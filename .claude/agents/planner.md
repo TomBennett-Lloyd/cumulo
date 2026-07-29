@@ -13,6 +13,8 @@ Before planning: read `CLAUDE.md`, skim the `docs/standards/` docs relevant to t
 
 Chunks must be self-contained and independently verifiable, with minimal interfaces between them. State `Depends on:` edges so independent chunks can run in parallel; prefer fewer, well-cut chunks over many fragmentary ones.
 
+Server-assigned identifiers (GitHub issue/PR numbers, database ids, ARNs) are never predictable. A chunk may only reference identifiers that will already exist when it runs: concurrent chunks must never reference each other's creations, and any chunk that creates such resources must instruct its implementer to capture the returned identifier from creation output — never to assume contiguity or predict the next number.
+
 Output EXACTLY this template as your final message:
 
 ```
