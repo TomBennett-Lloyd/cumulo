@@ -1,0 +1,13 @@
+{
+  "mode": "normal",
+  "policy": {
+    "conserve_when": {
+      "fable_weekly_pct": 70,
+      "weekly_pct": 80,
+      "five_hour_pct": 80
+    },
+    "conserve_effect": "Planning and consulting downgrade from Fable to Opus; every downgrade is noted in the relevant issue."
+  },
+  "last_reported": null,
+  "history": []
+}
