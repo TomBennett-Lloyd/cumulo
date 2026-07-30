@@ -5,27 +5,29 @@ Every substantive piece of human review feedback — on plans or PRs — gets an
 Entry format:
 
 ```
-## YYYY-MM-DD — PR/issue #n
+## YYYY-MM-DD — PR/issue #n — <short-slug>
 - Category: plan | code-style | architecture | testing | other
 - Feedback: what the user asked for, verbatim where short
 - Action: what changed in response (code fix, standards edit, agent-guidance edit, or none + why)
 ```
 
+One entry per distinct feedback item; the slug names that item's subject and disambiguates multiple items arising from the same review.
+
 ---
 
-## 2026-07-30 — PR #26
+## 2026-07-30 — PR #26 — merge-gate-calibration
 
 - Category: other (merge-policy calibration)
 - Feedback: Config-only PRs should auto-merge — "the json file in there didn't matter, i'm more on about actual code … how you're structuring functions and modules and components."
 - Action: merge rule refined from "every changed file is .md" to "no source-code files"; encoded in `.claude/workflow.json` (this PR).
 
-## 2026-07-30 — issue #2 (plan review)
+## 2026-07-30 — issue #2 (plan review) — adrs-human-always
 
 - Category: plan
 - Feedback: "ADRs should always require a human review" — major decisions, the right altitude for human guidance without going deep into code.
 - Action: `docs/adr/**` added to `merge.humanAlways`; `adr` added to `planApproval.alwaysRequiredFor`; skills updated (this PR).
 
-## 2026-07-30 — issue #2 (plan review)
+## 2026-07-30 — issue #2 (plan review) — demo-abuse-and-auth
 
 - Category: plan
 - Feedback: Anonymous site creation is an abuse/cost surface — wants a site cap with oldest-eviction, cheap IP rate limiting with auto-block, and friction against programmatic API use; auth is future expansion whose placement must be considered, not foreclosed.
