@@ -5,7 +5,7 @@ description: Execute a planned issue by dispatching plan chunks to implementer s
 
 You are orchestrating execution of an approved plan (in the issue's comments). Your context stays clean: sub-agents do the work; you verify, sequence, and re-plan.
 
-1. **Branch**: `git checkout -b <n>-<slug>` from up-to-date `main`. Never work on `main`.
+1. **Worktree, always**: `git worktree add .claude/worktrees/<n>-<slug> -b <n>-<slug> origin/main`. Every task gets its own worktree even when it is the only one running — the main checkout stays on `main` so concurrent tasks, verification, and `/burn-backlog` never contend for it. Task-local untracked state (Terraform `backend.hcl`, `.terraform/`, local overrides) lives in that worktree for the task's lifetime. Never work on `main`.
 2. **Load the plan**; compute dependency waves. Chunks in the same wave with no file overlap run in parallel — spawn their `implementer` agents in a single message.
 3. **Dispatch** each chunk with: the chunk's full text verbatim, the plan's Context section, and nothing else it doesn't need.
 4. **On each return, by status**:
