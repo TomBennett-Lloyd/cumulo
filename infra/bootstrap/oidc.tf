@@ -38,15 +38,27 @@ data "aws_iam_policy_document" "github_actions_trust" {
     # check above fails to close, while still looking like a condition block
     # that does something.
     #
-    # Only the trailing claim is wildcarded, so any branch, tag, pull request or
-    # environment in this one repo may assume the role. That is the right scope
-    # while the role has no permissions attached; narrowing it per branch or
-    # environment is tracked as follow-up work and becomes necessary at the same
-    # moment the first deploy permission is granted.
+    # The trailing claim is an exact-match allowlist rather than a `:*`
+    # wildcard: a wildcard would let *any* workflow context in this repo assume
+    # the role, including tags, non-main branch refs, and whatever event
+    # contexts GitHub adds to the `sub` claim in future. Two values, no more.
+    #
+    # The `pull_request` entry exists for exactly one reason: the `oidc-smoke`
+    # check must be able to run pre-merge, and it can only do that while this
+    # role has ZERO attached permissions (see below) — assuming it proves the
+    # trust path and grants nothing.
+    #
+    # THEREFORE: the PR that attaches the first permission to this role MUST
+    # delete the `pull_request` line in the same change. A pull_request-context
+    # run is triggerable by any fork PR author, so it must never hold deploy
+    # permissions (issue #7 security constraints, 2026-07-30).
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:*"]
+      values = [
+        "repo:${var.github_repository}:ref:refs/heads/main",
+        "repo:${var.github_repository}:pull_request",
+      ]
     }
   }
 }
