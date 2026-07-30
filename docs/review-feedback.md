@@ -15,6 +15,24 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 
 ---
 
+## 2026-07-30 — PR #36 — oidc-sub-tighten-now
+
+- Category: architecture
+- Feedback: "can we not tighten the sub claim now" — declining to defer the trust-policy narrowing to the later permissions-granting ticket.
+- Action: wildcard replaced with a two-value `StringEquals` allowlist before merge. This directly caused the next finding: the tightened policy failed the smoke test, exposing that GitHub now issues ID-embedded immutable subject claims (`repo:OWNER@<ownerId>/REPO@<repoId>:<claim>`) and that our name-based form could never match. A lazier policy would have hidden it. Final policy pins the immutable prefix, with a Terraform `validation` block that rejects a name-only prefix outright.
+
+## 2026-07-30 — PR #37 — pv-runtime-approved-clean
+
+- Category: architecture
+- Feedback: "the PV runtime ADR looks good i'll approve that" — TypeScript port plus pvlib-generated golden fixtures accepted as written.
+- Action: merged unchanged. No guidance change; logged as graduation evidence for the ADR gate.
+
+## 2026-07-30 — PR #40 — capacity-mode-challenged
+
+- Category: architecture
+- Feedback: "the on demand vs provisioned capacity question seems questionable ... at what point would normal use end up being throttled? since this will have very low traffic, we could presumably scale in the fleet size to stay within the free capacity?"
+- Action: challenge upheld. The ADR's rejection of provisioned capacity rested on a sustained-rate figure (~1 dashboard load/sec) where a burst-inclusive one belonged; the hourly write cycle turns out to use ~7% of the free allowance with zero GSI amplification. ADR amended before merge to a hybrid — provisioned on the batch-shaped tables, on-demand on the request-shaped ones — for $0 standing cost. Fleet size did not need reducing. **Pattern worth watching: two of three ADR reviews have turned on a quantitative claim that was arithmetically right but answered the wrong question — worth a planner/implementer instruction if it recurs.**
+
 ## 2026-07-30 — PR #39 — precommit-approved-clean
 
 - Category: code-style

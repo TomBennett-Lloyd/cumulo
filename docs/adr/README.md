@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Numbered, immutable once accepted (supersede rather than edit). Write one when a decision is expensive to reverse, cross-service, or would surprise a newcomer — see `docs/standards/architecture.md` rule 6.
+Numbered, immutable once **merged** (supersede rather than edit). Before merge an ADR is still a draft under review: amending it in place in response to review feedback is correct, and cheaper than merging a decision you already know is wrong and superseding it immediately. Write one when a decision is expensive to reverse, cross-service, or would surprise a newcomer — see `docs/standards/architecture.md` rule 6.
 
 Format: copy `0000-template.md` → `NNNN-short-title.md`.
 
