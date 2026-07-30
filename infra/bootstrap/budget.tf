@@ -46,8 +46,13 @@ data "aws_ssm_parameter" "notification_email" {
     # standing between this project and the cost ceiling. This turns that
     # silence into a loud failure at plan time. The message describes the
     # expected shape rather than echoing the value.
+    #
+    # The character class excludes `<`, `>`, `,` and `;` as well as whitespace
+    # and a second `@`, because those are exactly the characters the malformed
+    # shapes are made of: excluding whitespace alone would still admit
+    # `<tom@example.com>`, which AWS accepts and never delivers to.
     postcondition {
-      condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", self.value))
+      condition     = can(regex("^[^@\\s<>,;]+@[^@\\s<>,;]+\\.[^@\\s<>,;]+$", self.value))
       error_message = "SSM parameter /cumulo/notification-email must hold a single plain email address (the user@example.com form) — no display name, no angle brackets, no comma-separated list. Fix it with: aws ssm put-parameter --name /cumulo/notification-email --type SecureString --overwrite --value <address>"
     }
   }

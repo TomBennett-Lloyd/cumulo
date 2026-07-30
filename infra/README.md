@@ -168,13 +168,13 @@ gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
 
 ```bash
 aws ssm put-parameter --name /cumulo/notification-email \
-  --type SecureString --value <your-email>
+  --type SecureString --value <your-email> --region eu-west-1
 ```
 
-This has already been done for this account, so a routine spin-up skips it; the step exists so a clean account can be reproduced from this document alone. Confirm it is there without printing the address:
+`--region` must be the same value as `bootstrap.auto.tfvars`'s `aws_region`: Parameter Store is regional and the data source reads from the region the provider is configured for, so a CLI default region that differs from `aws_region` writes the parameter somewhere Terraform will never look — and A5 then fails with `ParameterNotFound` for a parameter that demonstrably exists. Pass it explicitly rather than trusting the CLI default. This has already been done for this account, so a routine spin-up skips it; the step exists so a clean account can be reproduced from this document alone. Confirm it is there, in the right region, without printing the address:
 
 ```bash
-aws ssm get-parameter --name /cumulo/notification-email --query 'Parameter.Name' --output text
+aws ssm get-parameter --name /cumulo/notification-email --query 'Parameter.Name' --output text --region eu-west-1
 ```
 
 Terraform reads the parameter and never writes it. If it is missing, the plan in A5 fails with a `ParameterNotFound` error naming this parameter — which is the intended failure, not a reason to hardcode an address.
@@ -362,7 +362,7 @@ Keep `backend.hcl` and `bootstrap.auto.tfvars` — the bucket name is determinis
 ```bash
 gh variable delete AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo
 gh variable delete AWS_REGION --repo TomBennett-Lloyd/cumulo
-aws ssm delete-parameter --name /cumulo/notification-email
+aws ssm delete-parameter --region eu-west-1 --name /cumulo/notification-email
 ```
 
 **After T4 this stack costs exactly $0** — not "approximately nothing", but no billable resource remaining. There is nothing left to leak, because IAM roles, OIDC providers and notification-only budgets are all free, and the only chargeable thing the stack ever created was the bucket. The parameter left behind by T6 is free too: standard tier, default KMS key.
