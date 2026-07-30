@@ -37,6 +37,48 @@ describe('weatherReadingSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects shortwave radiation above the 1500 W/m² sanity ceiling', () => {
+    const result = weatherReadingSchema.safeParse({
+      ...validReading,
+      shortwaveRadiationWm2: 1501,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects direct radiation above the 1500 W/m² sanity ceiling', () => {
+    const result = weatherReadingSchema.safeParse({
+      ...validReading,
+      directRadiationWm2: 1501,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects diffuse radiation above the 1500 W/m² sanity ceiling', () => {
+    const result = weatherReadingSchema.safeParse({
+      ...validReading,
+      diffuseRadiationWm2: 1501,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects direct normal irradiance above the 1500 W/m² sanity ceiling', () => {
+    const result = weatherReadingSchema.safeParse({
+      ...validReading,
+      directNormalIrradianceWm2: 1501,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a temperature above the 60 °C terrestrial-extreme ceiling', () => {
+    const result = weatherReadingSchema.safeParse({ ...validReading, temperature2mC: 61 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a wind speed above the 120 m/s sanity ceiling', () => {
+    const result = weatherReadingSchema.safeParse({ ...validReading, windSpeed10mMs: 121 });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects cloud cover above 100 percent', () => {
     const result = weatherReadingSchema.safeParse({ ...validReading, cloudCoverPct: 101 });
     expect(result.success).toBe(false);

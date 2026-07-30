@@ -51,9 +51,12 @@ export const weatherReadingSchema = z.object({
   // Degrees Celsius; the bounds bracket recorded terrestrial extremes
   // (~-89 °C Vostok, ~57 °C Furnace Creek) with a little headroom.
   temperature2mC: z.number().gte(-90).lte(60),
-  // Metres per second. Open-Meteo defaults to km/h, so ingestion (#11) must
-  // request `wind_speed_unit=ms`; the 120 m/s cap is above any recorded surface
-  // gust, so a km/h response would fail here rather than silently model as wind.
+  // Metres per second. The 120 cap is a sanity ceiling only — above any recorded
+  // surface gust — and explicitly does NOT catch a unit mistake: Open-Meteo
+  // defaults to km/h, and ordinary wind (5–40 km/h) parses cleanly as 5–40 m/s,
+  // feeding the Faiman cell-temperature term a silent ~3.6× error. The cap only
+  // bites above 120 km/h. The actual defence is ingestion (#11) pinning
+  // `wind_speed_unit=ms` in the request, proven by an adapter fixture test.
   windSpeed10mMs: z.number().gte(0).lte(120),
   // Total cloud cover, percent. The physics core does not use it — irradiance
   // already carries the cloud effect — but the ML correction layer (#20) and the

@@ -21,11 +21,14 @@ export type ForecastModel = z.infer<typeof forecastModelSchema>;
  * The refine sits on this nested object rather than on the forecast as a whole,
  * so `forecastSchema` stays a plain `ZodObject` and remains extensible via
  * `.extend()` / `.pick()` (a top-level `.refine()` would erase those).
+ *
+ * Both quantiles carry the same 0–50 kW bounds as `acPowerKw`: same quantity,
+ * same unit, same site, so a runaway ML p90 is exactly what the cap is for.
  */
 const uncertaintyBandSchema = z
   .object({
-    p10AcPowerKw: z.number().gte(0),
-    p90AcPowerKw: z.number().gte(0),
+    p10AcPowerKw: z.number().gte(0).lte(50),
+    p90AcPowerKw: z.number().gte(0).lte(50),
   })
   .refine((band) => band.p10AcPowerKw <= band.p90AcPowerKw, {
     message: 'p10AcPowerKw must not exceed p90AcPowerKw',
@@ -47,7 +50,11 @@ const uncertaintyBandSchema = z
  * - `acPowerKw`'s 50 kW cap mirrors `siteSchema.capacityKw`'s residential sanity
  *   cap, because output is clipped at nameplate (ADR 0003)
  * - `poaIrradianceWm2` is plane-of-array irradiance in W/m²; 2000 is a sanity
- *   ceiling well above terrestrial peak including edge-of-cloud enhancement
+ *   ceiling well above terrestrial peak including edge-of-cloud enhancement.
+ *   It is deliberately looser than the 1500 caps on the horizontal-component
+ *   irradiances it is computed from (`weatherReadingSchema`): projecting onto a
+ *   tilted plane concentrates beam irradiance by geometry, and cloud-edge
+ *   enhancement stacks on top, so a legitimate POA value can exceed its inputs.
  * - `weatherSource` propagates provenance from the weather input so the UI can
  *   render the mandatory Open-Meteo credit on forecast displays too
  * - `uncertainty` is optional because physics v1 (#12) emits point estimates.

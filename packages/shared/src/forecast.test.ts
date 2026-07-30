@@ -49,6 +49,25 @@ describe('forecastSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects ac power above the 50 kW residential nameplate ceiling', () => {
+    const result = forecastSchema.safeParse({ ...validForecast, acPowerKw: 51 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects plane-of-array irradiance above the 2000 W/m² sanity ceiling', () => {
+    const result = forecastSchema.safeParse({ ...validForecast, poaIrradianceWm2: 2001 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a band whose p90 exceeds the 50 kW ceiling that bounds acPowerKw', () => {
+    const result = forecastSchema.safeParse({
+      ...validForecast,
+      model: 'ml',
+      uncertainty: { p10AcPowerKw: 1.1, p90AcPowerKw: 51 },
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects a non-uuid siteId', () => {
     const result = forecastSchema.safeParse({ ...validForecast, siteId: 'site-1' });
     expect(result.success).toBe(false);
