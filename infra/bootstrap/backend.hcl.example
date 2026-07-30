@@ -1,0 +1,10 @@
+# Copy to backend.hcl (gitignored) and fill in the two account-specific values.
+# Consumed by:  terraform init -backend-config=backend.hcl
+#
+# `bucket` must equal the `state_bucket_name` output of this stack, which is
+# always cumulo-tfstate-<account-id> (see state.tf). `region` must match
+# `aws_region` in bootstrap.auto.tfvars — the backend and the provider have to
+# agree on where the bucket lives.
+
+bucket = "cumulo-tfstate-000000000000"
+region = "eu-west-1"

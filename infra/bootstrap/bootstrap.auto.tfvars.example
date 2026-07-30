@@ -1,0 +1,9 @@
+# Copy to bootstrap.auto.tfvars (gitignored). Terraform loads *.auto.tfvars
+# automatically for every command run in this directory, so there is no -var-file
+# flag to remember or forget.
+
+aws_region = "eu-west-1"
+
+# Optional. Defaults to TomBennett-Lloyd/cumulo; only set it if you are pointing
+# the trust policy at a fork.
+# github_repository = "TomBennett-Lloyd/cumulo"
