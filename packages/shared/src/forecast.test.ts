@@ -30,6 +30,33 @@ describe('forecastSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a night-time forecast of zero power under zero irradiance', () => {
+    const result = forecastSchema.safeParse({
+      ...validForecast,
+      poaIrradianceWm2: 0,
+      acPowerKw: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a forecast sitting exactly on both upper bounds', () => {
+    const result = forecastSchema.safeParse({
+      ...validForecast,
+      poaIrradianceWm2: 2000,
+      acPowerKw: 50,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a band spanning the full 0–50 kW range, bounds included', () => {
+    const result = forecastSchema.safeParse({
+      ...validForecast,
+      model: 'ml',
+      uncertainty: { p10AcPowerKw: 0, p90AcPowerKw: 50 },
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects an inverted band where p10 exceeds p90', () => {
     const result = forecastSchema.safeParse({
       ...validForecast,
@@ -54,8 +81,22 @@ describe('forecastSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects negative plane-of-array irradiance — a plane never receives less than nothing', () => {
+    const result = forecastSchema.safeParse({ ...validForecast, poaIrradianceWm2: -1 });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects plane-of-array irradiance above the 2000 W/m² sanity ceiling', () => {
     const result = forecastSchema.safeParse({ ...validForecast, poaIrradianceWm2: 2001 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a band whose p10 is negative even though the band itself is ordered', () => {
+    const result = forecastSchema.safeParse({
+      ...validForecast,
+      model: 'ml',
+      uncertainty: { p10AcPowerKw: -1, p90AcPowerKw: 3.2 },
+    });
     expect(result.success).toBe(false);
   });
 

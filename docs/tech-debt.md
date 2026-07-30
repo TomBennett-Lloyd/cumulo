@@ -37,8 +37,20 @@ Entry format:
 - What: `longitude` accepts both −180 and +180, which are the same meridian. One physical location can therefore produce two distinct `locationId` partition keys (ADR 0002 rounds lat/long to 2 dp) and two separate Open-Meteo fetches for identical weather — a correctness split and an API-frugality leak. The fix is normalization at key-derivation time, which is #13's key-function territory, not a schema bound.
 - Source: #10 review cycle 1
 
+## 2026-07-30 — Latitude/longitude are unbranded, so a swapped pair parses cleanly
+
+- Where: `packages/shared/src/weather-reading.ts`, `packages/shared/src/site.ts`
+- What: both files declare `latitude`/`longitude` as bare `z.number()` with copy-pasted bounds. Structurally the two are the same type, so `{ latitude: -6.26, longitude: 53.35 }` — Dublin's coordinates transposed — parses without complaint and sends a weather fetch to a field in Kazakhstan; the duplicated bounds also drift independently. `typing.md` rule 1 names exactly this (physical-unit confusion, with lat vs lon as its worked example) as the case for branded types. The fix is one shared branded coordinate schema adopted by `site.ts`, ingestion (#11), and ADR 0002's `locationId` key function (#13) in a single move — a coordinated cross-module change, not a bound tweak, and it feeds the #50 branding retrofit. Adjacent to the antimeridian entry above: both are the same missing coordinate abstraction seen from different sides.
+- Source: #10 review cycle 2
+
 ## 2026-07-30 — `.optional()` under `exactOptionalPropertyTypes` admits explicit `undefined`
 
 - Where: `packages/shared/src/forecast.ts` (`uncertainty`), any future optional schema field
 - What: Zod's `.optional()` produces `uncertainty?: T | undefined`, so `{ uncertainty: undefined }` parses even with `exactOptionalPropertyTypes` on — the key is present with an undefined value. DynamoDB `PutItem` marshalling throws on exactly that unless `removeUndefinedValues: true` is set on the document client. #13 needs a house rule (set the marshalling option, or strip undefined keys at the adapter boundary) so this fails at one known place rather than at runtime per-field.
 - Source: #10 review cycle 1
+
+## 2026-07-30 — site.test.ts bounds are not mutation-proof
+
+- Where: `packages/shared/src/site.test.ts`
+- What: single acceptance fixture with no boundary values, so `.gte`/`.lte` inclusivity mutants survive on lat/lon, `capacityKw`, tilt, azimuth — the same gap class closed for the #10 schemas (boundary-acceptance + single-mutation rejection tables). Bring `site.test.ts` up to the same pattern, ideally alongside the #50 branding retrofit since fixtures change anyway.
+- Source: #10 review cycle 2 fix agent (discovered)

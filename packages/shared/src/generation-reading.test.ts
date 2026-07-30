@@ -14,6 +14,16 @@ describe('generationReadingSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a night-time zero-generation reading', () => {
+    const result = generationReadingSchema.safeParse({ ...validReading, acPowerKw: 0 });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a reading at exactly the 50 kW cap — output clips at nameplate', () => {
+    const result = generationReadingSchema.safeParse({ ...validReading, acPowerKw: 50 });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects negative AC power — a site does not generate backwards', () => {
     const result = generationReadingSchema.safeParse({ ...validReading, acPowerKw: -0.1 });
     expect(result.success).toBe(false);
