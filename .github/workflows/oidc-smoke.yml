@@ -1,0 +1,63 @@
+name: OIDC smoke test
+
+# Proves the one thing `terraform validate` cannot: that GitHub Actions can
+# actually assume the AWS role. Keyless, by OIDC — there is no access key in
+# this repo to store or rotate (CLAUDE.md: no long-lived AWS credentials).
+#
+# Expected to FAIL until the bootstrap runbook's first apply publishes the
+# AWS_OIDC_ROLE_ARN and AWS_REGION repo variables. That red is the intended
+# state on the bootstrap PR itself and is explained by the preflight step below;
+# it must be green before any infra PR merges. See infra/README.md.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - infra/**
+      - .github/workflows/oidc-smoke.yml
+
+# id-token: write is what allows the runner to mint the OIDC token that AWS
+# trades for credentials. Nothing here writes to the repo.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  assume-role:
+    runs-on: ubuntu-latest
+    steps:
+      # Fails loudly rather than skipping. A credential check that quietly
+      # no-ops when unconfigured is a check that can pass by doing nothing —
+      # the exact failure mode this workflow exists to rule out.
+      - name: Preflight — repo variables present
+        run: |
+          missing=0
+          for var in AWS_OIDC_ROLE_ARN AWS_REGION; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Repo variable $var is not set."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Run the spin-up runbook in infra/README.md, which sets both" \
+              "variables from 'terraform output' after the first apply."
+            exit 1
+          fi
+        env:
+          AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+
+      # Repo *variables*, never secrets: a role ARN and a region are
+      # identifiers, and the whole point of OIDC is that there is no secret to
+      # pair them with.
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          # Names the session in CloudTrail, so an assume-role can be traced
+          # back to the workflow run that made it.
+          role-session-name: cumulo-oidc-smoke-${{ github.run_id }}
+
+      # The evidence step. It needs zero IAM permissions, which is precisely why
+      # it can verify a role that deliberately has none attached yet.
+      - name: aws sts get-caller-identity
+        run: aws sts get-caller-identity

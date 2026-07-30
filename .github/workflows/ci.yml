@@ -30,3 +30,29 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Runs on every push and PR, not just infra/** changes: a job that only fires
+  # when Terraform changes cannot tell you that Terraform still works after
+  # something else moved underneath it.
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          # Exact patch pin, matched to the version infra/README.md tells
+          # operators to install, so CI and humans can never disagree about fmt
+          # output or backend behaviour. Must stay inside the >= 1.12.0, < 2.0.0
+          # range in infra/bootstrap/versions.tf.
+          terraform_version: 1.15.8
+          # Raw exit codes, not step outputs — nothing here consumes stdout.
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform fmt -check -recursive infra
+      # -backend=false because CI has no state-bucket access and needs none to
+      # validate. -lockfile=readonly makes a stale .terraform.lock.hcl a build
+      # failure instead of something CI quietly fixes for itself.
+      - name: terraform init
+        run: terraform -chdir=infra/bootstrap init -backend=false -lockfile=readonly
+      - name: terraform validate
+        run: terraform -chdir=infra/bootstrap validate
