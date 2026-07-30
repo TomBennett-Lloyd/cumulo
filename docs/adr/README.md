@@ -6,4 +6,4 @@ Format: copy `0000-template.md` → `NNNN-short-title.md`.
 
 ## Index
 
-_(none yet — first up: service boundaries, DynamoDB/Postgres split, PV model runtime)_
+- [0001 — Service boundaries](0001-service-boundaries.md)
