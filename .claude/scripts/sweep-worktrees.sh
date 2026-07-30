@@ -93,13 +93,36 @@ done <<EOF
 $paths
 EOF
 
-git -C "$main_dir" worktree prune || {
-  echo "worktree prune failed in $main_dir" >&2
-  failed=$((failed + 1))
-}
+# --- stale admin entries: reported, never pruned -----------------------------------------
+# This used to run `git worktree prune` unconditionally, which broke --dry-run's read-only
+# contract. Reporting is now the behaviour in BOTH modes, for a reason beyond dry-run:
+# reap-worktree.sh removes worktrees via `git worktree remove`, which cleans up its own admin
+# dir, so a sweep never leaves an entry of its own to prune. Prune could therefore only ever
+# fire on the one case this tool has no business deciding — a worktree directory that vanished
+# for an unknown reason. Pruning it discards $GIT_DIR/worktrees/<name>, and a directory that
+# comes back (restored from a backup, remounted, un-renamed) is then unrepairable and any
+# uncommitted work in it needs manual surgery. Ambiguity resolves to KEPT here as everywhere:
+# say what is stale, leave the decision to a human.
+if stale=$(git -C "$main_dir" worktree prune --dry-run --verbose 2>&1); then
+  if [ -n "$stale" ]; then
+    printf 'WARN stale worktree admin entries in %s (not pruned — run `git worktree prune` by hand once you are sure nothing is recoverable):\n' "$main_dir"
+    printf '%s\n' "$stale" | sed 's/^/  /'
+  fi
+else
+  # Purely informational, so a failure to report is not a failure to sweep.
+  printf 'WARN could not check for stale worktree admin entries in %s\n' "$main_dir"
+fi
+
+# A dry run must never claim to have deleted anything, so the count it reports is labelled as
+# the hypothetical it is.
+if [ "$dry_run" = "1" ]; then
+  swept_label="would sweep"
+else
+  swept_label="swept"
+fi
 
 if [ "$failed" -gt 0 ]; then
-  printf 'swept %d, kept %d, failed %d\n' "$swept" "$kept" "$failed"
+  printf '%s %d, kept %d, failed %d\n' "$swept_label" "$swept" "$kept" "$failed"
   exit 2
 fi
-printf 'swept %d, kept %d\n' "$swept" "$kept"
+printf '%s %d, kept %d\n' "$swept_label" "$swept" "$kept"

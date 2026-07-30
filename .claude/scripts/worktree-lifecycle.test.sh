@@ -74,6 +74,12 @@ expect_out() { # expect_out <substring>
   esac
 }
 
+expect_not_out() { # expect_not_out <substring>
+  case "$out" in
+    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
+  esac
+}
+
 expect_exists() { [ -e "$1" ] || bad "expected to still exist: $1"; }
 expect_gone() { [ ! -e "$1" ] || bad "expected to be gone: $1"; }
 
@@ -174,6 +180,31 @@ run_reap() { # run_reap <gh-cmd> <min-age-minutes> <args...>
   out=$(env WORKTREE_GH_CMD="$gh" WORKTREE_MIN_AGE_MINUTES="$min_age" \
     bash "$SCRIPTS/reap-worktree.sh" "$@" 2>&1)
   rc=$?
+}
+
+# run_reap_default_age <gh-cmd> <args...> — reap with the min-age guard at its shipped default.
+# Every other reaping case pins the guard to 0, which means none of them can see a guard that
+# never lets anything through; -u makes sure an inherited env var cannot quietly do the same.
+run_reap_default_age() {
+  local gh="$1"
+  shift
+  out=$(env -u WORKTREE_MIN_AGE_MINUTES WORKTREE_GH_CMD="$gh" \
+    bash "$SCRIPTS/reap-worktree.sh" "$@" 2>&1)
+  rc=$?
+}
+
+# backdate_git_dir <worktree> — make the worktree's admin dir look untouched for years, i.e.
+# what an abandoned worktree looks like to the min-age probe.
+backdate_git_dir() {
+  local git_dir
+  git_dir=$(git -C "$1" rev-parse --absolute-git-dir) || {
+    printf 'FATAL harness setup failed: no git dir for %s\n' "$1" >&2
+    exit 2
+  }
+  must find "$git_dir" -exec touch -t 200001010000 {} +
+  # Belt and braces: the walk above touches the dir itself first, and nothing after that
+  # should re-stamp it, but assert the state the case depends on rather than assuming it.
+  must touch -t 200001010000 "$git_dir"
 }
 
 # ==========================================================================================
@@ -369,7 +400,60 @@ expect_branch "$ROOT/main" feat
 end
 
 # ==========================================================================================
-# 13. rebranch happy path
+# 13. the min-age guard lets a long-idle worktree through at the SHIPPED default
+# ==========================================================================================
+# The guard proving it can say no (case 12) is only half the contract; a guard that can never
+# say yes makes the whole sweeper inert in production, and no case that pins
+# WORKTREE_MIN_AGE_MINUTES=0 can tell the two apart. So: default min age, idle fixture, and the
+# assertion is that reap gets all the way to the end.
+begin "reap reaps a long-idle worktree at the default min age"
+fixture backdated
+add_wt feat wt
+gh_stub_broken "$ROOT/gh"
+backdate_git_dir "$ROOT/wt"
+run_reap_default_age "$ROOT/gh" "$ROOT/wt" --dry-run
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP"
+expect_not_out "recently-active"
+expect_exists "$ROOT/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 14. reap refuses the worktree it is running inside
+# ==========================================================================================
+begin "reap keeps the worktree its own cwd sits in"
+fixture owncwd
+add_wt feat wt
+gh_stub_broken "$ROOT/gh"
+out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt" 2>&1)
+rc=$?
+expect_rc 1 "$rc"
+# The reason is the assertion, not the refusal: with the own-cwd guard gone the live-session
+# check usually catches this anyway, so expecting only rc 1 would pass on a broken guard.
+expect_out "— own-cwd"
+expect_exists "$ROOT/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 15. reap refuses a detached-HEAD worktree
+# ==========================================================================================
+begin "reap keeps a worktree on a detached HEAD"
+fixture detachedhead
+add_wt feat wt
+must git -C "$ROOT/wt" checkout --quiet --detach
+gh_stub_broken "$ROOT/gh"
+run_reap "$ROOT/gh" 0 "$ROOT/wt"
+expect_rc 1 "$rc"
+expect_out "— detached"
+expect_exists "$ROOT/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 16. rebranch happy path
 # ==========================================================================================
 begin "rebranch moves a merged worktree onto a new branch at origin/main"
 fixture rebranch
@@ -401,7 +485,7 @@ fi
 end
 
 # ==========================================================================================
-# 14. rebranch refusals
+# 17. rebranch refusals
 # ==========================================================================================
 begin "rebranch refuses an existing target branch and a dirty tree"
 fixture refusals
@@ -431,7 +515,55 @@ expect_gone "$ROOT/pnpm.log"
 end
 
 # ==========================================================================================
-# 15. sweep end to end over a mixed fixture
+# 18. rebranch refuses to retire an unmerged branch
+# ==========================================================================================
+# rebranch ends in `git branch -D`, so this refusal is the last thing standing between an
+# unmerged branch and reflog-only recovery. Case 16's happy path resolves via merged-ancestor
+# and cases 17's refusals fire earlier, so without this case the whole is_merged arm of the
+# most destructive script in the set is unexercised.
+begin "rebranch refuses when the old branch has unmerged commits"
+fixture rebranch_unmerged
+add_wt feat wt
+commit_in "$ROOT/wt" work
+gh_stub_none "$ROOT/gh"
+pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
+tip=$(git -C "$ROOT/wt" rev-parse HEAD) || exit 2
+out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next 2>&1)
+rc=$?
+expect_rc 1 "$rc"
+expect_out "REFUSED"
+expect_out "feat is not merged"
+expect_eq "still on the old branch" "$(git -C "$ROOT/wt" branch --show-current)" feat
+expect_eq "commit still reachable from the branch" "$(git -C "$ROOT/main" rev-parse refs/heads/feat)" "$tip"
+expect_no_branch "$ROOT/main" next
+expect_gone "$ROOT/pnpm.log"
+end
+
+# ==========================================================================================
+# 19. rebranch refuses when the merge state cannot be established
+# ==========================================================================================
+begin "rebranch refuses when gh cannot confirm the old branch was merged"
+fixture rebranch_unverifiable
+add_wt feat wt
+commit_in "$ROOT/wt" work
+gh_stub_broken "$ROOT/gh"
+pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
+tip=$(git -C "$ROOT/wt" rev-parse HEAD) || exit 2
+out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next 2>&1)
+rc=$?
+expect_rc 1 "$rc"
+expect_out "REFUSED"
+expect_out "could not verify whether feat is merged"
+expect_eq "still on the old branch" "$(git -C "$ROOT/wt" branch --show-current)" feat
+expect_eq "commit still reachable from the branch" "$(git -C "$ROOT/main" rev-parse refs/heads/feat)" "$tip"
+expect_no_branch "$ROOT/main" next
+expect_gone "$ROOT/pnpm.log"
+end
+
+# ==========================================================================================
+# 20. sweep end to end over a mixed fixture
 # ==========================================================================================
 begin "sweep reaps only the finished worktree and warns about an off-main checkout"
 fixture sweep
@@ -459,6 +591,76 @@ expect_no_branch "$ROOT/main" done
 expect_branch "$ROOT/main" messy
 expect_branch "$ROOT/main" stranded
 expect_exists "$ROOT/main/file.txt"
+end
+
+# ==========================================================================================
+# 21. sweep --dry-run changes nothing and does not claim to have swept anything
+# ==========================================================================================
+begin "sweep --dry-run leaves a vanished worktree's admin entry intact and reports would-sweep counts"
+fixture sweepdry
+add_wt done wt-done
+add_wt messy wt-dirty
+add_wt gone wt-gone
+must printf 'scratch\n' >"$ROOT/wt-dirty/notes.txt"
+# A directory that has vanished is the only case `git worktree prune` ever fires on — reap
+# removes worktrees via `worktree remove`, which cleans up its own admin dir. A dry run that
+# prunes it destroys the one thing that makes the directory restorable.
+must mv "$ROOT/wt-gone" "$ROOT/wt-gone-stashed"
+gh_stub_broken "$ROOT/gh"
+out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP $ROOT/wt-done (done)"
+expect_out "KEPT $ROOT/wt-dirty — dirty"
+expect_out "WARN stale worktree admin entries"
+# A safety tool must not report deletions it did not perform.
+expect_out "would sweep 1, kept 2"
+expect_not_out "swept 1"
+expect_not_out "REAPED"
+expect_exists "$ROOT/wt-done/file.txt"
+expect_branch "$ROOT/main" done
+expect_exists "$ROOT/main/.git/worktrees/wt-gone"
+must mv "$ROOT/wt-gone-stashed" "$ROOT/wt-gone"
+# Restoring the directory must give back a usable worktree; a pruned entry cannot be repaired.
+git -C "$ROOT/wt-gone" rev-parse --absolute-git-dir >/dev/null 2>&1 ||
+  bad "restored worktree is unusable — its admin entry was pruned by a dry run"
+end
+
+# ==========================================================================================
+# 22. sweep's exit-code contract: 0 swept, 1 kept, anything else failed
+# ==========================================================================================
+# reap owns every safety decision; sweep owns only the mapping from reap's exit codes. Filing
+# an unexpected failure under "kept" would make a backstop that has stopped working look like
+# a backstop with nothing to do, so this case stubs reap to produce all three outcomes
+# deterministically — a real reap has no reliable way to exit 2 on demand.
+begin "sweep counts an unexpected reap failure as failed, not kept"
+fixture sweeprc
+add_wt a wt-a
+add_wt b wt-b
+add_wt c wt-c
+must mkdir -p "$ROOT/scripts"
+must cp "$SCRIPTS/sweep-worktrees.sh" "$SCRIPTS/worktree-lib.sh" "$ROOT/scripts/"
+cat >"$ROOT/scripts/reap-worktree.sh" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  *wt-a) printf 'REAPED %s (a)\n' "$1" ;;
+  *wt-b)
+    printf 'KEPT %s — stub\n' "$1"
+    exit 1
+    ;;
+  *)
+    echo "stub reap failed unexpectedly" >&2
+    exit 2
+    ;;
+esac
+EOF
+must chmod +x "$ROOT/scripts/reap-worktree.sh"
+out=$(cd "$ROOT/main" && bash "$ROOT/scripts/sweep-worktrees.sh" 2>&1)
+rc=$?
+expect_rc 2 "$rc"
+expect_out "ERROR reap-worktree.sh exited 2 for $ROOT/wt-c"
+expect_out "swept 1, kept 1, failed 1"
 end
 
 # ==========================================================================================

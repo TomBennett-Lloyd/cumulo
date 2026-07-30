@@ -32,9 +32,16 @@ main_checkout_dir() {
 # is_clean <worktree> -> 0 when the tree has no changes at all.
 # Untracked files count as dirty (unreviewed work is still work); ignored files such as
 # node_modules do not, since --porcelain omits them without --ignored.
+#
+# --no-optional-locks is load-bearing, not tidiness: a plain `status` takes $GIT_DIR/index.lock
+# to write back the refreshed index, and creating + removing that file bumps the mtime of the
+# per-worktree admin dir. reap-worktree.sh's min-age guard measures exactly that mtime, so a
+# locking status call makes every worktree look "active" the instant we inspect it — the guard
+# would then never let anything through. The guard is also ordered ahead of this call, so
+# neither mechanism alone is what keeps it working.
 is_clean() {
   local status
-  status=$(git -C "$1" status --porcelain 2>/dev/null) || return 1
+  status=$(git -C "$1" --no-optional-locks status --porcelain 2>/dev/null) || return 1
   [ -z "$status" ]
 }
 

@@ -85,15 +85,23 @@ case "$pwd_canon" in
 esac
 
 [ "$detached" = "1" ] && keep "detached"
-is_clean "$wt" || keep "dirty"
 
 # --- recently-active: a git dir touched moments ago means someone is still working -------
+# Ordered BEFORE is_clean deliberately. The probe reads the admin dir's mtime, so it has to
+# run before anything that writes there — a plain `git status` takes index.lock inside that
+# dir and would make the worktree look active purely because we just looked at it, silencing
+# the guard forever. is_clean uses --no-optional-locks so it no longer writes, but this
+# ordering means the guard survives a future edit that reintroduces a locking git command.
+# Only checks that reached this point read-only may be moved above it: `worktree list` and
+# `rev-parse` are verified not to touch the admin dir.
 git_dir=$(git -C "$wt" rev-parse --absolute-git-dir) || exit 2
 if [ "$WORKTREE_MIN_AGE_MINUTES" != "0" ]; then
   # A find that errors tells us nothing about activity, so it refuses rather than guesses.
   recent=$(find "$git_dir" -mmin -"$WORKTREE_MIN_AGE_MINUTES" -print -quit 2>/dev/null) || keep "recently-active"
   [ -n "$recent" ] && keep "recently-active"
 fi
+
+is_clean "$wt" || keep "dirty"
 
 # --- live-session: any process whose cwd sits in the worktree ----------------------------
 if ! cwds=$(lsof -a -d cwd -Fn 2>/dev/null); then
