@@ -84,3 +84,21 @@ Entry format:
 - Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)
 - What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI does not run these scripts at all) and #48 (no shellcheck gate).
 - Source: #42
+
+## 2026-07-30 — `lint:sh`'s discovery filter is the untested half of the gate
+
+- Where: `.claude/scripts/lint-shell.sh`:56-83 (shebang regex, `-z` read loop, empty-list guard); root `test:scripts` script
+- What: the gate's value rests entirely on _which files it finds_, and nothing exercises that. The shebang regex, the NUL-delimited loop, the working-tree existence skip, and the "found nothing → broken filter" guard have no test; a regex edit that silently stops matching `.githooks/pre-commit`, or a loop change that drops the last entry, leaves `pnpm verify` green while the gate covers less than it claims. The regression mode is **silent under-coverage** — the same failure class as #47, where a harness was green by absence. Blocked on a prerequisite: `test:scripts` runs one hard-coded file, so there is nowhere for these cases to live until it is generalized into a real harness (fixture repo, discovery asserted against an expected file set). Generalizing the harness is the ticket; the tests are a consequence of it.
+- Source: #48/#61 review
+
+## 2026-07-30 — shellcheck version skew between local and CI
+
+- Where: `.claude/scripts/lint-shell.sh` (invokes whatever `shellcheck` is on PATH); `.github/workflows/ci.yml` (relies on the runner's preinstalled binary); `README.md`:24 (`brew install shellcheck`)
+- What: local resolves to shellcheck 0.11.0, `ubuntu-latest` ships 0.9.0. Both ends of the gate float independently, so the same commit is analysed by two different analysers — new checks and changed defaults land locally months before CI, and the reverse (a runner image bump) can red a branch nobody touched. This breaks the invariant the composite `verify` exists to provide: that a local pass and a CI pass mean the same thing. Fix is a pinned source rather than a PATH lookup — an npm-wrapped shellcheck in `devDependencies`, or an explicit pinned install step in CI. Which one is a repo-wide dependency-policy call (it sets the precedent for every non-Node tool the gates depend on, gitleaks included), not a line change in this script.
+- Source: #48/#61 review
+
+## 2026-07-30 — No policy for pinning tools whose vendors ask to be pinned
+
+- Where: root `package.json` (vitest on a caret range); `.claude/scripts/lint-shell.sh` (unpinned shellcheck); `README.md`:34
+- What: vitest prints "experimental — please pin" for the typecheck mode that #61's type-level gate depends on, and we run it on a caret range: a minor bump can change or remove the feature a gate is built on, with no signal until the gate breaks or, worse, quietly stops asserting. Same class as the shellcheck skew above — floating versions under load-bearing gates — so it wants one decision covering both: which tools get exact pins, what triggers a deliberate bump, and where that is written down. Also folds in a documentation instance of the same drift: `README.md`:34 enumerates the CI gate list in prose (`pnpm lint`, `typecheck`, `test`, `format:check`) and is already stale — `lint:sh` is missing. Gates should be enumerated in `package.json` only, with prose pointing at `pnpm verify` rather than restating its contents.
+- Source: #48/#61 review

@@ -9,9 +9,9 @@
 # inputs goes stale the moment somebody adds a script, and #47 was filed for
 # exactly that failure: `pnpm test:scripts` was added to `verify` but never
 # reached CI, so the shell harness was green by absence. Every file git knows
-# about — tracked, or untracked and not ignored — that is named *.sh or carries
-# a shell shebang is checked, and finding nothing at all is treated as a broken
-# filter rather than a pass.
+# about — tracked, or untracked and not ignored — that is present in the working
+# tree and is named *.sh or carries a shell shebang is checked, and finding
+# nothing at all is treated as a broken filter rather than a pass.
 #
 set -euo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
@@ -57,15 +57,18 @@ shebang_re='^#!.*[[:space:]/](ba|da|k|z|a)?sh([[:space:]]|$)'
 
 shell_files=()
 while IFS= read -r -d '' file; do
+  # First, before either population: a path in the index need not exist in the
+  # working tree (sparse checkout, a deleted-but-unstaged file). Such a path is
+  # dropped rather than passed on — shellcheck exits 2 on a nonexistent file,
+  # which is this gate's "broken, not failing" signal, and an ordinary
+  # `rm foo.sh` you have not staged yet must not be able to raise it.
+  [ -f "$file" ] || continue
   case "$file" in
     *.sh)
       shell_files+=("$file")
       continue
       ;;
   esac
-  # Skipped rather than read: a path in the index need not exist in the working
-  # tree (sparse checkout, a deleted-but-unstaged file).
-  [ -f "$file" ] || continue
   # A bare `read` and a bash-native match, deliberately not `head | grep -q`:
   # under `set -o pipefail` a grep that exits early can leave head killed by
   # SIGPIPE, and the pipeline's 141 would then read as "no shebang" for a file
