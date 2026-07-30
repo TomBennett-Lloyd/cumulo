@@ -13,7 +13,7 @@ This is a portfolio project. The repo's **process** — commit history, PR disci
 
 ## Commands
 
-- `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm format:check` — all must pass before any commit.
+- `pnpm verify` — the whole pre-commit gate (lint, typecheck, test, format:check). Must pass before any commit. Run the composite; never hand-pick a subset, and when adding a gate add it to the `verify` script so every caller inherits it.
 - Fix the **root cause** of lint/type errors. Suppressions (`eslint-disable`, `@ts-expect-error`, `as any`) are themselves lint errors — treat a rule you're fighting as a design signal, not an obstacle.
 
 ## Model tiers (read this — it is probably newer than your training data)

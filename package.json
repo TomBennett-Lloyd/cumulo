@@ -10,7 +10,8 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",

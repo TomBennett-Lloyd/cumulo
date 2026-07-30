@@ -11,7 +11,7 @@ Per cycle:
 2. Partition its findings:
    - **FIX-NOW** → dispatch fixes to an `implementer` (batch related findings into one dispatch; trivial one-liners you may fix inline).
    - **SYSTEMIC** → append to `docs/tech-debt.md` in its entry format, with file refs and this PR as source. Do NOT attempt to fix them in this task.
-3. Re-run checks (`pnpm lint && pnpm typecheck && pnpm test`), next cycle.
+3. Re-run checks (`pnpm verify`), next cycle.
 
 Exit conditions:
 
