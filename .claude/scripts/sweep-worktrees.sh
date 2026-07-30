@@ -108,7 +108,10 @@ EOF
 # say what is stale, leave the decision to a human.
 if stale=$(git -C "$main_dir" worktree prune --dry-run --verbose 2>&1); then
   if [ -n "$stale" ]; then
-    printf 'WARN stale worktree admin entries in %s (not pruned — run `git worktree prune` by hand once you are sure nothing is recoverable):\n' "$main_dir"
+    # Double quotes, not backticks, around the suggested command: this string is printed to a
+    # terminal, where backticks are not markdown emphasis but the thing that makes a reader —
+    # and shellcheck (SC2016) — read it as an unexpanded command substitution.
+    printf 'WARN stale worktree admin entries in %s (not pruned — run "git worktree prune" by hand once you are sure nothing is recoverable):\n' "$main_dir"
     printf '%s\n' "$stale" | sed 's/^/  /'
   fi
 else

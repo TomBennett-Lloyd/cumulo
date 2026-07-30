@@ -567,7 +567,10 @@ end
 # ==========================================================================================
 begin "sweep reaps only the finished worktree and warns about an off-main checkout"
 fixture sweep
-add_wt done wt-done
+# 'done' is quoted everywhere it appears below because it is a branch name that collides with
+# a shell keyword. Bash parses it as a plain word in argument position either way, but the
+# quotes say "data, not syntax" to both readers and shellcheck (SC1010).
+add_wt 'done' wt-done
 add_wt messy wt-dirty
 add_wt stranded wt-unmerged
 must printf 'scratch\n' >"$ROOT/wt-dirty/notes.txt"
@@ -587,7 +590,7 @@ expect_out "swept 1, kept 2"
 expect_gone "$ROOT/wt-done"
 expect_exists "$ROOT/wt-dirty/notes.txt"
 expect_exists "$ROOT/wt-unmerged/file.txt"
-expect_no_branch "$ROOT/main" done
+expect_no_branch "$ROOT/main" 'done'
 expect_branch "$ROOT/main" messy
 expect_branch "$ROOT/main" stranded
 expect_exists "$ROOT/main/file.txt"
@@ -598,7 +601,7 @@ end
 # ==========================================================================================
 begin "sweep --dry-run leaves a vanished worktree's admin entry intact and reports would-sweep counts"
 fixture sweepdry
-add_wt done wt-done
+add_wt 'done' wt-done
 add_wt messy wt-dirty
 add_wt gone wt-gone
 must printf 'scratch\n' >"$ROOT/wt-dirty/notes.txt"
@@ -619,7 +622,7 @@ expect_out "would sweep 1, kept 2"
 expect_not_out "swept 1"
 expect_not_out "REAPED"
 expect_exists "$ROOT/wt-done/file.txt"
-expect_branch "$ROOT/main" done
+expect_branch "$ROOT/main" 'done'
 expect_exists "$ROOT/main/.git/worktrees/wt-gone"
 must mv "$ROOT/wt-gone-stashed" "$ROOT/wt-gone"
 # Restoring the directory must give back a usable worktree; a pruned entry cannot be repaired.
