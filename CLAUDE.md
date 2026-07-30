@@ -25,7 +25,7 @@ Policy:
 - Implementation and review run on **Opus**.
 - Planning and hard-problem consulting run on **Fable** (`model: 'fable'` in Agent calls).
 - An implementer returning `STATUS: STRUGGLING` triggers the `consultant` agent (Fable) for _guidance only_ — implementation stays with the original agent.
-- Before any Fable dispatch, check `.claude/budget.json`. If `mode` is `"conserve"`, downgrade to Opus and note the downgrade in the issue.
+- Before any Fable dispatch, read `~/.local/state/claude-budget/mode` — a machine-local budget ledger shared by every session and worktree on this machine, so it is one file read, not a computation. Contents are exactly `normal` or `conserve`; a missing file means `normal`. If `conserve`, downgrade to Opus and note the downgrade in the issue. To record fresh `/usage` numbers or refresh the mode, use the `budget-sync` skill.
 
 ## Standards index — read the linked doc BEFORE acting when a trigger matches
 
