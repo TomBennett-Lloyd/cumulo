@@ -4,8 +4,9 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    // Agent worktrees are gitignored, but eslint flat config does not read .gitignore
-    // (Prettier 3 does — which is why format:check never hit this). Keep the explicit entry.
+    // .claude/worktrees holds agent git worktrees; their unbuilt deps make type-aware rules
+    // report phantom errors. Gitignoring is not enough here: eslint flat config never reads
+    // .gitignore (Prettier does, so .gitignore alone covers format:check). Keep both entries.
     ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '.claude/worktrees/**'],
   },
   {

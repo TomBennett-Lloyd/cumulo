@@ -4,6 +4,9 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Agent git worktrees (created by .claude tooling inside the repo)
+.claude/worktrees/
+
 # Environment & secrets
 .env
 .env.*
