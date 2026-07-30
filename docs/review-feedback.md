@@ -13,4 +13,14 @@ Entry format:
 
 ---
 
-_(no entries)_
+## 2026-07-30 — PR #26
+
+- Category: other (merge-policy calibration)
+- Feedback: Config-only PRs should auto-merge — "the json file in there didn't matter, i'm more on about actual code … how you're structuring functions and modules and components."
+- Action: merge rule refined from "every changed file is .md" to "no source-code files"; encoded in `.claude/workflow.json` (this PR).
+
+## 2026-07-30 — issue #2 (plan review)
+
+- Category: plan
+- Feedback: "ADRs should always require a human review" — major decisions, the right altitude for human guidance without going deep into code.
+- Action: `docs/adr/**` added to `merge.humanAlways`; `adr` added to `planApproval.alwaysRequiredFor`; skills updated (this PR).

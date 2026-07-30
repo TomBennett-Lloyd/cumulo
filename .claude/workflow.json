@@ -1,14 +1,14 @@
 {
   "planApproval": {
     "mode": "required",
-    "note": "While 'required', /plan-issue stops after posting a plan; the user approves before /execute. Propose 'auto' via a retro PR once plan feedback has been quiet for several runs — the user decides."
+    "alwaysRequiredFor": ["adr"],
+    "note": "While 'required', /plan-issue stops after posting every plan. After graduation to 'auto', plans for issues carrying any label in alwaysRequiredFor STILL stop for user approval — ADRs are major decisions and the user steers at this altitude. Graduation is proposed via retro PR; the user decides."
   },
   "merge": {
-    "docs": "auto",
-    "code": "human",
-    "docsOnlyRule": "A PR is docs-only iff EVERY changed file ends in .md. Anything else — code, JSON/YAML config, hooks, CI, infra — is a code PR.",
-    "codeRule": "Code PRs: CI green, then label 'awaiting-review', notify the user, do NOT merge; continue with independent tickets while it waits.",
-    "note": "Propose flipping code→auto via a retro PR once review-feedback categories have gone quiet — the user decides."
+    "autoRule": "A PR auto-merges once CI is green iff it contains NO source-code files AND touches nothing under humanAlways paths. Source code = extensions .ts .tsx .js .mjs .cjs .sh .py .tf .sql — files whose structure (functions, modules, components) the user reviews. Markdown, JSON, YAML, and other plain config auto-merge.",
+    "humanAlways": ["docs/adr/**"],
+    "codeRule": "Human-review PRs: CI green, then label 'awaiting-review', notify the user with a short review guide, do NOT merge; continue with independent tickets while it waits.",
+    "note": "Propose relaxing via retro PR once review-feedback categories go quiet — the user decides."
   },
   "feedbackLog": "docs/review-feedback.md"
 }
