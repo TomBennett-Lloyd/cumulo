@@ -126,9 +126,11 @@ if [ "$dry_run" = "1" ]; then
   exit 0
 fi
 
-# --force only because ignored files (node_modules) block a plain remove; the stricter
-# is_clean check above already proved there is no unreviewed work here.
-git -C "$main_dir" worktree remove --force "$wt" || exit 2
+# No --force. Ignored files do NOT block a plain remove (verified on git 2.50.1 with a
+# populated node_modules), so the only thing --force would add is the power to delete work
+# that appeared between is_clean above and this line. A plain remove refuses in that race
+# and we exit 2 with the worktree intact, which is the outcome this script exists to prefer.
+git -C "$main_dir" worktree remove "$wt" || exit 2
 # -D not -d: -d compares against a possibly-stale local main and would reject squash-merged
 # branches. The merge safety lives in is_merged, above.
 git -C "$main_dir" branch -D "$branch" >/dev/null || exit 2

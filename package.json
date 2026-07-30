@@ -9,9 +9,10 @@
     "lint": "eslint --max-warnings 0 .",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
+    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:scripts && pnpm format:check",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "lint-staged": {
