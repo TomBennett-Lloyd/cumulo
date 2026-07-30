@@ -15,6 +15,12 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 
 ---
 
+## 2026-07-30 — PR #39 — precommit-approved-clean
+
+- Category: code-style
+- Feedback: "the precommit hooks look good i think we can ship that" — approved with no change requests, the first code PR through the human gate.
+- Action: merged (rebased onto `main` to resolve a `package.json` scripts conflict with `pnpm verify`). No guidance change needed; logged as graduation evidence for the code-review gate.
+
 ## 2026-07-30 — PR #26 — merge-gate-calibration
 
 - Category: other (merge-policy calibration)

@@ -1,5 +1,5 @@
 {
-  "mode": "normal",
+  "mode": "conserve",
   "policy": {
     "conserve_when": {
       "fable_weekly_pct": 70,
@@ -8,6 +8,20 @@
     },
     "conserve_effect": "Planning and consulting downgrade from Fable to Opus; every downgrade is noted in the relevant issue."
   },
-  "last_reported": null,
-  "history": []
+  "last_reported": {
+    "date": "2026-07-30",
+    "five_hour_pct": 94,
+    "weekly_pct": null,
+    "fable_weekly_pct": null,
+    "note": "User-reported 5-hour figure only; weekly/Fable not reported."
+  },
+  "history": [
+    {
+      "date": "2026-07-30",
+      "five_hour_pct": 94,
+      "weekly_pct": null,
+      "fable_weekly_pct": null,
+      "note": "User-reported 5-hour figure only; weekly/Fable not reported."
+    }
+  ]
 }
