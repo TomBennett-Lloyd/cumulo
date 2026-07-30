@@ -2,13 +2,15 @@
   "planApproval": {
     "mode": "required",
     "alwaysRequiredFor": ["adr"],
-    "note": "While 'required', /plan-issue stops after posting every plan. After graduation to 'auto', plans for issues carrying any label in alwaysRequiredFor STILL stop for user approval — ADRs are major decisions and the user steers at this altitude. Graduation is proposed via retro PR; the user decides."
+    "note": "While 'required', /plan-issue stops after posting every plan. After graduation to 'auto', plans for issues carrying any label in alwaysRequiredFor STILL stop for user approval \u2014 ADRs are major decisions and the user steers at this altitude. Graduation is proposed via retro PR; the user decides.",
+    "debtBurn": "Issues labelled 'debt-burn' skip plan approval: the issue body IS the plan (triage only applies the label to small, proven, well-scoped work with named files and mechanical acceptance). Anything needing a re-structure or re-think is not labelled debt-burn and keeps the full gates."
   },
   "merge": {
-    "autoRule": "A PR auto-merges once CI is green iff it contains NO source-code files AND touches nothing under humanAlways paths. Source code = extensions .ts .tsx .js .mjs .cjs .sh .py .tf .sql — files whose structure (functions, modules, components) the user reviews. Markdown, JSON, YAML, and other plain config auto-merge.",
+    "autoRule": "A PR auto-merges once CI is green iff it contains NO source-code files AND touches nothing under humanAlways paths. Source code = extensions .ts .tsx .js .mjs .cjs .sh .py .tf .sql \u2014 files whose structure (functions, modules, components) the user reviews. Markdown, JSON, YAML, and other plain config auto-merge.",
     "humanAlways": ["docs/adr/**"],
     "codeRule": "Human-review PRs: CI green, then label 'awaiting-review', notify the user with a short review guide, do NOT merge; continue with independent tickets while it waits.",
-    "note": "Propose relaxing via retro PR once review-feedback categories go quiet — the user decides."
+    "note": "Propose relaxing via retro PR once review-feedback categories go quiet \u2014 the user decides.",
+    "debtBurnRule": "A PR closing a 'debt-burn'-labelled issue auto-merges once CI is green AND the review loop ended in APPROVE, even when it touches source code. Decided by the user 2026-07-30 (see review-feedback: debt-burn-lane). Bigger themes stay human-gated \u2014 and a decision pending with the user must never block the debt-burn lane."
   },
   "feedbackLog": "docs/review-feedback.md"
 }
