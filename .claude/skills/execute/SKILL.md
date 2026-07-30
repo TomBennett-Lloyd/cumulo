@@ -14,4 +14,4 @@ You are orchestrating execution of an approved plan (in the issue's comments). Y
    - `STRUGGLING` → check `.claude/budget.json`; spawn the `consultant` agent (Fable, or Opus if conserving — note it) with the implementer's full report. Re-dispatch the SAME chunk to a fresh `implementer` with the consultant's guidance attached. The consultant never implements.
    - `DISCOVERED:` items → `gh issue create --label discovered` for each (or comment on an existing issue). Never act on them in this task.
 5. **After each wave**: commit completed work with a descriptive message referencing the issue; update the plan comment with per-chunk status (checkboxes).
-6. **All chunks done** → run `pnpm lint && pnpm typecheck && pnpm test && pnpm format:check` at repo root → invoke `/review-loop`.
+6. **All chunks done** → run `pnpm verify` at repo root → invoke `/review-loop`.
