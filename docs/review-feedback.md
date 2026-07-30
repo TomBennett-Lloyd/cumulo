@@ -68,3 +68,9 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 - Category: other (verification rigour)
 - Feedback: "are there any other places that need to ignore the worktree?"
 - Action: The audit this prompted found `format:check` was vulnerable too and that `.claude/worktrees/` had never actually been gitignored (only `.git/info/exclude`, which is machine-local) — both fixed in #35, correcting a false claim the first commit had already encoded as a code comment. Promoted into the workflow via #41: `implementer.md` now requires a negative control for any change whose purpose is to alter whether a check fires, and forbids asserting a check was unaffected without testing it.
+
+## 2026-07-30 — issue #38 — teardown-rehearsal-non-destructive
+
+- Category: plan
+- Feedback: "for 38, C5, i think we should go for the non destructive route (and generally going forwards this should be the case, the planned destroy should be sufficient)"
+- Action: #38's C5 amended on the issue: acceptance evidence is `terraform plan -destroy` enumerating the resource (`Plan: 0 to add, 0 to change, 8 to destroy.`), not an executed teardown/re-spin-up cycle. **Standing policy for future plans**: the full destructive teardown rehearsal was run once for #7 to prove the runbook; subsequent infra tickets verify teardown participation via planned destroy only. Planner guidance: when writing infra acceptance criteria, "verified removed by teardown" means the resource appears in a destroy plan, not that teardown was executed.
