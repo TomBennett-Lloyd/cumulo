@@ -78,3 +78,15 @@ Entry format:
 - Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)
 - What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI does not run these scripts at all) and #48 (no shellcheck gate).
 - Source: #42
+
+## 2026-07-30 — Terraform guard logic has no way to exercise its failure path
+
+- Where: `infra/bootstrap/budget.tf` (the `data.aws_ssm_parameter.notification_email` postcondition); no `*.tftest.hcl` anywhere in `infra/`
+- What: the postcondition exists to turn a malformed notification address into a plan-time failure, and nothing in the repo has ever made it fail. The regex was verified by hand in `terraform console` — which is how cycle 1 caught that `^[^@\s]+@…$` happily accepted `<tom@example.com>`, the exact shape the error message claims to reject. `terraform fmt` and `validate` do not evaluate conditions, so a guard that never fires and a guard that cannot fire look identical to CI. Root cause is a missing harness, not a missing assertion: `terraform test` with a `.tftest.hcl` fixture (`expect_failures` on the data source, mock/override values for the parameter) is the cross-cutting fix, and it applies to every future precondition, postcondition, and variable `validation` block in this stack — the OIDC subject prefix and bucket-name assumptions are the next candidates. Wants one fixture pattern plus a CI step, not a per-resource fix.
+- Source: #38 review cycle 1
+
+## 2026-07-30 — `aws_budgets_budget.cost_types` left at AWS defaults
+
+- Where: `infra/bootstrap/budget.tf` (`aws_budgets_budget.monthly_cost_ceiling`)
+- What: no `cost_types` block, so the budget uses the AWS defaults, which subtract credits and refunds. On an account carrying promotional credits the meter can therefore run well past $100/month of gross usage while net cost stays under threshold and nothing alerts — the alarm reports what will be billed, not what is being consumed. That is a defensible reading of "cost ceiling" for a project whose ceiling is about the bank balance, and it is the current deliberate choice; it stops being defensible the moment credits land on the account, because the whole point of the ceiling is to catch runaway usage _before_ it is expensive. Revisit if credits appear (or before any AWS-credits programme is used for this project): either add `cost_types { include_credit = true, include_refund = false }`, or add a second usage-oriented budget beside the billed-cost one. Not a fix for this diff — it is a policy decision about what the number means, and it wants the account's credit state as an input.
+- Source: #38 review cycle 1
