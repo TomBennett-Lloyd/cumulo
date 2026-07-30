@@ -1,0 +1,16 @@
+/*
+ * Styling for <OpenMeteoAttribution />. Tokens only — the credit has to stay
+ * legible on every surface and in both themes, so it borrows the muted ink and
+ * the accent link colour rather than choosing its own.
+ */
+
+.cumulo-attribution {
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.cumulo-attribution a {
+  color: var(--color-accent);
+}

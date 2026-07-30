@@ -47,4 +47,43 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'error',
     },
   },
+  {
+    /*
+     * Frontend gate (CLAUDE.md): UI code consumes design tokens only. Raw
+     * colours and inline styles are caught here; the CSS half of the same rule
+     * lives in stylelint.config.mjs. Values are exempted by file, never by
+     * comment — packages/ui/src/tokens/tokens.css is the one place raw values
+     * exist, and tokens.ts only ever references them as `var(--…)` strings.
+     */
+    files: ['apps/**/*.{ts,tsx}', 'packages/ui/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Literal[value=/#[0-9a-fA-F]{3,8}\\b/]',
+          message:
+            'Hex colour literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/#[0-9a-fA-F]{3,8}\\b/]',
+          message:
+            'Hex colour literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
+        },
+        {
+          selector: 'Literal[value=/(rgba?|hsla?|oklch)\\(/]',
+          message:
+            'Colour-function literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/(rgba?|hsla?|oklch)\\(/]',
+          message:
+            'Colour-function literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
+        },
+        {
+          selector: 'JSXAttribute[name.name="style"]',
+          message: 'Inline styles are banned in UI code. Style via CSS classes consuming tokens.',
+        },
+      ],
+    },
+  },
 );
