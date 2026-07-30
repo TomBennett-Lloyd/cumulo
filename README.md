@@ -14,6 +14,33 @@ The name: cumulus clouds are the antagonist — the thing between the sun and th
 
 - Weather and solar irradiance data by [Open-Meteo.com](https://open-meteo.com/), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Open-Meteo blends models and reanalysis data (ERA5, ERA5-Land) from national weather services; see their [data sources](https://open-meteo.com/en/docs) for the underlying providers.
 
+## Local checks
+
+Fresh clone:
+
+```bash
+pnpm install          # installs dependencies and points git at .githooks
+brew install gitleaks # required: the pre-commit hook hard-fails without it
+```
+
+`pnpm install` runs the root `prepare` script, which sets `core.hooksPath=.githooks` — the hook is committed and version-controlled, so there is nothing to copy into `.git/hooks` by hand.
+
+Three layers guard the same rules at different moments, deliberately redundant but with no duplicated work:
+
+| Layer                              | Runs                                   | Owns                                                                                                                                                               |
+| ---------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.claude/hooks/post-edit-check.sh` | after an agent edits a TypeScript file | ESLint on that one file, working-tree content — the fast inner loop                                                                                                |
+| `.githooks/pre-commit`             | `git commit`                           | the only check that sees exactly the **staged** content: gitleaks on the staged diff, then ESLint + `prettier --check` on staged files                             |
+| `.github/workflows/ci.yml`         | every push and pull request            | the unskippable backstop: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm format:check` across the whole repo, plus a full-history gitleaks scan — authoritative |
+
+Notes:
+
+- **Staged files only, and no typecheck or tests in the hook.** Whole-project `tsc` and vitest on every commit is how `--no-verify` becomes a habit. CI owns those gates.
+- **Check-only.** The hook never rewrites your files: formatting violations are reported, not fixed. Run `pnpm format` and re-stage.
+- **The hook's ESLint run uses `--cache`** (stored under `node_modules/.cache/eslint-precommit/`) purely for speed. Type-aware lint results for one file can change when a _different_ file changes, without invalidating the cache — so the cache is hook-only. `pnpm lint` and CI remain uncached and authoritative.
+- **Missing gitleaks is a hard failure**, not a warning. A silently skipped secret scanner is indistinguishable from a passing one, and a leaked credential is the one mistake a follow-up commit cannot undo.
+- **`--no-verify` skips all of this**, and pretending otherwise would be dishonest. It only moves the failure somewhere more expensive: CI cannot be skipped, and a secret that reaches a remote has to be rotated regardless of what happens to the history.
+
 ## How this repo is built
 
 This project is built with an agentic workflow (Claude Code) under tight human direction — and the workflow itself is part of the portfolio. Plans live in issue bodies, architecture decisions in [`docs/adr/`](docs/adr/), engineering standards in [`docs/standards/`](docs/standards/), and the agent/skill definitions in [`.claude/`](.claude/). Tech debt and process friction are tracked honestly in [`docs/tech-debt.md`](docs/tech-debt.md) and [`docs/friction-log.md`](docs/friction-log.md) and periodically converted into root-cause issues.
