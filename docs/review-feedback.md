@@ -15,6 +15,12 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 
 ---
 
+## 2026-07-30 — PR #52 — worktree-lifecycle-approved-clean
+
+- Category: code-style
+- Feedback: "nice yeah 52 looks good merge away" — approved with no change requests. Also closed out the stale sibling branch question: "i think those flags have already been tidied up as part of a different chat so don't worry about those".
+- Action: merged (rebased through an append-vs-append conflict in `docs/tech-debt.md` where other tickets had added entries; both sides kept). No guidance change from the user's feedback itself. Logged as graduation evidence for the code-review gate — second consecutive code PR approved clean after #39. Note the counterweight before anyone graduates on this: #52 reached "clean" only after two internal review cycles that found an inert feature and a destructive `--dry-run`, so the human gate saw a PR the loop had already repaired.
+
 ## 2026-07-30 — PR #36 — oidc-sub-tighten-now
 
 - Category: architecture

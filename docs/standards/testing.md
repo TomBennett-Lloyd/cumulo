@@ -16,6 +16,8 @@
 
 6. **Vitest, colocated.** `*.test.ts` next to the source it tests. `pnpm test` runs everything; a chunk isn't DONE until its tests pass.
 
+7. **If a test turns a guard off to reach its target, another test must run the production default.** Neutering a knob — env var, feature flag, injected clock, retry limit, rate limiter — is often the only way to make a path reachable. But when _every_ test on a path disables the same knob, the suite proves that path works in a configuration nobody runs, and the default is untested. #42 shipped a reaper that could never reap at its default 60-minute setting: every reaping test forced the guard to `0`, and the one test that left it on asserted only the refusal it always makes. Mutation testing did not catch it — mutation coverage proves your assertions bite, not that you asserted the right thing in the configuration that ships.
+
 ## Why
 
 Visible, meaningful coverage is an explicit portfolio goal — but reviewers at this level can tell coverage theatre from real tests. Five sharp edge-case tests on the aggregation math say more than fifty mock-assertion tests, and the pure-core architecture makes the sharp ones cheap.
