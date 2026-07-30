@@ -31,12 +31,25 @@ data "aws_iam_policy_document" "github_actions_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # The `sub` condition is the actual security boundary. Its shape is
-    # `repo:<owner>/<repo>:<ref-or-environment-claim>`, and the owner and repo
-    # segments must stay literal — a wildcard anywhere left of the last colon
-    # (`repo:*`, `repo:TomBennett-Lloyd/*`) reopens exactly the hole the `aud`
-    # check above fails to close, while still looking like a condition block
-    # that does something.
+    # The `sub` condition is the actual security boundary, and its shape is the
+    # one thing most GitHub-OIDC material gets wrong. The tokens this repo's
+    # runners actually present carry GitHub's *immutable* subject —
+    # `repo:<owner>@<owner-id>/<repo>@<repo-id>:<claim>` — embedding the numeric
+    # owner and repository ids. The name-only form
+    # (`repo:TomBennett-Lloyd/cumulo:...`) that nearly every tutorial shows is
+    # stale; a policy written that way matches nothing and every assume fails.
+    # The prefix comes from `var.github_subject_prefix`, which is read from
+    # GitHub, not assembled from the repo name (see variables.tf).
+    #
+    # Embedding ids is strictly *stronger* than naming the repo. Names are
+    # reassignable: rename this repo or this org and the freed name is available
+    # to anyone, whose new repo would then mint tokens matching a name-based
+    # policy. Numeric ids are never reissued, so a rename can move the repo but
+    # cannot transfer this trust to a stranger.
+    #
+    # The owner and repo segments must stay literal — a wildcard anywhere left
+    # of the last colon reopens exactly the hole the `aud` check above fails to
+    # close, while still looking like a condition block that does something.
     #
     # The trailing claim is an exact-match allowlist rather than a `:*`
     # wildcard: a wildcard would let *any* workflow context in this repo assume
@@ -56,8 +69,8 @@ data "aws_iam_policy_document" "github_actions_trust" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_repository}:ref:refs/heads/main",
-        "repo:${var.github_repository}:pull_request",
+        "${var.github_subject_prefix}:ref:refs/heads/main",
+        "${var.github_subject_prefix}:pull_request",
       ]
     }
   }

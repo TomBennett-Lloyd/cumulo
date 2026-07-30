@@ -61,7 +61,18 @@ That decision has a consequence worth stating plainly: `terraform output` prints
 
 `aws_iam_role.github_actions` has no inline policies and no managed policy attachments. This is not an oversight or a to-do: the smoke test that proves the role works — `aws sts get-caller-identity` — requires no permissions at all, so the entire OIDC path can be verified end to end before a single grant exists. Deploy permissions then arrive least-privilege with the service tickets that need them, scoped to the resources those services own (ADR 0001). A broad `PowerUserAccess` here would be quicker and would quietly undo that.
 
-The trust policy is the security boundary, and it is worth reading `oidc.tf` before changing: the `sub` condition is a two-value `StringEquals` allowlist — `repo:<owner>/<repo>:ref:refs/heads/main` and `repo:<owner>/<repo>:pull_request` — not a `:*` wildcard, so tags, other branch refs and future event contexts cannot assume the role at all. The `pull_request` entry is there only so `oidc-smoke` can run pre-merge against a role with no permissions; **the change that attaches the first permission to this role must delete that entry in the same PR**, because a pull_request-context run must never hold deploy permissions. Checking `aud` is necessary and nowhere near sufficient — every GitHub Actions token in the world carries `aud=sts.amazonaws.com`, so a trust policy that stops at the audience lets any repository on GitHub assume the role while still looking like it has a condition block that does something.
+The trust policy is the security boundary, and it is worth reading `oidc.tf` before changing: the `sub` condition is a two-value `StringEquals` allowlist — one `…:ref:refs/heads/main`, one `…:pull_request` — not a `:*` wildcard, so tags, other branch refs and future event contexts cannot assume the role at all. The `pull_request` entry is there only so `oidc-smoke` can run pre-merge against a role with no permissions; **the change that attaches the first permission to this role must delete that entry in the same PR**, because a pull_request-context run must never hold deploy permissions. Checking `aud` is necessary and nowhere near sufficient — every GitHub Actions token in the world carries `aud=sts.amazonaws.com`, so a trust policy that stops at the audience lets any repository on GitHub assume the role while still looking like it has a condition block that does something.
+
+The prefix in front of those two claims is GitHub's **immutable subject**, `repo:<owner>@<owner-id>/<repo>@<repo-id>`, and it is the part worth getting right. Almost every GitHub-OIDC tutorial shows the name-based form `repo:<owner>/<repo>:…`; current GitHub does not issue that, so a policy written from those examples matches nothing and every assume fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity` — a failure that reads like a missing permission and is actually a string mismatch. Embedding the ids is also the stricter choice, not merely the working one: GitHub names are reassignable, so a name-based policy would keep trusting whoever registered the org or repo name this project released, while numeric ids are never reissued.
+
+Because the ids are not derivable from the names, the value is read from GitHub rather than assembled, and lives in `var.github_subject_prefix` (`variables.tf`), whose `validation` block rejects a name-only prefix outright:
+
+```bash
+gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
+# repo:<owner>@<owner-id>/<repo>@<repo-id>
+```
+
+The numeric owner and repository ids are public identifiers, not secrets — unlike the account id of convention 7, they belong in the committed default.
 
 ---
 
@@ -144,6 +155,12 @@ aws sts get-caller-identity --query Account --output text
 ```
 
 `backend.hcl`'s `region` and `bootstrap.auto.tfvars`'s `aws_region` must be the same value: the backend and the provider have to agree on where the bucket lives. `github_repository` needs no entry — it defaults to `TomBennett-Lloyd/cumulo`.
+
+**Applying against your own fork or account?** Then `github_subject_prefix` does need an entry, because its default is this repository's immutable subject and no other repository's tokens will ever match it. Re-derive yours and put it in `bootstrap.auto.tfvars` alongside the region (convention 8 explains why this is the security boundary):
+
+```bash
+gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
+```
 
 **A2. Add the local-backend override.**
 
