@@ -42,7 +42,9 @@ EOF
   exit 1
 fi
 
-if ! gitleaks git --pre-commit --staged --redact --no-banner; then
+# --verbose is load-bearing, not noise: without it gitleaks reports only a count,
+# and a rejection that does not name the file and rule is not actionable.
+if ! gitleaks git --pre-commit --staged --redact --no-banner --verbose; then
   cat >&2 <<'EOF'
 
 pre-commit: gitleaks found a secret in your staged changes (file, line and rule
