@@ -94,8 +94,11 @@ $paths
 EOF
 
 # --- stale admin entries: reported, never pruned -----------------------------------------
-# This used to run `git worktree prune` unconditionally, which broke --dry-run's read-only
-# contract. Reporting is now the behaviour in BOTH modes, for a reason beyond dry-run:
+# This used to run `git worktree prune` unconditionally, which destroyed admin data under
+# --dry-run. Note the guarantee is "--dry-run destroys nothing", NOT "--dry-run is read-only":
+# is_merged still runs `git fetch origin main`, which writes remote-tracking refs and objects.
+# That is additive and cannot lose work, but do not restate it as read-only.
+# Reporting is now the behaviour in BOTH modes, for a reason beyond dry-run:
 # reap-worktree.sh removes worktrees via `git worktree remove`, which cleans up its own admin
 # dir, so a sweep never leaves an entry of its own to prune. Prune could therefore only ever
 # fire on the one case this tool has no business deciding — a worktree directory that vanished
