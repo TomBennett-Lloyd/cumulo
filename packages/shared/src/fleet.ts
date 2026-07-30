@@ -7,6 +7,8 @@ import type { Site } from './site';
  * so nothing here may touch ambient state: no platform randomness, no clock, no environment.
  * Every value derives from the caller's seed via an explicit PRNG, and the draw order below is
  * part of the contract: changing it changes the fleet.
+ *
+ * @see docs/design/fleet-simulation.md — the rationale behind every constant below.
  */
 
 /** The seed that defines *the* Cumulo demo fleet. Changing it changes every documented figure. */
@@ -42,6 +44,12 @@ const sitesPerLocation = 5;
 /** Half-width of the uniform offset applied to each site around its cluster centre. */
 const latitudeJitterDegrees = 0.02;
 const longitudeJitterDegrees = 0.03;
+
+/**
+ * Coordinates are recorded to 5 decimal places — about a metre, far finer than the jitter box and
+ * still distinct per site, without claiming survey accuracy a synthetic site cannot have.
+ */
+const coordinateDecimals = 5;
 
 /** A triangular distribution: `mode` is the peak, `min`/`max` the support. */
 interface TriangularRange {
@@ -136,8 +144,14 @@ export function generateFleet(seed: number): readonly Site[] {
     for (let index = 0; index < sitesPerLocation; index += 1) {
       // Draw order is the contract — id bytes, latitude, longitude, tilt, azimuth, capacity.
       const id = nextUuidV4(rng);
-      const latitude = location.latitude + sampleJitter(rng, latitudeJitterDegrees);
-      const longitude = location.longitude + sampleJitter(rng, longitudeJitterDegrees);
+      const latitude = roundTo(
+        location.latitude + sampleJitter(rng, latitudeJitterDegrees),
+        coordinateDecimals,
+      );
+      const longitude = roundTo(
+        location.longitude + sampleJitter(rng, longitudeJitterDegrees),
+        coordinateDecimals,
+      );
       const tiltDegrees = Math.round(sampleTriangular(rng, tiltDegreesRange));
       const azimuthDegrees = Math.round(sampleTriangular(rng, azimuthDegreesRange));
       const capacityKw = roundTo(sampleTriangular(rng, capacityKwRange), 1);

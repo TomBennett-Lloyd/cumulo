@@ -57,6 +57,11 @@ depend on co-located sites having byte-identical coordinates. The offset is smal
 sites in a cluster genuinely share weather, which is what makes the de-duplication honest rather
 than a rounding trick.
 
+Jittered coordinates are **rounded to 5 decimal places** — about a metre at these latitudes. That
+is three orders of magnitude finer than the jitter box, so sites stay distinct and stay inside
+their cluster, while the stored record reads like something a person could have entered rather
+than a float carrying the full residue of a PRNG draw.
+
 ## Distributions
 
 All three physical parameters are drawn from **triangular distributions**, written
@@ -72,8 +77,8 @@ around the mode without pretending to a precision the source data does not suppo
 | `azimuthDegrees` | triangular(90, 180, 270)   | degrees clockwise from north |
 
 Draws are rounded to the precision a site record would plausibly be recorded at — capacity to
-0.1 kWp, tilt and azimuth to whole degrees. A synthetic site should not carry eleven significant
-figures of fictional survey accuracy.
+0.1 kWp, tilt and azimuth to whole degrees, coordinates to 5 decimal places. A synthetic site
+should not carry eleven significant figures of fictional survey accuracy.
 
 **Capacity — triangular(2.0, 4.0, 10.0) kWp.** The mode sits at 4.0 kWp because that is where
 the IE/UK residential population actually clusters: the historic domestic connection cap and the
@@ -82,6 +87,15 @@ installations were sized to fit under it. The 2.0 kWp floor is a small starter a
 constrained roof. The 10.0 kWp ceiling is the tail — a large modern install with a bigger roof
 and no legacy cap — and it stays well inside `siteSchema`'s 50 kW sanity bound, which exists to
 reject data-entry errors rather than to describe residential norms.
+
+The long right tail means the mode is not the centre of mass: 75% of a triangular distribution's
+area sits above a mode this close to the floor, and the canonical fleet lands at a mean of
+5.5 kWp, a median of 5.2, with 48 of its 60 sites above 4 kWp. That skew is a decision, not an
+oversight. The mode is what anchors the fleet to the G98/MCS-era 3.68–4 kW cap; the mass above it
+reflects where new installations have actually gone now that the cap no longer binds — and it
+gives the demo a fleet with enough aggregate output (~332 kWp) to make fleet-level curves and
+flexibility headroom worth looking at. A fleet pinned to the historic domestic median would be a
+more faithful snapshot of the installed base and a less useful thing to forecast.
 
 **Tilt — triangular(20, 35, 50)°.** Rooftop PV is almost always mounted flush to the pitch, so
 this is really a distribution over IE/UK domestic roof pitches. 35° is both the typical pitch and
