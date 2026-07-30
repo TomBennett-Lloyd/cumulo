@@ -11,12 +11,18 @@
     "test": "pnpm -r run test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check",
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mts,cts}": "eslint --no-warn-ignored --max-warnings 0 --cache --cache-location node_modules/.cache/eslint-precommit/",
+    "*": "prettier --check --ignore-unknown"
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0"

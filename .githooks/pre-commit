@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#
+# Cumulo pre-commit hook. Installed via `core.hooksPath=.githooks`, which the
+# root package.json "prepare" script sets on every `pnpm install` — nothing is
+# ever copied into .git/hooks by hand.
+#
+# Three local layers, no duplicated work:
+#
+#   .claude/hooks/post-edit-check.sh  edit-time ESLint on the single file an agent
+#                                     just wrote. Fast inner loop, working-tree
+#                                     content, one file at a time.
+#   this hook                         the only check that sees exactly the STAGED
+#                                     content: secret scan, then lint + format on
+#                                     the staged files.
+#   .github/workflows/ci.yml          the unskippable backstop: whole-repo lint,
+#                                     typecheck, test, format:check plus a
+#                                     full-history gitleaks scan. Authoritative.
+#
+# Deliberately NOT here: typecheck and tests. Whole-project tsc/vitest on every
+# commit is exactly how `--no-verify` becomes a habit; CI owns those gates.
+#
+set -uo pipefail
+export PATH="/opt/homebrew/bin:$PATH"
+
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+
+pre-commit: gitleaks is not installed — refusing to commit.
+
+  Secret scanning is not optional in this repo. A leaked credential is the one
+  mistake a follow-up commit cannot undo, and a silently skipped scanner is
+  indistinguishable from a passing one — so this hook hard-fails rather than warn.
+
+  Install it, then commit again:
+
+      brew install gitleaks
+
+EOF
+  exit 1
+fi
+
+# --verbose is load-bearing, not noise: without it gitleaks reports only a count,
+# and a rejection that does not name the file and rule is not actionable.
+if ! gitleaks git --pre-commit --staged --redact --no-banner --verbose; then
+  cat >&2 <<'EOF'
+
+pre-commit: gitleaks found a secret in your staged changes (file, line and rule
+are named above; the value itself is redacted).
+
+  Remove it from the staged content. Do NOT reach for --no-verify: the whole
+  point of this hook is the seconds between the mistake and the push, and CI
+  will fail the PR anyway.
+
+  If the credential is real and has already left this machine — pushed, pasted,
+  shared — rotate it. Rewriting history is not a remedy on its own.
+
+  If it is genuinely a false positive, add a narrow allowlist to .gitleaks.toml
+  as its own reviewable commit, rather than bypassing the scan.
+
+EOF
+  exit 1
+fi
+
+if [ ! -d node_modules ]; then
+  cat >&2 <<'EOF'
+
+pre-commit: node_modules is missing, so the staged lint/format checks cannot run.
+
+  Run `pnpm install` and commit again.
+
+EOF
+  exit 1
+fi
+
+if ! pnpm exec lint-staged; then
+  cat >&2 <<'EOF'
+
+pre-commit: staged files failed lint or formatting (file and rule are named above).
+
+  Fix the root cause. In this repo `eslint-disable`, `@ts-expect-error` and
+  `as any` are themselves lint errors — a rule fighting you is a design signal.
+  For formatting only, `pnpm format` rewrites the files; re-stage afterwards.
+
+EOF
+  exit 1
+fi
