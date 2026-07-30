@@ -20,5 +20,5 @@ Exit conditions:
 
 Then:
 
-4. Push branch; `gh pr create` — title references the issue (`Closes #n`), body summarizes what/why, links the plan comment, and notes any tech-debt entries this task added.
-5. After the PR merges, run `/retro`.
+4. Push branch; `gh pr create` — title references the issue (`Closes #n`), body summarizes what/why, links the plan comment, and notes any tech-debt entries this task added. Wait for CI green.
+5. Classify the diff per `.claude/workflow.json`: **docs-only** (every changed file is `.md`) → merge (squash, delete branch) and run `/retro`. **Code** → add the `awaiting-review` label, notify the user with a one-paragraph review guide (what to look at, what decisions were made), and do NOT merge; continue with independent tickets. When the user reviews: log every substantive piece of feedback in `docs/review-feedback.md` (category + action), address requested changes (cycle cap still applies), and merge only after they approve. After merge: `/retro`.

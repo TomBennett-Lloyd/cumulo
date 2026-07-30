@@ -1,0 +1,14 @@
+{
+  "planApproval": {
+    "mode": "required",
+    "note": "While 'required', /plan-issue stops after posting a plan; the user approves before /execute. Propose 'auto' via a retro PR once plan feedback has been quiet for several runs — the user decides."
+  },
+  "merge": {
+    "docs": "auto",
+    "code": "human",
+    "docsOnlyRule": "A PR is docs-only iff EVERY changed file ends in .md. Anything else — code, JSON/YAML config, hooks, CI, infra — is a code PR.",
+    "codeRule": "Code PRs: CI green, then label 'awaiting-review', notify the user, do NOT merge; continue with independent tickets while it waits.",
+    "note": "Propose flipping code→auto via a retro PR once review-feedback categories have gone quiet — the user decides."
+  },
+  "feedbackLog": "docs/review-feedback.md"
+}

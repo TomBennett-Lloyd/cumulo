@@ -14,4 +14,4 @@ You are orchestrating the planning phase for one GitHub issue.
    - `Depends on:` edges form a DAG; parallelism claims don't overlap files.
      If it falls short, send it back once with specific defects. If still short, escalate to the user.
 5. Post the plan: `gh issue comment <n> --body-file <plan file>`. Apply label `planned` (`gh issue edit <n> --add-label planned`).
-6. If the plan's "Risks & open questions" contains questions only the user can answer, surface them and stop. Otherwise proceed to `/execute`.
+6. Check `.claude/workflow.json` → `planApproval.mode`. If `required`: surface a plan summary and link to the user and STOP — do not `/execute` until the user approves. Log any plan feedback they give to `docs/review-feedback.md` (category `plan`) as you address it. If `auto`: proceed to `/execute` unless the plan's "Risks & open questions" contains questions only the user can answer — surface those first.
