@@ -292,6 +292,8 @@ ls -l terraform.tfstate
 terraform state list   # expect the same 9 lines as B3 — 7 resources + 2 data sources
 ```
 
+This step is load-bearing, not ceremony. T1's prompt accepts only the literal string `yes`; anything else — including `y` — is taken as "start with an empty state", and Terraform then reports a _successful_ init while `terraform.tfstate` never appears and the real state stays in S3. A `terraform destroy` from that position would have no idea what it owns. If `ls` finds no file, nothing has been lost yet: re-init back to S3 with `terraform init -reconfigure -backend-config=backend.hcl` and start T1 again.
+
 **T3. Destroy.** `force_destroy = true` on the bucket is what allows this to complete — a versioned bucket is never empty, and by this point it holds only a copy of state that T1 already brought home:
 
 ```bash
