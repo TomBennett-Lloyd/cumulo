@@ -24,3 +24,9 @@ Entry format:
 - Category: plan
 - Feedback: "ADRs should always require a human review" — major decisions, the right altitude for human guidance without going deep into code.
 - Action: `docs/adr/**` added to `merge.humanAlways`; `adr` added to `planApproval.alwaysRequiredFor`; skills updated (this PR).
+
+## 2026-07-30 — issue #2 (plan review)
+
+- Category: plan
+- Feedback: Anonymous site creation is an abuse/cost surface — wants a site cap with oldest-eviction, cheap IP rate limiting with auto-block, and friction against programmatic API use; auth is future expansion whose placement must be considered, not foreclosed.
+- Action: #29 (demo abuse & cost protection; now blocks #21) and #30 (auth placement design) created; ADR 0001 amended to acknowledge both as deferred forces (this PR).
