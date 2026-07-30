@@ -16,9 +16,17 @@ coverage/
 .DS_Store
 *.log
 
-# Terraform (infra/ arrives later)
+# Terraform
 .terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
 !*.auto.tfvars.example
+# Account-specific backend config; backend.hcl.example is committed instead.
+backend.hcl
+# Override files swap the S3 backend for a local one during first apply and
+# teardown (see infra/README.md). They must never reach a PR.
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
