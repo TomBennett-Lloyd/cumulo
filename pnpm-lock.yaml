@@ -30,6 +30,22 @@ importers:
         specifier: ^8.65.0
         version: 8.65.0(eslint@10.8.0)(typescript@6.0.3)
 
+  packages/forecast:
+    dependencies:
+      '@cumulo/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(vite@8.1.5(yaml@2.9.0))
+
   packages/shared:
     dependencies:
       zod:

@@ -1,0 +1,30 @@
+# Golden-fixture generator dependencies — offline only.
+#
+# pvlib is never installed in CI, never on the deploy path and never at runtime
+# (ADR 0003). This file exists so that a regeneration years from now reproduces
+# the same numbers rather than "whatever pip resolved that day".
+#
+# Every transitive dependency is pinned, not just the three ADR 0003 names:
+# scipy is reached through pvlib.clearsky (the synthetic weather inputs) and
+# pandas/numpy carry the arithmetic, so an unpinned transitive bump is a silent
+# change to fixture values.
+#
+# Resolved on 2026-07-30 with CPython 3.14.6 (Homebrew python@3.14) on macOS
+# arm64, wheels only:
+#
+#   python3.14 -m venv .venv
+#   .venv/bin/pip install --only-binary=:all: -r requirements.txt
+#
+certifi==2026.7.22
+charset-normalizer==3.4.9
+h5py==3.16.0
+idna==3.18
+numpy==2.5.1
+pandas==3.0.5
+pvlib==0.15.2
+python-dateutil==2.9.0.post0
+pytz==2026.3.post1
+requests==2.34.2
+scipy==1.18.0
+six==1.17.0
+urllib3==2.7.0
