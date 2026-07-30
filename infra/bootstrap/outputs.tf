@@ -2,7 +2,7 @@
 # into backend.hcl and the GitHub repo variables — read them with
 # `terraform output`, never hand-construct them from an account id.
 #
-# Three of the four embed the AWS account id. It is an identifier rather than a
+# Three of the five embed the AWS account id. It is an identifier rather than a
 # credential, so it is not marked `sensitive` (that would only make the runbook
 # reach for `-raw` everywhere while protecting nothing), but it stays out of the
 # public repo by decision: do not paste raw output into committed files, PR
@@ -21,6 +21,11 @@ output "github_oidc_provider_arn" {
 output "github_actions_role_arn" {
   description = "ARN of the role GitHub Actions assumes. Published to the repo variable AWS_OIDC_ROLE_ARN."
   value       = aws_iam_role.github_actions.arn
+}
+
+output "aws_region" {
+  description = "Region this stack was applied to (echoes var.aws_region). Exists so runbook step B6 can publish the AWS_REGION repo variable with `terraform output -raw aws_region` instead of a retyped literal that could drift from backend.hcl."
+  value       = var.aws_region
 }
 
 output "aws_account_id" {

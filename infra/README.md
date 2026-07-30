@@ -55,7 +55,7 @@ The bootstrap stack creates the bucket that stores the bootstrap stack's state, 
 
 This repository is public. The AWS account id is not a credential, but it is an identifier that narrows an attacker's search, and there is no reason for it to be in a git history that cannot be rewritten. So `backend.tf` carries a **partial** backend configuration — the repo-wide conventions (`key`, `encrypt`, `use_lockfile`) are committed, and `bucket` and `region` come from a gitignored `backend.hcl` at init time. Region likewise comes from a gitignored `bootstrap.auto.tfvars`. Both have committed `.example` twins, so the shape is documented even though the values are not, and `.gitignore` blocks the real files along with Terraform override files.
 
-That decision has a consequence worth stating plainly: `terraform output` prints values that embed the account id, and three of the four outputs contain it. Do not paste raw output into committed files, PR bodies, or issue comments — quote the shape (`arn:aws:iam::<account-id>:role/cumulo-github-actions`), not the digits.
+That decision has a consequence worth stating plainly: `terraform output` prints values that embed the account id, and three of the five outputs contain it. Do not paste raw output into committed files, PR bodies, or issue comments — quote the shape (`arn:aws:iam::<account-id>:role/cumulo-github-actions`), not the digits.
 
 ### 8. The GitHub Actions role starts with zero permissions
 
@@ -213,15 +213,16 @@ terraform plan -detailed-exitcode
 echo $?   # expect 0
 ```
 
-**B6. Publish the two repo variables.** The role ARN comes from `terraform output`, never hand-assembled from an account id:
+**B6. Publish the two repo variables.** Both values come from `terraform output`, never hand-assembled from an account id or retyped from memory:
 
 ```bash
 gh variable set AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo \
   --body "$(terraform output -raw github_actions_role_arn)"
-gh variable set AWS_REGION --repo TomBennett-Lloyd/cumulo --body eu-west-1
+gh variable set AWS_REGION --repo TomBennett-Lloyd/cumulo \
+  --body "$(terraform output -raw aws_region)"
 ```
 
-`AWS_REGION` is typed literally because the region is an input to this stack rather than something it derives — it must equal `aws_region` in `bootstrap.auto.tfvars` and `region` in `backend.hcl`. Then confirm what exists, and what does not:
+The region is an _input_ to this stack rather than something it derives, so the stack re-exports it as the `aws_region` output purely to keep this step copy-paste: what lands in the repo variable is then provably the same value Terraform used, and cannot drift from `aws_region` in `bootstrap.auto.tfvars` or `region` in `backend.hcl`. Then confirm what exists, and what does not:
 
 ```bash
 gh variable list --repo TomBennett-Lloyd/cumulo
