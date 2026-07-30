@@ -54,3 +54,39 @@ Entry format:
 - Where: `packages/shared/src/site.test.ts`
 - What: single acceptance fixture with no boundary values, so `.gte`/`.lte` inclusivity mutants survive on lat/lon, `capacityKw`, tilt, azimuth — the same gap class closed for the #10 schemas (boundary-acceptance + single-mutation rejection tables). Bring `site.test.ts` up to the same pattern, ideally alongside the #50 branding retrofit since fixtures change anyway. Cycle-3 mutation check found the same residue in `weather-reading.test.ts`: the upper edges of the four irradiance caps (1500) and the wind cap (120) are unpinned — five `boundaryCases` rows close it; batch with this entry.
 - Source: #10 review cycle 2 fix agent (discovered)
+
+## 2026-07-30 — Self-protection guards match paths as globs, not literals
+
+- Where: `.claude/scripts/reap-worktree.sh`:84,109; `.claude/scripts/sweep-worktrees.sh`:69
+- What: `case "$path" in "$wt" | "$wt"/*)` expands `$wt` as a glob pattern. A worktree path containing `[`, `*` or `?` can fail to match its own literal cwd, bypassing both the `own-cwd` and `live-session` guards — reap could then remove the directory the running session sits in. No work is lost (the tree must still be clean and merged to reach that point), and the repo's `<n>-<slug>` naming never produces such a path, so this is latent rather than live. The literal form is `[ "${pwd_canon#"$wt"}" != "$pwd_canon" ]`; the idiom repeats in three places, so the fix is one shared helper rather than three edits.
+- Source: #42
+
+## 2026-07-30 — Sweep shares stdin with its reap children
+
+- Where: `.claude/scripts/sweep-worktrees.sh`:62-94
+- What: the `while read` loop over worktree entries shares stdin (a heredoc) with each `reap-worktree.sh` child, which itself runs a caller-supplied `$WORKTREE_GH_CMD`. A child that reads stdin silently consumes worktree entries, and the sweep skips those worktrees without a word. The failure direction is safe (skipped = kept), but silent skipping in a backstop defeats the point of having a backstop — it would report `swept 0, kept 2` on a repo with five worktrees and look correct. Fix is `< /dev/null` on the child invocations.
+- Source: #42
+
+## 2026-07-30 — Reap re-derives the admin dir instead of using the one it was given
+
+- Where: `.claude/scripts/reap-worktree.sh`:97
+- What: `git_dir` comes from `rev-parse --absolute-git-dir` run inside the target, which searches ancestors. Because Cumulo nests worktrees _inside_ the main checkout (`.claude/worktrees/`), a worktree whose `.git` file is missing resolves to the **main repo's** `.git`. The min-age probe then measures the main checkout's activity and `is_clean` reports the main checkout's status — two safety guards judging a different repository than the one under consideration. Reproduced by the cycle-2 reviewer. Fail-safe today (`worktree remove` refuses validation, reap exits 2, nothing deleted), which is why it did not block. Structural fix: take the admin dir from the `worktree list --porcelain` block that reap already parses, rather than re-deriving it.
+- Source: #42
+
+## 2026-07-30 — Nothing resolves a stale worktree admin entry
+
+- Where: `.claude/scripts/sweep-worktrees.sh`:106; `.claude/skills/execute/SKILL.md` step 1
+- What: dropping the unconditional prune was correct (it destroyed recoverable admin data under `--dry-run`), but now nothing in the workflow clears a genuinely dead entry. Consequence, verified: `git worktree add` at that path fails with `fatal: … is a missing but already registered worktree`. Since the execute skill uses deterministic paths (`.claude/worktrees/<n>-<slug>`), a killed session whose directory was deleted by hand blocks re-execution of that same issue until a human prunes. Sweep detects it and re-counts it `kept` on every future run, so the warning repeats indefinitely. Git's own error names the remedy, so this is friction rather than a bug — wants a line in the skill docs or an explicit opt-in flag, not a behaviour change.
+- Source: #42
+
+## 2026-07-30 — `--dry-run` destroys nothing, but is not read-only
+
+- Where: `.claude/scripts/worktree-lib.sh`:57 (`is_merged`), called from `reap-worktree.sh`:126 before the dry-run branch at :132
+- What: `is_merged` runs `git fetch origin main` in the main checkout, so a dry sweep issues one fetch per candidate — writing remote-tracking refs and objects, plus whatever `gc --auto` decides. The mutation is additive and cannot lose work, so the safety property holds, but the distinction matters: the comments now say "destroys nothing" rather than "read-only". Making the fetch conditional on non-dry-run (or hoisting one fetch per sweep) would both restore the stronger property and remove N-1 redundant network calls.
+- Source: #42
+
+## 2026-07-30 — Lifecycle tooling has an undeclared python3 dependency
+
+- Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)
+- What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI does not run these scripts at all) and #48 (no shellcheck gate).
+- Source: #42
