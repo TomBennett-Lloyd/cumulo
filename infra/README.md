@@ -197,8 +197,12 @@ terraform init -migrate-state -backend-config=backend.hcl
 ```bash
 BUCKET="$(terraform output -raw state_bucket_name)"
 aws s3api head-object --bucket "$BUCKET" --key bootstrap/terraform.tfstate
-terraform state list   # now read from S3; expect the 7 resources from A5
+terraform state list   # now read from S3
 ```
+
+Expect **9 lines**: the 7 managed resources from A5 plus the two data sources
+(`data.aws_caller_identity.current`, `data.aws_iam_policy_document.github_actions_trust`),
+which `state list` prints alongside them. Only the 7 are created, billed, or destroyed.
 
 **B4. Remove the local state files.** They are gitignored, but a stale local state that still describes live resources is a trap for the next operator:
 
@@ -268,7 +272,7 @@ terraform init -migrate-state
 
 ```bash
 ls -l terraform.tfstate
-terraform state list   # expect the same 7 resources
+terraform state list   # expect the same 9 lines as B3 — 7 resources + 2 data sources
 ```
 
 **T3. Destroy.** `force_destroy = true` on the bucket is what allows this to complete — a versioned bucket is never empty, and by this point it holds only a copy of state that T1 already brought home:
