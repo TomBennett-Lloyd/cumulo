@@ -44,13 +44,17 @@ Two of these carry more weight than their line length suggests. **H2** is a hard
 
 The numbers everything below is sized against, from #9 and #11: roughly **50 sites** — bounded by #29's cap, not by hope — spread over roughly **30 distinct weather locations** after #9's deliberate co-location, an **hourly** ingestion cadence, a **48-hour horizon at hourly resolution**, **two model variants** (physics and ML, per #20), and **90-day retention** on live series.
 
-That gives 30 calls per cycle, 720/day, against the 10,000/day quota. Per cycle it gives `30 × 48 = 1,440` weather items and `50 × 48 × 2 = 4,800` forecast items, so about 6,240 writes per cycle and, at 730 cycles a month, **≈ 4.6 M writes/month** plus ~37 K actuals. Items are a few hundred bytes, so one write request unit each. Retained at 90 days that is ~13.7 M items ≈ **3.5 GB** before per-item overhead.
+That gives 30 calls per cycle, 720/day, against the 10,000/day quota. Per cycle it gives `30 × 48 = 1,440` weather items, `50 × 48 × 2 = 4,800` forecast items, and 50 generation actuals — **6,290 writes per cycle** and, at 730 cycles a month, **≈ 4.6 M writes/month**. Items are a few hundred bytes, so one write request unit each. Retained at 90 days that is ~13.7 M items ≈ **3.5 GB** before per-item overhead.
+
+Divided through by fleet size, one site costs `48 × 2 + 1 = 97` write units of its own plus its share of the weather fetch (`30 ÷ 50 = 0.6` locations per site, `× 48 = 28.8`) — **≈ 125.8 write units per site per cycle**. That per-site figure is what the capacity section scales.
 
 ### Cost forces
 
 Figures are AWS list prices for us-east-1, **verified 2026-07-30**. Ireland (eu-west-1) — the likely region for a UK/Ireland fleet — runs roughly 10–15% higher; no conclusion below turns on that margin.
 
-**DynamoDB.** The always-free tier is 25 GB of standard-class storage plus 25 provisioned WCU and 25 provisioned RCU per Region per payer account, and it **does not expire after twelve months**. The capacity portion applies to provisioned mode only; on-demand bills from the first request at **$0.625 per million write request units and $0.125 per million read request units**. Those are the post-November-2024 prices — the on-demand cut halved the older $1.25/$0.25 figures, which several third-party pricing summaries still quote, and the difference is large enough to matter to this comparison.
+**DynamoDB.** The always-free tier is 25 GB of standard-class storage plus 25 provisioned WCU and 25 provisioned RCU per Region per payer account, and it **does not expire after twelve months**. The capacity portion applies to provisioned mode only; on-demand bills from the first request at **$0.625 per million write request units and $0.125 per million read request units**. Those are the post-November-2024 prices — the on-demand cut halved the older $1.25/$0.25 figures, which several third-party pricing summaries still quote, and the difference is large enough to matter to this comparison. Beyond the free allowance, provisioned capacity itself lists at **$0.00065 per WCU-hour and $0.00013 per RCU-hour** (verified 2026-07-30); those numbers do not appear on this project's bill, but they are what makes the honest cost comparison in the capacity section come out the way it does.
+
+A capacity fact the sizing below leans on: DynamoDB **retains up to 300 seconds of unused capacity as burst**, so a provisioned table that has been idle can absorb a spike far above its sustained rate. AWS documents this as best-effort — burst capacity may be consumed by background maintenance and the behaviour may change without notice — so everything below is sized against the **no-burst** case and treats burst as margin. For a demo that idles between hourly cycles, that margin is always there in practice.
 
 **RDS.** The free tier is 750 hours/month of a Single-AZ `db.t2/t3/t4g.micro` plus 20 GB of storage, for MySQL, MariaDB, or PostgreSQL — **for twelve months from account creation**. This project's AWS account is old and barely used, so **that window has already expired** (owner-confirmed, 2026-07-30). Any RDS resource therefore bills from hour one: `db.t4g.micro` PostgreSQL at ~$0.016/hour ≈ $11.70/month, plus 20 GB of gp3 at ~$0.115/GB-month ≈ $2.30, so **≈ $14/month standing** before backups or data transfer. There is no free period to spend and no dated cliff to plan for — the cliff is behind us.
 
@@ -90,7 +94,7 @@ Against a **single table**: the canonical reason for single-table DynamoDB desig
 
 Against **one table per schema** (six): forecasts and generation readings genuinely are read together (A4), and forecast weather and archive weather are the same concept at the same partition key (I2, H1) — separating either pair would split one Query into two and buy nothing.
 
-The cost of four tables is four Terraform resources inside #13's single module and one `terraform destroy`. One consequence is worth naming: were the free provisioned tier ever adopted, four tables plus two GSIs are six separately provisioned entities, each needing at least 1 WCU and 1 RCU from the Region's 25 — feasible, but fiddly, and it is a coupling that fewer tables would avoid.
+The cost of four tables is four Terraform resources inside #13's single module and one `terraform destroy`. One consequence is worth naming, and the capacity section below acts on it: four tables plus two GSIs are six separately capacity-managed entities, and anything provisioned among them draws from one Region-wide pool of 25 WCU / 25 RCU. Fewer tables would avoid that coupling. What makes it tractable here is that the two GSIs both sit on `sites` — so the split below can leave `sites` on-demand and provision only the two GSI-free tables, and the pool is shared between two entities rather than six.
 
 ### Key design
 
@@ -134,15 +138,73 @@ Serves **H4** (PutItem) and **H5**/**A6** (one Query with `begins_with(sk, '<per
 
 A5 is served by **one range Query per site, issued in parallel, aggregated by the pure function #19 already requires in `@cumulo/shared`.** The alternative is a time-bucketed GSI — PK `<model>#<bucket>`, SK `siteId` — which turns a single-bucket fleet read into one Query but turns a week-long window into one Query per bucket, and duplicates the entire forecast write volume into an index, roughly doubling write cost. At tens of sites, fan-out reuses the exact Query A4 already needs and costs nothing extra. The crossover is a fleet in the hundreds, or an aggregate endpoint hot enough that fan-out latency shows up; both are revisit triggers below.
 
-### Capacity mode: on-demand
+### Capacity mode: hybrid — provisioned where the load is batch-shaped, on-demand where it is request-shaped
 
-`PAY_PER_REQUEST` on all four tables. The provisioned free tier's 25 WCU/25 RCU would in fact cover the modelled write volume — 6,240 writes spread over a five-minute cycle is ~21 WCU — so this choice knowingly forfeits a genuinely free option. Three reasons:
+| Table                                | Mode        | WCU | RCU |
+| ------------------------------------ | ----------- | --- | --- |
+| `cumulo-series-<env>`                | provisioned | 14  | 21  |
+| `cumulo-weather-<env>`               | provisioned | 5   | 3   |
+| `cumulo-sites-<env>` (and both GSIs) | on-demand   | —   | —   |
+| `cumulo-metrics-<env>`               | on-demand   | —   | —   |
 
-- **The read side does not fit.** A dashboard load is ~50 eventually-consistent Queries ≈ 25 read units, so the entire free read allowance is consumed by roughly **one dashboard load per second**. A portfolio demo that gets posted anywhere exceeds that, and the failure mode is `ProvisionedThroughputExceededException` — a visibly broken demo at the exact moment someone is looking at it.
-- **The 25 units are one shared regional pool.** Every future table, GSI, and ticket would have to renegotiate against it, turning a capacity budget into a cross-ticket coupling.
-- **The bill is ~$3/month.** 4.6 M write units at $0.625/M ≈ $2.88, and reads at plausible demo traffic add well under $1. Against a $100 ceiling, that is a rounding error bought with the removal of a whole class of failure.
+**Total against the free tier: 19 WCU / 24 RCU of 25 / 25.** The standing DynamoDB capacity bill is **$0**.
 
-Honest counter-point in the other direction: under provisioned capacity an abusive read burst throttles, which is cost-safe; under on-demand it bills. That is why #29's throttling sits at the gateway, _upstream_ of DynamoDB, with billing alarms as the backstop.
+The rule is one line: **a table whose load is batch-shaped — driven by a clock, with a volume this document can compute — is provisioned; a table whose load is request-shaped, driven by whoever happens to be looking, is on-demand.** `series` and `weather` are written by the hourly cycle and read by paths whose size is a function of fleet size. `sites` and `metrics` are touched by human-triggered CRUD and by #29's abuse surface, where the arrival rate is exactly the thing that cannot be predicted.
+
+**The write path fits with an order of magnitude to spare.** One cycle is 6,290 write units (§ Assumed scale). The free 25 WCU delivers `25 × 3,600 = 90,000` write units per hour, so ingestion runs at **7% utilisation**. Against the allocation actually taken, `series` drains its 4,850 units in `4,850 ÷ 14 ≈ 347 s` and `weather` its 1,440 in `1,440 ÷ 5 = 288 s` — concurrently, on independent capacity, inside a 3,600-second cycle, **with zero burst assumed**. Burst makes both near-instant but is not required for correctness.
+
+**There is no GSI write amplification on the hourly path at all**, and this is the single strongest fact for provisioning. A GSI consumes write capacity from its own pool every time a projected attribute changes on the base table, which is what usually makes provisioned sizing treacherous for a write-heavy workload. Here both GSIs are on `sites` — a table the ingestion and forecast cycle never writes — and `series`, `weather`, and `metrics` are GSI-free by the key design above. The hourly write volume is therefore exactly the item count, with no multiplier hiding behind an index. Leaving `sites` on-demand keeps it that way permanently: no future GSI on `sites` can ever draw on the provisioned pool.
+
+**The read side fits too, and this is where the earlier reasoning needs correcting.** A dashboard load is ~50 per-site Queries on `series`, each returning a handful of small adjacent items; Queries are eventually consistent by default, so each costs the 0.5-unit minimum — **25 read units on `series`** — plus one Query over the ~50-item `FLEET` partition, roughly 2 units, which lands on `sites` and is billed on-demand. Call it **≈ 27 read units per load, ~25 of them against provisioned capacity**.
+
+An earlier draft of this ADR read that as "the entire free read allowance is consumed by roughly one dashboard load per second" and rejected provisioned capacity on it. The arithmetic was right; the conclusion did not follow. One load per second _sustained_ is 86,400 loads a day, indefinitely — not a rate a portfolio demo is in danger of. At the 21 RCU allocated to `series` it is **~50 dashboard loads per minute sustained**, and the 300-second burst reserve holds `21 × 300 = 6,300` read units, so **~250 loads are absorbed instantly** before the sustained rate binds at all. An idle demo always has that reserve. A sustained-rate figure was used where a burst-inclusive one belonged.
+
+`weather` gets 3 RCU because its only read paths are offline: #16's hindcast Query over an archive date range (a 90-day range is ~81 read units — 27 seconds at 3 RCU with no burst, instant with it) and #12's forecast service, which receives weather on the Kinesis stream rather than reading it back. Nothing on `weather`'s read path sits in front of a user.
+
+#### Fleet headroom
+
+The question this decision has to survive is what happens when the fleet grows. At **125.8 write units per site per cycle** (§ Assumed scale), holding the co-location ratio constant:
+
+| Sites | Locations | Write units/cycle | % of free 25 WCU-hour | Ingest drain at this allocation, zero burst | Sustained dashboard loads/min at 21 RCU |
+| ----- | --------- | ----------------- | --------------------- | ------------------------------------------- | --------------------------------------- |
+| 10    | 6         | 1,258             | 1.4%                  | 69 s                                        | 252                                     |
+| 25    | 15        | 3,145             | 3.5%                  | 173 s                                       | 101                                     |
+| 50    | 30        | 6,290             | 7.0%                  | 347 s                                       | 50                                      |
+| 100   | 60        | 12,580            | 14.0%                 | 693 s                                       | 25                                      |
+| 200   | 120       | 25,160            | 28.0%                 | 1,386 s                                     | 13                                      |
+
+**Writes are not the constraint at any fleet size this project will see** — 200 sites, four times #29's cap, is 28% of the free write allowance and still drains inside 40% of an hourly cycle. Reads degrade linearly because the fan-out is per site, so the read allocation is what a growing fleet spends first. That is already revisit trigger 1, which replaces the fan-out with a time-bucketed GSI or a snapshot for reasons that have nothing to do with capacity mode.
+
+**#17's add-a-site path is not the risk.** A new site at a new location writes ~48 weather items and `48 × 2 = 96` forecast items — **~150 write units worst case**. With zero burst that is `48 ÷ 5 ≈ 10 s` on `weather` and `96 ÷ 14 ≈ 7 s` on `series`; the two stages are pipelined through Kinesis rather than strictly serial, so the contribution to #17's ~60-second forecast-visible budget is between 10 and 17 seconds in the pathological no-burst case, and effectively zero with the burst reserve an idle demo always holds. The site record itself goes to `sites`, on-demand, and is not rate-limited at all.
+
+#### The failure mode, stated honestly
+
+Provisioned capacity can throttle, and the counter-argument deserves its weight. Throttling surfaces as `ProvisionedThroughputExceededException`, which the AWS SDK's DynamoDB clients retry automatically with exponential backoff and full jitter — 4 attempts, 1,000 ms throttling base delay. That is the 2026 default retry set and it requires `AWS_NEW_RETRIES_2026=true`, so #13 must pin it explicitly rather than inherit whatever the runtime supplies, per `docs/standards/error-handling.md` rule 3: timeout, retry count, and backoff are visible at the call site, not implicit in library defaults.
+
+On the write path a retried throttle is invisible — ingestion has an hour and needs six minutes. **The only genuinely user-visible throttle path is the synchronous dashboard fan-out**: one path, on one table, with ~250 loads of burst in front of it and a CloudWatch alarm behind it. That is a bounded, named risk rather than the "whole class of failure" the earlier draft believed it was removing.
+
+The earlier draft also claimed an asymmetry that does not exist: that provisioned capacity throttles while on-demand only bills. On-demand tables accept `MaxReadRequestUnits` and `MaxWriteRequestUnits`, and a request above that ceiling throttles exactly like a provisioned one. Whether a runaway read costs money or availability is a **configuration choice available in both modes**, not a property of either. #29's gateway throttling and the billing alarms remain the right backstop either way.
+
+#### Reversibility is what makes this cheap to get wrong
+
+`billing_mode` is a table attribute, not an architectural commitment. Provisioned → on-demand is available up to **4 times per 24-hour rolling window**, and a table's first switch to on-demand instantly sustains at least 4,000 WCU / 12,000 RCU — roughly 200× and 500× the allocations above. On-demand → provisioned carries no such limit. If the demo is posted somewhere and the read allocation binds, the fix is a one-attribute Terraform change that takes effect without a migration, without downtime, and without touching a key, an index, or a line of adapter code. Nothing else in this ADR is that reversible, which is why the decision should turn on the merits of the common case rather than on insurance against the tail.
+
+#### Cost, including the part that argues against this
+
+Hybrid costs **$0/month**. All-on-demand would cost **≈ $2.88/month** (4.6 M write units at $0.625/M; reads well under $1 at plausible demo traffic).
+
+The honest inversion: **provisioned capacity wins here only because the tier is free.** At list price the same 19 WCU / 24 RCU would cost `19 × $0.00065 × 730 ≈ $9.02` plus `24 × $0.00013 × 730 ≈ $2.28` — **≈ $11.30/month, roughly four times the on-demand bill** — because a 7% duty cycle is precisely the workload on-demand pricing exists to serve. Reserving capacity that sits idle 93% of the time is the wrong shape for this load on the merits, and it is chosen anyway because the first 25 units are free and this project's binding constraint is the bill. Saying so costs less than pretending provisioned is the better engineering answer.
+
+#### The standing rule, so the shared pool is never renegotiated
+
+The 25 units are one Region-wide pool, and the earlier draft was right that a shared budget can become a cross-ticket coupling. The rule that prevents it: **a new table defaults to on-demand unless its load is batch-shaped.** A ticket adding a request-shaped table takes no capacity and needs no conversation. Only a ticket adding another clock-driven batch table touches the pool, and such a ticket arrives with a computable volume — the one case where the budget can be divided on evidence rather than by negotiation. The 6 WCU / 1 RCU left unallocated is deliberately not a growth reserve; it is slack, and the rule is what stops it being needed.
+
+#### What this costs, stated without softening
+
+- **Two capacity modes in one Terraform module** must be explained to every reader of #13; the module is no longer four uniform resources.
+- **Auto-scaling must be explicitly absent.** Any `aws_appautoscaling_target` attached to these tables will scale past 25 units under load and start billing silently — the single easiest way to get this wrong, and the reason #13 carries an explicit non-resource with a comment rather than a mere omission.
+- **Throttle alarms become required work.** `ReadThrottleEvents` and `WriteThrottleEvents` on both provisioned tables are the difference between a bounded known risk and an unnoticed broken demo. On-demand would not have needed them.
+- **The regional-pool coupling this ADR already named survives.** It is bounded by the standing rule above, not eliminated.
 
 ### Table settings — each one an idle-billing decision
 
@@ -151,6 +213,7 @@ Honest counter-point in the other direction: under provisioned capacity an abusi
 - **Deletion protection: off.** Clean teardown is a project requirement and #13 must exercise `destroy`.
 - **Encryption: the AWS-owned key** (no charge), not a customer-managed KMS key ($1/month plus request charges). There is no compliance requirement here to justify the second one.
 - **Standard table class.** Standard-IA trades request price for storage price, and storage is free at this volume.
+- **Application Auto Scaling: absent, and absent on purpose.** An `aws_appautoscaling_target` on either provisioned table would raise capacity above 25 units under load and begin billing without anyone deciding to — the quietest way this decision could fail. #13 records the absence with a comment, so a later reader does not "fix" the omission.
 
 ### Architecture rule 2: one schema per concept, both stores derivable
 
@@ -202,7 +265,7 @@ Genuine downsides, and they are not small:
 - **The site cap is an application-level invariant** — a counter item in a transaction — where PostgreSQL would give a constraint. It is correct, but it is ours to keep correct.
 - **The key design _is_ the schema.** Every pattern in the inventory is baked into a key or an index, so a genuinely new pattern means a migration or a new GSI, and this document becomes required reading for anyone touching the data. That is a deliberate trade of future flexibility for present cost and simplicity.
 - **Reversing it is not free.** If #22's topology graph becomes real, it is the workload DynamoDB is worst at, and adding PostgreSQL then means paying A's standing costs then, with data to migrate.
-- **On-demand forfeits a genuinely free tier.** The provisioned allowance would cover the write volume; ~$3/month is being spent to avoid a shared capacity budget and visible throttling.
+- **Capacity mode is a live trade rather than a settled one.** The free provisioned allowance covers this workload, but taking it means a shared regional budget, a throttle that is visible on one synchronous path, and alarms that on-demand would not need. Options E–G below take that trade apart.
 
 ### D. Single-store PostgreSQL
 
@@ -216,19 +279,64 @@ Rejected because:
 - Teardown, VPC, and connection-limit problems are identical to A.
 - On the portfolio axis it reads worst of all: choosing the familiar store and then paying $69/month standing under a $100 ceiling to hold fifty rows and some hourly series is the decision hardest to defend on its merits.
 
+### Capacity mode within option C: E, F, and G
+
+Having chosen DynamoDB, the capacity mode is a second decision with its own three candidates. It is a genuine judgement call — an earlier version of this ADR chose E, on reasoning that was honest and arithmetically correct, and the sections below say why the answer moved.
+
+#### E. On-demand on all four tables
+
+The case for it is not weak. `PAY_PER_REQUEST` is one uniform attribute across four resources, needs no sizing exercise, no throttle alarms, and no auto-scaling abstinence; it cannot be invalidated by a fleet-size assumption drifting; and it absorbs an arbitrary traffic spike without anyone having modelled it. It leaves the 25/25 regional pool untouched, so no future table or ticket ever has to negotiate for capacity. And at **≈ $2.88/month** against a $100 ceiling, it buys all of that for a rounding error. If this project's constraint were engineering time rather than the bill, E would be the right answer.
+
+Rejected because:
+
+- **The read figure that decided it was a sustained rate presented as a ceiling.** "~25 read units per load, so 25 RCU is one load per second" is correct arithmetic about the steady state and silent about the 300 seconds of burst sitting in front of it. Restated properly — ~50 loads/minute sustained on `series` with ~250 absorbed instantly — the read side fits with room, and E's central objection dissolves.
+- **The write side was never in question.** 7% of the free allowance, with no GSI amplification anywhere on the hourly path.
+- **It forfeits a permanently free, non-expiring allowance** in a project whose stated posture is free-tier-first with idle cost as the steady state — while the modelled workload sits inside that allowance by an order of magnitude.
+- The cost-safety argument advanced for it — that on-demand bills rather than throttles — is a configuration choice (`MaxRead/WriteRequestUnits`) available in both modes, so it does not separate them.
+
+#### F. Provisioned on all four tables
+
+The maximally free-tier-first answer: one mode, one Terraform idiom, $0.
+
+Rejected because:
+
+- **`sites` and `metrics` have request-shaped load.** Their arrival rate is whoever is looking, plus #29's abuse surface. Sizing them means guessing, and a wrong guess throttles the CRUD path that #17's demo flow depends on.
+- **`sites` carries both GSIs.** A provisioned GSI needs its own allocation and consumes it on every projected-attribute write, so F puts four of the six capacity-managed entities in the pool instead of two, and couples the pool to any future index.
+- The saving over G is zero — `sites` and `metrics` cost cents on-demand — so F pays real risk for no money.
+
+#### G. Hybrid: provisioned for `series` and `weather`, on-demand for `sites` and `metrics` — chosen
+
+Takes the free allowance exactly where the load is predictable and computable, and pays cents where it is not. $0/month, 19 WCU / 24 RCU of 25/25, both GSIs outside the pool permanently, and a standing rule (new tables default to on-demand) that keeps the budget from becoming a cross-ticket negotiation.
+
+Its costs are real and are stated in the Decision: two modes in one module, mandatory auto-scaling abstinence, throttle alarms as required work, and a residual regional-pool coupling. The reason those are acceptable rather than merely tolerable is reversibility — `billing_mode` flips to on-demand in one Terraform attribute, up to four times per 24 hours, with the first switch instantly sustaining 4,000 WCU / 12,000 RCU. G is a bet that can be unwound in the time it takes to run `terraform apply`, which is not true of anything else in this document.
+
 ## Consequences
 
-**Easier.** #13 implements four `aws_dynamodb_table` resources, two GSIs, one TTL attribute, and on-demand capacity in a single Terraform module with a one-step `destroy` — no VPC, no subnet groups, no proxy, no secrets. #16 gets exact quota protection, because the `ARCHIVE#DAY#` marker written in the same transaction as its readings makes "fetch each site-period at most once" a property of the key design rather than of caller discipline. #29 gets a structural seed-fleet exemption via the sparse GSI2 and an atomic cap via the counter item. #20 gets forecast identity that already carries the model variant, in both the series and metrics keys. #17's ~60-second path needs no cache invalidation and no snapshot rebuild. #19's aggregation stays the pure function architecture rule 3 wanted anyway. And least privilege becomes a list of table ARNs: ingestion reads `sites` and writes `weather`; forecast reads `sites` and `weather` and writes `series` and `metrics`; the fleet API writes `sites` and reads the rest.
+**Easier.** #13 implements four `aws_dynamodb_table` resources, two GSIs, one TTL attribute, and two capacity modes in a single Terraform module with a one-step `destroy` — no VPC, no subnet groups, no proxy, no secrets. #16 gets exact quota protection, because the `ARCHIVE#DAY#` marker written in the same transaction as its readings makes "fetch each site-period at most once" a property of the key design rather than of caller discipline. #29 gets a structural seed-fleet exemption via the sparse GSI2 and an atomic cap via the counter item. #20 gets forecast identity that already carries the model variant, in both the series and metrics keys. #17's ~60-second path needs no cache invalidation and no snapshot rebuild. #19's aggregation stays the pure function architecture rule 3 wanted anyway. And least privilege becomes a list of table ARNs: ingestion reads `sites` and writes `weather`; forecast reads `sites` and `weather` and writes `series` and `metrics`; the fleet API writes `sites` and reads the rest.
 
-**Harder, and accepted.** Fan-out instead of `GROUP BY`; no ad-hoc SQL; no referential integrity; the site cap and orphan cleanup as application-level invariants; and this document as required reading for the data layer. These are option C's downsides, accepted with open eyes rather than argued away.
+**Harder, and accepted.** Fan-out instead of `GROUP BY`; no ad-hoc SQL; no referential integrity; the site cap and orphan cleanup as application-level invariants; and this document as required reading for the data layer. These are option C's downsides, accepted with open eyes rather than argued away. The hybrid capacity mode adds four more: two modes to explain, mandatory auto-scaling abstinence, throttle alarms as work that on-demand would not have needed, and a residual coupling to the Region's 25/25 pool.
 
-**Standing cost.** **$0 while nothing runs.** In steady state, **≈ $3/month** at the modelled cadence — dominated by ~4.6 M write request units a month from hourly ingestion, which runs on a clock whether or not anyone visits. That is the honest framing: the steady state here is not zero, it is three dollars, and reads add well under $1 at plausible demo traffic. Storage sits inside the always-free 25 GB at ~3.5 GB. If it ever matters, the levers are ingestion cadence, forecast horizon, and bundling a horizon series into one item per (site, model, day) instead of one item per point — roughly a tenfold write reduction, deliberately not taken now because it complicates partial updates for a saving of a couple of dollars. Nothing else in the storage layer bills: no VPC, no NAT Gateway, no instance, no proxy, no PITR, no customer-managed key. The only standing charge in the platform remains ADR 0001's Kinesis stream.
+**What the capacity mode requires of #13.** Five things, none of them optional:
+
+1. **No Application Auto Scaling resources.** No `aws_appautoscaling_target`, no `aws_appautoscaling_policy`, on either provisioned table. This is an explicit non-resource: the module carries a comment saying why, because an absence with no explanation reads as an oversight and the "fix" bills silently past the free tier.
+2. **CloudWatch alarms on `ReadThrottleEvents` and `WriteThrottleEvents`** for `cumulo-series` and `cumulo-weather`. Throttling is the accepted failure mode of this decision, which makes an unobserved throttle the unaccepted one.
+3. **Reads are deliberately eventually consistent.** The read sizing above assumes the Query default. `ConsistentRead: true` doubles read cost and there is no pattern in the inventory that needs it — every consumer is reading data written by a clock-driven cycle minutes earlier. Adapters set it nowhere, and a future caller wanting it needs a reason in the diff.
+4. **`BatchWriteItem` returns HTTP 200 with `UnprocessedItems`.** Under provisioned capacity that field is how throttling actually arrives on the batch write path — a success response carrying dropped writes. Ignoring it silently loses data and would surface later as a phantom accuracy gap, exactly the failure `docs/standards/error-handling.md` rule 2 (never swallow) exists to prevent. The adapter retries unprocessed items with backoff or returns a typed partial-failure value; it never treats a 200 as done.
+5. **Pin the SDK retry behaviour explicitly.** The 4-attempt, 1,000 ms-throttling-base, full-jitter defaults are the 2026 retry set gated behind `AWS_NEW_RETRIES_2026=true`. #13 sets it rather than inheriting it, per error-handling rule 3.
+
+**What the capacity mode requires of #17.** The read-capacity risk in the add-a-site flow is **polling cadence, not viewer count**. A handful of concurrent visitors is nothing against ~50 loads/minute sustained plus ~250 of burst; several tabs each re-polling the whole 50-site fan-out every few seconds is ~25 read units per poll per tab and saturates the allocation quickly. The flow polls **the newly created site's own partition** — a single Query, 0.5 read units — not the fleet endpoint. Worth noting that this bites under on-demand too; it simply arrives as a bill instead of a throttle, which is the harder failure to notice.
+
+**One thing we could not confirm.** AWS's pricing page describes the always-free 25 GB of storage in provisioned-mode terms, and we could not establish from the docs whether that allowance also covers on-demand tables. It does not affect the decision — under the hybrid split the two tables holding essentially all the data (`series` at ~3.5 GB, `weather`) are provisioned, so the allowance applies on any reading. It affects only the comparison figure: if on-demand tables are excluded, option E would have cost ≈ $3.75/month rather than ≈ $2.88 (3.5 GB at $0.25/GB-month). Immaterial to a decision that turned on $0 versus $3.
+
+**Standing cost.** **$0/month — genuinely zero, not a rounding error.** The hourly cycle's ~4.6 M write units and the dashboard's reads land on `series` and `weather`, inside the permanently free 19 WCU / 24 RCU drawn from the Region's 25/25. Storage sits inside the always-free 25 GB at ~3.5 GB. `sites` and `metrics` bill on-demand at request volumes measured in thousands per month — cents, and not reliably a whole one. If write volume ever does matter, the levers are ingestion cadence, forecast horizon, and bundling a horizon series into one item per (site, model, day) instead of one item per point — roughly a tenfold write reduction, deliberately not taken now because it complicates partial updates to relieve a pressure that does not exist at 7% utilisation. Nothing else in the storage layer bills: no VPC, no NAT Gateway, no instance, no proxy, no PITR, no customer-managed key. The only standing charge in the platform remains ADR 0001's Kinesis stream.
+
+The trade this buys is not money — the alternative was ≈ $2.88/month — it is that a capacity ceiling now exists where none did. That ceiling is documented, measured, alarmed, and reversible in one Terraform attribute.
 
 **The RDS free-tier expiry, stated explicitly.** The twelve-month window runs from account creation, and this account's has already expired (owner-confirmed, 2026-07-30). Had option A or D been chosen there would have been no free period at all — the failure this ceiling exists to prevent, a bill that starts silently after a year, would instead have been an immediate known charge. Because no RDS or Aurora resource is created, there is nothing to expire and no dated cliff anywhere in the storage layer. This is the fact that moved the decision furthest: issue #3's title assumed a free relational store, and on this account there is no such thing.
 
 **Nothing survives teardown, deliberately.** Per the owner's decision (2026-07-30), tearing the project down means deprecating it, so the hindcast cache should go with it. Hence no PITR, no final snapshots, no S3 mirror. The Open-Meteo quota embodied in the archive cache is spent again only if the project is rebuilt — the accepted price of a one-step destroy.
 
-**Assumed scale, restated as the thing that would falsify this.** ~50 sites over ~30 locations, hourly, 48-hour horizon, two models, 90-day retention: 720 Open-Meteo calls/day against 10,000; ~6,240 writes per cycle and ~4.6 M/month; ~3.5 GB retained; ~25 read units per dashboard load. Every one of those numbers is a lever, and an order-of-magnitude move in any of them is a reason to reopen this.
+**Assumed scale, restated as the thing that would falsify this.** ~50 sites over ~30 locations, hourly, 48-hour horizon, two models, 90-day retention: 720 Open-Meteo calls/day against 10,000; 6,290 writes per cycle and ~4.6 M/month; ~3.5 GB retained; ~27 read units per dashboard load, ~25 of them provisioned. Every one of those numbers is a lever, and an order-of-magnitude move in any of them is a reason to reopen this. The capacity allocation is the part most tightly bound to them: it is sized from this scale, and the fleet table above says exactly where it stops holding.
 
 **What would make us revisit.** ADRs are immutable — any change supersedes this one with a new ADR and never edits it. Concrete triggers:
 
@@ -239,3 +347,4 @@ Rejected because:
 5. **Write volume becoming material**, which triggers the horizon-bundling optimisation named above.
 6. **The DynamoDB line exceeding a meaningful fraction of the ceiling**, or #29's billing alarms firing on storage rather than requests.
 7. **Any requirement that data survive teardown**, which reverses the persistence decision and reintroduces PITR or an export path.
+8. **A throttle alarm firing on `cumulo-series`, or a ticket needing a third batch-shaped table.** The first says the read allocation has met real traffic; the answer is to flip `series` to on-demand — one attribute, no migration — rather than to argue about RCU. The second is the only case in which the 25/25 pool has to be divided again, and the standing rule requires that ticket to arrive with a computed volume rather than an estimate.
