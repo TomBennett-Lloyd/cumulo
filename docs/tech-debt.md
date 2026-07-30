@@ -19,12 +19,6 @@ Entry format:
 - What: `seed` is typed as bare `number` but coerced, so distinct inputs collide — `generateFleet(1)`, `generateFleet(1.5)`, and `generateFleet(4294967297)` all return the same fleet, and the "different seeds → different fleets" test only holds for distinct uint32s. Root cause is the missing branded type for a meaningful primitive (typing.md rule 1); a `FleetSeed` uint32 brand belongs in the #50 branded-unit retrofit rather than a local fix.
 - Source: #9 review cycle 2
 
-## 2026-07-30 — Timestamp brand is unenforced by any gate
-
-- Where: `packages/shared/src/timestamp.ts`, `packages/shared/vitest.config.ts`, root `verify` script
-- What: deleting `.brand<'UtcIsoTimestamp'>()` leaves `pnpm verify` fully green — the brand's whole purpose is to make a raw `string` unassignable to a timestamp field, and nothing checks that property. Runtime tests cannot: branding is type-level only. Root cause is a missing gate, not a missing test — Vitest's typecheck mode (`expectTypeOf`, `*.test-d.ts`) needs wiring into `verify` so type-level guarantees are as load-bearing as runtime ones. Cross-cutting: it protects every future brand, so it does not belong in this diff.
-- Source: #10 review cycle 1
-
 ## 2026-07-30 — `uncertaintyBandSchema` / `UncertaintyBand` not exported
 
 - Where: `packages/shared/src/forecast.ts`, `packages/shared/src/index.ts`
