@@ -1,0 +1,1908 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Cumulo — design direction candidates</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+        padding: 28px 20px 60px;
+        background: #f4f4f2;
+        color: #1a1a19;
+        max-width: 1120px;
+        margin: 0 auto;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #111;
+          color: #eee;
+        }
+        .note {
+          color: #aaa;
+        }
+      }
+      h1 {
+        font-size: 22px;
+        letter-spacing: -0.01em;
+      }
+      .note {
+        font-size: 13px;
+        color: #666;
+        margin: 6px 0 26px;
+        max-width: 72ch;
+        line-height: 1.5;
+      }
+      section {
+        margin-bottom: 44px;
+      }
+      h2 {
+        font-size: 17px;
+        margin-bottom: 2px;
+      }
+      .dirid {
+        display: inline-block;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: currentColor;
+        position: relative;
+        vertical-align: -3px;
+        margin-right: 2px;
+      }
+      .dirid::after {
+        content: '';
+      }
+      h2 .dirid {
+        color: #888;
+      }
+      .blurb {
+        font-size: 13px;
+        color: #777;
+        margin: 4px 0 12px;
+        max-width: 78ch;
+        line-height: 1.45;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 14px;
+      }
+      .panel {
+        border-radius: 14px;
+        padding: 16px;
+        position: relative;
+      }
+      .modechip {
+        position: absolute;
+        top: 10px;
+        right: 12px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border: 1px solid;
+        border-radius: 99px;
+        padding: 2px 8px;
+      }
+      .palrow {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .sw {
+        width: 52px;
+        height: 30px;
+        border-radius: 7px;
+        position: relative;
+      }
+      .sw span {
+        position: absolute;
+        bottom: -14px;
+        left: 2px;
+        font-size: 8px;
+        font-family: ui-monospace, monospace;
+        color: rgba(128, 128, 128, 0.9);
+      }
+      .ramp {
+        display: flex;
+        margin-left: 10px;
+        border-radius: 7px;
+        overflow: hidden;
+        height: 30px;
+      }
+      .rw {
+        width: 22px;
+        height: 30px;
+      }
+      .typespec {
+        margin: 20px 0 14px;
+      }
+      .spacing {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        margin-top: 10px;
+      }
+      .spacing div {
+        height: 14px;
+        background: rgba(128, 128, 128, 0.35);
+        border-radius: 3px;
+      }
+      .spacing span {
+        margin-left: 8px;
+      }
+      .card {
+        border: 1px solid;
+        border-radius: 12px;
+        padding: 12px 12px 8px;
+        margin-top: 12px;
+      }
+      .cardtitle {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .legend {
+        display: flex;
+        gap: 14px;
+        font-size: 11px;
+        margin: 2px 0 4px;
+      }
+      .li {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .attr {
+        font-size: 10.5px;
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 4px 2px 2px;
+      }
+      .attr a {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .legend svg,
+      .attr svg {
+        width: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Cumulo — design direction candidates</h1>
+    <p class="note">
+      Three candidate directions for issue #15. Every categorical palette passed the dataviz
+      validator (lightness band, chroma floor, CVD ΔE, normal-vision floor, surface contrast) in
+      <em>both</em> modes; the first three slots also pass the harder all-pairs check used for map
+      markers. Type scale (12/13/15/18/22/28, minor-third-ish) and the 4px-base spacing scale are
+      held constant across candidates — the reaction wanted here is
+      <strong>colour, mood, and the band treatment</strong>. Each candidate shows: tokens, the
+      forecast uncertainty-band chart treatment (P10–P90 wash at 12% + inner P25–P75 at 16%, dashed
+      2px forecast median, solid 2px actuals with an end marker, "now" rule), the site-map treatment
+      (default / hover / selected / cluster markers), and the Open-Meteo attribution component in
+      place.
+    </p>
+
+    <section>
+      <h2><span class="dirid">A</span> Clearsky</h2>
+      <p class="blurb">
+        Warm, paper-like neutrals; generation wears solar amber. Forecast band is amber, actuals are
+        a grounded blue. Feels like a consumer energy product.
+      </p>
+      <div class="pair">
+        <div class="panel" style="background: #faf8f2; color-scheme: light">
+          <div class="modechip" style="color: #8b867d; border-color: rgba(28, 25, 23, 0.12)">
+            light
+          </div>
+          <div class="palrow">
+            <div class="sw" style="background: #d97b00"><span>#d97b00</span></div>
+            <div class="sw" style="background: #2a78d6"><span>#2a78d6</span></div>
+            <div class="sw" style="background: #0e9f8f"><span>#0e9f8f</span></div>
+            <div class="sw" style="background: #8558d6"><span>#8558d6</span></div>
+            <div class="ramp">
+              <div class="rw" style="background: #f5e3c2"></div>
+              <div class="rw" style="background: #eec27a"></div>
+              <div class="rw" style="background: #d97b00"></div>
+              <div class="rw" style="background: #8a4e00"></div>
+            </div>
+          </div>
+          <div class="typespec" style="color: #1c1917">
+            <div
+              style="font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15"
+            >
+              Fleet output 128.4 kW
+            </div>
+            <div style="font-size: 15px; color: #57534e; margin-top: 4px">
+              42 sites · P50 today 1.9 MWh · type scale 12 / 13 / 15 / 18 / 22 / 28
+            </div>
+            <div class="spacing" aria-hidden="true">
+              <div style="width: 4px" title="4px"></div>
+              <div style="width: 8px" title="8px"></div>
+              <div style="width: 12px" title="12px"></div>
+              <div style="width: 16px" title="16px"></div>
+              <div style="width: 24px" title="24px"></div>
+              <div style="width: 32px" title="32px"></div>
+              <span style="font-size: 11px; color: #8b867d">spacing 4·8·12·16·24·32</span>
+            </div>
+          </div>
+          <div class="card" style="background: #fdfcf8; border-color: rgba(28, 25, 23, 0.12)">
+            <div class="cardtitle" style="color: #1c1917">
+              Fleet output <span style="color: #57534e; font-weight: 400">— today</span>
+            </div>
+            <div class="legend" style="color: #57534e">
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#2a78d6"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  /></svg
+                >Actual</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#d97b00"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                    stroke-linecap="round"
+                  /></svg
+                >Forecast median</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <rect x="1" y="1" width="16" height="8" rx="2" fill="#d97b00" opacity="0.16" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="16"
+                    height="8"
+                    rx="2"
+                    fill="none"
+                    stroke="#d97b00"
+                    opacity="0.4"
+                    stroke-width="1"
+                  /></svg
+                >P10–P90</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 200"
+              role="img"
+              aria-label="Fleet output: actuals to 14:00, forecast band ahead"
+            >
+              <line x1="34" y1="134" x2="328" y2="134" stroke="#e9e5dc" stroke-width="1" />
+              <text x="28" y="137.5" text-anchor="end" font-size="9" fill="#8b867d">200</text>
+              <line x1="34" y1="94" x2="328" y2="94" stroke="#e9e5dc" stroke-width="1" />
+              <text x="28" y="97.5" text-anchor="end" font-size="9" fill="#8b867d">400</text>
+              <line x1="34" y1="54" x2="328" y2="54" stroke="#e9e5dc" stroke-width="1" />
+              <text x="28" y="57.5" text-anchor="end" font-size="9" fill="#8b867d">600</text>
+              <line x1="34" y1="14" x2="328" y2="14" stroke="#e9e5dc" stroke-width="1" />
+              <text x="28" y="17.5" text-anchor="end" font-size="9" fill="#8b867d">800</text>
+              <text x="34" y="190" text-anchor="middle" font-size="9" fill="#8b867d">00:00</text>
+              <text x="107.5" y="190" text-anchor="middle" font-size="9" fill="#8b867d">06:00</text>
+              <text x="181" y="190" text-anchor="middle" font-size="9" fill="#8b867d">12:00</text>
+              <text x="254.5" y="190" text-anchor="middle" font-size="9" fill="#8b867d">18:00</text>
+              <text x="328" y="190" text-anchor="middle" font-size="9" fill="#8b867d">24:00</text>
+              <line
+                x1="34"
+                y1="174"
+                x2="328"
+                y2="174"
+                stroke="#8b867d"
+                stroke-width="1"
+                opacity="0.55"
+              />
+              <path
+                d="M34.0,171.2L40.1,171.2L46.3,171.2L52.4,171.2L58.5,171.1L64.6,171.0L70.8,170.8L76.9,170.6L83.0,170.1L89.1,169.3L95.3,168.0L101.4,166.1L107.5,163.2L113.6,159.2L119.8,153.7L125.9,146.4L132.0,137.2L138.1,126.1L144.3,113.1L150.4,98.6L156.5,83.4L162.6,68.2L168.8,54.1L174.9,42.2L181.0,33.5L187.1,28.6L193.3,28.2L199.4,32.2L205.5,40.2L211.6,52.8L217.8,65.6L223.9,80.0L230.0,94.8L236.1,109.2L242.3,122.4L248.4,134.0L254.5,143.7L260.6,151.5L266.8,157.5L272.9,162.0L279.0,165.2L285.1,167.4L291.3,168.9L297.4,169.8L303.5,170.4L309.6,170.8L315.8,171.0L321.9,171.1L328.0,171.1L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,174.0L291.3,174.0L285.1,173.7L279.0,172.3L272.9,170.2L266.8,167.2L260.6,163.1L254.5,157.6L248.4,150.6L242.3,142.0L236.1,131.9L230.0,120.5L223.9,108.4L217.8,96.2L211.6,84.7L205.5,78.0L199.4,72.0L193.3,69.0L187.1,69.3L181.0,72.9L174.9,79.5L168.8,88.4L162.6,98.9L156.5,110.3L150.4,121.7L144.3,132.5L138.1,142.2L132.0,150.6L125.9,157.5L119.8,162.9L113.6,167.0L107.5,170.0L101.4,172.2L95.3,173.6L89.1,174.0L83.0,174.0L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#d97b00"
+                opacity="0.12"
+              />
+              <path
+                d="M34.0,172.8L40.1,172.8L46.3,172.8L52.4,172.8L58.5,172.7L64.6,172.6L70.8,172.5L76.9,172.2L83.0,171.7L89.1,171.0L95.3,169.8L101.4,168.0L107.5,165.3L113.6,161.5L119.8,156.3L125.9,149.5L132.0,140.8L138.1,130.3L144.3,118.1L150.4,104.5L156.5,90.1L162.6,75.9L168.8,62.6L174.9,51.4L181.0,43.2L187.1,38.6L193.3,38.2L199.4,42.0L205.5,49.5L211.6,60.8L217.8,73.3L223.9,87.1L230.0,101.3L236.1,115.0L242.3,127.5L248.4,138.4L254.5,147.4L260.6,154.7L266.8,160.3L272.9,164.4L279.0,167.3L285.1,169.4L291.3,170.7L297.4,171.6L303.5,172.1L309.6,172.4L315.8,172.6L321.9,172.7L328.0,172.7L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,173.8L291.3,173.1L285.1,172.0L279.0,170.4L272.9,167.9L266.8,164.5L260.6,159.7L254.5,153.5L248.4,145.6L242.3,136.1L236.1,125.0L230.0,112.7L223.9,99.7L217.8,86.8L211.6,74.9L205.5,66.2L199.4,59.6L193.3,56.3L187.1,56.7L181.0,60.7L174.9,67.9L168.8,77.8L162.6,89.5L156.5,102.0L150.4,114.7L144.3,126.6L138.1,137.4L132.0,146.7L125.9,154.3L119.8,160.3L113.6,164.9L107.5,168.2L101.4,170.6L95.3,172.1L89.1,173.2L83.0,173.9L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#d97b00"
+                opacity="0.16"
+              />
+              <line
+                x1="205.5"
+                y1="14"
+                x2="205.5"
+                y2="174"
+                stroke="#8b867d"
+                stroke-width="1"
+                stroke-dasharray="1 3"
+              />
+              <text x="209.5" y="22" font-size="9" fill="#8b867d">now</text>
+              <polyline
+                points="205.5,57.0 211.6,67.2 217.8,79.4 223.9,92.8 230.0,106.5 236.1,119.6 242.3,131.5 248.4,141.8 254.5,150.4 260.6,157.2 266.8,162.4 272.9,166.3 279.0,169.0 285.1,170.9 291.3,172.1 297.4,172.9 303.5,173.4 309.6,173.6 315.8,173.8 321.9,173.9 328.0,173.9"
+                fill="none"
+                stroke="#d97b00"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="34.0,174.0 40.1,174.0 46.3,174.0 52.4,174.0 58.5,173.9 64.6,173.8 70.8,173.7 76.9,173.4 83.0,172.9 89.1,172.3 95.3,171.2 101.4,169.8 107.5,166.7 113.6,163.0 119.8,157.5 125.9,151.9 132.0,145.7 138.1,134.5 144.3,123.5 150.4,104.3 156.5,93.3 162.6,82.1 168.8,73.4 174.9,66.8 181.0,46.9 187.1,44.1 193.3,37.8 199.4,51.5 205.5,63.5"
+                fill="none"
+                stroke="#2a78d6"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="205.5"
+                cy="63.5150311913533"
+                r="4.5"
+                fill="#2a78d6"
+                stroke="#fdfcf8"
+                stroke-width="2"
+              />
+              <text
+                x="197.5"
+                y="54.5150311913533"
+                text-anchor="end"
+                font-size="10"
+                font-weight="600"
+                fill="#1c1917"
+              >
+                552 kW
+              </text>
+            </svg>
+            <div class="attr" style="color: #8b867d">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #57534e">Open-Meteo.com</a>
+            </div>
+          </div>
+          <div
+            class="card"
+            style="background: #fdfcf8; border-color: rgba(28, 25, 23, 0.12); padding-bottom: 6px"
+          >
+            <div class="cardtitle" style="color: #1c1917">
+              Site map
+              <span style="color: #57534e; font-weight: 400"
+                >— default · hover · selected · cluster</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 170"
+              role="img"
+              aria-label="Site map: default, hover, selected markers and a cluster"
+            >
+              <rect width="340" height="170" fill="#eef0e9" />
+              <path
+                d="M-10,150 C40,120 60,150 120,138 C190,124 200,160 270,146 C310,138 330,150 350,142 L350,180 L-10,180 Z"
+                fill="#f7f5ee"
+                opacity="0.7"
+              />
+              <path
+                d="M-10,20 C60,6 120,40 200,26 C270,14 320,30 350,18 L350,-10 L-10,-10 Z"
+                fill="#f7f5ee"
+              />
+              <path
+                d="M0,96 C80,88 150,104 230,92 C290,84 320,94 340,88"
+                fill="none"
+                stroke="#e3dfd4"
+                stroke-width="1"
+              />
+              <path
+                d="M120,0 C128,50 116,110 132,170 M228,0 C220,60 236,120 226,170"
+                fill="none"
+                stroke="#e3dfd4"
+                stroke-width="1"
+              />
+              <circle cx="60" cy="60" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="96" cy="44" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="128" cy="74" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="82" cy="108" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="180" cy="52" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="214" cy="96" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="172" cy="130" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <circle cx="250" cy="66" r="5" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <!-- selected: accent ring -->
+              <circle cx="214" cy="96" r="9" fill="none" stroke="#d97b00" stroke-width="2" />
+              <!-- cluster -->
+              <circle cx="290" cy="120" r="11" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <text
+                x="290"
+                y="123.5"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#fdfcf8"
+              >
+                12
+              </text>
+              <!-- hovered marker + tooltip -->
+              <circle cx="96" cy="44" r="7" fill="#d97b00" stroke="#fdfcf8" stroke-width="2" />
+              <g>
+                <rect
+                  x="106"
+                  y="18"
+                  width="118"
+                  height="34"
+                  rx="6"
+                  fill="#fdfcf8"
+                  stroke="rgba(28,25,23,0.12)"
+                />
+                <text x="114" y="32" font-size="9.5" font-weight="600" fill="#1c1917">
+                  Elm Street · 4.2 kWp
+                </text>
+                <text x="114" y="44" font-size="9" fill="#57534e">now 2.9 kW · today 18.4 kWh</text>
+              </g>
+            </svg>
+            <div class="attr" style="color: #8b867d">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #57534e">Open-Meteo.com</a>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="background: #121110; color-scheme: dark">
+          <div class="modechip" style="color: #8b867d; border-color: rgba(245, 244, 242, 0.12)">
+            dark
+          </div>
+          <div class="palrow">
+            <div class="sw" style="background: #c98500"><span>#c98500</span></div>
+            <div class="sw" style="background: #3987e5"><span>#3987e5</span></div>
+            <div class="sw" style="background: #12a695"><span>#12a695</span></div>
+            <div class="sw" style="background: #9085e9"><span>#9085e9</span></div>
+            <div class="ramp">
+              <div class="rw" style="background: #4a3610"></div>
+              <div class="rw" style="background: #8a5f10"></div>
+              <div class="rw" style="background: #c98500"></div>
+              <div class="rw" style="background: #eab74d"></div>
+            </div>
+          </div>
+          <div class="typespec" style="color: #f5f4f2">
+            <div
+              style="font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15"
+            >
+              Fleet output 128.4 kW
+            </div>
+            <div style="font-size: 15px; color: #c6c2ba; margin-top: 4px">
+              42 sites · P50 today 1.9 MWh · type scale 12 / 13 / 15 / 18 / 22 / 28
+            </div>
+            <div class="spacing" aria-hidden="true">
+              <div style="width: 4px" title="4px"></div>
+              <div style="width: 8px" title="8px"></div>
+              <div style="width: 12px" title="12px"></div>
+              <div style="width: 16px" title="16px"></div>
+              <div style="width: 24px" title="24px"></div>
+              <div style="width: 32px" title="32px"></div>
+              <span style="font-size: 11px; color: #8b867d">spacing 4·8·12·16·24·32</span>
+            </div>
+          </div>
+          <div class="card" style="background: #1b1917; border-color: rgba(245, 244, 242, 0.12)">
+            <div class="cardtitle" style="color: #f5f4f2">
+              Fleet output <span style="color: #c6c2ba; font-weight: 400">— today</span>
+            </div>
+            <div class="legend" style="color: #c6c2ba">
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#3987e5"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  /></svg
+                >Actual</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#c98500"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                    stroke-linecap="round"
+                  /></svg
+                >Forecast median</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <rect x="1" y="1" width="16" height="8" rx="2" fill="#c98500" opacity="0.16" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="16"
+                    height="8"
+                    rx="2"
+                    fill="none"
+                    stroke="#c98500"
+                    opacity="0.4"
+                    stroke-width="1"
+                  /></svg
+                >P10–P90</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 200"
+              role="img"
+              aria-label="Fleet output: actuals to 14:00, forecast band ahead"
+            >
+              <line x1="34" y1="134" x2="328" y2="134" stroke="#2e2b28" stroke-width="1" />
+              <text x="28" y="137.5" text-anchor="end" font-size="9" fill="#8b867d">200</text>
+              <line x1="34" y1="94" x2="328" y2="94" stroke="#2e2b28" stroke-width="1" />
+              <text x="28" y="97.5" text-anchor="end" font-size="9" fill="#8b867d">400</text>
+              <line x1="34" y1="54" x2="328" y2="54" stroke="#2e2b28" stroke-width="1" />
+              <text x="28" y="57.5" text-anchor="end" font-size="9" fill="#8b867d">600</text>
+              <line x1="34" y1="14" x2="328" y2="14" stroke="#2e2b28" stroke-width="1" />
+              <text x="28" y="17.5" text-anchor="end" font-size="9" fill="#8b867d">800</text>
+              <text x="34" y="190" text-anchor="middle" font-size="9" fill="#8b867d">00:00</text>
+              <text x="107.5" y="190" text-anchor="middle" font-size="9" fill="#8b867d">06:00</text>
+              <text x="181" y="190" text-anchor="middle" font-size="9" fill="#8b867d">12:00</text>
+              <text x="254.5" y="190" text-anchor="middle" font-size="9" fill="#8b867d">18:00</text>
+              <text x="328" y="190" text-anchor="middle" font-size="9" fill="#8b867d">24:00</text>
+              <line
+                x1="34"
+                y1="174"
+                x2="328"
+                y2="174"
+                stroke="#8b867d"
+                stroke-width="1"
+                opacity="0.55"
+              />
+              <path
+                d="M34.0,171.2L40.1,171.2L46.3,171.2L52.4,171.2L58.5,171.1L64.6,171.0L70.8,170.8L76.9,170.6L83.0,170.1L89.1,169.3L95.3,168.0L101.4,166.1L107.5,163.2L113.6,159.2L119.8,153.7L125.9,146.4L132.0,137.2L138.1,126.1L144.3,113.1L150.4,98.6L156.5,83.4L162.6,68.2L168.8,54.1L174.9,42.2L181.0,33.5L187.1,28.6L193.3,28.2L199.4,32.2L205.5,40.2L211.6,52.8L217.8,65.6L223.9,80.0L230.0,94.8L236.1,109.2L242.3,122.4L248.4,134.0L254.5,143.7L260.6,151.5L266.8,157.5L272.9,162.0L279.0,165.2L285.1,167.4L291.3,168.9L297.4,169.8L303.5,170.4L309.6,170.8L315.8,171.0L321.9,171.1L328.0,171.1L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,174.0L291.3,174.0L285.1,173.7L279.0,172.3L272.9,170.2L266.8,167.2L260.6,163.1L254.5,157.6L248.4,150.6L242.3,142.0L236.1,131.9L230.0,120.5L223.9,108.4L217.8,96.2L211.6,84.7L205.5,78.0L199.4,72.0L193.3,69.0L187.1,69.3L181.0,72.9L174.9,79.5L168.8,88.4L162.6,98.9L156.5,110.3L150.4,121.7L144.3,132.5L138.1,142.2L132.0,150.6L125.9,157.5L119.8,162.9L113.6,167.0L107.5,170.0L101.4,172.2L95.3,173.6L89.1,174.0L83.0,174.0L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#c98500"
+                opacity="0.12"
+              />
+              <path
+                d="M34.0,172.8L40.1,172.8L46.3,172.8L52.4,172.8L58.5,172.7L64.6,172.6L70.8,172.5L76.9,172.2L83.0,171.7L89.1,171.0L95.3,169.8L101.4,168.0L107.5,165.3L113.6,161.5L119.8,156.3L125.9,149.5L132.0,140.8L138.1,130.3L144.3,118.1L150.4,104.5L156.5,90.1L162.6,75.9L168.8,62.6L174.9,51.4L181.0,43.2L187.1,38.6L193.3,38.2L199.4,42.0L205.5,49.5L211.6,60.8L217.8,73.3L223.9,87.1L230.0,101.3L236.1,115.0L242.3,127.5L248.4,138.4L254.5,147.4L260.6,154.7L266.8,160.3L272.9,164.4L279.0,167.3L285.1,169.4L291.3,170.7L297.4,171.6L303.5,172.1L309.6,172.4L315.8,172.6L321.9,172.7L328.0,172.7L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,173.8L291.3,173.1L285.1,172.0L279.0,170.4L272.9,167.9L266.8,164.5L260.6,159.7L254.5,153.5L248.4,145.6L242.3,136.1L236.1,125.0L230.0,112.7L223.9,99.7L217.8,86.8L211.6,74.9L205.5,66.2L199.4,59.6L193.3,56.3L187.1,56.7L181.0,60.7L174.9,67.9L168.8,77.8L162.6,89.5L156.5,102.0L150.4,114.7L144.3,126.6L138.1,137.4L132.0,146.7L125.9,154.3L119.8,160.3L113.6,164.9L107.5,168.2L101.4,170.6L95.3,172.1L89.1,173.2L83.0,173.9L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#c98500"
+                opacity="0.16"
+              />
+              <line
+                x1="205.5"
+                y1="14"
+                x2="205.5"
+                y2="174"
+                stroke="#8b867d"
+                stroke-width="1"
+                stroke-dasharray="1 3"
+              />
+              <text x="209.5" y="22" font-size="9" fill="#8b867d">now</text>
+              <polyline
+                points="205.5,57.0 211.6,67.2 217.8,79.4 223.9,92.8 230.0,106.5 236.1,119.6 242.3,131.5 248.4,141.8 254.5,150.4 260.6,157.2 266.8,162.4 272.9,166.3 279.0,169.0 285.1,170.9 291.3,172.1 297.4,172.9 303.5,173.4 309.6,173.6 315.8,173.8 321.9,173.9 328.0,173.9"
+                fill="none"
+                stroke="#c98500"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="34.0,174.0 40.1,174.0 46.3,174.0 52.4,174.0 58.5,173.9 64.6,173.8 70.8,173.7 76.9,173.4 83.0,172.9 89.1,172.3 95.3,171.2 101.4,169.8 107.5,166.7 113.6,163.0 119.8,157.5 125.9,151.9 132.0,145.7 138.1,134.5 144.3,123.5 150.4,104.3 156.5,93.3 162.6,82.1 168.8,73.4 174.9,66.8 181.0,46.9 187.1,44.1 193.3,37.8 199.4,51.5 205.5,63.5"
+                fill="none"
+                stroke="#3987e5"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="205.5"
+                cy="63.5150311913533"
+                r="4.5"
+                fill="#3987e5"
+                stroke="#1b1917"
+                stroke-width="2"
+              />
+              <text
+                x="197.5"
+                y="54.5150311913533"
+                text-anchor="end"
+                font-size="10"
+                font-weight="600"
+                fill="#f5f4f2"
+              >
+                552 kW
+              </text>
+            </svg>
+            <div class="attr" style="color: #8b867d">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #c6c2ba">Open-Meteo.com</a>
+            </div>
+          </div>
+          <div
+            class="card"
+            style="
+              background: #1b1917;
+              border-color: rgba(245, 244, 242, 0.12);
+              padding-bottom: 6px;
+            "
+          >
+            <div class="cardtitle" style="color: #f5f4f2">
+              Site map
+              <span style="color: #c6c2ba; font-weight: 400"
+                >— default · hover · selected · cluster</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 170"
+              role="img"
+              aria-label="Site map: default, hover, selected markers and a cluster"
+            >
+              <rect width="340" height="170" fill="#15171a" />
+              <path
+                d="M-10,150 C40,120 60,150 120,138 C190,124 200,160 270,146 C310,138 330,150 350,142 L350,180 L-10,180 Z"
+                fill="#211f1c"
+                opacity="0.7"
+              />
+              <path
+                d="M-10,20 C60,6 120,40 200,26 C270,14 320,30 350,18 L350,-10 L-10,-10 Z"
+                fill="#211f1c"
+              />
+              <path
+                d="M0,96 C80,88 150,104 230,92 C290,84 320,94 340,88"
+                fill="none"
+                stroke="#312e2a"
+                stroke-width="1"
+              />
+              <path
+                d="M120,0 C128,50 116,110 132,170 M228,0 C220,60 236,120 226,170"
+                fill="none"
+                stroke="#312e2a"
+                stroke-width="1"
+              />
+              <circle cx="60" cy="60" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="96" cy="44" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="128" cy="74" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="82" cy="108" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="180" cy="52" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="214" cy="96" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="172" cy="130" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <circle cx="250" cy="66" r="5" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <!-- selected: accent ring -->
+              <circle cx="214" cy="96" r="9" fill="none" stroke="#c98500" stroke-width="2" />
+              <!-- cluster -->
+              <circle cx="290" cy="120" r="11" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <text
+                x="290"
+                y="123.5"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#1b1917"
+              >
+                12
+              </text>
+              <!-- hovered marker + tooltip -->
+              <circle cx="96" cy="44" r="7" fill="#c98500" stroke="#1b1917" stroke-width="2" />
+              <g>
+                <rect
+                  x="106"
+                  y="18"
+                  width="118"
+                  height="34"
+                  rx="6"
+                  fill="#1b1917"
+                  stroke="rgba(245,244,242,0.12)"
+                />
+                <text x="114" y="32" font-size="9.5" font-weight="600" fill="#f5f4f2">
+                  Elm Street · 4.2 kWp
+                </text>
+                <text x="114" y="44" font-size="9" fill="#c6c2ba">now 2.9 kW · today 18.4 kWh</text>
+              </g>
+            </svg>
+            <div class="attr" style="color: #8b867d">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #c6c2ba">Open-Meteo.com</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2><span class="dirid">B</span> Meridian</h2>
+      <p class="blurb">
+        Cool, quiet neutrals; forecast wears the leading blue and actuals are near-ink — “measured
+        truth is neutral, prediction is coloured.” Closest to a grid-operator tool.
+      </p>
+      <div class="pair">
+        <div class="panel" style="background: #f6f8f9; color-scheme: light">
+          <div class="modechip" style="color: #83909a; border-color: rgba(13, 18, 21, 0.12)">
+            light
+          </div>
+          <div class="palrow">
+            <div class="sw" style="background: #2a78d6"><span>#2a78d6</span></div>
+            <div class="sw" style="background: #eb6834"><span>#eb6834</span></div>
+            <div class="sw" style="background: #1baf7a"><span>#1baf7a</span></div>
+            <div class="sw" style="background: #eda100"><span>#eda100</span></div>
+            <div class="ramp">
+              <div class="rw" style="background: #cde2fb"></div>
+              <div class="rw" style="background: #86b6ef"></div>
+              <div class="rw" style="background: #2a78d6"></div>
+              <div class="rw" style="background: #184f95"></div>
+            </div>
+          </div>
+          <div class="typespec" style="color: #0d1215">
+            <div
+              style="font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15"
+            >
+              Fleet output 128.4 kW
+            </div>
+            <div style="font-size: 15px; color: #4e5a63; margin-top: 4px">
+              42 sites · P50 today 1.9 MWh · type scale 12 / 13 / 15 / 18 / 22 / 28
+            </div>
+            <div class="spacing" aria-hidden="true">
+              <div style="width: 4px" title="4px"></div>
+              <div style="width: 8px" title="8px"></div>
+              <div style="width: 12px" title="12px"></div>
+              <div style="width: 16px" title="16px"></div>
+              <div style="width: 24px" title="24px"></div>
+              <div style="width: 32px" title="32px"></div>
+              <span style="font-size: 11px; color: #83909a">spacing 4·8·12·16·24·32</span>
+            </div>
+          </div>
+          <div class="card" style="background: #fbfcfd; border-color: rgba(13, 18, 21, 0.12)">
+            <div class="cardtitle" style="color: #0d1215">
+              Fleet output <span style="color: #4e5a63; font-weight: 400">— today</span>
+            </div>
+            <div class="legend" style="color: #4e5a63">
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#0d1215"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  /></svg
+                >Actual</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#2a78d6"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                    stroke-linecap="round"
+                  /></svg
+                >Forecast median</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <rect x="1" y="1" width="16" height="8" rx="2" fill="#2a78d6" opacity="0.16" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="16"
+                    height="8"
+                    rx="2"
+                    fill="none"
+                    stroke="#2a78d6"
+                    opacity="0.4"
+                    stroke-width="1"
+                  /></svg
+                >P10–P90</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 200"
+              role="img"
+              aria-label="Fleet output: actuals to 14:00, forecast band ahead"
+            >
+              <line x1="34" y1="134" x2="328" y2="134" stroke="#e2e7ea" stroke-width="1" />
+              <text x="28" y="137.5" text-anchor="end" font-size="9" fill="#83909a">200</text>
+              <line x1="34" y1="94" x2="328" y2="94" stroke="#e2e7ea" stroke-width="1" />
+              <text x="28" y="97.5" text-anchor="end" font-size="9" fill="#83909a">400</text>
+              <line x1="34" y1="54" x2="328" y2="54" stroke="#e2e7ea" stroke-width="1" />
+              <text x="28" y="57.5" text-anchor="end" font-size="9" fill="#83909a">600</text>
+              <line x1="34" y1="14" x2="328" y2="14" stroke="#e2e7ea" stroke-width="1" />
+              <text x="28" y="17.5" text-anchor="end" font-size="9" fill="#83909a">800</text>
+              <text x="34" y="190" text-anchor="middle" font-size="9" fill="#83909a">00:00</text>
+              <text x="107.5" y="190" text-anchor="middle" font-size="9" fill="#83909a">06:00</text>
+              <text x="181" y="190" text-anchor="middle" font-size="9" fill="#83909a">12:00</text>
+              <text x="254.5" y="190" text-anchor="middle" font-size="9" fill="#83909a">18:00</text>
+              <text x="328" y="190" text-anchor="middle" font-size="9" fill="#83909a">24:00</text>
+              <line
+                x1="34"
+                y1="174"
+                x2="328"
+                y2="174"
+                stroke="#83909a"
+                stroke-width="1"
+                opacity="0.55"
+              />
+              <path
+                d="M34.0,171.2L40.1,171.2L46.3,171.2L52.4,171.2L58.5,171.1L64.6,171.0L70.8,170.8L76.9,170.6L83.0,170.1L89.1,169.3L95.3,168.0L101.4,166.1L107.5,163.2L113.6,159.2L119.8,153.7L125.9,146.4L132.0,137.2L138.1,126.1L144.3,113.1L150.4,98.6L156.5,83.4L162.6,68.2L168.8,54.1L174.9,42.2L181.0,33.5L187.1,28.6L193.3,28.2L199.4,32.2L205.5,40.2L211.6,52.8L217.8,65.6L223.9,80.0L230.0,94.8L236.1,109.2L242.3,122.4L248.4,134.0L254.5,143.7L260.6,151.5L266.8,157.5L272.9,162.0L279.0,165.2L285.1,167.4L291.3,168.9L297.4,169.8L303.5,170.4L309.6,170.8L315.8,171.0L321.9,171.1L328.0,171.1L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,174.0L291.3,174.0L285.1,173.7L279.0,172.3L272.9,170.2L266.8,167.2L260.6,163.1L254.5,157.6L248.4,150.6L242.3,142.0L236.1,131.9L230.0,120.5L223.9,108.4L217.8,96.2L211.6,84.7L205.5,78.0L199.4,72.0L193.3,69.0L187.1,69.3L181.0,72.9L174.9,79.5L168.8,88.4L162.6,98.9L156.5,110.3L150.4,121.7L144.3,132.5L138.1,142.2L132.0,150.6L125.9,157.5L119.8,162.9L113.6,167.0L107.5,170.0L101.4,172.2L95.3,173.6L89.1,174.0L83.0,174.0L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#2a78d6"
+                opacity="0.12"
+              />
+              <path
+                d="M34.0,172.8L40.1,172.8L46.3,172.8L52.4,172.8L58.5,172.7L64.6,172.6L70.8,172.5L76.9,172.2L83.0,171.7L89.1,171.0L95.3,169.8L101.4,168.0L107.5,165.3L113.6,161.5L119.8,156.3L125.9,149.5L132.0,140.8L138.1,130.3L144.3,118.1L150.4,104.5L156.5,90.1L162.6,75.9L168.8,62.6L174.9,51.4L181.0,43.2L187.1,38.6L193.3,38.2L199.4,42.0L205.5,49.5L211.6,60.8L217.8,73.3L223.9,87.1L230.0,101.3L236.1,115.0L242.3,127.5L248.4,138.4L254.5,147.4L260.6,154.7L266.8,160.3L272.9,164.4L279.0,167.3L285.1,169.4L291.3,170.7L297.4,171.6L303.5,172.1L309.6,172.4L315.8,172.6L321.9,172.7L328.0,172.7L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,173.8L291.3,173.1L285.1,172.0L279.0,170.4L272.9,167.9L266.8,164.5L260.6,159.7L254.5,153.5L248.4,145.6L242.3,136.1L236.1,125.0L230.0,112.7L223.9,99.7L217.8,86.8L211.6,74.9L205.5,66.2L199.4,59.6L193.3,56.3L187.1,56.7L181.0,60.7L174.9,67.9L168.8,77.8L162.6,89.5L156.5,102.0L150.4,114.7L144.3,126.6L138.1,137.4L132.0,146.7L125.9,154.3L119.8,160.3L113.6,164.9L107.5,168.2L101.4,170.6L95.3,172.1L89.1,173.2L83.0,173.9L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#2a78d6"
+                opacity="0.16"
+              />
+              <line
+                x1="205.5"
+                y1="14"
+                x2="205.5"
+                y2="174"
+                stroke="#83909a"
+                stroke-width="1"
+                stroke-dasharray="1 3"
+              />
+              <text x="209.5" y="22" font-size="9" fill="#83909a">now</text>
+              <polyline
+                points="205.5,57.0 211.6,67.2 217.8,79.4 223.9,92.8 230.0,106.5 236.1,119.6 242.3,131.5 248.4,141.8 254.5,150.4 260.6,157.2 266.8,162.4 272.9,166.3 279.0,169.0 285.1,170.9 291.3,172.1 297.4,172.9 303.5,173.4 309.6,173.6 315.8,173.8 321.9,173.9 328.0,173.9"
+                fill="none"
+                stroke="#2a78d6"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="34.0,174.0 40.1,174.0 46.3,174.0 52.4,174.0 58.5,173.9 64.6,173.8 70.8,173.7 76.9,173.4 83.0,172.9 89.1,172.3 95.3,171.2 101.4,169.8 107.5,166.7 113.6,163.0 119.8,157.5 125.9,151.9 132.0,145.7 138.1,134.5 144.3,123.5 150.4,104.3 156.5,93.3 162.6,82.1 168.8,73.4 174.9,66.8 181.0,46.9 187.1,44.1 193.3,37.8 199.4,51.5 205.5,63.5"
+                fill="none"
+                stroke="#0d1215"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="205.5"
+                cy="63.5150311913533"
+                r="4.5"
+                fill="#0d1215"
+                stroke="#fbfcfd"
+                stroke-width="2"
+              />
+              <text
+                x="197.5"
+                y="54.5150311913533"
+                text-anchor="end"
+                font-size="10"
+                font-weight="600"
+                fill="#0d1215"
+              >
+                552 kW
+              </text>
+            </svg>
+            <div class="attr" style="color: #83909a">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #4e5a63">Open-Meteo.com</a>
+            </div>
+          </div>
+          <div
+            class="card"
+            style="background: #fbfcfd; border-color: rgba(13, 18, 21, 0.12); padding-bottom: 6px"
+          >
+            <div class="cardtitle" style="color: #0d1215">
+              Site map
+              <span style="color: #4e5a63; font-weight: 400"
+                >— default · hover · selected · cluster</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 170"
+              role="img"
+              aria-label="Site map: default, hover, selected markers and a cluster"
+            >
+              <rect width="340" height="170" fill="#edf1f4" />
+              <path
+                d="M-10,150 C40,120 60,150 120,138 C190,124 200,160 270,146 C310,138 330,150 350,142 L350,180 L-10,180 Z"
+                fill="#f5f7f8"
+                opacity="0.7"
+              />
+              <path
+                d="M-10,20 C60,6 120,40 200,26 C270,14 320,30 350,18 L350,-10 L-10,-10 Z"
+                fill="#f5f7f8"
+              />
+              <path
+                d="M0,96 C80,88 150,104 230,92 C290,84 320,94 340,88"
+                fill="none"
+                stroke="#dfe4e8"
+                stroke-width="1"
+              />
+              <path
+                d="M120,0 C128,50 116,110 132,170 M228,0 C220,60 236,120 226,170"
+                fill="none"
+                stroke="#dfe4e8"
+                stroke-width="1"
+              />
+              <circle cx="60" cy="60" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="96" cy="44" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="128" cy="74" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="82" cy="108" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="180" cy="52" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="214" cy="96" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="172" cy="130" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <circle cx="250" cy="66" r="5" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <!-- selected: accent ring -->
+              <circle cx="214" cy="96" r="9" fill="none" stroke="#2a78d6" stroke-width="2" />
+              <!-- cluster -->
+              <circle cx="290" cy="120" r="11" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <text
+                x="290"
+                y="123.5"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#fbfcfd"
+              >
+                12
+              </text>
+              <!-- hovered marker + tooltip -->
+              <circle cx="96" cy="44" r="7" fill="#2a78d6" stroke="#fbfcfd" stroke-width="2" />
+              <g>
+                <rect
+                  x="106"
+                  y="18"
+                  width="118"
+                  height="34"
+                  rx="6"
+                  fill="#fbfcfd"
+                  stroke="rgba(13,18,21,0.12)"
+                />
+                <text x="114" y="32" font-size="9.5" font-weight="600" fill="#0d1215">
+                  Elm Street · 4.2 kWp
+                </text>
+                <text x="114" y="44" font-size="9" fill="#4e5a63">now 2.9 kW · today 18.4 kWh</text>
+              </g>
+            </svg>
+            <div class="attr" style="color: #83909a">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #4e5a63">Open-Meteo.com</a>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="background: #0e1011; color-scheme: dark">
+          <div class="modechip" style="color: #83909a; border-color: rgba(242, 245, 247, 0.12)">
+            dark
+          </div>
+          <div class="palrow">
+            <div class="sw" style="background: #3987e5"><span>#3987e5</span></div>
+            <div class="sw" style="background: #d95926"><span>#d95926</span></div>
+            <div class="sw" style="background: #199e70"><span>#199e70</span></div>
+            <div class="sw" style="background: #c98500"><span>#c98500</span></div>
+            <div class="ramp">
+              <div class="rw" style="background: #122c4d"></div>
+              <div class="rw" style="background: #1c5cab"></div>
+              <div class="rw" style="background: #3987e5"></div>
+              <div class="rw" style="background: #86b6ef"></div>
+            </div>
+          </div>
+          <div class="typespec" style="color: #f2f5f7">
+            <div
+              style="font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15"
+            >
+              Fleet output 128.4 kW
+            </div>
+            <div style="font-size: 15px; color: #b9c2c9; margin-top: 4px">
+              42 sites · P50 today 1.9 MWh · type scale 12 / 13 / 15 / 18 / 22 / 28
+            </div>
+            <div class="spacing" aria-hidden="true">
+              <div style="width: 4px" title="4px"></div>
+              <div style="width: 8px" title="8px"></div>
+              <div style="width: 12px" title="12px"></div>
+              <div style="width: 16px" title="16px"></div>
+              <div style="width: 24px" title="24px"></div>
+              <div style="width: 32px" title="32px"></div>
+              <span style="font-size: 11px; color: #83909a">spacing 4·8·12·16·24·32</span>
+            </div>
+          </div>
+          <div class="card" style="background: #16181a; border-color: rgba(242, 245, 247, 0.12)">
+            <div class="cardtitle" style="color: #f2f5f7">
+              Fleet output <span style="color: #b9c2c9; font-weight: 400">— today</span>
+            </div>
+            <div class="legend" style="color: #b9c2c9">
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#f2f5f7"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  /></svg
+                >Actual</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#3987e5"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                    stroke-linecap="round"
+                  /></svg
+                >Forecast median</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <rect x="1" y="1" width="16" height="8" rx="2" fill="#3987e5" opacity="0.16" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="16"
+                    height="8"
+                    rx="2"
+                    fill="none"
+                    stroke="#3987e5"
+                    opacity="0.4"
+                    stroke-width="1"
+                  /></svg
+                >P10–P90</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 200"
+              role="img"
+              aria-label="Fleet output: actuals to 14:00, forecast band ahead"
+            >
+              <line x1="34" y1="134" x2="328" y2="134" stroke="#2a2e31" stroke-width="1" />
+              <text x="28" y="137.5" text-anchor="end" font-size="9" fill="#83909a">200</text>
+              <line x1="34" y1="94" x2="328" y2="94" stroke="#2a2e31" stroke-width="1" />
+              <text x="28" y="97.5" text-anchor="end" font-size="9" fill="#83909a">400</text>
+              <line x1="34" y1="54" x2="328" y2="54" stroke="#2a2e31" stroke-width="1" />
+              <text x="28" y="57.5" text-anchor="end" font-size="9" fill="#83909a">600</text>
+              <line x1="34" y1="14" x2="328" y2="14" stroke="#2a2e31" stroke-width="1" />
+              <text x="28" y="17.5" text-anchor="end" font-size="9" fill="#83909a">800</text>
+              <text x="34" y="190" text-anchor="middle" font-size="9" fill="#83909a">00:00</text>
+              <text x="107.5" y="190" text-anchor="middle" font-size="9" fill="#83909a">06:00</text>
+              <text x="181" y="190" text-anchor="middle" font-size="9" fill="#83909a">12:00</text>
+              <text x="254.5" y="190" text-anchor="middle" font-size="9" fill="#83909a">18:00</text>
+              <text x="328" y="190" text-anchor="middle" font-size="9" fill="#83909a">24:00</text>
+              <line
+                x1="34"
+                y1="174"
+                x2="328"
+                y2="174"
+                stroke="#83909a"
+                stroke-width="1"
+                opacity="0.55"
+              />
+              <path
+                d="M34.0,171.2L40.1,171.2L46.3,171.2L52.4,171.2L58.5,171.1L64.6,171.0L70.8,170.8L76.9,170.6L83.0,170.1L89.1,169.3L95.3,168.0L101.4,166.1L107.5,163.2L113.6,159.2L119.8,153.7L125.9,146.4L132.0,137.2L138.1,126.1L144.3,113.1L150.4,98.6L156.5,83.4L162.6,68.2L168.8,54.1L174.9,42.2L181.0,33.5L187.1,28.6L193.3,28.2L199.4,32.2L205.5,40.2L211.6,52.8L217.8,65.6L223.9,80.0L230.0,94.8L236.1,109.2L242.3,122.4L248.4,134.0L254.5,143.7L260.6,151.5L266.8,157.5L272.9,162.0L279.0,165.2L285.1,167.4L291.3,168.9L297.4,169.8L303.5,170.4L309.6,170.8L315.8,171.0L321.9,171.1L328.0,171.1L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,174.0L291.3,174.0L285.1,173.7L279.0,172.3L272.9,170.2L266.8,167.2L260.6,163.1L254.5,157.6L248.4,150.6L242.3,142.0L236.1,131.9L230.0,120.5L223.9,108.4L217.8,96.2L211.6,84.7L205.5,78.0L199.4,72.0L193.3,69.0L187.1,69.3L181.0,72.9L174.9,79.5L168.8,88.4L162.6,98.9L156.5,110.3L150.4,121.7L144.3,132.5L138.1,142.2L132.0,150.6L125.9,157.5L119.8,162.9L113.6,167.0L107.5,170.0L101.4,172.2L95.3,173.6L89.1,174.0L83.0,174.0L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#3987e5"
+                opacity="0.12"
+              />
+              <path
+                d="M34.0,172.8L40.1,172.8L46.3,172.8L52.4,172.8L58.5,172.7L64.6,172.6L70.8,172.5L76.9,172.2L83.0,171.7L89.1,171.0L95.3,169.8L101.4,168.0L107.5,165.3L113.6,161.5L119.8,156.3L125.9,149.5L132.0,140.8L138.1,130.3L144.3,118.1L150.4,104.5L156.5,90.1L162.6,75.9L168.8,62.6L174.9,51.4L181.0,43.2L187.1,38.6L193.3,38.2L199.4,42.0L205.5,49.5L211.6,60.8L217.8,73.3L223.9,87.1L230.0,101.3L236.1,115.0L242.3,127.5L248.4,138.4L254.5,147.4L260.6,154.7L266.8,160.3L272.9,164.4L279.0,167.3L285.1,169.4L291.3,170.7L297.4,171.6L303.5,172.1L309.6,172.4L315.8,172.6L321.9,172.7L328.0,172.7L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,173.8L291.3,173.1L285.1,172.0L279.0,170.4L272.9,167.9L266.8,164.5L260.6,159.7L254.5,153.5L248.4,145.6L242.3,136.1L236.1,125.0L230.0,112.7L223.9,99.7L217.8,86.8L211.6,74.9L205.5,66.2L199.4,59.6L193.3,56.3L187.1,56.7L181.0,60.7L174.9,67.9L168.8,77.8L162.6,89.5L156.5,102.0L150.4,114.7L144.3,126.6L138.1,137.4L132.0,146.7L125.9,154.3L119.8,160.3L113.6,164.9L107.5,168.2L101.4,170.6L95.3,172.1L89.1,173.2L83.0,173.9L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#3987e5"
+                opacity="0.16"
+              />
+              <line
+                x1="205.5"
+                y1="14"
+                x2="205.5"
+                y2="174"
+                stroke="#83909a"
+                stroke-width="1"
+                stroke-dasharray="1 3"
+              />
+              <text x="209.5" y="22" font-size="9" fill="#83909a">now</text>
+              <polyline
+                points="205.5,57.0 211.6,67.2 217.8,79.4 223.9,92.8 230.0,106.5 236.1,119.6 242.3,131.5 248.4,141.8 254.5,150.4 260.6,157.2 266.8,162.4 272.9,166.3 279.0,169.0 285.1,170.9 291.3,172.1 297.4,172.9 303.5,173.4 309.6,173.6 315.8,173.8 321.9,173.9 328.0,173.9"
+                fill="none"
+                stroke="#3987e5"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="34.0,174.0 40.1,174.0 46.3,174.0 52.4,174.0 58.5,173.9 64.6,173.8 70.8,173.7 76.9,173.4 83.0,172.9 89.1,172.3 95.3,171.2 101.4,169.8 107.5,166.7 113.6,163.0 119.8,157.5 125.9,151.9 132.0,145.7 138.1,134.5 144.3,123.5 150.4,104.3 156.5,93.3 162.6,82.1 168.8,73.4 174.9,66.8 181.0,46.9 187.1,44.1 193.3,37.8 199.4,51.5 205.5,63.5"
+                fill="none"
+                stroke="#f2f5f7"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="205.5"
+                cy="63.5150311913533"
+                r="4.5"
+                fill="#f2f5f7"
+                stroke="#16181a"
+                stroke-width="2"
+              />
+              <text
+                x="197.5"
+                y="54.5150311913533"
+                text-anchor="end"
+                font-size="10"
+                font-weight="600"
+                fill="#f2f5f7"
+              >
+                552 kW
+              </text>
+            </svg>
+            <div class="attr" style="color: #83909a">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #b9c2c9">Open-Meteo.com</a>
+            </div>
+          </div>
+          <div
+            class="card"
+            style="
+              background: #16181a;
+              border-color: rgba(242, 245, 247, 0.12);
+              padding-bottom: 6px;
+            "
+          >
+            <div class="cardtitle" style="color: #f2f5f7">
+              Site map
+              <span style="color: #b9c2c9; font-weight: 400"
+                >— default · hover · selected · cluster</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 170"
+              role="img"
+              aria-label="Site map: default, hover, selected markers and a cluster"
+            >
+              <rect width="340" height="170" fill="#131719" />
+              <path
+                d="M-10,150 C40,120 60,150 120,138 C190,124 200,160 270,146 C310,138 330,150 350,142 L350,180 L-10,180 Z"
+                fill="#1c1f21"
+                opacity="0.7"
+              />
+              <path
+                d="M-10,20 C60,6 120,40 200,26 C270,14 320,30 350,18 L350,-10 L-10,-10 Z"
+                fill="#1c1f21"
+              />
+              <path
+                d="M0,96 C80,88 150,104 230,92 C290,84 320,94 340,88"
+                fill="none"
+                stroke="#2b3033"
+                stroke-width="1"
+              />
+              <path
+                d="M120,0 C128,50 116,110 132,170 M228,0 C220,60 236,120 226,170"
+                fill="none"
+                stroke="#2b3033"
+                stroke-width="1"
+              />
+              <circle cx="60" cy="60" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="96" cy="44" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="128" cy="74" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="82" cy="108" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="180" cy="52" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="214" cy="96" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="172" cy="130" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <circle cx="250" cy="66" r="5" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <!-- selected: accent ring -->
+              <circle cx="214" cy="96" r="9" fill="none" stroke="#3987e5" stroke-width="2" />
+              <!-- cluster -->
+              <circle cx="290" cy="120" r="11" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <text
+                x="290"
+                y="123.5"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#16181a"
+              >
+                12
+              </text>
+              <!-- hovered marker + tooltip -->
+              <circle cx="96" cy="44" r="7" fill="#3987e5" stroke="#16181a" stroke-width="2" />
+              <g>
+                <rect
+                  x="106"
+                  y="18"
+                  width="118"
+                  height="34"
+                  rx="6"
+                  fill="#16181a"
+                  stroke="rgba(242,245,247,0.12)"
+                />
+                <text x="114" y="32" font-size="9.5" font-weight="600" fill="#f2f5f7">
+                  Elm Street · 4.2 kWp
+                </text>
+                <text x="114" y="44" font-size="9" fill="#b9c2c9">now 2.9 kW · today 18.4 kWh</text>
+              </g>
+            </svg>
+            <div class="attr" style="color: #83909a">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #b9c2c9">Open-Meteo.com</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2><span class="dirid">C</span> Nocturne</h2>
+      <p class="blurb">
+        Dark-first ops console on blue-black; cyan forecast against amber actuals. Highest drama —
+        the fleet map reads like a control room. Light mode exists but dark leads.
+      </p>
+      <div class="pair">
+        <div class="panel" style="background: #eff2f5; color-scheme: light">
+          <div class="modechip" style="color: #7c88a0; border-color: rgba(11, 18, 32, 0.12)">
+            light
+          </div>
+          <div class="palrow">
+            <div class="sw" style="background: #0d84a6"><span>#0d84a6</span></div>
+            <div class="sw" style="background: #b97a10"><span>#b97a10</span></div>
+            <div class="sw" style="background: #c23a6c"><span>#c23a6c</span></div>
+            <div class="sw" style="background: #6a4fd0"><span>#6a4fd0</span></div>
+            <div class="ramp">
+              <div class="rw" style="background: #d6ecf3"></div>
+              <div class="rw" style="background: #7ec4d8"></div>
+              <div class="rw" style="background: #0d84a6"></div>
+              <div class="rw" style="background: #08566d"></div>
+            </div>
+          </div>
+          <div class="typespec" style="color: #0b1220">
+            <div
+              style="font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15"
+            >
+              Fleet output 128.4 kW
+            </div>
+            <div style="font-size: 15px; color: #46536b; margin-top: 4px">
+              42 sites · P50 today 1.9 MWh · type scale 12 / 13 / 15 / 18 / 22 / 28
+            </div>
+            <div class="spacing" aria-hidden="true">
+              <div style="width: 4px" title="4px"></div>
+              <div style="width: 8px" title="8px"></div>
+              <div style="width: 12px" title="12px"></div>
+              <div style="width: 16px" title="16px"></div>
+              <div style="width: 24px" title="24px"></div>
+              <div style="width: 32px" title="32px"></div>
+              <span style="font-size: 11px; color: #7c88a0">spacing 4·8·12·16·24·32</span>
+            </div>
+          </div>
+          <div class="card" style="background: #f6f8fa; border-color: rgba(11, 18, 32, 0.12)">
+            <div class="cardtitle" style="color: #0b1220">
+              Fleet output <span style="color: #46536b; font-weight: 400">— today</span>
+            </div>
+            <div class="legend" style="color: #46536b">
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#b97a10"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  /></svg
+                >Actual</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#0d84a6"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                    stroke-linecap="round"
+                  /></svg
+                >Forecast median</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <rect x="1" y="1" width="16" height="8" rx="2" fill="#0d84a6" opacity="0.16" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="16"
+                    height="8"
+                    rx="2"
+                    fill="none"
+                    stroke="#0d84a6"
+                    opacity="0.4"
+                    stroke-width="1"
+                  /></svg
+                >P10–P90</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 200"
+              role="img"
+              aria-label="Fleet output: actuals to 14:00, forecast band ahead"
+            >
+              <line x1="34" y1="134" x2="328" y2="134" stroke="#dde3ea" stroke-width="1" />
+              <text x="28" y="137.5" text-anchor="end" font-size="9" fill="#7c88a0">200</text>
+              <line x1="34" y1="94" x2="328" y2="94" stroke="#dde3ea" stroke-width="1" />
+              <text x="28" y="97.5" text-anchor="end" font-size="9" fill="#7c88a0">400</text>
+              <line x1="34" y1="54" x2="328" y2="54" stroke="#dde3ea" stroke-width="1" />
+              <text x="28" y="57.5" text-anchor="end" font-size="9" fill="#7c88a0">600</text>
+              <line x1="34" y1="14" x2="328" y2="14" stroke="#dde3ea" stroke-width="1" />
+              <text x="28" y="17.5" text-anchor="end" font-size="9" fill="#7c88a0">800</text>
+              <text x="34" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">00:00</text>
+              <text x="107.5" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">06:00</text>
+              <text x="181" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">12:00</text>
+              <text x="254.5" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">18:00</text>
+              <text x="328" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">24:00</text>
+              <line
+                x1="34"
+                y1="174"
+                x2="328"
+                y2="174"
+                stroke="#7c88a0"
+                stroke-width="1"
+                opacity="0.55"
+              />
+              <path
+                d="M34.0,171.2L40.1,171.2L46.3,171.2L52.4,171.2L58.5,171.1L64.6,171.0L70.8,170.8L76.9,170.6L83.0,170.1L89.1,169.3L95.3,168.0L101.4,166.1L107.5,163.2L113.6,159.2L119.8,153.7L125.9,146.4L132.0,137.2L138.1,126.1L144.3,113.1L150.4,98.6L156.5,83.4L162.6,68.2L168.8,54.1L174.9,42.2L181.0,33.5L187.1,28.6L193.3,28.2L199.4,32.2L205.5,40.2L211.6,52.8L217.8,65.6L223.9,80.0L230.0,94.8L236.1,109.2L242.3,122.4L248.4,134.0L254.5,143.7L260.6,151.5L266.8,157.5L272.9,162.0L279.0,165.2L285.1,167.4L291.3,168.9L297.4,169.8L303.5,170.4L309.6,170.8L315.8,171.0L321.9,171.1L328.0,171.1L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,174.0L291.3,174.0L285.1,173.7L279.0,172.3L272.9,170.2L266.8,167.2L260.6,163.1L254.5,157.6L248.4,150.6L242.3,142.0L236.1,131.9L230.0,120.5L223.9,108.4L217.8,96.2L211.6,84.7L205.5,78.0L199.4,72.0L193.3,69.0L187.1,69.3L181.0,72.9L174.9,79.5L168.8,88.4L162.6,98.9L156.5,110.3L150.4,121.7L144.3,132.5L138.1,142.2L132.0,150.6L125.9,157.5L119.8,162.9L113.6,167.0L107.5,170.0L101.4,172.2L95.3,173.6L89.1,174.0L83.0,174.0L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#0d84a6"
+                opacity="0.12"
+              />
+              <path
+                d="M34.0,172.8L40.1,172.8L46.3,172.8L52.4,172.8L58.5,172.7L64.6,172.6L70.8,172.5L76.9,172.2L83.0,171.7L89.1,171.0L95.3,169.8L101.4,168.0L107.5,165.3L113.6,161.5L119.8,156.3L125.9,149.5L132.0,140.8L138.1,130.3L144.3,118.1L150.4,104.5L156.5,90.1L162.6,75.9L168.8,62.6L174.9,51.4L181.0,43.2L187.1,38.6L193.3,38.2L199.4,42.0L205.5,49.5L211.6,60.8L217.8,73.3L223.9,87.1L230.0,101.3L236.1,115.0L242.3,127.5L248.4,138.4L254.5,147.4L260.6,154.7L266.8,160.3L272.9,164.4L279.0,167.3L285.1,169.4L291.3,170.7L297.4,171.6L303.5,172.1L309.6,172.4L315.8,172.6L321.9,172.7L328.0,172.7L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,173.8L291.3,173.1L285.1,172.0L279.0,170.4L272.9,167.9L266.8,164.5L260.6,159.7L254.5,153.5L248.4,145.6L242.3,136.1L236.1,125.0L230.0,112.7L223.9,99.7L217.8,86.8L211.6,74.9L205.5,66.2L199.4,59.6L193.3,56.3L187.1,56.7L181.0,60.7L174.9,67.9L168.8,77.8L162.6,89.5L156.5,102.0L150.4,114.7L144.3,126.6L138.1,137.4L132.0,146.7L125.9,154.3L119.8,160.3L113.6,164.9L107.5,168.2L101.4,170.6L95.3,172.1L89.1,173.2L83.0,173.9L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#0d84a6"
+                opacity="0.16"
+              />
+              <line
+                x1="205.5"
+                y1="14"
+                x2="205.5"
+                y2="174"
+                stroke="#7c88a0"
+                stroke-width="1"
+                stroke-dasharray="1 3"
+              />
+              <text x="209.5" y="22" font-size="9" fill="#7c88a0">now</text>
+              <polyline
+                points="205.5,57.0 211.6,67.2 217.8,79.4 223.9,92.8 230.0,106.5 236.1,119.6 242.3,131.5 248.4,141.8 254.5,150.4 260.6,157.2 266.8,162.4 272.9,166.3 279.0,169.0 285.1,170.9 291.3,172.1 297.4,172.9 303.5,173.4 309.6,173.6 315.8,173.8 321.9,173.9 328.0,173.9"
+                fill="none"
+                stroke="#0d84a6"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="34.0,174.0 40.1,174.0 46.3,174.0 52.4,174.0 58.5,173.9 64.6,173.8 70.8,173.7 76.9,173.4 83.0,172.9 89.1,172.3 95.3,171.2 101.4,169.8 107.5,166.7 113.6,163.0 119.8,157.5 125.9,151.9 132.0,145.7 138.1,134.5 144.3,123.5 150.4,104.3 156.5,93.3 162.6,82.1 168.8,73.4 174.9,66.8 181.0,46.9 187.1,44.1 193.3,37.8 199.4,51.5 205.5,63.5"
+                fill="none"
+                stroke="#b97a10"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="205.5"
+                cy="63.5150311913533"
+                r="4.5"
+                fill="#b97a10"
+                stroke="#f6f8fa"
+                stroke-width="2"
+              />
+              <text
+                x="197.5"
+                y="54.5150311913533"
+                text-anchor="end"
+                font-size="10"
+                font-weight="600"
+                fill="#0b1220"
+              >
+                552 kW
+              </text>
+            </svg>
+            <div class="attr" style="color: #7c88a0">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #46536b">Open-Meteo.com</a>
+            </div>
+          </div>
+          <div
+            class="card"
+            style="background: #f6f8fa; border-color: rgba(11, 18, 32, 0.12); padding-bottom: 6px"
+          >
+            <div class="cardtitle" style="color: #0b1220">
+              Site map
+              <span style="color: #46536b; font-weight: 400"
+                >— default · hover · selected · cluster</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 170"
+              role="img"
+              aria-label="Site map: default, hover, selected markers and a cluster"
+            >
+              <rect width="340" height="170" fill="#e9eef3" />
+              <path
+                d="M-10,150 C40,120 60,150 120,138 C190,124 200,160 270,146 C310,138 330,150 350,142 L350,180 L-10,180 Z"
+                fill="#f2f5f7"
+                opacity="0.7"
+              />
+              <path
+                d="M-10,20 C60,6 120,40 200,26 C270,14 320,30 350,18 L350,-10 L-10,-10 Z"
+                fill="#f2f5f7"
+              />
+              <path
+                d="M0,96 C80,88 150,104 230,92 C290,84 320,94 340,88"
+                fill="none"
+                stroke="#dbe1e8"
+                stroke-width="1"
+              />
+              <path
+                d="M120,0 C128,50 116,110 132,170 M228,0 C220,60 236,120 226,170"
+                fill="none"
+                stroke="#dbe1e8"
+                stroke-width="1"
+              />
+              <circle cx="60" cy="60" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="96" cy="44" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="128" cy="74" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="82" cy="108" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="180" cy="52" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="214" cy="96" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="172" cy="130" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <circle cx="250" cy="66" r="5" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <!-- selected: accent ring -->
+              <circle cx="214" cy="96" r="9" fill="none" stroke="#0d84a6" stroke-width="2" />
+              <!-- cluster -->
+              <circle cx="290" cy="120" r="11" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <text
+                x="290"
+                y="123.5"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#f6f8fa"
+              >
+                12
+              </text>
+              <!-- hovered marker + tooltip -->
+              <circle cx="96" cy="44" r="7" fill="#0d84a6" stroke="#f6f8fa" stroke-width="2" />
+              <g>
+                <rect
+                  x="106"
+                  y="18"
+                  width="118"
+                  height="34"
+                  rx="6"
+                  fill="#f6f8fa"
+                  stroke="rgba(11,18,32,0.12)"
+                />
+                <text x="114" y="32" font-size="9.5" font-weight="600" fill="#0b1220">
+                  Elm Street · 4.2 kWp
+                </text>
+                <text x="114" y="44" font-size="9" fill="#46536b">now 2.9 kW · today 18.4 kWh</text>
+              </g>
+            </svg>
+            <div class="attr" style="color: #7c88a0">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #46536b">Open-Meteo.com</a>
+            </div>
+          </div>
+        </div>
+        <div class="panel" style="background: #0a0e14; color-scheme: dark">
+          <div class="modechip" style="color: #7c88a0; border-color: rgba(237, 241, 247, 0.12)">
+            dark
+          </div>
+          <div class="palrow">
+            <div class="sw" style="background: #189cc0"><span>#189cc0</span></div>
+            <div class="sw" style="background: #c98500"><span>#c98500</span></div>
+            <div class="sw" style="background: #d55181"><span>#d55181</span></div>
+            <div class="sw" style="background: #8f7ce6"><span>#8f7ce6</span></div>
+            <div class="ramp">
+              <div class="rw" style="background: #0d3340"></div>
+              <div class="rw" style="background: #116a83"></div>
+              <div class="rw" style="background: #189cc0"></div>
+              <div class="rw" style="background: #6fc4da"></div>
+            </div>
+          </div>
+          <div class="typespec" style="color: #edf1f7">
+            <div
+              style="font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15"
+            >
+              Fleet output 128.4 kW
+            </div>
+            <div style="font-size: 15px; color: #b4bece; margin-top: 4px">
+              42 sites · P50 today 1.9 MWh · type scale 12 / 13 / 15 / 18 / 22 / 28
+            </div>
+            <div class="spacing" aria-hidden="true">
+              <div style="width: 4px" title="4px"></div>
+              <div style="width: 8px" title="8px"></div>
+              <div style="width: 12px" title="12px"></div>
+              <div style="width: 16px" title="16px"></div>
+              <div style="width: 24px" title="24px"></div>
+              <div style="width: 32px" title="32px"></div>
+              <span style="font-size: 11px; color: #7c88a0">spacing 4·8·12·16·24·32</span>
+            </div>
+          </div>
+          <div class="card" style="background: #10151d; border-color: rgba(237, 241, 247, 0.12)">
+            <div class="cardtitle" style="color: #edf1f7">
+              Fleet output <span style="color: #b4bece; font-weight: 400">— today</span>
+            </div>
+            <div class="legend" style="color: #b4bece">
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#c98500"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  /></svg
+                >Actual</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <line
+                    x1="1"
+                    y1="5"
+                    x2="17"
+                    y2="5"
+                    stroke="#189cc0"
+                    stroke-width="2"
+                    stroke-dasharray="4 3"
+                    stroke-linecap="round"
+                  /></svg
+                >Forecast median</span
+              >
+              <span class="li"
+                ><svg width="18" height="10">
+                  <rect x="1" y="1" width="16" height="8" rx="2" fill="#189cc0" opacity="0.16" />
+                  <rect
+                    x="1"
+                    y="1"
+                    width="16"
+                    height="8"
+                    rx="2"
+                    fill="none"
+                    stroke="#189cc0"
+                    opacity="0.4"
+                    stroke-width="1"
+                  /></svg
+                >P10–P90</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 200"
+              role="img"
+              aria-label="Fleet output: actuals to 14:00, forecast band ahead"
+            >
+              <line x1="34" y1="134" x2="328" y2="134" stroke="#252c38" stroke-width="1" />
+              <text x="28" y="137.5" text-anchor="end" font-size="9" fill="#7c88a0">200</text>
+              <line x1="34" y1="94" x2="328" y2="94" stroke="#252c38" stroke-width="1" />
+              <text x="28" y="97.5" text-anchor="end" font-size="9" fill="#7c88a0">400</text>
+              <line x1="34" y1="54" x2="328" y2="54" stroke="#252c38" stroke-width="1" />
+              <text x="28" y="57.5" text-anchor="end" font-size="9" fill="#7c88a0">600</text>
+              <line x1="34" y1="14" x2="328" y2="14" stroke="#252c38" stroke-width="1" />
+              <text x="28" y="17.5" text-anchor="end" font-size="9" fill="#7c88a0">800</text>
+              <text x="34" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">00:00</text>
+              <text x="107.5" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">06:00</text>
+              <text x="181" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">12:00</text>
+              <text x="254.5" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">18:00</text>
+              <text x="328" y="190" text-anchor="middle" font-size="9" fill="#7c88a0">24:00</text>
+              <line
+                x1="34"
+                y1="174"
+                x2="328"
+                y2="174"
+                stroke="#7c88a0"
+                stroke-width="1"
+                opacity="0.55"
+              />
+              <path
+                d="M34.0,171.2L40.1,171.2L46.3,171.2L52.4,171.2L58.5,171.1L64.6,171.0L70.8,170.8L76.9,170.6L83.0,170.1L89.1,169.3L95.3,168.0L101.4,166.1L107.5,163.2L113.6,159.2L119.8,153.7L125.9,146.4L132.0,137.2L138.1,126.1L144.3,113.1L150.4,98.6L156.5,83.4L162.6,68.2L168.8,54.1L174.9,42.2L181.0,33.5L187.1,28.6L193.3,28.2L199.4,32.2L205.5,40.2L211.6,52.8L217.8,65.6L223.9,80.0L230.0,94.8L236.1,109.2L242.3,122.4L248.4,134.0L254.5,143.7L260.6,151.5L266.8,157.5L272.9,162.0L279.0,165.2L285.1,167.4L291.3,168.9L297.4,169.8L303.5,170.4L309.6,170.8L315.8,171.0L321.9,171.1L328.0,171.1L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,174.0L291.3,174.0L285.1,173.7L279.0,172.3L272.9,170.2L266.8,167.2L260.6,163.1L254.5,157.6L248.4,150.6L242.3,142.0L236.1,131.9L230.0,120.5L223.9,108.4L217.8,96.2L211.6,84.7L205.5,78.0L199.4,72.0L193.3,69.0L187.1,69.3L181.0,72.9L174.9,79.5L168.8,88.4L162.6,98.9L156.5,110.3L150.4,121.7L144.3,132.5L138.1,142.2L132.0,150.6L125.9,157.5L119.8,162.9L113.6,167.0L107.5,170.0L101.4,172.2L95.3,173.6L89.1,174.0L83.0,174.0L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#189cc0"
+                opacity="0.12"
+              />
+              <path
+                d="M34.0,172.8L40.1,172.8L46.3,172.8L52.4,172.8L58.5,172.7L64.6,172.6L70.8,172.5L76.9,172.2L83.0,171.7L89.1,171.0L95.3,169.8L101.4,168.0L107.5,165.3L113.6,161.5L119.8,156.3L125.9,149.5L132.0,140.8L138.1,130.3L144.3,118.1L150.4,104.5L156.5,90.1L162.6,75.9L168.8,62.6L174.9,51.4L181.0,43.2L187.1,38.6L193.3,38.2L199.4,42.0L205.5,49.5L211.6,60.8L217.8,73.3L223.9,87.1L230.0,101.3L236.1,115.0L242.3,127.5L248.4,138.4L254.5,147.4L260.6,154.7L266.8,160.3L272.9,164.4L279.0,167.3L285.1,169.4L291.3,170.7L297.4,171.6L303.5,172.1L309.6,172.4L315.8,172.6L321.9,172.7L328.0,172.7L328.0,174.0L321.9,174.0L315.8,174.0L309.6,174.0L303.5,174.0L297.4,173.8L291.3,173.1L285.1,172.0L279.0,170.4L272.9,167.9L266.8,164.5L260.6,159.7L254.5,153.5L248.4,145.6L242.3,136.1L236.1,125.0L230.0,112.7L223.9,99.7L217.8,86.8L211.6,74.9L205.5,66.2L199.4,59.6L193.3,56.3L187.1,56.7L181.0,60.7L174.9,67.9L168.8,77.8L162.6,89.5L156.5,102.0L150.4,114.7L144.3,126.6L138.1,137.4L132.0,146.7L125.9,154.3L119.8,160.3L113.6,164.9L107.5,168.2L101.4,170.6L95.3,172.1L89.1,173.2L83.0,173.9L76.9,174.0L70.8,174.0L64.6,174.0L58.5,174.0L52.4,174.0L46.3,174.0L40.1,174.0L34.0,174.0Z"
+                fill="#189cc0"
+                opacity="0.16"
+              />
+              <line
+                x1="205.5"
+                y1="14"
+                x2="205.5"
+                y2="174"
+                stroke="#7c88a0"
+                stroke-width="1"
+                stroke-dasharray="1 3"
+              />
+              <text x="209.5" y="22" font-size="9" fill="#7c88a0">now</text>
+              <polyline
+                points="205.5,57.0 211.6,67.2 217.8,79.4 223.9,92.8 230.0,106.5 236.1,119.6 242.3,131.5 248.4,141.8 254.5,150.4 260.6,157.2 266.8,162.4 272.9,166.3 279.0,169.0 285.1,170.9 291.3,172.1 297.4,172.9 303.5,173.4 309.6,173.6 315.8,173.8 321.9,173.9 328.0,173.9"
+                fill="none"
+                stroke="#189cc0"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <polyline
+                points="34.0,174.0 40.1,174.0 46.3,174.0 52.4,174.0 58.5,173.9 64.6,173.8 70.8,173.7 76.9,173.4 83.0,172.9 89.1,172.3 95.3,171.2 101.4,169.8 107.5,166.7 113.6,163.0 119.8,157.5 125.9,151.9 132.0,145.7 138.1,134.5 144.3,123.5 150.4,104.3 156.5,93.3 162.6,82.1 168.8,73.4 174.9,66.8 181.0,46.9 187.1,44.1 193.3,37.8 199.4,51.5 205.5,63.5"
+                fill="none"
+                stroke="#c98500"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle
+                cx="205.5"
+                cy="63.5150311913533"
+                r="4.5"
+                fill="#c98500"
+                stroke="#10151d"
+                stroke-width="2"
+              />
+              <text
+                x="197.5"
+                y="54.5150311913533"
+                text-anchor="end"
+                font-size="10"
+                font-weight="600"
+                fill="#edf1f7"
+              >
+                552 kW
+              </text>
+            </svg>
+            <div class="attr" style="color: #7c88a0">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #b4bece">Open-Meteo.com</a>
+            </div>
+          </div>
+          <div
+            class="card"
+            style="
+              background: #10151d;
+              border-color: rgba(237, 241, 247, 0.12);
+              padding-bottom: 6px;
+            "
+          >
+            <div class="cardtitle" style="color: #edf1f7">
+              Site map
+              <span style="color: #b4bece; font-weight: 400"
+                >— default · hover · selected · cluster</span
+              >
+            </div>
+            <svg
+              viewBox="0 0 340 170"
+              role="img"
+              aria-label="Site map: default, hover, selected markers and a cluster"
+            >
+              <rect width="340" height="170" fill="#0c1118" />
+              <path
+                d="M-10,150 C40,120 60,150 120,138 C190,124 200,160 270,146 C310,138 330,150 350,142 L350,180 L-10,180 Z"
+                fill="#161c26"
+                opacity="0.7"
+              />
+              <path
+                d="M-10,20 C60,6 120,40 200,26 C270,14 320,30 350,18 L350,-10 L-10,-10 Z"
+                fill="#161c26"
+              />
+              <path
+                d="M0,96 C80,88 150,104 230,92 C290,84 320,94 340,88"
+                fill="none"
+                stroke="#232b38"
+                stroke-width="1"
+              />
+              <path
+                d="M120,0 C128,50 116,110 132,170 M228,0 C220,60 236,120 226,170"
+                fill="none"
+                stroke="#232b38"
+                stroke-width="1"
+              />
+              <circle cx="60" cy="60" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="96" cy="44" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="128" cy="74" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="82" cy="108" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="180" cy="52" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="214" cy="96" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="172" cy="130" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <circle cx="250" cy="66" r="5" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <!-- selected: accent ring -->
+              <circle cx="214" cy="96" r="9" fill="none" stroke="#189cc0" stroke-width="2" />
+              <!-- cluster -->
+              <circle cx="290" cy="120" r="11" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <text
+                x="290"
+                y="123.5"
+                text-anchor="middle"
+                font-size="10"
+                font-weight="700"
+                fill="#10151d"
+              >
+                12
+              </text>
+              <!-- hovered marker + tooltip -->
+              <circle cx="96" cy="44" r="7" fill="#189cc0" stroke="#10151d" stroke-width="2" />
+              <g>
+                <rect
+                  x="106"
+                  y="18"
+                  width="118"
+                  height="34"
+                  rx="6"
+                  fill="#10151d"
+                  stroke="rgba(237,241,247,0.12)"
+                />
+                <text x="114" y="32" font-size="9.5" font-weight="600" fill="#edf1f7">
+                  Elm Street · 4.2 kWp
+                </text>
+                <text x="114" y="44" font-size="9" fill="#b4bece">now 2.9 kW · today 18.4 kWh</text>
+              </g>
+            </svg>
+            <div class="attr" style="color: #7c88a0">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M17.5 19a4.5 4.5 0 100-9 6 6 0 00-11.6 1.6A3.8 3.8 0 006 19h11.5z" />
+              </svg>
+              Weather data by
+              <a href="https://open-meteo.com/" style="color: #b4bece">Open-Meteo.com</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>
