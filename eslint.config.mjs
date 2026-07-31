@@ -62,7 +62,10 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.tsx'],
+    // Hooks are not a JSX-only concern: a custom hook authored in a plain .ts
+    // file (no JSX, so no .tsx) breaks the same rules in the same ways, and
+    // scoping to .tsx left those files silently unlinted (#94).
+    files: ['**/*.{ts,tsx}'],
     plugins: {
       'react-hooks': reactHooks,
     },

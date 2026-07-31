@@ -1,5 +1,9 @@
+// Tokens first: every stylesheet below resolves `var(--…)` against them, and a
+// sheet loaded ahead of the declarations it consumes has nothing to read.
 import '@cumulo/ui/styles.css';
 import './preview/preview.css';
+import './charts/charts.css';
+import './views/views.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

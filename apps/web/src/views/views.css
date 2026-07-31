@@ -1,0 +1,128 @@
+/*
+ * Chrome shared by the chart views: the heading block, the selector row, and
+ * the status / empty / error / notice lines that stand in for a chart whenever
+ * there is nothing — or not everything — to draw.
+ *
+ * One stylesheet for both views on purpose. "Loading", "this failed", "there is
+ * nothing here" and "this is partial" are the same statements about different
+ * data, and a reader should not have to work out whether the fleet view's error
+ * line means something different from the site view's because it wears a
+ * different colour. The classes are prefixed `view-` so they never collide with
+ * the chart's own `forecast-chart-*` block or the token preview's.
+ *
+ * Every value is a token — the gate in stylelint.config.mjs, not a style choice
+ * (react.md rule 5). Where a token pair carries meaning it is used for meaning:
+ * `--color-danger` says a request failed, `--color-warning` says the answer
+ * arrived but is incomplete, and the two are deliberately not the same.
+ */
+
+.view {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.view-header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.view-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.view-subtitle {
+  max-width: 46rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+
+.view-field {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.view-select {
+  padding: var(--space-2) var(--space-3);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.view-range {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Same shape as `.theme-toggle`, deliberately its own class: a range is a
+ * choice among three, and borrowing the toggle's selector would tie a data
+ * control to a chrome control that is free to change. */
+.view-range-button {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.view-range-button[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.view-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.view-status,
+.view-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.view-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+/* Partial results are labelled partial (error-handling.md rule 5), and a label
+ * nobody notices is not a label — hence a colour of its own. */
+.view-notice {
+  margin: 0;
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+}
+
+.view-caption {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.view-footer {
+  margin: 0;
+}
