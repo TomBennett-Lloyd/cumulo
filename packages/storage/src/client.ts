@@ -1,6 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ConfiguredRetryStrategy } from '@smithy/core/retry';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 
 import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
 
@@ -52,6 +53,37 @@ export const storageRetryDelayMs = (retryAttempt: number, random?: () => number)
   });
 
 /**
+ * Per-attempt deadline, in milliseconds. The SDK's default is **0 — no timeout
+ * at all** (`@smithy/node-http-handler`'s `DEFAULT_REQUEST_TIMEOUT`), so
+ * without this a stalled socket on the storage path is bounded by nothing this
+ * repo sets: {@link STORAGE_MAX_ATTEMPTS} bounds how many times a request is
+ * *retried*, never how long one of them may hang.
+ *
+ * That asymmetry was the point of #115. `@cumulo/ingestion`'s SQS client had
+ * already pinned its own (`INGESTION_SEND_REQUEST_TIMEOUT_MS`), so a location's
+ * publish was bounded while its DynamoDB write was not, and the ingestion
+ * Lambda's whole time budget rested on the unbounded one.
+ *
+ * 3 s is the same number the SQS client uses, and for the same reason: roughly
+ * thirty times a healthy regional request. The heaviest single request this
+ * package issues is a 25-item `BatchWriteItem`, a 25-item `TransactWriteItems`
+ * or a 100-key `BatchGetItem`, all of which answer in low tens of milliseconds
+ * in-region. It is deliberately generous enough to survive the package's
+ * non-Lambda consumers too — the operator smoke script and #16's hindcast CLI
+ * run from a laptop over the public internet, where a round trip costs tens of
+ * milliseconds rather than single digits, and aborting those would trade a
+ * bounded wait for a spurious failure.
+ */
+export const STORAGE_REQUEST_TIMEOUT_MS = 3_000;
+
+/**
+ * Connection-establishment deadline, in milliseconds: a DNS or TCP stall is not
+ * a slow table, and the SDK retries a failed connection under
+ * {@link STORAGE_MAX_ATTEMPTS} like any other transient error.
+ */
+export const STORAGE_CONNECTION_TIMEOUT_MS = 1_000;
+
+/**
  * `ConfiguredRetryStrategy` is the SDK's supported seam for owning the backoff
  * curve: it extends the standard strategy — keeping its retry-quota accounting
  * and its classification of which errors are retryable at all — while replacing
@@ -95,7 +127,19 @@ export interface StorageClientOptions {
  *    depth, decided once. (This resolves the explicit-`undefined` tech-debt
  *    entry.)
  *
- * 2. `ConsistentRead` is set nowhere in this package. ADR 0002 sized the
+ * 2. The per-request deadlines of {@link STORAGE_REQUEST_TIMEOUT_MS} and
+ *    {@link STORAGE_CONNECTION_TIMEOUT_MS}, set here so that every adapter in
+ *    the package inherits them and no call site can forget one. Together with
+ *    {@link STORAGE_MAX_ATTEMPTS} and {@link STORAGE_RETRY_BASE_DELAY_MS} they
+ *    make a single storage request's worst case a number this repo states
+ *    rather than one the network chooses — which is what lets
+ *    `@cumulo/ingestion`'s cycle budget compute a bound instead of assuming
+ *    one (#115).
+ *
+ *    A caller that supplies its own `baseClient` supplies its own deadlines
+ *    too, exactly as it supplies its own retry configuration.
+ *
+ * 3. `ConsistentRead` is set nowhere in this package. ADR 0002 sized the
  *    `series` table's 21 RCU against Query's default eventually-consistent
  *    reads; a single `ConsistentRead: true` doubles the cost of that read and
  *    can push the table into throttling. Any future need for one has to be
@@ -111,6 +155,10 @@ export const createStorageDocumentClient = (
       ...(options?.region === undefined ? {} : { region: options.region }),
       maxAttempts: STORAGE_MAX_ATTEMPTS,
       retryStrategy: createStorageRetryStrategy(),
+      requestHandler: new NodeHttpHandler({
+        requestTimeout: STORAGE_REQUEST_TIMEOUT_MS,
+        connectionTimeout: STORAGE_CONNECTION_TIMEOUT_MS,
+      }),
     });
 
   return DynamoDBDocumentClient.from(baseClient, {

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { cycleStartedEvent, locationOutcomeEvent, type RunCycleDeps } from './cycle';
+import { cycleStartMs, productionBudget } from './cycle-test-harness';
 import { createHandler, cycleSummaryEvent, jsonLineLog, CycleFailedError } from './handler';
 import type { ForecastWeatherReading } from './open-meteo/response';
 import type { ForecastLocation } from './open-meteo/url';
@@ -102,6 +103,12 @@ const handlerDeps = (input: HandlerDepsInput): RunCycleDeps => ({
   log: (entry) => {
     input.record.entries.push(entry);
   },
+  // The shipped budget, so these tests exercise the configuration that deploys
+  // (`docs/standards/testing.md` rule 7). Three locations is far inside both
+  // bounds, so nothing here is ever skipped — `cycle.test.ts` owns the cases
+  // where they bite.
+  now: () => cycleStartMs,
+  budget: productionBudget,
 });
 
 const expectCycleFailure = (thrown: unknown): CycleFailedError => {
@@ -143,6 +150,8 @@ describe('createHandler', () => {
       activeLocations: 3,
       published: 3,
       failed: 0,
+      skippedForCap: 0,
+      skippedForDeadline: 0,
     });
   });
 
@@ -217,9 +226,9 @@ describe('createHandler', () => {
     }
 
     expect(lines).toEqual([
-      `{"event":"${cycleStartedEvent}","fleetSites":1,"activeLocations":1}`,
+      `{"event":"${cycleStartedEvent}","fleetSites":1,"activeLocations":1,"attemptedLocations":1}`,
       `{"event":"${locationOutcomeEvent}","locationId":"${locationId(dublin)}","status":"published","readingCount":1,"droppedHours":0}`,
-      `{"event":"${cycleSummaryEvent}","activeLocations":1,"published":1,"failed":0}`,
+      `{"event":"${cycleSummaryEvent}","activeLocations":1,"published":1,"failed":0,"skippedForCap":0,"skippedForDeadline":0}`,
     ]);
   });
 });

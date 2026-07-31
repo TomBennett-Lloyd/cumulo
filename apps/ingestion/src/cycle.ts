@@ -1,6 +1,11 @@
 import type { BatchWriteOutcome, SiteAdapter, WeatherAdapter } from '@cumulo/storage';
 
-import { activeFetchLocations, type FetchLocation } from './locations';
+import {
+  activeFetchLocations,
+  rotationOffset,
+  selectCycleLocations,
+  type FetchLocation,
+} from './locations';
 import type { FetchForecastForLocation, FetchForecastOutcome } from './open-meteo/fetch-forecast';
 import type { WeatherPublisher } from './publisher/weather-publisher';
 import { describeThrown } from './thrown-detail';
@@ -38,7 +43,17 @@ export type LocationOutcome = { readonly locationId: string } & (
   | { readonly status: 'unreachable'; readonly detail: string }
   | { readonly status: 'store-partial'; readonly unprocessedCount: number }
   | { readonly status: 'failed'; readonly detail: string }
+  | { readonly status: 'skipped'; readonly reason: SkipReason }
 );
+
+/**
+ * Why a location was never attempted. The two reasons are two different
+ * conversations: `location-cap` says the fleet has outgrown the Open-Meteo
+ * allowance this service budgets for, and `cycle-deadline` says the cycle ran
+ * out of wall clock — an infrastructure problem, since a healthy cycle finishes
+ * in seconds.
+ */
+export type SkipReason = 'location-cap' | 'cycle-deadline';
 
 /**
  * The cycle's result, reported honestly (`docs/standards/error-handling.md` rule 5).
@@ -54,6 +69,26 @@ export interface CycleReport {
   readonly activeLocations: number;
   readonly published: number;
   readonly failed: number;
+  /** Of `failed`, those the cap deferred to a later cycle. */
+  readonly skippedForCap: number;
+  /** Of `failed`, those the cycle ran out of time to attempt. */
+  readonly skippedForDeadline: number;
+}
+
+/**
+ * The two bounds a cycle runs under. The deadline protects the function
+ * timeout; the cap protects the Open-Meteo quota; neither substitutes for the
+ * other. `cycle-budget.ts` derives both and states the arithmetic.
+ *
+ * Injected rather than imported so the cycle is testable at a scale a test can
+ * express, and so the numbers stay a decision of the composition root
+ * (`docs/standards/architecture.md` rule 3).
+ */
+export interface CycleBudget {
+  /** Milliseconds after which no further location is *started*. */
+  readonly deadlineMs: number;
+  /** Locations this cycle may attempt at all. */
+  readonly maxLocations: number;
 }
 
 export interface RunCycleDeps {
@@ -70,6 +105,14 @@ export interface RunCycleDeps {
    * tests read the entries a reviewer would read in CloudWatch.
    */
   readonly log: (entry: Record<string, unknown>) => void;
+  /**
+   * Wall clock, in milliseconds. Injected because the deadline below is the one
+   * piece of this module that depends on time passing, and a cycle whose
+   * time-out behaviour could only be tested by actually waiting would not be
+   * tested at all.
+   */
+  readonly now: () => number;
+  readonly budget: CycleBudget;
 }
 
 /** Emitted once per cycle, before any fetch — including for a cycle with nothing to fetch. */
@@ -165,6 +208,16 @@ const runLocation = async (
   };
 };
 
+/** A location the cycle never attempted, as an outcome rather than as silence. */
+const skippedOutcome = (location: FetchLocation, reason: SkipReason): LocationOutcome => ({
+  locationId: location.locationId,
+  status: 'skipped',
+  reason,
+});
+
+const countSkipped = (outcomes: readonly LocationOutcome[], reason: SkipReason): number =>
+  outcomes.filter((outcome) => outcome.status === 'skipped' && outcome.reason === reason).length;
+
 /**
  * Run one cycle over the fleet's active locations.
  *
@@ -176,9 +229,29 @@ const runLocation = async (
  *
  * Locations are processed **sequentially**. The fleet's fetches are a shared draw
  * on one third-party quota (`docs/design/fleet-simulation.md`), so a serial loop
- * keeps a cycle's whole burst at 12 calls spread over its own duration rather than
- * 12 simultaneous ones, and it keeps this function's failure story simple enough
- * to be true: one location at a time, each independent of the last.
+ * keeps a cycle's whole burst spread over its own duration rather than issued at
+ * once, and it keeps this function's failure story simple enough to be true: one
+ * location at a time, each independent of the last.
+ *
+ * **Two bounds, and every location accounted for either way** (#115). The budget's
+ * cap decides how many locations this cycle may attempt at all; its deadline, checked
+ * before each location, decides when to stop starting more. Neither shortens the
+ * report: a location the cap deferred and a location the deadline cut off both
+ * appear in `locations` with a `skipped` status and count toward `failed`, so
+ * `published + failed === activeLocations` still holds and a cycle that ran out of
+ * budget still says exactly which locations published. A Lambda killed at its
+ * timeout says none of that, which is why the deadline exists at all.
+ *
+ * The deadline is checked *before* a location and never interrupts one in flight —
+ * `cycle-budget.ts` reserves a whole location's worst case behind it for exactly
+ * that. Checking elapsed time rather than counting locations is also what makes
+ * `listFleetSites`'s own cost part of the budget without needing a term of its own.
+ *
+ * One consequence worth stating: during a total outage the first locations report
+ * their individual failures and the rest report `skipped`, so the log shows a
+ * handful of `unreachable` entries rather than one per location. That is the design
+ * working — the cycle stopped spending an exhausted budget — and the summary's
+ * counts still add up to the whole fleet.
  *
  * `listFleetSites` is deliberately *not* wrapped. A fleet we cannot read is not a
  * per-location failure — it is a cycle that never learned what to do, so it
@@ -188,27 +261,49 @@ const runLocation = async (
  */
 export const runCycle = async (deps: RunCycleDeps): Promise<CycleReport> => {
   const sites = await deps.sites.listFleetSites();
-  const locations = activeFetchLocations(sites);
+  const active = activeFetchLocations(sites);
+  const startedAt = deps.now();
+
+  const { selected, deferred } = selectCycleLocations(active, {
+    offset: rotationOffset(startedAt, active.length),
+    maxLocations: deps.budget.maxLocations,
+  });
 
   deps.log({
     event: cycleStartedEvent,
     fleetSites: sites.length,
-    activeLocations: locations.length,
+    activeLocations: active.length,
+    attemptedLocations: selected.length,
   });
 
   const outcomes: LocationOutcome[] = [];
-  for (const location of locations) {
-    const outcome = await runLocation(deps, location);
+  const record = (outcome: LocationOutcome): void => {
     deps.log({ event: locationOutcomeEvent, ...outcome });
     outcomes.push(outcome);
+  };
+
+  for (const [index, location] of selected.entries()) {
+    if (deps.now() - startedAt > deps.budget.deadlineMs) {
+      for (const unreached of selected.slice(index)) {
+        record(skippedOutcome(unreached, 'cycle-deadline'));
+      }
+      break;
+    }
+    record(await runLocation(deps, location));
+  }
+
+  for (const location of deferred) {
+    record(skippedOutcome(location, 'location-cap'));
   }
 
   const published = outcomes.filter((outcome) => outcome.status === 'published').length;
 
   return {
     locations: outcomes,
-    activeLocations: locations.length,
+    activeLocations: active.length,
     published,
     failed: outcomes.length - published,
+    skippedForCap: countSkipped(outcomes, 'location-cap'),
+    skippedForDeadline: countSkipped(outcomes, 'cycle-deadline'),
   };
 };

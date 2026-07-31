@@ -3,7 +3,8 @@ import type { FleetSite, WeatherReading } from '@cumulo/shared';
 import type { SiteAdapter, WeatherAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
-import type { RunCycleDeps } from './cycle';
+import type { CycleBudget, RunCycleDeps } from './cycle';
+import { CYCLE_DEADLINE_MS, MAX_LOCATIONS_PER_CYCLE } from './cycle-budget';
 import type { ForecastWeatherReading } from './open-meteo/response';
 import type { ForecastLocation } from './open-meteo/url';
 import type { WeatherPublisher } from './publisher/weather-publisher';
@@ -136,10 +137,63 @@ export interface LocationScript {
   readonly publish?: PublishBehaviour;
 }
 
+/**
+ * The cycle's start instant for every test that does not care about time.
+ *
+ * Chosen so `rotationOffset` is **0** for fleets of 2, 3, 4 and 5 locations —
+ * 495,960 hours since the epoch, divisible by all of them — which keeps the
+ * rotation invisible to the tests that are about something else, and makes it
+ * the explicit subject of the ones that are about it.
+ */
+export const cycleStartMs = Date.parse('2026-07-31T00:00:00Z');
+
+/**
+ * A clock that reports a fixed instant and advances by `stepMs` on every
+ * reading, so a test can say "each location costs 40 s" without waiting.
+ *
+ * A class rather than a function returning a closure: the reading and the
+ * cursor genuinely share mutable state, and `this.#currentMs` is the visible
+ * marker of it (`docs/standards/structure.md` rule 2).
+ */
+export class SteppingClock {
+  #currentMs: number;
+  readonly #stepMs: number;
+
+  constructor(stepMs: number, startMs: number = cycleStartMs) {
+    this.#currentMs = startMs;
+    this.#stepMs = stepMs;
+  }
+
+  /** The current reading; the next one is `stepMs` later. */
+  read(): number {
+    const reading = this.#currentMs;
+    this.#currentMs += this.#stepMs;
+    return reading;
+  }
+}
+
+/**
+ * The budget tests get unless they say otherwise: the one production ships.
+ *
+ * Deliberately *not* a permissive stand-in. `docs/standards/testing.md` rule 7
+ * is the whole reason — if every test ran with the cap and deadline turned off,
+ * the suite would prove the cycle works in a configuration nobody deploys. So
+ * the default is the shipped configuration, and only the tests that are about
+ * the bounds narrow them.
+ */
+export const productionBudget: CycleBudget = {
+  deadlineMs: CYCLE_DEADLINE_MS,
+  maxLocations: MAX_LOCATIONS_PER_CYCLE,
+};
+
 export interface CycleDepsInput {
   readonly sites: readonly FleetSite[];
   readonly scripts?: Readonly<Record<string, LocationScript>>;
   readonly record: CycleRecord;
+  /** Defaults to a clock frozen at {@link cycleStartMs}, so no deadline can fire. */
+  readonly now?: () => number;
+  /** Defaults to {@link productionBudget}. */
+  readonly budget?: CycleBudget;
 }
 
 export const everythingSucceeds: LocationScript = {};
@@ -212,6 +266,8 @@ export const cycleDeps = (input: CycleDepsInput): RunCycleDeps => ({
   log: (entry) => {
     input.record.entries.push(entry);
   },
+  now: input.now ?? ((): number => cycleStartMs),
+  budget: input.budget ?? productionBudget,
 });
 
 export const publishedOutcome = (id: string): LogEntry => ({
@@ -222,3 +278,12 @@ export const publishedOutcome = (id: string): LogEntry => ({
 });
 
 export const effectsFor = (id: string): string[] => [`fetch:${id}`, `store:${id}`, `publish:${id}`];
+
+export const skippedOutcome = (
+  id: string,
+  reason: 'location-cap' | 'cycle-deadline',
+): LogEntry => ({
+  locationId: id,
+  status: 'skipped',
+  reason,
+});

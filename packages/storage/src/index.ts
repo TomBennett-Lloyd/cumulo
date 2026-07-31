@@ -20,10 +20,17 @@
  *   either rebuilding an adapter or tuning one from the outside, and both
  *   belong in here instead. The *numbers* those functions apply do stay
  *   exported — `STORAGE_MAX_ATTEMPTS`, `STORAGE_RETRY_BASE_DELAY_MS`,
- *   `SERIES_RETENTION_DAYS` — because ADR 0002 Consequences 4 and 5 state them
- *   as decisions, and infrastructure and operators quote them. So does
- *   `BatchPolicy`/`defaultBatchPolicy`, which `BatchingAdapterDeps` names in
- *   its own signature.
+ *   `STORAGE_REQUEST_TIMEOUT_MS`, `STORAGE_CONNECTION_TIMEOUT_MS`,
+ *   `DYNAMODB_BATCH_WRITE_SIZE`, `SERIES_RETENTION_DAYS` — because ADR 0002
+ *   Consequences 4 and 5 state them as decisions, and infrastructure and
+ *   operators quote them. So does `BatchPolicy`/`defaultBatchPolicy`, which
+ *   `BatchingAdapterDeps` names in its own signature.
+ *
+ *   The four timing numbers earn their place twice over since #115: they are
+ *   the terms `@cumulo/ingestion` multiplies out to bound one location's
+ *   storage cost. A consumer computing a time budget from remembered values
+ *   instead of these is writing down a model of this package rather than
+ *   reading this package, which is the mistake #115 was filed about.
  * - the `toItem`/`fromItem` pairs each adapter exports for its own tests. They
  *   are the wire format, not the contract; exporting them would invite a caller
  *   to build items by hand and bypass the key computation the adapters exist to
@@ -39,11 +46,18 @@
 
 export {
   createStorageDocumentClient,
+  STORAGE_CONNECTION_TIMEOUT_MS,
   STORAGE_MAX_ATTEMPTS,
+  STORAGE_REQUEST_TIMEOUT_MS,
   STORAGE_RETRY_BASE_DELAY_MS,
   type StorageClientOptions,
 } from './client';
-export { defaultBatchPolicy, type BatchPolicy, type BatchWriteOutcome } from './batch';
+export {
+  DYNAMODB_BATCH_WRITE_SIZE,
+  defaultBatchPolicy,
+  type BatchPolicy,
+  type BatchWriteOutcome,
+} from './batch';
 export { StorageError, type StorageErrorContext } from './errors';
 export { storageTableName, type StorageTable } from './table-name';
 export { SERIES_RETENTION_DAYS } from './ttl';

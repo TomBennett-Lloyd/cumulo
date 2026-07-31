@@ -6,6 +6,8 @@ import {
 } from '@cumulo/storage';
 import { z } from 'zod';
 
+import { CYCLE_DEADLINE_MS, MAX_LOCATIONS_PER_CYCLE } from './cycle-budget';
+import type { CycleBudget } from './cycle';
 import { createHandler, jsonLineLog, type IngestionHandler } from './handler';
 import { fetchForecast, type ForecastFetchDeps } from './open-meteo/fetch-forecast';
 import { SqsWeatherPublisher, createIngestionSqsClient } from './publisher/sqs';
@@ -86,6 +88,18 @@ const documentClient = createStorageDocumentClient();
 const openMeteoPolicy: ForecastFetchDeps = {};
 
 /**
+ * The cycle's two bounds, bound here for the same reason the Open-Meteo policy
+ * is: they are decisions about the running system, and `cycle.ts` should be
+ * runnable in a test at a scale a test can express. `cycle-budget.ts` derives
+ * both numbers from the constants the effects themselves declare, and states
+ * the arithmetic.
+ */
+const cycleBudget: CycleBudget = {
+  deadlineMs: CYCLE_DEADLINE_MS,
+  maxLocations: MAX_LOCATIONS_PER_CYCLE,
+};
+
+/**
  * The Lambda entry point. `dist/main.mjs` is the bundle and `main.handler` is the
  * function handler string ingestion's Terraform configures.
  *
@@ -116,4 +130,9 @@ export const handler: IngestionHandler = createHandler({
   // and it is the composition root's job rather than the cycle's.
   fetchForecast: (location) => fetchForecast(openMeteoPolicy, location),
   log: jsonLineLog,
+  // Wrapped rather than passed as `Date.now`: a detached method is the bug
+  // `docs/standards/structure.md` rule 3 names, and this is the only clock the
+  // cycle ever sees.
+  now: () => Date.now(),
+  budget: cycleBudget,
 });

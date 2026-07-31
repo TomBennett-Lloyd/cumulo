@@ -82,11 +82,19 @@ export const createHandler =
   async () => {
     const report = await runCycle(deps);
 
+    // The two skip counts are on the summary rather than only on the individual
+    // outcomes because they are the line an operator reads first, and they mean
+    // different things: `skippedForCap` says the fleet has outgrown the
+    // Open-Meteo allowance this service budgets for, `skippedForDeadline` says
+    // the cycle ran out of wall clock. Both are zero on every healthy cycle, so
+    // either being non-zero is the signal (#115).
     deps.log({
       event: cycleSummaryEvent,
       activeLocations: report.activeLocations,
       published: report.published,
       failed: report.failed,
+      skippedForCap: report.skippedForCap,
+      skippedForDeadline: report.skippedForDeadline,
     });
 
     if (report.failed > 0) {

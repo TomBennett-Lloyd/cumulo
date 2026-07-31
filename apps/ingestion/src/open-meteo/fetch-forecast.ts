@@ -92,6 +92,20 @@ export const defaultTimeoutMs = 10_000;
 /** Upper bound of the full-jitter window before the single retry. */
 export const retryBaseDelayMs = 1_000;
 
+/**
+ * Requests one location's fetch may cost: the initial attempt plus the single
+ * retry {@link fetchForecast} makes on a transient failure.
+ *
+ * Exported because it is a term in `cycle-budget.ts`'s worst-case arithmetic,
+ * and a budget that hard-codes `2` there is a *model* of this module rather
+ * than a reading of it (#115). It is load-bearing rather than decorative in
+ * two ways: the `unreachable` detail below is rendered from it, and
+ * `fetch-forecast.test.ts` asserts the request count against it on a
+ * persistently-failing fetch — so a third attempt could not be added without
+ * this number moving with it.
+ */
+export const FETCH_MAX_ATTEMPTS = 2;
+
 /** Longest provider text carried in a `detail`; an HTML error page must not flood the logs. */
 const maxDetailLength = 200;
 
@@ -229,6 +243,6 @@ export const fetchForecast = async (
   }
   return {
     outcome: 'unreachable',
-    detail: `2 attempts failed; last: ${second.detail}`,
+    detail: `${String(FETCH_MAX_ATTEMPTS)} attempts failed; last: ${second.detail}`,
   };
 };

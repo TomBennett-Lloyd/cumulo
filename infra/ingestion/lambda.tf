@@ -44,26 +44,58 @@ resource "aws_lambda_function" "ingestion" {
   # is checked at plan time, where the question is legitimate.
   source_code_hash = fileexists(local.artifact_path) ? filebase64sha256(local.artifact_path) : null
 
-  # 300 s, sized against the worst case the cycle can actually take rather than
-  # rounded up for comfort. Locations are fetched **sequentially** (a deliberate
-  # choice in cycle.ts: the fleet's fetches are one shared draw on Open-Meteo's
-  # rate limit), and there are structurally 12 of them — `docs/design/
-  # fleet-simulation.md`'s co-location is enforced in @cumulo/shared post-#78,
-  # so 12 is a property of the fleet rather than a coincidence of the current
-  # seed data. Each location is one 10 s attempt plus at most one retry after up
-  # to 1 s of full jitter, so 12 × ~21 s ≈ 252 s of fetching in the worst case,
-  # leaving headroom for the DynamoDB batch writes and the SQS sends.
+  # 300 s. This number is no longer sized against a fleet size, and #115 is the
+  # record of why: the previous rationale multiplied a location count nothing
+  # enforced (12, a property of the seed fleet that #17's visitor sites are
+  # designed to exceed, and that ADR 0002's own "Assumed scale" already puts at
+  # ~30) by a per-location cost that priced two of a location's three effects at
+  # zero. Both halves were arithmetic against a model of the system rather than
+  # against the system.
+  #
+  # What replaced it is a bound the code enforces. apps/ingestion/src/
+  # cycle-budget.ts multiplies out one location's genuinely worst case from the
+  # constants the three effects declare — FETCH_WORST_MS ≈ 21 s, STORE_WORST_MS
+  # ≈ 115 s, PUBLISH_WORST_MS ≈ 10.5 s, so LOCATION_WORST_MS ≈ 147 s — and
+  # derives
+  #
+  #   CYCLE_DEADLINE_MS = INGESTION_LAMBDA_TIMEOUT_MS  (300_000, this value)
+  #                     - LOCATION_WORST_MS            (≈ 147_000)
+  #                     - SHUTDOWN_MARGIN_MS           (5_000)
+  #                     ≈ 148_000
+  #
+  # runCycle checks that deadline before starting each location and never
+  # interrupts one in flight, so the last location it can possibly start
+  # finishes by 148 + 147 = 295 s, leaving 5 s to flush the summary log line.
+  # The function timeout is therefore **unreachable by construction** rather
+  # than merely generous — which matters because a Lambda killed at its timeout
+  # is the one ingestion failure that produces no CycleFailedError, no summary,
+  # and no account of which locations published. A cycle that runs out of budget
+  # now reports every location it skipped instead.
+  #
+  # Note what this value does *not* bound: how many locations a cycle fetches.
+  # That is MAX_LOCATIONS_PER_CYCLE, derived from the Open-Meteo daily allowance
+  # in CLAUDE.md, because a count and a duration are two different resources.
+  # The deadline protects this timeout; the cap protects the quota.
+  #
+  # Changing this number means changing INGESTION_LAMBDA_TIMEOUT_MS in
+  # cycle-budget.ts to match — it mirrors this value and cites this file, as
+  # this comment cites it. Nothing gates that pairing yet; see #123.
+  #
+  # A healthy twelve-location cycle finishes in seconds, so if the deadline ever
+  # fires in production the constants above are wrong at their source, not the
+  # mechanism.
   #
   # This is also the number the queue's visibility timeout is *not* derived
   # from — that one is 6× the #12 *consumer's* timeout (see transport.tf).
   timeout = 300
 
   # 256 MB. The work is I/O-bound — HTTP, DynamoDB, SQS — so memory buys CPU
-  # this function does not use; the reason to sit above the 128 MB floor is that
-  # a cycle holds 12 locations' worth of parsed JSON (~576 readings) and the
-  # AWS SDK clients at once. Free-tier compute is measured in GB-seconds, and
-  # 720 invocations/month at 256 MB is a rounding error against the always-free
-  # 400,000 GB-seconds.
+  # this function does not use; the reason to sit above the 128 MB floor is the
+  # AWS SDK clients plus one location's parsed horizon (48 readings), which is
+  # all the cycle holds at once — locations are processed one at a time and only
+  # their outcomes are accumulated. Free-tier compute is measured in
+  # GB-seconds, and 720 invocations/month at 256 MB is a rounding error against
+  # the always-free 400,000 GB-seconds.
   memory_size = 256
 
   environment {

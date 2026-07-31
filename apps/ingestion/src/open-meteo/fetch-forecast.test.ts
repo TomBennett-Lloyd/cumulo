@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FETCH_MAX_ATTEMPTS,
   fetchForecast,
   retryBaseDelayMs,
   type FetchForecastOutcome,
@@ -158,8 +159,12 @@ describe('fetchForecast', () => {
 
     expect(result.outcome).toBe('unreachable');
     expect(detailOf(result)).toContain('fetch failed');
-    expect(stub.requests).toHaveLength(2);
-    expect(sleeps.delays).toHaveLength(1);
+    // Asserted against the exported constant, not against a literal 2: it is a
+    // term in `cycle-budget.ts`'s worst-case arithmetic, so a third attempt
+    // added here has to move the budget with it (#115).
+    expect(stub.requests).toHaveLength(FETCH_MAX_ATTEMPTS);
+    expect(sleeps.delays).toHaveLength(FETCH_MAX_ATTEMPTS - 1);
+    expect(detailOf(result)).toContain(`${String(FETCH_MAX_ATTEMPTS)} attempts failed`);
   });
 
   it('a non-429 4xx returns malformed with the provider reason', async () => {

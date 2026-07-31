@@ -13,6 +13,7 @@ import {
 } from '@cumulo/shared';
 
 import {
+  DYNAMODB_BATCH_WRITE_SIZE,
   defaultBatchPolicy,
   drainBatches,
   type BatchPolicy,
@@ -82,8 +83,8 @@ export type ArchiveDayCoverage =
 /** An archive day is hourly, so at most 24 readings — 25 transaction items with the marker. */
 const MAX_ARCHIVE_DAY_READINGS = 24;
 
-/** DynamoDB's hard per-request limits for the two batch APIs. */
-const BATCH_WRITE_SIZE = 25;
+/** DynamoDB's hard per-request limit for `BatchGetItem`; the write-side twin
+ * lives in `batch.ts`, which both batching adapters share. */
 const BATCH_GET_SIZE = 100;
 
 /**
@@ -120,7 +121,7 @@ export class WeatherAdapter extends StorageAdapterBase {
     // propagates — which is exactly what `sending` does. A batch that merely
     // failed to drain is not that: it is a value, returned below.
     const outcome = await this.sending('putForecastWeather', undefined, () =>
-      drainBatches(sendWriteBatch, requests, BATCH_WRITE_SIZE, this.batchPolicy),
+      drainBatches(sendWriteBatch, requests, DYNAMODB_BATCH_WRITE_SIZE, this.batchPolicy),
     );
 
     return outcome.status === 'complete'

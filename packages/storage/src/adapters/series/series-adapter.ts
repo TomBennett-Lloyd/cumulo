@@ -7,6 +7,7 @@ import {
 import type { Forecast, GenerationReading, UtcIsoTimestamp } from '@cumulo/shared';
 
 import {
+  DYNAMODB_BATCH_WRITE_SIZE,
   defaultBatchPolicy,
   drainBatches,
   type BatchPolicy,
@@ -41,9 +42,6 @@ import {
  * sized against eventually-consistent Query reads, and the dashboard fan-out is
  * the one user-visible path on that capacity.
  */
-
-/** DynamoDB's hard ceiling on the request list of a single `BatchWriteItem`. */
-const BATCH_WRITE_MAX_ITEMS = 25;
 
 /**
  * The result of a batch write is {@link BatchWriteOutcome}, defined in
@@ -173,7 +171,7 @@ export class SeriesAdapter extends StorageAdapterBase {
           return output.UnprocessedItems?.[this.tableName] ?? [];
         },
         requests,
-        BATCH_WRITE_MAX_ITEMS,
+        DYNAMODB_BATCH_WRITE_SIZE,
         this.batchPolicy,
       ),
     );
