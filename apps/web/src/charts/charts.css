@@ -1,0 +1,136 @@
+/*
+ * Styling for the forecast chart.
+ *
+ * Every mark here is `docs/design/chart-treatment.md` in CSS: the band is a
+ * fill with no `fill-opacity` (the 10% alpha is baked into the token, and
+ * setting one double-dips), the bounds are hairlines because the quantiles are
+ * data, the median is 2px round-capped in slot 1, and actuals are near-ink,
+ * drawn last, never faded to let the band through.
+ *
+ * Values are tokens — the gate in stylelint.config.mjs, not a style choice
+ * (react.md rule 5). The class names are deliberately prefixed
+ * `forecast-chart-`: the token preview's `.chart-*` block in preview.css is a
+ * swatch of this treatment and stays independent of the real component, so
+ * neither can silently restyle the other.
+ */
+
+.forecast-chart-figure {
+  margin: 0;
+}
+
+.forecast-chart {
+  display: block;
+  width: 100%;
+  max-width: 46rem;
+}
+
+.forecast-chart-grid,
+.forecast-chart-horizon {
+  stroke: var(--color-chart-grid);
+  stroke-width: 1;
+}
+
+/* No `fill-opacity`: the alpha lives in the token (chart-treatment.md). */
+.forecast-chart-band {
+  fill: var(--color-chart-band-fill);
+}
+
+.forecast-chart-band-bound {
+  fill: none;
+  stroke: var(--color-chart-band-stroke);
+  stroke-width: 1;
+}
+
+.forecast-chart-median {
+  fill: none;
+  stroke: var(--color-chart-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.forecast-chart-actuals {
+  fill: none;
+  stroke: var(--color-chart-actuals);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The ring is a spacer, not a border: it keeps the end dot countable where it
+ * crosses the median line (chart-treatment.md). */
+.forecast-chart-actuals-marker {
+  fill: var(--color-chart-actuals);
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+.forecast-chart-axis-label {
+  fill: var(--color-chart-axis-label);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.forecast-chart-axis-title {
+  fill: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+}
+
+/* Legend text wears text tokens, never the series colour — identity comes from
+ * the swatch beside it (chart-treatment.md). */
+.forecast-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+.forecast-chart-legend li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.forecast-chart-legend-key {
+  width: var(--space-8);
+  height: var(--space-4);
+  flex: none;
+}
+
+.forecast-chart-table {
+  margin: var(--space-6) 0 0;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.forecast-chart-table caption {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-align: left;
+}
+
+.forecast-chart-table th,
+.forecast-chart-table td {
+  padding: var(--space-1) var(--space-3);
+  text-align: right;
+}
+
+.forecast-chart-table thead th {
+  border-bottom: calc(var(--space-1) / 4) solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.forecast-chart-table tbody th {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+  text-align: left;
+}

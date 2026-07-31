@@ -1,0 +1,145 @@
+import { describe, expect, it } from 'vitest';
+import {
+  axisTicks,
+  niceAxisMax,
+  spanHoursBetween,
+  tickLabelFor,
+  xForIndex,
+  xTickIndices,
+  yForKw,
+  type PlotRect,
+} from './chart-geometry';
+
+const PLOT: PlotRect = { left: 40, right: 440, top: 20, bottom: 160 };
+
+describe('xForIndex', () => {
+  it('puts the first sample on the left plot edge and the last on the right', () => {
+    expect(xForIndex(0, 5, PLOT)).toBe(PLOT.left);
+    expect(xForIndex(4, 5, PLOT)).toBe(PLOT.right);
+  });
+
+  it('spaces intermediate samples evenly across the plot width', () => {
+    expect(xForIndex(1, 5, PLOT)).toBe(140);
+    expect(xForIndex(2, 5, PLOT)).toBe(240);
+  });
+
+  it('centres a lone sample, which has no extent to spread across the plot', () => {
+    expect(xForIndex(0, 1, PLOT)).toBe(240);
+  });
+});
+
+describe('yForKw', () => {
+  it('maps zero to the plot floor and the axis maximum to its ceiling', () => {
+    expect(yForKw(0, 8, PLOT)).toBe(PLOT.bottom);
+    expect(yForKw(8, 8, PLOT)).toBe(PLOT.top);
+  });
+
+  it('maps half the axis maximum to the middle of the plot', () => {
+    expect(yForKw(4, 8, PLOT)).toBe(90);
+  });
+});
+
+describe('niceAxisMax', () => {
+  it('gives an all-zero series a 1 kW axis rather than a degenerate scale', () => {
+    expect(niceAxisMax(0)).toBe(1);
+    expect(niceAxisMax(0.4)).toBe(1);
+  });
+
+  it('takes the smallest allowed step at or above the series maximum', () => {
+    expect(niceAxisMax(1)).toBe(1);
+    expect(niceAxisMax(1.1)).toBe(2);
+    expect(niceAxisMax(3.5)).toBe(4);
+    expect(niceAxisMax(4.2)).toBe(5);
+    expect(niceAxisMax(6.2)).toBe(8);
+    expect(niceAxisMax(8)).toBe(8);
+  });
+
+  it('rolls into the next decade when nothing in this one reaches the maximum', () => {
+    expect(niceAxisMax(8.1)).toBe(10);
+    expect(niceAxisMax(47)).toBe(50);
+    expect(niceAxisMax(420)).toBe(500);
+    expect(niceAxisMax(900)).toBe(1000);
+    expect(niceAxisMax(1000)).toBe(1000);
+  });
+
+  it('falls back to the floor for a non-finite maximum instead of hunting a decade', () => {
+    expect(niceAxisMax(Number.NaN)).toBe(1);
+    expect(niceAxisMax(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+});
+
+describe('axisTicks', () => {
+  it('spans zero to the axis maximum in five evenly spaced steps', () => {
+    expect(axisTicks(8)).toStrictEqual([0, 2, 4, 6, 8]);
+    expect(axisTicks(1)).toStrictEqual([0, 0.25, 0.5, 0.75, 1]);
+  });
+});
+
+describe('xTickIndices', () => {
+  it('labels every sample when the series is shorter than the label budget', () => {
+    expect(xTickIndices(5)).toStrictEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('labels the only sample of a single-point series', () => {
+    expect(xTickIndices(1)).toStrictEqual([0]);
+  });
+
+  it('has nothing to label in an empty series', () => {
+    expect(xTickIndices(0)).toStrictEqual([]);
+  });
+
+  it('thins a long series to the budget, keeping the first and last samples', () => {
+    const indices = xTickIndices(49);
+
+    expect(indices.length).toBeLessThanOrEqual(8);
+    expect(indices[0]).toBe(0);
+    expect(indices.at(-1)).toBe(48);
+    expect(indices).toStrictEqual([0, 7, 14, 21, 28, 35, 42, 48]);
+  });
+
+  it('keeps the first and last samples at any budget', () => {
+    const indices = xTickIndices(100, 3);
+
+    expect(indices[0]).toBe(0);
+    expect(indices.at(-1)).toBe(99);
+    expect(indices.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('tickLabelFor', () => {
+  it('labels an instant in UTC wall time, not the reader local zone', () => {
+    expect(tickLabelFor('2026-07-30T13:00:00Z', 24)).toBe('13:00');
+    expect(tickLabelFor('2026-07-30T00:30:00Z', 24)).toBe('00:30');
+  });
+
+  // The clock decision is load-bearing for a solar product (docs/tech-debt.md,
+  // 2026-07-31): rendered in local time, an Irish summer peak sits an hour off
+  // solar noon. Running the same assertion under a non-UTC ambient zone is the
+  // control that proves the axis reads UTC rather than inheriting the host.
+  it('labels the same instant identically under a non-UTC ambient timezone', () => {
+    const ambient = process.env.TZ;
+    try {
+      process.env.TZ = 'Asia/Tokyo';
+
+      expect(tickLabelFor('2026-07-30T13:00:00Z', 24)).toBe('13:00');
+    } finally {
+      process.env.TZ = ambient;
+    }
+  });
+
+  it('prefixes a short weekday once a bare time stops identifying a point', () => {
+    expect(tickLabelFor('2026-07-30T14:00:00Z', 168)).toBe('Thu 14:00');
+    expect(tickLabelFor('2026-07-30T14:00:00Z', 48)).toBe('14:00');
+  });
+});
+
+describe('spanHoursBetween', () => {
+  it('measures the series span in hours', () => {
+    expect(spanHoursBetween('2026-07-30T00:00:00Z', '2026-07-31T00:00:00Z')).toBe(24);
+    expect(spanHoursBetween('2026-07-30T00:00:00Z', '2026-07-30T00:30:00Z')).toBe(0.5);
+  });
+
+  it('is zero across a single instant', () => {
+    expect(spanHoursBetween('2026-07-30T00:00:00Z', '2026-07-30T00:00:00Z')).toBe(0);
+  });
+});
