@@ -126,7 +126,9 @@ body {
 .swatch-chip {
   display: block;
   height: var(--space-12);
-  border: calc(var(--space-1) / 4) solid var(--color-border);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
   border-radius: var(--radius-sm);
 }
 

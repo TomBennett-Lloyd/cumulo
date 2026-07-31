@@ -54,6 +54,10 @@ export default tseslint.config(
      * lives in stylelint.config.mjs. Values are exempted by file, never by
      * comment — packages/ui/src/tokens/tokens.css is the one place raw values
      * exist, and tokens.ts only ever references them as `var(--…)` strings.
+     *
+     * The colour-function list below is the same set stylelint refuses in
+     * `declaration-property-value-disallowed-list`; the two must stay in step,
+     * or a value banned in a stylesheet becomes legal in a string literal.
      */
     files: ['apps/**/*.{ts,tsx}', 'packages/ui/**/*.{ts,tsx}'],
     rules: {
@@ -70,12 +74,12 @@ export default tseslint.config(
             'Hex colour literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
         },
         {
-          selector: 'Literal[value=/(rgba?|hsla?|oklch)\\(/]',
+          selector: 'Literal[value=/(rgba?|hsla?|oklch|lab|lch)\\(/]',
           message:
             'Colour-function literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
         },
         {
-          selector: 'TemplateElement[value.raw=/(rgba?|hsla?|oklch)\\(/]',
+          selector: 'TemplateElement[value.raw=/(rgba?|hsla?|oklch|lab|lch)\\(/]',
           message:
             'Colour-function literal. UI code references design tokens: var(--color-…) from @cumulo/ui.',
         },

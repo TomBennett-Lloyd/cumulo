@@ -63,6 +63,27 @@ export default {
         'row-gap',
         'column-gap',
         'border-radius',
+        /*
+         * Colour-bearing shorthands. Without these, `border: 1px solid red`
+         * lints clean — the named colour is a sub-value of a property nothing
+         * on this list matches, and the property-agnostic rule below only
+         * catches hex literals and colour functions, not named colours. Listed
+         * individually rather than as `/^border-/`, which would also demand a
+         * token for `border-style: solid` — a keyword, not a design value.
+         *
+         * The plugin checks every sub-value, so listing a shorthand refuses the
+         * whole shorthand form unless each part is a `var()` or an ignored
+         * keyword: `border: var(--w) solid red` trips on `solid` as well as on
+         * `red`. That is the intended trade — write the longhands
+         * (`border-width`/`border-style`/`border-color`, as `.swatch-chip` and
+         * `.map-marker` do) and each part is checked on its own terms.
+         * `border: none` and friends stay legal via `ignoreValues`.
+         */
+        'border',
+        'outline',
+        'box-shadow',
+        'text-shadow',
+        'background-image',
       ],
       {
         ignoreFunctions: false,
@@ -81,12 +102,27 @@ export default {
 
     /*
      * The property list above is an allow-list of the properties we thought of,
-     * so a raw colour reaches the page through any property not on it — most
-     * often a shorthand: `border: 1px solid #ff0000`, `outline`, `box-shadow`,
-     * `text-shadow`, `background-image: linear-gradient(…)`. This rule is
-     * property-agnostic instead: whatever the property, a hex literal or a
-     * colour-function call in its value is refused. Token references survive
-     * because `var(--color-…)` names a colour rather than spelling one.
+     * so anything it does not name is unguarded. This rule closes the colour
+     * half of that gap and only that half: it is property-agnostic, so whatever
+     * the property, a hex literal or a colour-function call in its value is
+     * refused. Token references survive because `var(--color-…)` names a colour
+     * rather than spelling one. Named colours (`red`) are not caught here —
+     * they are ordinary keywords, indistinguishable from `solid` or `auto` by
+     * pattern — which is why every colour-bearing shorthand is on the list
+     * above instead.
+     *
+     * Residual, deliberately open: the *length* half of the frontend gate is
+     * still allow-list-shaped, so a raw size reaches the page through any
+     * property the list omits — `width`, `height`, `max-width`, `inset`,
+     * `flex-basis`, `border-width`, `letter-spacing`, `stroke-width`,
+     * `grid-template-columns`, among others. Committed CSS already relies on
+     * this (e.g. `max-width: 44rem` in apps/web/src/preview/preview.css). There
+     * is no property-agnostic mirror for lengths because a length is legal
+     * syntax everywhere, and adding these properties to the list above would
+     * demand tokens that do not exist: the set has spacing, type, and radii
+     * scales, but no measure or layout-size category. Closing it means adding
+     * token categories first — design-system scope, tracked in
+     * docs/tech-debt.md, not a config tweak.
      */
     'declaration-property-value-disallowed-list': [
       { '/.*/': ['/#[0-9a-fA-F]{3,8}\\b/', '/\\b(rgba?|hsla?|oklch|lab|lch)\\(/'] },
