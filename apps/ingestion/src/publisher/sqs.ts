@@ -4,7 +4,7 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { z } from 'zod';
 
 import type { ForecastWeatherReading } from '../open-meteo/response';
-import type { WeatherPublisher } from '../publisher';
+import type { WeatherPublisher } from './weather-publisher';
 
 /**
  * The SQS implementation of the transport seam (ADR 0004): one `SendMessage` per

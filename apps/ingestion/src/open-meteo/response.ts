@@ -1,6 +1,7 @@
 import { weatherReadingSchema, type WeatherReading } from '@cumulo/shared';
 import { z } from 'zod';
 
+import { describeZodIssues } from '../zod-issue-detail';
 import type { ForecastLocation, HourlyVariable } from './url';
 
 /**
@@ -94,19 +95,10 @@ export type ParsedForecast =
  */
 const openMeteoHourPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
-function describeIssues(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => `${issue.path.length > 0 ? issue.path.join('.') : '<root>'}: ${issue.message}`)
-    .join('; ');
-}
+const malformed = (detail: string): ParsedForecast => ({ ok: false, reason: 'malformed', detail });
 
-function malformed(detail: string): ParsedForecast {
-  return { ok: false, reason: 'malformed', detail };
-}
-
-function hasEveryValue(values: ReceivedHourlyValues): values is HourlyReadingValues {
-  return Object.values(values).every((value) => value !== null && value !== undefined);
-}
+const hasEveryValue = (values: ReceivedHourlyValues): values is HourlyReadingValues =>
+  Object.values(values).every((value) => value !== null && value !== undefined);
 
 /**
  * Turn a forecast response body into `WeatherReading`s for `location`.
@@ -124,10 +116,13 @@ function hasEveryValue(values: ReceivedHourlyValues): values is HourlyReadingVal
  * rather than shortening it — and `droppedHours` is what lets the caller report
  * partial coverage honestly (rule 5) instead of implying a full 48 hours.
  */
-export function parseForecastResponse(location: ForecastLocation, body: unknown): ParsedForecast {
+export const parseForecastResponse = (
+  location: ForecastLocation,
+  body: unknown,
+): ParsedForecast => {
   const response = openMeteoForecastResponseSchema.safeParse(body);
   if (!response.success) {
-    return malformed(describeIssues(response.error));
+    return malformed(describeZodIssues(response.error));
   }
 
   const { hourly } = response.data;
@@ -166,7 +161,7 @@ export function parseForecastResponse(location: ForecastLocation, body: unknown)
       ...received,
     });
     if (!reading.success) {
-      return malformed(`hour ${hour} — ${describeIssues(reading.error)}`);
+      return malformed(`hour ${hour} — ${describeZodIssues(reading.error)}`);
     }
     readings.push(reading.data);
   }
@@ -176,4 +171,4 @@ export function parseForecastResponse(location: ForecastLocation, body: unknown)
   }
 
   return { ok: true, readings, droppedHours };
-}
+};

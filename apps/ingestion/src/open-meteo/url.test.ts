@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildForecastUrl, forecastHours, hourlyVariables, openMeteoForecastEndpoint } from './url';
+import {
+  buildForecastUrl,
+  forecastHours,
+  hourlyVariables,
+  openMeteoForecastEndpoint,
+  type ForecastLocation,
+} from './url';
 
 /** Dublin, rounded to the 2 dp bucket ADR 0002 keys weather by. */
 const dublin = { latitude: 53.35, longitude: -6.26 };
 
-function paramsFor(location: { latitude: number; longitude: number }): URLSearchParams {
-  return new URL(buildForecastUrl(location)).searchParams;
-}
+const paramsFor = (location: ForecastLocation): URLSearchParams =>
+  new URL(buildForecastUrl(location)).searchParams;
 
 describe('buildForecastUrl', () => {
   it('pins wind_speed_unit=ms in the request URL', () => {

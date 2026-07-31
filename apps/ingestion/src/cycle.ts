@@ -1,8 +1,9 @@
 import type { BatchWriteOutcome, SiteAdapter, WeatherAdapter } from '@cumulo/storage';
 
 import { activeFetchLocations, type FetchLocation } from './locations';
-import type { FetchForecastOutcome, OpenMeteoClient } from './open-meteo/client';
-import type { WeatherPublisher } from './publisher';
+import type { FetchForecastForLocation, FetchForecastOutcome } from './open-meteo/fetch-forecast';
+import type { WeatherPublisher } from './publisher/weather-publisher';
+import { describeThrown } from './thrown-detail';
 
 /**
  * One ingestion cycle: list the fleet, collapse it to the locations worth fetching
@@ -61,8 +62,8 @@ export interface RunCycleDeps {
   /** Only the forecast write: ingestion never touches archive weather (#16 owns that). */
   readonly weather: Pick<WeatherAdapter, 'putForecastWeather'>;
   readonly publisher: WeatherPublisher;
-  /** Taken as the bare function so a cycle cannot reach the client's other surface. */
-  readonly fetchForecast: OpenMeteoClient['fetchForecast'];
+  /** The one Open-Meteo call a cycle makes; the policy behind it is bound by `main.ts`. */
+  readonly fetchForecast: FetchForecastForLocation;
   /**
    * Structured-logging sink (`docs/standards/error-handling.md` rule 4). Injected
    * rather than called directly so this module stays free of a console, and so the
@@ -85,9 +86,6 @@ export const locationOutcomeEvent = 'ingestion.location.outcome';
  */
 type LocationOperation = 'fetchForecast' | 'putForecastWeather' | 'publishLocationReadings';
 
-const describeThrown = (error: unknown): string =>
-  error instanceof Error ? `${error.name}: ${error.message}` : `non-Error thrown (${typeof error})`;
-
 const failedOutcome = (
   locationId: string,
   operation: LocationOperation,
@@ -99,9 +97,9 @@ const failedOutcome = (
 });
 
 /**
- * A fetch that produced no readings, as this location's outcome: the client's
+ * A fetch that produced no readings, as this location's outcome: the adapter's
  * vocabulary carried across unchanged rather than collapsed into one "fetch
- * failed", since the client drew those distinctions precisely because the caller
+ * failed", since the adapter drew those distinctions precisely because the caller
  * acts differently on each.
  */
 const fetchFailureOutcome = (

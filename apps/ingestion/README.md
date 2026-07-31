@@ -6,17 +6,19 @@ location for the forecast service (ADR 0004).
 
 ## The cycle
 
-| Module                   | Responsibility                                                                               |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| `open-meteo/url.ts`      | Request construction. Pure — pins `wind_speed_unit=ms`, `timezone=UTC`, `forecast_hours=48`. |
-| `open-meteo/response.ts` | Parses and normalizes a response body into `WeatherReading`s. Pure.                          |
-| `open-meteo/client.ts`   | The one module that touches the network, and the only place the failure policy lives.        |
-| `locations.ts`           | De-duplicates active fleet sites into the set of weather locations to fetch.                 |
-| `publisher.ts`           | The transport seam: one publish per location-cycle, implementation-agnostic.                 |
-| `publisher/sqs.ts`       | The SQS implementation of that seam (ADR 0004), and the message body's contract.             |
-| `cycle.ts`               | Orchestration: per location, fetch → **store** → **publish**, in that order.                 |
-| `handler.ts`             | The Lambda boundary: structured logs, and a failed cycle that fails the invocation.          |
-| `main.ts`                | The composition root: parses the environment, builds the clients, exports `handler`.         |
+| Module                           | Responsibility                                                                                |
+| -------------------------------- | --------------------------------------------------------------------------------------------- |
+| `open-meteo/url.ts`              | Request construction. Pure — pins `wind_speed_unit=ms`, `timezone=UTC`, `forecast_hours=48`.  |
+| `open-meteo/response.ts`         | Parses and normalizes a response body into `WeatherReading`s. Pure.                           |
+| `open-meteo/fetch-forecast.ts`   | The one module that touches the network, and the only place the failure policy lives.         |
+| `locations.ts`                   | De-duplicates active fleet sites into the set of weather locations to fetch.                  |
+| `publisher/weather-publisher.ts` | The transport seam: one publish per location-cycle, implementation-agnostic.                  |
+| `publisher/sqs.ts`               | The SQS implementation of that seam (ADR 0004), and the message body's contract.              |
+| `cycle.ts`                       | Orchestration: per location, fetch → **store** → **publish**, in that order.                  |
+| `handler.ts`                     | The Lambda boundary: structured logs, and a failed cycle that fails the invocation.           |
+| `main.ts`                        | The composition root: parses the environment, binds the policies, exports `handler`.          |
+| `thrown-detail.ts`               | One rendering of an unknown thrown value, shared by the adapter and the cycle.                |
+| `zod-issue-detail.ts`            | One rendering of a zod parse failure, shared by the response parser and the composition root. |
 
 Two orderings in `cycle.ts` are correctness properties rather than style:
 

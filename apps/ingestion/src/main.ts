@@ -7,8 +7,9 @@ import {
 import { z } from 'zod';
 
 import { createHandler, jsonLineLog, type IngestionHandler } from './handler';
-import { createOpenMeteoClient } from './open-meteo/client';
+import { fetchForecast, type ForecastFetchDeps } from './open-meteo/fetch-forecast';
 import { SqsWeatherPublisher, createIngestionSqsClient } from './publisher/sqs';
+import { describeZodIssues } from './zod-issue-detail';
 
 /**
  * The composition root, and the module the bundled artifact's `handler` export
@@ -49,9 +50,6 @@ export const ingestionEnvSchema = z.object({
 
 export type IngestionEnv = z.infer<typeof ingestionEnvSchema>;
 
-const describeIssues = (error: z.ZodError): string =>
-  error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
-
 /**
  * Parse the process environment, or fail loudly.
  *
@@ -63,7 +61,7 @@ const describeIssues = (error: z.ZodError): string =>
 export const parseIngestionEnv = (source: Record<string, string | undefined>): IngestionEnv => {
   const parsed = ingestionEnvSchema.safeParse(source);
   if (!parsed.success) {
-    throw new Error(`ingestion: invalid environment — ${describeIssues(parsed.error)}`);
+    throw new Error(`ingestion: invalid environment — ${describeZodIssues(parsed.error)}`);
   }
   return parsed.data;
 };
@@ -78,7 +76,14 @@ const env = parseIngestionEnv(process.env);
  */
 const documentClient = createStorageDocumentClient();
 
-const openMeteo = createOpenMeteoClient();
+/**
+ * Ingestion runs Open-Meteo on the adapter's own timeout, retry and jitter — an
+ * hourly batch against a free tier is exactly the shape those defaults were argued
+ * for. Stated as an empty override rather than left implicit at the call site,
+ * because "this service overrides nothing" is a decision the composition root owns
+ * and the next reader will want to see made.
+ */
+const openMeteoPolicy: ForecastFetchDeps = {};
 
 /**
  * The Lambda entry point. `dist/main.mjs` is the bundle and `main.handler` is the
@@ -101,9 +106,9 @@ export const handler: IngestionHandler = createHandler({
     client: createIngestionSqsClient(),
     queueUrl: env.QUEUE_URL,
   }),
-  // Wrapped rather than passed as a bare method reference: the cycle depends on the
-  // call, not on the client object, and an unbound method would be one refactor away
-  // from a `this` that is no longer there.
-  fetchForecast: (location) => openMeteo.fetchForecast(location),
+  // The adapter is a function of (policy, location); the cycle's dependency is the
+  // call for one location. Binding the policy here is the whole of that difference,
+  // and it is the composition root's job rather than the cycle's.
+  fetchForecast: (location) => fetchForecast(openMeteoPolicy, location),
   log: jsonLineLog,
 });

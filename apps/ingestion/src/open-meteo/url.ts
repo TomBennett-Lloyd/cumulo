@@ -58,7 +58,7 @@ export const forecastHours = 48;
  * - `forecast_hours=48` — API frugality (CLAUDE.md): ask for the horizon we use,
  *   not the 7-day default.
  */
-export function buildForecastUrl(location: ForecastLocation): string {
+export const buildForecastUrl = (location: ForecastLocation): string => {
   const url = new URL(openMeteoForecastEndpoint);
   url.search = new URLSearchParams({
     latitude: String(location.latitude),
@@ -69,4 +69,4 @@ export function buildForecastUrl(location: ForecastLocation): string {
     forecast_hours: String(forecastHours),
   }).toString();
   return url.toString();
-}
+};

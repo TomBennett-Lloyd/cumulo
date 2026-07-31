@@ -1,4 +1,4 @@
-import type { ForecastWeatherReading } from './open-meteo/response';
+import type { ForecastWeatherReading } from '../open-meteo/response';
 
 /**
  * The seam between an ingestion cycle and whatever carries its output onward.

@@ -22,20 +22,21 @@ interface ForecastBody {
   hourly: { time: string[] } & Record<HourlyVariable, (number | null)[]>;
 }
 
-function capturedBody(): ForecastBody {
-  return structuredClone(fixture);
-}
+const capturedBody = (): ForecastBody => structuredClone(fixture);
 
-function parseFixture(body: unknown = capturedBody()): {
+/** The fixture's parsed readings, or a failure naming why the parse refused them. */
+interface ParsedFixture {
   readings: ForecastWeatherReading[];
   droppedHours: number;
-} {
+}
+
+const parseFixture = (body: unknown = capturedBody()): ParsedFixture => {
   const result = parseForecastResponse(dublin, body);
   if (!result.ok) {
     return expect.fail(`expected a parsed forecast, got malformed: ${result.detail}`);
   }
   return { readings: result.readings, droppedHours: result.droppedHours };
-}
+};
 
 describe('parseForecastResponse', () => {
   it('carries requested coordinates, not the grid-snapped response coordinates', () => {

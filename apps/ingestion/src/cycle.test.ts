@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { cycleStartedEvent, locationOutcomeEvent, runCycle, type RunCycleDeps } from './cycle';
 import type { ForecastWeatherReading } from './open-meteo/response';
 import type { ForecastLocation } from './open-meteo/url';
-import type { WeatherPublisher } from './publisher';
+import type { WeatherPublisher } from './publisher/weather-publisher';
 
 /**
  * The cycle is exercised end to end against scripted adapters: a real fleet parsed

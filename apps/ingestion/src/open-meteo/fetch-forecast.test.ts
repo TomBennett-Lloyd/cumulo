@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createOpenMeteoClient,
+  fetchForecast,
   retryBaseDelayMs,
   type FetchForecastOutcome,
-  type OpenMeteoClientDeps,
-} from './client';
+  type ForecastFetchDeps,
+} from './fetch-forecast';
 import fixture from './fixtures/dublin-forecast.json';
-import { buildForecastUrl } from './url';
+import { buildForecastUrl, type ForecastLocation } from './url';
 
 /**
  * The adapter is exercised against a stubbed `fetch` returning the same captured
@@ -16,7 +16,7 @@ import { buildForecastUrl } from './url';
  * mock having been called. Nothing here touches the network or the wall clock: the
  * retry delay is asserted from an injected `sleep` that resolves instantly.
  */
-const dublin = { latitude: 53.35, longitude: -6.26 };
+const dublin: ForecastLocation = { latitude: 53.35, longitude: -6.26 };
 
 type FetchResponder = () => Promise<Response>;
 
@@ -30,12 +30,12 @@ interface FetchStub {
   readonly requests: readonly RecordedRequest[];
 }
 
-function requestUrl(input: Parameters<typeof fetch>[0]): string {
+const requestUrl = (input: Parameters<typeof fetch>[0]): string => {
   if (typeof input === 'string') {
     return input;
   }
   return input instanceof URL ? input.href : input.url;
-}
+};
 
 /**
  * A `fetch` that answers with `responders` in order and records what it was asked.
@@ -43,7 +43,7 @@ function requestUrl(input: Parameters<typeof fetch>[0]): string {
  * response, so a policy that retried more than the test expects cannot pass by
  * quietly getting another success.
  */
-function stubFetch(responders: readonly FetchResponder[]): FetchStub {
+const stubFetch = (responders: readonly FetchResponder[]): FetchStub => {
   const requests: RecordedRequest[] = [];
   const fetchFn: typeof fetch = (input, init) => {
     const responder = responders[requests.length];
@@ -53,29 +53,27 @@ function stubFetch(responders: readonly FetchResponder[]): FetchStub {
       : responder();
   };
   return { fetchFn, requests };
-}
+};
 
-function respondsWith(body: unknown, status: number): FetchResponder {
-  return () =>
+const respondsWith =
+  (body: unknown, status: number): FetchResponder =>
+  () =>
     Promise.resolve(
       new Response(JSON.stringify(body), {
         status,
         headers: { 'content-type': 'application/json' },
       }),
     );
-}
 
 /** What Node's `fetch` throws when the connection never gets off the ground. */
-function networkFailure(): FetchResponder {
-  return () => Promise.reject(new TypeError('fetch failed'));
-}
+const networkFailure = (): FetchResponder => () => Promise.reject(new TypeError('fetch failed'));
 
 interface SleepSpy {
   readonly sleep: (ms: number) => Promise<void>;
   readonly delays: readonly number[];
 }
 
-function spyOnSleep(): SleepSpy {
+const spyOnSleep = (): SleepSpy => {
   const delays: number[] = [];
   return {
     delays,
@@ -84,34 +82,33 @@ function spyOnSleep(): SleepSpy {
       return Promise.resolve();
     },
   };
-}
+};
 
-function expectOk(result: FetchForecastOutcome): Extract<FetchForecastOutcome, { outcome: 'ok' }> {
+const expectOk = (
+  result: FetchForecastOutcome,
+): Extract<FetchForecastOutcome, { outcome: 'ok' }> => {
   if (result.outcome !== 'ok') {
     return expect.fail(
       `expected ok, got ${result.outcome}${'detail' in result ? `: ${result.detail}` : ''}`,
     );
   }
   return result;
-}
+};
 
-function detailOf(result: FetchForecastOutcome): string {
-  return 'detail' in result ? result.detail : '';
-}
+const detailOf = (result: FetchForecastOutcome): string =>
+  'detail' in result ? result.detail : '';
 
-async function fetchForecast(
-  deps: OpenMeteoClientDeps,
-  location = dublin,
-): Promise<FetchForecastOutcome> {
-  return createOpenMeteoClient(deps).fetchForecast(location);
-}
+const fetchWith = (
+  deps: ForecastFetchDeps,
+  location: ForecastLocation = dublin,
+): Promise<FetchForecastOutcome> => fetchForecast(deps, location);
 
-describe('createOpenMeteoClient', () => {
+describe('fetchForecast', () => {
   it('a 200 fixture response yields ok readings', async () => {
     // No timeout or sleep injected: this test runs the shipped defaults.
     const stub = stubFetch([respondsWith(fixture, 200)]);
 
-    const result = expectOk(await fetchForecast({ fetchFn: stub.fetchFn }));
+    const result = expectOk(await fetchWith({ fetchFn: stub.fetchFn }));
 
     expect(result.readings).toHaveLength(fixture.hourly.time.length);
     expect(result.droppedHours).toBe(0);
@@ -128,7 +125,7 @@ describe('createOpenMeteoClient', () => {
     ]);
     const sleeps = spyOnSleep();
 
-    const result = await fetchForecast({ fetchFn: stub.fetchFn, sleep: sleeps.sleep });
+    const result = await fetchWith({ fetchFn: stub.fetchFn, sleep: sleeps.sleep });
 
     expect(result.outcome).toBe('rate-limited');
     // Hot-retrying a rate limit spends the exhausted quota — a hard CLAUDE.md
@@ -145,7 +142,7 @@ describe('createOpenMeteoClient', () => {
     const sleeps = spyOnSleep();
 
     const result = expectOk(
-      await fetchForecast({ fetchFn: stub.fetchFn, sleep: sleeps.sleep, random: () => 0.5 }),
+      await fetchWith({ fetchFn: stub.fetchFn, sleep: sleeps.sleep, random: () => 0.5 }),
     );
 
     expect(result.readings).toHaveLength(fixture.hourly.time.length);
@@ -157,7 +154,7 @@ describe('createOpenMeteoClient', () => {
     const stub = stubFetch([networkFailure(), networkFailure()]);
     const sleeps = spyOnSleep();
 
-    const result = await fetchForecast({ fetchFn: stub.fetchFn, sleep: sleeps.sleep });
+    const result = await fetchWith({ fetchFn: stub.fetchFn, sleep: sleeps.sleep });
 
     expect(result.outcome).toBe('unreachable');
     expect(detailOf(result)).toContain('fetch failed');
@@ -170,7 +167,7 @@ describe('createOpenMeteoClient', () => {
     const stub = stubFetch([respondsWith({ error: true, reason }, 400)]);
     const sleeps = spyOnSleep();
 
-    const result = await fetchForecast({ fetchFn: stub.fetchFn, sleep: sleeps.sleep });
+    const result = await fetchWith({ fetchFn: stub.fetchFn, sleep: sleeps.sleep });
 
     expect(result.outcome).toBe('malformed');
     expect(detailOf(result)).toContain(reason);
@@ -183,7 +180,7 @@ describe('createOpenMeteoClient', () => {
   it('a 200 body that is not a forecast response is malformed, not ok', async () => {
     const stub = stubFetch([respondsWith({ error: true, reason: 'No data is available' }, 200)]);
 
-    const result = await fetchForecast({ fetchFn: stub.fetchFn, sleep: spyOnSleep().sleep });
+    const result = await fetchWith({ fetchFn: stub.fetchFn, sleep: spyOnSleep().sleep });
 
     expect(result.outcome).toBe('malformed');
     expect(detailOf(result)).toContain('hourly');
@@ -194,7 +191,7 @@ describe('createOpenMeteoClient', () => {
     const stub = stubFetch([networkFailure(), respondsWith(fixture, 200)]);
     const sleeps = spyOnSleep();
 
-    expectOk(await fetchForecast({ fetchFn: stub.fetchFn, sleep: sleeps.sleep }));
+    expectOk(await fetchWith({ fetchFn: stub.fetchFn, sleep: sleeps.sleep }));
 
     expect(sleeps.delays).toHaveLength(1);
     expect(sleeps.delays[0]).toBeGreaterThanOrEqual(0);
@@ -206,7 +203,7 @@ describe('createOpenMeteoClient', () => {
     // spending wall-clock time: the default sleep ships untested otherwise.
     const stub = stubFetch([networkFailure(), respondsWith(fixture, 200)]);
 
-    const result = expectOk(await fetchForecast({ fetchFn: stub.fetchFn, random: () => 0 }));
+    const result = expectOk(await fetchWith({ fetchFn: stub.fetchFn, random: () => 0 }));
 
     expect(result.readings).toHaveLength(fixture.hourly.time.length);
     expect(stub.requests).toHaveLength(2);
