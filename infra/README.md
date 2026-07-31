@@ -616,7 +616,7 @@ terraform init -backend-config=backend.hcl
 terraform plan -no-color | tee ~/cumulo-ingestion-plan.txt
 ```
 
-Expect **`Plan: 12 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
+Expect **`Plan: 13 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the async invoke config that pins the function's retry policy to zero, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
 
 **A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, queue-name shape, the timeout numbers — and label it `awaiting-review`. Per convention 7, quote shapes rather than digits.
 
@@ -633,7 +633,7 @@ terraform apply
 **B2. Confirm what exists.**
 
 ```bash
-terraform state list   # expect 17 lines — the 12 resources plus the 5 data sources
+terraform state list   # expect 18 lines — the 13 resources plus the 5 data sources
 ```
 
 The deploy grant is the one resource in this stack that lives on something another stack owns, so confirm it landed where it was meant to rather than trusting the count:

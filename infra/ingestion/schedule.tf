@@ -26,10 +26,6 @@ resource "aws_cloudwatch_event_target" "ingestion" {
   # somebody to start branching on it.
 }
 
-# EventBridge invoking a function is a resource policy on the *function*, not a
-# grant on the rule. Without this the rule fires, EventBridge is refused, and
-# the only evidence is the rule's FailedInvocations metric — a schedule that is
-# silently doing nothing.
 # EventBridge invokes a function **asynchronously**, and Lambda's default async
 # policy retries a failed invocation twice — roughly one and three minutes later.
 # That default is wrong for this function in a way nothing else would surface:
@@ -60,6 +56,10 @@ resource "aws_lambda_function_event_invoke_config" "ingestion" {
   maximum_event_age_in_seconds = 60
 }
 
+# EventBridge invoking a function is a resource policy on the *function*, not a
+# grant on the rule. Without this the rule fires, EventBridge is refused, and
+# the only evidence is the rule's FailedInvocations metric — a schedule that is
+# silently doing nothing.
 resource "aws_lambda_permission" "eventbridge" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.ingestion.function_name
