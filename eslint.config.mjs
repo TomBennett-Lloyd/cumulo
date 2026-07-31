@@ -157,7 +157,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/web/src/preview/TokensPreview.tsx', 'packages/forecast/src/solar-position.ts'],
+    files: ['apps/web/src/preview/TokensPreview.tsx'],
     rules: {
       'max-lines': 'off',
     },

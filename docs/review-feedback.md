@@ -87,3 +87,17 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 - **Feedback**: Small, proven, well-scoped tech-debt tickets ("already well scoped/proven") may auto-plan (issue body as plan) and auto-merge on green CI + clean review loop, even for source code. Bigger themes needing re-structure/re-think stay human-gated — but a pending user decision must never block the debt-burn lane ("if i'm not at my laptop... i don't want that to stop progress").
 - **Why**: The review gate exists to check style/architecture direction on novel structures. Debt tickets re-apply already-reviewed patterns to known files; the marginal review value is near zero and the waiting cost is real.
 - **How applied**: `debt-burn` label + `planApproval.debtBurn` + `merge.debtBurnRule` in `.claude/workflow.json`; triage applies the label.
+
+## 2026-07-31 — refactor-lane
+
+- **Category**: gate-calibration
+- **Feedback**: "PR 80 looks good to go, things like that can probably auto merge, changes that will bake in the shape of functions etc i do want to review though."
+- **Why**: A behaviour-preserving refactor (mechanical moves, style conversion, file splits) whose PR proves no API-shape or semantic change carries near-zero review value for the user; the review that matters is on decisions that ossify — new abstractions, signatures, public surfaces.
+- **How applied**: `merge.refactorRule` in `.claude/workflow.json`: auto-merge on green CI + review-loop APPROVE iff no exported-API shape change, no semantic change (assertions unmodified, goldens byte-identical), and the PR body proves both. PR #80 is the precedent for the lane; #77 C3 (adapters → classes) is the precedent for what stays human-gated.
+
+## 2026-07-31 — plan-file-references
+
+- **Category**: plan
+- **Feedback**: "you're referencing files within a worktree, this is fragile as worktrees could end up being reaped. we should only reference files on main or files on another branch if not on main"
+- **Why**: Plans are durable (they live on issues); worktrees are not (reaped on merge or by sweep). The #19 plan's references into the `15-design-system` worktree were already dead when the user read it.
+- **How applied**: `planner.md` rule: repo-relative paths on `main`, or `<branch>:<path>` for unmerged files, never worktree paths; translate before posting. The #19 plan comment was edited to main-relative paths; #16/#17 audited clean.
