@@ -37,7 +37,17 @@ import { INGESTION_SEND_MAX_ATTEMPTS, INGESTION_SEND_REQUEST_TIMEOUT_MS } from '
  * time must be left in reserve for a location already in flight?* — which is
  * exactly what {@link CYCLE_DEADLINE_MS} subtracts.
  *
- * **Every term is imported.** Nothing here restates a number that lives
+ * **One term is knowingly priced at zero.** The smithy standard retry strategy
+ * honours a server-supplied retry hint, which can extend any single retry by up
+ * to 5,000 ms beyond the computed delay (verified in the installed
+ * `@smithy/core` 3.31.1). Neither DynamoDB nor SQS sends `Retry-After` in normal
+ * operation, so it never fires in practice — but the identity below is exact and
+ * carries no slack, so if one ever did, the function timeout becomes reachable by
+ * that much. Recorded in `docs/tech-debt.md` rather than priced in, because
+ * pricing it would roughly double {@link LOCATION_WORST_MS} to insure against
+ * something neither service does.
+ *
+ * **Every other term is imported.** Nothing here restates a number that lives
  * somewhere else, because a copied constant is how the previous budget went
  * stale without anyone noticing. The one exception is named and explained:
  * {@link SDK_THROTTLING_RETRY_DELAY_BASE_MS}, which belongs to the AWS SDK and
@@ -198,8 +208,12 @@ export const CYCLE_DEADLINE_MS =
  * why ingestion enforces a bound of its own instead of inheriting one from a
  * property of the seed fleet.
  *
- * Reaching it is not an error; it is reported as `skipped` on each location the
- * cycle did not reach and counted in the summary, and rotation means the same
- * locations are not the ones skipped next hour.
+ * Reaching it is not an error, and the code says so rather than only the
+ * comment: a capped location is reported as `skipped` with reason
+ * `location-cap`, counted in the report's `deferred` — which is deliberately
+ * **not** part of `failed` — and so it does not raise `CycleFailedError` or the
+ * `ingestion_errors` alarm. A fleet legitimately larger than the cap would
+ * otherwise page every hour forever. Rotation means the deferred locations are
+ * not the same ones next hour.
  */
 export const MAX_LOCATIONS_PER_CYCLE = 100;

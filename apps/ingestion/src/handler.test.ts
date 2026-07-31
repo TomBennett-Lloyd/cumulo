@@ -3,8 +3,13 @@ import type { FleetSite } from '@cumulo/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { cycleStartedEvent, locationOutcomeEvent, type RunCycleDeps } from './cycle';
-import { cycleStartMs, productionBudget } from './cycle-test-harness';
+import {
+  cycleStartedEvent,
+  locationOutcomeEvent,
+  type CycleBudget,
+  type RunCycleDeps,
+} from './cycle';
+import { SteppingClock, cycleStartMs, productionBudget } from './cycle-test-harness';
 import { createHandler, cycleSummaryEvent, jsonLineLog, CycleFailedError } from './handler';
 import type { ForecastWeatherReading } from './open-meteo/response';
 import type { ForecastLocation } from './open-meteo/url';
@@ -72,6 +77,9 @@ interface HandlerDepsInput {
   /** Ids whose publish throws. */
   readonly publishThrows?: readonly string[];
   readonly record: HandlerRecord;
+  /** Defaults to {@link productionBudget}; narrowed by the tests about the bounds. */
+  readonly budget?: CycleBudget;
+  readonly now?: () => number;
 }
 
 const handlerDeps = (input: HandlerDepsInput): RunCycleDeps => ({
@@ -107,8 +115,8 @@ const handlerDeps = (input: HandlerDepsInput): RunCycleDeps => ({
   // (`docs/standards/testing.md` rule 7). Three locations is far inside both
   // bounds, so nothing here is ever skipped — `cycle.test.ts` owns the cases
   // where they bite.
-  now: () => cycleStartMs,
-  budget: productionBudget,
+  now: input.now ?? ((): number => cycleStartMs),
+  budget: input.budget ?? productionBudget,
 });
 
 const expectCycleFailure = (thrown: unknown): CycleFailedError => {
@@ -150,7 +158,7 @@ describe('createHandler', () => {
       activeLocations: 3,
       published: 3,
       failed: 0,
-      skippedForCap: 0,
+      deferred: 0,
       skippedForDeadline: 0,
     });
   });
@@ -228,7 +236,59 @@ describe('createHandler', () => {
     expect(lines).toEqual([
       `{"event":"${cycleStartedEvent}","fleetSites":1,"activeLocations":1,"attemptedLocations":1}`,
       `{"event":"${locationOutcomeEvent}","locationId":"${locationId(dublin)}","status":"published","readingCount":1,"droppedHours":0}`,
-      `{"event":"${cycleSummaryEvent}","activeLocations":1,"published":1,"failed":0,"skippedForCap":0,"skippedForDeadline":0}`,
+      `{"event":"${cycleSummaryEvent}","activeLocations":1,"published":1,"failed":0,"deferred":0,"skippedForDeadline":0}`,
     ]);
+  });
+
+  it('a cycle that defers locations to the cap is still a successful invocation', async () => {
+    // The #115 ruling, pinned where it actually bites. A fleet legitimately
+    // larger than the cap defers on *every* cycle, so counting deferrals as
+    // failures would make this function's error metric permanently red — and
+    // the CloudWatch alarm on it permanently useless — for a system working
+    // exactly as designed.
+    const record = emptyRecord();
+    const handler = createHandler(
+      handlerDeps({
+        locations: threeLocations,
+        budget: { ...productionBudget, maxLocations: 2 },
+        record,
+      }),
+    );
+
+    const report = await handler();
+
+    expect(report).toMatchObject({ activeLocations: 3, published: 2, failed: 0, deferred: 1 });
+    expect(record.entries.at(-1)).toMatchObject({
+      event: cycleSummaryEvent,
+      failed: 0,
+      deferred: 1,
+      skippedForDeadline: 0,
+    });
+  });
+
+  it('a cycle cut short by its deadline does fail the invocation', async () => {
+    // The other half of the same ruling: a deadline skip is pathology, not
+    // scheduling, so it stays in `failed` and still raises the alarm.
+    const record = emptyRecord();
+    const clock = new SteppingClock(400);
+    const handler = createHandler(
+      handlerDeps({
+        locations: threeLocations,
+        budget: { deadlineMs: 500, maxLocations: productionBudget.maxLocations },
+        now: () => clock.read(),
+        record,
+      }),
+    );
+
+    const failure = expectCycleFailure(await rejectionOf(handler()));
+
+    expect(failure).toMatchObject({ failed: 2, total: 3 });
+    expect(record.entries.at(-1)).toMatchObject({
+      event: cycleSummaryEvent,
+      published: 1,
+      failed: 2,
+      deferred: 0,
+      skippedForDeadline: 2,
+    });
   });
 });

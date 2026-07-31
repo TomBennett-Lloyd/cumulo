@@ -158,6 +158,20 @@ export const createStorageDocumentClient = (
       requestHandler: new NodeHttpHandler({
         requestTimeout: STORAGE_REQUEST_TIMEOUT_MS,
         connectionTimeout: STORAGE_CONNECTION_TIMEOUT_MS,
+        // Without this, `requestTimeout` is advisory: verified against the
+        // installed @smithy/node-http-handler 4.9.13, `setRequestTimeout`
+        // only emits a `console.warn` when the deadline passes and leaves the
+        // socket hanging — the destroy-and-reject branch is gated entirely on
+        // this flag. A timeout that logs is not a bound, and the budget in
+        // `@cumulo/ingestion` treats this one as arithmetic.
+        //
+        // `socketTimeout` is deliberately left unset. `requestTimeout` is a
+        // single absolute timer started when the request is issued and cleared
+        // when it settles, so it already bounds the whole round trip;
+        // `socketTimeout` measures *inactivity* instead, which would fire
+        // earlier on a slow-but-progressing response and add a second term to
+        // price for no extra guarantee.
+        throwOnRequestTimeout: true,
       }),
     });
 

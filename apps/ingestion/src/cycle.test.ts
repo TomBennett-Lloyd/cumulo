@@ -30,7 +30,7 @@ describe('runCycle', () => {
       activeLocations: 4,
       published: 4,
       failed: 0,
-      skippedForCap: 0,
+      deferred: 0,
       skippedForDeadline: 0,
     });
     expect(record.calls).toEqual([
@@ -73,7 +73,7 @@ describe('runCycle', () => {
       activeLocations: 0,
       published: 0,
       failed: 0,
-      skippedForCap: 0,
+      deferred: 0,
       skippedForDeadline: 0,
     });
     expect(record.calls).toEqual([]);

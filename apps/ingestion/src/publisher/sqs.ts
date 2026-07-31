@@ -92,6 +92,13 @@ export const createIngestionSqsClient = (): SQSClient =>
     requestHandler: new NodeHttpHandler({
       requestTimeout: INGESTION_SEND_REQUEST_TIMEOUT_MS,
       connectionTimeout: INGESTION_SEND_CONNECTION_TIMEOUT_MS,
+      // Load-bearing, and it was missing until #115 measured it: in the
+      // installed @smithy/node-http-handler 4.9.13, `requestTimeout` alone
+      // only logs a warning and lets the socket hang — the destroy-and-reject
+      // branch is gated on this flag. The comment above claimed a bound of
+      // ~9 s per location that the code did not actually enforce, and
+      // `cycle-budget.ts` now imports these numbers as arithmetic.
+      throwOnRequestTimeout: true,
     }),
   });
 

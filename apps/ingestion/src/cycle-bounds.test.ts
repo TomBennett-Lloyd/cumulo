@@ -15,7 +15,7 @@ import {
   publishedOutcome,
   skippedOutcome,
 } from './cycle-test-harness';
-import { cycleStartedEvent, locationOutcomeEvent, runCycle } from './cycle';
+import { cycleStartedEvent, locationOutcomeEvent, runCycle, type RunCycleDeps } from './cycle';
 import { CYCLE_ROTATION_PERIOD_MS } from './locations';
 
 /**
@@ -28,14 +28,15 @@ import { CYCLE_ROTATION_PERIOD_MS } from './locations';
  * assertion and would be exactly the defect these bounds exist to prevent.
  */
 describe('runCycle bounds', () => {
-  /** `published + failed === activeLocations`, whatever became of the cycle. */
+  /** `published + failed + deferred === activeLocations`, whatever became of the cycle. */
   const expectEveryLocationAccountedFor = (report: {
     locations: unknown[];
     activeLocations: number;
     published: number;
     failed: number;
+    deferred: number;
   }): void => {
-    expect(report.published + report.failed).toBe(report.activeLocations);
+    expect(report.published + report.failed + report.deferred).toBe(report.activeLocations);
     expect(report.locations).toHaveLength(report.activeLocations);
   };
 
@@ -67,8 +68,10 @@ describe('runCycle bounds', () => {
     expect(report).toMatchObject({
       activeLocations: 4,
       published: 2,
-      failed: 2,
-      skippedForCap: 2,
+      // Deferrals are not failures: an over-cap fleet is a scheduling fact, and
+      // counting it as a failure would alarm every hour forever.
+      failed: 0,
+      deferred: 2,
       skippedForDeadline: 0,
     });
     expectEveryLocationAccountedFor(report);
@@ -101,8 +104,9 @@ describe('runCycle bounds', () => {
     expect(report).toMatchObject({
       activeLocations: 4,
       published: 2,
+      // Deadline skips *are* failures: a cycle out of clock is pathology.
       failed: 2,
-      skippedForCap: 0,
+      deferred: 0,
       skippedForDeadline: 2,
     });
     expectEveryLocationAccountedFor(report);
@@ -198,10 +202,56 @@ describe('runCycle bounds', () => {
     expect(report).toMatchObject({
       activeLocations: 4,
       published: 2,
-      failed: 2,
-      skippedForCap: 1,
+      failed: 1,
+      deferred: 1,
+      skippedForDeadline: 0,
+    });
+
+    expect(report).toMatchObject({
+      activeLocations: 4,
+      published: 2,
+      // The rate-limited location is a failure; the capped one is not.
+      failed: 1,
+      deferred: 1,
       skippedForDeadline: 0,
     });
     expectEveryLocationAccountedFor(report);
+  });
+
+  it('a slow fleet listing spends the budget it costs, rather than escaping it', async () => {
+    // The clock starts before `listFleetSites`, so a fleet read that itself
+    // burns the budget leaves nothing for the locations. Started after it, this
+    // cost would be invisible to the deadline and the function timeout would be
+    // reachable again by exactly the time the read took — which is the failure
+    // the deadline exists to remove, reintroduced by an ordering detail.
+    const record = emptyRecord();
+    const clock = new SteppingClock(0);
+    const base = cycleDeps({
+      sites: activeFleet,
+      budget: { deadlineMs: 1_000, maxLocations: productionBudget.maxLocations },
+      now: () => clock.read(),
+      record,
+    });
+    const deps: RunCycleDeps = {
+      ...base,
+      sites: {
+        listFleetSites: async () => {
+          const sites = await base.sites.listFleetSites();
+          // The read took longer than the whole cycle budget.
+          clock.advance(5_000);
+          return sites;
+        },
+      },
+    };
+
+    const report = await runCycle(deps);
+
+    expect(report).toMatchObject({
+      activeLocations: 4,
+      published: 0,
+      failed: 4,
+      skippedForDeadline: 4,
+    });
+    expect(record.calls).toEqual([]);
   });
 });

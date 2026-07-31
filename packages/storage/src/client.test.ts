@@ -1,10 +1,11 @@
 import { createServer } from 'node:http';
+import type { Socket } from 'node:net';
 
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { ConfiguredRetryStrategy } from '@smithy/core/retry';
 import { HttpRequest } from '@smithy/core/transport';
-import { NodeHttpHandler, type NodeHttpHandlerOptions } from '@smithy/node-http-handler';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -123,111 +124,6 @@ describe('createStorageDocumentClient', () => {
   });
 });
 
-/**
- * The deadlines #115 added, asserted on the handler the *production* client
- * ships rather than on an injected one — every test above supplies its own base
- * client and so bypasses this configuration entirely
- * (`docs/standards/testing.md` rule 7).
- *
- * A `NodeHttpHandler` only resolves its configuration when it first handles a
- * request, so each test drives one real round trip against a local server. That
- * is also what makes the assertion meaningful: these are the deadlines that
- * were in force for a request that actually went out, not the arguments we
- * remember passing.
- */
-describe('createStorageDocumentClient request deadlines', () => {
-  /** A server that answers anything immediately, so no test here waits on a timeout. */
-  const withLocalServer = async (
-    runChecks: (origin: { hostname: string; port: number }) => Promise<void>,
-  ): Promise<void> => {
-    const server = createServer((_request, response) => {
-      response.writeHead(200, { 'content-type': 'application/x-amz-json-1.0' });
-      response.end('{}');
-    });
-
-    await new Promise<void>((resolve) => {
-      server.listen(0, '127.0.0.1', resolve);
-    });
-
-    try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('the local test server did not report a TCP port');
-      }
-      await runChecks({ hostname: '127.0.0.1', port: address.port });
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error === undefined) {
-            resolve();
-          } else {
-            reject(error);
-          }
-        });
-      });
-    }
-  };
-
-  /** The handler's resolved configuration, after one request has gone through it. */
-  const configsAfterOneRequest = async (
-    handler: unknown,
-    origin: { hostname: string; port: number },
-  ): Promise<NodeHttpHandlerOptions> => {
-    if (!(handler instanceof NodeHttpHandler)) {
-      throw new Error('expected the client to be built on a NodeHttpHandler');
-    }
-    await handler.handle(
-      new HttpRequest({ protocol: 'http:', method: 'GET', path: '/', ...origin }),
-    );
-    return handler.httpHandlerConfigs();
-  };
-
-  it('every request the shipped client makes carries both pinned deadlines', async () => {
-    await withLocalServer(async (origin) => {
-      const client = createStorageDocumentClient({ region: 'eu-west-1' });
-
-      try {
-        expect(await configsAfterOneRequest(client.config.requestHandler, origin)).toMatchObject({
-          requestTimeout: STORAGE_REQUEST_TIMEOUT_MS,
-          connectionTimeout: STORAGE_CONNECTION_TIMEOUT_MS,
-        });
-      } finally {
-        client.destroy();
-      }
-    });
-  });
-
-  it('negative control: without the pin a request has no deadline at all', async () => {
-    // The state of this package before #115, and the reason the ingestion
-    // Lambda's time budget could not be computed: `STORAGE_MAX_ATTEMPTS` bounds
-    // how often a request is retried, never how long one may hang, and the
-    // SDK's own default is no request timeout whatsoever. Without this control
-    // the test above would look identical if the option were being dropped.
-    await withLocalServer(async (origin) => {
-      const bare = new DynamoDBClient({ region: 'eu-west-1', maxAttempts: STORAGE_MAX_ATTEMPTS });
-
-      try {
-        const configs = await configsAfterOneRequest(bare.config.requestHandler, origin);
-
-        expect(configs.requestTimeout).toBeUndefined();
-        expect(configs.connectionTimeout).toBeUndefined();
-      } finally {
-        bare.destroy();
-      }
-    });
-  });
-
-  it('pins values a laptop-run CLI can also live with', () => {
-    // The package's consumers are not only the in-region Lambda: the operator
-    // smoke script and #16's hindcast run from a workstation over the public
-    // internet. Both numbers are an order of magnitude above a transatlantic
-    // round trip, so pinning them cannot turn a slow link into a failure.
-    expect(STORAGE_REQUEST_TIMEOUT_MS).toBeGreaterThanOrEqual(1_000);
-    expect(STORAGE_CONNECTION_TIMEOUT_MS).toBeGreaterThanOrEqual(500);
-    expect(STORAGE_CONNECTION_TIMEOUT_MS).toBeLessThan(STORAGE_REQUEST_TIMEOUT_MS);
-  });
-});
-
 describe('storageRetryDelayMs', () => {
   it('backs off from a 1000 ms base, doubling, with full jitter', () => {
     const nearlyOne = () => 0.999_999;
@@ -284,5 +180,204 @@ describe('createStorageRetryStrategy', () => {
 
     expect(firstElapsed).toBeGreaterThanOrEqual(45);
     expect(secondElapsed).toBeGreaterThanOrEqual(95);
+  });
+});
+
+/**
+ * The deadlines #115 added, asserted as **behaviour against a server that never
+ * answers** rather than as configuration read back off the client.
+ *
+ * The distinction is the whole point of these tests. An earlier version asserted
+ * `httpHandlerConfigs()` after a request to a server that replied instantly, and
+ * it passed while the deadline did not work at all: in the installed
+ * @smithy/node-http-handler 4.9.13, `requestTimeout` without
+ * `throwOnRequestTimeout` only logs a warning and leaves the socket hanging. A
+ * test that reads back the options we remember passing cannot see that
+ * (`docs/standards/testing.md` rules 1 and 3) — only one that waits for the
+ * deadline to bite can.
+ *
+ * These are the slowest tests in the package, deliberately: they are the only
+ * proof of the number the ingestion Lambda's whole time budget rests on.
+ */
+describe('createStorageDocumentClient request deadlines', () => {
+  /**
+   * The worst case for one command, restated locally: four attempts at the
+   * pinned deadline plus the pinned backoff between them. `@cumulo/ingestion`
+   * derives the same figure as `STORE_SEND_WORST_MS`; this package cannot
+   * import that without depending on its own consumer, so the assertion below
+   * is bounded by the arithmetic rather than by a copied literal.
+   */
+  const commandWorstCaseMs =
+    STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + STORAGE_RETRY_BASE_DELAY_MS * (1 + 2 + 4);
+
+  interface TimedRejection {
+    readonly error: unknown;
+    readonly elapsedMs: number;
+  }
+
+  /**
+   * A server that accepts connections and never responds — the stalled socket
+   * the deadline exists for. Open sockets are tracked and destroyed on the way
+   * out, because `server.close()` on its own waits for connections that never end.
+   */
+  const withUnresponsiveServer = async (
+    runChecks: (port: number, connectionsSoFar: () => number) => Promise<void>,
+  ): Promise<void> => {
+    const sockets = new Set<Socket>();
+    let connectionCount = 0;
+    const server = createServer(() => {
+      // Deliberately empty: never write, never end. That is the fixture.
+    });
+    server.on('connection', (socket) => {
+      connectionCount += 1;
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('the local test server did not report a TCP port');
+      }
+      await runChecks(address.port, () => connectionCount);
+    } finally {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await new Promise<void>((resolve) => {
+        server.close(() => {
+          resolve();
+        });
+      });
+    }
+  };
+
+  /** How long `run` took, and what it rejected with. A resolution is a test failure. */
+  const timeRejection = async (run: () => Promise<unknown>): Promise<TimedRejection> => {
+    const startedAt = Date.now();
+    try {
+      await run();
+    } catch (error) {
+      return { error, elapsedMs: Date.now() - startedAt };
+    }
+    throw new Error('expected the request to be rejected by its deadline, but it resolved');
+  };
+
+  /**
+   * Runs `runChecks` with the SDK pointed at the local server and given
+   * unusable credentials, then restores the environment exactly as it was.
+   *
+   * The variables have to stay set for the whole call, not just while the
+   * client is constructed: endpoint and credential resolution are lazy and
+   * happen on the first `send`. An earlier version of this helper cleared them
+   * straight after construction, and the command went to **real DynamoDB** on
+   * whatever ambient credentials the machine had — which is exactly the thing a
+   * unit test must never do, and it announced itself as a
+   * `ResourceNotFoundException` rather than the timeout being asserted.
+   */
+  const withLocalEndpoint = async (port: number, runChecks: () => Promise<void>): Promise<void> => {
+    const overrides = {
+      AWS_ENDPOINT_URL_DYNAMODB: `http://127.0.0.1:${String(port)}`,
+      AWS_ACCESS_KEY_ID: 'test-access-key-id',
+      AWS_SECRET_ACCESS_KEY: 'test-secret-access-key',
+      AWS_SESSION_TOKEN: 'test-session-token',
+      AWS_PROFILE: '',
+    };
+    // Captured and reassigned rather than deleted: `delete process.env[key]` is
+    // a dynamic-key delete, and restoring an absent variable to the empty string
+    // is indistinguishable to every reader below.
+    const previous = Object.fromEntries(
+      Object.keys(overrides).map((key) => [key, process.env[key] ?? '']),
+    );
+
+    Object.assign(process.env, overrides);
+    try {
+      await runChecks();
+    } finally {
+      Object.assign(process.env, previous);
+    }
+  };
+
+  it('aborts a single stalled request at the pinned deadline', async () => {
+    await withUnresponsiveServer(async (port, connectionsSoFar) => {
+      const client = createStorageDocumentClient({ region: 'eu-west-1' });
+      const handler = client.config.requestHandler;
+      if (!(handler instanceof NodeHttpHandler)) {
+        throw new Error('expected the shipped client to be built on a NodeHttpHandler');
+      }
+
+      try {
+        const { error, elapsedMs } = await timeRejection(() =>
+          handler.handle(
+            new HttpRequest({
+              protocol: 'http:',
+              hostname: '127.0.0.1',
+              port,
+              method: 'GET',
+              path: '/',
+            }),
+          ),
+        );
+
+        expect(error).toMatchObject({ name: 'TimeoutError' });
+        // Bounded below as well as above: a request that failed instantly would
+        // also reject, and would mean something other than the deadline stopped it.
+        expect(elapsedMs).toBeGreaterThanOrEqual(STORAGE_REQUEST_TIMEOUT_MS - 200);
+        expect(elapsedMs).toBeLessThan(STORAGE_REQUEST_TIMEOUT_MS * 2);
+        expect(connectionsSoFar()).toBe(1);
+      } finally {
+        client.destroy();
+      }
+    });
+  }, 20_000);
+
+  it('abandons a stalled command inside the worst case the ingestion budget prices', async () => {
+    // The claim `@cumulo/ingestion`'s STORE_SEND_WORST_MS makes, measured end to
+    // end through the real retry strategy rather than modelled.
+    await withUnresponsiveServer(async (port, connectionsSoFar) => {
+      await withLocalEndpoint(port, async () => {
+        const client = createStorageDocumentClient({ region: 'eu-west-1' });
+
+        try {
+          const { error, elapsedMs } = await timeRejection(() =>
+            client.send(
+              new PutCommand({
+                TableName: 'cumulo-weather-test',
+                Item: { locationId: 'x', sk: 'y' },
+              }),
+            ),
+          );
+
+          expect(error).toMatchObject({ name: 'TimeoutError' });
+          // Every attempt was made and every one hit its deadline...
+          expect(elapsedMs).toBeGreaterThanOrEqual(
+            STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS - 500,
+          );
+          // ...and the whole thing still finished inside the budgeted bound.
+          expect(elapsedMs).toBeLessThanOrEqual(commandWorstCaseMs);
+          // Proof the command reached the fixture rather than the internet:
+          // without it, a real endpoint refusing us would look like a passing
+          // timeout test — which is exactly how an earlier draft of this file
+          // silently sent a PutItem to real DynamoDB.
+          expect(connectionsSoFar()).toBe(STORAGE_MAX_ATTEMPTS);
+        } finally {
+          client.destroy();
+        }
+      });
+    });
+  }, 60_000);
+
+  it('pins values a laptop-run CLI can also live with', () => {
+    // The package's consumers are not only the in-region Lambda: the operator
+    // smoke script and #16's hindcast run from a workstation over the public
+    // internet. Both numbers are an order of magnitude above a transatlantic
+    // round trip, so pinning them cannot turn a slow link into a failure.
+    expect(STORAGE_REQUEST_TIMEOUT_MS).toBeGreaterThanOrEqual(1_000);
+    expect(STORAGE_CONNECTION_TIMEOUT_MS).toBeGreaterThanOrEqual(500);
+    expect(STORAGE_CONNECTION_TIMEOUT_MS).toBeLessThan(STORAGE_REQUEST_TIMEOUT_MS);
   });
 });

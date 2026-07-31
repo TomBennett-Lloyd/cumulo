@@ -170,6 +170,11 @@ export class SteppingClock {
     this.#currentMs += this.#stepMs;
     return reading;
   }
+
+  /** Jump the clock, for costs a test wants to charge to something other than a step. */
+  advance(byMs: number): void {
+    this.#currentMs += byMs;
+  }
 }
 
 /**

@@ -58,19 +58,35 @@ export type SkipReason = 'location-cap' | 'cycle-deadline';
 /**
  * The cycle's result, reported honestly (`docs/standards/error-handling.md` rule 5).
  *
- * `failed` counts every location that did **not** publish, whatever the reason —
- * a rate limit, a malformed body and a thrown adapter error all mean the same thing
- * downstream: the forecast service was not told about that location this hour. So
- * `published + failed === activeLocations` always, and a caller that alarms on
- * `failed > 0` cannot be fooled by a failure mode that reported itself politely.
+ * `failed` counts every location that went **wrong** — a rate limit, a malformed
+ * body and a thrown adapter error all mean the same thing downstream: the forecast
+ * service was not told about that location this hour, and something is amiss. A
+ * caller that alarms on `failed > 0` cannot be fooled by a failure mode that
+ * reported itself politely.
+ *
+ * `deferred` is deliberately outside that count. A fleet larger than the cap is a
+ * scheduling fact rather than a fault: the locations are served by a later cycle,
+ * rotation guarantees it, and nothing needs an operator. Folding them into `failed`
+ * would make a legitimately over-cap fleet page every hour forever, which is an
+ * alarm that trains its reader to ignore it. A deadline skip is the opposite — it
+ * only happens under pathology — so those stay in `failed`.
+ *
+ * So the invariant is `published + failed + deferred === activeLocations`: every
+ * active location is accounted for, and the three buckets mean three different
+ * things to the operator.
  */
 export interface CycleReport {
   readonly locations: LocationOutcome[];
   readonly activeLocations: number;
   readonly published: number;
   readonly failed: number;
-  /** Of `failed`, those the cap deferred to a later cycle. */
-  readonly skippedForCap: number;
+  /**
+   * Locations the cap held back for a later cycle. **Not** failures: a fleet
+   * larger than the cap is a scheduling fact, not a fault, and rotation means a
+   * deferred location is served within the next few cycles. Counted separately
+   * so `failed` keeps meaning "something went wrong".
+   */
+  readonly deferred: number;
   /** Of `failed`, those the cycle ran out of time to attempt. */
   readonly skippedForDeadline: number;
 }
@@ -237,10 +253,12 @@ const countSkipped = (outcomes: readonly LocationOutcome[], reason: SkipReason):
  * cap decides how many locations this cycle may attempt at all; its deadline, checked
  * before each location, decides when to stop starting more. Neither shortens the
  * report: a location the cap deferred and a location the deadline cut off both
- * appear in `locations` with a `skipped` status and count toward `failed`, so
- * `published + failed === activeLocations` still holds and a cycle that ran out of
- * budget still says exactly which locations published. A Lambda killed at its
+ * appear in `locations` with a `skipped` status, so
+ * `published + failed + deferred === activeLocations` holds and a cycle that ran out
+ * of budget still says exactly which locations published. A Lambda killed at its
  * timeout says none of that, which is why the deadline exists at all.
+ *
+ * The two skip reasons land in different buckets on purpose — see {@link CycleReport}.
  *
  * The deadline is checked *before* a location and never interrupts one in flight —
  * `cycle-budget.ts` reserves a whole location's worst case behind it for exactly
@@ -260,11 +278,16 @@ const countSkipped = (outcomes: readonly LocationOutcome[], reason: SkipReason):
  * report.
  */
 export const runCycle = async (deps: RunCycleDeps): Promise<CycleReport> => {
+  // Read before the fleet listing, not after. `listFleetSites` is itself at
+  // least one fully-retried DynamoDB request and pages in principle, so a clock
+  // started after it would leave that cost outside the budget entirely — and the
+  // function timeout reachable again by exactly the amount the fleet read took.
+  // This is what makes the docstring's claim true rather than aspirational.
+  const startedAt = deps.now();
   const sites = await deps.sites.listFleetSites();
   const active = activeFetchLocations(sites);
-  const startedAt = deps.now();
 
-  const { selected, deferred } = selectCycleLocations(active, {
+  const { selected, deferred: deferredLocations } = selectCycleLocations(active, {
     offset: rotationOffset(startedAt, active.length),
     maxLocations: deps.budget.maxLocations,
   });
@@ -292,18 +315,19 @@ export const runCycle = async (deps: RunCycleDeps): Promise<CycleReport> => {
     record(await runLocation(deps, location));
   }
 
-  for (const location of deferred) {
+  for (const location of deferredLocations) {
     record(skippedOutcome(location, 'location-cap'));
   }
 
   const published = outcomes.filter((outcome) => outcome.status === 'published').length;
+  const deferred = countSkipped(outcomes, 'location-cap');
 
   return {
     locations: outcomes,
     activeLocations: active.length,
     published,
-    failed: outcomes.length - published,
-    skippedForCap: countSkipped(outcomes, 'location-cap'),
+    failed: outcomes.length - published - deferred,
+    deferred,
     skippedForDeadline: countSkipped(outcomes, 'cycle-deadline'),
   };
 };

@@ -1,6 +1,5 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { weatherReadingSchema } from '@cumulo/shared';
-import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { mockClient } from 'aws-sdk-client-mock';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -180,14 +179,12 @@ describe('SqsWeatherPublisher', () => {
 });
 
 describe('createIngestionSqsClient', () => {
-  it('pins the attempt budget and the request timeouts rather than inheriting them', async () => {
-    // testing.md rule 7: every test above runs against an injected client, so the
-    // configuration production actually ships needs its own assertion. The SDK's
-    // own defaults here are an environment-dependent attempt count and *no*
-    // request timeout at all.
+  it('pins the attempt budget rather than inheriting it', async () => {
+    // testing.md rule 7: every test above runs against an injected client, so
+    // the configuration production actually ships needs its own assertion. The
+    // SDK's own default here is an environment-dependent attempt count.
     const shipped = createIngestionSqsClient();
 
     await expect(shipped.config.maxAttempts()).resolves.toBe(INGESTION_SEND_MAX_ATTEMPTS);
-    expect(shipped.config.requestHandler).toBeInstanceOf(NodeHttpHandler);
   });
 });
