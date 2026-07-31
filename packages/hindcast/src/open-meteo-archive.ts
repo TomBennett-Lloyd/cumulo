@@ -1,6 +1,7 @@
 import {
+  archiveWeatherReadingSchema,
   locationId,
-  weatherReadingSchema,
+  type ArchiveWeatherReading,
   type GeoCoordinates,
   type WeatherReading,
 } from '@cumulo/shared';
@@ -25,7 +26,8 @@ import type { UtcDay } from './archive-days';
  * count, while backfill's unit is a whole *day* that is either storable in full or
  * not storable at all. If one changed, the other would not be wrong
  * (`docs/standards/structure.md` rule 7). What is shared is shared where it
- * belongs: `weatherReadingSchema` and `locationId` in `@cumulo/shared`.
+ * belongs: `archiveWeatherReadingSchema` (the `kind`-narrowed half of
+ * `weatherReadingSchema`) and `locationId`, both in `@cumulo/shared`.
  *
  * Standalone functions over an explicit deps parameter, not a client object:
  * nothing here outlives a call, so each step is legible from its signature alone.
@@ -150,15 +152,6 @@ const hourlySchema = z
   );
 
 export const archiveResponseSchema = z.object({ hourly: hourlySchema });
-
-/**
- * `weatherReadingSchema` with the `kind` axis fixed: this module only ever
- * produces historical readings. Derived from the shared schema rather than
- * restated, so the domain definition stays in one place.
- */
-const archiveWeatherReadingSchema = weatherReadingSchema.extend({ kind: z.literal('archive') });
-
-export type ArchiveWeatherReading = WeatherReading & { kind: 'archive' };
 
 /** The reading fields that come from an hourly column, as opposed to from the request. */
 type HourlyReadingValues = Pick<

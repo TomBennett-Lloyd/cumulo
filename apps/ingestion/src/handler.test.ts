@@ -1,7 +1,6 @@
-import { fleetSiteSchema, locationId, weatherReadingSchema } from '@cumulo/shared';
-import type { FleetSite } from '@cumulo/shared';
+import { fleetSiteSchema, forecastWeatherReadingSchema, locationId } from '@cumulo/shared';
+import type { FleetSite, ForecastWeatherReading } from '@cumulo/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 
 import {
   cycleStartedEvent,
@@ -11,7 +10,6 @@ import {
 } from './cycle';
 import { SteppingClock, cycleStartMs, productionBudget } from './cycle-test-harness';
 import { createHandler, cycleSummaryEvent, jsonLineLog, CycleFailedError } from './handler';
-import type { ForecastWeatherReading } from './open-meteo/response';
 import type { ForecastLocation } from './open-meteo/url';
 
 /**
@@ -28,10 +26,8 @@ const edinburgh: ForecastLocation = { latitude: 55.95, longitude: -3.19 };
 
 const threeLocations: readonly ForecastLocation[] = [bristol, dublin, edinburgh];
 
-const forecastReadingSchema = weatherReadingSchema.extend({ kind: z.literal('forecast') });
-
 const readingAt = (location: ForecastLocation): ForecastWeatherReading =>
-  forecastReadingSchema.parse({
+  forecastWeatherReadingSchema.parse({
     latitude: location.latitude,
     longitude: location.longitude,
     validTime: '2026-07-31T00:00:00Z',

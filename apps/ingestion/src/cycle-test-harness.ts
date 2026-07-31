@@ -1,11 +1,9 @@
-import { fleetSiteSchema, locationId, weatherReadingSchema } from '@cumulo/shared';
-import type { FleetSite, WeatherReading } from '@cumulo/shared';
+import { fleetSiteSchema, forecastWeatherReadingSchema, locationId } from '@cumulo/shared';
+import type { FleetSite, ForecastWeatherReading, WeatherReading } from '@cumulo/shared';
 import type { SiteAdapter, WeatherAdapter } from '@cumulo/storage';
-import { z } from 'zod';
 
 import type { CycleBudget, RunCycleDeps } from './cycle';
 import { CYCLE_DEADLINE_MS, MAX_LOCATIONS_PER_CYCLE } from './cycle-budget';
-import type { ForecastWeatherReading } from './open-meteo/response';
 import type { ForecastLocation } from './open-meteo/url';
 import type { WeatherPublisher } from './publisher/weather-publisher';
 
@@ -81,12 +79,9 @@ export const fleetOf = (active: boolean): FleetSite[] =>
 export const activeFleet = fleetOf(true);
 export const inactiveFleet = fleetOf(false);
 
-/** `weatherReadingSchema` with the `kind` axis fixed, mirroring what the parser emits. */
-export const forecastReadingSchema = weatherReadingSchema.extend({ kind: z.literal('forecast') });
-
 export const readingsFor = (location: ForecastLocation): ForecastWeatherReading[] =>
   Array.from({ length: readingsPerLocation }, (_, hour) =>
-    forecastReadingSchema.parse({
+    forecastWeatherReadingSchema.parse({
       latitude: location.latitude,
       longitude: location.longitude,
       validTime: `2026-07-31T0${String(hour)}:00:00Z`,

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { weatherReadingSchema, type WeatherReading } from './weather-reading';
+import {
+  archiveWeatherReadingSchema,
+  forecastWeatherReadingSchema,
+  weatherReadingSchema,
+  type WeatherReading,
+} from './weather-reading';
 
 /**
  * A Dublin midsummer noon hour — plausible clear-ish sky values, everything but
@@ -113,5 +118,41 @@ describe('weatherReadingSchema', () => {
   it('rejects a reading with no kind — forecast and archive must never be conflated', () => {
     const result = weatherReadingSchema.safeParse(readingWithoutKind);
     expect(result.success).toBe(false);
+  });
+});
+
+/**
+ * The narrowed halves are what every producer and consumer of a single-`kind`
+ * reading is typed against, so what they must prove is that each still *excludes*
+ * the other kind — a narrowing that admitted both would compile everywhere and be
+ * caught by nothing — and that narrowing `kind` did not drop the base schema's
+ * bounds along with it.
+ */
+describe('the kind-narrowed weather reading schemas', () => {
+  it('parses a forecast reading as a forecast, and refuses an archive one', () => {
+    expect(forecastWeatherReadingSchema.safeParse(validReading).success).toBe(true);
+    expect(
+      forecastWeatherReadingSchema.safeParse({ ...readingWithoutKind, kind: 'archive' }).success,
+    ).toBe(false);
+  });
+
+  it('parses an archive reading as an archive, and refuses a forecast one', () => {
+    expect(
+      archiveWeatherReadingSchema.safeParse({ ...readingWithoutKind, kind: 'archive' }).success,
+    ).toBe(true);
+    expect(archiveWeatherReadingSchema.safeParse(validReading).success).toBe(false);
+  });
+
+  it('still enforces the base schema bounds it narrows', () => {
+    expect(
+      forecastWeatherReadingSchema.safeParse({ ...validReading, cloudCoverPct: 101 }).success,
+    ).toBe(false);
+    expect(
+      archiveWeatherReadingSchema.safeParse({
+        ...readingWithoutKind,
+        kind: 'archive',
+        cloudCoverPct: 101,
+      }).success,
+    ).toBe(false);
   });
 });
