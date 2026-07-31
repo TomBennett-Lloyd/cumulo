@@ -18,9 +18,14 @@
  * modelled as having an inverter sized to its array (v1 pins a DC/AC ratio of 1.0).
  *
  * Neither function clamps at zero, because pvlib does not: above roughly 275 °C the
- * temperature factor turns negative and DC power goes with it. That is far outside the
- * range any real weather input can produce (`weatherReadingSchema` caps irradiance and
- * air temperature), and inventing a clamp here would silently diverge from the fixtures.
+ * temperature factor turns negative and DC power goes with it. No *plausible* weather puts
+ * a cell there — but a schema-valid one can, so this is not an unreachable branch. A
+ * near-grazing sun on a vertical array aimed at it drives the Hay-Davies circumsolar term
+ * to ~57x DHI (`irradiance.ts`), and with the irradiance fields at their 1500 W/m² caps
+ * the resulting POA reaches ~95 200 W/m², putting the cell near 3870 °C and both DC and AC
+ * below zero. Clamping here would hide that input rather than reject it, and would also
+ * diverge from the fixtures; `createPhysicsForecast`'s final `forecastSchema.parse` is the
+ * layer that refuses to store such a number, and its doc comment carries the detail.
  */
 
 /** Operating point of the array for a single DC-power evaluation. */

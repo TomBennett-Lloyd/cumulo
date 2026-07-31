@@ -208,12 +208,27 @@ export const runPhysicsChain = (
  * `undefined` are different things. The omitted form is the honest one: it round-trips
  * through JSON and DynamoDB as "absent" rather than as a null nobody meant.
  *
- * The result is passed through `forecastSchema.parse` as a final invariant guard, and
- * the parse is deliberately not caught. Every bound it can violate — POA above
- * 2000 W/m², AC power above 50 kW or below zero — is unreachable from schema-valid
- * inputs, so a failure here is a bug in this package, and a bug should stop the cycle
- * loudly rather than persist a quietly wrong number (error-handling: fail fast on
- * programmer error, never swallow).
+ * The result is passed through `forecastSchema.parse` as a final invariant guard, and the
+ * parse is deliberately not caught: a violated bound means the chain produced a number
+ * nobody should store, and that must stop the cycle loudly rather than persist quietly
+ * (error-handling: fail fast, never swallow).
+ *
+ * Those bounds are **not** unreachable from schema-valid inputs, and this comment used to
+ * claim they were. The route is low-sun circumsolar amplification. Hay-Davies floors
+ * cos(zenith) in the projection ratio at 0.01745 (`irradiance.ts`, pvlib GH 432), so `Rb`
+ * tops out near 57; a near-grazing sun on a vertical array aimed straight at it therefore
+ * multiplies DHI by ~57 rather than diverging. Feed that geometry every irradiance field
+ * at its 1500 W/m² `weatherReadingSchema` cap and the chain returns POA ≈ 95 200 W/m², a
+ * cell at ≈ 3870 °C and — once the PVWatts temperature factor goes negative — DC and AC
+ * power around −5300 kW. Measured with a `siteSchema`-valid Dublin site (tilt 90, azimuth
+ * 89.47) and a `weatherReadingSchema`-valid reading at 2026-03-20T07:00:00Z, whose
+ * evaluation midpoint sits at apparent zenith 89.996°.
+ *
+ * So a throw here means "physically implausible input" as well as "bug in this package".
+ * Both still warrant failing fast at this layer; what neither this function nor its caller
+ * yet has is a policy for the first case — abort the cycle, or surface a typed expected
+ * failure (error-handling rule 1). That decision belongs to #13's forecast Lambda and
+ * #16's hindcast harness and is logged in `docs/tech-debt.md`, not settled here.
  */
 export const createPhysicsForecast = (input: CreatePhysicsForecastInput): Forecast => {
   const { site, weather, issuedAt, params } = input;

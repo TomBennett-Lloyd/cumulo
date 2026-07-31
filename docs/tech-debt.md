@@ -85,6 +85,12 @@ Entry format:
 - What: `is_merged` runs `git fetch origin main` in the main checkout, so a dry sweep issues one fetch per candidate — writing remote-tracking refs and objects, plus whatever `gc --auto` decides. The mutation is additive and cannot lose work, so the safety property holds, but the distinction matters: the comments now say "destroys nothing" rather than "read-only". Making the fetch conditional on non-dry-run (or hoisting one fetch per sweep) would both restore the stronger property and remove N-1 redundant network calls.
 - Source: #42
 
+## 2026-07-31 — `createPhysicsForecast` throws on boundary-accepted inputs, with no caller policy
+
+- Where: `packages/forecast/src/physics-forecast.ts` (`createPhysicsForecast`'s final `forecastSchema.parse`), `packages/forecast/src/irradiance.ts` (`MINIMUM_COS_ZENITH_FOR_PROJECTION_RATIO`)
+- What: the final parse is an uncaught throw, justified as a bug guard — but its bounds are reachable from inputs `siteSchema` and `weatherReadingSchema` both accept, so the throw is not exclusively a programmer-error signal. Route: Hay-Davies floors cos(zenith) at 0.01745 (pvlib GH 432), capping `Rb` near 57, so a near-grazing sun on a vertical array aimed at it amplifies DHI ~57x. Measured on a schema-valid Dublin site (tilt 90, azimuth 89.47) at 2026-03-20T07:00:00Z with every irradiance field at its 1500 W/m² cap: POA 95 241 W/m², cell 3870 °C, DC −5478 kW, AC −5259 kW — three separate `forecastSchema` bounds violated. Root cause is not the guard (fail-fast is right) but the missing decision one layer up: error-handling rule 1 splits expected failures (values) from bugs (exceptions), and an implausible-but-accepted weather hour is the former wearing the latter's clothes. #13's forecast Lambda and #16's hindcast need one policy between them — abort the cycle on a ZodError, or have the forecast package return a typed expected failure for out-of-range results so a single bad upstream hour cannot take down a fleet-wide run. Decision input for those tickets, not a change to this diff.
+- Source: #12 review cycle 1
+
 ## 2026-07-30 — Lifecycle tooling has an undeclared python3 dependency
 
 - Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)

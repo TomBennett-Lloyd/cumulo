@@ -1,6 +1,40 @@
 {
   "cases": [
     {
+      "description": "Anisotropy index above 1: DNI (1450) exceeds the early-January extraterrestrial normal irradiance, as noisy measured data can, so the Hay-Davies isotropic sky term is negative before clipping \u2014 pvlib clips each sky component at zero separately, and a port that clipped only their sum would agree everywhere else",
+      "expected": {
+        "acPowerKw": 4.0,
+        "aoiDeg": 2.86108014349,
+        "apparentZenithDeg": 22.6091670541,
+        "azimuthDeg": 176.762855265,
+        "cellTemperatureC": 59.9325792628,
+        "dcPowerKw": 5.47176599255,
+        "poaBeamWm2": 1448.19256561,
+        "poaGroundWm2": 8.80487736526,
+        "poaSkyDiffuseWm2": 133.133565073,
+        "poaTotalWm2": 1590.13100804
+      },
+      "id": "edge-anisotropy-above-one",
+      "params": {
+        "albedo": 0.2
+      },
+      "site": {
+        "azimuthDegrees": 180.0,
+        "capacityKw": 4.0,
+        "latitude": 0.0,
+        "longitude": 0.0,
+        "tiltDegrees": 20.0
+      },
+      "validTime": "2026-01-05T12:30:00Z",
+      "weather": {
+        "dhiWm2": 120.0,
+        "dniWm2": 1450.0,
+        "ghiWm2": 1460.0,
+        "temperature2mC": 25.0,
+        "windSpeed10mMs": 3.0
+      }
+    },
+    {
       "description": "Inverter clipping: DC x 0.96 exceeds nameplate, so AC is exactly capacityKw",
       "expected": {
         "acPowerKw": 2.0,
@@ -11222,8 +11256,8 @@
     }
   ],
   "provenance": {
-    "generatedAt": "2025-07-30T00:00:00Z",
-    "gitCommit": "59a0bc86651aee01e58f63fdf5f6826a4c429f04-dirty",
+    "generatedAt": "2026-07-31T00:35:36Z",
+    "gitCommit": "72dea9273aab906c8f83f63144d88b7ab8dc6a7f-dirty",
     "models": {
       "acPower": "min(dcKw * 0.96, capacityKw)",
       "aoi": "pvlib.irradiance.aoi(tiltDegrees, azimuthDegrees, apparent_zenith, azimuth)",
@@ -11240,6 +11274,6 @@
     "pandasVersion": "3.0.5",
     "pvlibVersion": "0.15.2",
     "pythonVersion": "3.14.6",
-    "scriptSha256": "260c8eeea75669ccb10acbb150249b53836b63186440be79a1945e93084a0d26"
+    "scriptSha256": "87cde641be3a918aea8a9800748c780fcd48b7d208410735941e632729558435"
   }
 }

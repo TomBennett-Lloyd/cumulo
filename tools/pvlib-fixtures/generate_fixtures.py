@@ -41,7 +41,11 @@ Usage::
 
     python3 -m venv .venv
     .venv/bin/pip install -r requirements.txt
-    SOURCE_DATE_EPOCH=1753833600 .venv/bin/python generate_fixtures.py
+    SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) .venv/bin/python generate_fixtures.py
+
+``SOURCE_DATE_EPOCH`` is taken from the commit being generated from, never
+hardcoded: a literal epoch outlives the plan that chose it and ends up claiming
+the fixtures were generated a year before the commit they record.
 
 See README.md in this directory.
 """
@@ -330,6 +334,23 @@ def edge_cases() -> list[CaseSpec]:
             temperature_2m_c=-2.0,
             albedo=0.8,
         ),
+        CaseSpec(
+            id="edge-anisotropy-above-one",
+            description=(
+                "Anisotropy index above 1: DNI (1450) exceeds the early-January "
+                "extraterrestrial normal irradiance, as noisy measured data can, so the "
+                "Hay-Davies isotropic sky term is negative before clipping — pvlib clips "
+                "each sky component at zero separately, and a port that clipped only "
+                "their sum would agree everywhere else"
+            ),
+            latitude=0.0,
+            longitude=0.0,
+            tilt_degrees=20.0,
+            azimuth_degrees=180.0,
+            valid_time="2026-01-05T12:30:00Z",
+            temperature_2m_c=25.0,
+            irradiance={"mode": "fixed", "ghi": 1460.0, "dni": 1450.0, "dhi": 120.0},
+        ),
     ]
 
     # Polar winter night: a whole day where the sun never rises. Exactly zero
@@ -391,6 +412,7 @@ REQUIRED_EDGE_IDS = frozenset(
         "edge-equator-equinox-noon",
         "edge-clipping",
         "edge-snow-albedo",
+        "edge-anisotropy-above-one",
         "edge-dst-h01",
         "edge-dst-h02",
         "edge-dst-h11",
@@ -543,7 +565,7 @@ def compute_case(spec: CaseSpec) -> dict[str, object]:
             "acPowerKw": round_output(ac_power_kw),
         },
     }
-    check_case(spec, case)
+    check_case(spec, case, dni_extra)
     return case
 
 
@@ -584,12 +606,15 @@ def weather_irradiance(spec: CaseSpec, apparent_zenith: float) -> tuple[float, f
     )
 
 
-def check_case(spec: CaseSpec, case: dict[str, object]) -> None:
+def check_case(spec: CaseSpec, case: dict[str, object], dni_extra: float) -> None:
     """Assert the properties each case exists to pin, before it reaches the file.
 
     A fixture that silently stopped exercising its edge — a clipping case that no
     longer clips, a snow case whose ground term is zero — is worse than a missing
     one, because it still looks like coverage.
+
+    ``dni_extra`` is passed in because one property — the Hay-Davies anisotropy
+    index — is a ratio against a quantity the fixture file does not record.
     """
     weather = case["weather"]
     expected = case["expected"]
@@ -657,6 +682,28 @@ def check_case(spec: CaseSpec, case: dict[str, object]) -> None:
             raise ValueError("edge-clipping: AC must be exactly capacityKw")
     if spec.id == "edge-snow-albedo" and expected["poaGroundWm2"] <= 0.0:
         raise ValueError("edge-snow-albedo: ground-reflected term must be positive")
+    if spec.id == "edge-anisotropy-above-one":
+        if weather["dniWm2"] <= dni_extra:
+            raise ValueError(
+                f"edge-anisotropy-above-one: DNI {weather['dniWm2']} does not exceed "
+                f"dni_extra {dni_extra}, so the anisotropy index is not above 1"
+            )
+        view_factor = 0.5 * (1.0 + math.cos(math.radians(spec.tilt_degrees)))
+        unclipped_isotropic = (
+            weather["dhiWm2"] * (1.0 - weather["dniWm2"] / dni_extra) * view_factor
+        )
+        if unclipped_isotropic >= 0.0:
+            raise ValueError(
+                "edge-anisotropy-above-one: the isotropic sky term is not negative before "
+                "clipping, so the per-component clip is not exercised"
+            )
+        if expected["poaSkyDiffuseWm2"] <= 0.0:
+            raise ValueError(
+                "edge-anisotropy-above-one: sky diffuse must stay positive — the "
+                "circumsolar term survives the clip that removes the isotropic one"
+            )
+        if expected["poaBeamWm2"] <= 0.0:
+            raise ValueError("edge-anisotropy-above-one: the sun must be in front of the panel")
 
 
 # --- Provenance and output --------------------------------------------------

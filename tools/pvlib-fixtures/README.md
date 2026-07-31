@@ -37,14 +37,14 @@ SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) .venv/bin/python generate_fixtures.
 `--only-binary=:all:` is deliberate: without it, pip falls back to building numpy/pandas
 from source, which takes many minutes and can produce a subtly different build.
 
-The generator writes 330 cases — a 288-case grid over site, season, hour and array
-geometry, plus the 42 edge cases ADR 0003 requires (polar low sun, midnight sun, a full
+The generator writes 331 cases — a 288-case grid over site, season, hour and array
+geometry, plus the 43 edge cases ADR 0003 requires (polar low sun, midnight sun, a full
 polar-winter night, ordinary night, twilight, sun behind the panel, sunrise/sunset
 boundaries, tilt 0 and vertical both ways, southern hemisphere with a north-facing array,
-equatorial equinox noon, inverter clipping, snow albedo, and a DST transition expressed in
-UTC). It asserts the property each edge case exists to pin — a clipping case that stops
-clipping, or a snow case whose ground term is zero, fails the run rather than quietly
-becoming decoration.
+equatorial equinox noon, inverter clipping, snow albedo, an anisotropy index above 1, and a
+DST transition expressed in UTC). It asserts the property each edge case exists to pin — a
+clipping case that stops clipping, or a snow case whose ground term is zero, fails the run
+rather than quietly becoming decoration.
 
 **Determinism.** Output is `json.dumps(..., indent=2, sort_keys=True)` plus a trailing
 newline, cases sorted by `id`, floats at 12 significant digits. Two runs with the same
@@ -52,9 +52,9 @@ newline, cases sorted by `id`, floats at 12 significant digits. Two runs with th
 regeneration diff shows only what actually moved:
 
 ```bash
-SOURCE_DATE_EPOCH=1753833600 .venv/bin/python generate_fixtures.py
+SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) .venv/bin/python generate_fixtures.py
 shasum ../../packages/forecast/fixtures/pvlib-golden.json
-SOURCE_DATE_EPOCH=1753833600 .venv/bin/python generate_fixtures.py
+SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) .venv/bin/python generate_fixtures.py
 shasum ../../packages/forecast/fixtures/pvlib-golden.json   # same hash
 ```
 

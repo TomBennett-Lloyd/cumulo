@@ -22,8 +22,12 @@ import { siteSchema, weatherReadingSchema, type Site, type WeatherReading } from
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-import { goldenFixtureFileSchema, type GoldenCase } from './golden-fixture';
-import { runPhysicsChain } from './physics-forecast';
+import {
+  goldenFixtureFileSchema,
+  type GoldenCase,
+  type GoldenCaseExpected,
+} from './golden-fixture';
+import { runPhysicsChain, type PhysicsChainResult } from './physics-forecast';
 
 /**
  * The fixtures are untyped external data until the schema says otherwise: read as text,
@@ -169,6 +173,9 @@ const REQUIRED_EDGE_CASE_IDS: readonly string[] = [
   'edge-equator-equinox-noon',
   'edge-clipping',
   'edge-snow-albedo',
+  // DNI above the extraterrestrial normal irradiance: the Hay-Davies isotropic term goes
+  // negative and must be clipped per component, not after summing with the circumsolar one.
+  'edge-anisotropy-above-one',
   'edge-dst-h01',
   'edge-dst-h02',
   'edge-dst-h11',
@@ -207,59 +214,104 @@ describe('the golden fixture set', () => {
   });
 });
 
+/**
+ * The whole per-case comparison: every intermediate the fixture records, each at its ADR
+ * 0003 tolerance.
+ *
+ * Factored out because two tests need it — the parametrised sweep below and the
+ * default-albedo test after it — and a second hand-copied assertion wall would be free to
+ * drift into checking less than the first one does.
+ */
+const expectChainMatchesFixture = (
+  chain: PhysicsChainResult,
+  expected: GoldenCaseExpected,
+): void => {
+  expectWithin(
+    chain.solar.apparentZenithDeg,
+    expected.apparentZenithDeg,
+    angleToleranceDeg,
+    'apparent zenith (deg)',
+  );
+  expectWithin(
+    angularDistanceDeg(chain.solar.azimuthDeg, expected.azimuthDeg),
+    0,
+    angleToleranceDeg,
+    `solar azimuth wrap-aware separation (deg, pvlib ${String(expected.azimuthDeg)}, port ${String(chain.solar.azimuthDeg)})`,
+  );
+  expectWithin(chain.aoiDeg, expected.aoiDeg, angleToleranceDeg, 'angle of incidence (deg)');
+
+  expectZeroOrWithin(chain.poa.beamWm2, expected.poaBeamWm2, poaTolerance, 'POA beam (W/m²)');
+  expectZeroOrWithin(
+    chain.poa.skyDiffuseWm2,
+    expected.poaSkyDiffuseWm2,
+    poaTolerance,
+    'POA sky diffuse (W/m²)',
+  );
+  expectZeroOrWithin(
+    chain.poa.groundWm2,
+    expected.poaGroundWm2,
+    poaTolerance,
+    'POA ground reflected (W/m²)',
+  );
+  expectZeroOrWithin(chain.poa.totalWm2, expected.poaTotalWm2, poaTolerance, 'POA total (W/m²)');
+
+  expectWithin(
+    chain.cellTemperatureC,
+    expected.cellTemperatureC,
+    cellTemperatureTolerance,
+    'cell temperature (°C)',
+  );
+
+  expectZeroOrWithin(chain.dcPowerKw, expected.dcPowerKw, powerTolerance, 'DC power (kW)');
+  expectZeroOrWithin(chain.acPowerKw, expected.acPowerKw, powerTolerance, 'AC power (kW)');
+};
+
 describe('runPhysicsChain against pvlib golden fixtures', () => {
   it.each(fixtures.cases)(
     'reproduces pvlib within ADR 0003 tolerances for $id',
     (goldenCase: GoldenCase) => {
-      const { expected } = goldenCase;
-
-      const chain = runPhysicsChain(siteForCase(goldenCase), weatherForCase(goldenCase), {
-        albedo: goldenCase.params.albedo,
-      });
-
-      expectWithin(
-        chain.solar.apparentZenithDeg,
-        expected.apparentZenithDeg,
-        angleToleranceDeg,
-        'apparent zenith (deg)',
+      expectChainMatchesFixture(
+        runPhysicsChain(siteForCase(goldenCase), weatherForCase(goldenCase), {
+          albedo: goldenCase.params.albedo,
+        }),
+        goldenCase.expected,
       );
-      expectWithin(
-        angularDistanceDeg(chain.solar.azimuthDeg, expected.azimuthDeg),
-        0,
-        angleToleranceDeg,
-        `solar azimuth wrap-aware separation (deg, pvlib ${String(expected.azimuthDeg)}, port ${String(chain.solar.azimuthDeg)})`,
-      );
-      expectWithin(chain.aoiDeg, expected.aoiDeg, angleToleranceDeg, 'angle of incidence (deg)');
-
-      expectZeroOrWithin(chain.poa.beamWm2, expected.poaBeamWm2, poaTolerance, 'POA beam (W/m²)');
-      expectZeroOrWithin(
-        chain.poa.skyDiffuseWm2,
-        expected.poaSkyDiffuseWm2,
-        poaTolerance,
-        'POA sky diffuse (W/m²)',
-      );
-      expectZeroOrWithin(
-        chain.poa.groundWm2,
-        expected.poaGroundWm2,
-        poaTolerance,
-        'POA ground reflected (W/m²)',
-      );
-      expectZeroOrWithin(
-        chain.poa.totalWm2,
-        expected.poaTotalWm2,
-        poaTolerance,
-        'POA total (W/m²)',
-      );
-
-      expectWithin(
-        chain.cellTemperatureC,
-        expected.cellTemperatureC,
-        cellTemperatureTolerance,
-        'cell temperature (°C)',
-      );
-
-      expectZeroOrWithin(chain.dcPowerKw, expected.dcPowerKw, powerTolerance, 'DC power (kW)');
-      expectZeroOrWithin(chain.acPowerKw, expected.acPowerKw, powerTolerance, 'AC power (kW)');
     },
   );
+});
+
+/**
+ * pvlib's own default ground reflectance, and the value `defaultPhysicsParams.albedo`
+ * pins. Written as a literal rather than imported from the module under test: importing it
+ * would make this a tautology that passes at whatever the default happens to become.
+ */
+const PVLIB_DEFAULT_ALBEDO = 0.2;
+
+/** A midday case with a substantial ground-reflected term, generated at that albedo. */
+const DEFAULT_ALBEDO_CASE_ID = 'grid-dublin-2026-06-21-1200z-tilt35-az180';
+
+describe('runPhysicsChain with no params argument', () => {
+  it('reproduces pvlib for a case generated at the default albedo, taking albedo from defaultPhysicsParams', () => {
+    // Every case in the sweep above injects `{ albedo }`, so the sweep proves the chain in
+    // a configuration nothing runs: `createPhysicsForecast` never passes params, and
+    // `defaultPhysicsParams.albedo` is what production actually uses. Before this test,
+    // changing that constant from 0.2 to 0.85 left the entire suite green — testing rule
+    // 7, the production default needs a test that runs it.
+    const goldenCase = fixtures.cases.find((entry) => entry.id === DEFAULT_ALBEDO_CASE_ID);
+
+    if (goldenCase === undefined) {
+      throw new Error(`the \`${DEFAULT_ALBEDO_CASE_ID}\` fixture case is missing`);
+    }
+
+    // A regeneration that moved this case off the default albedo, or onto a geometry with
+    // no ground-reflected term, would leave the comparison below true at any albedo. Both
+    // must fail loudly instead of quietly ceasing to test anything.
+    expect(goldenCase.params.albedo).toBe(PVLIB_DEFAULT_ALBEDO);
+    expect(goldenCase.expected.poaGroundWm2).toBeGreaterThan(poaTolerance.absolute);
+
+    expectChainMatchesFixture(
+      runPhysicsChain(siteForCase(goldenCase), weatherForCase(goldenCase)),
+      goldenCase.expected,
+    );
+  });
 });
