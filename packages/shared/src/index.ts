@@ -4,6 +4,8 @@ export { locationId, type GeoCoordinates } from './location';
 export {
   siteSchema,
   type Site,
+  createSiteInputSchema,
+  type CreateSiteInput,
   siteOriginSchema,
   type SiteOrigin,
   fleetSiteSchema,

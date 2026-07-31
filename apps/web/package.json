@@ -10,7 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cumulo/shared": "workspace:*",
     "@cumulo/ui": "workspace:*",
+    "maplibre-gl": "^6.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
