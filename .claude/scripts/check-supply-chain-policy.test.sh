@@ -441,6 +441,69 @@ done
 case_ctx=""
 end
 
+# A guarded key in YAML flow style has no indented lines to walk, so a reader built
+# around block style sees an empty block and reports zero opt-outs — exit 0, on the
+# one key the gate exists for. pnpm patches the existing YAML document rather than
+# rewriting it, so a manifest already in flow style keeps it and every entry pnpm
+# appends lands unread. These three cases exit 0 against the pre-fix script (#92
+# review cycle 1) and are the reason the refusal exists.
+begin "an inline flow sequence on a guarded key exits 2, not 0"
+must raw_fixture flow_sequence <<'EOF'
+packages:
+  - 'packages/*'
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeExclude: ['left-pad@1.3.0', 'right-pad@2.0.0']
+EOF
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "writes minimumReleaseAgeExclude as an inline collection"
+expect_out "Rewrite the block in indented (block) style"
+expect_not_out "all justified"
+end
+
+begin "an inline flow mapping on a guarded key exits 2, not 0"
+must raw_fixture flow_mapping <<'EOF'
+packages:
+  - 'packages/*'
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+allowBuilds: {esbuild: true, sharp: true}
+EOF
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "writes allowBuilds as an inline collection"
+expect_not_out "all justified"
+end
+
+# An empty flow collection is harmless in itself. It is refused anyway, so the rule
+# stays one sentence — a guarded key's entries live on indented lines beneath it —
+# rather than one sentence plus an exception nobody remembers.
+begin "an empty inline collection is refused too, deliberately"
+must raw_fixture flow_empty <<'EOF'
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeExclude: []
+EOF
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "inline collection"
+end
+
+# The mirror of the three above: an unguarded key is allowed to hold whatever it
+# likes, and a guarded key with nothing after the colon is the normal shape. A
+# refusal that fired on either would make the gate unusable.
+begin "an inline collection on an unguarded key is fine"
+must raw_fixture flow_unguarded <<'EOF'
+packages: ['apps/*', 'packages/*']
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+EOF
+run_check "$DIR"
+expect_rc 0 "$rc"
+expect_out "0 opt-out entr"
+end
+
 begin "a dedent inside a guarded block exits 2"
 must armed_fixture dedent <<'EOF'
 minimumReleaseAgeExclude:

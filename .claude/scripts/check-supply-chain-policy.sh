@@ -40,6 +40,17 @@
 # the census. If the key matching ever stopped matching, this gate goes red
 # ("missing setting") instead of green ("no violations found").
 #
+# SCOPE LIMIT, stated because it is not obvious from the OK line: this gate reads
+# the MANIFEST, and pnpm does not resolve these settings from the manifest alone.
+# A CLI flag, a `pnpm_config_*` environment variable and the global `config.yaml`
+# all outrank pnpm-workspace.yaml, so `pnpm_config_minimum_release_age_strict=false`
+# in a runner's environment disarms the quarantine with this gate still green.
+# What is checked here is that the repo's committed intent is right — not that the
+# process which ran pnpm honoured it. Closing that gap means asking pnpm for its
+# effective config at gate time, which is a dependency this script deliberately
+# does not have; the trade-off is recorded in docs/tech-debt.md rather than
+# decided here.
+#
 # No dependencies: bash (3.2, which macOS ships as /bin/bash) only. No YAML
 # library, no pnpm, no network.
 #
@@ -172,7 +183,30 @@ while IFS= read -r line || [ -n "$line" ]; do
     esac
 
     case "$GUARDED_BLOCKS" in
-      *" $key "*) block=$key ;;
+      *" $key "*)
+        # A guarded key with anything after the colon is holding an inline (flow)
+        # collection: `minimumReleaseAgeExclude: ['left-pad@1.3.0', …]`. There are
+        # no indented lines beneath it, so the block-shaped reader below walks an
+        # empty block and reports zero opt-outs — silent green on precisely the
+        # key this gate exists for. Not hypothetical: pnpm patches the existing
+        # YAML document rather than rewriting it, so a manifest already in flow
+        # style keeps it, and every entry pnpm then appends lands unread.
+        #
+        # An empty `[]` or `{}` would be harmless, and is refused anyway: "a
+        # guarded key's entries live on indented lines beneath it" is a rule worth
+        # more than the one manifest it inconveniences, and rewriting it in block
+        # style costs a line.
+        if [ -n "$value" ]; then
+          printf 'check-supply-chain-policy: %s:%d writes %s as an inline collection\n' \
+            "$MANIFEST_NAME" "$line_no" "$key" >&2
+          printf '  %s\n' "$trimmed" >&2
+          printf '\n  This gate reads opt-out entries from the indented lines beneath their key, so\n' >&2
+          printf '  it cannot see these — and a justification comment has nowhere to go either.\n' >&2
+          printf '  Rewrite the block in indented (block) style, one entry per line.\n' >&2
+          exit 2
+        fi
+        block=$key
+        ;;
       *) block="" ;;
     esac
     entry_indent=-1
