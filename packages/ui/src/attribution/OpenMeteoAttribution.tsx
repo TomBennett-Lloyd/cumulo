@@ -11,13 +11,11 @@ import type { ReactElement } from 'react';
  * Styling lives in `attribution.css`, reached through `@cumulo/ui/styles.css`;
  * it is deliberately not imported here so `tsc --noEmit` stays clean.
  */
-export function OpenMeteoAttribution(): ReactElement {
-  return (
-    <small className="cumulo-attribution">
-      Weather data by{' '}
-      <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
-        Open-Meteo.com
-      </a>
-    </small>
-  );
-}
+export const OpenMeteoAttribution = (): ReactElement => (
+  <small className="cumulo-attribution">
+    Weather data by{' '}
+    <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">
+      Open-Meteo.com
+    </a>
+  </small>
+);
