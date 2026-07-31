@@ -28,6 +28,18 @@ jobs:
       # package.json is the single place that list lives, and restating it would
       # re-create exactly the duplicate this step exists to remove.
       # Gate completeness beats step granularity.
+      #
+      # No `apt-get install shellcheck` step, even though the composite shells
+      # out to it: the runner image ships shellcheck. Verified against
+      # actions/runner-images, not assumed — images/ubuntu/Ubuntu2404-Readme.md
+      # (ubuntu-latest today) lists shellcheck 0.9.0-1, and Ubuntu2204-Readme.md
+      # lists 0.8.0-2, so this survives the next ubuntu-latest rollover too. If a
+      # future image drops it, the shell gate hard-fails with install
+      # instructions rather than passing by skipping.
+      # Open caveat, first checked on this PR's own CI run: local Homebrew is on
+      # 0.11.0, so the runner lints with an older shellcheck than a developer
+      # does. Newer versions add checks, which makes CI the more permissive of
+      # the two — the safe direction, but not a pinned one.
       - run: pnpm verify
 
   gitleaks:
