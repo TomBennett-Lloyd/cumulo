@@ -4,11 +4,11 @@ All AWS infrastructure lives here as Terraform. Nothing is created by hand in th
 
 A **stack** is one directory under `infra/`, applied independently, with its own state. There are three today:
 
-| Stack       | Directory          | Owns                                                                                                                                                     |
-| ----------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                            |
-| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                               |
-| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), and two alarms. |
+| Stack       | Directory          | Owns                                                                                                                                                                                               |
+| ----------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                                                                      |
+| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                                                                         |
+| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), two alarms, and the CI deploy grant for its own function. |
 
 `storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
 
@@ -69,11 +69,19 @@ Personal config tied to the account goes one step further and does not live on t
 
 That decision has a consequence worth stating plainly: `terraform output` prints values that embed the account id, and three of the five outputs contain it. Do not paste raw output into committed files, PR bodies, or issue comments — quote the shape (`arn:aws:iam::<account-id>:role/cumulo-github-actions`), not the digits.
 
-### 8. The GitHub Actions role starts with zero permissions
+### 8. The GitHub Actions role starts with zero permissions, and every grant it later holds lives in the stack that needed it
 
-`aws_iam_role.github_actions` has no inline policies and no managed policy attachments. This is not an oversight or a to-do: the smoke test that proves the role works — `aws sts get-caller-identity` — requires no permissions at all, so the entire OIDC path can be verified end to end before a single grant exists. Deploy permissions then arrive least-privilege with the service tickets that need them, scoped to the resources those services own (ADR 0001). A broad `PowerUserAccess` here would be quicker and would quietly undo that.
+`aws_iam_role.github_actions` is created with no inline policies and no managed policy attachments, and the bootstrap stack still attaches none. That was never a to-do: the smoke test that proves the role works — `aws sts get-caller-identity` — requires no permissions at all, so the entire OIDC path was verifiable end to end before a single grant existed. Deploy permissions then arrive least-privilege with the service tickets that need them, from those tickets' own stacks and scoped to the resources those services own (ADR 0001). A broad `PowerUserAccess` in `oidc.tf` would be quicker and would quietly undo that, and it would also mean a destroyed service left its deploy rights behind on a role that outlives it.
 
-The trust policy is the security boundary, and it is worth reading `oidc.tf` before changing: the `sub` condition is a two-value `StringEquals` allowlist — one `…:ref:refs/heads/main`, one `…:pull_request` — not a `:*` wildcard, so tags, other branch refs and future event contexts cannot assume the role at all. The `pull_request` entry is there only so `oidc-smoke` can run pre-merge against a role with no permissions; **the change that attaches the first permission to this role must delete that entry in the same PR**, because a pull_request-context run must never hold deploy permissions. Checking `aud` is necessary and nowhere near sufficient — every GitHub Actions token in the world carries `aud=sts.amazonaws.com`, so a trust policy that stops at the audience lets any repository on GitHub assume the role while still looking like it has a condition block that does something.
+The first grant landed with the ingestion stack (#11): `infra/ingestion/deploy.tf`, two actions — `lambda:UpdateFunctionCode` and `lambda:GetFunction` — on one function ARN. The consequence for a reader is worth stating plainly: **`oidc.tf` no longer tells you what this role can do, and it never will again.** The account is the only complete answer, and it is one command:
+
+```bash
+aws iam list-role-policies --role-name cumulo-github-actions
+```
+
+The trust policy is the security boundary, and it is worth reading `oidc.tf` before changing: the `sub` condition is a single-value `StringEquals` allowlist — `…:ref:refs/heads/main` — not a `:*` wildcard, so tags, other branch refs and every event context GitHub has or later adds cannot assume the role at all. It held a second value until #11: a PR-context subject, present only so `oidc-smoke` could run pre-merge against a role with no permissions. That entry was deleted by the same change that attached the first grant, as the rule then required, because a PR-context run is triggerable by any fork author and must never hold deploy permissions. **The rule outlives its first application** — nothing an unmerged contributor controls goes back into that list. What it cost is pre-merge OIDC verification, and the recovery, if that coverage is ever wanted again, is a second, permanently permissionless role trusted for the PR context alone; see the header comment in `.github/workflows/oidc-smoke.yml`, which now runs on `main` pushes and `workflow_dispatch` for exactly this reason.
+
+Checking `aud` is necessary and nowhere near sufficient — every GitHub Actions token in the world carries `aud=sts.amazonaws.com`, so a trust policy that stops at the audience lets any repository on GitHub assume the role while still looking like it has a condition block that does something.
 
 The prefix in front of those two claims is GitHub's **immutable subject**, `repo:<owner>@<owner-id>/<repo>@<repo-id>`, and it is the part worth getting right. Almost every GitHub-OIDC tutorial shows the name-based form `repo:<owner>/<repo>:…`; current GitHub does not issue that, so a policy written from those examples matches nothing and every assume fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity` — a failure that reads like a missing permission and is actually a string mismatch. Embedding the ids is also the stricter choice, not merely the working one: GitHub names are reassignable, so a name-based policy would keep trusting whoever registered the org or repo name this project released, while numeric ids are never reissued.
 
@@ -219,7 +227,7 @@ terraform plan -no-color | tee ~/cumulo-bootstrap-plan.txt
 
 Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, and the AWS Budgets cost-ceiling budget. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
 
-**A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for review. The `oidc-smoke` check will be red on the PR until Phase B publishes the repo variables; that is expected, and the workflow's preflight step says so on the run itself.
+**A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for review. `oidc-smoke` does not run on the PR at all — it has not been a pre-merge check since #11 (convention 8) — so there is no red check to explain here; B7 runs it by hand once the variables exist.
 
 ### Phase B — apply, migrate, publish
 
@@ -285,11 +293,7 @@ gh workflow run oidc-smoke.yml --repo TomBennett-Lloyd/cumulo
 gh run list --workflow oidc-smoke.yml --repo TomBennett-Lloyd/cumulo --limit 1
 ```
 
-Then re-run the PR's previously-red `oidc-smoke` check, which should now pass:
-
-```bash
-gh pr checks --repo TomBennett-Lloyd/cumulo
-```
+`workflow_dispatch` is the whole of the manual path, and since #11 it is also the only way to run this check other than merging an `infra/**` change to `main`. So run it here rather than assuming a PR check covered it.
 
 The evidence is the `aws sts get-caller-identity` output in the run log: an account, and a caller ARN of the form `arn:aws:sts::<account-id>:assumed-role/cumulo-github-actions/cumulo-oidc-smoke-<run-id>`. Confirm the account matches the one from `terraform output -raw aws_account_id`.
 
@@ -403,7 +407,7 @@ The ~$100/month ceiling in [CLAUDE.md](../CLAUDE.md) was a convention until `aws
 
 It sits in this stack rather than a sibling one because of convention 1. A stack is a lifecycle unit, and this alarm's lifecycle is exactly bootstrap's: it has to exist from the first spin-up until the final decommission, and it has to be the last thing still watching while anything else in the account is billable. A sibling stack would either be torn down before bootstrap — leaving the alarm dead while resources were still spending — or need a new cross-stack ordering rule to prevent that. It is account-level and more than one service will rely on it, so [ADR 0001](../docs/adr/0001-service-boundaries.md) makes it platform-owned.
 
-That does not dilute convention 8. Bootstrap's "deliberately minimal" property is about _deploy permissions_ and app resources, and this budget is notification-only: no budget action, no SNS topic, no IAM grant of any kind. The GitHub Actions role still has zero permissions, the `pull_request` entry in its trust policy is untouched, and CI still never touches AWS. Budget _actions_ — auto-attaching a deny policy at 100% — would change all three of those and start the $0.10/day meter; they are a separate decision, not an increment of this one.
+That does not dilute convention 8. Bootstrap's "deliberately minimal" property is about _deploy permissions_ and app resources, and this budget is notification-only: no budget action, no SNS topic, no IAM grant of any kind. It added nothing to the GitHub Actions role, it did not touch the trust policy, and CI still never touches AWS to plan or validate. Budget _actions_ — auto-attaching a deny policy at 100% — would change all three of those and start the $0.10/day meter; they are a separate decision, not an increment of this one. (The role's zero-permission state ended later and for an unrelated reason — #11's deploy grant, from the ingestion stack — which is convention 8's subject, not this budget's.)
 
 Email subscribers are attached to the budget directly rather than through SNS. Budget notifications need no subscription confirmation, whereas an SNS email subscription requires a human to click a link and, until they do, cannot be deleted for three days — a teardown that blocks for three days is not a teardown.
 
@@ -547,15 +551,17 @@ Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the 
 
 ## Runbook: the ingestion stack
 
-One Lambda, one hourly EventBridge rule, one SQS queue with its dead-letter queue, one log group, one execution role, and two alarms — the whole of [issue #11](https://github.com/TomBennett-Lloyd/cumulo/issues/11)'s infrastructure, per [ADR 0004](../docs/adr/0004-ingestion-transport.md). Every command runs from `infra/ingestion/`:
+One Lambda, one hourly EventBridge rule, one SQS queue with its dead-letter queue, one log group, one execution role, two alarms, and one deploy grant on the shared GitHub Actions role — the whole of [issue #11](https://github.com/TomBennett-Lloyd/cumulo/issues/11)'s infrastructure, per [ADR 0004](../docs/adr/0004-ingestion-transport.md). Every command runs from `infra/ingestion/`:
 
 ```bash
 cd infra/ingestion
 ```
 
+> **Applying this stack for the first time since #11 merged? Re-apply `bootstrap` first.** #11 changed two stacks at once, and the order is not optional. `infra/bootstrap/oidc.tf` lost the PR-context subject from its trust policy (convention 8) and `infra/ingestion/deploy.tf` gained the inline policy that forced that deletion. Apply bootstrap first, then this stack: applying ingestion first would attach a deploy permission to a role that a fork PR author can still assume, which is precisely the window the trust-policy change closes. Bootstrap's re-apply is small — `Plan: 0 to add, 1 to change, 0 to destroy`, the role's `assume_role_policy` — and needs no override dance, because bootstrap's state is already remote by this point.
+
 **Prerequisites**, in this order and for these reasons:
 
-1. **The bootstrap stack applied** — this stack's state lives in the bucket bootstrap creates.
+1. **The bootstrap stack applied** — this stack's state lives in the bucket bootstrap creates, and since #11 this stack also attaches an inline policy to the role bootstrap owns, so `data.aws_iam_role.github_actions` fails at plan time if bootstrap has not run.
 2. **The storage stack applied**, with the same `environment` and in the same region. Not a Terraform dependency: nothing here references storage's state or outputs, and a plan succeeds without it. It is a _runtime_ prerequisite — the IAM policy grants access to `cumulo-sites-<env>` and `cumulo-weather-<env>` by name, so applying against absent tables produces a stack that plans, applies, and then fails its first cycle in CloudWatch.
 3. **An operator credential session** — see [Operator prerequisites](#operator-prerequisites).
 4. **A built Lambda artefact**, which is the one prerequisite the other two runbooks do not have.
@@ -610,7 +616,7 @@ terraform init -backend-config=backend.hcl
 terraform plan -no-color | tee ~/cumulo-ingestion-plan.txt
 ```
 
-Expect **`Plan: 11 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the Lambda permission, the execution role, its inline policy, and the two alarms. Any other count means the configuration is not what this document describes; stop and find out why. The three data sources (`aws_caller_identity` and the two IAM policy documents) are read rather than created and add nothing to the count.
+Expect **`Plan: 12 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
 
 **A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, queue-name shape, the timeout numbers — and label it `awaiting-review`. Per convention 7, quote shapes rather than digits.
 
@@ -627,7 +633,14 @@ terraform apply
 **B2. Confirm what exists.**
 
 ```bash
-terraform state list   # expect 14 lines — the 11 resources plus the 3 data sources
+terraform state list   # expect 17 lines — the 12 resources plus the 5 data sources
+```
+
+The deploy grant is the one resource in this stack that lives on something another stack owns, so confirm it landed where it was meant to rather than trusting the count:
+
+```bash
+aws iam list-role-policies --role-name cumulo-github-actions
+# expect: cumulo-ingestion-deploy-<env>
 ```
 
 **B3. Capture the two identifiers other things need.** Both come from `terraform output`, never hand-assembled and never retyped: a queue URL is **server-assigned**, and a URL guessed from an account id and a queue name is how a configuration ends up pointing at a queue that does not exist.
@@ -687,7 +700,28 @@ terraform plan -detailed-exitcode
 echo $?   # expect 0
 ```
 
-A `2` here immediately after an apply usually means the artefact was rebuilt in between — `source_code_hash` changed, so Terraform correctly wants to deploy it.
+A `2` here immediately after an apply usually means the artefact was rebuilt in between — `source_code_hash` changed, so Terraform correctly wants to deploy it. Away from an apply, the ordinary cause is the deploy workflow below, and that `2` is expected rather than drift; the next section says why.
+
+### The deploy path: what CI ships and what Terraform owns
+
+`.github/workflows/deploy-ingestion.yml` updates the function's **code** on every push to `main` that touches `apps/ingestion/**`, `packages/shared/**`, `packages/storage/**`, or the lockfile. It does nothing else, and it cannot: `deploy.tf` grants `cumulo-github-actions` exactly `lambda:UpdateFunctionCode` and `lambda:GetFunction` on this one function ARN. There is no `UpdateFunctionConfiguration` in that grant, so timeout, memory, environment variables, execution role, schedule, queue and alarms remain things only a reviewed `.tf` change can move.
+
+Authentication is OIDC and there is no AWS secret in the repository, per the rule at the top of this document. The role is assumed with a session named `deploy-ingestion-<run-id>`, so CloudTrail traces an `UpdateFunctionCode` back to the run — and therefore the commit — that made it.
+
+**The drift this creates is real, expected, and bounded.** Terraform's `source_code_hash` records the artefact of the last _apply_. After CI deploys, the live code no longer matches it, and `terraform plan` reports a pending change to `aws_lambda_function.ingestion`. That is Terraform being right about a fact it was not told, not a fault:
+
+- **Applying it is safe.** It re-uploads the artefact built from your working tree. Build first (Phase A1) or you will ship a stale bundle — the precondition stops an absent one, not an old one.
+- **Not applying it is also safe.** The function keeps running CI's code. Nothing else in the plan is affected, because no other attribute depends on the artefact.
+- **What is _not_ safe is treating a non-empty plan here as noise.** B7's `-detailed-exitcode` check is only meaningful if you know which change you are expecting to see, so read the plan rather than the exit code once CI has deployed at least once.
+
+To check what is actually running, without an apply:
+
+```bash
+aws lambda get-function --function-name "$(terraform output -raw function_name)" \
+  --query 'Configuration.{Sha:CodeSha256,Modified:LastModified}'
+```
+
+Compare `Sha` with the `Sha` the deploy run printed. They match, or CI did not ship what you think it did.
 
 ### Teardown
 
@@ -706,9 +740,14 @@ aws sqs list-queues --queue-name-prefix cumulo-weather-readings --query 'QueueUr
 # expect: null
 aws logs describe-log-groups --log-group-name-prefix /aws/lambda/cumulo-ingestion --query 'logGroups[].logGroupName'
 # expect: []
+
+aws iam list-role-policies --role-name cumulo-github-actions
+# expect: no cumulo-ingestion-deploy-<env> entry — the role survives, its ingestion grant does not
 ```
 
-That last one is the one worth actually running. Lambda creates its own never-expiring log group on first invocation if Terraform has not declared one, and a group created that way is outside Terraform's ownership — so it survives `destroy` and bills for storage indefinitely. `lambda.tf` declares the group explicitly and the execution role has no `logs:CreateLogGroup`, which is what makes an empty list here a property of the design rather than luck.
+That last one is the reason the deploy grant lives in this stack rather than in `bootstrap` (ADR 0001). A destroyed service must not leave a live deploy permission behind on a role that outlives it, and this command is the check that it did not.
+
+The log-group one is the other one worth actually running. Lambda creates its own never-expiring log group on first invocation if Terraform has not declared one, and a group created that way is outside Terraform's ownership — so it survives `destroy` and bills for storage indefinitely. `lambda.tf` declares the group explicitly and the execution role has no `logs:CreateLogGroup`, which is what makes an empty list here a property of the design rather than luck.
 
 Keep `backend.hcl` and `ingestion.auto.tfvars` — both are still correct for the next spin-up. To spin back up, run [Phase A](#phase-a--build-configure-and-plan) then [Phase B](#phase-b--apply-and-prove-the-cycle) back to back, starting from the build.
 
