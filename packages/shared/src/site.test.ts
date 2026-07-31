@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { fleetSiteSchema, siteOriginSchema, siteSchema, type Site } from './site';
+import {
+  createSiteInputSchema,
+  fleetSiteSchema,
+  siteOriginSchema,
+  siteSchema,
+  type Site,
+} from './site';
 
 const validSite = {
   id: 'e7b8f8a0-3c2d-4e5f-9a1b-2c3d4e5f6a7b',
@@ -11,6 +17,10 @@ const validSite = {
   azimuthDegrees: 180,
   capacityKw: 4.2,
 };
+
+/** Fixture builder: the same site minus one field, for the required-field tests. */
+const withoutField = (site: Record<string, unknown>, field: string): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(site).filter(([name]) => name !== field));
 
 /** The site's numeric fields — every field carrying a range bound. */
 type NumericField = {
@@ -105,16 +115,52 @@ describe('siteSchema', () => {
   });
 });
 
+const validCreateSiteInput = withoutField(validSite, 'id');
+
+describe('createSiteInputSchema', () => {
+  it('accepts a proposed site with no id — the id is the server’s to assign', () => {
+    const result = createSiteInputSchema.safeParse(validCreateSiteInput);
+
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * The contract is that a caller-supplied `id` cannot become the site's id.
+   * `.omit()` enforces that by *stripping* the key rather than failing the
+   * parse, so this asserts on the parsed output: a request carrying an id — a
+   * client trying to predict or overwrite one — yields a value with no id in
+   * it, and the handler has nothing to accidentally trust.
+   */
+  it('never carries a caller-supplied id through, so a client cannot pick its own', () => {
+    const result = createSiteInputSchema.safeParse(validSite);
+
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('id');
+    expect(result.data && Object.keys(result.data).sort()).toEqual([
+      'azimuthDegrees',
+      'capacityKw',
+      'latitude',
+      'longitude',
+      'name',
+      'tiltDegrees',
+    ]);
+  });
+
+  // Derived with `.omit`, not redeclared: the bounds must be the same ones
+  // `siteSchema` declares, so a bound that drifts here fails here.
+  it.each(outOfRangeCases)('inherits the %s bound and rejects %s — %s', (field, value) => {
+    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
+
+    expect(result.success).toBe(false);
+  });
+});
+
 const validFleetSite = {
   ...validSite,
   origin: 'seed',
   createdAt: '2026-07-30T14:00:00Z',
   active: true,
 };
-
-/** Fixture builder: the same fleet site minus one field, for the required-field tests. */
-const withoutField = (site: Record<string, unknown>, field: string): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(site).filter(([name]) => name !== field));
 
 describe('siteOriginSchema', () => {
   it.each(['seed', 'user'])('accepts origin %s', (origin) => {
