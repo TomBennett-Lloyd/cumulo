@@ -12,7 +12,7 @@
     "lint:sh": "bash .claude/scripts/lint-shell.sh",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
-    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh && bash .claude/scripts/check-adr-index.test.sh && bash .claude/scripts/lint-shell.test.sh && bash .claude/scripts/check-module-names.test.sh",
+    "test:scripts": "bash .claude/scripts/run-script-tests.sh",
     "check:adr-index": "bash .claude/scripts/check-adr-index.sh",
     "check:module-names": "bash .claude/scripts/check-module-names.sh",
     "format": "prettier --write .",
