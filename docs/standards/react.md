@@ -26,7 +26,7 @@
 
 4. **Components are presentational by default.** Data fetching and domain logic live in hooks/modules; a component that's hard to render in isolation (Storybook-style) is structured wrong.
 
-5. **Design tokens only.** No arbitrary colors, sizes, or spacing in components — everything comes from the design system (gated ticket; see CLAUDE.md). If a token is missing, that's a design-system issue, not a license to hardcode.
+5. **Design tokens only — lint-enforced, not a convention.** `no-restricted-syntax` in `eslint.config.mjs` and `stylelint.config.mjs` are the rule; read them for the exact scope rather than trusting a paraphrase here. Both run under `pnpm lint`, `packages/ui/src/tokens/tokens.css` is the one exempt file, and disable comments are themselves errors in both linters. So: if a token is missing, the lint error _is_ the design signal — raise it as a design-system issue rather than reaching for a literal.
 
 ## Why
 

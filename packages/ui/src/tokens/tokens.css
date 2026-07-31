@@ -1,0 +1,137 @@
+/*
+ * Cumulo design tokens — direction B "Meridian" (approved on issue #15).
+ *
+ * This file is the ONLY place in the repo where raw colour, size and spacing
+ * values are allowed to exist. Everything else — components, apps, docs —
+ * references these custom properties by name (see CLAUDE.md, frontend gate).
+ *
+ * Colour selection followed the bundled `dataviz` skill. The categorical slots
+ * are the skill's fixed hue order (blue, orange, aqua, yellow, magenta, green)
+ * and both modes were validated independently with the skill's
+ * `scripts/validate_palette.js` against this file's own surfaces — dark is a
+ * selected palette, never an automatic flip of light.
+ *
+ *   light: --pairs adjacent, surface #fbfcfd → ALL CHECKS PASS
+ *          (contrast WARN on #1baf7a / #eda100 / #e87ba4 → relief rule:
+ *           direct labels or the table view, never colour alone)
+ *   dark:  --pairs adjacent, surface #16181a → ALL CHECKS PASS
+ *   map marker triad (slots 1–3) additionally validated with --pairs all in
+ *   both modes, because default/hover/selected markers are on screen together.
+ */
+
+:root {
+  /* ── Base surfaces & ink (cool quiet neutrals) ───────────────────────── */
+  --color-bg: #eef2f6;
+  --color-surface: #fbfcfd;
+  --color-text: #0f1419;
+  --color-text-muted: #58626d;
+  --color-border: #dbe2e9;
+  --color-accent: #2a78d6;
+  --color-accent-contrast: #ffffff;
+
+  /* Status steps are fixed by the dataviz skill and mode-invariant; they ship
+     with an icon + label so colour never carries the state alone. */
+  --color-danger: #d03b3b;
+  --color-warning: #fab219;
+  --color-success: #0ca30c;
+
+  /* ── Chart ───────────────────────────────────────────────────────────── */
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+  --color-chart-3: #1baf7a;
+  --color-chart-4: #eda100;
+  --color-chart-5: #e87ba4;
+  --color-chart-6: #008300;
+
+  /* Actuals read as near-ink so the measured series never competes with the
+     forecast hue (direction B). */
+  --color-chart-actuals: #0f1419;
+
+  /* Uncertainty band: slot-1 hue as a ~10% wash per the skill's area-fill
+     spec, with a stronger same-hue edge so the P10/P90 bounds stay readable
+     while staying recessive against the median line. */
+  --color-chart-band-fill: rgba(42, 120, 214, 0.1);
+  --color-chart-band-stroke: rgba(42, 120, 214, 0.35);
+
+  --color-chart-grid: #e3e9ef;
+  --color-chart-axis-label: #6b7683;
+
+  /* ── Map markers ─────────────────────────────────────────────────────── */
+  /* Slots 1–3: default blue, selected takes the warm slot-2 pop (best light
+     contrast of the three), hover takes slot 3. Stroke is the surface colour —
+     the skill's 2px surface ring, so overlapping markers stay legible. */
+  --color-map-marker: #2a78d6;
+  --color-map-marker-hover: #1baf7a;
+  --color-map-marker-selected: #eb6834;
+  --color-map-marker-stroke: #fbfcfd;
+
+  /* ── Spacing (0.25rem grid) ──────────────────────────────────────────── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* ── Radii ───────────────────────────────────────────────────────────── */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-full: 9999px;
+}
+
+/*
+ * Dark mode. Every --color-* token above is re-declared here; tokens.test.ts
+ * fails the build if either block gains or loses one. Non-colour tokens
+ * (spacing, type, radii) are deliberately mode-invariant.
+ */
+[data-theme='dark'] {
+  --color-bg: #0d0f10;
+  --color-surface: #16181a;
+  --color-text: #eef2f6;
+  --color-text-muted: #9aa5b1;
+  --color-border: #2a2f34;
+  --color-accent: #3987e5;
+  --color-accent-contrast: #0d0f10;
+
+  --color-danger: #d03b3b;
+  --color-warning: #fab219;
+  --color-success: #0ca30c;
+
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #199e70;
+  --color-chart-4: #c98500;
+  --color-chart-5: #d55181;
+  --color-chart-6: #008300;
+
+  --color-chart-actuals: #eef2f6;
+
+  --color-chart-band-fill: rgba(57, 135, 229, 0.1);
+  --color-chart-band-stroke: rgba(57, 135, 229, 0.35);
+
+  --color-chart-grid: #262b30;
+  --color-chart-axis-label: #8d97a3;
+
+  --color-map-marker: #3987e5;
+  --color-map-marker-hover: #199e70;
+  --color-map-marker-selected: #d95926;
+  --color-map-marker-stroke: #16181a;
+}
