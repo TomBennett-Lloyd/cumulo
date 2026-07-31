@@ -15,8 +15,25 @@ export {
 export { generationReadingSchema, type GenerationReading } from './generation-reading';
 export { locationId, type GeoCoordinates } from './location';
 export {
+  baselineSchema,
+  type Baseline,
+  PERSISTENCE_24H,
+  errorMetricsSchema,
+  type ErrorMetrics,
+  type TimedPowerPoint,
+  type AlignedPair,
+  alignByValidTime,
+  meanAbsoluteErrorKw,
+  rootMeanSquareErrorKw,
+  type SkillScoreInput,
+  skillScore,
+  persistenceBaselineSeries,
+} from './metrics';
+export {
   siteSchema,
   type Site,
+  createSiteInputSchema,
+  type CreateSiteInput,
   siteOriginSchema,
   type SiteOrigin,
   fleetSiteSchema,
