@@ -1,13 +1,38 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import type { MapMouseEvent } from 'maplibre-gl';
-import { MapLibreMap } from 'maplibre-gl';
+import { MapLibreMap, setWorkerUrl } from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import type { ReactElement, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { Theme } from '../theme';
 import { basemapStyleUrl } from './basemap';
 import { MapAttributionStrip } from './MapAttributionStrip';
 import { MapContext } from './MapContext';
+
+/*
+ * Tell maplibre where its worker is, once, before any map exists.
+ *
+ * Left alone, maplibre v6 derives the worker URL from its own `import.meta.url`
+ * — `new URL('./maplibre-gl-worker.mjs', <this module's url>)`. That address is
+ * a lie under any bundler: in dev the library is pre-bundled into
+ * `node_modules/.vite/deps/`, where no worker file is ever emitted, so the
+ * request hangs, the worker never starts, and the map paints a black rectangle
+ * with not one tile request issued. Vite's own error text suggests
+ * `optimizeDeps.exclude`, which silences dev and leaves `vite build` shipping
+ * the same dead map — the derived URL is dynamic, so rollup cannot emit the
+ * file there either.
+ *
+ * So this is maplibre's documented per-bundler fix rather than a workaround.
+ * `?worker&url` and not `?url`: the dist worker imports its sibling
+ * `maplibre-gl-shared.mjs`, and `?url` would emit the worker verbatim without
+ * it, failing on its first import in production only. `?worker&url` routes it
+ * through Vite's worker pipeline, which emits a self-contained chunk.
+ *
+ * `map-worker-contract.test.ts` is the ratchet: nothing else in CI can see a
+ * missing worker, because the failure only exists in a browser.
+ */
+setWorkerUrl(workerUrl);
 
 /** A position on the map, named in the domain's vocabulary rather than GL's. */
 export interface MapPosition {
