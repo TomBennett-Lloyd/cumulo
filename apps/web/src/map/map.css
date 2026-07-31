@@ -4,8 +4,11 @@
  * Tokens only, like every stylesheet outside `packages/ui/src/tokens` — the
  * gate in stylelint.config.mjs is what enforces it, and a missing token is a
  * design-system signal rather than a licence to write a literal (react.md
- * rule 5). Marker and cluster rules are deliberately absent: they arrive with
- * the clustering work and belong in their own section of this file.
+ * rule 5).
+ *
+ * `map-css-contract.test.ts` reads this file and asserts the two rules that a
+ * screenshot would not catch: that a marker's *hit* area is bigger than its
+ * painted mark, and that nothing here fades a marker to cope with crowding.
  */
 
 /* The map is a column — tiles above, credits below — rather than a strip
@@ -52,4 +55,158 @@
 
 .map-attribution-tiles a {
   color: var(--color-accent);
+}
+
+/* ── Site markers ────────────────────────────────────────────────────────────
+ *
+ * `docs/design/map-treatment.md` made concrete. Three things are worth reading
+ * slowly, because each looks like a styling choice and is actually a rule:
+ *
+ * 1. The button is the *hit target* and the `::before` circle is the *mark*.
+ *    A `--space-3` circle is a 12px target — comfortable to look at, hostile to
+ *    click — so the button holds a `--space-6` minimum and paints nothing
+ *    itself. Every painted state is smaller than the area that responds to it.
+ * 2. No state is carried by hue alone. Hover and selection each change the
+ *    diameter as well as the fill, hover and focus both name the site in a
+ *    tooltip, and the site list beside the map is the table view of the same
+ *    states — the relief the light palette's contrast warning on slot 3
+ *    requires.
+ * 3. Crowding is answered by clustering, never by fading: there is deliberately
+ *    no `opacity` anywhere below. On this platform a faded mark reads as an
+ *    uncertain one, which means something specific and different.
+ *
+ * The class names are `map-site-*` rather than the `map-marker` the treatment's
+ * prose uses, because `preview.css` already owns `.map-marker` for the static
+ * marker specimens on the token page and both stylesheets are global.
+ *
+ * Focus keeps the platform outline (no `outline: none` here, ever): the
+ * selected fill is the *extra* focus signal, not a replacement for the ring the
+ * browser draws. A token-driven ring is issue #93; until it exists the user
+ * agent's own is the honest default.
+ */
+
+.map-site-marker {
+  position: relative;
+  display: flex;
+  min-width: var(--space-6);
+  min-height: var(--space-6);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The mark itself: one flat fill, one ring, no shadow. The ring is the spacer
+ * that keeps two overlapping markers legible as two markers. */
+.map-site-marker::before {
+  display: block;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 2);
+  border-color: var(--color-map-marker-stroke);
+  border-radius: var(--radius-full);
+  background: var(--color-map-marker);
+  content: '';
+}
+
+.map-site-marker:hover::before {
+  width: var(--space-4);
+  height: var(--space-4);
+  background: var(--color-map-marker-hover);
+}
+
+/* Keyboard focus takes the selected treatment: everything reachable by pointer
+ * is reachable, and as visible, without one. */
+.map-site-marker-selected::before,
+.map-site-marker:focus-visible::before {
+  width: var(--space-4);
+  height: var(--space-4);
+  border-width: var(--space-1);
+  background: var(--color-map-marker-selected);
+}
+
+/* Shown on hover *and* focus — a pointer-only tooltip would leave the keyboard
+ * reader with hue alone. `display` and not opacity, for the reason above. */
+.map-site-marker-tooltip {
+  position: absolute;
+  bottom: 100%;
+  display: none;
+  margin-bottom: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.map-site-marker:hover .map-site-marker-tooltip,
+.map-site-marker:focus-visible .map-site-marker-tooltip {
+  display: block;
+}
+
+/* ── Cluster bubbles ─────────────────────────────────────────────────────────
+ *
+ * Size steps across three bands and never scales with the count: circle areas
+ * are something people compare badly, so the number inside the bubble is the
+ * precise channel and the diameter is only a coarse "more than that one".
+ * The smallest band is already `--space-6`, so the bubble is its own hit
+ * target; the minimums below say so rather than leaving it to arithmetic.
+ */
+
+.map-cluster-marker {
+  display: flex;
+  min-width: var(--space-6);
+  min-height: var(--space-6);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-style: solid;
+  border-width: calc(var(--space-1) / 2);
+  border-color: var(--color-map-marker-stroke);
+  border-radius: var(--radius-full);
+  background: var(--color-map-marker);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.map-cluster-marker-small {
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
+.map-cluster-marker-medium {
+  width: var(--space-8);
+  height: var(--space-8);
+}
+
+.map-cluster-marker-large {
+  width: var(--space-12);
+  height: var(--space-12);
+}
+
+.map-cluster-marker:hover {
+  background: var(--color-map-marker-hover);
+}
+
+/* A cluster holding the selected site wears the selection. Zooming out is how a
+ * reader gets context on the thing they just selected; losing it at exactly
+ * that moment is the worst possible time. */
+.map-cluster-marker-selected,
+.map-cluster-marker:focus-visible {
+  border-width: var(--space-1);
+  background: var(--color-map-marker-selected);
 }
