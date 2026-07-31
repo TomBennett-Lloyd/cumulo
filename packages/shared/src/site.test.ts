@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { fleetSiteSchema, siteOriginSchema, siteSchema, type Site } from './site';
+import {
+  createSiteInputSchema,
+  fleetSiteSchema,
+  siteOriginSchema,
+  siteSchema,
+  type Site,
+} from './site';
 
 const validSite = {
   id: 'e7b8f8a0-3c2d-4e5f-9a1b-2c3d4e5f6a7b',
@@ -177,5 +183,47 @@ describe('fleetSiteSchema', () => {
       'origin',
       'tiltDegrees',
     ]);
+  });
+});
+
+const validCreateSiteInput = withoutField(validSite, 'id');
+
+describe('createSiteInputSchema', () => {
+  it('accepts a proposed site carrying every domain field but no id', () => {
+    const result = createSiteInputSchema.safeParse(validCreateSiteInput);
+
+    expect(result.success).toBe(true);
+  });
+
+  // Derived by `.omit`, so the physics bounds are the *same* bounds. Driving the
+  // siteSchema table through this schema is the assertion: a bound relaxed on
+  // the request shape alone — the classic parallel-DTO drift — fails here.
+  it.each(outOfRangeCases)('rejects %s of %s — %s', (field, value) => {
+    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
+
+    expect(result.success).toBe(false);
+  });
+
+  it.each(boundaryCases)('accepts %s of exactly %s — %s', (field, value) => {
+    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a proposed site missing a required field', () => {
+    const result = createSiteInputSchema.safeParse(
+      withoutField(validCreateSiteInput, 'capacityKw'),
+    );
+
+    expect(result.success).toBe(false);
+  });
+
+  // The id belongs to the server. A client that sends one gets it dropped, not
+  // honoured — so nothing downstream can mistake a caller's guess for an id.
+  it('drops an id a caller tries to choose for itself', () => {
+    const result = createSiteInputSchema.safeParse(validSite);
+
+    expect(result.success).toBe(true);
+    expect(result.data && 'id' in result.data).toBe(false);
   });
 });

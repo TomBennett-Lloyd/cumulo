@@ -23,6 +23,22 @@ export const siteSchema = z.object({
 export type Site = z.infer<typeof siteSchema>;
 
 /**
+ * A site as a *caller* proposes it: every domain field of {@link siteSchema},
+ * minus the `id`.
+ *
+ * The id is the server's to assign, so it cannot be part of the request — a
+ * client that predicts an id is a client that can collide with, or overwrite,
+ * something it did not create. Derived with `.omit` rather than redeclared so
+ * the physics bounds have exactly one definition (`architecture.md` rule 2):
+ * the Fleet API's request validation (#14), the add-site form (#17) and the
+ * in-memory demo source all validate against this same schema, and a bound
+ * changed in `siteSchema` changes all three at once.
+ */
+export const createSiteInputSchema = siteSchema.omit({ id: true });
+
+export type CreateSiteInput = z.infer<typeof createSiteInputSchema>;
+
+/**
  * How a site joined the fleet.
  *
  * This is not decoration: ADR 0002 makes `origin` the basis of a structural

@@ -32,6 +32,8 @@ export {
 export {
   siteSchema,
   type Site,
+  createSiteInputSchema,
+  type CreateSiteInput,
   siteOriginSchema,
   type SiteOrigin,
   fleetSiteSchema,
