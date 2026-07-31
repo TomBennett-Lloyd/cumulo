@@ -10,7 +10,8 @@
     "humanAlways": ["docs/adr/**"],
     "codeRule": "Human-review PRs: CI green, then label 'awaiting-review', notify the user with a short review guide, do NOT merge; continue with independent tickets while it waits.",
     "note": "Propose relaxing via retro PR once review-feedback categories go quiet \u2014 the user decides.",
-    "debtBurnRule": "A PR closing a 'debt-burn'-labelled issue auto-merges once CI is green AND the review loop ended in APPROVE, even when it touches source code. Decided by the user 2026-07-30 (see review-feedback: debt-burn-lane). Bigger themes stay human-gated \u2014 and a decision pending with the user must never block the debt-burn lane."
+    "debtBurnRule": "A PR closing a 'debt-burn'-labelled issue auto-merges once CI is green AND the review loop ended in APPROVE, even when it touches source code. Decided by the user 2026-07-30 (see review-feedback: debt-burn-lane). Bigger themes stay human-gated \u2014 and a decision pending with the user must never block the debt-burn lane.",
+    "refactorRule": "A behaviour-preserving refactor PR auto-merges once CI is green AND the review loop ended in APPROVE, when ALL hold: no exported API shape changes (no symbol added/removed/re-signatured in any package's public surface), no semantic change (existing test assertion content unmodified; goldens/fixtures byte-identical), and the PR body proves both. Anything that bakes in the shape of functions, classes, or module APIs \u2014 new abstractions, symbol renames/removals, signature changes \u2014 stays human-gated. Decided by the user 2026-07-31 (PR #80 precedent: mechanical table extraction auto-mergeable; #77 C3 class conversion not)."
   },
   "feedbackLog": "docs/review-feedback.md"
 }
