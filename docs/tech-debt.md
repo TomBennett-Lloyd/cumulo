@@ -114,3 +114,9 @@ Entry format:
 - Where: `docs/design/chart-treatment.md`, `apps/web/src/preview/TokensPreview.tsx` (chart placeholder), #19's real chart component
 - What: the doc specifies the horizon boundary, series treatment and colour roles, but never says which clock the time axis runs on — site-local or UTC — nor what happens across a DST transition. For a solar product that is load-bearing, not a detail: rendered in UTC, an Irish summer forecast puts its peak an hour off solar noon, and the chart reads as a modelling error to anyone who knows the physics. The DST days are worse, because the axis must either show a 23- or 25-hour day or silently drop/duplicate an hour. Nothing downstream can supply the answer by default: the forecast payload carries UTC instants (`UtcIsoTimestamp`), so the renderer has to be told to convert, and site-local means carrying a timezone per site through to the axis. Same shape as the interior-gap entry above — an unspecified case in the treatment doc that #19 will resolve by accident if it is not decided first — so the fix spans the doc and the component, and the two should be settled together.
 - Source: #15 review cycle 2
+
+## 2026-07-31 — `pnpm verify` never builds: export maps and CSS entry drift ship green
+
+- Where: root `package.json` (`verify`), `apps/web/package.json` (`build`), `packages/ui` export map, `apps/web/src/main.tsx`
+- What: no gate runs `vite build` or resolves `@cumulo/ui`'s export conditions/CSS imports — `main.tsx` has no test and vitest resolves neither, so a broken `exports` entry, renamed `styles.css`, or missing `@import` renders the demo unstyled while CI stays green. Fix is cross-cutting: `build` scripts in every buildable package, `pnpm -r build` joining `verify`, and a decision on artifact paths vs the `dist/**` lint exemptions.
+- Source: #15 review cycle 3
