@@ -27,7 +27,7 @@ export interface StorageErrorContext {
   readonly key?: Record<string, string>;
 }
 
-function describe(context: StorageErrorContext): string {
+const describe = (context: StorageErrorContext): string => {
   const base = `storage operation '${context.operation}' failed on table '${context.table}'`;
   if (context.key === undefined) {
     return base;
@@ -36,7 +36,7 @@ function describe(context: StorageErrorContext): string {
     .map(([name, value]) => `${name}=${value}`)
     .join(', ');
   return `${base} for key {${key}}`;
-}
+};
 
 export class StorageError extends Error {
   override readonly name = 'StorageError';

@@ -29,7 +29,7 @@
 
 5. **The strict compiler flags stay on.** `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` are non-negotiable in `tsconfig.base.json`. Code that's awkward under them is usually code with a hidden bug — restructure rather than loosen.
 
-6. **Parameter objects conform to named, reusable types.** A function taking an options or dependencies object declares a named, exported `interface`/`type` — `SiteAdapterDeps`, `BackoffSpec` — never a fresh anonymous shape inlined into the signature. Call sites then conform to one nameable contract instead of to a shape that only exists inside one signature, and two functions that want the same deps are visibly the same rather than accidentally alike. Prose rather than lint because "reusable" is the part that matters and no rule can see it.
+6. **Parameter objects conform to named, reusable types.** A function taking an options or dependencies object declares a named, exported `interface`/`type` — `StorageAdapterDeps`, `BackoffSpec` — never a fresh anonymous shape inlined into the signature. Call sites then conform to one nameable contract instead of to a shape that only exists inside one signature, and two functions that want the same deps are visibly the same rather than accidentally alike. Prose rather than lint because "reusable" is the part that matters and no rule can see it.
 
 ## Why
 
