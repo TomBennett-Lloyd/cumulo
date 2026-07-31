@@ -21,8 +21,8 @@
 #     --list   print the discovered harnesses and exit without running any
 #
 # Exit:  0 every harness passed, 1 at least one failed, 2 the runner itself
-#        could not reach a verdict (bad arguments, missing directory, empty
-#        discovery, or a recursive invocation).
+#        could not reach a verdict (bad arguments, missing directory, a failed
+#        or empty discovery, or a recursive invocation).
 #
 # On self-reference: this runner's own harness, run-script-tests.test.sh, lives
 # in this directory and is therefore discovered and run like any other — it is
@@ -85,17 +85,40 @@ if [ ! -d "$target" ]; then
 fi
 target_canon=$(cd "$target" && pwd -P) || exit 2
 
-# Sorted so a red run is reproducible and diffable: LC_ALL=C pins the collation
-# rather than inheriting whatever the caller's locale sorts by. `find` rather
-# than a flat glob so a harness in a subdirectory is still found. A find that
-# fails here leaves the list empty, which lands on the empty-discovery exit
-# below — the right verdict either way, since neither case has looked at
-# anything.
+# `find` rather than a flat glob so a harness in a subdirectory is still found,
+# and LC_ALL=C so the order is the caller's locale's business, not the report's.
+#
+# Discovery is written to a file and its exit status checked, rather than piped
+# straight into the read loop. That is not ceremony: a `find` that cannot descend
+# into one subdirectory prints "Permission denied" to stderr, exits non-zero, and
+# STILL emits everything it did reach. Piped into a loop, that partial listing
+# runs as if it were the whole suite — a red harness behind an unreadable
+# directory reported as "1 harness(es), 0 failed" — and `pipefail` cannot help,
+# because the pipeline lives inside a process substitution whose status the
+# parent shell never sees. A partial listing is the one outcome worse than none,
+# so it is refused outright.
+discovered=$(mktemp "${TMPDIR:-/tmp}/run-script-tests.XXXXXX") || exit 2
+trap 'rm -f "$discovered"' EXIT INT TERM
+
+if ! find "$target_canon" -type f -name '*.test.sh' >"$discovered"; then
+  printf 'run-script-tests: discovery failed under %s — find exited non-zero (its own error is above)\n' "$target_canon" >&2
+  printf '  find still lists what it could reach, so continuing would run a subset of the\n' >&2
+  printf '  suite and report it as the whole of it. No verdict is the honest answer.\n' >&2
+  exit 2
+fi
+
+# Same reasoning one step on: a sort that fails has produced a truncated list, so
+# its status is checked too. `-o` naming the input file is explicitly supported.
+if ! LC_ALL=C sort -o "$discovered" "$discovered"; then
+  printf 'run-script-tests: could not sort the discovered harnesses under %s\n' "$target_canon" >&2
+  exit 2
+fi
+
 harnesses=()
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   harnesses+=("$path")
-done < <(find "$target_canon" -type f -name '*.test.sh' | LC_ALL=C sort)
+done <"$discovered"
 
 harness_count=${#harnesses[@]}
 

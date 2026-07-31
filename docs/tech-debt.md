@@ -11,7 +11,7 @@ Entry format:
 - Source: PR/issue #
 ```
 
-Pointers must survive unrelated edits: cite **files and symbol or section names** (function names, headings, config keys, script names) — never bare line numbers, and never a copied code literal unless the literal itself is the finding. An entry that pins its claim to `file.sh`:42 sends its reader to whatever happens to sit at line 42 months later.
+Pointers must survive unrelated edits: cite **files and symbol or section names** (function names, headings, config keys, script names) — never bare line numbers, and never a copied code literal unless the literal itself is the finding. An entry that pins its claim to `file.sh`:42 sends its reader to whatever happens to sit at line 42 months later. Applies to entries dated 2026-07-31 onward; the back catalogue is retrofitted opportunistically, whenever an entry is edited for any other reason.
 
 ---
 
@@ -83,7 +83,7 @@ Pointers must survive unrelated edits: cite **files and symbol or section names*
 
 ## 2026-07-30 — Lifecycle tooling has an undeclared python3 dependency
 
-- Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)
+- Where: `.claude/scripts/worktree-lib.sh` (`canon`, which resolves realpaths; `is_merged`, which parses the `gh pr list --json headRefOid` payload), plus the `worktree list --porcelain` parsing in `reap-worktree.sh` and `sweep-worktrees.sh`
 - What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI did not run these scripts at all; fixed by #64) and #48 (no shellcheck gate; fixed by #69 — shellcheck itself has nothing to say about an undeclared `python3`, so this entry survives the gate).
 - Source: #42
 
@@ -170,3 +170,9 @@ Pointers must survive unrelated edits: cite **files and symbol or section names*
 - Where: `packages/shared/package.json`, `packages/ui/package.json`, `apps/web/package.json` (three copies of vitest on a caret range); `.claude/scripts/lint-shell.sh` (unpinned shellcheck); `README.md`:35; `.githooks/pre-commit`:15-17
 - What: vitest prints "experimental — please pin" for the typecheck mode that #61's type-level gate depends on, and we run it on a caret range: a minor bump can change or remove the feature a gate is built on, with no signal until the gate breaks or, worse, quietly stops asserting. Same class as the shellcheck skew above — floating versions under load-bearing gates — so it wants one decision covering both: which tools get exact pins, what triggers a deliberate bump, and where that is written down. Also folds in a documentation instance of the same drift, now seen in two places: `README.md`:35 enumerates the CI gate list in prose (`pnpm lint`, `typecheck`, `test`, `format:check`) and is already stale — it names neither `check:adr-index` nor `test:scripts` — and the header comment at `.githooks/pre-commit`:15-17 restates the same list for the same purpose ("whole-repo lint, typecheck, test, format:check plus a full-history gitleaks scan"), missing the same two. Two independent copies of a list that only `package.json` owns is the pattern, not two typos — and #64 already removed the third copy from `ci.yml` for exactly this reason. Gates should be enumerated in `package.json` only, with prose pointing at `pnpm verify` rather than restating its contents.
 - Source: #48/#61 review
+
+## 2026-07-31 — "Discover or die" is asserted in two gates and enforced in neither
+
+- Where: `.claude/scripts/lint-shell.sh` (the `git ls-files --cached --others --exclude-standard -z` read loop feeding `shell_files`, and its empty-list guard); `.claude/scripts/run-script-tests.sh` (the `find` discovery, which now writes to a temp file and checks the status)
+- What: both gates rest on discovering their own inputs, and both wrote the producer inside a process substitution — where a non-zero exit is invisible to the parent shell, `pipefail` included. The failure that matters is not the producer dying but the producer **partly succeeding**: `find` that cannot descend into one subdirectory, and `git ls-files` in a repository state it cannot fully read, both print to stderr, exit non-zero, and still emit everything they reached. The gate then runs a subset and reports it as the whole, which is worse than reporting nothing — reproduced against the runner in #84 review cycle 1, where a red harness behind an unreadable directory came back "1 harness(es), 0 failed" at exit 0. `run-script-tests.sh` now refuses a partial listing; `lint-shell.sh` has the same shape and still does not, so `pnpm lint:sh` can silently check fewer files than the repo contains. The empty-list guard both gates already have is the same idea stopped one step short: it catches "found nothing", never "found some of it". Fix is one shared idiom for discovery-with-status rather than a second one-off patch — two instances today and a third likely, so it wants extracting into a sourced helper with its own cases, alongside the equivalent guard for the `check-module-names` and `check-adr-index` searches.
+- Source: #84 review cycle 1

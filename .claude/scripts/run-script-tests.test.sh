@@ -268,6 +268,35 @@ expect_rc 2 "$rc"
 expect_out "found no *.test.sh under"
 end
 
+# The nastier sibling of the empty set: a discovery that PARTLY worked. `find` that cannot
+# descend into a subdirectory exits non-zero and still lists everything it reached, so a red
+# harness behind an unreadable directory used to be reported as "1 harness(es), 0 failed" —
+# a subset run, announced as the whole suite. `pipefail` never saw it, because the pipeline
+# was inside a process substitution.
+#
+# There is no way to fake this: the condition IS a filesystem permission. Under a root uid,
+# chmod 000 restricts nothing and the case cannot be created — so it fails loudly rather
+# than passing on a path it never exercised (`lint-shell.sh` takes the same line about a
+# missing shellcheck: a check that could not run must never read as a check that passed).
+begin "a partial discovery (unreadable subdirectory) exits 2, not a subset reported as green"
+fixture partial_discovery
+must harness "$DIR/a.test.sh" 0
+must mkdir -p "$DIR/locked"
+must harness "$DIR/locked/red.test.sh" 1
+must chmod 000 "$DIR/locked"
+if find "$DIR" -type f -name '*.test.sh' >/dev/null 2>&1; then
+  bad "could not make a directory unreadable (running as root?) — the partial-discovery path was NOT exercised"
+else
+  run_runner "$DIR"
+  expect_rc 2 "$rc"
+  expect_out "discovery failed"
+  expect_not_out "0 failed"
+  expect_not_out "PASS a.test.sh"
+fi
+# Restored unconditionally: the trap's `rm -rf` cannot remove a directory it cannot enter.
+must chmod 755 "$DIR/locked"
+end
+
 # ==========================================================================================
 # 6. discovery selects harnesses, and only harnesses
 # ==========================================================================================
