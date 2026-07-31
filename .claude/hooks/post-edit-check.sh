@@ -10,6 +10,17 @@
 # the branch touches lint config or plugins. `pnpm exec` writes into the main
 # checkout's node_modules, which the worktree rules declare read-only for task
 # work. And the agent doing the editing has no way to see either happening.
+#
+# $CLAUDE_PROJECT_DIR is still the right answer to a different question, and
+# .claude/settings.json still uses it — to locate the script FILE. Which copy of
+# this script runs and which tree it judges are separate decisions, and the first
+# one has a consequence worth knowing: a worktree session's project dir is the
+# main checkout, so it is the MAIN checkout's settings.json and the MAIN
+# checkout's copy of this file that execute. A hook edited on a branch never runs
+# for that branch's own sessions — it takes effect on merge, and only for
+# sessions started afterwards. That is the mechanism by which #74 survived as
+# long as it did, and it is why the harness invokes these scripts directly
+# instead of trusting a session to exercise them.
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 

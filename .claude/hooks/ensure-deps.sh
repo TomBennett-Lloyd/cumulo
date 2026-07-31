@@ -23,6 +23,12 @@
 # in the MAIN checkout, conclude there was nothing to do, and leave the worktree
 # it was supposed to prepare without deps.
 #
+# .claude/settings.json does still use $CLAUDE_PROJECT_DIR, correctly, to locate
+# this script FILE — which tree is judged and which copy of the script judges it
+# are different questions. See post-edit-check.sh's header for the consequence of
+# the second one: the copy that runs is the main checkout's, so a hook edited on
+# a branch takes effect on merge and only for sessions started after it.
+#
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 

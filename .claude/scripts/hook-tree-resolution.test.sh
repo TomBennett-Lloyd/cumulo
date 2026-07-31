@@ -27,6 +27,13 @@
 #
 # Unset — how `pnpm test:scripts` runs it — tests the shipped hooks.
 #
+# That recipe works for PRE-FIX revisions only, and the reason is worth stating
+# because the alternative looks like a broken harness rather than a broken recipe:
+# a post-fix hook copied alone to /tmp has no sibling hook-context.sh, so it fails
+# the `source` and exits 1 before reaching any logic. To bisect a post-fix
+# revision, extract the hooks AND the library into one directory together and
+# point both variables inside it.
+#
 # Self-contained on the same terms as the other harnesses here: no framework, no
 # network, one `mktemp -d` that a trap removes, and every fixture is a throwaway
 # git repo, so the harness can never touch the repository it ships in.
@@ -139,15 +146,22 @@ make_fixture() {
   must git -C "$base/main" worktree add -q -b task "$base/main/.claude/worktrees/task"
 }
 
-# add_deps <tree> -> a package.json plus a node_modules/.bin/eslint that reports the
-# directory `pnpm exec` ran it from, and fails so post-edit-check surfaces the report.
+# add_deps <tree> <eslint-exit-status> -> a package.json plus a node_modules/.bin/eslint
+# that reports the directory `pnpm exec` ran it from and then returns the given verdict.
 # The package.json is what stops pnpm walking up out of the fixture looking for one.
+#
+# The verdict is a parameter because BOTH values have to appear in the suite. A clean
+# edit and a no-verdict edit are the same observable pair — exit 0, no output — so the
+# cases asserting no-verdict cannot, on their own, tell that the hook still reports a
+# clean file as clean: inverting `if ! out=$(pnpm exec eslint …)` in post-edit-check.sh
+# would make every clean edit an exit-2 block, and every rc-0 case here would stay
+# green. The passing case below is what closes that.
 add_deps() {
   must mkdir -p "$1/node_modules/.bin"
-  cat >"$1/node_modules/.bin/eslint" <<'SHIM'
+  cat >"$1/node_modules/.bin/eslint" <<SHIM
 #!/usr/bin/env bash
-printf 'eslint-shim cwd=[%s]\n' "$PWD"
-exit 1
+printf 'eslint-shim cwd=[%s]\n' "\$PWD"
+exit $2
 SHIM
   must chmod +x "$1/node_modules/.bin/eslint"
   must_write "$1/package.json" '{"name":"fixture","version":"0.0.0","private":true}'
@@ -182,8 +196,8 @@ run_ensure_deps() { # run_ensure_deps <event-cwd> <claude-project-dir>
 make_fixture both
 BOTH_MAIN="$TMP_ROOT/both/main"
 BOTH_WT="$BOTH_MAIN/.claude/worktrees/task"
-add_deps "$BOTH_MAIN"
-add_deps "$BOTH_WT"
+add_deps "$BOTH_MAIN" 1
+add_deps "$BOTH_WT" 1
 must mkdir -p "$BOTH_WT/pkg" "$BOTH_MAIN/pkg"
 must touch "$BOTH_WT/pkg/mod.ts" "$BOTH_MAIN/pkg/mod.ts" "$BOTH_WT/notes.md"
 
@@ -221,12 +235,28 @@ end
 make_fixture mainonly
 MAINONLY_MAIN="$TMP_ROOT/mainonly/main"
 MAINONLY_WT="$MAINONLY_MAIN/.claude/worktrees/task"
-add_deps "$MAINONLY_MAIN"
+add_deps "$MAINONLY_MAIN" 1
 must mkdir -p "$MAINONLY_WT/pkg"
 must touch "$MAINONLY_WT/pkg/mod.ts"
 
 begin "post-edit-check does not borrow the main checkout's node_modules for a worktree file"
 run_post_edit "$MAINONLY_WT/pkg/mod.ts" "$MAINONLY_MAIN"
+expect_rc 0 "$rc"
+expect_silent
+end
+
+# The other verdict. Silence here and silence for the no-verdict cases above are the
+# same two bytes of evidence, which is the point: this case is the only thing standing
+# between a clean edit and an exit-2 block if the eslint branch is ever inverted.
+make_fixture clean
+CLEAN_MAIN="$TMP_ROOT/clean/main"
+CLEAN_WT="$CLEAN_MAIN/.claude/worktrees/task"
+add_deps "$CLEAN_WT" 0
+must mkdir -p "$CLEAN_WT/pkg"
+must touch "$CLEAN_WT/pkg/mod.ts"
+
+begin "post-edit-check passes a clean worktree file through silently"
+run_post_edit "$CLEAN_WT/pkg/mod.ts" "$CLEAN_MAIN"
 expect_rc 0 "$rc"
 expect_silent
 end
