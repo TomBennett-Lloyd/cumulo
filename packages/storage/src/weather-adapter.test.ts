@@ -563,6 +563,21 @@ describe('listFetchedArchiveDays', () => {
     expect(ddbMock.calls()).toHaveLength(0);
   });
 
+  it('fails loudly, and not as an outage, on a marker item it did not write', async () => {
+    // A marker carries the two key attributes and nothing else; this one has
+    // lost its sort key, so it cannot say which day it vouches for.
+    ddbMock.on(BatchGetCommand).resolves({
+      Responses: { [TABLE]: [{ locationId: DUBLIN_ID, fetchedAt: '2026-02-10T00:00:00Z' }] },
+    });
+
+    const failure = await adapter()
+      .listFetchedArchiveDays(DUBLIN, [FETCHED])
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(z.ZodError);
+    expect(failure).not.toBeInstanceOf(StorageError);
+  });
+
   it('wraps a rejected batch get in a StorageError naming the location', async () => {
     const failure = new Error('ProvisionedThroughputExceededException');
     ddbMock.on(BatchGetCommand).rejects(failure);

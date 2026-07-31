@@ -296,20 +296,23 @@ export function createWeatherAdapter(deps: WeatherAdapterDeps): WeatherAdapter {
         locationId: partitionKey,
         sk: sortKey,
       }));
-      const fetched = new Set<string>();
 
-      const sendGetBatch = async (batch: MarkerKey[]): Promise<MarkerKey[]> => {
+      // Answered markers accumulate exactly as DynamoDB returned them. Nothing
+      // is parsed or mapped inside `sendGetBatch`, because that runs inside the
+      // transport `try` below: a marker item that drifted, or an answer for a
+      // key we never asked about, is a violated invariant and must not be
+      // dressed up as a `StorageError`, which means an outage. Same rule as
+      // `queryArchiveRange` — see the comment there.
+      const answeredMarkers: WeatherItem[] = [];
+
+      const sendGetBatch = async (batch: WeatherItem[]): Promise<WeatherItem[]> => {
         const response = await client.send(
           new BatchGetCommand({ RequestItems: { [tableName]: { Keys: batch } } }),
         );
-        for (const item of response.Responses?.[tableName] ?? []) {
-          fetched.add(dayOf(markerKeySchema.parse(item).sk));
-        }
+        answeredMarkers.push(...(response.Responses?.[tableName] ?? []));
         // Whatever DynamoDB declined stays pending; `drainBatches` retries it
         // and hands back only what never got an answer.
-        return (response.UnprocessedKeys?.[tableName]?.Keys ?? []).map((key) =>
-          markerKeySchema.parse(key),
-        );
+        return response.UnprocessedKeys?.[tableName]?.Keys ?? [];
       };
 
       let outcome;
@@ -326,12 +329,15 @@ export function createWeatherAdapter(deps: WeatherAdapterDeps): WeatherAdapter {
         );
       }
 
+      const dayOfItem = (item: WeatherItem): string => dayOf(markerKeySchema.parse(item).sk);
+      const fetched = new Set(answeredMarkers.map(dayOfItem));
+
       return outcome.status === 'complete'
         ? { status: 'complete', fetched }
         : {
             status: 'incomplete',
             fetched,
-            undeterminedDays: outcome.unprocessed.map((key) => dayOf(key.sk)),
+            undeterminedDays: outcome.unprocessed.map(dayOfItem),
           };
     },
 
