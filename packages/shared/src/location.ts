@@ -14,14 +14,27 @@ const ANTIMERIDIAN_EAST = (180).toFixed(DECIMAL_PLACES);
 const ANTIMERIDIAN_WEST = (-180).toFixed(DECIMAL_PLACES);
 
 /**
+ * A point on the planet, as the two same-shaped numbers every caller already
+ * holds — a site, a weather reading, a hard-coded probe coordinate. Named and
+ * exported rather than inlined into the signature below so that the several
+ * callers across `@cumulo/storage` conform to one contract instead of to a
+ * shape that exists only inside one function (`docs/standards/typing.md`
+ * rule 6). Branded per-axis types are #50.
+ */
+export interface GeoCoordinates {
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+/**
  * Rounds one axis to the bucket width and removes the two spellings of zero
  * that IEEE-754 leaves behind: `(-0.001).toFixed(2)` is `"-0.00"`, which is a
  * different partition key from `"0.00"` for the same point on the planet.
  */
-function roundAxis(value: number): string {
+const roundAxis = (value: number): string => {
   const formatted = value.toFixed(DECIMAL_PLACES);
   return formatted === NEGATIVE_ZERO ? POSITIVE_ZERO : formatted;
-}
+};
 
 /**
  * The de-duplication identity of a geographic location: `"<lat>,<lon>"` with
@@ -48,7 +61,7 @@ function roundAxis(value: number): string {
  * swap in silence. This is the interim swap guard only; branded coordinate
  * types are #50.
  */
-export function locationId(coords: { latitude: number; longitude: number }): string {
+export const locationId = (coords: GeoCoordinates): string => {
   // 180°E and 180°W name one meridian. Stated twice on purpose: once here on the
   // number, where the domain rule lives, and once below on the rounded string,
   // which is what catches coordinates that only *round* onto the antimeridian.
@@ -61,4 +74,4 @@ export function locationId(coords: { latitude: number; longitude: number }): str
     roundedLongitude === ANTIMERIDIAN_EAST ? ANTIMERIDIAN_WEST : roundedLongitude;
 
   return `${roundAxis(coords.latitude)},${canonicalLongitude}`;
-}
+};
