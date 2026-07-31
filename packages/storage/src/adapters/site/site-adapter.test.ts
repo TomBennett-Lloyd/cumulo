@@ -1,18 +1,23 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import {
-  DeleteCommand,
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-} from '@aws-sdk/lib-dynamodb';
-import { fleetSiteSchema, type FleetSite } from '@cumulo/shared';
-import { mockClient } from 'aws-sdk-client-mock';
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createStorageDocumentClient } from './client';
-import { StorageError } from './errors';
-import { createSiteAdapter, fromItem, toItem, type SiteAdapter } from './site-adapter';
+import { StorageError } from '../../errors';
+import { captureStorageError } from '../storage-error-capture';
+
+import {
+  GALWAY_ID,
+  RANELAGH_ID,
+  RATHMINES_ID,
+  TABLE_NAME,
+  adapter,
+  ddbMock,
+  fleetSite,
+  galwayItem,
+  ranelaghItem,
+  ranelaghProjectedItem,
+  rathminesItem,
+  without,
+} from './site-fixtures';
 
 /**
  * These are contract tests in the sense `docs/standards/testing.md` rule 3
@@ -21,218 +26,11 @@ import { createSiteAdapter, fromItem, toItem, type SiteAdapter } from './site-ad
  * derives from a **fixture response** shaped like DynamoDB's. Nothing here
  * asserts that a mock was called.
  *
- * The key-attribute logic that carries the real risk (sparse GSI attributes,
- * the `siteId >= '0'` bound) is pure, so it is pinned directly on
- * `toItem`/`fromItem` as well as through the adapter.
+ * The pure key-attribute logic is pinned separately, in `site-item.test.ts`.
  */
-
-const TABLE_NAME = 'cumulo-sites-test';
-
-const RANELAGH_ID = '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
-const RATHMINES_ID = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
-const GALWAY_ID = 'b1e9f0a2-3c4d-4e5f-9a8b-7c6d5e4f3a2b';
-
-type FleetSiteOverrides = Partial<Omit<FleetSite, 'createdAt'>> & { readonly createdAt?: string };
-
-function fleetSite(overrides: FleetSiteOverrides = {}): FleetSite {
-  return fleetSiteSchema.parse({
-    id: RANELAGH_ID,
-    name: 'Ranelagh rooftop',
-    latitude: 53.3245,
-    longitude: -6.2601,
-    tiltDegrees: 35,
-    azimuthDegrees: 180,
-    capacityKw: 4.2,
-    origin: 'seed',
-    createdAt: '2026-07-30T14:00:00Z',
-    active: true,
-    ...overrides,
-  });
-}
-
-/**
- * A stored item exactly as the document client hands it back, written out
- * literally rather than produced by `toItem` — a fixture that agreed with the
- * code under test by construction would prove nothing about the wire shape.
- */
-const ranelaghItem = {
-  pk: 'FLEET',
-  siteId: RANELAGH_ID,
-  name: 'Ranelagh rooftop',
-  latitude: 53.3245,
-  longitude: -6.2601,
-  tiltDegrees: 35,
-  azimuthDegrees: 180,
-  capacityKw: 4.2,
-  origin: 'seed',
-  createdAt: '2026-07-30T14:00:00Z',
-  active: true,
-  locationId: '53.32,-6.26',
-  gsiLocation: '53.32,-6.26',
-};
-
-const rathminesItem = {
-  pk: 'FLEET',
-  siteId: RATHMINES_ID,
-  name: 'Rathmines terrace',
-  latitude: 53.3201,
-  longitude: -6.2652,
-  tiltDegrees: 30,
-  azimuthDegrees: 170,
-  capacityKw: 3.5,
-  origin: 'user',
-  createdAt: '2026-07-29T09:30:00Z',
-  active: false,
-  locationId: '53.32,-6.27',
-  gsiUserSites: 'USER',
-  gsiCreatedAt: `2026-07-29T09:30:00Z#${RATHMINES_ID}`,
-};
-
-const galwayItem = {
-  pk: 'FLEET',
-  siteId: GALWAY_ID,
-  name: 'Salthill bungalow',
-  latitude: 53.2611,
-  longitude: -9.0713,
-  tiltDegrees: 25,
-  azimuthDegrees: 195,
-  capacityKw: 6,
-  origin: 'seed',
-  createdAt: '2026-07-28T08:00:00Z',
-  active: true,
-  locationId: '53.26,-9.07',
-  gsiLocation: '53.26,-9.07',
-};
-
-/** What the `by-location` index actually projects: the two keys plus INCLUDE. */
-const ranelaghProjectedItem = {
-  gsiLocation: '53.32,-6.26',
-  pk: 'FLEET',
-  siteId: RANELAGH_ID,
-  latitude: 53.3245,
-  longitude: -6.2601,
-  tiltDegrees: 35,
-  azimuthDegrees: 180,
-  capacityKw: 4.2,
-};
-
-const ddbMock = mockClient(DynamoDBDocumentClient);
-
-function adapter(): SiteAdapter {
-  return createSiteAdapter({
-    client: createStorageDocumentClient({
-      baseClient: new DynamoDBClient({
-        region: 'eu-west-1',
-        credentials: { accessKeyId: 'test-access-key-id', secretAccessKey: 'test-secret' },
-      }),
-    }),
-    tableName: TABLE_NAME,
-  });
-}
-
-/** A stored item with one attribute taken away, to stand in for a drifted table. */
-function without(item: Record<string, unknown>, attribute: string): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(item).filter(([name]) => name !== attribute));
-}
-
-async function captureStorageError(run: () => Promise<unknown>): Promise<StorageError> {
-  try {
-    await run();
-  } catch (error) {
-    if (error instanceof StorageError) {
-      return error;
-    }
-    throw error;
-  }
-  throw new Error('expected the operation to reject with a StorageError');
-}
 
 beforeEach(() => {
   ddbMock.reset();
-});
-
-describe('toItem', () => {
-  it('renames id to the siteId key attribute and computes pk and locationId', () => {
-    expect(toItem(fleetSite())).toEqual(ranelaghItem);
-  });
-
-  const sparseMatrix = [
-    {
-      description: 'an active seed site is in by-location only',
-      overrides: { origin: 'seed', active: true },
-      indexAttributes: { gsiLocation: '53.32,-6.26' },
-    },
-    {
-      description: 'an inactive seed site is in neither index',
-      overrides: { origin: 'seed', active: false },
-      indexAttributes: {},
-    },
-    {
-      description: 'an active user site is in both indexes',
-      overrides: { origin: 'user', active: true },
-      indexAttributes: {
-        gsiLocation: '53.32,-6.26',
-        gsiUserSites: 'USER',
-        gsiCreatedAt: `2026-07-30T14:00:00Z#${RANELAGH_ID}`,
-      },
-    },
-    {
-      description: 'an inactive user site stays evictable but leaves by-location',
-      overrides: { origin: 'user', active: false },
-      indexAttributes: {
-        gsiUserSites: 'USER',
-        gsiCreatedAt: `2026-07-30T14:00:00Z#${RANELAGH_ID}`,
-      },
-    },
-  ] as const;
-
-  for (const { description, overrides, indexAttributes } of sparseMatrix) {
-    it(description, () => {
-      const item: Record<string, unknown> = toItem(fleetSite(overrides));
-      const written = Object.fromEntries(
-        Object.entries(item).filter(([attribute]) => attribute.startsWith('gsi')),
-      );
-
-      expect(written).toEqual(indexAttributes);
-    });
-  }
-});
-
-describe('fromItem', () => {
-  const roundTrips = [
-    { description: 'seed and active', overrides: { origin: 'seed', active: true } },
-    { description: 'seed and inactive', overrides: { origin: 'seed', active: false } },
-    { description: 'user and active', overrides: { origin: 'user', active: true } },
-    { description: 'user and inactive', overrides: { origin: 'user', active: false } },
-  ] as const;
-
-  for (const { description, overrides } of roundTrips) {
-    it(`round-trips a site that is ${description}`, () => {
-      const site = fleetSite(overrides);
-
-      expect(fromItem(toItem(site))).toEqual(site);
-    });
-  }
-
-  it('returns no key attributes as domain fields', () => {
-    expect(Object.keys(fromItem(ranelaghItem)).sort()).toEqual([
-      'active',
-      'azimuthDegrees',
-      'capacityKw',
-      'createdAt',
-      'id',
-      'latitude',
-      'longitude',
-      'name',
-      'origin',
-      'tiltDegrees',
-    ]);
-  });
-
-  it('throws on an item the schema does not recognise', () => {
-    expect(() => fromItem(without(ranelaghItem, 'origin'))).toThrow();
-    expect(() => fromItem({ ...ranelaghItem, capacityKw: '4.2' })).toThrow();
-  });
 });
 
 describe('putFleetSite', () => {

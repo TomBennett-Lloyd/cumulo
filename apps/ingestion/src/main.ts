@@ -1,7 +1,7 @@
 import {
-  createSiteAdapter,
+  SiteAdapter,
+  WeatherAdapter,
   createStorageDocumentClient,
-  createWeatherAdapter,
   storageTableName,
 } from '@cumulo/storage';
 import { z } from 'zod';
@@ -92,13 +92,18 @@ const openMeteoPolicy: ForecastFetchDeps = {};
  * `sites` and `weather` are the full adapters; `RunCycleDeps` narrows each to the
  * one method the cycle may use, so ingestion's least-privilege posture (ADR 0002:
  * reads `sites`, writes `weather`) is a compile-time fact as well as an IAM policy.
+ *
+ * The adapters are passed as whole objects, never as `adapter.listFleetSites`: they
+ * hold their client and table name on `this` (#77), so a detached method would
+ * arrive at the cycle already broken. The narrowing is the type's job — `Pick<…>`
+ * costs the cycle nothing at runtime and cannot lose a binding.
  */
 export const handler: IngestionHandler = createHandler({
-  sites: createSiteAdapter({
+  sites: new SiteAdapter({
     client: documentClient,
     tableName: storageTableName('sites', env.CUMULO_ENV),
   }),
-  weather: createWeatherAdapter({
+  weather: new WeatherAdapter({
     client: documentClient,
     tableName: storageTableName('weather', env.CUMULO_ENV),
   }),

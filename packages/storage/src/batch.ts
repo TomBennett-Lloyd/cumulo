@@ -38,7 +38,7 @@ export interface BackoffSpec {
  * `retryAttempt` is 1-based: 1 is the first retry (the initial try is not a
  * retry), so the first retry's cap is exactly `baseDelayMs`.
  */
-export function fullJitterDelayMs(retryAttempt: number, spec: BackoffSpec): number {
+export const fullJitterDelayMs = (retryAttempt: number, spec: BackoffSpec): number => {
   if (!Number.isInteger(retryAttempt) || retryAttempt < 1) {
     throw new Error(
       `fullJitterDelayMs: retryAttempt must be a positive integer, got ${String(retryAttempt)}`,
@@ -47,7 +47,7 @@ export function fullJitterDelayMs(retryAttempt: number, spec: BackoffSpec): numb
   const random = spec.random ?? Math.random;
   const cap = Math.min(spec.baseDelayMs * 2 ** (retryAttempt - 1), spec.maxDelayMs);
   return Math.floor(random() * cap);
-}
+};
 
 /**
  * How hard to push a batch before accepting a partial result.
@@ -104,13 +104,13 @@ const realSleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-function chunk<TReq>(requests: readonly TReq[], batchSize: number): TReq[][] {
+const chunk = <TReq>(requests: readonly TReq[], batchSize: number): TReq[][] => {
   const chunks: TReq[][] = [];
   for (let index = 0; index < requests.length; index += batchSize) {
     chunks.push(requests.slice(index, index + batchSize));
   }
   return chunks;
-}
+};
 
 /**
  * Splits `requests` into batches of at most `batchSize`, sends each one, and
@@ -127,12 +127,12 @@ function chunk<TReq>(requests: readonly TReq[], batchSize: number): TReq[][] {
  * batches from being attempted, and every leftover from every batch is returned
  * together, in request order.
  */
-export async function drainBatches<TReq>(
+export const drainBatches = async <TReq>(
   send: (batch: TReq[]) => Promise<TReq[]>,
   requests: readonly TReq[],
   batchSize: number,
   policy: BatchPolicy,
-): Promise<DrainOutcome<TReq>> {
+): Promise<DrainOutcome<TReq>> => {
   if (!Number.isInteger(batchSize) || batchSize < 1) {
     throw new Error(`drainBatches: batchSize must be a positive integer, got ${String(batchSize)}`);
   }
@@ -167,4 +167,4 @@ export async function drainBatches<TReq>(
   }
 
   return unprocessed.length === 0 ? { status: 'complete' } : { status: 'partial', unprocessed };
-}
+};

@@ -12,7 +12,7 @@ const DARK_SELECTOR = "[data-theme='dark']";
  * violated invariant of this package, not an expected failure — the tokens
  * file is ours and both blocks are mandatory (error-handling.md rule 1).
  */
-function declarationBlock(selector: string): string {
+const declarationBlock = (selector: string): string => {
   const selectorAt = css.indexOf(`${selector} {`);
   if (selectorAt === -1) {
     throw new Error(`tokens.css declares no '${selector}' block`);
@@ -23,16 +23,16 @@ function declarationBlock(selector: string): string {
     throw new Error(`tokens.css never closes the '${selector}' block`);
   }
   return css.slice(opensAt + 1, closesAt);
-}
+};
 
 /** Custom property names declared in a block, e.g. `--color-bg`. */
-function declaredProperties(selector: string): Set<string> {
+const declaredProperties = (selector: string): Set<string> => {
   const block = declarationBlock(selector);
   return new Set(block.match(/^\s*(--[a-z0-9-]+)\s*:/gm)?.map((line) => line.trim().slice(0, -1)));
-}
+};
 
 /** Custom property names the TypeScript surface promises exist. */
-function referencedProperties(): Set<string> {
+const referencedProperties = (): Set<string> => {
   const referenced = new Set<string>();
   for (const group of Object.values(tokens)) {
     for (const value of Object.values(group)) {
@@ -42,7 +42,7 @@ function referencedProperties(): Set<string> {
     }
   }
   return referenced;
-}
+};
 
 const colourProperties = (properties: Set<string>): string[] =>
   [...properties].filter((name) => name.startsWith('--color-')).sort();
