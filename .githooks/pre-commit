@@ -69,7 +69,18 @@ if [ ! -d node_modules ]; then
 
 pre-commit: node_modules is missing, so the staged lint/format checks cannot run.
 
-  Run `pnpm install` and commit again.
+  This is normally handled before you get here: the SessionStart hook
+  .claude/hooks/ensure-deps.sh installs deps in any worktree that has a lockfile
+  but no node_modules, ahead of the first tool call. So reaching this message
+  means either the hook never ran for this directory — a plain shell, or a
+  worktree created after the session started — or its install failed, in which
+  case it printed the reason to stderr at session start. Worth reading that
+  before assuming this is a plain forgotten install.
+
+  Either way, install into THIS worktree (never share or symlink node_modules
+  with another checkout) and commit again:
+
+      pnpm install --frozen-lockfile
 
 EOF
   exit 1

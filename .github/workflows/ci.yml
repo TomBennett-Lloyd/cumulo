@@ -16,10 +16,19 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm format:check
-      - run: pnpm test
+      # One step, not one step per gate. Enumerating the gates here duplicates
+      # the `verify` script's list, and the duplicate drifts: `pnpm test:scripts`
+      # was added to `verify` and never reached CI, so the shell harness was
+      # green-by-absence. Calling the composite makes CI a caller like any other,
+      # so a gate added to `verify` is automatically enforced here.
+      # The cost is real but small: GitHub shows one step's timing and one
+      # failure marker instead of per-gate ones. The composite runs its gates in
+      # a fixed order and stops at the first failure, so the log still names the
+      # failing one. Which gates those are is deliberately not written here —
+      # package.json is the single place that list lives, and restating it would
+      # re-create exactly the duplicate this step exists to remove.
+      # Gate completeness beats step granularity.
+      - run: pnpm verify
 
   gitleaks:
     runs-on: ubuntu-latest
