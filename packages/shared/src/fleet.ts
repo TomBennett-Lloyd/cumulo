@@ -21,29 +21,51 @@ interface FleetLocation {
 }
 
 /**
- * Cluster centres for the demo fleet. Sites cluster around these so that a whole cluster shares
- * one weather fetch — the API-frugality constraint is a design input, not an afterthought.
+ * Cluster centres for the demo fleet — real population centres, each snapped to the centre of its
+ * `locationId` bucket, i.e. exact at 2 decimal places (see `location.ts`).
+ *
+ * That snapping is half of a structural invariant: **every site in a cluster produces the same
+ * `locationId`, so a whole cluster is one weather fetch.** The other half is `jitterDegrees`
+ * below, whose half-width is strictly less than half a bucket — a site offset from a
+ * bucket-centred point by less than 0.005° cannot round into a neighbouring bucket. Co-location
+ * therefore holds by construction rather than by luck, which is what makes the fleet's 12-fetch
+ * weather budget a property of the data instead of a hope about it.
+ *
+ * Before #78 the centres carried their real 4 dp coordinates and the jitter box was wider than a
+ * bucket, so the canonical fleet spread across 58 buckets rather than 12 — the de-duplication
+ * lever the design claimed did not exist. The API-frugality constraint is a design input, so the
+ * generator now enforces it.
  */
 const fleetLocations = [
-  { name: 'Dublin', latitude: 53.3498, longitude: -6.2603 },
-  { name: 'Cork', latitude: 51.8985, longitude: -8.4756 },
-  { name: 'Galway', latitude: 53.2707, longitude: -9.0568 },
-  { name: 'Limerick', latitude: 52.6638, longitude: -8.6267 },
-  { name: 'Belfast', latitude: 54.5973, longitude: -5.9301 },
-  { name: 'London', latitude: 51.5072, longitude: -0.1276 },
-  { name: 'Manchester', latitude: 53.4808, longitude: -2.2426 },
-  { name: 'Birmingham', latitude: 52.4862, longitude: -1.8904 },
-  { name: 'Bristol', latitude: 51.4545, longitude: -2.5879 },
-  { name: 'Leeds', latitude: 53.8008, longitude: -1.5491 },
-  { name: 'Edinburgh', latitude: 55.9533, longitude: -3.1883 },
-  { name: 'Cardiff', latitude: 51.4816, longitude: -3.1791 },
+  { name: 'Dublin', latitude: 53.35, longitude: -6.26 },
+  { name: 'Cork', latitude: 51.9, longitude: -8.48 },
+  { name: 'Galway', latitude: 53.27, longitude: -9.06 },
+  { name: 'Limerick', latitude: 52.66, longitude: -8.63 },
+  { name: 'Belfast', latitude: 54.6, longitude: -5.93 },
+  { name: 'London', latitude: 51.51, longitude: -0.13 },
+  { name: 'Manchester', latitude: 53.48, longitude: -2.24 },
+  { name: 'Birmingham', latitude: 52.49, longitude: -1.89 },
+  { name: 'Bristol', latitude: 51.45, longitude: -2.59 },
+  { name: 'Leeds', latitude: 53.8, longitude: -1.55 },
+  { name: 'Edinburgh', latitude: 55.95, longitude: -3.19 },
+  { name: 'Cardiff', latitude: 51.48, longitude: -3.18 },
 ] as const satisfies readonly FleetLocation[];
 
 const sitesPerLocation = 5;
 
-/** Half-width of the uniform offset applied to each site around its cluster centre. */
-const latitudeJitterDegrees = 0.02;
-const longitudeJitterDegrees = 0.03;
+/**
+ * Half-width of the uniform offset applied to each site around its cluster centre, both axes.
+ *
+ * Bounded by the de-duplication bucket rather than by taste: `locationId` rounds to 2 decimal
+ * places, so a site keeps its centre's bucket only while it stays within half a bucket — 0.005° —
+ * of that centre. 0.004° leaves margin for the 5 dp coordinate rounding below (up to 0.000005°)
+ * and for float representation. Widening it past 0.005 would silently multiply the fleet's
+ * Open-Meteo call volume; `fleet.test.ts` fails if it does.
+ *
+ * The two axes share one half-width for the same reason: the constraint is expressed in degrees
+ * of the bucket grid, which is square, not in kilometres on the ground.
+ */
+const jitterDegrees = 0.004;
 
 /**
  * Coordinates are recorded to 5 decimal places — about a metre, far finer than the jitter box and
@@ -145,11 +167,11 @@ export function generateFleet(seed: number): readonly Site[] {
       // Draw order is the contract — id bytes, latitude, longitude, tilt, azimuth, capacity.
       const id = nextUuidV4(rng);
       const latitude = roundTo(
-        location.latitude + sampleJitter(rng, latitudeJitterDegrees),
+        location.latitude + sampleJitter(rng, jitterDegrees),
         coordinateDecimals,
       );
       const longitude = roundTo(
-        location.longitude + sampleJitter(rng, longitudeJitterDegrees),
+        location.longitude + sampleJitter(rng, jitterDegrees),
         coordinateDecimals,
       );
       const tiltDegrees = Math.round(sampleTriangular(rng, tiltDegreesRange));

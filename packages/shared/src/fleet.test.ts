@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { canonicalFleetSeed, generateFleet } from './fleet';
+import { locationId } from './location';
 import { siteSchema } from './site';
 import type { Site } from './site';
 
@@ -28,24 +29,26 @@ const expectedLocationNames = [
  * that imported the constants could not catch them drifting from the documented design.
  */
 const expectedClusterCentres = [
-  { name: 'Dublin', latitude: 53.3498, longitude: -6.2603 },
-  { name: 'Cork', latitude: 51.8985, longitude: -8.4756 },
-  { name: 'Galway', latitude: 53.2707, longitude: -9.0568 },
-  { name: 'Limerick', latitude: 52.6638, longitude: -8.6267 },
-  { name: 'Belfast', latitude: 54.5973, longitude: -5.9301 },
-  { name: 'London', latitude: 51.5072, longitude: -0.1276 },
-  { name: 'Manchester', latitude: 53.4808, longitude: -2.2426 },
-  { name: 'Birmingham', latitude: 52.4862, longitude: -1.8904 },
-  { name: 'Bristol', latitude: 51.4545, longitude: -2.5879 },
-  { name: 'Leeds', latitude: 53.8008, longitude: -1.5491 },
-  { name: 'Edinburgh', latitude: 55.9533, longitude: -3.1883 },
-  { name: 'Cardiff', latitude: 51.4816, longitude: -3.1791 },
+  { name: 'Dublin', latitude: 53.35, longitude: -6.26 },
+  { name: 'Cork', latitude: 51.9, longitude: -8.48 },
+  { name: 'Galway', latitude: 53.27, longitude: -9.06 },
+  { name: 'Limerick', latitude: 52.66, longitude: -8.63 },
+  { name: 'Belfast', latitude: 54.6, longitude: -5.93 },
+  { name: 'London', latitude: 51.51, longitude: -0.13 },
+  { name: 'Manchester', latitude: 53.48, longitude: -2.24 },
+  { name: 'Birmingham', latitude: 52.49, longitude: -1.89 },
+  { name: 'Bristol', latitude: 51.45, longitude: -2.59 },
+  { name: 'Leeds', latitude: 53.8, longitude: -1.55 },
+  { name: 'Edinburgh', latitude: 55.95, longitude: -3.19 },
+  { name: 'Cardiff', latitude: 51.48, longitude: -3.18 },
 ];
 
-const expectedLatitudeJitter = 0.02;
-const expectedLongitudeJitter = 0.03;
+/** Both axes share one half-width: the de-duplication bucket it has to fit inside is square. */
+const expectedJitter = 0.004;
 /** Coordinates are recorded to 5 dp, so rounding can nudge a site half a unit past the jitter box. */
 const coordinateRoundingSlack = 0.000005;
+/** Half of `locationId`'s 0.01° bucket — the ceiling the jitter half-width has to stay under. */
+const halfLocationBucket = 0.005;
 
 function locationNameOf(site: Site): string {
   return site.name.split(' rooftop ')[0] ?? site.name;
@@ -108,12 +111,44 @@ describe('generateFleet', () => {
         continue;
       }
       expect(Math.abs(site.latitude - centre.latitude)).toBeLessThanOrEqual(
-        expectedLatitudeJitter + coordinateRoundingSlack,
+        expectedJitter + coordinateRoundingSlack,
       );
       expect(Math.abs(site.longitude - centre.longitude)).toBeLessThanOrEqual(
-        expectedLongitudeJitter + coordinateRoundingSlack,
+        expectedJitter + coordinateRoundingSlack,
       );
     }
+  });
+
+  it('keeps every cluster centre at the centre of its own locationId bucket', () => {
+    // Half of the co-location invariant below. A centre that is not bucket-exact puts its
+    // jitter box across a bucket boundary, and the cluster stops being one weather fetch.
+    for (const centre of expectedClusterCentres) {
+      expect(locationId(centre)).toBe(
+        `${centre.latitude.toFixed(2)},${centre.longitude.toFixed(2)}`,
+      );
+    }
+  });
+
+  it('gives every cluster one shared locationId, so 60 sites are 12 weather fetches', () => {
+    // The de-duplication lever the fleet exists to provide (docs/design/fleet-simulation.md,
+    // "Weather locations and the Open-Meteo budget"). It holds because the jitter half-width is
+    // strictly under half a bucket — asserted here rather than assumed, since widening the
+    // jitter is the change that would quietly break it (#78).
+    expect(expectedJitter + coordinateRoundingSlack).toBeLessThan(halfLocationBucket);
+
+    const fleet = generateFleet(canonicalFleetSeed);
+    const idsByCluster = new Map<string, Set<string>>();
+    for (const site of fleet) {
+      const cluster = locationNameOf(site);
+      const ids = idsByCluster.get(cluster) ?? new Set<string>();
+      ids.add(locationId(site));
+      idsByCluster.set(cluster, ids);
+    }
+
+    for (const [cluster, ids] of idsByCluster) {
+      expect([...ids], `${cluster} spans more than one weather location`).toHaveLength(1);
+    }
+    expect(new Set(fleet.map((site) => locationId(site))).size).toBe(expectedClusterCentres.length);
   });
 
   it('pins the canonical fleet: any change to seed, PRNG, or draw order fails here', () => {
@@ -122,8 +157,8 @@ describe('generateFleet', () => {
     expect(fleet.at(0)).toEqual({
       id: '651ceb1d-ad75-4da3-b8f4-f6e72ead1fc8',
       name: 'Dublin rooftop 1',
-      latitude: 53.35728,
-      longitude: -6.24317,
+      latitude: 53.3515,
+      longitude: -6.25772,
       tiltDegrees: 22,
       azimuthDegrees: 121,
       capacityKw: 5.9,
@@ -132,8 +167,8 @@ describe('generateFleet', () => {
     expect(fleet.at(-1)).toEqual({
       id: '491b3a8f-ae77-4c32-81b4-0722e36170b1',
       name: 'Cardiff rooftop 5',
-      latitude: 51.47242,
-      longitude: -3.18851,
+      latitude: 51.47816,
+      longitude: -3.18126,
       tiltDegrees: 31,
       azimuthDegrees: 195,
       capacityKw: 4,
