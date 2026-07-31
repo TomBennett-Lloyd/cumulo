@@ -6,7 +6,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "eslint --max-warnings 0 .",
+    "lint": "pnpm lint:js && pnpm lint:css",
+    "lint:js": "eslint --max-warnings 0 .",
+    "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh",
@@ -17,6 +19,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx,mts,cts}": "eslint --no-warn-ignored --max-warnings 0 --cache --cache-location node_modules/.cache/eslint-precommit/",
+    "*.css": "stylelint --max-warnings 0",
     "*": "prettier --check --ignore-unknown"
   },
   "devDependencies": {
@@ -25,6 +28,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "lint-staged": "^16.4.0",
     "prettier": "^3.9.6",
+    "stylelint": "^17.14.1",
+    "stylelint-declaration-strict-value": "^1.11.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0"
   }
