@@ -103,8 +103,15 @@ fixture() {
     '- [0002 — Storage split](0002-storage-split.md)'
 }
 
-adr() { # adr <path> <title>
-  printf '# %s\n\nStatus: Accepted\n' "$2" >"$1"
+# The header is the real one's, not a sketch of it: the gate reads `Status:` now, so a
+# fixture ADR whose header does not match what `docs/adr/0000-template.md` prescribes would
+# make every case a status case by accident.
+adr() { # adr <path> <title> [status]   status defaults to the repo's `accepted`
+  printf '# %s\n\n- **Status:** %s\n- **Date:** 2026-07-31\n' "$2" "${3:-accepted}" >"$1"
+}
+
+adr_without_status() { # adr_without_status <path> <title>
+  printf '# %s\n\n- **Date:** 2026-07-31\n' "$2" >"$1"
 }
 
 # index <dir> <row...> -> a README with prose above the index, matching the real one: the
@@ -388,6 +395,125 @@ begin "a nonexistent ADR directory exits 2, not 1"
 run_check "$TMP_ROOT/does-not-exist"
 expect_rc 2 "$rc"
 expect_out "not a directory"
+end
+
+# ==========================================================================================
+# 19. the extended grammar's valid forms
+# ==========================================================================================
+# One case for everything the grammar is supposed to accept, because the risk with a
+# loosened row regex and a new per-file check is not that they reject too little — cases
+# 20-24 cover that — but that a stricter reading of them makes the legal forms unusable.
+begin "an annotated row, an unannotated row and the full Status vocabulary all pass"
+fixture annotated
+must adr "$DIR/0001-service-boundaries.md" "Service boundaries" "superseded by 0002"
+must adr "$DIR/0002-storage-split.md" "Storage split" "proposed"
+index "$DIR" \
+  '- [0001 — Service boundaries](0001-service-boundaries.md) — superseded by 0002' \
+  '- [0002 — Storage split](0002-storage-split.md)'
+run_check "$DIR"
+expect_rc 0 "$rc"
+expect_out "OK — 2 ADRs"
+expect_not_out "ERROR"
+end
+
+# ==========================================================================================
+# 20. a malformed annotation is still a malformed row
+# ==========================================================================================
+# The point of an *optional, structured* suffix is that the trailing anchor still bites. If
+# the grammar had been loosened to `.*$` instead, both variants below would sail through and
+# the row's shape would stop being checked at all.
+begin "a malformed row annotation fails instead of being waved through"
+fixture bad_annotation
+case_ctx="no em-dash separator"
+index "$DIR" \
+  '- [0001 — Service boundaries](0001-service-boundaries.md)' \
+  '- [0002 — Storage split](0002-storage-split.md) superseded by 0001'
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "index row is not in the"
+# Unreadable rows credit nothing: the target must still be reported unindexed (case 8).
+expect_out "ADR file 0002-storage-split.md is not listed in the index"
+case_ctx="separator with nothing after it"
+index "$DIR" \
+  '- [0001 — Service boundaries](0001-service-boundaries.md)' \
+  '- [0002 — Storage split](0002-storage-split.md) — '
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "index row is not in the"
+expect_out "ADR file 0002-storage-split.md is not listed in the index"
+case_ctx=""
+end
+
+# ==========================================================================================
+# 21. an ADR carrying no Status at all
+# ==========================================================================================
+begin "an ADR file with no Status line fails the gate"
+fixture no_status
+must adr_without_status "$DIR/0002-storage-split.md" "Storage split"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "ADR file 0002-storage-split.md has no 'Status:' line with a value"
+# The file is indexed and the index is intact: this is the only fault in the fixture.
+expect_not_out "is not listed in the index"
+end
+
+# ==========================================================================================
+# 22. a Status outside the template's vocabulary
+# ==========================================================================================
+# Both variants matter. A word nobody defined ("draft") is the obvious one; a capitalised
+# spelling of a word that *is* defined is the one that erodes the vocabulary quietly, since
+# each variant reads fine on its own and only the set stops being machine-readable.
+begin "an ADR Status outside the template's vocabulary fails the gate"
+fixture unknown_status
+case_ctx="undefined word"
+must adr "$DIR/0002-storage-split.md" "Storage split" "draft"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "ADR file 0002-storage-split.md has Status 'draft'"
+case_ctx="wrong case"
+must adr "$DIR/0002-storage-split.md" "Storage split" "Accepted"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "ADR file 0002-storage-split.md has Status 'Accepted'"
+case_ctx=""
+end
+
+# ==========================================================================================
+# 23. a Status superseded by an ADR that is not there
+# ==========================================================================================
+begin "a Status naming a nonexistent superseding ADR fails the gate"
+fixture status_supersession
+case_ctx="number nobody has written yet"
+must adr "$DIR/0002-storage-split.md" "Storage split" "superseded by 0009"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "the Status of 0002-storage-split.md says 'superseded by 0009', but no ADR 0009 exists"
+case_ctx="the template's own number"
+# 0000-template.md is a form, not a decision. It is on disk, so a resolver that only globbed
+# for NNNN-*.md would accept this — and an ADR "superseded by the template" means nothing.
+must adr "$DIR/0002-storage-split.md" "Storage split" "superseded by 0000"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "says 'superseded by 0000', but no ADR 0000 exists"
+case_ctx=""
+end
+
+# ==========================================================================================
+# 24. an index annotation superseded by an ADR that is not there
+# ==========================================================================================
+# The row-level twin of case 23: the annotation is free text to the row grammar, so without
+# this cross-check the index could announce a replacement decision that was never written.
+begin "an index annotation naming a nonexistent superseding ADR fails the gate"
+fixture annotation_supersession
+index "$DIR" \
+  '- [0001 — Service boundaries](0001-service-boundaries.md) — superseded by 0009' \
+  '- [0002 — Storage split](0002-storage-split.md)'
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "the annotation on index row 0001 says 'superseded by 0009', but no ADR 0009 exists"
+# The row itself is well-formed and its target exists — only the pointer is wrong.
+expect_not_out "index row is not in the"
+expect_not_out "is not listed in the index"
 end
 
 # ==========================================================================================

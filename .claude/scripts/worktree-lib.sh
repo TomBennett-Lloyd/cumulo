@@ -13,6 +13,7 @@ fi
 : "${WORKTREE_MIN_AGE_MINUTES:=60}" # minutes of git-dir quiet required before reaping; 0 disables the guard
 : "${WORKTREE_GH_CMD:=gh}"          # GitHub CLI used for the squash-merge check
 : "${WORKTREE_PNPM_CMD:=pnpm}"      # package manager used to reinstall deps after a rebranch
+: "${WORKTREE_FETCH_MAIN:=1}"       # 0 means a caller has already refreshed origin/main this run
 
 # canon <path> -> absolute, symlink-resolved path (works for paths that do not exist).
 # macOS puts temp dirs behind /var -> /private/var, so string comparison needs this.
@@ -45,16 +46,29 @@ is_clean() {
   [ -z "$status" ]
 }
 
+# fetch_main <main-dir> -> best-effort refresh of the base ref is_merged compares against.
+# Always succeeds: a stale base ref costs the ancestry fast path, never a safety property.
+#
+# This is a separate call, not a step inside is_merged, so the decision to touch the network
+# and the object store belongs to whoever owns the run. That buys two things is_merged could
+# not offer on its own: a sweep hoists one fetch above its loop instead of paying one per
+# candidate, and a --dry-run skips it and writes nothing whatsoever.
+fetch_main() {
+  git -C "$1" fetch --quiet origin main >/dev/null 2>&1 || true
+}
+
 # is_merged <branch> <tip> <main-dir> -> prints one of:
 #   merged-ancestor | merged-squash | unmerged | unverifiable
 # This repo squash-merges, so a merged branch's tip is NOT an ancestor of main. Ancestry is
 # only a fast path (it also catches never-committed branches); the authoritative check asks
 # GitHub whether a merged PR had exactly this tip as its head.
+#
+# Reads whatever base ref is on disk and never refreshes it (see fetch_main). Staleness can
+# only turn a merge the fast path would have spotted into a question for the gh check, and the
+# gh check is the authoritative one — so a caller that must not write is giving up speed, not
+# safety.
 is_merged() {
   local branch="$1" tip="$2" main_dir="$3" base="" prs rc
-
-  # Best effort: a stale base ref only ever costs us a false "unmerged", which is safe.
-  git -C "$main_dir" fetch --quiet origin main >/dev/null 2>&1 || true
 
   if git -C "$main_dir" rev-parse --verify --quiet refs/remotes/origin/main >/dev/null 2>&1; then
     base=refs/remotes/origin/main
