@@ -80,3 +80,10 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 - Category: plan
 - Feedback: "for 38, C5, i think we should go for the non destructive route (and generally going forwards this should be the case, the planned destroy should be sufficient)"
 - Action: #38's C5 amended on the issue: acceptance evidence is `terraform plan -destroy` enumerating the resource (`Plan: 0 to add, 0 to change, 8 to destroy.`), not an executed teardown/re-spin-up cycle. **Standing policy for future plans**: the full destructive teardown rehearsal was run once for #7 to prove the runbook; subsequent infra tickets verify teardown participation via planned destroy only. Planner guidance: when writing infra acceptance criteria, "verified removed by teardown" means the resource appears in a destroy plan, not that teardown was executed.
+
+## 2026-07-30 — debt-burn-lane
+
+- **Category**: gate-calibration
+- **Feedback**: Small, proven, well-scoped tech-debt tickets ("already well scoped/proven") may auto-plan (issue body as plan) and auto-merge on green CI + clean review loop, even for source code. Bigger themes needing re-structure/re-think stay human-gated — but a pending user decision must never block the debt-burn lane ("if i'm not at my laptop... i don't want that to stop progress").
+- **Why**: The review gate exists to check style/architecture direction on novel structures. Debt tickets re-apply already-reviewed patterns to known files; the marginal review value is near zero and the waiting cost is real.
+- **How applied**: `debt-burn` label + `planApproval.debtBurn` + `merge.debtBurnRule` in `.claude/workflow.json`; triage applies the label.

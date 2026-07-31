@@ -2,13 +2,16 @@
 
 All AWS infrastructure lives here as Terraform. Nothing is created by hand in the console — if it exists in the account, it exists in a `.tf` file, because the alternative is infrastructure that cannot be torn down and a cost ceiling that cannot be trusted.
 
-A **stack** is one directory under `infra/`, applied independently, with its own state. There is one today:
+A **stack** is one directory under `infra/`, applied independently, with its own state. There are two today:
 
-| Stack       | Directory          | Owns                                                                   |
-| ----------- | ------------------ | ---------------------------------------------------------------------- |
-| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, and the GitHub Actions OIDC role. |
+| Stack       | Directory          | Owns                                                                                                          |
+| ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm. |
+| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.    |
 
-Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned.
+`storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
+
+Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables.
 
 **The one rule that has no exceptions:** no long-lived AWS credentials, anywhere. GitHub Actions authenticates by OIDC and holds no keys. A human operator holds short-term credentials in their own shell, and those never enter this repo, a Terraform variable, or an Actions secret. The single section of this document where operator credentials are discussed at all is [Operator prerequisites](#operator-prerequisites).
 
@@ -47,13 +50,19 @@ terraform -chdir=infra/bootstrap providers lock \
   -platform=linux_amd64 -platform=linux_arm64
 ```
 
+Every stack carries its own `.terraform.lock.hcl` and is bumped the same way with its own `-chdir`; they are independent files and may legitimately sit on different provider patches until each is bumped.
+
 ### 6. First apply: local state, then migrate the stack into its own bucket
 
 The bootstrap stack creates the bucket that stores the bootstrap stack's state, which does not exist when the stack is first applied. Resolved by applying against a local backend, then migrating the resulting state into the bucket that apply just created. Teardown runs it in reverse. Both directions are scripted below in [Runbook: spin up](#runbook-spin-up-the-bootstrap-stack) and [Runbook: tear down](#runbook-tear-down-the-bootstrap-stack), and the mechanism is explained in [Why the override dance](#why-the-override-dance).
 
+**This convention applies to `bootstrap` alone.** Every later stack — `storage` included — finds the bucket already there, so it inits straight against S3 with `-backend-config=backend.hcl` and never sees a local backend, an override file, or a state migration. If you find yourself writing a `backend_override.tf` outside `infra/bootstrap/`, something has gone wrong.
+
 ### 7. Account-specific values stay out of the public repo
 
 This repository is public. The AWS account id is not a credential, but it is an identifier that narrows an attacker's search, and there is no reason for it to be in a git history that cannot be rewritten. So `backend.tf` carries a **partial** backend configuration — the repo-wide conventions (`key`, `encrypt`, `use_lockfile`) are committed, and `bucket` and `region` come from a gitignored `backend.hcl` at init time. Region likewise comes from a gitignored `bootstrap.auto.tfvars`. Both have committed `.example` twins, so the shape is documented even though the values are not, and `.gitignore` blocks the real files along with Terraform override files.
+
+Personal config tied to the account goes one step further and does not live on the operator's disk either. The budget alarm's notification address is an email address — personal data with no business in a public git history, and no business being retyped into a local file on every machine that ever applies this stack. It lives in an **operator-created SSM parameter**, `/cumulo/notification-email` (SecureString, default KMS key), and Terraform only ever _reads_ it through a data source. The account is the source of truth: there is exactly one copy, in the region the stack deploys to, and a second machine spinning the stack up needs no handoff. Terraform cannot create it without reintroducing the problem — the value would have to come from a variable again — so the one-time `put-parameter` is an operator step in [A1](#phase-a--configure-and-plan). The address does land in Terraform state, which is why state lives in a private bucket; it never lands in git.
 
 That decision has a consequence worth stating plainly: `terraform output` prints values that embed the account id, and three of the five outputs contain it. Do not paste raw output into committed files, PR bodies, or issue comments — quote the shape (`arn:aws:iam::<account-id>:role/cumulo-github-actions`), not the digits.
 
@@ -162,6 +171,21 @@ aws sts get-caller-identity --query Account --output text
 gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
 ```
 
+**Still A1, but once per _account_ rather than once per machine: the budget-alarm notification parameter.** The budget alarm emails this address; per convention 7 it lives in the account rather than in any file here:
+
+```bash
+aws ssm put-parameter --name /cumulo/notification-email \
+  --type SecureString --value <your-email> --region eu-west-1
+```
+
+`--region` must be the same value as `bootstrap.auto.tfvars`'s `aws_region`: Parameter Store is regional and the data source reads from the region the provider is configured for, so a CLI default region that differs from `aws_region` writes the parameter somewhere Terraform will never look — and A5 then fails with `ParameterNotFound` for a parameter that demonstrably exists. Pass it explicitly rather than trusting the CLI default. This has already been done for this account, so a routine spin-up skips it; the step exists so a clean account can be reproduced from this document alone. Confirm it is there, in the right region, without printing the address:
+
+```bash
+aws ssm get-parameter --name /cumulo/notification-email --query 'Parameter.Name' --output text --region eu-west-1
+```
+
+Terraform reads the parameter and never writes it. If it is missing, the plan in A5 fails with a `ParameterNotFound` error naming this parameter — which is the intended failure, not a reason to hardcode an address.
+
 **A2. Add the local-backend override.**
 
 ```bash
@@ -190,7 +214,7 @@ terraform init
 terraform plan -no-color | tee ~/cumulo-bootstrap-plan.txt
 ```
 
-Expect **`Plan: 7 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, and the IAM role. Any other count means the configuration is not what this document describes; stop and find out why.
+Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, and the AWS Budgets cost-ceiling budget. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
 
 **A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for review. The `oidc-smoke` check will be red on the PR until Phase B publishes the repo variables; that is expected, and the workflow's preflight step says so on the run itself.
 
@@ -217,9 +241,10 @@ aws s3api head-object --bucket "$BUCKET" --key bootstrap/terraform.tfstate
 terraform state list   # now read from S3
 ```
 
-Expect **9 lines**: the 7 managed resources from A5 plus the two data sources
-(`data.aws_caller_identity.current`, `data.aws_iam_policy_document.github_actions_trust`),
-which `state list` prints alongside them. Only the 7 are created, billed, or destroyed.
+Expect **11 lines**: the 8 managed resources from A5 plus the three data sources
+(`data.aws_caller_identity.current`, `data.aws_iam_policy_document.github_actions_trust`,
+`data.aws_ssm_parameter.notification_email`), which `state list` prints alongside them.
+Only the 8 are created, billed, or destroyed.
 
 **B4. Remove the local state files.** They are gitignored, but a stale local state that still describes live resources is a trap for the next operator:
 
@@ -271,6 +296,14 @@ The evidence is the `aws sts get-caller-identity` output in the run log: an acco
 
 Teardown is a first-class requirement, not a paragraph of good intentions: the cost ceiling in [CLAUDE.md](../CLAUDE.md) is only credible if this works, and it is exercised rather than assumed.
 
+**Exercised once, then read.** This runbook was rehearsed end to end — real destroy, real re-spin-up — when the stack was first built. That rehearsal proves the _procedure_; it does not need repeating every time a resource joins the stack, because repeating it puts live state at real risk to re-prove something already proven. So the routine check that a newly added resource dies with the stack is the non-destructive one:
+
+```bash
+terraform -chdir=infra/bootstrap plan -destroy -no-color
+```
+
+Expect **`Plan: 0 to add, 0 to change, 8 to destroy.`** with the new resource among the enumerated destroys — for the cost-ceiling budget, `aws_budgets_budget.monthly_cost_ceiling`. A resource that Terraform plans to destroy is a resource Terraform owns, which is the whole claim. Full rehearsals are reserved for changes to the teardown procedure itself (the override dance, the backend, the ordering below), where the procedure is what is in doubt. Everything from T1 onward describes a real teardown, for when one is actually wanted.
+
 The ordering matters more than anything else here. **The state that describes the bucket lives in the bucket.** Destroy the bucket while state is still remote and Terraform loses the record of what it was deleting mid-operation. So the state comes home first.
 
 **T1. Bring the state back to local disk.**
@@ -289,7 +322,7 @@ terraform init -migrate-state
 
 ```bash
 ls -l terraform.tfstate
-terraform state list   # expect the same 9 lines as B3 — 7 resources + 2 data sources
+terraform state list   # expect the same 11 lines as B3 — 8 resources + 3 data sources
 ```
 
 This step is load-bearing, not ceremony. T1's prompt accepts only the literal string `yes`; anything else — including `y` — is taken as "start with an empty state", and Terraform then reports a _successful_ init while `terraform.tfstate` never appears and the real state stays in S3. A `terraform destroy` from that position would have no idea what it owns. If `ls` finds no file, nothing has been lost yet: re-init back to S3 with `terraform init -reconfigure -backend-config=backend.hcl` and start T1 again.
@@ -300,7 +333,7 @@ This step is load-bearing, not ceremony. T1's prompt accepts only the literal st
 terraform destroy
 ```
 
-**T4. Verify it is actually gone**, from AWS rather than from Terraform's own opinion. All three commands are expected to _fail_, and the specific failures are the evidence:
+**T4. Verify it is actually gone**, from AWS rather than from Terraform's own opinion. All four commands are expected to _fail_ or come back empty, and the specific failures are the evidence:
 
 ```bash
 BUCKET="cumulo-tfstate-$(aws sts get-caller-identity --query Account --output text)"
@@ -313,7 +346,14 @@ aws iam get-role --role-name cumulo-github-actions
 
 aws iam list-open-id-connect-providers
 # expect: no entry containing token.actions.githubusercontent.com
+
+aws budgets describe-budget \
+  --account-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --budget-name cumulo-monthly-cost-ceiling
+# expect: An error occurred (NotFoundException) ...
 ```
+
+The budgets API is account-scoped rather than regional, so it needs the account id passed explicitly; deriving it from `sts get-caller-identity` in the same line keeps the digits out of this file (convention 7).
 
 **T5. Clean the working directory.**
 
@@ -324,14 +364,15 @@ rm -rf .terraform
 
 Keep `backend.hcl` and `bootstrap.auto.tfvars` — the bucket name is deterministic (convention 3), so both are still correct for the next spin-up.
 
-**T6. Repo variables — leave them, unless this is the end of the project.** A teardown rehearsal should _not_ delete `AWS_OIDC_ROLE_ARN`: the role name and account are fixed, so a fresh apply reproduces a byte-identical ARN, and the stored value still matching afterwards is itself a check that the runbook is reproducible. Only on a final decommission:
+**T6. Repo variables and the notification parameter — leave them, unless this is the end of the project.** A teardown rehearsal should _not_ delete `AWS_OIDC_ROLE_ARN`: the role name and account are fixed, so a fresh apply reproduces a byte-identical ARN, and the stored value still matching afterwards is itself a check that the runbook is reproducible. The same logic covers `/cumulo/notification-email`: Terraform never owned it, `destroy` therefore never touched it, and leaving it means the next spin-up needs no A1 handoff. Only on a final decommission:
 
 ```bash
 gh variable delete AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo
 gh variable delete AWS_REGION --repo TomBennett-Lloyd/cumulo
+aws ssm delete-parameter --region eu-west-1 --name /cumulo/notification-email
 ```
 
-**After T4 this stack costs exactly $0** — not "approximately nothing", but no billable resource remaining. There is nothing left to leak, because IAM roles and OIDC providers are free and the only chargeable thing the stack ever created was the bucket.
+**After T4 this stack costs exactly $0** — not "approximately nothing", but no billable resource remaining. There is nothing left to leak, because IAM roles, OIDC providers and notification-only budgets are all free, and the only chargeable thing the stack ever created was the bucket. The parameter left behind by T6 is free too: standard tier, default KMS key.
 
 To spin back up, run [Phase A](#phase-a--configure-and-plan) then [Phase B](#phase-b--apply-migrate-publish) back to back; A1 is already done.
 
@@ -353,17 +394,167 @@ Alternatives, and why not: creating the bucket by hand or by CLI script leaves i
 
 ---
 
+## Why the cost-ceiling budget lives in bootstrap
+
+The ~$100/month ceiling in [CLAUDE.md](../CLAUDE.md) was a convention until `aws_budgets_budget.monthly_cost_ceiling` made AWS enforce it: a monthly COST budget named `cumulo-monthly-cost-ceiling` that emails the address in `/cumulo/notification-email` at 50%, 80% and 100% of actual spend, and at a forecast of 100%.
+
+It sits in this stack rather than a sibling one because of convention 1. A stack is a lifecycle unit, and this alarm's lifecycle is exactly bootstrap's: it has to exist from the first spin-up until the final decommission, and it has to be the last thing still watching while anything else in the account is billable. A sibling stack would either be torn down before bootstrap — leaving the alarm dead while resources were still spending — or need a new cross-stack ordering rule to prevent that. It is account-level and more than one service will rely on it, so [ADR 0001](../docs/adr/0001-service-boundaries.md) makes it platform-owned.
+
+That does not dilute convention 8. Bootstrap's "deliberately minimal" property is about _deploy permissions_ and app resources, and this budget is notification-only: no budget action, no SNS topic, no IAM grant of any kind. The GitHub Actions role still has zero permissions, the `pull_request` entry in its trust policy is untouched, and CI still never touches AWS. Budget _actions_ — auto-attaching a deny policy at 100% — would change all three of those and start the $0.10/day meter; they are a separate decision, not an increment of this one.
+
+Email subscribers are attached to the budget directly rather than through SNS. Budget notifications need no subscription confirmation, whereas an SNS email subscription requires a human to click a link and, until they do, cannot be deleted for three days — a teardown that blocks for three days is not a teardown.
+
+**A quiet forecast alarm is not a broken one.** FORECASTED notifications need roughly five weeks of usage history before AWS will produce a forecast at all, so on a young account that threshold is simply silent. The three ACTUAL thresholds work from the first billing period and cover the gap.
+
+---
+
+## Runbook: the storage stack
+
+Four DynamoDB tables and four CloudWatch alarms, per [ADR 0002](../docs/adr/0002-storage-split.md). Every command runs from `infra/storage/`:
+
+```bash
+cd infra/storage
+```
+
+**Prerequisites:** the bootstrap stack applied (this stack's state lives in the bucket bootstrap creates), and an operator credential session — see [Operator prerequisites](#operator-prerequisites).
+
+**There is no override dance here.** The bucket already exists, so this stack inits straight against S3 (convention 6). No `backend_override.tf`, no local state, no `-migrate-state`, in either direction.
+
+### Phase A — configure and plan the tables
+
+The same A/B split as the bootstrap runbook, and for the same reason: `.tf` files require human review before they are applied, and a plan is exactly the artefact a reviewer needs. The heading differs from bootstrap's only so the two sections have distinct anchors.
+
+**A1. Create the two gitignored local files from their committed examples.**
+
+```bash
+cp storage.auto.tfvars.example storage.auto.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Set `aws_region` in `storage.auto.tfvars`, and both `region` and `bucket` in `backend.hcl`. They must be the same region as the bootstrap stack — the backend and the provider have to agree on where the bucket lives, and the bucket only exists in one place. The bucket name is `cumulo-tfstate-` followed by the account id:
+
+```bash
+aws sts get-caller-identity --query Account --output text
+```
+
+`environment` needs no entry; it defaults to `dev`. Setting it to something else creates a **fresh, empty** set of tables — DynamoDB has no rename, so Terraform destroys and recreates, and the data goes with it.
+
+**A2. Confirm none of that is visible to git.**
+
+```bash
+git status --short   # expect no output for infra/storage/
+```
+
+**A3. Initialise against the real backend.**
+
+```bash
+terraform init -backend-config=backend.hcl
+```
+
+**A4. Plan.** The tee target is outside the repo on purpose, so a plan output file cannot be committed:
+
+```bash
+terraform plan -no-color | tee ~/cumulo-storage-plan.txt
+```
+
+Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — four tables (`sites`, `series`, `weather`, `metrics`) and four throttle alarms (read and write, on `series` and `weather`). Any other count means the configuration is not what this document describes; stop and find out why. In particular, **9 or more would mean an auto-scaling resource has appeared**, which is the one thing `tables.tf` exists to prevent.
+
+**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, table-name shape, capacity numbers — and label it `awaiting-review`.
+
+### Phase B — apply and prove
+
+**B1. Apply.**
+
+```bash
+terraform apply
+```
+
+**B2. Confirm what exists.**
+
+```bash
+terraform state list   # expect exactly 8 lines — this stack has no data sources
+```
+
+**B3. Confirm the capacity that the whole cost argument rests on.** Read it back from AWS, not from Terraform's opinion of AWS:
+
+```bash
+ENV="$(terraform output -raw environment)"
+aws dynamodb describe-table --table-name "cumulo-series-$ENV" \
+  --query 'Table.ProvisionedThroughput.{W:WriteCapacityUnits,R:ReadCapacityUnits}'
+# expect: W 14, R 21
+aws dynamodb describe-table --table-name "cumulo-weather-$ENV" \
+  --query 'Table.ProvisionedThroughput.{W:WriteCapacityUnits,R:ReadCapacityUnits}'
+# expect: W 5, R 3
+```
+
+19 WCU / 24 RCU against the Region's always-free 25 / 25. Then confirm the non-resource is genuinely absent — an empty list here is the assertion that nothing can scale this past the free tier:
+
+```bash
+aws application-autoscaling describe-scalable-targets --service-namespace dynamodb
+# expect: {"ScalableTargets": []}
+```
+
+**B4. Confirm no drift.**
+
+```bash
+terraform plan -detailed-exitcode
+echo $?   # expect 0
+```
+
+**B5. Smoke-test the adapters against the real tables.** This is the only check that exercises TTL, sparse GSI behaviour, and `BETWEEN` range semantics — the three things unit tests cannot prove:
+
+```bash
+CUMULO_ENV="$(terraform output -raw environment)" pnpm --filter @cumulo/storage smoke
+```
+
+Every line PASS, exit 0, and no residual items (the script re-queries to prove it).
+
+### Teardown rehearsal
+
+Teardown is a project requirement, so it is exercised rather than documented. Unlike bootstrap's, this one has no ordering trap — the state lives in a bucket another stack owns, so nothing is destroying its own foundation.
+
+**What it costs you: all the data, irrecoverably.** No PITR, no final snapshot, no export — deliberate, per ADR 0002. The archive weather cache embodies spent Open-Meteo quota and re-fetching it spends the quota again.
+
+```bash
+terraform destroy
+```
+
+Verify from AWS rather than from Terraform:
+
+```bash
+aws dynamodb list-tables --query "TableNames[?starts_with(@, 'cumulo-')]"
+# expect: []
+aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query 'MetricAlarms[].AlarmName'
+# expect: []
+```
+
+Then re-apply and re-verify, because a teardown that cannot be reversed is only half a rehearsal:
+
+```bash
+terraform apply
+terraform plan -detailed-exitcode ; echo $?   # expect 0
+CUMULO_ENV="$(terraform output -raw environment)" pnpm --filter @cumulo/storage smoke
+```
+
+Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the next spin-up. **Leave the tables up at the end**: #11, #12, #14, and #16 need them, and they cost $0 sitting there, which is the entire point of the capacity decision.
+
+---
+
 ## Cost
 
-`eu-west-1`, and the amounts are not rounded down for effect — the stack really is this cheap, which is the reason a remote backend is affordable at all under the ~$100/month ceiling.
+`eu-west-1`, and the amounts are not rounded down for effect — the stacks really are this cheap, which is the reason a remote backend is affordable at all under the ~$100/month ceiling.
 
-| Resource group                                                                       | Billing basis                                                   | Estimate                       |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------ |
-| **State bucket — storage** (`aws_s3_bucket.tfstate`)                                 | S3 Standard, ~$0.023/GB-month                                   | < $0.01/mo (state is KB-scale) |
-| **State bucket — requests** (state reads/writes plus native lockfile PUT/GET/DELETE) | ~$0.005/1,000 PUT, ~$0.0004/1,000 GET                           | < $0.01/mo (hundreds of ops)   |
-| **Bucket configuration** (versioning, SSE-S3, public access block, lifecycle rule)   | No charge for the configuration; versions bill as storage above | $0.00/mo                       |
-| **IAM** (`aws_iam_openid_connect_provider.github`, `aws_iam_role.github_actions`)    | IAM roles and OIDC providers are free                           | $0.00/mo                       |
-| **Total**                                                                            |                                                                 | **≈ $0.01/mo — rounds to $0**  |
+### Bootstrap stack
+
+| Resource group                                                                       | Billing basis                                                                                                                                     | Estimate                       |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| **State bucket — storage** (`aws_s3_bucket.tfstate`)                                 | S3 Standard, ~$0.023/GB-month                                                                                                                     | < $0.01/mo (state is KB-scale) |
+| **State bucket — requests** (state reads/writes plus native lockfile PUT/GET/DELETE) | ~$0.005/1,000 PUT, ~$0.0004/1,000 GET                                                                                                             | < $0.01/mo (hundreds of ops)   |
+| **Bucket configuration** (versioning, SSE-S3, public access block, lifecycle rule)   | No charge for the configuration; versions bill as storage above                                                                                   | $0.00/mo                       |
+| **IAM** (`aws_iam_openid_connect_provider.github`, `aws_iam_role.github_actions`)    | IAM roles and OIDC providers are free                                                                                                             | $0.00/mo                       |
+| **Cost-ceiling budget** (`aws_budgets_budget.monthly_cost_ceiling`)                  | Notification-only budgets are free of charge; only _action-enabled_ budgets bill (first two free, then $0.10/day), and this budget has no actions | $0.00/mo                       |
+| **Notification parameter** (`/cumulo/notification-email`, read via data source)      | SSM Parameter Store standard tier, encrypted with the default KMS key — no charge for the parameter and none for the key                          | $0.00/mo                       |
+| **Total**                                                                            |                                                                                                                                                   | **≈ $0.01/mo — rounds to $0**  |
 
 Notes on why nothing here grows:
 
@@ -371,3 +562,25 @@ Notes on why nothing here grows:
 - **SSE-S3, not SSE-KMS.** State is encrypted at rest either way; a customer-managed KMS key would add a monthly key charge plus per-request charges to the one stack whose entire purpose includes being tearable down to $0.
 - **The native lockfile has no standing charge.** A DynamoDB lock table would sit in the account billing for existence even while idle; the lockfile is an object that exists only during an operation.
 - **No NAT gateway, no load balancer, no VPC endpoint** — this stack creates nothing with an hourly rate. That is the property to preserve when adding to it: per-request costs at this volume are noise, and hourly ones are the whole budget.
+
+### Storage stack
+
+The figures and the workload they are computed from are [ADR 0002](../docs/adr/0002-storage-split.md)'s; they are restated here because a cost table that lives only inside a decision record is not somewhere an operator looks. Sized against ~50 sites over ~30 locations, hourly, a 48-hour horizon, two models, 90-day retention: ~4.6 M write units/month and ~3.5 GB retained.
+
+| Resource group                                                       | Billing basis                                                                                                             | Estimate     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **Provisioned capacity** (`series` 14 WCU / 21 RCU, `weather` 5 / 3) | 19 WCU / 24 RCU against the always-free **25 WCU / 25 RCU per Region**, which does not expire after twelve months         | **$0.00/mo** |
+| **On-demand tables** (`sites` + both GSIs, `metrics`)                | $0.625/M write request units, $0.125/M read request units — thousands of requests/month, and $0 while idle                | **$0.00/mo** |
+| **Storage** (all four tables)                                        | ~3.5 GB inside the always-free **25 GB**                                                                                  | **$0.00/mo** |
+| **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                                        | **$0.00/mo** |
+| **Backups / recovery**                                               | PITR off ($0.20/GB-month avoided), no on-demand backups, no exports, AWS-owned encryption key rather than a ~$1/month CMK | **$0.00/mo** |
+| **Total**                                                            |                                                                                                                           | **$0.00/mo** |
+
+Genuinely zero, not a rounding error — and unlike the bootstrap stack, this one has no sub-cent line at all.
+
+Notes on what would change that:
+
+- **The free capacity allowance is a hard edge, not a discount.** Crossing 25 WCU or 25 RCU in the Region bills the excess at $0.00065/WCU-hour and $0.00013/RCU-hour. This is why `tables.tf` has no auto-scaling and says so at length: an `aws_appautoscaling_target` is the one change that crosses that edge without appearing in anyone's plan review.
+- **The pool is Region-wide and shared.** 19/24 of 25/25 leaves 6 WCU / 1 RCU. That slack is not a growth reserve — the standing rule (a new table defaults to on-demand unless its load is batch-shaped) is what stops it being needed.
+- **The honest inversion.** At list price this same allocation would cost ≈ $11.30/month against all-on-demand's ≈ $2.88, because a 7% duty cycle is exactly what on-demand pricing exists to serve. Provisioned wins here only because the tier is free, and ADR 0002 says so rather than pretending it is the better engineering answer.
+- **Nothing here has an hourly rate**, which is the property to preserve. Per-request DynamoDB costs at this volume are noise; a VPC, a NAT gateway, or a database instance would be the whole budget — the comparison ADR 0002 turned on.
