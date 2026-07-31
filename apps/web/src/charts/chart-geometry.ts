@@ -120,3 +120,62 @@ export const tickLabelFor = (validTimeIso: string, spanHours: number): string =>
 /** Hours from one UTC ISO instant to another; drives the label form above. */
 export const spanHoursBetween = (startIso: string, endIso: string): number =>
   (Date.parse(endIso) - Date.parse(startIso)) / MS_PER_HOUR;
+
+/**
+ * Named rather than positional: `snapToNearestIndex(x, 46, 452, 5)` is four
+ * interchangeable numbers at the call site, and swapping two of them is a bug
+ * no type can catch.
+ */
+export interface SnapToIndexParams {
+  /** Pointer position in SVG user units — the space the plot rect lives in. */
+  readonly pointerX: number;
+  readonly plot: PlotRect;
+  readonly count: number;
+}
+
+/**
+ * The sample index nearest `pointerX`, clamped into `[0, count - 1]` so a
+ * pointer drifting into the axis margins keeps reading the end sample instead
+ * of dropping the readout. Readers aim at a time, not at a 2px line.
+ *
+ * **A pointer exactly halfway between two samples snaps to the later one.**
+ * `Math.round` breaks the tie upward; the direction matters less than the fact
+ * that it is fixed, because a pixel that reported two different hours on two
+ * passes would make the crosshair look broken.
+ */
+export const snapToNearestIndex = ({ pointerX, plot, count }: SnapToIndexParams): number => {
+  const lastIndex = count - 1;
+  const plotWidth = plot.right - plot.left;
+  // A lone sample (or a plot with no width to divide by) has one answer.
+  if (lastIndex <= 0 || plotWidth <= 0) {
+    return 0;
+  }
+  const exactIndex = ((pointerX - plot.left) / plotWidth) * lastIndex;
+  return Math.min(lastIndex, Math.max(0, Math.round(exactIndex)));
+};
+
+export interface TooltipAnchorParams {
+  /** Crosshair position in SVG user units. */
+  readonly snappedX: number;
+  readonly tooltipWidth: number;
+  readonly plot: PlotRect;
+}
+
+/** SVG user units between the crosshair and the panel it labels. */
+const TOOLTIP_GAP = 8;
+
+/**
+ * Left edge of the tooltip panel. It sits to the right of the crosshair until
+ * that would push it past the right plot edge, then flips to the left side —
+ * the readout follows the pointer without ever running off the canvas.
+ *
+ * If the panel fits on neither side it pins to the left plot edge: a readout
+ * overlapping its own crosshair is still readable, one half off the chart is
+ * not.
+ */
+export const tooltipAnchorX = ({ snappedX, tooltipWidth, plot }: TooltipAnchorParams): number => {
+  const rightAnchor = snappedX + TOOLTIP_GAP;
+  return rightAnchor + tooltipWidth <= plot.right
+    ? rightAnchor
+    : Math.max(plot.left, snappedX - TOOLTIP_GAP - tooltipWidth);
+};

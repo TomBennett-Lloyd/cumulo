@@ -1,4 +1,10 @@
-import type { ReactElement } from 'react';
+import {
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+} from 'react';
 import {
   axisTicks,
   niceAxisMax,
@@ -14,7 +20,6 @@ import {
   axisTickText,
   bandPolygonPoints,
   contiguousRuns,
-  formatKw,
   highestValueKw,
   medianAt,
   p10At,
@@ -25,6 +30,9 @@ import {
   type ChartScale,
   type ForecastChartPoint,
 } from './chart-series';
+import { ForecastChartHoverLayer, hoverKeyAction, pointerIndex } from './forecast-chart-hover';
+import { FORECAST_CHART_LEGEND } from './forecast-chart-legend';
+import { forecastChartTable } from './forecast-chart-table';
 
 /**
  * The forecast chart, drawn to `docs/design/chart-treatment.md`: a P10–P90 band
@@ -44,6 +52,17 @@ import {
  * actuals are drawn once per contiguous run, so a straight segment is never
  * painted across a gap to imply a value that was never modelled or measured
  * (`error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31).
+ *
+ * **The readout has one source of truth.** Pointer and keyboard both do exactly
+ * one thing — set `activeIndex` — and `forecast-chart-hover.tsx` draws whatever
+ * that index says. There is no separate keyboard rendering path to drift from
+ * the hover one, which is what the treatment's "keyboard focus shows exactly
+ * what hover shows" costs when it is designed in rather than retrofitted.
+ *
+ * This file is composition plus the plot's marks. The hover layer and the
+ * figure's chrome sit beside it — `forecast-chart-hover.tsx`,
+ * `-legend.tsx`, `-table.tsx` — each a piece of the treatment named after the
+ * piece it draws, and each well inside `structure.md` rule 4's ceiling.
  */
 
 export type { ForecastChartBand, ForecastChartPoint } from './chart-series';
@@ -59,9 +78,13 @@ export interface ForecastChartProps {
  * SVG user units. Geometry is not styling: these are coordinates, not sizes.
  * Exported because anything positioning a mark against this chart — the hover
  * layer, and the tests that check where a rule landed — needs the same rect.
+ * The view-box width goes with it: mapping a client pixel into this chart's
+ * space is a division by the rendered width and a multiplication by this.
  */
 export const CHART_PLOT: PlotRect = { left: 46, right: 452, top: 16, bottom: 164 };
-const VIEW_BOX = '0 0 480 194';
+export const CHART_VIEW_BOX_WIDTH = 480;
+const VIEW_BOX_HEIGHT = 194;
+const VIEW_BOX = `0 0 ${String(CHART_VIEW_BOX_WIDTH)} ${String(VIEW_BOX_HEIGHT)}`;
 const Y_LABEL_GAP = 10;
 const X_LABEL_GAP = 18;
 const HORIZON_LABEL_GAP = 6;
@@ -184,72 +207,10 @@ const xLabelElements = (
         ];
   });
 
-/**
- * Fixed in draw order and always present: three series are on the plot, so
- * identity is never carried by colour alone. The band swatch is the one place
- * the bound stroke does double duty — at swatch size a bare 10% wash is nearly
- * invisible, and the edges are what make it read as a band.
- */
-const LEGEND: ReactElement = (
-  <ul className="forecast-chart-legend">
-    <li>
-      <svg className="forecast-chart-legend-key" viewBox="0 0 28 14" aria-hidden="true">
-        <rect className="forecast-chart-band" x="0" y="2" width="28" height="10" />
-        <line className="forecast-chart-band-bound" x1="0" x2="28" y1="2.5" y2="2.5" />
-        <line className="forecast-chart-band-bound" x1="0" x2="28" y1="11.5" y2="11.5" />
-      </svg>
-      Forecast (P10–P90)
-    </li>
-    <li>
-      <svg className="forecast-chart-legend-key" viewBox="0 0 28 14" aria-hidden="true">
-        <line className="forecast-chart-median" x1="0" x2="28" y1="7" y2="7" />
-      </svg>
-      Forecast (median)
-    </li>
-    <li>
-      <svg className="forecast-chart-legend-key" viewBox="0 0 28 14" aria-hidden="true">
-        <line className="forecast-chart-actuals" x1="0" x2="28" y1="7" y2="7" />
-      </svg>
-      Actuals
-    </li>
-  </ul>
-);
-
-/** The WCAG-clean twin the treatment requires: every plotted value, in text. */
-const tableElement = (
-  points: readonly ForecastChartPoint[],
-  spanHours: number,
-  caption: string,
-): ReactElement => (
-  <table className="forecast-chart-table">
-    <caption>{caption}</caption>
-    <thead>
-      <tr>
-        <th scope="col">Time</th>
-        <th scope="col">P10</th>
-        <th scope="col">Median</th>
-        <th scope="col">P90</th>
-        <th scope="col">Actual</th>
-      </tr>
-    </thead>
-    <tbody>
-      {points.map((point) => (
-        <tr key={point.validTimeIso}>
-          <th scope="row">
-            <time dateTime={point.validTimeIso}>{tickLabelFor(point.validTimeIso, spanHours)}</time>
-          </th>
-          <td>{formatKw(point.band?.p10Kw)}</td>
-          <td>{formatKw(point.medianKw)}</td>
-          <td>{formatKw(point.band?.p90Kw)}</td>
-          <td>{formatKw(point.actualKw)}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-);
-
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const { points } = props;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const scale: ChartScale = {
     plot: CHART_PLOT,
     axisMaxKw: niceAxisMax(highestValueKw(points)),
@@ -260,11 +221,53 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
 
+  const clearReadout = (): void => {
+    setActiveIndex(null);
+  };
+
+  const readAtPointer = (event: ReactPointerEvent<SVGRectElement>): void => {
+    setActiveIndex(
+      pointerIndex({
+        clientX: event.clientX,
+        svg: svgRef.current,
+        viewBoxWidth: CHART_VIEW_BOX_WIDTH,
+        scale,
+      }),
+    );
+  };
+
+  /** Focus opens the readout on the first sample; a live pointer readout stands. */
+  const readAtFocus = (): void => {
+    setActiveIndex((current) => current ?? 0);
+  };
+
+  const readAtKey = (event: ReactKeyboardEvent<SVGSVGElement>): void => {
+    const action = hoverKeyAction({ key: event.key, activeIndex, pointCount: points.length });
+    if (action.kind === 'ignored') {
+      return;
+    }
+    // Only keys the chart actually acts on lose their default — arrows must not
+    // scroll the page out from under a focused chart, and Tab must still tab.
+    event.preventDefault();
+    setActiveIndex(action.kind === 'cleared' ? null : action.activeIndex);
+  };
+
   return (
     <figure className="forecast-chart-figure">
       {/* Draw order is back to front: grid → band → bounds → horizon → median →
-          actuals → marker. Actuals are drawn last and win every overlap. */}
-      <svg className="forecast-chart" viewBox={VIEW_BOX} role="img" aria-label={props.ariaLabel}>
+          actuals → marker. Actuals are drawn last of the data and win every
+          overlap; the hover chrome and its pointer target sit above all of it. */}
+      <svg
+        ref={svgRef}
+        className="forecast-chart"
+        viewBox={VIEW_BOX}
+        role="img"
+        aria-label={props.ariaLabel}
+        tabIndex={0}
+        onFocus={readAtFocus}
+        onBlur={clearReadout}
+        onKeyDown={readAtKey}
+      >
         {gridElements(scale)}
         {bandElements(points, bandRuns, scale)}
         {boundElements(points, bandRuns, scale)}
@@ -286,10 +289,28 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         <text className="forecast-chart-axis-title" x={0} y={AXIS_TITLE_BASELINE}>
           kW
         </text>
+        <ForecastChartHoverLayer
+          points={points}
+          activeIndex={activeIndex}
+          scale={scale}
+          spanHours={spanHours}
+        />
+        {/* Last child, and the whole plot: the readout must never depend on the
+            pointer hitting a 2px line. `charts.css` gives it the pointer-events
+            it needs and no fill. */}
+        <rect
+          className="forecast-chart-pointer-target"
+          x={CHART_PLOT.left}
+          y={CHART_PLOT.top}
+          width={CHART_PLOT.right - CHART_PLOT.left}
+          height={CHART_PLOT.bottom - CHART_PLOT.top}
+          onPointerMove={readAtPointer}
+          onPointerLeave={clearReadout}
+        />
       </svg>
 
-      {LEGEND}
-      {tableElement(points, spanHours, props.tableCaption)}
+      {FORECAST_CHART_LEGEND}
+      {forecastChartTable({ points, spanHours, caption: props.tableCaption })}
     </figure>
   );
 };

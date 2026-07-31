@@ -1,62 +1,22 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex } from './chart-geometry';
-import { CHART_PLOT, ForecastChart, type ForecastChartPoint } from './ForecastChart';
+import { CHART_PLOT } from './ForecastChart';
+import {
+  banded,
+  bare,
+  marks,
+  renderChart,
+  requireMark,
+  SERIES,
+  tableCells,
+} from './forecast-chart-test-fixture';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
 // never registers itself.
 afterEach(cleanup);
-
-const iso = (hour: number): string => `2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`;
-
-const banded = (hour: number, medianKw: number, actualKw: number | null): ForecastChartPoint => ({
-  validTimeIso: iso(hour),
-  medianKw,
-  band: { p10Kw: medianKw - 1, p90Kw: medianKw + 1 },
-  actualKw,
-});
-
-/** No `band` key at all — a point estimate, not a band of `undefined`. */
-const bare = (hour: number, medianKw: number, actualKw: number | null): ForecastChartPoint => ({
-  validTimeIso: iso(hour),
-  medianKw,
-  actualKw,
-});
-
-/** Five samples, banded throughout, measured up to a horizon at index 2. */
-const SERIES: readonly ForecastChartPoint[] = [
-  banded(6, 1, 0.9),
-  banded(9, 4, 3.8),
-  banded(12, 6, 5.9),
-  banded(15, 5, null),
-  banded(18, 2, null),
-];
-
-const renderChart = (points: readonly ForecastChartPoint[]): HTMLElement => {
-  const { container } = render(
-    <ForecastChart
-      points={points}
-      ariaLabel="Sunnyside Farm: forecast and actuals"
-      tableCaption="Table view — Sunnyside Farm, kW"
-    />,
-  );
-  return container;
-};
-
-/** Scoped to the plot, so legend swatches wearing the same classes stay out. */
-const marks = (container: HTMLElement, selector: string): readonly Element[] => [
-  ...container.querySelectorAll(`.forecast-chart > ${selector}`),
-];
-
-const requireMark = (container: HTMLElement, selector: string): Element => {
-  const found = marks(container, selector)[0];
-  if (found === undefined) {
-    throw new Error(`no mark matching ${selector}`);
-  }
-  return found;
-};
 
 const vertexCount = (mark: Element): number =>
   (mark.getAttribute('points') ?? '').split(' ').length;
@@ -175,16 +135,10 @@ describe('ForecastChart', () => {
     const rows = [...container.querySelectorAll('.forecast-chart-table tbody tr')];
 
     expect(rows).toHaveLength(SERIES.length + 1);
-    expect(
-      [...(rows[0]?.querySelectorAll('td') ?? [])].map((cell) => cell.textContent),
-    ).toStrictEqual(['0.0', '1.0', '2.0', '0.9']);
+    expect(tableCells(container, 0)).toStrictEqual(['0.0', '1.0', '2.0', '0.9']);
     // Past the horizon: no measurement. Point estimate: no band bounds.
-    expect(
-      [...(rows[4]?.querySelectorAll('td') ?? [])].map((cell) => cell.textContent),
-    ).toStrictEqual(['1.0', '2.0', '3.0', '—']);
-    expect(
-      [...(rows[5]?.querySelectorAll('td') ?? [])].map((cell) => cell.textContent),
-    ).toStrictEqual(['—', '0.5', '—', '—']);
+    expect(tableCells(container, 4)).toStrictEqual(['1.0', '2.0', '3.0', '—']);
+    expect(tableCells(container, 5)).toStrictEqual(['—', '0.5', '—', '—']);
   });
 
   it('carries the caller labels to the image role and the table caption', () => {

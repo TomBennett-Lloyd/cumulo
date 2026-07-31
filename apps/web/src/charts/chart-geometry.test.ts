@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   axisTicks,
   niceAxisMax,
+  snapToNearestIndex,
   spanHoursBetween,
   tickLabelFor,
+  tooltipAnchorX,
   xForIndex,
   xTickIndices,
   yForKw,
@@ -130,6 +132,75 @@ describe('tickLabelFor', () => {
   it('prefixes a short weekday once a bare time stops identifying a point', () => {
     expect(tickLabelFor('2026-07-30T14:00:00Z', 168)).toBe('Thu 14:00');
     expect(tickLabelFor('2026-07-30T14:00:00Z', 48)).toBe('14:00');
+  });
+});
+
+describe('snapToNearestIndex', () => {
+  // PLOT spans 40..440 over five samples, so they sit at 40, 140, 240, 340, 440.
+  it('reads the sample under the pointer at each sample position', () => {
+    expect(snapToNearestIndex({ pointerX: PLOT.left, plot: PLOT, count: 5 })).toBe(0);
+    expect(snapToNearestIndex({ pointerX: 240, plot: PLOT, count: 5 })).toBe(2);
+    expect(snapToNearestIndex({ pointerX: PLOT.right, plot: PLOT, count: 5 })).toBe(4);
+  });
+
+  it('reads the nearer sample when the pointer falls between two', () => {
+    expect(snapToNearestIndex({ pointerX: 160, plot: PLOT, count: 5 })).toBe(1);
+    expect(snapToNearestIndex({ pointerX: 220, plot: PLOT, count: 5 })).toBe(2);
+  });
+
+  it('breaks an exact midpoint towards the later sample', () => {
+    // 190 is exactly between index 1 (140) and index 2 (240). The direction
+    // matters less than it being fixed: one pixel must not report two hours.
+    expect(snapToNearestIndex({ pointerX: 190, plot: PLOT, count: 5 })).toBe(2);
+    expect(snapToNearestIndex({ pointerX: 189, plot: PLOT, count: 5 })).toBe(1);
+  });
+
+  it('clamps a pointer outside the plot to the nearest end sample', () => {
+    expect(snapToNearestIndex({ pointerX: -1000, plot: PLOT, count: 5 })).toBe(0);
+    expect(snapToNearestIndex({ pointerX: 1000, plot: PLOT, count: 5 })).toBe(4);
+  });
+
+  it('reads the only sample of a single-point series wherever the pointer is', () => {
+    expect(snapToNearestIndex({ pointerX: 400, plot: PLOT, count: 1 })).toBe(0);
+  });
+
+  it('has nothing to divide by when the plot has no width', () => {
+    const degenerate: PlotRect = { ...PLOT, right: PLOT.left };
+
+    expect(snapToNearestIndex({ pointerX: 400, plot: degenerate, count: 5 })).toBe(0);
+  });
+});
+
+describe('tooltipAnchorX', () => {
+  const TOOLTIP_WIDTH = 100;
+
+  it('sits to the right of the crosshair while the panel fits there', () => {
+    const anchor = tooltipAnchorX({ snappedX: 300, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
+
+    expect(anchor).toBeGreaterThan(300);
+    expect(anchor + TOOLTIP_WIDTH).toBeLessThanOrEqual(PLOT.right);
+  });
+
+  it('flips to the left of the crosshair rather than overflow the right edge', () => {
+    const anchor = tooltipAnchorX({ snappedX: 430, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
+
+    expect(anchor + TOOLTIP_WIDTH).toBeLessThanOrEqual(430);
+    expect(anchor).toBeGreaterThanOrEqual(PLOT.left);
+  });
+
+  it('keeps the panel inside the plot at every position the crosshair can take', () => {
+    for (let snappedX = PLOT.left; snappedX <= PLOT.right; snappedX += 1) {
+      const anchor = tooltipAnchorX({ snappedX, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
+
+      expect(anchor).toBeGreaterThanOrEqual(PLOT.left);
+      expect(anchor + TOOLTIP_WIDTH).toBeLessThanOrEqual(PLOT.right);
+    }
+  });
+
+  it('pins to the left plot edge when the panel fits on neither side', () => {
+    const overwide = PLOT.right - PLOT.left + 1;
+
+    expect(tooltipAnchorX({ snappedX: 100, tooltipWidth: overwide, plot: PLOT })).toBe(PLOT.left);
   });
 });
 

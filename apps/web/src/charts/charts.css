@@ -65,6 +65,52 @@
   stroke-width: 2;
 }
 
+/* Chrome, not data: the crosshair is the same hairline weight and colour as the
+ * grid it crosses, so it locates a time without competing with a series. */
+.forecast-chart-crosshair {
+  stroke: var(--color-chart-grid);
+  stroke-width: 1;
+}
+
+/* Invisible, but the entire plot is a target — readers aim at a time, not at a
+ * 2px line. `fill: none` alone would make the rect untargetable; the
+ * `pointer-events` declaration is what does the work. */
+.forecast-chart-pointer-target {
+  fill: none;
+  pointer-events: all;
+}
+
+/* The readout floats over the marks and must never intercept the pointer that
+ * summoned it — without this it would sit under the cursor and flicker. */
+.forecast-chart-tooltip {
+  pointer-events: none;
+}
+
+.forecast-chart-tooltip-panel {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.forecast-chart-tooltip-text {
+  fill: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The value leads in full contrast and the series name follows muted
+ * (chart-treatment.md): the number is what the reader came for, and identity
+ * comes from the key stroke beside it rather than from colouring the text. */
+.forecast-chart-tooltip-value {
+  fill: var(--color-text);
+}
+
+.forecast-chart-tooltip-name,
+.forecast-chart-tooltip-time {
+  fill: var(--color-text-muted);
+}
+
 .forecast-chart-axis-label {
   fill: var(--color-chart-axis-label);
   font-family: var(--font-sans);
