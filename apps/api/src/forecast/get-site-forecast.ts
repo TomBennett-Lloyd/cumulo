@@ -42,13 +42,21 @@ import { hoursAfter } from './series-window';
  * three match the ranges the web app's picker offers (`RangeHours`), so a
  * request the UI can make is a request this route can answer.
  *
- * `.default('48')` is applied to the *string* before the mapping, so a missing
+ * Both are exported because the OpenAPI document states this parameter's enum
+ * and its default: generated from these constants, the published contract and
+ * the parser cannot drift; restated in the document, they could.
+ *
+ * The default is applied to the *string* before the mapping, so a missing
  * parameter and an explicit `hours=48` take the identical path — a default
  * expressed as a number afterwards would be a second place the value 48 lived.
  */
+export const FORECAST_HORIZON_HOURS = ['24', '48', '168'] as const;
+
+export const DEFAULT_FORECAST_HORIZON_HOURS = '48';
+
 const forecastHoursSchema = z
-  .enum(['24', '48', '168'])
-  .default('48')
+  .enum(FORECAST_HORIZON_HOURS)
+  .default(DEFAULT_FORECAST_HORIZON_HOURS)
   .transform((hours) => Number.parseInt(hours, 10));
 
 /**

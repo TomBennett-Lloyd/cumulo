@@ -7,11 +7,12 @@
     "lint": "eslint --max-warnings 0 .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/main.mjs && cd dist && zip -q -X handler.zip main.mjs"
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/main.mjs && node scripts/copy-swagger-assets.mjs && cd dist && zip -q -X -r handler.zip main.mjs swagger"
   },
   "dependencies": {
     "@cumulo/shared": "workspace:*",
     "@cumulo/storage": "workspace:*",
+    "swagger-ui-dist": "5.32.11",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -17,6 +17,11 @@ discipline: there is no HTTP client in this package to misuse.
 | `http/router.ts`         | The route table and its matcher. 404 on no match, 400 on a body that is not JSON.      |
 | `sites/site-id-param.ts` | The `{siteId}` path parameter, validated once for the three routes that take one.      |
 | `sites/*.ts`             | One module per route: list, create, get, update, delete.                               |
+| `openapi/components.ts`  | `components.schemas`, generated from the zod schemas the handlers parse with.          |
+| `openapi/paths.ts`       | One documented operation per registered route. Statuses read from `apiErrorStatus`.    |
+| `openapi/document.ts`    | The document, assembled once at module load, and `GET /openapi.json`.                  |
+| `openapi/docs-assets.ts` | The exact-filename asset allowlist — also the build's copy manifest.                   |
+| `openapi/docs-page.ts`   | The Swagger UI page and the `/docs/{asset}` route that serves its assets.              |
 | `main.ts`                | The composition root: environment, adapters, route table, and the error boundary.      |
 | `api-fixtures.ts`        | Test support — request and site fixtures, in one module rather than one per test file. |
 
@@ -60,6 +65,9 @@ the status (plus `Retry-After` when present), never on the body.
 | `GET /v1/sites/{siteId}`    | 200 with the site; 404 if unknown; 400 if the id is not a uuid.                                                 |
 | `PUT /v1/sites/{siteId}`    | 200 with the updated site. Read-modify-write preserving `id`, `origin`, `createdAt`, `active`. Last write wins. |
 | `DELETE /v1/sites/{siteId}` | 204 empty when a site was removed; 404 when there was nothing to remove.                                        |
+| `GET /openapi.json`         | 200 with the OpenAPI 3.0 document, built at start-up from the zod schemas.                                      |
+| `GET /docs`                 | 200 `text/html` — Swagger UI, pointed at `/openapi.json` on the same origin.                                    |
+| `GET /docs/{asset}`         | 200 with an allowlisted Swagger UI asset; 404 for every other name.                                             |
 
 `POST /v1/sites` is unauthenticated and enforces **no site cap**. That is deliberate: #14's cost
 guard on this endpoint is the API Gateway stage throttle (10 rps, burst 20) configured in
@@ -85,7 +93,7 @@ during initialization rather than mid-request.
 ## Build
 
 ```sh
-pnpm --filter @cumulo/api build   # → dist/main.mjs, dist/handler.zip
+pnpm --filter @cumulo/api build   # → dist/main.mjs, dist/swagger/*, dist/handler.zip
 ```
 
 The zip is the artifact the API's Terraform uploads; the Lambda handler string is `main.handler`.
@@ -94,3 +102,11 @@ argues at length: the AWS SDK is bundled rather than `--external` (the runtime's
 changes without notice), `--main-fields=module,main` bundles the SDK's ESM build so no dynamic
 `require` survives into an ESM artifact, and `rm -rf dist` runs first because `zip` appends to an
 existing archive.
+
+`scripts/copy-swagger-assets.mjs` then copies the Swagger UI files into `dist/swagger/`, which is
+where `main.ts` resolves them from — `new URL('./swagger/', import.meta.url)` against the bundle's
+own location, so the same code path works in the zip and nowhere else has to know a path. The script
+imports the allowlist from `src/openapi/docs-assets.ts` rather than repeating it (Node strips the
+types on import), so the artifact ships exactly the files the route will serve. The largest of them,
+`swagger-ui-bundle.js`, is ~1.5 MB — comfortably inside Lambda's 6 MB response limit even if it were
+base64-encoded, which as text it is not.

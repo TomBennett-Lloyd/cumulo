@@ -14,6 +14,9 @@ import { getSiteSeries } from './forecast/get-site-series';
 import { parseGatewayEvent } from './http/gateway-event';
 import { describeZodIssues, errorResponse, type ApiResponse } from './http/response';
 import { routeRequest, type Route } from './http/router';
+import { docsAssetParamName } from './openapi/docs-assets';
+import { docsPageResponse, serveDocsAsset, type DocsAssetDeps } from './openapi/docs-page';
+import { openApiDocumentResponse } from './openapi/document';
 import { createSite, type CreateSiteDeps } from './sites/create-site';
 import { deleteSite } from './sites/delete-site';
 import { getSite } from './sites/get-site';
@@ -135,6 +138,18 @@ const newSiteId = (): string => randomUUID();
 const createSiteDeps: CreateSiteDeps = { sites, now, newSiteId };
 
 /**
+ * Where the bundled Swagger UI assets are, decided here because it is a fact
+ * about the *artifact* rather than about the code that reads them.
+ *
+ * `import.meta.url` is `dist/main.mjs` in Lambda, so this resolves to
+ * `dist/swagger/` — the directory `scripts/copy-swagger-assets.mjs` fills from
+ * the pinned `swagger-ui-dist` package and `handler.zip` ships alongside the
+ * bundle. The trailing slash is load-bearing: `new URL('swagger-ui.css', …)`
+ * resolves inside the directory only if the base names one.
+ */
+const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', import.meta.url) };
+
+/**
  * The route table. Order is match order; no two patterns here overlap.
  *
  * The adapter is passed whole rather than as `sites.listFleetSites`: it holds
@@ -180,6 +195,22 @@ export const routes: readonly Route[] = [
     method: 'GET',
     segments: ['v1', 'sites', { param: siteIdParamName }, 'series'],
     handle: (request) => getSiteSeries({ sites, series }, request),
+  },
+  // The self-documenting half of the API (ADR 0005): the document, the page
+  // that renders it, and the page's assets, all from this function and this
+  // origin. Same origin is what lets Swagger UI's "try it out" call the routes
+  // above with no CORS negotiation, and one artifact is what stops a deploy
+  // from publishing a document for an API that is not running yet.
+  {
+    method: 'GET',
+    segments: ['openapi.json'],
+    handle: () => Promise.resolve(openApiDocumentResponse()),
+  },
+  { method: 'GET', segments: ['docs'], handle: () => Promise.resolve(docsPageResponse()) },
+  {
+    method: 'GET',
+    segments: ['docs', { param: docsAssetParamName }],
+    handle: (request) => serveDocsAsset(docsAssetDeps, request),
   },
 ];
 

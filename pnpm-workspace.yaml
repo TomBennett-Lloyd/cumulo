@@ -17,6 +17,15 @@ minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 
 allowBuilds:
+  # @scarf/scarf is swagger-ui-dist's only runtime dependency (#14 bundles the
+  # Swagger UI assets into the fleet API's Lambda artifact, per ADR 0005). Its
+  # install script exists solely to report an installation event to scarf.sh —
+  # it is analytics, not a build step, so nothing this repo uses depends on it
+  # having run. Refused rather than approved on both counts: it executes
+  # unreviewed code at install time, and what it does when it succeeds is send
+  # our install telemetry to a third party. The assets are read off disk as
+  # files; no code path in `apps/api` imports this package at all.
+  '@scarf/scarf': false
   # esbuild arrives as a transitive dependency of tsx (the runner for
   # @cumulo/storage's operator smoke script). Its install script exists to fetch
   # a platform binary when the optional per-platform package is unavailable;
