@@ -1,6 +1,21 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Supply-chain quarantine: a version published less than 24h ago is not resolved,
+# so a compromised release has to survive a day of public scrutiny before it can
+# reach this repo. 1440 minutes is pnpm's own default — the point of writing it
+# down is `minimumReleaseAgeStrict` below, which pnpm auto-enables only when the
+# age is set EXPLICITLY. Left implicit, pnpm 11.18 runs the policy in "loose"
+# mode: an install that trips the cutoff does not fail, it appends the offending
+# versions to `minimumReleaseAgeExclude` in this file and proceeds. The gate
+# quietly writes its own exemption, and the exemption is then committed. See #92
+# for the reproduction; `check:supply-chain-policy` in `verify` is the backstop
+# for the paths strict mode does not cover (`pnpm audit --fix`, and an approved
+# interactive prompt), which can still add entries below.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+
 allowBuilds:
   # esbuild arrives as a transitive dependency of tsx (the runner for
   # @cumulo/storage's operator smoke script). Its install script exists to fetch
