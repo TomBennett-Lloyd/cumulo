@@ -1,8 +1,8 @@
 # `@cumulo/api`
 
 The Fleet API: one Lambda behind an API Gateway HTTP API, serving sites CRUD over `cumulo-sites`
-and (from #14's later chunks) per-site forecast reads over `cumulo-series`, plus the OpenAPI
-document and the Swagger UI that renders it.
+and per-site forecast reads over `cumulo-series`, plus the OpenAPI document and the Swagger UI that
+renders it.
 
 The service makes **zero Open-Meteo calls**. It reads what ingestion and the forecast service
 already stored, so CLAUDE.md's API-frugality constraint holds here by construction rather than by
@@ -10,20 +10,25 @@ discipline: there is no HTTP client in this package to misuse.
 
 ## The request path
 
-| Module                   | Responsibility                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------- |
-| `http/gateway-event.ts`  | Parses the API Gateway payload-v2 event into an `ApiRequest`. No `@types/aws-lambda`.  |
-| `http/response.ts`       | The response shape, the `apiErrorSchema` failure body, and response-schema validation. |
-| `http/router.ts`         | The route table and its matcher. 404 on no match, 400 on a body that is not JSON.      |
-| `sites/site-id-param.ts` | The `{siteId}` path parameter, validated once for the three routes that take one.      |
-| `sites/*.ts`             | One module per route: list, create, get, update, delete.                               |
-| `openapi/components.ts`  | `components.schemas`, generated from the zod schemas the handlers parse with.          |
-| `openapi/paths.ts`       | One documented operation per registered route. Statuses read from `apiErrorStatus`.    |
-| `openapi/document.ts`    | The document, assembled once at module load, and `GET /openapi.json`.                  |
-| `openapi/docs-assets.ts` | The exact-filename asset allowlist — also the build's copy manifest.                   |
-| `openapi/docs-page.ts`   | The Swagger UI page and the `/docs/{asset}` route that serves its assets.              |
-| `main.ts`                | The composition root: environment, adapters, route table, and the error boundary.      |
-| `api-fixtures.ts`        | Test support — request and site fixtures, in one module rather than one per test file. |
+| Module                          | Responsibility                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| `http/gateway-event.ts`         | Parses the API Gateway payload-v2 event into an `ApiRequest`. No `@types/aws-lambda`.  |
+| `http/response.ts`              | The response shape, the `apiErrorSchema` failure body, and response-schema validation. |
+| `http/router.ts`                | The route table and its matcher. 404 on no match, 400 on a body that is not JSON.      |
+| `sites/site-id-param.ts`        | The `{siteId}` path parameter, validated once for the three routes that take one.      |
+| `sites/*.ts`                    | One module per route: list, create, get, update, delete.                               |
+| `forecast/known-site.ts`        | The "is there such a site at all" gate both series routes open with.                   |
+| `forecast/series-window.ts`     | Window arithmetic: a horizon into an upper bound, and a window's width in hours.       |
+| `forecast/series-split.ts`      | Splits one interleaved `SeriesPoint[]` into the forecasts and actuals arrays.          |
+| `forecast/get-site-forecast.ts` | `GET …/forecast` — the next 24/48/168 hours, with attribution. Empty is a 200.         |
+| `forecast/get-site-series.ts`   | `GET …/series` — forecasts and actuals over an explicit window, span-capped.           |
+| `openapi/components.ts`         | `components.schemas`, generated from the zod schemas the handlers parse with.          |
+| `openapi/paths.ts`              | One documented operation per registered route. Statuses read from `apiErrorStatus`.    |
+| `openapi/document.ts`           | The document, assembled once at module load, and `GET /openapi.json`.                  |
+| `openapi/docs-assets.ts`        | The exact-filename asset allowlist — also the build's copy manifest.                   |
+| `openapi/docs-page.ts`          | The Swagger UI page and the `/docs/{asset}` route that serves its assets.              |
+| `main.ts`                       | The composition root: environment, adapters, route table, and the error boundary.      |
+| `api-fixtures.ts`               | Test support — request and site fixtures, in one module rather than one per test file. |
 
 Three properties are contracts rather than style:
 

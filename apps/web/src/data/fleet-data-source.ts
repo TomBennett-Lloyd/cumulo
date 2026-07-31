@@ -100,9 +100,18 @@ export type RangeHours = 24 | 48 | 168;
  *   is, on a backoff.
  *
  * A 200 carrying an empty series is **not** an error: the API answers a
- * forecast-less site with `200 []`, and that is `{ kind: 'ok', value: [] }`
- * here. Callers that need "nothing yet" as a distinct state derive it from the
- * empty array, which is what `useFirstForecast` does.
+ * forecast-less site with `200 { "forecasts": [], "attribution": {…} }` — the
+ * body is an object rather than a bare array, so that it can carry the
+ * Open-Meteo credit beside the data it credits (`siteForecastResponseSchema`).
+ * The HTTP source unwraps `forecasts` into `{ kind: 'ok', value: [] }` here.
+ * Callers that need "nothing yet" as a distinct state derive it from the empty
+ * array, which is what `useFirstForecast` does.
+ *
+ * The attribution travels with every weather-derived payload and must be
+ * displayed wherever the data is (CC BY 4.0, CLAUDE.md). Today the UI renders
+ * a static credit; an HTTP source that discards this field is only correct for
+ * as long as that stays true, so unwrapping it is a decision to revisit here
+ * rather than a detail of the transport.
  */
 export interface FleetDataSource {
   /**
