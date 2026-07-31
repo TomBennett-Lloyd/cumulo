@@ -79,6 +79,20 @@ export default {
       },
     ],
 
+    /*
+     * The property list above is an allow-list of the properties we thought of,
+     * so a raw colour reaches the page through any property not on it — most
+     * often a shorthand: `border: 1px solid #ff0000`, `outline`, `box-shadow`,
+     * `text-shadow`, `background-image: linear-gradient(…)`. This rule is
+     * property-agnostic instead: whatever the property, a hex literal or a
+     * colour-function call in its value is refused. Token references survive
+     * because `var(--color-…)` names a colour rather than spelling one.
+     */
+    'declaration-property-value-disallowed-list': [
+      { '/.*/': ['/#[0-9a-fA-F]{3,8}\\b/', '/\\b(rgba?|hsla?|oklch|lab|lch)\\(/'] },
+      { reportDisables: true },
+    ],
+
     // A local custom property may only alias a token — never introduce a raw
     // value under a new name, which would launder it past the rule above.
     'declaration-property-value-allowed-list': [
@@ -105,6 +119,7 @@ export default {
       rules: {
         'scale-unlimited/declaration-strict-value': null,
         'declaration-property-value-allowed-list': null,
+        'declaration-property-value-disallowed-list': null,
       },
     },
   ],

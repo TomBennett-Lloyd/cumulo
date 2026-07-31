@@ -7,16 +7,13 @@ import { TokensPreview } from './TokensPreview';
 
 afterEach(cleanup);
 
-// Derived from the design system rather than from the component, so this stays
-// a real check: a token that stops being rendered — or a new token that lands
-// in a group the preview does not have a section for — fails here.
-const tokenNames = [
-  ...Object.values(tokens.color),
-  ...Object.values(tokens.space),
-  ...Object.values(tokens.text),
-  ...Object.values(tokens.font),
-  ...Object.values(tokens.radius),
-].map((reference) => reference.replace(/^var\(|\)$/g, ''));
+// Walked from `tokens` rather than from the component, and walked whole: naming
+// the groups here would mean a brand-new group — the case most likely to have no
+// section in the preview — passing unnoticed. A token that stops being rendered,
+// or any token in any group the preview has no section for, fails below.
+const tokenNames = Object.values(tokens)
+  .flatMap((group) => Object.values(group))
+  .map((reference) => reference.replace(/^var\(|\)$/g, ''));
 
 describe('TokensPreview', () => {
   it('shows every token in the design system, named', () => {

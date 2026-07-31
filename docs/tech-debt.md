@@ -84,3 +84,9 @@ Entry format:
 - Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)
 - What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI does not run these scripts at all) and #48 (no shellcheck gate).
 - Source: #42
+
+## 2026-07-31 — Chart treatment specifies the horizon boundary but not interior gaps
+
+- Where: `docs/design/chart-treatment.md`, `apps/web/src/preview/TokensPreview.tsx` (chart placeholder), #19's real chart component
+- What: the treatment doc pins how the actuals series ends at the forecast-horizon boundary, but says nothing about missing data _inside_ the measured range. A mid-series null is a partial result and must read as one — the actuals line has to break at the gap, never interpolate a straight segment across it, which would draw a measurement that was never taken (error-handling.md rule 5: partial results are labeled partial, in the API response and the UI). The preview's flat-map-and-join path shape has no notion of a break, so it would silently bridge any gap it was handed; today that is invisible only because the placeholder data is dense. Root cause is the unspecified case, not the placeholder — so the fix is one move across the treatment doc (state the interior-gap rule alongside the boundary rule) and #19's chart component (segment the path, or emit `null` and let the renderer break), not a patch to either alone.
+- Source: #15 review cycle 1
