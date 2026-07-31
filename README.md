@@ -13,6 +13,7 @@ The name: cumulus clouds are the antagonist — the thing between the sun and th
 ## Data sources
 
 - Weather and solar irradiance data by [Open-Meteo.com](https://open-meteo.com/), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Open-Meteo blends models and reanalysis data (ERA5, ERA5-Land) from national weather services; see their [data sources](https://open-meteo.com/en/docs) for the underlying providers.
+- Reference values for the PV physics model are generated offline with [pvlib python](https://pvlib-python.readthedocs.io/) ([BSD-3-Clause](https://github.com/pvlib/pvlib-python/blob/main/LICENSE)) and committed as golden fixtures. pvlib is **not** a runtime or CI dependency — per [ADR 0003](docs/adr/0003-pv-model-runtime.md) the physics itself is a hand-written TypeScript port, validated against those fixtures. The generator and its regeneration instructions live in [`tools/pvlib-fixtures/`](tools/pvlib-fixtures/).
 
 ## Local checks
 
