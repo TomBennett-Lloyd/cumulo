@@ -1,0 +1,141 @@
+/*
+ * The add-a-site form.
+ *
+ * Every value is a token — the gate in stylelint.config.mjs, and the frontend
+ * rule in CLAUDE.md. Two consequences worth naming, because they look like
+ * omissions otherwise:
+ *
+ * - No `:focus` rules. The platform focus ring is the accessible default and
+ *   the map treatment forbids suppressing it; a custom ring here would be a
+ *   worse one, drawn from tokens that exist for data identity.
+ * - The disabled submit button changes colour rather than fading. Opacity is
+ *   how a control becomes unreadable while still looking present; the border
+ *   and muted-ink pair stays legible at the contrast the palette was validated
+ *   at.
+ */
+
+.add-site-form {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+.add-site-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.add-site-coordinates {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Coordinates are figures to be compared with the map, so they get the
+   tabular-friendly face rather than the prose one. */
+.add-site-coordinates-value {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}
+
+.add-site-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.add-site-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.add-site-input {
+  padding: var(--space-2);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+}
+
+.add-site-input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.add-site-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/* The message is a second signal alongside the invalid border, never colour
+   alone: the words say what is wrong and the border says which field. */
+.add-site-message {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.add-site-notice {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.add-site-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.add-site-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+.add-site-cancel,
+.add-site-submit {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.add-site-cancel {
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  background: none;
+  color: var(--color-text);
+}
+
+.add-site-submit {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.add-site-submit:disabled {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
