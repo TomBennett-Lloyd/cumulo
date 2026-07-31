@@ -1,0 +1,108 @@
+/*
+ * Dashboard layout: map beside the fleet column.
+ *
+ * Tokens only (stylelint.config.mjs). Lengths that no token category covers —
+ * the column measure and the map's height — are the documented residual of the
+ * CSS gate, so they are written as `rem`/`vh` and kept to this file's two
+ * layout decisions rather than spread through the components.
+ */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+/* The map needs a height from somewhere — it has no intrinsic one — and this is
+ * the element that knows how much of the viewport the dashboard is worth. */
+.dashboard-map {
+  height: 70vh;
+  min-height: 24rem;
+}
+
+.dashboard-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.dashboard-slot {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.dashboard-slot-heading {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.dashboard-slot-note {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Sixty rows is taller than the map beside them, and an aside that grows to fit
+   pushes the detail panel — the thing a selection is *for* — below the fold. So
+   the fleet scrolls within a fixed measure and the panel stays where the reader
+   left it. The height is the residual the CSS gate documents: no token category
+   describes a scroll measure. */
+.dashboard-fleet {
+  display: grid;
+  gap: var(--space-3);
+  max-height: 18rem;
+  margin-top: var(--space-3);
+  overflow-y: auto;
+}
+
+/* This looks like `.forecast-failure` in site-panels.css, and deliberately so:
+   same column, same idiom — what failed, and a way to try again. They are not
+   shared, because they are free to diverge: a fleet that will not load may one
+   day take over the column entirely, which a single site's failed forecast
+   never would. If a third one appears, extract the idiom then. */
+.dashboard-failure {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+
+.dashboard-failure-message {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.dashboard-retry {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+/* Below the width where two columns still leave the map usable, the fleet
+ * column moves under it. It is never dropped: the list is the map's table view,
+ * and a narrow screen is exactly where a reader is most likely to need it. */
+@media (width < 60rem) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-map {
+    height: 50vh;
+  }
+}
