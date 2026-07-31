@@ -141,14 +141,6 @@ export default tseslint.config(
    */
   {
     files: [
-      'apps/web/src/App.tsx',
-      'apps/web/src/preview/TokensPreview.tsx',
-      'packages/shared/src/fleet.test.ts',
-      'packages/shared/src/fleet.ts',
-      'packages/shared/src/location.ts',
-      'packages/shared/src/site.test.ts',
-      'packages/shared/src/storage-key.test.ts',
-      'packages/shared/src/storage-key.ts',
       'packages/storage/scripts/smoke.ts',
       'packages/storage/src/batch.test.ts',
       'packages/storage/src/batch.ts',
@@ -163,8 +155,6 @@ export default tseslint.config(
       'packages/storage/src/ttl.ts',
       'packages/storage/src/weather-adapter.test.ts',
       'packages/storage/src/weather-adapter.ts',
-      'packages/ui/src/attribution/OpenMeteoAttribution.tsx',
-      'packages/ui/src/tokens/tokens.test.ts',
     ],
     rules: {
       'func-style': 'off',
@@ -172,7 +162,6 @@ export default tseslint.config(
   },
   {
     files: [
-      'apps/web/src/preview/TokensPreview.tsx',
       'packages/forecast/src/solar-position.ts',
       'packages/storage/scripts/smoke.ts',
       'packages/storage/src/series-adapter.test.ts',
