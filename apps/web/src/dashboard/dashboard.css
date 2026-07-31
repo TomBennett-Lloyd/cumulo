@@ -1,0 +1,61 @@
+/*
+ * Dashboard layout: map beside the fleet column.
+ *
+ * Tokens only (stylelint.config.mjs). Lengths that no token category covers —
+ * the column measure and the map's height — are the documented residual of the
+ * CSS gate, so they are written as `rem`/`vh` and kept to this file's two
+ * layout decisions rather than spread through the components.
+ */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+/* The map needs a height from somewhere — it has no intrinsic one — and this is
+ * the element that knows how much of the viewport the dashboard is worth. */
+.dashboard-map {
+  height: 70vh;
+  min-height: 24rem;
+}
+
+.dashboard-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.dashboard-slot {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.dashboard-slot-heading {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.dashboard-slot-note {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Below the width where two columns still leave the map usable, the fleet
+ * column moves under it. It is never dropped: the list is the map's table view,
+ * and a narrow screen is exactly where a reader is most likely to need it. */
+@media (width < 60rem) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-map {
+    height: 50vh;
+  }
+}

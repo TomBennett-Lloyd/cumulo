@@ -1,0 +1,55 @@
+/*
+ * The map surface and its attribution strip.
+ *
+ * Tokens only, like every stylesheet outside `packages/ui/src/tokens` — the
+ * gate in stylelint.config.mjs is what enforces it, and a missing token is a
+ * design-system signal rather than a licence to write a literal (react.md
+ * rule 5). Marker and cluster rules are deliberately absent: they arrive with
+ * the clustering work and belong in their own section of this file.
+ */
+
+/* The map is a column — tiles above, credits below — rather than a strip
+ * floating over the tiles. That is the treatment's placement rule made
+ * structural: the credits cannot end up on imagery even by accident, because
+ * they are not drawn on it. */
+.map-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* `min-height: 0` lets the canvas shrink inside the flex column instead of
+ * pushing the credits off the bottom edge — the strip is persistent, so it can
+ * never be the thing that gives way. */
+.map-canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Wrapping to two lines is the narrow-width behaviour, in place of collapsing
+ * either credit behind a control. */
+.map-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: calc(var(--space-1) / 4) solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* The weather credit styles itself, from `@cumulo/ui`. This is only the tile
+ * credit, matched to it so neither reads as the more important of the two. */
+.map-attribution-tiles {
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.map-attribution-tiles a {
+  color: var(--color-accent);
+}

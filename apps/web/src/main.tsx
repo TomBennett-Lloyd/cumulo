@@ -1,4 +1,7 @@
+// Tokens first: every stylesheet below resolves `var(--…)` against them.
 import '@cumulo/ui/styles.css';
+import './dashboard/dashboard.css';
+import './map/map.css';
 import './preview/preview.css';
 
 import { StrictMode } from 'react';
