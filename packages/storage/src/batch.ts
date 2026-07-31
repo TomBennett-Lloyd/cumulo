@@ -80,6 +80,25 @@ export const defaultBatchPolicy: BatchPolicy = {
 export type DrainOutcome<TReq> =
   { readonly status: 'complete' } | { readonly status: 'partial'; readonly unprocessed: TReq[] };
 
+/**
+ * The result of a batched write, as an adapter reports it to its caller: the
+ * same distinction {@link DrainOutcome} draws, with the leftover *requests*
+ * reduced to a count.
+ *
+ * Adapters narrow the outcome this way because the unprocessed entries are
+ * SDK-shaped write requests — transport, not domain — so handing them out would
+ * leak the wire format through the package surface. The count is what a caller
+ * can act on: log it, alarm on it, or re-derive the items from its own input.
+ *
+ * It lives here, next to the drain that produces it, because both the series and
+ * the weather adapter return exactly this union. Two identical copies would be
+ * two things a caller could not pass to one function, and one edit away from
+ * disagreeing (architecture rule 2 applied to a type rather than a schema).
+ */
+export type BatchWriteOutcome =
+  | { readonly status: 'complete' }
+  | { readonly status: 'partial'; readonly unprocessedCount: number };
+
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);

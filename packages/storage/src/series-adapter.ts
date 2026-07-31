@@ -15,7 +15,12 @@ import {
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
 
-import { defaultBatchPolicy, drainBatches, type BatchPolicy } from './batch';
+import {
+  defaultBatchPolicy,
+  drainBatches,
+  type BatchPolicy,
+  type BatchWriteOutcome,
+} from './batch';
 import { StorageError } from './errors';
 import { SERIES_RETENTION_DAYS, expiresAtEpochSeconds } from './ttl';
 
@@ -76,18 +81,14 @@ export type SeriesPoint =
   | { readonly type: 'generation'; readonly reading: GenerationReading };
 
 /**
- * The result of a batch write.
- *
- * `BatchWriteItem` answers HTTP 200 while handing back the items it declined
- * (`UnprocessedItems`), so "the call succeeded" and "the data was written" are
- * different facts. This union keeps them different all the way out to the
- * caller: a drain that did not finish is `partial` with the exact count, never
- * a `complete` that quietly lost writes (ADR 0002 Consequence 4,
+ * The result of a batch write is {@link BatchWriteOutcome}, defined in
+ * `batch.ts` alongside the drain that produces it and shared with the weather
+ * adapter. `BatchWriteItem` answers HTTP 200 while handing back the items it
+ * declined (`UnprocessedItems`), so "the call succeeded" and "the data was
+ * written" are different facts, and that union keeps them different all the way
+ * out to the caller (ADR 0002 Consequence 4,
  * `docs/standards/error-handling.md` rule 2).
  */
-export type BatchWriteOutcome =
-  | { readonly status: 'complete' }
-  | { readonly status: 'partial'; readonly unprocessedCount: number };
 
 /**
  * One entry of a `BatchWriteItem` request list, as the *document* client types

@@ -1,3 +1,12 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+allowBuilds:
+  # esbuild arrives as a transitive dependency of tsx (the runner for
+  # @cumulo/storage's operator smoke script). Its install script exists to fetch
+  # a platform binary when the optional per-platform package is unavailable;
+  # pnpm installs @esbuild/<platform> here, and tsx reaches the binary through
+  # esbuild's JS API, which resolves it at runtime. So the script has nothing to
+  # do, and not running arbitrary install-time code is the safer default —
+  # verified by running the smoke script's preflight with it disabled.
+  esbuild: false

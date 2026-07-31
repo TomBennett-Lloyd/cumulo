@@ -17,7 +17,12 @@ import {
 } from '@cumulo/shared';
 import { z } from 'zod';
 
-import { defaultBatchPolicy, drainBatches, type BatchPolicy } from './batch';
+import {
+  defaultBatchPolicy,
+  drainBatches,
+  type BatchPolicy,
+  type BatchWriteOutcome,
+} from './batch';
 import { StorageError } from './errors';
 import { SERIES_RETENTION_DAYS, expiresAtEpochSeconds } from './ttl';
 
@@ -54,13 +59,12 @@ export type ForecastWeatherReading = WeatherReading & { readonly kind: 'forecast
 export type ArchiveWeatherReading = WeatherReading & { readonly kind: 'archive' };
 
 /**
- * Outcome of a batched write. `BatchWriteItem` answers HTTP 200 while handing
- * back the items it declined (`UnprocessedItems`), so "complete" is a claim this
- * adapter only makes when the batch genuinely drained (ADR 0002 Consequence 4).
+ * The outcome of a batched write is {@link BatchWriteOutcome}, defined in
+ * `batch.ts` and shared with the series adapter. `BatchWriteItem` answers
+ * HTTP 200 while handing back the items it declined (`UnprocessedItems`), so
+ * "complete" is a claim this adapter only makes when the batch genuinely
+ * drained (ADR 0002 Consequence 4).
  */
-export type WeatherBatchWriteOutcome =
-  | { readonly status: 'complete' }
-  | { readonly status: 'partial'; readonly unprocessedCount: number };
 
 /**
  * Three-way answer to "which of these location-days has the archive fetch
@@ -84,9 +88,7 @@ export type ArchiveDayCoverage =
 
 export interface WeatherAdapter {
   /** Appends forecast weather for a horizon (access pattern I2). */
-  putForecastWeather(
-    readings: readonly ForecastWeatherReading[],
-  ): Promise<WeatherBatchWriteOutcome>;
+  putForecastWeather(readings: readonly ForecastWeatherReading[]): Promise<BatchWriteOutcome>;
   /** Writes one location-day of archive weather and its marker (H3). */
   putArchiveDay(day: string, readings: readonly ArchiveWeatherReading[]): Promise<void>;
   /** Reports archive-fetch coverage for the given days at one location (H2). */
