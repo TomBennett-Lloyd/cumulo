@@ -41,6 +41,9 @@ importers:
       '@cumulo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@cumulo/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       zod:
         specifier: ^4.4.3
         version: 4.4.3

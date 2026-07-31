@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@cumulo/shared": "workspace:*",
+    "@cumulo/storage": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
