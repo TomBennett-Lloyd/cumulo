@@ -15,11 +15,12 @@
     "test": "pnpm -r run test",
     "test:scripts": "bash .claude/scripts/run-script-tests.sh",
     "check:adr-index": "bash .claude/scripts/check-adr-index.sh",
+    "check:infra-mirrors": "bash .claude/scripts/check-infra-mirrors.sh",
     "check:module-names": "bash .claude/scripts/check-module-names.sh",
     "check:supply-chain-policy": "bash .claude/scripts/check-supply-chain-policy.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm verify:root && pnpm lint && pnpm typecheck && pnpm test && pnpm check:adr-index && pnpm check:module-names && pnpm check:supply-chain-policy && pnpm test:scripts && pnpm format:check",
+    "verify": "pnpm verify:root && pnpm lint && pnpm typecheck && pnpm test && pnpm check:adr-index && pnpm check:infra-mirrors && pnpm check:module-names && pnpm check:supply-chain-policy && pnpm test:scripts && pnpm format:check",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "lint-staged": {

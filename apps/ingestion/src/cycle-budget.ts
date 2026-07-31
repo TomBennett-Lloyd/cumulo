@@ -165,9 +165,12 @@ export const LOCATION_WORST_MS = FETCH_WORST_MS + STORE_WORST_MS + PUBLISH_WORST
  * The function timeout in `infra/ingestion/lambda.tf`, mirrored.
  *
  * A mirror, not a source: Terraform owns the deployed value and its comment
- * cites this constant by name, as this one cites the file. They are checked
- * against each other by eye today; the drift that a mirrored constant invites
- * is tracked as #123.
+ * cites this constant by name, as this one cites the file. The two are held
+ * equal by `pnpm check:infra-mirrors` in the `verify` composite (#123), which
+ * multiplies the Terraform `timeout` by 1000 and compares — so moving one
+ * without the other is a red build rather than a silently mis-sized deadline.
+ * Editing the literal below therefore means editing `lambda.tf` in the same
+ * commit; the gate does not care which of the two moves first.
  */
 export const INGESTION_LAMBDA_TIMEOUT_MS = 300_000;
 

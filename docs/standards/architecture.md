@@ -18,6 +18,8 @@
 
 7. **Functions by default; a class only where methods genuinely share state.** `this.` is the marker that makes that state visible — which is exactly what a factory closing over variables hides. One **flat** base class is acceptable for shared _mechanism_ that needs instance state (the storage adapters' error-wrapping helper is the motivating example). No hierarchies: a class extending anything other than a base that itself extends nothing is a review blocker (`Error` subclasses excepted). No speculative polymorphism: an abstract method needs ≥2 implementations in the same PR. And a detached method loses its `this`, so inject the object, not the method — `@typescript-eslint/unbound-method` enforces that.
 
+8. **A constant that mirrors an infrastructure value is declared to the mirror gate.** Some numbers genuinely live in two places — Terraform owns the deployed value, and code has to size itself against it (`INGESTION_LAMBDA_TIMEOUT_MS` against `aws_lambda_function.ingestion`'s `timeout`). That is allowed, and citing the other file in a comment is not enough: comments do not fail builds. Add the pair to `MIRRORS` in `.claude/scripts/check-infra-mirrors.sh`, which the `check:infra-mirrors` gate in `verify` compares on every run. The gate only knows the pairs it is told about, so declaring one is the part that cannot be automated — and an undeclared mirror drifts silently, in whichever direction nobody was watching.
+
 ## Why
 
 The job this repo showcases values judgement about boundaries: a small number of genuinely independent services, documented reasoning, and restraint about further splitting. The pure-core rule is also what makes the physics-vs-ML comparison feature cheap to build — both layers are pure transforms over the same typed inputs.

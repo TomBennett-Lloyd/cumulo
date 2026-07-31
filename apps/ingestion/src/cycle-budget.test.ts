@@ -104,8 +104,11 @@ describe('the cycle deadline', () => {
   });
 
   it('mirrors the deployed Lambda timeout', () => {
-    // A mirror of `infra/ingestion/lambda.tf`. Kept in step by eye today; the
-    // drift a mirrored constant invites is tracked as #123.
+    // A mirror of `infra/ingestion/lambda.tf`. This assertion pins the literal
+    // so that a change to it is a deliberate one; what pins it to *Terraform*
+    // is `pnpm check:infra-mirrors` in the `verify` composite (#123), which
+    // reads both files. Vitest cannot do that job — it would have to parse HCL
+    // — and a green suite here has never meant the deployed timeout agrees.
     expect(INGESTION_LAMBDA_TIMEOUT_MS).toBe(300_000);
   });
 });
