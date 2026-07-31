@@ -151,12 +151,6 @@ Entry format:
 - What: `test:scripts` is a literal list — `bash …/worktree-lifecycle.test.sh && bash …/check-adr-index.test.sh`. Two failure modes, both silent. A third harness added next to these two is green-by-absence until someone remembers to extend the string, which is the same drift class #47/#64 just fixed one level up (CI enumerating `verify`'s gates instead of calling the composite) — fixed for the CI→`verify` edge and left in place for the `verify`→harnesses edge. And `&&` short-circuits: when the first harness fails the second never runs, so a red run reports one harness's findings and conceals the other's, turning what should be one fix-everything cycle into two. Real fix is discovery plus a floor: `find .claude/scripts -name '*.test.sh'` driving a loop that runs every harness, accumulates exit codes rather than short-circuiting, and fails loudly if the search matched nothing — a script rather than a package.json one-liner, which is why it is a ticket and not an addendum here.
 - Source: #75 review cycle 1
 
-## 2026-07-31 — ADR row grammar and the ADR immutability policy are on a collision course
-
-- Where: `.claude/scripts/check-adr-index.sh` (`row_re`), `docs/adr/README.md`
-- What: `row_re` anchors on `\)[[:space:]]*$`, so an index row may carry nothing after the link. Meanwhile `docs/adr/README.md` states ADRs are immutable once merged and are superseded rather than edited — and the first supersession will want the index to say so: `- [0002 — Storage split](0002-storage-split.md) — superseded by 0007`. The gate will reject that row as malformed, correctly by its own grammar, at the exact moment the policy is first exercised. Whoever hits it will be mid-supersession and will reach for the quickest unblock, which is loosening the trailing anchor to `.*$` and thereby giving up the strictness the grammar exists for. The decision wants making before then, not under pressure: extend the grammar with an optional, _structured_ status suffix the gate can parse and check (a `superseded by NNNN` that must name a real ADR closes a drift hole the index has today), or rule that supersession is recorded only in the ADR bodies and the index stays link-only. Either is defensible; discovering the conflict during a supersession is not.
-- Source: #75 review cycle 1
-
 ## 2026-07-30 — `lint:sh`'s discovery filter is the untested half of the gate
 
 - Where: `.claude/scripts/lint-shell.sh`:58-88 (shebang regex, `-z` read loop, empty-list guard); `.claude/scripts/lint-shell.test.sh`
