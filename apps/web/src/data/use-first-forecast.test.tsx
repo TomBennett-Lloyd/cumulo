@@ -4,7 +4,7 @@ import { forecastSchema, type CreateSiteInput, type Forecast, type Site } from '
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { DataResult, FleetDataSource } from './fleet-data-source';
+import type { FleetSourceResult, FleetDataSource } from './fleet-data-source';
 import { useFirstForecast } from './use-first-forecast';
 
 const SITE_ID = '3c3d3e3f-0000-4000-8000-000000000001';
@@ -21,9 +21,9 @@ interface PollContext {
   readonly callIndex: number;
 }
 
-type ForecastAnswer = (context: PollContext) => Promise<DataResult<readonly Forecast[]>>;
+type ForecastAnswer = (context: PollContext) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
-type ForecastResolver = (result: DataResult<readonly Forecast[]>) => void;
+type ForecastResolver = (result: FleetSourceResult<readonly Forecast[]>) => void;
 
 const oneForecast = (siteId: string): readonly Forecast[] => [
   forecastSchema.parse({
@@ -37,17 +37,17 @@ const oneForecast = (siteId: string): readonly Forecast[] => [
   }),
 ];
 
-const forecastReady = (siteId: string): DataResult<readonly Forecast[]> => ({
+const forecastReady = (siteId: string): FleetSourceResult<readonly Forecast[]> => ({
   kind: 'ok',
   value: oneForecast(siteId),
 });
 
-const notFound = (siteId: string): DataResult<never> => ({
+const notFound = (siteId: string): FleetSourceResult<never> => ({
   kind: 'error',
   error: { code: 'not-found', message: `No forecast for site ${siteId} yet` },
 });
 
-const rateLimited = (retryAfterSeconds: number): DataResult<never> => ({
+const rateLimited = (retryAfterSeconds: number): FleetSourceResult<never> => ({
   kind: 'error',
   error: {
     code: 'rate-limited',
@@ -56,7 +56,7 @@ const rateLimited = (retryAfterSeconds: number): DataResult<never> => ({
   },
 });
 
-const networkDown = (): DataResult<never> => ({
+const networkDown = (): FleetSourceResult<never> => ({
   kind: 'error',
   error: { code: 'network', message: 'The fleet did not answer' },
 });
@@ -70,7 +70,7 @@ const forecastAfterMs =
     );
 
 const alwaysAnswering =
-  (answer: DataResult<readonly Forecast[]>): ForecastAnswer =>
+  (answer: FleetSourceResult<readonly Forecast[]>): ForecastAnswer =>
   () =>
     Promise.resolve(answer);
 
@@ -88,14 +88,14 @@ const rateLimitedFirst =
 const deferredAnswer =
   (resolvers: ForecastResolver[]): ForecastAnswer =>
   () =>
-    new Promise<DataResult<readonly Forecast[]>>((resolve) => {
+    new Promise<FleetSourceResult<readonly Forecast[]>>((resolve) => {
       resolvers.push(resolve);
     });
 
 const answerCall = (
   resolvers: readonly ForecastResolver[],
   index: number,
-  result: DataResult<readonly Forecast[]>,
+  result: FleetSourceResult<readonly Forecast[]>,
 ): void => {
   const resolve = resolvers[index];
   if (resolve === undefined) {
@@ -125,17 +125,17 @@ class ScriptedFleetDataSource implements FleetDataSource {
     this.answer = answer;
   }
 
-  listSites(): Promise<DataResult<readonly Site[]>> {
+  listSites(): Promise<FleetSourceResult<readonly Site[]>> {
     this.calls.push('listSites');
     return Promise.resolve({ kind: 'ok', value: [] });
   }
 
-  createSite(input: CreateSiteInput): Promise<DataResult<Site>> {
+  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>> {
     this.calls.push(`createSite:${input.name}`);
     return Promise.resolve({ kind: 'ok', value: { id: SITE_ID, ...input } });
   }
 
-  getSiteForecast(siteId: Site['id']): Promise<DataResult<readonly Forecast[]>> {
+  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>> {
     this.calls.push(`getSiteForecast:${siteId}`);
     const callIndex = this.forecastCalls;
     this.forecastCalls += 1;

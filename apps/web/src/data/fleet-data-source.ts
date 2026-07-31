@@ -38,8 +38,17 @@ export interface FleetDataError {
  * forget to catch (`error-handling.md` rule 1). A rejected promise from any
  * implementation of `FleetDataSource` is therefore a bug in that
  * implementation, not a failure mode callers are expected to handle.
+ *
+ * Named for this source rather than the generic `DataResult` it started as,
+ * because `data/provider.ts` (#19's read surface for the chart views) exports a
+ * differently-shaped result under that generic name. Two same-named types with
+ * different shapes in one directory is the collision; the contextual name is
+ * only the de-collision. **Which of the two surfaces `apps/web` keeps is #105**,
+ * and the substantive part of that question is the error model — a `string`
+ * message there versus `FleetDataError` here — because that is what C8 maps
+ * #14's real responses onto. Resolve it before C8 starts.
  */
-export type DataResult<T> =
+export type FleetSourceResult<T> =
   | { readonly kind: 'ok'; readonly value: T }
   | { readonly kind: 'error'; readonly error: FleetDataError };
 
@@ -60,7 +69,7 @@ export interface FleetDataSource {
    * mistake ADR 0002's review called out (a per-site forecast poll costs
    * ~0.5 read units; the fleet fan-out costs ~25).
    */
-  listSites(): Promise<DataResult<readonly Site[]>>;
+  listSites(): Promise<FleetSourceResult<readonly Site[]>>;
 
   /**
    * Adds a site to the fleet.
@@ -71,7 +80,7 @@ export interface FleetDataSource {
    * every subsequent call keyed on it (forecast polling above all) then
    * addresses a site that does not exist.
    */
-  createSite(input: CreateSiteInput): Promise<DataResult<Site>>;
+  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>>;
 
   /**
    * The forecast series for one site — one partition, never the fleet.
@@ -80,5 +89,5 @@ export interface FleetDataSource {
    * been produced yet, so a caller polling for it should treat that arm as
    * "keep waiting" rather than as a failure.
    */
-  getSiteForecast(siteId: Site['id']): Promise<DataResult<readonly Forecast[]>>;
+  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>>;
 }

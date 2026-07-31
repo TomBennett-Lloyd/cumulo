@@ -2,7 +2,7 @@ import type { Forecast, Site } from '@cumulo/shared';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { ForecastViewState } from '../dashboard/forecast-view-state';
-import type { DataResult, FleetDataSource } from './fleet-data-source';
+import type { FleetSourceResult, FleetDataSource } from './fleet-data-source';
 
 const MS_PER_SECOND = 1_000;
 
@@ -81,7 +81,7 @@ const rateLimitBackoffMs = (retryAfterSeconds: number | undefined): number =>
  * table and no rows, which reads as "this site produces nothing" instead of
  * "this site is still waiting".
  */
-const decidePoll = (result: DataResult<readonly Forecast[]>): PollDecision => {
+const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecision => {
   if (result.kind === 'ok') {
     return result.value.length > 0
       ? { kind: 'ready', forecasts: result.value }

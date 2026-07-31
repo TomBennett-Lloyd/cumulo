@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_CREATION_WINDOW_MS } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
-import type { DataResult, FleetDataSource } from '../data/fleet-data-source';
+import type { FleetSourceResult, FleetDataSource } from '../data/fleet-data-source';
 import { Dashboard } from './Dashboard';
 import type { MapRegionProps } from './MapRegion';
 
@@ -83,7 +83,7 @@ class FlakyFleetSource implements FleetDataSource {
   private listAttempts = 0;
   private readonly fleet = new DemoFleetDataSource();
 
-  listSites(): Promise<DataResult<readonly Site[]>> {
+  listSites(): Promise<FleetSourceResult<readonly Site[]>> {
     this.listAttempts += 1;
 
     return this.listAttempts === 1
@@ -94,11 +94,11 @@ class FlakyFleetSource implements FleetDataSource {
       : this.fleet.listSites();
   }
 
-  createSite(input: CreateSiteInput): Promise<DataResult<Site>> {
+  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>> {
     return this.fleet.createSite(input);
   }
 
-  getSiteForecast(siteId: Site['id']): Promise<DataResult<readonly Forecast[]>> {
+  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>> {
     return this.fleet.getSiteForecast(siteId);
   }
 }

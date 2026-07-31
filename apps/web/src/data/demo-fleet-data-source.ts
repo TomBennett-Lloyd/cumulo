@@ -8,7 +8,7 @@ import {
   type Site,
 } from '@cumulo/shared';
 
-import type { DataResult, FleetDataError, FleetDataSource } from './fleet-data-source';
+import type { FleetSourceResult, FleetDataError, FleetDataSource } from './fleet-data-source';
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -91,12 +91,12 @@ const syntheticForecasts = (site: Site, nowMs: number): readonly Forecast[] => {
 };
 
 /**
- * The error arm of `DataResult` says nothing about the success type, so one
- * `DataResult<never>` is assignable wherever any `DataResult<T>` is expected.
+ * The error arm of `FleetSourceResult` says nothing about the success type, so one
+ * `FleetSourceResult<never>` is assignable wherever any `FleetSourceResult<T>` is expected.
  */
-const failure = (error: FleetDataError): DataResult<never> => ({ kind: 'error', error });
+const failure = (error: FleetDataError): FleetSourceResult<never> => ({ kind: 'error', error });
 
-const siteNotFound = (siteId: string): DataResult<never> =>
+const siteNotFound = (siteId: string): FleetSourceResult<never> =>
   failure({ code: 'not-found', message: `No forecast for site ${siteId} yet` });
 
 export interface DemoFleetDataSourceOptions {
@@ -134,11 +134,11 @@ export class DemoFleetDataSource implements FleetDataSource {
     this.sites = [...generateFleet(canonicalFleetSeed)];
   }
 
-  listSites(): Promise<DataResult<readonly Site[]>> {
+  listSites(): Promise<FleetSourceResult<readonly Site[]>> {
     return Promise.resolve({ kind: 'ok', value: [...this.sites] });
   }
 
-  createSite(input: CreateSiteInput): Promise<DataResult<Site>> {
+  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>> {
     // The static type says this cannot fail; the schema says whether the
     // *values* are in range, which no type in this codebase encodes. This is
     // the boundary the Fleet API will enforce for real, so the demo enforces it
@@ -161,7 +161,7 @@ export class DemoFleetDataSource implements FleetDataSource {
     return Promise.resolve({ kind: 'ok', value: site });
   }
 
-  getSiteForecast(siteId: Site['id']): Promise<DataResult<readonly Forecast[]>> {
+  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>> {
     const site = this.sites.find((candidate) => candidate.id === siteId);
     if (site === undefined) {
       return Promise.resolve(siteNotFound(siteId));
