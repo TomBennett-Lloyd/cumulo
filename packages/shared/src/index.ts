@@ -1,6 +1,6 @@
 export { forecastModelSchema, type ForecastModel, forecastSchema, type Forecast } from './forecast';
 export { generationReadingSchema, type GenerationReading } from './generation-reading';
-export { locationId } from './location';
+export { locationId, type GeoCoordinates } from './location';
 export {
   siteSchema,
   type Site,
@@ -15,6 +15,7 @@ export {
   parseSeriesSortKey,
   weatherSortKey,
   archiveDayMarkerSortKey,
+  type MetricsPeriod,
   metricsSortKey,
 } from './storage-key';
 export { generateFleet, canonicalFleetSeed } from './fleet';
