@@ -1,0 +1,528 @@
+/*
+ * Styling for the token preview surface.
+ *
+ * Every value here is a token. That is not a style choice — it is the gate in
+ * stylelint.config.mjs, and this stylesheet is the first real test of it: if a
+ * page whose entire job is to display the design system cannot be built from
+ * the design system, the token set is incomplete and the lint error is the
+ * signal (react.md rule 5).
+ *
+ * The per-token rules further down are keyed by `[data-token='--name']` rather
+ * than by a hand-written class. The selector *is* the token name, so a swatch
+ * and the token it demonstrates cannot drift apart.
+ */
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  line-height: var(--leading-normal);
+}
+
+.app {
+  padding: var(--space-8);
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: 0 0 var(--space-8);
+}
+
+.app-title {
+  margin: 0;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.app-subtitle {
+  max-width: 44rem;
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.theme-toggle {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+/* Pressed state wears base ink, not a chart or map slot: those tokens carry
+ * data identity, and a control borrowing one would make "selected site" and
+ * "toggle is on" the same colour. */
+.theme-toggle[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.preview {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.section {
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.section h2 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.section h3 {
+  margin: var(--space-6) 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-note {
+  max-width: 46rem;
+  margin: var(--space-2) 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.token-name {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* ── Colour swatches ─────────────────────────────────────────────────────── */
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.swatch {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.swatch-chip {
+  display: block;
+  height: var(--space-12);
+  border: calc(var(--space-1) / 4) solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Scale rows (spacing, type, radii) ───────────────────────────────────── */
+
+.scale-list,
+.radius-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scale-row {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.space-bar {
+  display: block;
+  height: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+}
+
+.type-specimen {
+  display: block;
+  line-height: var(--leading-tight);
+}
+
+.leading-specimen {
+  display: block;
+  max-width: 32rem;
+  font-size: var(--text-sm);
+}
+
+.radius-box {
+  display: block;
+  width: var(--space-16);
+  height: var(--space-16);
+  background: var(--color-accent);
+}
+
+/* ── Chart sample ────────────────────────────────────────────────────────── */
+
+.chart-figure {
+  margin: 0;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  max-width: 46rem;
+}
+
+.chart-grid,
+.chart-horizon {
+  stroke: var(--color-chart-grid);
+  stroke-width: 1;
+}
+
+.chart-band {
+  fill: var(--color-chart-band-fill);
+}
+
+.chart-band-bound {
+  fill: none;
+  stroke: var(--color-chart-band-stroke);
+  stroke-width: 1;
+}
+
+.chart-median {
+  fill: none;
+  stroke: var(--color-chart-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-actuals {
+  fill: none;
+  stroke: var(--color-chart-actuals);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The ring is a spacer, not a border: it keeps the end dot countable where it
+ * crosses the median line (chart-treatment.md). */
+.chart-actuals-marker {
+  fill: var(--color-chart-actuals);
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+.chart-axis-label {
+  fill: var(--color-chart-axis-label);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-axis-title {
+  fill: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.chart-legend li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.legend-key {
+  width: var(--space-8);
+  height: var(--space-4);
+  flex: none;
+}
+
+.chart-table {
+  margin: var(--space-6) 0 0;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-table caption {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-align: left;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: var(--space-1) var(--space-3);
+  text-align: right;
+}
+
+.chart-table thead th {
+  border-bottom: calc(var(--space-1) / 4) solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.chart-table tbody th {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+  text-align: left;
+}
+
+/* ── Map marker states ───────────────────────────────────────────────────── */
+
+.marker-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.marker-item {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+}
+
+/* Stands in for the desaturated basemap: land reads at --color-bg, and the
+ * markers are the only saturated thing on it (map-treatment.md). */
+.marker-stage {
+  display: grid;
+  place-items: center;
+  width: var(--space-16);
+  height: var(--space-16);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.map-marker {
+  display: block;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 2);
+  border-color: var(--color-map-marker-stroke);
+  border-radius: var(--radius-full);
+  background: var(--color-map-marker);
+}
+
+.map-marker-hover {
+  width: var(--space-4);
+  height: var(--space-4);
+  background: var(--color-map-marker-hover);
+}
+
+.map-marker-selected {
+  width: var(--space-4);
+  height: var(--space-4);
+  border-width: var(--space-1);
+  background: var(--color-map-marker-selected);
+}
+
+.marker-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+
+.preview-footer {
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* ── One rule per token ──────────────────────────────────────────────────────
+ *
+ * Colour: the chip wears the token. Spacing: the bar is as wide as the token.
+ * Type: the specimen is set in it. Radius: the box is rounded by it. Nothing
+ * here restates a value — each rule points at the custom property it displays,
+ * which is why the preview renders the dark palette without a single change.
+ */
+
+.swatch-chip[data-token='--color-bg'] {
+  background: var(--color-bg);
+}
+.swatch-chip[data-token='--color-surface'] {
+  background: var(--color-surface);
+}
+.swatch-chip[data-token='--color-text'] {
+  background: var(--color-text);
+}
+.swatch-chip[data-token='--color-text-muted'] {
+  background: var(--color-text-muted);
+}
+.swatch-chip[data-token='--color-border'] {
+  background: var(--color-border);
+}
+.swatch-chip[data-token='--color-accent'] {
+  background: var(--color-accent);
+}
+.swatch-chip[data-token='--color-accent-contrast'] {
+  background: var(--color-accent-contrast);
+}
+.swatch-chip[data-token='--color-danger'] {
+  background: var(--color-danger);
+}
+.swatch-chip[data-token='--color-warning'] {
+  background: var(--color-warning);
+}
+.swatch-chip[data-token='--color-success'] {
+  background: var(--color-success);
+}
+.swatch-chip[data-token='--color-chart-1'] {
+  background: var(--color-chart-1);
+}
+.swatch-chip[data-token='--color-chart-2'] {
+  background: var(--color-chart-2);
+}
+.swatch-chip[data-token='--color-chart-3'] {
+  background: var(--color-chart-3);
+}
+.swatch-chip[data-token='--color-chart-4'] {
+  background: var(--color-chart-4);
+}
+.swatch-chip[data-token='--color-chart-5'] {
+  background: var(--color-chart-5);
+}
+.swatch-chip[data-token='--color-chart-6'] {
+  background: var(--color-chart-6);
+}
+.swatch-chip[data-token='--color-chart-actuals'] {
+  background: var(--color-chart-actuals);
+}
+.swatch-chip[data-token='--color-chart-band-fill'] {
+  background: var(--color-chart-band-fill);
+}
+.swatch-chip[data-token='--color-chart-band-stroke'] {
+  background: var(--color-chart-band-stroke);
+}
+.swatch-chip[data-token='--color-chart-grid'] {
+  background: var(--color-chart-grid);
+}
+.swatch-chip[data-token='--color-chart-axis-label'] {
+  background: var(--color-chart-axis-label);
+}
+.swatch-chip[data-token='--color-map-marker'] {
+  background: var(--color-map-marker);
+}
+.swatch-chip[data-token='--color-map-marker-hover'] {
+  background: var(--color-map-marker-hover);
+}
+.swatch-chip[data-token='--color-map-marker-selected'] {
+  background: var(--color-map-marker-selected);
+}
+.swatch-chip[data-token='--color-map-marker-stroke'] {
+  background: var(--color-map-marker-stroke);
+}
+
+.space-bar[data-token='--space-1'] {
+  width: var(--space-1);
+}
+.space-bar[data-token='--space-2'] {
+  width: var(--space-2);
+}
+.space-bar[data-token='--space-3'] {
+  width: var(--space-3);
+}
+.space-bar[data-token='--space-4'] {
+  width: var(--space-4);
+}
+.space-bar[data-token='--space-6'] {
+  width: var(--space-6);
+}
+.space-bar[data-token='--space-8'] {
+  width: var(--space-8);
+}
+.space-bar[data-token='--space-12'] {
+  width: var(--space-12);
+}
+.space-bar[data-token='--space-16'] {
+  width: var(--space-16);
+}
+
+.type-specimen[data-token='--text-xs'] {
+  font-size: var(--text-xs);
+}
+.type-specimen[data-token='--text-sm'] {
+  font-size: var(--text-sm);
+}
+.type-specimen[data-token='--text-base'] {
+  font-size: var(--text-base);
+}
+.type-specimen[data-token='--text-lg'] {
+  font-size: var(--text-lg);
+}
+.type-specimen[data-token='--text-xl'] {
+  font-size: var(--text-xl);
+}
+.type-specimen[data-token='--text-2xl'] {
+  font-size: var(--text-2xl);
+}
+.type-specimen[data-token='--text-3xl'] {
+  font-size: var(--text-3xl);
+}
+
+.type-specimen[data-token='--font-sans'] {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+}
+.type-specimen[data-token='--font-mono'] {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+}
+
+.type-specimen[data-token='--font-weight-regular'] {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-regular);
+}
+.type-specimen[data-token='--font-weight-medium'] {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-medium);
+}
+.type-specimen[data-token='--font-weight-semibold'] {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.leading-specimen[data-token='--leading-tight'] {
+  line-height: var(--leading-tight);
+}
+.leading-specimen[data-token='--leading-normal'] {
+  line-height: var(--leading-normal);
+}
+
+.radius-box[data-token='--radius-sm'] {
+  border-radius: var(--radius-sm);
+}
+.radius-box[data-token='--radius-md'] {
+  border-radius: var(--radius-md);
+}
+.radius-box[data-token='--radius-full'] {
+  border-radius: var(--radius-full);
+}
