@@ -17,6 +17,8 @@ A numeric constant, library behaviour, or paper value you have not verified duri
 
 Server-assigned identifiers (GitHub issue/PR numbers, database ids, ARNs) are never predictable. A chunk may only reference identifiers that will already exist when it runs: concurrent chunks must never reference each other's creations, and any chunk that creates such resources must instruct its implementer to capture the returned identifier from creation output — never to assume contiguity or predict the next number.
 
+File references in a plan are repo-relative paths on `main`, or `<branch>:<path>` when the file only exists on an unmerged branch. Never reference a worktree path (`.claude/worktrees/...`, or an absolute path containing one): worktrees are reaped when their branch merges or dies, and a plan outlives them. If your exploration happened inside a worktree, translate every reference before writing the plan (decided by the user 2026-07-31; a posted plan's references went dead when their worktree was reaped).
+
 Output EXACTLY this template as your final message:
 
 ```
