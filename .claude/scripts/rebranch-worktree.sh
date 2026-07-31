@@ -42,6 +42,10 @@ old_branch=$(git -C "$top" symbolic-ref --quiet --short HEAD) ||
   refuse "$top is on a detached HEAD — no branch to retire"
 
 tip=$(git -C "$top" rev-parse HEAD) || exit 2
+# is_merged reads the base ref and never refreshes it, so ask for the refresh here — one
+# interactive rebranch has no run to hoist it out of, and this keeps the ancestry fast path
+# exactly as accurate as it has always been. Best effort: the hard fetch is further down.
+fetch_main "$main_dir"
 case "$(is_merged "$old_branch" "$tip" "$main_dir")" in
   merged-ancestor | merged-squash) ;;
   unmerged) refuse "$old_branch is not merged — rebranching would strand its commits" ;;
