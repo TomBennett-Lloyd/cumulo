@@ -44,13 +44,12 @@ export const STORAGE_RETRY_BASE_DELAY_MS = 1000;
  *
  * Full jitter over an exponentially growing window — see `fullJitterDelayMs`.
  */
-export function storageRetryDelayMs(retryAttempt: number, random?: () => number): number {
-  return fullJitterDelayMs(retryAttempt, {
+export const storageRetryDelayMs = (retryAttempt: number, random?: () => number): number =>
+  fullJitterDelayMs(retryAttempt, {
     baseDelayMs: STORAGE_RETRY_BASE_DELAY_MS,
     maxDelayMs: MAX_BACKOFF_DELAY_MS,
     ...(random === undefined ? {} : { random }),
   });
-}
 
 /**
  * `ConfiguredRetryStrategy` is the SDK's supported seam for owning the backoff
@@ -61,11 +60,10 @@ export function storageRetryDelayMs(retryAttempt: number, random?: () => number)
  *
  * `random` is injectable for tests only; production takes `Math.random`.
  */
-export function createStorageRetryStrategy(random?: () => number): ConfiguredRetryStrategy {
-  return new ConfiguredRetryStrategy(STORAGE_MAX_ATTEMPTS, (retryAttempt: number) =>
+export const createStorageRetryStrategy = (random?: () => number): ConfiguredRetryStrategy =>
+  new ConfiguredRetryStrategy(STORAGE_MAX_ATTEMPTS, (retryAttempt: number) =>
     storageRetryDelayMs(retryAttempt, random),
   );
-}
 
 export interface StorageClientOptions {
   readonly region?: string;
@@ -104,9 +102,9 @@ export interface StorageClientOptions {
  *    justified at its own call site — and the adapter tests assert that no
  *    command input carries the flag.
  */
-export function createStorageDocumentClient(
+export const createStorageDocumentClient = (
   options?: StorageClientOptions,
-): DynamoDBDocumentClient {
+): DynamoDBDocumentClient => {
   const baseClient =
     options?.baseClient ??
     new DynamoDBClient({
@@ -118,4 +116,4 @@ export function createStorageDocumentClient(
   return DynamoDBDocumentClient.from(baseClient, {
     marshallOptions: { removeUndefinedValues: true },
   });
-}
+};

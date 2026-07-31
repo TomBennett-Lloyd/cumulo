@@ -22,8 +22,8 @@
  *   exported — `STORAGE_MAX_ATTEMPTS`, `STORAGE_RETRY_BASE_DELAY_MS`,
  *   `SERIES_RETENTION_DAYS` — because ADR 0002 Consequences 4 and 5 state them
  *   as decisions, and infrastructure and operators quote them. So does
- *   `BatchPolicy`/`defaultBatchPolicy`, which `WeatherAdapterDeps` and its
- *   siblings name in their own signatures.
+ *   `BatchPolicy`/`defaultBatchPolicy`, which `BatchingAdapterDeps` names in
+ *   its own signature.
  * - the `toItem`/`fromItem` pairs each adapter exports for its own tests. They
  *   are the wire format, not the contract; exporting them would invite a caller
  *   to build items by hand and bypass the key computation the adapters exist to
@@ -48,26 +48,16 @@ export { StorageError, type StorageErrorContext } from './errors';
 export { storageTableName, type StorageTable } from './table-name';
 export { SERIES_RETENTION_DAYS } from './ttl';
 
+export { type BatchingAdapterDeps, type StorageAdapterDeps } from './adapters/storage-adapter-base';
+
+export { SiteAdapter, type GetFleetSiteResult } from './adapters/site/site-adapter';
+export { type SitePhysics } from './adapters/site/site-item';
+export { SeriesAdapter } from './adapters/series/series-adapter';
+export { type SeriesPoint } from './adapters/series/series-item';
+export { WeatherAdapter, type ArchiveDayCoverage } from './adapters/weather/weather-adapter';
 export {
-  createSiteAdapter,
-  type GetFleetSiteResult,
-  type SiteAdapter,
-  type SiteAdapterDeps,
-  type SitePhysics,
-} from './site-adapter';
-export {
-  createSeriesAdapter,
-  type SeriesAdapter,
-  type SeriesAdapterDeps,
-  type SeriesPoint,
-} from './series-adapter';
-export {
-  createWeatherAdapter,
   FORECAST_WEATHER_RETENTION_DAYS,
-  type ArchiveDayCoverage,
   type ArchiveWeatherReading,
   type ForecastWeatherReading,
-  type WeatherAdapter,
-  type WeatherAdapterDeps,
   type WeatherLocation,
-} from './weather-adapter';
+} from './adapters/weather/weather-item';

@@ -45,34 +45,16 @@ Pointers must survive unrelated edits: cite **files and symbol or section names*
 - What: Zod's `.optional()` produces `uncertainty?: T | undefined`, so `{ uncertainty: undefined }` parses even with `exactOptionalPropertyTypes` on — the key is present with an undefined value. DynamoDB `PutItem` marshalling throws on exactly that unless `removeUndefinedValues: true` is set on the document client. #13 needs a house rule (set the marshalling option, or strip undefined keys at the adapter boundary) so this fails at one known place rather than at runtime per-field.
 - Source: #10 review cycle 1
 
-## 2026-07-30 — Self-protection guards match paths as globs, not literals
+## 2026-07-31 — `is_clean` asks the worktree directory which repo it belongs to
 
-- Where: `.claude/scripts/reap-worktree.sh`:84,109; `.claude/scripts/sweep-worktrees.sh`:69
-- What: `case "$path" in "$wt" | "$wt"/*)` expands `$wt` as a glob pattern. A worktree path containing `[`, `*` or `?` can fail to match its own literal cwd, bypassing both the `own-cwd` and `live-session` guards — reap could then remove the directory the running session sits in. No work is lost (the tree must still be clean and merged to reach that point), and the repo's `<n>-<slug>` naming never produces such a path, so this is latent rather than live. The literal form is `[ "${pwd_canon#"$wt"}" != "$pwd_canon" ]`; the idiom repeats in three places, so the fix is one shared helper rather than three edits.
-- Source: #42
-
-## 2026-07-30 — Sweep shares stdin with its reap children
-
-- Where: `.claude/scripts/sweep-worktrees.sh`:62-94
-- What: the `while read` loop over worktree entries shares stdin (a heredoc) with each `reap-worktree.sh` child, which itself runs a caller-supplied `$WORKTREE_GH_CMD`. A child that reads stdin silently consumes worktree entries, and the sweep skips those worktrees without a word. The failure direction is safe (skipped = kept), but silent skipping in a backstop defeats the point of having a backstop — it would report `swept 0, kept 2` on a repo with five worktrees and look correct. Fix is `< /dev/null` on the child invocations.
-- Source: #42
-
-## 2026-07-30 — Reap re-derives the admin dir instead of using the one it was given
-
-- Where: `.claude/scripts/reap-worktree.sh`:97
-- What: `git_dir` comes from `rev-parse --absolute-git-dir` run inside the target, which searches ancestors. Because Cumulo nests worktrees _inside_ the main checkout (`.claude/worktrees/`), a worktree whose `.git` file is missing resolves to the **main repo's** `.git`. The min-age probe then measures the main checkout's activity and `is_clean` reports the main checkout's status — two safety guards judging a different repository than the one under consideration. Reproduced by the cycle-2 reviewer. Fail-safe today (`worktree remove` refuses validation, reap exits 2, nothing deleted), which is why it did not block. Structural fix: take the admin dir from the `worktree list --porcelain` block that reap already parses, rather than re-deriving it.
-- Source: #42
+- Where: `.claude/scripts/worktree-lib.sh` (`is_clean`), called from `reap-worktree.sh` and `rebranch-worktree.sh`
+- What: `is_clean` runs `git -C "$wt" status`, which discovers the repository by walking up from that directory. Cumulo nests worktrees inside the main checkout, so a worktree whose `.git` file is missing answers with the **main checkout** — `is_clean` then reports the main checkout's status while reap believes it is describing the target. Same root cause and same fix direction as the min-age probe, which #83 moved onto the admin dir the main repo records for the worktree; `is_clean` was left alone because it takes a path, not an admin dir, and threading one in as an optional second argument is the mode-flag shape `structure.md` rule 7 warns about. Fail-safe today: reaching a destructive action still requires `git worktree remove`, which refuses to validate a worktree with no `.git` file, so reap exits 2 with nothing deleted. Wants one decision covering both callers — hand `is_clean` an explicit repo (`--git-dir` plus `--work-tree`), or have reap refuse a worktree whose `.git` link does not resolve to its recorded admin dir before any probe runs at all.
+- Source: #83
 
 ## 2026-07-30 — Nothing resolves a stale worktree admin entry
 
 - Where: `.claude/scripts/sweep-worktrees.sh`:106; `.claude/skills/execute/SKILL.md` step 1
 - What: dropping the unconditional prune was correct (it destroyed recoverable admin data under `--dry-run`), but now nothing in the workflow clears a genuinely dead entry. Consequence, verified: `git worktree add` at that path fails with `fatal: … is a missing but already registered worktree`. Since the execute skill uses deterministic paths (`.claude/worktrees/<n>-<slug>`), a killed session whose directory was deleted by hand blocks re-execution of that same issue until a human prunes. Sweep detects it and re-counts it `kept` on every future run, so the warning repeats indefinitely. Git's own error names the remedy, so this is friction rather than a bug — wants a line in the skill docs or an explicit opt-in flag, not a behaviour change.
-- Source: #42
-
-## 2026-07-30 — `--dry-run` destroys nothing, but is not read-only
-
-- Where: `.claude/scripts/worktree-lib.sh`:57 (`is_merged`), called from `reap-worktree.sh`:126 before the dry-run branch at :132
-- What: `is_merged` runs `git fetch origin main` in the main checkout, so a dry sweep issues one fetch per candidate — writing remote-tracking refs and objects, plus whatever `gc --auto` decides. The mutation is additive and cannot lose work, so the safety property holds, but the distinction matters: the comments now say "destroys nothing" rather than "read-only". Making the fetch conditional on non-dry-run (or hoisting one fetch per sweep) would both restore the stronger property and remove N-1 redundant network calls.
 - Source: #42
 
 ## 2026-07-31 — `createPhysicsForecast` throws on boundary-accepted inputs, with no caller policy
@@ -90,12 +72,12 @@ Pointers must survive unrelated edits: cite **files and symbol or section names*
 ## 2026-07-31 — `@smithy/core` is a direct dependency whose major we do not own
 
 - Where: `packages/storage/package.json` (`"@smithy/core": "^3.31.1"`), `packages/storage/src/client.ts`:3 (`ConfiguredRetryStrategy` from `@smithy/core/retry`)
-- What: pinning the retry curve (ADR 0002 Consequence 5) needs `ConfiguredRetryStrategy`, which is only reachable from `@smithy/core` — an SDK-_internal_ package. Declaring it directly makes us the range-owner of a major version that is really owned by `@aws-sdk/client-dynamodb`: the two ranges can be bumped independently, and a resolution where our `ConfiguredRetryStrategy` is a different copy from the one the DynamoDB client's retry middleware is built against would break the pinned strategy at runtime. Today they dedupe to one copy, and the `toBeInstanceOf(ConfiguredRetryStrategy)` assertion in `packages/storage/src/client.test.ts`:155 would fail if they split — so this is latent, not live. The fix is repo-level rather than package-level (a pnpm catalog entry, or a stated policy that smithy ranges are aligned to the SDK's), and until it exists every future package that needs to pin retry behaviour re-takes the same coupling on its own.
+- What: pinning the retry curve (ADR 0002 Consequence 5) needs `ConfiguredRetryStrategy`, which is only reachable from `@smithy/core` — an SDK-_internal_ package. Declaring it directly makes us the range-owner of a major version that is really owned by `@aws-sdk/client-dynamodb`: the two ranges can be bumped independently, and a resolution where our `ConfiguredRetryStrategy` is a different copy from the one the DynamoDB client's retry middleware is built against would break the pinned strategy at runtime. Today they dedupe to one copy, and the `toBeInstanceOf(ConfiguredRetryStrategy)` assertion in `packages/storage/src/client.test.ts` (the "pins the retry strategy" test) would fail if they split — so this is latent, not live. The fix is repo-level rather than package-level (a pnpm catalog entry, or a stated policy that smithy ranges are aligned to the SDK's), and until it exists every future package that needs to pin retry behaviour re-takes the same coupling on its own.
 - Source: #13 review cycle 1
 
 ## 2026-07-31 — Duplicate item keys in write requests surface as StorageError, not caller bugs
 
-- Where: `packages/storage/src/weather-adapter.ts` (`putArchiveDay`, `putForecastWeather`), `packages/storage/src/series-adapter.ts` (`putForecasts`, `putGenerationReadings`)
+- Where: `packages/storage/src/adapters/weather/weather-adapter.ts` (`putArchiveDay`, `putForecastWeather`), `packages/storage/src/adapters/series/series-adapter.ts` (`putForecasts`, `putGenerationReadings`)
 - What: two readings/forecasts sharing a key pass every precondition and reach DynamoDB, which rejects the whole request (`ValidationException`) — wrapped as `StorageError`, pointing operators at AWS instead of the caller. The read path already de-duplicates for exactly this reason (`listFetchedArchiveDays`); the reasoning wasn't carried to writes. Different answers per method: the transaction path can take a cheap Set-based precondition; the chunked batch paths need a policy call (reject vs last-wins dedupe). Not a data-integrity bug — rejection is atomic and loud.
 - Source: #13 review cycle 2
 
@@ -147,12 +129,6 @@ Pointers must survive unrelated edits: cite **files and symbol or section names*
 - What: no `cost_types` block, so the budget uses the AWS defaults, which subtract credits and refunds. On an account carrying promotional credits the meter can therefore run well past $100/month of gross usage while net cost stays under threshold and nothing alerts — the alarm reports what will be billed, not what is being consumed. That is a defensible reading of "cost ceiling" for a project whose ceiling is about the bank balance, and it is the current deliberate choice; it stops being defensible the moment credits land on the account, because the whole point of the ceiling is to catch runaway usage _before_ it is expensive. Revisit if credits appear (or before any AWS-credits programme is used for this project): either add `cost_types { include_credit = true, include_refund = false }`, or add a second usage-oriented budget beside the billed-cost one. Not a fix for this diff — it is a policy decision about what the number means, and it wants the account's credit state as an input.
 - Source: #38 review cycle 1
 
-## 2026-07-31 — ADR row grammar and the ADR immutability policy are on a collision course
-
-- Where: `.claude/scripts/check-adr-index.sh` (`row_re`), `docs/adr/README.md`
-- What: `row_re` anchors on `\)[[:space:]]*$`, so an index row may carry nothing after the link. Meanwhile `docs/adr/README.md` states ADRs are immutable once merged and are superseded rather than edited — and the first supersession will want the index to say so: `- [0002 — Storage split](0002-storage-split.md) — superseded by 0007`. The gate will reject that row as malformed, correctly by its own grammar, at the exact moment the policy is first exercised. Whoever hits it will be mid-supersession and will reach for the quickest unblock, which is loosening the trailing anchor to `.*$` and thereby giving up the strictness the grammar exists for. The decision wants making before then, not under pressure: extend the grammar with an optional, _structured_ status suffix the gate can parse and check (a `superseded by NNNN` that must name a real ADR closes a drift hole the index has today), or rule that supersession is recorded only in the ADR bodies and the index stays link-only. Either is defensible; discovering the conflict during a supersession is not.
-- Source: #75 review cycle 1
-
 ## 2026-07-30 — `lint:sh`'s discovery filter is the untested half of the gate
 
 - Where: `.claude/scripts/lint-shell.sh`:58-88 (shebang regex, `-z` read loop, empty-list guard); `.claude/scripts/lint-shell.test.sh`
@@ -176,3 +152,21 @@ Pointers must survive unrelated edits: cite **files and symbol or section names*
 - Where: `.claude/scripts/lint-shell.sh` (the `git ls-files --cached --others --exclude-standard -z` read loop feeding `shell_files`, and its empty-list guard); `.claude/scripts/run-script-tests.sh` (the `find` discovery, which now writes to a temp file and checks the status)
 - What: both gates rest on discovering their own inputs, and both wrote the producer inside a process substitution — where a non-zero exit is invisible to the parent shell, `pipefail` included. The failure that matters is not the producer dying but the producer **partly succeeding**: `find` that cannot descend into one subdirectory, and `git ls-files` in a repository state it cannot fully read, both print to stderr, exit non-zero, and still emit everything they reached. The gate then runs a subset and reports it as the whole, which is worse than reporting nothing — reproduced against the runner in #84 review cycle 1, where a red harness behind an unreadable directory came back "1 harness(es), 0 failed" at exit 0. `run-script-tests.sh` now refuses a partial listing; `lint-shell.sh` has the same shape and still does not, so `pnpm lint:sh` can silently check fewer files than the repo contains. The empty-list guard both gates already have is the same idea stopped one step short: it catches "found nothing", never "found some of it". Fix is one shared idiom for discovery-with-status rather than a second one-off patch — two instances today and a third likely, so it wants extracting into a sourced helper with its own cases, alongside the equivalent guard for the `check-module-names` and `check-adr-index` searches.
 - Source: #84 review cycle 1
+
+## 2026-07-31 — Supersession is now stated in two places the gate never cross-validates
+
+- Where: `.claude/scripts/check-adr-index.sh` (`check_supersessions`, `adr_status_value`), `docs/adr/README.md` (index annotation grammar)
+- What: #85 validates an index row's `— superseded by NNNN` annotation and an ADR file's `Status:` line each in isolation, so the gate sanctions exactly the disagreement it exists to prevent: an index row can say superseded while the file still says `accepted`, and vice versa, both exiting 0. Three adjacent soft spots share the scan-rather-than-parse root cause: the first `Status:` line in a header wins, so a second, conflicting `Status:` line (the plausible "added instead of replaced" edit) is never read; a self-referential `superseded by 0001` inside `0001-*.md` passes; and the number is regex-scraped from free text, so `superseded by 00021` resolves against `0002`. One fix shape: parse (status, pointer) per file and per row, then require agreement and sanity in one place.
+- Source: #85 review cycle 1
+
+## 2026-07-31 — ADR Status vocabulary is duplicated between the template and the gate
+
+- Where: `docs/adr/0000-template.md` (the `Status:` menu line), `.claude/scripts/check-adr-index.sh` (the status `case`)
+- What: the allowed vocabulary (`proposed | accepted | superseded by NNNN`) lives in the template's prose and again in the gate's `case`, with nothing binding them — adding a value to the template makes the gate reject conforming ADRs, and extending the gate leaves the template lying. Same restated-list drift class as the `README.md`/`.githooks/pre-commit` gate-list entry. Cheapest fix: the gate derives the vocabulary by reading the template's menu line (the template is already excluded from per-file checks, so reading it is safe), making the template the single source. Also: the two harness cases exercising the new `${hits[@]+…}` empty-array guard run only under the default `bash`, not the `$BASHES` loop the harness header commits to — on CI (bash ≥ 4.4) the 3.2 guard is unexercised; wrap one variant in the loop when next touching the harness.
+- Source: #85 review cycle 1
+
+## 2026-07-31 — Test-support modules live in the production source tree with dev-only imports
+
+- Where: `packages/storage/src/adapters/*/​*-fixtures.ts`, `packages/storage/src/adapters/storage-error-capture.ts`, `packages/storage/src/recording-http-handler.ts`
+- What: the #77 C3 test split moved shared test support out of `.test.ts` files into plain modules under `src/`, and they statically import dev-only packages (`vitest`'s `expect`, `aws-sdk-client-mock`). Nothing structural stops production code from importing them — the ban is a doc comment and their absence from `index.ts`, not a gate. Harmless while the package is source-only with a single `exports` entry, but the repo now has an unruled category of file. Real fix is cross-cutting: a naming convention for test-support modules plus a `no-restricted-imports` boundary (or a tsconfig `files` split), decided once for every package.
+- Source: #77 C3 review
