@@ -97,12 +97,6 @@ Entry format:
 - What: two readings/forecasts sharing a key pass every precondition and reach DynamoDB, which rejects the whole request (`ValidationException`) — wrapped as `StorageError`, pointing operators at AWS instead of the caller. The read path already de-duplicates for exactly this reason (`listFetchedArchiveDays`); the reasoning wasn't carried to writes. Different answers per method: the transaction path can take a cheap Set-based precondition; the chunked batch paths need a policy call (reject vs last-wins dedupe). Not a data-integrity bug — rejection is atomic and loud.
 - Source: #13 review cycle 2
 
-## 2026-07-31 — Chart treatment specifies the horizon boundary but not interior gaps
-
-- Where: `docs/design/chart-treatment.md`, `apps/web/src/preview/TokensPreview.tsx` (chart placeholder), #19's real chart component
-- What: the treatment doc pins how the actuals series ends at the forecast-horizon boundary, but says nothing about missing data _inside_ the measured range. A mid-series null is a partial result and must read as one — the actuals line has to break at the gap, never interpolate a straight segment across it, which would draw a measurement that was never taken (error-handling.md rule 5: partial results are labeled partial, in the API response and the UI). The preview's flat-map-and-join path shape has no notion of a break, so it would silently bridge any gap it was handed; today that is invisible only because the placeholder data is dense. Root cause is the unspecified case, not the placeholder — so the fix is one move across the treatment doc (state the interior-gap rule alongside the boundary rule) and #19's chart component (segment the path, or emit `null` and let the renderer break), not a patch to either alone.
-- Source: #15 review cycle 1
-
 ## 2026-07-31 — Length half of the frontend gate is unenforced outside its allow-list
 
 - Where: `stylelint.config.mjs` (`scale-unlimited/declaration-strict-value` property list), `apps/web/src/preview/preview.css`, `packages/ui/src/tokens/tokens.css`
@@ -121,11 +115,11 @@ Entry format:
 - What: the two gates divide the world into CSS files (stylelint) and colour-shaped string literals in TS/TSX (ESLint). SVG presentation attributes fall between them: `<line stroke="red" stroke-width="2" />` is not a CSS declaration, and `"red"` is not a hex or colour-function literal, so nothing objects. `JSXAttribute[name.name="style"]` is already banned, which shows the selector shape is available — the omission is the attribute _name list_, not the technique. This matters now rather than in the abstract because #19 is an SVG chart: `stroke`, `fill`, `stop-color`, `stroke-width` are the natural way to write one, and they are precisely the attributes that carry design values. The fix is a deliberate restriction on those attribute names (permitting `var(--token)` strings and the handful of genuine keywords like `none`/`currentColor`), decided once so the chart is written against it rather than retrofitted after review.
 - Source: #15 review cycle 2
 
-## 2026-07-31 — Chart treatment never states the time-axis clock
+## 2026-07-31 — Charts render a UTC time axis without saying so on the chart
 
-- Where: `docs/design/chart-treatment.md`, `apps/web/src/preview/TokensPreview.tsx` (chart placeholder), #19's real chart component
-- What: the doc specifies the horizon boundary, series treatment and colour roles, but never says which clock the time axis runs on — site-local or UTC — nor what happens across a DST transition. For a solar product that is load-bearing, not a detail: rendered in UTC, an Irish summer forecast puts its peak an hour off solar noon, and the chart reads as a modelling error to anyone who knows the physics. The DST days are worse, because the axis must either show a 23- or 25-hour day or silently drop/duplicate an hour. Nothing downstream can supply the answer by default: the forecast payload carries UTC instants (`UtcIsoTimestamp`), so the renderer has to be told to convert, and site-local means carrying a timezone per site through to the axis. Same shape as the interior-gap entry above — an unspecified case in the treatment doc that #19 will resolve by accident if it is not decided first — so the fix spans the doc and the component, and the two should be settled together.
-- Source: #15 review cycle 2
+- Where: `apps/web/src/charts/ForecastChart.tsx` (the `kW` axis title, `xLabelElements`), `apps/web/src/charts/forecast-chart-table.tsx` (the table twin's Time column), `docs/design/chart-treatment.md` ("The time axis")
+- What: the clock itself is now settled and written down — #19 chose UTC, the treatment doc states it with the DST reasoning, and `chart-geometry.ts` labels through `getUTC*` accessors only. What remains is the obligation that decision carries: the treatment says a chart owes its clock in words somewhere in its chrome, and neither the axis nor the table twin says "UTC" anywhere. A reader in Ireland in July sees the modelled peak an hour left of local solar noon with nothing on screen to explain it, which reads as a modelling error rather than a labelling convention. The change is small per chart (an axis title, a caption suffix) but the wording is design-system-wide — every future chart and table twin inherits it — so it wants deciding once alongside the UI vocabulary rather than invented per component. The separate, larger question of a per-site _local_ axis stays open and is gated on carrying a timezone per site.
+- Source: #15 review cycle 2; the doc half was closed by #19 C7
 
 ## 2026-07-31 — `pnpm verify` never builds: export maps and CSS entry drift ship green
 

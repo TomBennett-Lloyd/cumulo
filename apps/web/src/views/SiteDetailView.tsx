@@ -6,6 +6,7 @@ import { useId, useState } from 'react';
 import { ForecastChart, type ForecastChartPoint } from '../charts/ForecastChart';
 import type { DataResult, FleetDataProvider, RangeHours } from '../data/provider';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
+import { RangePicker } from './range-picker';
 
 /**
  * One site's forecast against its measured generation, over a chosen window.
@@ -36,17 +37,6 @@ interface SiteSeries {
   readonly forecasts: readonly Forecast[];
   readonly actuals: readonly GenerationReading[];
 }
-
-interface RangeOption {
-  readonly hours: RangeHours;
-  readonly label: string;
-}
-
-const RANGE_OPTIONS: readonly RangeOption[] = [
-  { hours: 24, label: '24 h' },
-  { hours: 48, label: '48 h' },
-  { hours: 168, label: '7 d' },
-];
 
 const DEFAULT_RANGE: RangeHours = 24;
 
@@ -122,29 +112,6 @@ const loadSiteSeries = async (
   }
   return { status: 'ready', data: { forecasts: forecasts.data, actuals: actuals.data } };
 };
-
-interface RangePickerProps {
-  readonly range: RangeHours;
-  readonly onSelect: (range: RangeHours) => void;
-}
-
-const RangePicker = (props: RangePickerProps): ReactElement => (
-  <div className="view-range" role="group" aria-label="Forecast range">
-    {RANGE_OPTIONS.map((option) => (
-      <button
-        key={option.hours}
-        type="button"
-        className="view-range-button"
-        aria-pressed={option.hours === props.range}
-        onClick={() => {
-          props.onSelect(option.hours);
-        }}
-      >
-        {option.label}
-      </button>
-    ))}
-  </div>
-);
 
 interface SitePickerProps {
   readonly sites: readonly Site[];
@@ -259,7 +226,11 @@ const SiteDetailBody = (props: SiteDetailBodyProps): ReactElement => {
     <>
       <div className="view-controls">
         <SitePicker sites={sites} selectedSiteId={site.id} onSelect={props.onSelectSite} />
-        <RangePicker range={props.range} onSelect={props.onSelectRange} />
+        <RangePicker
+          range={props.range}
+          ariaLabel="Forecast range"
+          onSelect={props.onSelectRange}
+        />
       </div>
       <SiteSeriesPanel provider={props.provider} site={site} range={props.range} />
     </>

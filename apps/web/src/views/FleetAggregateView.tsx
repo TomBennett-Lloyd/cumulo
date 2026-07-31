@@ -14,6 +14,7 @@ import { useState, type ReactElement } from 'react';
 import { ForecastChart, type ForecastChartPoint } from '../charts/ForecastChart';
 import type { FleetDataProvider, RangeHours } from '../data/provider';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
+import { RangePicker, rangeLabel } from './range-picker';
 
 /**
  * The fleet's forecast and measured output, summed hour by hour.
@@ -39,8 +40,6 @@ export interface FleetAggregateViewProps {
 }
 
 const DEFAULT_RANGE: RangeHours = 24;
-const RANGE_OPTIONS: readonly RangeHours[] = [24, 48, 168];
-const RANGE_LABELS: Record<RangeHours, string> = { 24: '24 h', 48: '48 h', 168: '7 d' };
 
 const LOADING_TEXT = 'Loading the fleet aggregate…';
 const NO_SITES_TEXT = 'No active sites yet';
@@ -162,21 +161,7 @@ const errorLine = (text: string): ReactElement => (
 
 const rangeControls = (range: RangeHours, onSelect: (next: RangeHours) => void): ReactElement => (
   <div className="view-controls">
-    <div className="view-range" role="group" aria-label="Aggregation range">
-      {RANGE_OPTIONS.map((option) => (
-        <button
-          key={option}
-          type="button"
-          className="view-range-button"
-          aria-pressed={option === range}
-          onClick={() => {
-            onSelect(option);
-          }}
-        >
-          {RANGE_LABELS[option]}
-        </button>
-      ))}
-    </div>
+    <RangePicker range={range} ariaLabel="Aggregation range" onSelect={onSelect} />
   </div>
 );
 
@@ -206,14 +191,16 @@ const readyBody = (data: FleetData, range: RangeHours): ReactElement => {
     return emptyLine(NO_FORECAST_TEXT);
   }
 
-  const rangeLabel = RANGE_LABELS[range];
+  // The same words the control wears, so the chart's title and the button a
+  // reader just pressed cannot name the window differently.
+  const windowLabel = rangeLabel(range);
   return (
     <div className="view-panel">
       {completenessNote(minimumContributingSites(forecastPoints), siteCount)}
       <ForecastChart
         points={joinFleetSeries(forecastPoints, aggregateFleetActuals(data.actuals))}
-        ariaLabel={`Fleet aggregate forecast and measured output, ${rangeLabel} range`}
-        tableCaption={`Table view — fleet aggregate, ${rangeLabel} range, kW`}
+        ariaLabel={`Fleet aggregate forecast and measured output, ${windowLabel} range`}
+        tableCaption={`Table view — fleet aggregate, ${windowLabel} range, kW`}
       />
     </div>
   );
