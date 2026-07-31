@@ -135,28 +135,48 @@ const combineFleetQueries = (
   };
 };
 
-/** Loading, failure and emptiness all read the same way: a sentence, never a blank panel. */
-const statusText = (text: string): ReactElement => (
+/*
+ * Three separate lines rather than one parameterized by class and role: "still working", "nothing
+ * to show" and "this failed" are different statements about the fleet, and `views.css` colours the
+ * third differently on purpose. Merging them behind flags would be the merge `structure.md` rule 7
+ * warns about.
+ */
+
+const loadingLine = (): ReactElement => (
   <p className="view-status" role="status">
+    {LOADING_TEXT}
+  </p>
+);
+
+const emptyLine = (text: string): ReactElement => (
+  <p className="view-empty" role="status">
+    {text}
+  </p>
+);
+
+const errorLine = (text: string): ReactElement => (
+  <p className="view-error" role="alert">
     {text}
   </p>
 );
 
 const rangeControls = (range: RangeHours, onSelect: (next: RangeHours) => void): ReactElement => (
-  <div className="view-controls" role="group" aria-label="Aggregation range">
-    {RANGE_OPTIONS.map((option) => (
-      <button
-        key={option}
-        type="button"
-        className="view-range-button"
-        aria-pressed={option === range}
-        onClick={() => {
-          onSelect(option);
-        }}
-      >
-        {RANGE_LABELS[option]}
-      </button>
-    ))}
+  <div className="view-controls">
+    <div className="view-range" role="group" aria-label="Aggregation range">
+      {RANGE_OPTIONS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          className="view-range-button"
+          aria-pressed={option === range}
+          onClick={() => {
+            onSelect(option);
+          }}
+        >
+          {RANGE_LABELS[option]}
+        </button>
+      ))}
+    </div>
   </div>
 );
 
@@ -178,35 +198,35 @@ const completenessNote = (minContributing: number, siteCount: number): ReactElem
 const readyBody = (data: FleetData, range: RangeHours): ReactElement => {
   const siteCount = data.sites.length;
   if (siteCount === 0) {
-    return statusText(NO_SITES_TEXT);
+    return emptyLine(NO_SITES_TEXT);
   }
 
   const forecastPoints = aggregateFleetForecast(data.forecasts);
   if (forecastPoints.length === 0) {
-    return statusText(NO_FORECAST_TEXT);
+    return emptyLine(NO_FORECAST_TEXT);
   }
 
   const rangeLabel = RANGE_LABELS[range];
   return (
-    <>
+    <div className="view-panel">
       {completenessNote(minimumContributingSites(forecastPoints), siteCount)}
       <ForecastChart
         points={joinFleetSeries(forecastPoints, aggregateFleetActuals(data.actuals))}
         ariaLabel={`Fleet aggregate forecast and measured output, ${rangeLabel} range`}
         tableCaption={`Table view — fleet aggregate, ${rangeLabel} range, kW`}
       />
-    </>
+    </div>
   );
 };
 
 const viewBody = (state: QueryState<FleetData>, range: RangeHours): ReactElement => {
   if (state.status === 'loading') {
-    return statusText(LOADING_TEXT);
+    return loadingLine();
   }
   if (state.status === 'failed') {
     // The provider's message already names the operation it failed (error-handling.md rule 4);
     // this sentence supplies the surface the reader is looking at.
-    return statusText(`Could not load the fleet aggregate: ${state.error}`);
+    return errorLine(`Could not load the fleet aggregate: ${state.error}`);
   }
   return readyBody(state.data, range);
 };
@@ -226,14 +246,18 @@ export const FleetAggregateView = ({ provider }: FleetAggregateViewProps): React
 
   return (
     <section className="view">
-      <h2 className="view-title">Fleet aggregate</h2>
-      <p className="view-intro">
-        Every active site&rsquo;s forecast, summed hour by hour, with the fleet&rsquo;s
-        P10&ndash;P90 band and measured output to date.
-      </p>
+      <header className="view-header">
+        <h2 className="view-title">Fleet aggregate</h2>
+        <p className="view-subtitle">
+          Every active site&rsquo;s forecast, summed hour by hour, with the fleet&rsquo;s
+          P10&ndash;P90 band and measured output to date.
+        </p>
+      </header>
       {rangeControls(range, setRange)}
       {viewBody(combineFleetQueries(sites, forecasts, actuals), range)}
-      <OpenMeteoAttribution />
+      <footer className="view-footer">
+        <OpenMeteoAttribution />
+      </footer>
     </section>
   );
 };
