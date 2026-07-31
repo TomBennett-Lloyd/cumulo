@@ -52,8 +52,10 @@ case "$(is_merged "$old_branch" "$tip" "$main_dir")" in
   *) refuse "could not verify whether $old_branch is merged" ;;
 esac
 
-# Hard requirement, unlike the best-effort fetch in is_merged: the new branch must start
-# from an up-to-date main, not from a stale remote-tracking ref.
+# Hard requirement, unlike the best-effort fetch_main above: the new branch must start from an
+# up-to-date main, not from a stale remote-tracking ref. Failing that fetch costs the ancestry
+# fast path a merge it could have spotted; failing this one would cut the branch from the wrong
+# commit, so it exits instead.
 git -C "$top" fetch origin main || {
   echo "fetch of origin/main failed — rebranch needs an updated main" >&2
   exit 2

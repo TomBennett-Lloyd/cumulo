@@ -857,6 +857,34 @@ expect_eq "origin/main with the knob at its default" "$(tracking_ref)" "$ahead"
 end
 
 # ==========================================================================================
+# 28. a direct reap --dry-run writes nothing either
+# ==========================================================================================
+# The fetch guard has two halves — the dry-run mode and the parent's no-fetch signal — and
+# case 27 only exercises the signal. `reap-worktree.sh <path> --dry-run` run by hand is a
+# documented entry point with no sweep above it to carry the signal, so without this case the
+# whole `dry_run` half could be deleted and the suite would not notice.
+begin "reap --dry-run fetches nothing even with no parent telling it not to"
+fixture reapdryfetch
+add_wt feat wt
+advance_origin upstream-work
+expect_stale_fixture
+stale=$(tracking_ref) || exit 2
+# gh must never be reached: the fixture resolves via ancestry against the stale ref, so a
+# failing stub turns any detour through GitHub into a visible failure rather than a pass.
+gh_stub_broken "$ROOT/gh"
+# -u, not merely "we did not set it": an inherited WORKTREE_FETCH_MAIN=0 would make this case
+# pass by testing case 27's half of the guard all over again.
+out=$(env -u WORKTREE_FETCH_MAIN WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt" --dry-run 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP"
+expect_eq "origin/main after a dry reap" "$(tracking_ref)" "$stale"
+expect_exists "$ROOT/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
 
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" = "0" ] || exit 1
