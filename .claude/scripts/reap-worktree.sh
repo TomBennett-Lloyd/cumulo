@@ -43,11 +43,43 @@ main_dir=$(main_checkout_dir "$wt") || keep "not-a-worktree"
 main_dir=$(canon "$main_dir") || exit 2
 [ "$wt" = "$main_dir" ] && keep "main-checkout"
 
+common_dir=$(git -C "$main_dir" rev-parse --path-format=absolute --git-common-dir) || exit 2
 list=$(git -C "$main_dir" worktree list --porcelain) || exit 2
 entry=$(printf '%s' "$list" | python3 -c '
 import os, sys
 
-target = sys.argv[1]
+target, common = sys.argv[1], sys.argv[2]
+
+
+def admin_dir():
+    """The per-worktree admin dir the MAIN repo records for target, or "".
+
+    The porcelain output does not carry it (git 2.50), so this reads the records that
+    worktree list is itself built on: under the common git dir, worktrees/<name>/gitdir
+    holds the path of that worktree .git file. Matching on realpath is the same identity
+    rule the block scan below uses, so one lookup answers both "is this one of ours" and
+    "which admin dir is its own". The alternative -- asking the target directory to name
+    its own git dir -- is what this exists to avoid: that search walks up through parents,
+    and since Cumulo nests worktrees inside the main checkout, a worktree whose .git file
+    is missing answers with the admin dir of the MAIN repo. Reading these files cannot
+    bump the mtime the min-age probe measures.
+    """
+    base = os.path.join(common, "worktrees")
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return ""
+    for name in names:
+        try:
+            with open(os.path.join(base, name, "gitdir")) as handle:
+                link = handle.read().strip()
+        except OSError:
+            continue
+        if link and os.path.realpath(os.path.dirname(link)) == target:
+            return os.path.join(base, name)
+    return ""
+
+
 blocks, cur = [], {}
 for line in sys.stdin.read().splitlines():
     if not line.strip():
@@ -63,17 +95,19 @@ if cur:
 for block in blocks:
     path = block.get("worktree", "")
     if path and os.path.realpath(path) == target:
-        print("1 %d %d %s" % ("locked" in block, "detached" in block,
-                              block.get("branch", "") or "-"))
+        print("1 %d %d %s %s" % ("locked" in block, "detached" in block,
+                                 block.get("branch", "") or "-", admin_dir() or "-"))
         break
 else:
-    print("0 0 0 -")
-' "$wt") || exit 2
+    print("0 0 0 - -")
+' "$wt" "$common_dir") || exit 2
 
 found=$(printf '%s' "$entry" | cut -d' ' -f1)
 locked=$(printf '%s' "$entry" | cut -d' ' -f2)
 detached=$(printf '%s' "$entry" | cut -d' ' -f3)
 branch_ref=$(printf '%s' "$entry" | cut -d' ' -f4)
+# Last field, taken with -f5- rather than -f5: an admin dir is a path and may contain spaces.
+admin_dir=$(printf '%s' "$entry" | cut -d' ' -f5-)
 
 [ "$found" = "1" ] || keep "not-a-worktree"
 [ "$locked" = "1" ] && keep "locked"
@@ -94,10 +128,17 @@ esac
 # ordering means the guard survives a future edit that reintroduces a locking git command.
 # Only checks that reached this point read-only may be moved above it: `worktree list` and
 # `rev-parse` are verified not to touch the admin dir.
-git_dir=$(git -C "$wt" rev-parse --absolute-git-dir) || exit 2
+#
+# The dir it measures came down from the lookup that identified this worktree, i.e. from what
+# the main repo records — deliberately not `rev-parse --absolute-git-dir` run inside the
+# target. That search walks up through parent directories, and Cumulo nests worktrees inside
+# the main checkout, so a worktree whose .git file has gone missing answers with the MAIN
+# repo's admin dir. The probe would then be reading the main checkout's activity while
+# reporting on this worktree.
+[ "$admin_dir" = "-" ] && keep "no-admin-dir"
 if [ "$WORKTREE_MIN_AGE_MINUTES" != "0" ]; then
   # A find that errors tells us nothing about activity, so it refuses rather than guesses.
-  recent=$(find "$git_dir" -mmin -"$WORKTREE_MIN_AGE_MINUTES" -print -quit 2>/dev/null) || keep "recently-active"
+  recent=$(find "$admin_dir" -mmin -"$WORKTREE_MIN_AGE_MINUTES" -print -quit 2>/dev/null) || keep "recently-active"
   [ -n "$recent" ] && keep "recently-active"
 fi
 
@@ -121,6 +162,15 @@ $cwds
 EOF
 
 # --- merge state -------------------------------------------------------------------------
+# One refresh of the base ref, here, and only on a real run. --dry-run must leave the
+# repository byte-identical — "destroys nothing" was true before, "writes nothing" was not —
+# and a sweep that has already fetched for the whole run passes WORKTREE_FETCH_MAIN=0 so N
+# candidates cost one fetch instead of N. Skipping it can only cost the ancestry fast path,
+# never a safety check: is_merged says why.
+if [ "$dry_run" = "0" ] && [ "$WORKTREE_FETCH_MAIN" != "0" ]; then
+  fetch_main "$main_dir"
+fi
+
 branch=${branch_ref#refs/heads/}
 tip=$(git -C "$main_dir" rev-parse "$branch_ref") || exit 2
 case "$(is_merged "$branch" "$tip" "$main_dir")" in
