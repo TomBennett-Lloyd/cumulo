@@ -151,12 +151,6 @@ Entry format:
 - What: `test:scripts` is a literal list — `bash …/worktree-lifecycle.test.sh && bash …/check-adr-index.test.sh`. Two failure modes, both silent. A third harness added next to these two is green-by-absence until someone remembers to extend the string, which is the same drift class #47/#64 just fixed one level up (CI enumerating `verify`'s gates instead of calling the composite) — fixed for the CI→`verify` edge and left in place for the `verify`→harnesses edge. And `&&` short-circuits: when the first harness fails the second never runs, so a red run reports one harness's findings and conceals the other's, turning what should be one fix-everything cycle into two. Real fix is discovery plus a floor: `find .claude/scripts -name '*.test.sh'` driving a loop that runs every harness, accumulates exit codes rather than short-circuiting, and fails loudly if the search matched nothing — a script rather than a package.json one-liner, which is why it is a ticket and not an addendum here.
 - Source: #75 review cycle 1
 
-## 2026-07-31 — ADR row grammar and the ADR immutability policy are on a collision course
-
-- Where: `.claude/scripts/check-adr-index.sh` (`row_re`), `docs/adr/README.md`
-- What: `row_re` anchors on `\)[[:space:]]*$`, so an index row may carry nothing after the link. Meanwhile `docs/adr/README.md` states ADRs are immutable once merged and are superseded rather than edited — and the first supersession will want the index to say so: `- [0002 — Storage split](0002-storage-split.md) — superseded by 0007`. The gate will reject that row as malformed, correctly by its own grammar, at the exact moment the policy is first exercised. Whoever hits it will be mid-supersession and will reach for the quickest unblock, which is loosening the trailing anchor to `.*$` and thereby giving up the strictness the grammar exists for. The decision wants making before then, not under pressure: extend the grammar with an optional, _structured_ status suffix the gate can parse and check (a `superseded by NNNN` that must name a real ADR closes a drift hole the index has today), or rule that supersession is recorded only in the ADR bodies and the index stays link-only. Either is defensible; discovering the conflict during a supersession is not.
-- Source: #75 review cycle 1
-
 ## 2026-07-30 — `lint:sh`'s discovery filter is the untested half of the gate
 
 - Where: `.claude/scripts/lint-shell.sh`:58-88 (shebang regex, `-z` read loop, empty-list guard); `.claude/scripts/lint-shell.test.sh`
@@ -180,6 +174,18 @@ Entry format:
 - Where: this file — e.g. the python3 entry cites `worktree-lib.sh`:20,68 where the second call now sits at :75; the `test:scripts` entry quotes the script literal as two harnesses after this branch made it three; two more pointer corrections were needed on this very PR (#69 closing review)
 - What: entries that pin a claim to a line number or a copied code literal go stale the moment an unrelated change moves the code — and a stale pointer sends whoever picks the entry up to a place that does not contain the thing, or silently understates the blast radius. This is the same drift class the pinning entry above diagnoses in `README.md` prose, recursing into the debt log itself. Fix is a convention for this file, not more edits: cite files and symbol/section names (function names, headings, config keys), never bare line numbers; describe code rather than quoting it verbatim unless the quote is the finding. Wants one line in this file's header stating the rule.
 - Source: #69 closing review
+
+## 2026-07-31 — Supersession is now stated in two places the gate never cross-validates
+
+- Where: `.claude/scripts/check-adr-index.sh` (`check_supersessions`, `adr_status_value`), `docs/adr/README.md` (index annotation grammar)
+- What: #85 validates an index row's `— superseded by NNNN` annotation and an ADR file's `Status:` line each in isolation, so the gate sanctions exactly the disagreement it exists to prevent: an index row can say superseded while the file still says `accepted`, and vice versa, both exiting 0. Three adjacent soft spots share the scan-rather-than-parse root cause: the first `Status:` line in a header wins, so a second, conflicting `Status:` line (the plausible "added instead of replaced" edit) is never read; a self-referential `superseded by 0001` inside `0001-*.md` passes; and the number is regex-scraped from free text, so `superseded by 00021` resolves against `0002`. One fix shape: parse (status, pointer) per file and per row, then require agreement and sanity in one place.
+- Source: #85 review cycle 1
+
+## 2026-07-31 — ADR Status vocabulary is duplicated between the template and the gate
+
+- Where: `docs/adr/0000-template.md` (the `Status:` menu line), `.claude/scripts/check-adr-index.sh` (the status `case`)
+- What: the allowed vocabulary (`proposed | accepted | superseded by NNNN`) lives in the template's prose and again in the gate's `case`, with nothing binding them — adding a value to the template makes the gate reject conforming ADRs, and extending the gate leaves the template lying. Same restated-list drift class as the `README.md`/`.githooks/pre-commit` gate-list entry. Cheapest fix: the gate derives the vocabulary by reading the template's menu line (the template is already excluded from per-file checks, so reading it is safe), making the template the single source. Also: the two harness cases exercising the new `${hits[@]+…}` empty-array guard run only under the default `bash`, not the `$BASHES` loop the harness header commits to — on CI (bash ≥ 4.4) the 3.2 guard is unexercised; wrap one variant in the loop when next touching the harness.
+- Source: #85 review cycle 1
 
 ## 2026-07-31 — Test-support modules live in the production source tree with dev-only imports
 
