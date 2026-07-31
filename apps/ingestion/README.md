@@ -37,7 +37,7 @@ during initialization rather than mid-cycle.
 | Variable     | Purpose                                                                |
 | ------------ | ---------------------------------------------------------------------- |
 | `CUMULO_ENV` | Environment suffix of the DynamoDB table names (`cumulo-sites-<env>`). |
-| `QUEUE_URL`  | Full URL of `cumulo-ingestion-<env>`, the queue of ADR 0004.           |
+| `QUEUE_URL`  | Full URL of `cumulo-weather-readings-<env>`, the queue of ADR 0004.    |
 
 `AWS_REGION` is not listed because Lambda always sets it and the SDK reads it directly — naming it
 again here would be one more place for the queue's region and the client's to disagree.

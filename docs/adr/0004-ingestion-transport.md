@@ -36,7 +36,7 @@ The usage-driven component is immaterial in every option and can be set aside ho
 
 **Ingestion publishes to an SQS standard queue, and the forecast service consumes it through a Lambda event source mapping.** One queue, one consumer, one redrive policy to a dead-letter queue. Decided by the owner on 2026-07-31 at plan review.
 
-`cumulo-ingestion-<env>` is owned by #11's Terraform, per ADR 0001's rule that a resource only one service provisions is service-owned — which is unchanged by this ADR, since only ingestion produces to it.
+`cumulo-weather-readings-<env>` is owned by #11's Terraform, per ADR 0001's rule that a resource only one service provisions is service-owned — which is unchanged by this ADR, since only ingestion produces to it.
 
 **The message granularity is one message per location per cycle**, carrying that location's full horizon, matching 0002's F1. The consumer's event source mapping batches messages; #12 chooses the batch size.
 
@@ -140,7 +140,7 @@ Two smaller consequences follow inside 0001, and both are in its favour:
 
 **Teardown stops being load-bearing for the transport.** `terraform destroy` removes the queue and its DLQ in one step with no ordered dependencies, no final snapshot, and no detaching network interfaces — and, unlike a stream, a queue nobody remembers to destroy costs nothing while it sits there. This is the first resource in the platform where forgetting teardown has no price, which removes one of the places ADR 0001 warned an idle billable resource could hide.
 
-**What #11 owns.** `cumulo-ingestion-<env>` and `cumulo-ingestion-dlq-<env>` in ingestion's Terraform, with a redrive policy carrying an explicit `maxReceiveCount`; an IAM policy granting ingestion `sqs:SendMessage` on the queue only; and a CloudWatch alarm on the DLQ's `ApproximateNumberOfMessagesVisible`, since a dead-letter queue nobody watches is a silently broken pipeline. Per `docs/standards/error-handling.md` rule 3, send timeout and retry behaviour are set at the call site rather than inherited from SDK defaults.
+**What #11 owns.** `cumulo-weather-readings-<env>` and `cumulo-weather-readings-dlq-<env>` in ingestion's Terraform, with a redrive policy carrying an explicit `maxReceiveCount`; an IAM policy granting ingestion `sqs:SendMessage` on the queue only; and a CloudWatch alarm on the DLQ's `ApproximateNumberOfMessagesVisible`, since a dead-letter queue nobody watches is a silently broken pipeline. Per `docs/standards/error-handling.md` rule 3, send timeout and retry behaviour are set at the call site rather than inherited from SDK defaults.
 
 **What #12 must honour**, both consequences of choosing a queue over a stream, and neither optional:
 
