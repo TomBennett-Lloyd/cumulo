@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Test harness for scripts/check-adr-index.sh.
+# Test harness for check-adr-index.sh, its neighbour in this directory.
 #
-# Self-contained on purpose (same shape as .claude/scripts/worktree-lifecycle.test.sh): no
+# Self-contained on purpose (same shape as worktree-lifecycle.test.sh next door): no
 # test framework, no network, no pnpm. Every fixture is a throwaway ADR directory under a
 # single `mktemp -d` that a trap deletes on exit, so the drift cases — an unindexed ADR, an
 # index row pointing at a deleted file — are exercised for real without ever mutating the
@@ -11,7 +11,7 @@
 # every other case pins ADR_DIR to a fixture, so without it the shipped default path could
 # be broken and the suite would still be green (testing.md rule 7).
 #
-# Usage: bash scripts/check-adr-index.test.sh   (or `pnpm test:scripts`)
+# Usage: bash .claude/scripts/check-adr-index.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
 set -uo pipefail
 
@@ -26,8 +26,18 @@ passed=0
 failed=0
 case_name=""
 case_failed=0
+case_ctx=""
 out=""
 rc=0
+
+# The gate has to survive the oldest bash it can meet, and the interpreter is not a detail:
+# under `set -u`, bash 3.2 (which macOS ships as /bin/bash) aborts on an empty array's `[@]`
+# where 4.4+ shrugs. So cases that turn on that difference run under every distinct bash on
+# the box, not just whichever one happens to be first on PATH.
+BASHES="bash"
+if [ -x /bin/bash ] && [ "$(command -v bash)" != "/bin/bash" ]; then
+  BASHES="$BASHES /bin/bash"
+fi
 
 # --- harness plumbing --------------------------------------------------------------------
 
@@ -41,6 +51,7 @@ must() {
 begin() {
   case_name="$1"
   case_failed=0
+  case_ctx=""
 }
 
 end() {
@@ -53,8 +64,9 @@ end() {
   fi
 }
 
+# case_ctx names the variant a failure came from, for cases that run the gate more than once.
 bad() {
-  printf '  ! %s\n' "$1" >&2
+  printf '  ! %s%s\n' "$1" "${case_ctx:+ (under $case_ctx)}" >&2
   case_failed=1
 }
 
@@ -110,9 +122,15 @@ index() {
   } >"$dir/README.md"
 }
 
-run_check() { # run_check <args...>
-  out=$(bash "$CHECK" "$@" 2>&1)
+run_check_with() { # run_check_with <bash> <args...>
+  local interpreter="$1"
+  shift
+  out=$("$interpreter" "$CHECK" "$@" 2>&1)
   rc=$?
+}
+
+run_check() { # run_check <args...>
+  run_check_with bash "$@"
 }
 
 # ==========================================================================================
@@ -222,7 +240,44 @@ expect_out "ADR file 0002-storage-split.md is not listed in the index"
 end
 
 # ==========================================================================================
-# 9. duplicates in the index
+# 9. an indented row is still a row
+# ==========================================================================================
+# Markdown lets a list item carry leading whitespace, and editors and formatters add it. A
+# gate that only recognised a column-1 hyphen would file such a row under "prose" and drop
+# it — the same green-by-skipping failure as case 8, reached by a whitespace character.
+begin "an indented index row is checked, not read as prose"
+fixture indented_row
+index "$DIR" \
+  '- [0001 — Service boundaries](0001-service-boundaries.md)' \
+  '- [0002 — Storage split](0002-storage-split.md)' \
+  '  - [0009 — Gone](0009-gone.md)' \
+  '  - 0010 no link at all'
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "index row 0009 links to a file that does not exist: 0009-gone.md"
+expect_out "index row is not in the"
+expect_out "- 0010 no link at all"
+end
+
+# ==========================================================================================
+# 10. '*' and '+' bullet markers are rows too
+# ==========================================================================================
+begin "'*' and '+' bullet markers are index rows like '-'"
+fixture other_markers
+index "$DIR" \
+  '* [0001 — Service boundaries](0001-service-boundaries.md)' \
+  '+ [0002 — Storage split](0002-storage-split.md)' \
+  '* [0009 — Gone](0009-gone.md)'
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "index row 0009 links to a file that does not exist: 0009-gone.md"
+# The other two rows are accepted as rows, not merely noticed: if they were skipped, both
+# ADR files would be reported unindexed.
+expect_not_out "is not listed in the index"
+end
+
+# ==========================================================================================
+# 11. duplicates in the index
 # ==========================================================================================
 begin "a duplicated index row fails the gate"
 fixture dupe_row
@@ -237,7 +292,7 @@ expect_out "index uses ADR number 0002 more than once"
 end
 
 # ==========================================================================================
-# 10. two files claiming the same ADR number
+# 12. two files claiming the same ADR number
 # ==========================================================================================
 # ADR numbers are the identity of a decision; two files under 0002 means one of them is
 # unreachable by number no matter what the index says.
@@ -250,7 +305,7 @@ expect_out "two ADR files share number 0002"
 end
 
 # ==========================================================================================
-# 11. the template is exempt, and only the template
+# 13. the template is exempt, and only the template
 # ==========================================================================================
 begin "0000-template.md needs no index row"
 fixture template
@@ -260,7 +315,7 @@ expect_not_out "0000-template.md"
 end
 
 # ==========================================================================================
-# 12. a missing README
+# 14. a missing README
 # ==========================================================================================
 begin "a missing README.md fails the gate"
 fixture no_readme
@@ -271,7 +326,7 @@ expect_out "no index file at"
 end
 
 # ==========================================================================================
-# 13. a README with no index section
+# 15. a README with no index section
 # ==========================================================================================
 begin "a README without an '## Index' section fails the gate"
 fixture no_section
@@ -282,7 +337,7 @@ expect_out "has no '## Index' section"
 end
 
 # ==========================================================================================
-# 14. an empty index section
+# 16. an empty index section
 # ==========================================================================================
 begin "an empty '## Index' section fails the gate"
 fixture empty_section
@@ -293,21 +348,31 @@ expect_out "lists no ADRs"
 end
 
 # ==========================================================================================
-# 15. no ADR files at all — the wrong-directory case
+# 17. no ADR files at all — the wrong-directory case
 # ==========================================================================================
 # Green-by-absence is the failure mode a docs gate is most likely to die of: point it at a
 # directory that has been moved or renamed and "nothing to check" must not read as "fine".
 begin "a directory with no ADR files fails instead of passing vacuously"
 fixture empty_dir
-must rm "$DIR/0001-service-boundaries.md" "$DIR/0002-storage-split.md"
+# The template goes too. Leave it behind and the NNNN-*.md glob still matches something, so
+# the empty-glob path — the only path this guard exists for — is never taken, and the case
+# proves nothing about the scenario it is named after.
+must rm "$DIR/0000-template.md" "$DIR/0001-service-boundaries.md" "$DIR/0002-storage-split.md"
 index "$DIR"
-run_check "$DIR"
-expect_rc 1 "$rc"
-expect_out "no ADR files (NNNN-*.md, excluding 0000-template.md) found"
+for interpreter in $BASHES; do
+  case_ctx="$interpreter"
+  run_check_with "$interpreter" "$DIR"
+  expect_rc 1 "$rc"
+  expect_out "no ADR files (NNNN-*.md, excluding 0000-template.md) found"
+  # Not an academic assertion: on bash 3.2 the array expansion aborted the script here,
+  # before the guard above could report anything.
+  expect_not_out "unbound variable"
+done
+case_ctx=""
 end
 
 # ==========================================================================================
-# 16. a directory that is not there at all
+# 18. a directory that is not there at all
 # ==========================================================================================
 begin "a nonexistent ADR directory exits 2, not 1"
 run_check "$TMP_ROOT/does-not-exist"

@@ -7,20 +7,20 @@
 #
 # Wired into the root `verify` composite (CLAUDE.md: gates join `verify`, never a
 # hand-picked subset), so `pnpm verify`, the CI `checks` job and any human running
-# the composite all enforce it. Lives in scripts/ rather than .claude/scripts/
-# because it is a repo gate every contributor runs, not agent lifecycle tooling.
+# the composite all enforce it. It lives in .claude/scripts/ alongside the repo's
+# other shell gates and their harnesses.
 #
 # No dependencies: bash only, and bash 3.2 only (macOS ships 3.2 as /bin/bash, so
 # no associative arrays here — seen-sets are space-delimited strings).
 #
-# Usage: bash scripts/check-adr-index.sh [ADR_DIR]   (or `pnpm check:adr-index`)
+# Usage: bash .claude/scripts/check-adr-index.sh [ADR_DIR]   (or `pnpm check:adr-index`)
 #        ADR_DIR defaults to docs/adr next to this script's repo root; the argument
 #        exists so the test harness can point the gate at throwaway fixtures.
 # Exit:  0 index and files agree, 1 they disagree, 2 the invocation itself was wrong.
 set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
-ADR_DIR=${1:-"$SCRIPT_DIR/../docs/adr"}
+ADR_DIR=${1:-"$SCRIPT_DIR/../../docs/adr"}
 
 TEMPLATE=0000-template.md
 
@@ -55,7 +55,9 @@ rows=0
 saw_index_heading=0
 in_index=0
 
-row_re='^-[[:space:]]+\[([0-9][0-9][0-9][0-9])[^]]*\]\(([^)]+)\)[[:space:]]*$'
+# Markdown allows -, * or + as the bullet marker and permits leading indentation; a gate that
+# recognised only a column-1 hyphen would read every other spelling as prose and skip it.
+row_re='^[[:space:]]*[-*+][[:space:]]+\[([0-9][0-9][0-9][0-9])[^]]*\]\(([^)]+)\)[[:space:]]*$'
 
 while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in
@@ -70,9 +72,12 @@ while IFS= read -r line || [ -n "$line" ]; do
       ;;
   esac
   [ "$in_index" = 1 ] || continue
-  # Bullets are index rows; anything else in the section (blank lines, prose) is not.
-  case "$line" in
-    '-'*) ;;
+  # Bullets are index rows whatever their marker and however they are indented; anything else
+  # in the section (blank lines, prose) is not. Strip the leading whitespace before asking,
+  # because a `case` glob cannot express "optional indentation" without extglob.
+  trimmed=${line#"${line%%[![:space:]]*}"}
+  case "$trimmed" in
+    [-*+]*) ;;
     *) continue ;;
   esac
 
@@ -120,7 +125,10 @@ shopt -u nullglob
 
 indexed=0
 disk_numbers=" "
-for path in "${adr_files[@]}"; do
+# `${a[@]+"${a[@]}"}` rather than `"${adr_files[@]}"`: under `set -u`, bash 3.2 treats an empty
+# array's `[@]` as an unbound variable and aborts — which is exactly the no-ADR-files case the
+# guard below exists to report, so the plain form would kill the check before it could speak.
+for path in ${adr_files[@]+"${adr_files[@]}"}; do
   base=${path##*/}
   [ "$base" = "$TEMPLATE" ] && continue
   indexed=$((indexed + 1))
