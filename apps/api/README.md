@@ -110,3 +110,119 @@ imports the allowlist from `src/openapi/docs-assets.ts` rather than repeating it
 types on import), so the artifact ships exactly the files the route will serve. The largest of them,
 `swagger-ui-bundle.js`, is ~1.5 MB — comfortably inside Lambda's 6 MB response limit even if it were
 base64-encoded, which as text it is not.
+
+## Deploy
+
+Two mechanisms, and which one you need depends entirely on what changed.
+
+| Changed                                                              | Ships by                                                     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Code — `apps/api/**`, `packages/shared/**`, `packages/storage/**`    | `.github/workflows/deploy-api.yml`, automatically on `main`. |
+| Anything else about the function, the gateway, the throttle, the IAM | `terraform apply` in `infra/api/`, by an operator.           |
+
+`deploy-api.yml` rebuilds the artifact on the same toolchain CI verified it with, assumes
+`cumulo-github-actions` by OIDC (no AWS secret exists in this repository), calls
+`UpdateFunctionCode` on `cumulo-api-dev`, and waits for the update to leave `InProgress` so a bundle
+that fails validation fails the job rather than the next request. Its grant is two Lambda actions on
+one function ARN (`infra/api/deploy.tf`) and **no `apigatewayv2` permission at all** — the stage
+throttle that bounds this stack's bill is unreachable from CI by construction, and moving it takes a
+reviewed `.tf` diff.
+
+The workflow deploys code onto infrastructure that must already exist. First time through, that
+means the operator apply below.
+
+## Runbook: smoke the deployed API
+
+The apply itself is [`infra/README.md`'s api-stack runbook](../../infra/README.md#runbook-the-api-stack) —
+build the artifact first (`terraform plan` has a `fileexists` precondition on
+`apps/api/dist/handler.zip` and stops with the command to run if it is missing), copy `backend.hcl`
+and `api.auto.tfvars` from their committed `.example` twins, init against the real backend, plan,
+review, apply. This section starts where that one's B5 hands over: proving the deployed service
+answers, which is [issue #14](https://github.com/TomBennett-Lloyd/cumulo/issues/14)'s acceptance
+criterion.
+
+**S1. Take the endpoint from the apply's output. Never assemble it.**
+
+```bash
+API_ENDPOINT="$(terraform -chdir=infra/api output -raw api_endpoint)"
+echo "$API_ENDPOINT"   # https://<api-id>.execute-api.<region>.amazonaws.com
+```
+
+The api id in that hostname is **server-assigned at create time**, so there is no template a correct
+URL can be predicted from — a guessed one points at a different API or at nothing. It embeds no
+account id, unlike most of this platform's outputs, so it is safe to quote in a PR body or an issue
+comment.
+
+**S2. The spec is being served, and it is the generated one.**
+
+```bash
+curl -fsS "$API_ENDPOINT/openapi.json" | head -c 200
+```
+
+`-f` is what makes this a check rather than a print: without it curl reports success on a 500 whose
+body happens to be text. Expect the document to open `{"openapi":"3.0.3","info":{"title":"Cumulo
+Fleet API"…`. There is no spec file in this repository to have gone stale — it is built from the zod
+schemas at Lambda start-up — so what this proves is that the running bundle and the published
+contract came out of the same build.
+
+**S3. The fleet reads.**
+
+```bash
+curl -fsS "$API_ENDPOINT/v1/sites"
+```
+
+Expect `{"sites":[…]}`. An empty array is a legitimate answer on a fresh `cumulo-sites` table.
+
+**S4. The docs render, and try-it-out works.**
+
+```bash
+open "$API_ENDPOINT/docs"
+```
+
+Swagger UI loads its assets from `/docs/…` on the same origin and its spec from `/openapi.json`, so
+a page that renders is already evidence that three routes work. Then exercise **Try it out** on:
+
+- `GET /v1/sites` — expect the same body as S3.
+- `POST /v1/sites` — expect `201` and a body whose `id`, `origin: "user"`, `createdAt` and `active`
+  the server assigned. The response is the only source of that id; nothing predicts it.
+
+**That POST creates a real site in a real table.** The next ingestion cycle will fetch weather for
+its location, so unless you meant to add a permanent site to the demo fleet, remove it with the id
+the response gave you:
+
+```bash
+curl -fsS -X DELETE -o /dev/null -w '%{http_code}\n' "$API_ENDPOINT/v1/sites/<id-from-the-201>"
+# expect: 204
+```
+
+**Empty forecast arrays are the expected answer, not a failure.** Until #12's forecast service is
+deployed and writing rows, `GET /v1/sites/{siteId}/forecast` and `/series` return `200` with
+`forecasts: []` — deliberate behaviour, documented on both operations in the spec, and the exact
+distinction #17's first-forecast poll keys on (`404` means the id is wrong, `[]` means keep
+waiting). A reviewer clicking try-it-out on those two routes should expect empty arrays and read
+them as correct.
+
+**S5. The throttle is live.** This is the cost guard the whole stack's bill argument rests on
+(ADR 0005), so it is worth one burst to see it fire rather than trusting the console:
+
+```bash
+for _ in $(seq 1 40); do
+  curl -s -o /dev/null -w '%{http_code}\n' "$API_ENDPOINT/v1/sites" &
+done | sort | uniq -c
+# expect two lines: some 200s and some 429s
+```
+
+Forty concurrent requests against a burst limit of 20 must produce some `429`s; a run that is all
+`200` means the stage throttle is not doing what `infra/api/gateway.tf` says it does — stop and read
+the stage back (that runbook's B4). The exact split varies with how the requests interleave and is
+not worth pinning.
+
+Two details in that one-liner are load-bearing. The `&` is what makes the requests concurrent — a
+serial loop cannot exceed a rate limit of 10 per second by much and will report forty `200`s from a
+working throttle. And the pipe hangs off `done`, not off a `wait`: the backgrounded curls inherit
+the loop's stdout, so `sort` sees their codes and finishes when the last one closes the pipe.
+Piping `wait` instead sorts an empty stream while the codes scroll past on the terminal.
+
+A `429` here comes from the gateway, before this Lambda is invoked, so its body is the gateway's own
+`{ "message": … }` and not an `apiErrorSchema` body. That asymmetry is the contract
+described under [Error contract](#error-contract): clients map rate limiting on the status.

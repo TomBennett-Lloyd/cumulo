@@ -1,0 +1,131 @@
+name: Deploy API
+
+# Ships a rebuilt Lambda bundle to the already-provisioned fleet API function,
+# and does exactly nothing else.
+#
+# The split with Terraform is the same one `deploy-ingestion.yml` describes, and
+# on this stack it guards more than a runtime setting. `infra/api/` owns the
+# function's runtime, handler, memory, environment and execution role — and it
+# also owns the HTTP API, its `$default` stage, and the stage throttle
+# (10 rps, burst 20) that turns an unauthenticated public write endpoint into an
+# arithmetic cost bound. The deploy grant in `infra/api/deploy.tf` is two Lambda
+# actions and no `apigatewayv2` permission at all, so no workflow — this one
+# included — can move that throttle. Changing the bound requires a reviewed diff
+# in a `.tf` file, which is the entire point.
+#
+# The one seam it leaves is the ingestion workflow's: after a deploy, Terraform's
+# recorded `source_code_hash` describes the artefact of the last *apply*, so the
+# next `terraform plan` reports a code change. That is correct and harmless, and
+# infra/README.md's api runbook (B6) calls it out so nobody reads it as drift.
+#
+# Keyless throughout: `cumulo-github-actions` is assumed by OIDC, and there is
+# no AWS secret in this repository to store or rotate (CLAUDE.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # The bundle is built by esbuild from source, so its content is a function
+      # of the service *and* the workspace packages it inlines — a change to
+      # @cumulo/shared's schemas ships inside this artefact twice over (the
+      # handlers parse with them, and the OpenAPI document is generated from
+      # them, so a schema edit that never reached here would leave the published
+      # spec describing an API that no longer exists), and @cumulo/storage's
+      # adapters are the whole read path. The lockfile is here for the same
+      # reason one level down: a bumped dependency is bundled code too, and on
+      # this service that includes the pinned `swagger-ui-dist` assets that
+      # `/docs` serves.
+      - apps/api/**
+      - packages/shared/**
+      - packages/storage/**
+      - pnpm-lock.yaml
+      - .github/workflows/deploy-api.yml
+
+# id-token: write is what lets the runner mint the OIDC token AWS trades for
+# credentials. contents: read is the checkout. Nothing here writes to the repo,
+# and no other permission is needed to update a Lambda's code.
+permissions:
+  id-token: write
+  contents: read
+
+# Two pushes landing minutes apart race each other: both build, both call
+# UpdateFunctionCode, and whichever upload finishes last wins regardless of
+# which commit is newer — so main can end up running older code than it thinks.
+# Serialising on the workflow makes the last *started* run the last to deploy.
+# Not `cancel-in-progress`: a half-finished deploy is worse than a slow queue,
+# and this function answers the public endpoint while the deploy is in flight.
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Setup mirrors ci.yml exactly — same actions, same versions, same
+      # .nvmrc-driven Node and pnpm store cache. What CI verified and what this
+      # workflow ships must be built by the same toolchain, or "green on main"
+      # stops being a statement about the artefact.
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # No `pnpm verify` step, deliberately. Every commit on main arrived
+      # through a PR whose CI ran the composite gate, so re-running it here
+      # would double the wall clock to re-prove a fact about the same tree. If
+      # main ever admits unverified commits, this is the line that has to change.
+      #
+      # The build emits `dist/main.mjs`, copies the allowlisted Swagger UI files
+      # into `dist/swagger/`, and zips both into `dist/handler.zip` — one
+      # artefact, so the rendered spec and the running API cannot disagree.
+      - run: pnpm --filter @cumulo/api build
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          # Repo *variables*, never secrets: a role ARN and a region are
+          # identifiers, and the point of OIDC is that there is no secret to
+          # pair them with. Both are published by the bootstrap runbook's B6.
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          # Names the session in CloudTrail, so an UpdateFunctionCode call can
+          # be traced back to the run — and the commit — that made it.
+          role-session-name: deploy-api-${{ github.run_id }}
+
+      # The function name is literal rather than derived: this repository
+      # deploys one environment, `dev`, which is `var.environment`'s default in
+      # infra/api. A second environment is not a matrix over this file — it is a
+      # second stack apply, whose deploy grant would be a second inline policy,
+      # and the name would come from that stack's `function_name` output.
+      #
+      # `--query` on this call is not cosmetic. The raw response embeds the
+      # function ARN and the execution-role ARN, both of which carry the AWS
+      # account id, and this repository is public — so a full JSON dump would
+      # publish into every run log the digits infra/README.md convention 7 keeps
+      # out of the repo. These three fields are the deploy's actual evidence and
+      # none of them identify the account.
+      - name: Update function code
+        run: |
+          aws lambda update-function-code \
+            --function-name cumulo-api-dev \
+            --zip-file fileb://apps/api/dist/handler.zip \
+            --query '{Status:LastUpdateStatus,Sha:CodeSha256,Size:CodeSize}' \
+            --output json
+
+      # UpdateFunctionCode returns as soon as the upload is accepted, while the
+      # function is still `InProgress` — so without this the job goes green on
+      # an update that may yet fail validation, and the first evidence is a 500
+      # from the public endpoint. The waiter fails the job instead.
+      #
+      # `-v2`, not the unsuffixed waiter, and the suffix is load-bearing:
+      # `function-updated` polls GetFunctionConfiguration, `function-updated-v2`
+      # polls GetFunction. The deploy grant allows `lambda:GetFunction` and not
+      # `lambda:GetFunctionConfiguration`, so the unsuffixed waiter would spend
+      # the job's remaining minutes being AccessDenied.
+      - name: Wait for the update to finish
+        run: |
+          aws lambda wait function-updated-v2 \
+            --function-name cumulo-api-dev
