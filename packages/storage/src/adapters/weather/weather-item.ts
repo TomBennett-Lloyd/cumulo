@@ -3,6 +3,8 @@ import {
   locationId,
   weatherReadingSchema,
   weatherSortKey,
+  type ArchiveWeatherReading,
+  type ForecastWeatherReading,
   type WeatherReading,
 } from '@cumulo/shared';
 import { z } from 'zod';
@@ -20,16 +22,6 @@ import { SERIES_RETENTION_DAYS, expiresAtEpochSeconds } from '../../ttl';
 export type WeatherLocation = Pick<WeatherReading, 'latitude' | 'longitude'>;
 
 /**
- * The two halves of `weatherReadingSchema`'s `kind` axis, narrowed at the type
- * level. The adapter never inspects `kind` at runtime: `putForecastWeather` and
- * `putArchiveDay` write different sort-key prefixes and different TTLs, so
- * handing one the other's readings has to be a compile error rather than a
- * runtime check nobody exercises.
- */
-export type ForecastWeatherReading = WeatherReading & { readonly kind: 'forecast' };
-export type ArchiveWeatherReading = WeatherReading & { readonly kind: 'archive' };
-
-/**
  * Forecast weather is kept exactly as long as the series it explains
  * (`SERIES_RETENTION_DAYS`). Tying the two is deliberate: a stored forecast
  * whose input weather had already expired would be unexplainable, and #16's
@@ -43,6 +35,12 @@ export type WeatherItem = Record<string, NativeAttributeValue>;
 export const markerKeySchema = z.object({ locationId: z.string(), sk: z.string() });
 export type MarkerKey = z.infer<typeof markerKeySchema>;
 
+/**
+ * The two writers take the narrowed reading types (`@cumulo/shared`) rather than
+ * `WeatherReading`, and neither inspects `kind` at runtime: they write different
+ * sort-key prefixes and different TTLs, so handing one the other's readings is a
+ * compile error instead of a runtime check nobody exercises.
+ */
 export const toForecastItem = (reading: ForecastWeatherReading): WeatherItem => ({
   ...reading,
   locationId: locationId(reading),

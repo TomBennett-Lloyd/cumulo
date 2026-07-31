@@ -1,7 +1,8 @@
+import type { ForecastWeatherReading } from '@cumulo/shared';
 import { z } from 'zod';
 
 import { describeThrown } from '../thrown-detail';
-import { parseForecastResponse, type ForecastWeatherReading } from './response';
+import { parseForecastResponse } from './response';
 import { buildForecastUrl, type ForecastLocation } from './url';
 
 /**

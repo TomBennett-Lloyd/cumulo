@@ -52,5 +52,12 @@ export {
 } from './storage-key';
 export { generateFleet, canonicalFleetSeed } from './fleet';
 export { utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
-export { weatherReadingSchema, type WeatherReading } from './weather-reading';
+export {
+  weatherReadingSchema,
+  type WeatherReading,
+  forecastWeatherReadingSchema,
+  type ForecastWeatherReading,
+  archiveWeatherReadingSchema,
+  type ArchiveWeatherReading,
+} from './weather-reading';
 export { weatherSourceSchema, type WeatherSource } from './weather-source';

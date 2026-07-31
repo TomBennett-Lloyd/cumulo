@@ -1,9 +1,8 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { weatherReadingSchema } from '@cumulo/shared';
+import { weatherReadingSchema, type ForecastWeatherReading } from '@cumulo/shared';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { z } from 'zod';
 
-import type { ForecastWeatherReading } from '../open-meteo/response';
 import type { WeatherPublisher } from './weather-publisher';
 
 /**

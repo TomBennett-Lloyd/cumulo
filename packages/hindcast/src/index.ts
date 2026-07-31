@@ -29,6 +29,5 @@ export {
   type ArchiveFetchDeps,
   type ArchiveFetchResult,
   type ArchiveHourlyVariable,
-  type ArchiveWeatherReading,
   type ParsedArchiveDays,
 } from './open-meteo-archive';

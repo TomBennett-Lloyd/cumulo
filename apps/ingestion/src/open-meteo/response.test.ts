@@ -1,8 +1,8 @@
-import { weatherReadingSchema } from '@cumulo/shared';
+import { weatherReadingSchema, type ForecastWeatherReading } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import fixture from './fixtures/dublin-forecast.json';
-import { parseForecastResponse, type ForecastWeatherReading } from './response';
+import { parseForecastResponse } from './response';
 import type { HourlyVariable } from './url';
 
 /**

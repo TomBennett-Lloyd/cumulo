@@ -39,6 +39,15 @@
  *   ADR 0002's key attributes live between `toItem` and `fromItem` and nowhere
  *   else, and a type that names them outside the package would make them look
  *   like domain data.
+ * - the reading types the weather adapter's parameters and returns are written
+ *   in — `ForecastWeatherReading`, `ArchiveWeatherReading` and `WeatherReading`
+ *   itself. These are domain schema types, so they come from `@cumulo/shared`
+ *   and a caller imports them from there (#91). Re-exporting them here would
+ *   give one definition three import paths and imply this package owns a
+ *   concept it only consumes — the opposite of `architecture.md` rule 2. Which
+ *   is why `WeatherLocation`, just below, *is* exported: it is a `Pick` of the
+ *   shared reading describing what this package keys on, and it exists nowhere
+ *   else.
  *
  * Tests reach past this file by relative path on purpose — they test the
  * modules, not the promise.
@@ -72,7 +81,5 @@ export { MetricsAdapter } from './adapters/metrics/metrics-adapter';
 export { WeatherAdapter, type ArchiveDayCoverage } from './adapters/weather/weather-adapter';
 export {
   FORECAST_WEATHER_RETENTION_DAYS,
-  type ArchiveWeatherReading,
-  type ForecastWeatherReading,
   type WeatherLocation,
 } from './adapters/weather/weather-item';

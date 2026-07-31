@@ -1,11 +1,9 @@
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 
-import { weatherReadingSchema } from '@cumulo/shared';
+import { forecastWeatherReadingSchema, type ForecastWeatherReading } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
 
-import type { ForecastWeatherReading } from '../open-meteo/response';
 import {
   INGESTION_SEND_MAX_ATTEMPTS,
   INGESTION_SEND_REQUEST_TIMEOUT_MS,
@@ -32,10 +30,8 @@ import {
  * was unenforced (#115).
  */
 
-const forecastReadingSchema = weatherReadingSchema.extend({ kind: z.literal('forecast') });
-
 const oneReading = (): ForecastWeatherReading =>
-  forecastReadingSchema.parse({
+  forecastWeatherReadingSchema.parse({
     latitude: 53.35,
     longitude: -6.26,
     validTime: '2026-07-31T00:00:00Z',

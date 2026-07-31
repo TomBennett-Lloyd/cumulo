@@ -1,4 +1,8 @@
-import { weatherReadingSchema, type WeatherReading } from '@cumulo/shared';
+import {
+  forecastWeatherReadingSchema,
+  type ForecastWeatherReading,
+  type WeatherReading,
+} from '@cumulo/shared';
 import { z } from 'zod';
 
 import { describeZodIssues } from '../zod-issue-detail';
@@ -51,17 +55,6 @@ export const openMeteoForecastResponseSchema = z.object({
 });
 
 export type OpenMeteoForecastResponse = z.infer<typeof openMeteoForecastResponseSchema>;
-
-/**
- * `weatherReadingSchema` with the `kind` axis fixed: this module only ever produces
- * predictions. Derived from the shared schema rather than restated, so the domain
- * definition stays in one place (architecture.md rule 2).
- */
-const forecastWeatherReadingSchema = weatherReadingSchema.extend({
-  kind: z.literal('forecast'),
-});
-
-export type ForecastWeatherReading = WeatherReading & { kind: 'forecast' };
 
 /** The reading fields that come from an hourly column, as opposed to the request. */
 type HourlyReadingValues = Pick<

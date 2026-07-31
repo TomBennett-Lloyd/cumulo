@@ -1,11 +1,7 @@
-import { locationId, type GeoCoordinates } from '@cumulo/shared';
+import { locationId, type ArchiveWeatherReading, type GeoCoordinates } from '@cumulo/shared';
 
 import { contiguousDayRuns, type DayRun, type UtcDay } from './archive-days';
-import {
-  MAX_ARCHIVE_REQUEST_DAYS,
-  type ArchiveFetchResult,
-  type ArchiveWeatherReading,
-} from './open-meteo-archive';
+import { MAX_ARCHIVE_REQUEST_DAYS, type ArchiveFetchResult } from './open-meteo-archive';
 
 /**
  * The quota guard between a hindcast window and Open-Meteo's archive: given the

@@ -8,6 +8,8 @@ import {
   archiveDayMarkerSortKey,
   locationId,
   weatherSortKey,
+  type ArchiveWeatherReading,
+  type ForecastWeatherReading,
   type UtcIsoTimestamp,
   type WeatherReading,
 } from '@cumulo/shared';
@@ -26,8 +28,6 @@ import {
   markerKeySchema,
   toArchiveItem,
   toForecastItem,
-  type ArchiveWeatherReading,
-  type ForecastWeatherReading,
   type MarkerKey,
   type WeatherItem,
   type WeatherLocation,

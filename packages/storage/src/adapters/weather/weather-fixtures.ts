@@ -11,9 +11,12 @@ import {
   type TransactWriteCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import {
+  archiveWeatherReadingSchema,
+  forecastWeatherReadingSchema,
   utcIsoTimestampSchema,
-  weatherReadingSchema,
   weatherSortKey,
+  type ArchiveWeatherReading,
+  type ForecastWeatherReading,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
 import { mockClient } from 'aws-sdk-client-mock';
@@ -23,7 +26,6 @@ import { z } from 'zod';
 import type { BatchPolicy } from '../../batch';
 
 import { WeatherAdapter } from './weather-adapter';
-import type { ArchiveWeatherReading, ForecastWeatherReading } from './weather-item';
 
 /**
  * Fixtures shared by this folder's tests: the two `kind`-narrowed reading
@@ -68,9 +70,6 @@ export const shippedAdapter = (): WeatherAdapter =>
 
 export const at = (iso: string): UtcIsoTimestamp => utcIsoTimestampSchema.parse(iso);
 
-const archiveReadingSchema = weatherReadingSchema.extend({ kind: z.literal('archive') });
-const forecastReadingSchema = weatherReadingSchema.extend({ kind: z.literal('forecast') });
-
 const readingFields = (validTime: string, coords: { latitude: number; longitude: number }) => ({
   latitude: coords.latitude,
   longitude: coords.longitude,
@@ -86,10 +85,10 @@ const readingFields = (validTime: string, coords: { latitude: number; longitude:
 });
 
 export const archiveReading = (validTime: string, coords = DUBLIN): ArchiveWeatherReading =>
-  archiveReadingSchema.parse({ ...readingFields(validTime, coords), kind: 'archive' });
+  archiveWeatherReadingSchema.parse({ ...readingFields(validTime, coords), kind: 'archive' });
 
 export const forecastReading = (validTime: string, coords = DUBLIN): ForecastWeatherReading =>
-  forecastReadingSchema.parse({ ...readingFields(validTime, coords), kind: 'forecast' });
+  forecastWeatherReadingSchema.parse({ ...readingFields(validTime, coords), kind: 'forecast' });
 
 /** `count` consecutive hourly UTC timestamps in the schema's fixed-width form. */
 export const hourlyFrom = (start: string, count: number): string[] => {
