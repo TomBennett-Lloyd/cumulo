@@ -113,9 +113,8 @@ const validFleetSite = {
 };
 
 /** Fixture builder: the same fleet site minus one field, for the required-field tests. */
-function withoutField(site: Record<string, unknown>, field: string): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(site).filter(([name]) => name !== field));
-}
+const withoutField = (site: Record<string, unknown>, field: string): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(site).filter(([name]) => name !== field));
 
 describe('siteOriginSchema', () => {
   it.each(['seed', 'user'])('accepts origin %s', (origin) => {

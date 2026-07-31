@@ -20,12 +20,12 @@ const TWO_PM = at('2026-07-30T14:00:00Z');
  * Compares by UTF-16 code unit, the order DynamoDB sorts string sort keys in —
  * `localeCompare` would answer a different, locale-dependent question.
  */
-function byCodeUnit(left: string, right: string): number {
+const byCodeUnit = (left: string, right: string): number => {
   if (left < right) {
     return -1;
   }
   return left > right ? 1 : 0;
-}
+};
 
 const allKinds: SeriesKind[] = [
   { kind: 'forecast', model: 'physics' },

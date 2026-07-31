@@ -1,7 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { ConfiguredRetryStrategy } from '@smithy/core/retry';
-import { HttpResponse, type HttpRequest } from '@smithy/core/transport';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -12,61 +11,23 @@ import {
   createStorageRetryStrategy,
   storageRetryDelayMs,
 } from './client';
-
-/**
- * A request handler that answers every call with an empty successful response
- * and keeps the signed HTTP requests. Asserting on the serialized body is what
- * makes these contract tests rather than mock-assertion tests
- * (`docs/standards/testing.md` rule 3): the marshalling under test happens in
- * the client's own middleware, below any SDK-level mock.
- */
-class RecordingHttpHandler {
-  readonly requests: HttpRequest[] = [];
-  readonly configUpdates: [string, unknown][] = [];
-
-  handle(request: HttpRequest): Promise<{ response: HttpResponse }> {
-    this.requests.push(request);
-    return Promise.resolve({
-      response: new HttpResponse({
-        statusCode: 200,
-        headers: { 'content-type': 'application/x-amz-json-1.0' },
-        body: new TextEncoder().encode('{}'),
-      }),
-    });
-  }
-
-  updateHttpClientConfig(key: string, value: unknown): void {
-    this.configUpdates.push([key, value]);
-  }
-
-  httpHandlerConfigs(): Record<string, unknown> {
-    return {};
-  }
-}
+import { RecordingHttpHandler, firstRequestBody } from './recording-http-handler';
 
 const putItemBodySchema = z.object({
   TableName: z.string(),
   Item: z.record(z.string(), z.unknown()),
 });
 
-function offlineClient(handler: RecordingHttpHandler): DynamoDBClient {
-  return new DynamoDBClient({
+const offlineClient = (handler: RecordingHttpHandler): DynamoDBClient =>
+  new DynamoDBClient({
     region: 'eu-west-1',
     credentials: { accessKeyId: 'test-access-key-id', secretAccessKey: 'test-secret-access-key' },
     requestHandler: handler,
   });
-}
 
-function sentItem(handler: RecordingHttpHandler): Record<string, unknown> {
-  const [request] = handler.requests;
-  if (request === undefined) {
-    throw new Error('no request reached the HTTP handler');
-  }
-  if (typeof request.body !== 'string') {
-    throw new Error('expected a JSON string body on the DynamoDB request');
-  }
-  return putItemBodySchema.parse(JSON.parse(request.body)).Item;
-}
+/** The single `PutItem` body that reached the wire, as marshalled attributes. */
+const sentItem = (handler: RecordingHttpHandler): Record<string, unknown> =>
+  putItemBodySchema.parse(firstRequestBody(handler)).Item;
 
 const itemWithTopLevelUndefined = {
   siteId: 'site-1',

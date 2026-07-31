@@ -9,31 +9,30 @@ import {
 } from './batch';
 
 /** A `send` that accepts everything, recording the batches it was handed. */
-function acceptingSend(record: string[][]): (batch: string[]) => Promise<string[]> {
-  return (batch) => {
+const acceptingSend =
+  (record: string[][]): ((batch: string[]) => Promise<string[]>) =>
+  (batch) => {
     record.push([...batch]);
     return Promise.resolve([]);
   };
-}
 
 /** A `send` that never accepts anything, recording every attempt. */
-function refusingSend(record: string[][]): (batch: string[]) => Promise<string[]> {
-  return (batch) => {
+const refusingSend =
+  (record: string[][]): ((batch: string[]) => Promise<string[]>) =>
+  (batch) => {
     record.push([...batch]);
     return Promise.resolve([...batch]);
   };
-}
 
-function recordingSleep(delays: number[]): (ms: number) => Promise<void> {
-  return (ms) => {
+const recordingSleep =
+  (delays: number[]): ((ms: number) => Promise<void>) =>
+  (ms) => {
     delays.push(ms);
     return Promise.resolve();
   };
-}
 
-function requests(count: number): string[] {
-  return Array.from({ length: count }, (_unused, index) => `req-${String(index)}`);
-}
+const requests = (count: number): string[] =>
+  Array.from({ length: count }, (_unused, index) => `req-${String(index)}`);
 
 describe('fullJitterDelayMs', () => {
   const nearlyOne = () => 0.999_999;

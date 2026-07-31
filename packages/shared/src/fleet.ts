@@ -69,7 +69,7 @@ const azimuthDegreesRange = { min: 90, mode: 180, max: 270 } as const satisfies 
  * mulberry32 — a 32-bit PRNG chosen for being tiny, dependency-free and byte-identical across
  * JS engines, so a seed means the same fleet in Node, the browser and CI.
  */
-function mulberry32(seed: number): () => number {
+const mulberry32 = (seed: number): (() => number) => {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -78,25 +78,23 @@ function mulberry32(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
+};
 
 /**
  * Inverse-CDF sample from a triangular distribution, consuming exactly one uniform draw so the
  * draw sequence stays predictable.
  */
-function sampleTriangular(rng: () => number, range: TriangularRange): number {
+const sampleTriangular = (rng: () => number, range: TriangularRange): number => {
   const { min, mode, max } = range;
   const u = rng();
   const modeFraction = (mode - min) / (max - min);
   return u < modeFraction
     ? min + Math.sqrt(u * (max - min) * (mode - min))
     : max - Math.sqrt((1 - u) * (max - min) * (max - mode));
-}
+};
 
 /** Uniform offset in `[-halfWidth, +halfWidth]`, one draw. */
-function sampleJitter(rng: () => number, halfWidth: number): number {
-  return (rng() * 2 - 1) * halfWidth;
-}
+const sampleJitter = (rng: () => number, halfWidth: number): number => (rng() * 2 - 1) * halfWidth;
 
 const uuidByteCount = 16;
 /** Byte indices that a canonical 8-4-4-4-12 UUID string prefixes with a dash. */
@@ -109,7 +107,7 @@ const uuidVariantByteIndex = 8;
  * accepts it), but reproducible. The hex string is built in one pass rather than via an
  * intermediate byte array, which keeps every access checked.
  */
-function nextUuidV4(rng: () => number): string {
+const nextUuidV4 = (rng: () => number): string => {
   let uuid = '';
   for (let index = 0; index < uuidByteCount; index += 1) {
     let byte = Math.floor(rng() * 256);
@@ -124,19 +122,19 @@ function nextUuidV4(rng: () => number): string {
     uuid += byte.toString(16).padStart(2, '0');
   }
   return uuid;
-}
+};
 
-function roundTo(value: number, decimals: number): number {
+const roundTo = (value: number, decimals: number): number => {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
-}
+};
 
 /**
  * Build the demo fleet for `seed`: 5 sites around each of the 12 cluster centres, 60 in total.
  *
  * Pure and deterministic — equal seeds always yield deeply equal fleets.
  */
-export function generateFleet(seed: number): readonly Site[] {
+export const generateFleet = (seed: number): readonly Site[] => {
   const rng = mulberry32(seed);
   const sites: Site[] = [];
 
@@ -169,4 +167,4 @@ export function generateFleet(seed: number): readonly Site[] {
   }
 
   return sites;
-}
+};
