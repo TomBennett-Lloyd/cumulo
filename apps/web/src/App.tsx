@@ -13,7 +13,7 @@ type Theme = 'light' | 'dark';
  * that belongs to the app shell in #17, and guessing at it here would create a
  * second place where theming is decided.
  */
-export function App(): ReactElement {
+export const App = (): ReactElement => {
   const [theme, setTheme] = useState<Theme>('light');
 
   // The `data-theme` attribute on <html> is what `tokens.css` keys its dark
@@ -50,4 +50,4 @@ export function App(): ReactElement {
       <TokensPreview />
     </div>
   );
-}
+};

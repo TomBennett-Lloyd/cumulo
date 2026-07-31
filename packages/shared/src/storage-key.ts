@@ -39,16 +39,15 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  * Valid time comes before kind so that a single Query returns physics, ML and
  * actuals interleaved by time (ADR 0002 access pattern A4).
  */
-export function seriesSortKey(validTime: UtcIsoTimestamp, kind: SeriesKind): string {
+export const seriesSortKey = (validTime: UtcIsoTimestamp, kind: SeriesKind): string => {
   const kindSuffix =
     kind.kind === 'forecast' ? `${FORECAST_SEGMENT}#${kind.model}` : GENERATION_SEGMENT;
 
   return `${TIME_SEGMENT}#${validTime}#${kindSuffix}`;
-}
+};
 
-function malformedSeriesSortKey(sortKey: string): Error {
-  return new Error(`Malformed series sort key: ${JSON.stringify(sortKey)}`);
-}
+const malformedSeriesSortKey = (sortKey: string): Error =>
+  new Error(`Malformed series sort key: ${JSON.stringify(sortKey)}`);
 
 /**
  * Inverse of {@link seriesSortKey}, used by the series adapter to decide which
@@ -59,7 +58,7 @@ function malformedSeriesSortKey(sortKey: string): Error {
  * the format changed under it — not an expected outcome a caller could handle,
  * so it propagates (`docs/standards/error-handling.md` rule 1).
  */
-export function parseSeriesSortKey(sortKey: string): { validTime: string; kind: SeriesKind } {
+export const parseSeriesSortKey = (sortKey: string): { validTime: string; kind: SeriesKind } => {
   const segments = sortKey.split('#');
   const [prefix, rawValidTime, kindSegment, rawModel] = segments;
 
@@ -86,7 +85,7 @@ export function parseSeriesSortKey(sortKey: string): { validTime: string; kind: 
   }
 
   throw malformedSeriesSortKey(sortKey);
-}
+};
 
 /**
  * `cumulo-weather` sort key: `FORECAST#T#<validTime>` or
@@ -101,11 +100,14 @@ export function parseSeriesSortKey(sortKey: string): { validTime: string; kind: 
  * forecast items for the same location, and so the day markers below sit in one
  * contiguous run.
  */
-export function weatherSortKey(kind: 'forecast' | 'archive', validTime: UtcIsoTimestamp): string {
+export const weatherSortKey = (
+  kind: 'forecast' | 'archive',
+  validTime: UtcIsoTimestamp,
+): string => {
   const sourceSegment = kind === 'archive' ? ARCHIVE_SEGMENT : WEATHER_FORECAST_SEGMENT;
 
   return `${sourceSegment}#${TIME_SEGMENT}#${validTime}`;
-}
+};
 
 /**
  * `cumulo-weather` sort key of the marker item that records "this location-day
@@ -121,12 +123,23 @@ export function weatherSortKey(kind: 'forecast' | 'archive', validTime: UtcIsoTi
  * the marker run unqueryable, so a loose day string is a violated invariant
  * rather than something to normalize quietly.
  */
-export function archiveDayMarkerSortKey(day: string): string {
+export const archiveDayMarkerSortKey = (day: string): string => {
   if (!DAY_PATTERN.test(day)) {
     throw new Error(`Archive day must be YYYY-MM-DD, received: ${JSON.stringify(day)}`);
   }
 
   return `${ARCHIVE_SEGMENT}#${DAY_SEGMENT}#${day}`;
+};
+
+/**
+ * The half-open evaluation window a metrics row covers. Named and exported
+ * rather than inlined into `metricsSortKey`'s signature so #16's callers and
+ * #20's comparison endpoint conform to one contract instead of re-declaring the
+ * shape per call site (`docs/standards/typing.md` rule 6).
+ */
+export interface MetricsPeriod {
+  readonly startInclusive: UtcIsoTimestamp;
+  readonly endExclusive: UtcIsoTimestamp;
 }
 
 /**
@@ -143,10 +156,8 @@ export function archiveDayMarkerSortKey(day: string): string {
  * and may need a different period granularity; amending this function is its
  * call to make.
  */
-export function metricsSortKey(
-  period: { startInclusive: UtcIsoTimestamp; endExclusive: UtcIsoTimestamp },
+export const metricsSortKey = (
+  period: MetricsPeriod,
   model: ForecastModel,
   baseline: string,
-): string {
-  return `${period.startInclusive}#${period.endExclusive}#${model}#${baseline}`;
-}
+): string => `${period.startInclusive}#${period.endExclusive}#${model}#${baseline}`;

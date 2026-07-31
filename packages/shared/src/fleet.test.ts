@@ -47,18 +47,16 @@ const expectedLongitudeJitter = 0.03;
 /** Coordinates are recorded to 5 dp, so rounding can nudge a site half a unit past the jitter box. */
 const coordinateRoundingSlack = 0.000005;
 
-function locationNameOf(site: Site): string {
-  return site.name.split(' rooftop ')[0] ?? site.name;
-}
+const locationNameOf = (site: Site): string => site.name.split(' rooftop ')[0] ?? site.name;
 
-function countSitesByLocation(fleet: readonly Site[]): Map<string, number> {
+const countSitesByLocation = (fleet: readonly Site[]): Map<string, number> => {
   const counts = new Map<string, number>();
   for (const site of fleet) {
     const locationName = locationNameOf(site);
     counts.set(locationName, (counts.get(locationName) ?? 0) + 1);
   }
   return counts;
-}
+};
 
 describe('generateFleet', () => {
   it('produces an identical fleet for the same seed', () => {
