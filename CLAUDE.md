@@ -48,8 +48,8 @@ These docs are self-contained — one hop only, no chained references. If a rule
 - After each merged PR: `/retro`. Weak signals go to `docs/friction-log.md`; `/triage` periodically converts both logs into root-cause GitHub issues.
 - **Worktree lifecycle**: task work happens only in a worktree under `.claude/worktrees/`; the main checkout stays parked on `main` and is read-only for task work (reviews, pulls, triage). Each worktree installs its own deps with `pnpm install --frozen-lockfile` (the SessionStart hook `.claude/hooks/ensure-deps.sh` does this) — never share or symlink `node_modules` with the main checkout. After merging, the merging agent decides: reap on finish, or `rebranch-worktree.sh` to continue in place. `sweep-worktrees.sh` is the backstop for killed sessions and only ever removes worktrees that are both merged and clean.
 - Newly discovered scope becomes an issue (label `discovered`) — never a detour from the current task.
-- **Frontend gate**: no frontend feature work before the design-system ticket lands. UI code consumes design tokens only — no arbitrary colors, sizes, or spacing values.
+- **Frontend gate**: UI code consumes design tokens only. `stylelint.config.mjs` and `eslint.config.mjs` enforce the colour half mechanically; lengths reaching the page through a property the allow-list omits are still on you (residual documented in the stylelint config).
 
 ## Layout
 
-pnpm monorepo: `apps/*` (web, api — created via tickets), `packages/*` (shared code; `@cumulo/shared` holds domain schemas), `infra/` (Terraform, later), `docs/` (standards, ADRs, logs), `.claude/` (agents, skills, hooks — part of the portfolio, kept in-repo deliberately).
+pnpm monorepo: `apps/*` (web, ingestion; api later — created via tickets), `packages/*` (shared code; `@cumulo/shared` holds domain schemas), `infra/` (Terraform, later), `docs/` (standards, ADRs, logs), `.claude/` (agents, skills, hooks — part of the portfolio, kept in-repo deliberately).

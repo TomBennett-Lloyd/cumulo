@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "lint": "eslint --max-warnings 0 . && stylelint \"**/*.css\" --max-warnings 0",
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
