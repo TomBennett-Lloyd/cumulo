@@ -13,8 +13,10 @@ location for the forecast service (ADR 0004).
 | `open-meteo/client.ts`   | The one module that touches the network, and the only place the failure policy lives.        |
 | `locations.ts`           | De-duplicates active fleet sites into the set of weather locations to fetch.                 |
 | `publisher.ts`           | The transport seam: one publish per location-cycle, implementation-agnostic.                 |
+| `publisher/sqs.ts`       | The SQS implementation of that seam (ADR 0004), and the message body's contract.             |
 | `cycle.ts`               | Orchestration: per location, fetch → **store** → **publish**, in that order.                 |
 | `handler.ts`             | The Lambda boundary: structured logs, and a failed cycle that fails the invocation.          |
+| `main.ts`                | The composition root: parses the environment, builds the clients, exports `handler`.         |
 
 Two orderings in `cycle.ts` are correctness properties rather than style:
 
@@ -26,6 +28,41 @@ Two orderings in `cycle.ts` are correctness properties rather than style:
   converted into that location's outcome and nothing else — the other locations in the cycle still
   publish. A cycle that ends with any location unpublished then throws `CycleFailedError`, so a
   partial run is a failed Lambda invocation rather than a silent success.
+
+## Configuration
+
+`main.ts` parses `process.env` through a zod schema at module scope, so a wrong deployment fails
+during initialization rather than mid-cycle.
+
+| Variable     | Purpose                                                                |
+| ------------ | ---------------------------------------------------------------------- |
+| `CUMULO_ENV` | Environment suffix of the DynamoDB table names (`cumulo-sites-<env>`). |
+| `QUEUE_URL`  | Full URL of `cumulo-ingestion-<env>`, the queue of ADR 0004.           |
+
+`AWS_REGION` is not listed because Lambda always sets it and the SDK reads it directly — naming it
+again here would be one more place for the queue's region and the client's to disagree.
+
+## Build
+
+```sh
+pnpm --filter @cumulo/ingestion build   # → dist/main.mjs, dist/handler.zip
+```
+
+The zip is the artifact ingestion's Terraform uploads; the Lambda handler string is `main.handler`.
+
+Three choices in that one-line script are load-bearing:
+
+- **The AWS SDK is bundled, not `--external`.** The Lambda Node.js runtime ships its own SDK
+  version and changes it without notice, so an externalised SDK makes the deployed behaviour a
+  function of when the function was invoked. Bundling costs ~1.4 MB and buys version determinism.
+- **`--main-fields=module,main`.** The SDK packages have no `exports` map, and esbuild's
+  `--platform=node` default prefers `main` — the CommonJS build, whose `require("node:https")`
+  becomes a dynamic require that an ESM bundle cannot satisfy, so the artifact throws on import.
+  Preferring `module` bundles the SDK's own ESM build instead: no `require` shim banner, and a
+  smaller bundle. The check is `node --input-type=module -e "await import('./dist/main.mjs')"` from
+  `dist/`, which must load with the variables above set and fail with the zod message without them.
+- **`rm -rf dist` first.** `zip` appends to an existing archive, so a stale `main.mjs` would
+  otherwise survive into the next artifact.
 
 ## Open-Meteo call budget
 

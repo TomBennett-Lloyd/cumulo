@@ -5,15 +5,20 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/main.mjs && cd dist && zip -q -X handler.zip main.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1098.0",
     "@cumulo/shared": "workspace:*",
     "@cumulo/storage": "workspace:*",
+    "@smithy/node-http-handler": "^4.9.13",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "aws-sdk-client-mock": "^4.1.0",
+    "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }
