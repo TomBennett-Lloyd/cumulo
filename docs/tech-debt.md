@@ -11,6 +11,8 @@ Entry format:
 - Source: PR/issue #
 ```
 
+Pointers must survive unrelated edits: cite **files and symbol or section names** (function names, headings, config keys, script names) — never bare line numbers, and never a copied code literal unless the literal itself is the finding. An entry that pins its claim to `file.sh`:42 sends its reader to whatever happens to sit at line 42 months later.
+
 ---
 
 ## 2026-07-30 — seed parameter silently coerces to uint32
@@ -145,12 +147,6 @@ Entry format:
 - What: no `cost_types` block, so the budget uses the AWS defaults, which subtract credits and refunds. On an account carrying promotional credits the meter can therefore run well past $100/month of gross usage while net cost stays under threshold and nothing alerts — the alarm reports what will be billed, not what is being consumed. That is a defensible reading of "cost ceiling" for a project whose ceiling is about the bank balance, and it is the current deliberate choice; it stops being defensible the moment credits land on the account, because the whole point of the ceiling is to catch runaway usage _before_ it is expensive. Revisit if credits appear (or before any AWS-credits programme is used for this project): either add `cost_types { include_credit = true, include_refund = false }`, or add a second usage-oriented budget beside the billed-cost one. Not a fix for this diff — it is a policy decision about what the number means, and it wants the account's credit state as an input.
 - Source: #38 review cycle 1
 
-## 2026-07-31 — `test:scripts` hand-enumerates its harnesses, and hides the second one's results
-
-- Where: root `package.json` (`test:scripts`), `.claude/scripts/*.test.sh`
-- What: `test:scripts` is a literal list — `bash …/worktree-lifecycle.test.sh && bash …/check-adr-index.test.sh`. Two failure modes, both silent. A third harness added next to these two is green-by-absence until someone remembers to extend the string, which is the same drift class #47/#64 just fixed one level up (CI enumerating `verify`'s gates instead of calling the composite) — fixed for the CI→`verify` edge and left in place for the `verify`→harnesses edge. And `&&` short-circuits: when the first harness fails the second never runs, so a red run reports one harness's findings and conceals the other's, turning what should be one fix-everything cycle into two. Real fix is discovery plus a floor: `find .claude/scripts -name '*.test.sh'` driving a loop that runs every harness, accumulates exit codes rather than short-circuiting, and fails loudly if the search matched nothing — a script rather than a package.json one-liner, which is why it is a ticket and not an addendum here.
-- Source: #75 review cycle 1
-
 ## 2026-07-31 — ADR row grammar and the ADR immutability policy are on a collision course
 
 - Where: `.claude/scripts/check-adr-index.sh` (`row_re`), `docs/adr/README.md`
@@ -174,9 +170,3 @@ Entry format:
 - Where: `packages/shared/package.json`, `packages/ui/package.json`, `apps/web/package.json` (three copies of vitest on a caret range); `.claude/scripts/lint-shell.sh` (unpinned shellcheck); `README.md`:35; `.githooks/pre-commit`:15-17
 - What: vitest prints "experimental — please pin" for the typecheck mode that #61's type-level gate depends on, and we run it on a caret range: a minor bump can change or remove the feature a gate is built on, with no signal until the gate breaks or, worse, quietly stops asserting. Same class as the shellcheck skew above — floating versions under load-bearing gates — so it wants one decision covering both: which tools get exact pins, what triggers a deliberate bump, and where that is written down. Also folds in a documentation instance of the same drift, now seen in two places: `README.md`:35 enumerates the CI gate list in prose (`pnpm lint`, `typecheck`, `test`, `format:check`) and is already stale — it names neither `check:adr-index` nor `test:scripts` — and the header comment at `.githooks/pre-commit`:15-17 restates the same list for the same purpose ("whole-repo lint, typecheck, test, format:check plus a full-history gitleaks scan"), missing the same two. Two independent copies of a list that only `package.json` owns is the pattern, not two typos — and #64 already removed the third copy from `ci.yml` for exactly this reason. Gates should be enumerated in `package.json` only, with prose pointing at `pnpm verify` rather than restating its contents.
 - Source: #48/#61 review
-
-## 2026-07-31 — Tech-debt entries cite line numbers and copied literals, which drift
-
-- Where: this file — e.g. the python3 entry cites `worktree-lib.sh`:20,68 where the second call now sits at :75; the `test:scripts` entry quotes the script literal as two harnesses after this branch made it three; two more pointer corrections were needed on this very PR (#69 closing review)
-- What: entries that pin a claim to a line number or a copied code literal go stale the moment an unrelated change moves the code — and a stale pointer sends whoever picks the entry up to a place that does not contain the thing, or silently understates the blast radius. This is the same drift class the pinning entry above diagnoses in `README.md` prose, recursing into the debt log itself. Fix is a convention for this file, not more edits: cite files and symbol/section names (function names, headings, config keys), never bare line numbers; describe code rather than quoting it verbatim unless the quote is the finding. Wants one line in this file's header stating the rule.
-- Source: #69 closing review
