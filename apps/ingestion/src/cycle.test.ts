@@ -30,6 +30,8 @@ describe('runCycle', () => {
       activeLocations: 4,
       published: 4,
       failed: 0,
+      deferred: 0,
+      skippedForDeadline: 0,
     });
     expect(record.calls).toEqual([
       ...effectsFor(bristolId),
@@ -38,7 +40,7 @@ describe('runCycle', () => {
       ...effectsFor(edinburghId),
     ]);
     expect(record.entries).toEqual([
-      { event: cycleStartedEvent, fleetSites: 5, activeLocations: 4 },
+      { event: cycleStartedEvent, fleetSites: 5, activeLocations: 4, attemptedLocations: 4 },
       ...[bristolId, dublinId, manchesterId, edinburghId].map((id) => ({
         event: locationOutcomeEvent,
         ...publishedOutcome(id),
@@ -66,10 +68,17 @@ describe('runCycle', () => {
 
     const report = await runCycle(cycleDeps({ sites: inactiveFleet, record }));
 
-    expect(report).toEqual({ locations: [], activeLocations: 0, published: 0, failed: 0 });
+    expect(report).toEqual({
+      locations: [],
+      activeLocations: 0,
+      published: 0,
+      failed: 0,
+      deferred: 0,
+      skippedForDeadline: 0,
+    });
     expect(record.calls).toEqual([]);
     expect(record.entries).toEqual([
-      { event: cycleStartedEvent, fleetSites: 5, activeLocations: 0 },
+      { event: cycleStartedEvent, fleetSites: 5, activeLocations: 0, attemptedLocations: 0 },
     ]);
   });
 

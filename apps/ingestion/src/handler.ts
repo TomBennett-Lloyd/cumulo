@@ -82,13 +82,27 @@ export const createHandler =
   async () => {
     const report = await runCycle(deps);
 
+    // `deferred` and `skippedForDeadline` are on the summary rather than only on
+    // the individual outcomes because they are the line an operator reads first,
+    // and they mean different things: `deferred` says the fleet has outgrown the
+    // Open-Meteo allowance this service budgets for — worth knowing, not worth
+    // waking anyone — while `skippedForDeadline` says the cycle ran out of wall
+    // clock, which only happens under pathology (#115).
     deps.log({
       event: cycleSummaryEvent,
       activeLocations: report.activeLocations,
       published: report.published,
       failed: report.failed,
+      deferred: report.deferred,
+      skippedForDeadline: report.skippedForDeadline,
     });
 
+    // Deliberately `failed`, never `failed + deferred`. A fleet legitimately
+    // larger than the cap defers locations on every single cycle, and alarming
+    // on that would mean this function's error metric was permanently red for a
+    // system working exactly as designed — the alarm nobody reads. Deadline
+    // skips are counted in `failed` and do throw, because a cycle that ran out
+    // of clock is pathology by construction (#115).
     if (report.failed > 0) {
       throw new CycleFailedError({ failed: report.failed, total: report.activeLocations });
     }

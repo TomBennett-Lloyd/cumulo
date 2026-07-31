@@ -18,6 +18,22 @@
  */
 export const MAX_BACKOFF_DELAY_MS = 20_000;
 
+/**
+ * DynamoDB's hard per-request limit for `BatchWriteItem`: 25 items.
+ *
+ * One copy rather than one per adapter, because it is not a choice either of
+ * them made — it is the service's number, and if it ever moved, every adapter
+ * that split a write into batches would be wrong until it changed the same way
+ * (`docs/standards/structure.md` rule 7).
+ *
+ * It is on this package's public surface because a caller sizing a *time*
+ * budget needs it: how many round trips a write of N items costs is
+ * `ceil(N / 25)`, and `@cumulo/ingestion`'s cycle budget derives its per-location
+ * worst case from exactly that (#115). A number quoted from memory there would
+ * be the assumption this export exists to remove.
+ */
+export const DYNAMODB_BATCH_WRITE_SIZE = 25;
+
 /** Inputs to the full-jitter backoff formula. */
 export interface BackoffSpec {
   /** Delay base `x`: the cap on the first retry's sleep. */
