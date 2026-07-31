@@ -86,3 +86,7 @@ jobs:
         run: terraform -chdir=infra/storage init -backend=false -lockfile=readonly
       - name: terraform validate (storage)
         run: terraform -chdir=infra/storage validate
+      - name: terraform init (ingestion)
+        run: terraform -chdir=infra/ingestion init -backend=false -lockfile=readonly
+      - name: terraform validate (ingestion)
+        run: terraform -chdir=infra/ingestion validate

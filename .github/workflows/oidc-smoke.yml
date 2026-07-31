@@ -4,13 +4,29 @@ name: OIDC smoke test
 # actually assume the AWS role. Keyless, by OIDC — there is no access key in
 # this repo to store or rotate (CLAUDE.md: no long-lived AWS credentials).
 #
-# Expected to FAIL until the bootstrap runbook's first apply publishes the
-# AWS_OIDC_ROLE_ARN and AWS_REGION repo variables. That red is the intended
-# state on the bootstrap PR itself and is explained by the preflight step below;
-# it must be green before any infra PR merges. See infra/README.md.
+# THIS RAN PRE-MERGE UNTIL #11, AND DELIBERATELY NO LONGER DOES. The role's
+# trust policy used to admit a PR-context subject purely so this check could run
+# on a PR, which was safe only while the role granted nothing at all. #11
+# attached the first real permission (`infra/ingestion/deploy.tf`), so that
+# subject was deleted in the same change — infra/README.md convention 8. Left on
+# a PR trigger, this workflow would now fail on every single PR by design, which
+# is the most expensive kind of red: a check nobody can make green and everybody
+# learns to scroll past.
+#
+# What that costs is real and is being paid on purpose: a trust-policy or
+# region-variable change is now proved only *after* it lands on main, so the
+# failure mode it protects against is a broken main rather than a blocked merge.
+# The recovery, if pre-merge coverage is ever wanted back, is a SECOND role that
+# is permanently permissionless and trusted for the PR context alone — not a
+# second subject on this one. That option is deliberately out of scope for #11.
+#
+# Still expected to FAIL on a fresh account until the bootstrap runbook's first
+# apply publishes the AWS_OIDC_ROLE_ARN and AWS_REGION repo variables; the
+# preflight step below says so on the run itself. See infra/README.md.
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - infra/**
       - .github/workflows/oidc-smoke.yml
@@ -57,7 +73,11 @@ jobs:
           # back to the workflow run that made it.
           role-session-name: cumulo-oidc-smoke-${{ github.run_id }}
 
-      # The evidence step. It needs zero IAM permissions, which is precisely why
-      # it can verify a role that deliberately has none attached yet.
+      # The evidence step, and it stays `get-caller-identity` now that the role
+      # has grants: this call needs zero IAM permissions, so what it proves is
+      # the trust path and only the trust path. Reaching for something the
+      # deploy policy allows would conflate "can Actions assume this role" with
+      # "does this role still hold permission X", and a red run would no longer
+      # tell you which.
       - name: aws sts get-caller-identity
         run: aws sts get-caller-identity

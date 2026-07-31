@@ -34,3 +34,4 @@ Two more things the gate checks, so that a decision's standing can be read mecha
 - [0001 — Service boundaries](0001-service-boundaries.md)
 - [0002 — Storage split](0002-storage-split.md)
 - [0003 — PV physics model runtime](0003-pv-model-runtime.md)
+- [0004 — Ingestion transport](0004-ingestion-transport.md)
