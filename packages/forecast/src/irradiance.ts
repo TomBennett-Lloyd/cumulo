@@ -49,7 +49,8 @@ const SPENCER_DAY_ANGLE_DIVISOR_DAYS = 365;
 
 /**
  * Floor applied to cos(zenith) in the Hay-Davies projection ratio (pvlib GH 432).
- * cos(89°) ≈ 0.01745, so the circumsolar term is capped at ~57× the diffuse rather than
+ * cos(89°) ≈ 0.01745, capping Rb near 57.3; the circumsolar term is DHI · A · Rb, so when
+ * the anisotropy index A exceeds 1 (DNI above dni_extra) the multiple exceeds the Rb cap rather than
  * diverging as the sun reaches the horizon.
  */
 const MINIMUM_COS_ZENITH_FOR_PROJECTION_RATIO = 0.01745;
