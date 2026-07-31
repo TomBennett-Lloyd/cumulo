@@ -54,6 +54,7 @@ export { SiteAdapter, type GetFleetSiteResult } from './adapters/site/site-adapt
 export { type SitePhysics } from './adapters/site/site-item';
 export { SeriesAdapter } from './adapters/series/series-adapter';
 export { type SeriesPoint } from './adapters/series/series-item';
+export { MetricsAdapter } from './adapters/metrics/metrics-adapter';
 export { WeatherAdapter, type ArchiveDayCoverage } from './adapters/weather/weather-adapter';
 export {
   FORECAST_WEATHER_RETENTION_DAYS,

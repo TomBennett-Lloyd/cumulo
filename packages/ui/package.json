@@ -9,6 +9,7 @@
     "./tokens.css": "./src/tokens/tokens.css"
   },
   "scripts": {
+    "lint": "eslint --max-warnings 0 . && stylelint \"**/*.css\" --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

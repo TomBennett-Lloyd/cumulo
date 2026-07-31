@@ -1,5 +1,5 @@
 {
-  "name": "@cumulo/shared",
+  "name": "@cumulo/hindcast",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -9,12 +9,18 @@
   "scripts": {
     "lint": "eslint --max-warnings 0 .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "hindcast": "tsx scripts/run-hindcast.ts"
   },
   "dependencies": {
+    "@cumulo/forecast": "workspace:*",
+    "@cumulo/shared": "workspace:*",
+    "@cumulo/storage": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   }

@@ -13,6 +13,10 @@ Before planning: read `CLAUDE.md`, skim the `docs/standards/` docs relevant to t
 
 Chunks must be self-contained and independently verifiable, with minimal interfaces between them. State `Depends on:` edges so independent chunks can run in parallel; prefer fewer, well-cut chunks over many fragmentary ones.
 
+Where two chunks write to the same shared surface — a stylesheet, a barrel export, a tokens file, a shared type module — publish the exact identifiers each chunk owns (class names, exported symbols) and repeat them in both chunk descriptions. An identifier on a shared surface is a plan-level contract, not an implementer's judgement call: on #19 one chunk invented `.view-intro` for the element its sibling had already shipped as `.view-subtitle`.
+
+A chunk with a browser surface needs one acceptance criterion measured in a browser, verified by the `browser-smoke` agent. A passing test suite cannot see a label clipped off-canvas, a worker bundle broken by the dev server's dependency optimizer, or an element that renders at zero height — all three shipped green in #17/#19 and were caught by hand.
+
 A numeric constant, library behaviour, or paper value you have not verified during this planning session is an assumption, not a specification. Mark it `Assumption:` in the chunk, with the exact command that checks it, so the implementer verifies before building on it. An implementer who tests a planted value, finds reality disagrees, and returns PARTIAL/BLOCKED instead of complying is behaving correctly — write acceptance criteria expecting that check, and never present an unverified textbook value as if it were pinned to the model in use.
 
 Server-assigned identifiers (GitHub issue/PR numbers, database ids, ARNs) are never predictable. A chunk may only reference identifiers that will already exist when it runs: concurrent chunks must never reference each other's creations, and any chunk that creates such resources must instruct its implementer to capture the returned identifier from creation output — never to assume contiguity or predict the next number.

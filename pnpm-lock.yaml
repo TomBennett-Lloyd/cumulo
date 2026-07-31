@@ -138,6 +138,34 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@22.20.1)(jsdom@30.0.1)(vite@8.1.5(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.9.0))
 
+  packages/hindcast:
+    dependencies:
+      '@cumulo/forecast':
+        specifier: workspace:*
+        version: link:../forecast
+      '@cumulo/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@cumulo/storage':
+        specifier: workspace:*
+        version: link:../storage
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      tsx:
+        specifier: ^4.23.1
+        version: 4.23.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@22.20.1)(jsdom@30.0.1)(vite@8.1.5(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.9.0))
+
   packages/shared:
     dependencies:
       zod:
