@@ -1,0 +1,19 @@
+{
+  "name": "@cumulo/ingestion",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cumulo/shared": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
