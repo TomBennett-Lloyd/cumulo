@@ -22,9 +22,11 @@ jobs:
       # green-by-absence. Calling the composite makes CI a caller like any other,
       # so a gate added to `verify` is automatically enforced here.
       # The cost is real but small: GitHub shows one step's timing and one
-      # failure marker instead of per-gate ones. The composite runs in a fixed
-      # order (lint -> typecheck -> test -> test:scripts -> format:check) and
-      # stops at the first failure, so the log still names the failing gate.
+      # failure marker instead of per-gate ones. The composite runs its gates in
+      # a fixed order and stops at the first failure, so the log still names the
+      # failing one. Which gates those are is deliberately not written here —
+      # package.json is the single place that list lives, and restating it would
+      # re-create exactly the duplicate this step exists to remove.
       # Gate completeness beats step granularity.
       - run: pnpm verify
 
@@ -50,16 +52,25 @@ jobs:
           # Exact patch pin, matched to the version infra/README.md tells
           # operators to install, so CI and humans can never disagree about fmt
           # output or backend behaviour. Must stay inside the >= 1.12.0, < 2.0.0
-          # range in infra/bootstrap/versions.tf.
+          # range that every stack's versions.tf declares.
           terraform_version: 1.15.8
           # Raw exit codes, not step outputs — nothing here consumes stdout.
           terraform_wrapper: false
       - name: terraform fmt
         run: terraform fmt -check -recursive infra
+      # Each stack is initialised and validated separately: they have separate
+      # state, separate provider lock files, and no dependency on each other's
+      # resources, so a break in one must not be masked by the other.
+      #
       # -backend=false because CI has no state-bucket access and needs none to
-      # validate. -lockfile=readonly makes a stale .terraform.lock.hcl a build
-      # failure instead of something CI quietly fixes for itself.
-      - name: terraform init
+      # validate — which is also what keeps the OIDC role at zero permissions.
+      # -lockfile=readonly makes a stale .terraform.lock.hcl a build failure
+      # instead of something CI quietly fixes for itself.
+      - name: terraform init (bootstrap)
         run: terraform -chdir=infra/bootstrap init -backend=false -lockfile=readonly
-      - name: terraform validate
+      - name: terraform validate (bootstrap)
         run: terraform -chdir=infra/bootstrap validate
+      - name: terraform init (storage)
+        run: terraform -chdir=infra/storage init -backend=false -lockfile=readonly
+      - name: terraform validate (storage)
+        run: terraform -chdir=infra/storage validate

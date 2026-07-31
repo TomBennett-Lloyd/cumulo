@@ -2,13 +2,16 @@
 
 All AWS infrastructure lives here as Terraform. Nothing is created by hand in the console — if it exists in the account, it exists in a `.tf` file, because the alternative is infrastructure that cannot be torn down and a cost ceiling that cannot be trusted.
 
-A **stack** is one directory under `infra/`, applied independently, with its own state. There is one today:
+A **stack** is one directory under `infra/`, applied independently, with its own state. There are two today:
 
 | Stack       | Directory          | Owns                                                                                                          |
 | ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm. |
+| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.    |
 
-Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned.
+`storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
+
+Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables.
 
 **The one rule that has no exceptions:** no long-lived AWS credentials, anywhere. GitHub Actions authenticates by OIDC and holds no keys. A human operator holds short-term credentials in their own shell, and those never enter this repo, a Terraform variable, or an Actions secret. The single section of this document where operator credentials are discussed at all is [Operator prerequisites](#operator-prerequisites).
 
@@ -47,9 +50,13 @@ terraform -chdir=infra/bootstrap providers lock \
   -platform=linux_amd64 -platform=linux_arm64
 ```
 
+Every stack carries its own `.terraform.lock.hcl` and is bumped the same way with its own `-chdir`; they are independent files and may legitimately sit on different provider patches until each is bumped.
+
 ### 6. First apply: local state, then migrate the stack into its own bucket
 
 The bootstrap stack creates the bucket that stores the bootstrap stack's state, which does not exist when the stack is first applied. Resolved by applying against a local backend, then migrating the resulting state into the bucket that apply just created. Teardown runs it in reverse. Both directions are scripted below in [Runbook: spin up](#runbook-spin-up-the-bootstrap-stack) and [Runbook: tear down](#runbook-tear-down-the-bootstrap-stack), and the mechanism is explained in [Why the override dance](#why-the-override-dance).
+
+**This convention applies to `bootstrap` alone.** Every later stack — `storage` included — finds the bucket already there, so it inits straight against S3 with `-backend-config=backend.hcl` and never sees a local backend, an override file, or a state migration. If you find yourself writing a `backend_override.tf` outside `infra/bootstrap/`, something has gone wrong.
 
 ### 7. Account-specific values stay out of the public repo
 
@@ -401,9 +408,143 @@ Email subscribers are attached to the budget directly rather than through SNS. B
 
 ---
 
+## Runbook: the storage stack
+
+Four DynamoDB tables and four CloudWatch alarms, per [ADR 0002](../docs/adr/0002-storage-split.md). Every command runs from `infra/storage/`:
+
+```bash
+cd infra/storage
+```
+
+**Prerequisites:** the bootstrap stack applied (this stack's state lives in the bucket bootstrap creates), and an operator credential session — see [Operator prerequisites](#operator-prerequisites).
+
+**There is no override dance here.** The bucket already exists, so this stack inits straight against S3 (convention 6). No `backend_override.tf`, no local state, no `-migrate-state`, in either direction.
+
+### Phase A — configure and plan the tables
+
+The same A/B split as the bootstrap runbook, and for the same reason: `.tf` files require human review before they are applied, and a plan is exactly the artefact a reviewer needs. The heading differs from bootstrap's only so the two sections have distinct anchors.
+
+**A1. Create the two gitignored local files from their committed examples.**
+
+```bash
+cp storage.auto.tfvars.example storage.auto.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Set `aws_region` in `storage.auto.tfvars`, and both `region` and `bucket` in `backend.hcl`. They must be the same region as the bootstrap stack — the backend and the provider have to agree on where the bucket lives, and the bucket only exists in one place. The bucket name is `cumulo-tfstate-` followed by the account id:
+
+```bash
+aws sts get-caller-identity --query Account --output text
+```
+
+`environment` needs no entry; it defaults to `dev`. Setting it to something else creates a **fresh, empty** set of tables — DynamoDB has no rename, so Terraform destroys and recreates, and the data goes with it.
+
+**A2. Confirm none of that is visible to git.**
+
+```bash
+git status --short   # expect no output for infra/storage/
+```
+
+**A3. Initialise against the real backend.**
+
+```bash
+terraform init -backend-config=backend.hcl
+```
+
+**A4. Plan.** The tee target is outside the repo on purpose, so a plan output file cannot be committed:
+
+```bash
+terraform plan -no-color | tee ~/cumulo-storage-plan.txt
+```
+
+Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — four tables (`sites`, `series`, `weather`, `metrics`) and four throttle alarms (read and write, on `series` and `weather`). Any other count means the configuration is not what this document describes; stop and find out why. In particular, **9 or more would mean an auto-scaling resource has appeared**, which is the one thing `tables.tf` exists to prevent.
+
+**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, table-name shape, capacity numbers — and label it `awaiting-review`.
+
+### Phase B — apply and prove
+
+**B1. Apply.**
+
+```bash
+terraform apply
+```
+
+**B2. Confirm what exists.**
+
+```bash
+terraform state list   # expect exactly 8 lines — this stack has no data sources
+```
+
+**B3. Confirm the capacity that the whole cost argument rests on.** Read it back from AWS, not from Terraform's opinion of AWS:
+
+```bash
+ENV="$(terraform output -raw environment)"
+aws dynamodb describe-table --table-name "cumulo-series-$ENV" \
+  --query 'Table.ProvisionedThroughput.{W:WriteCapacityUnits,R:ReadCapacityUnits}'
+# expect: W 14, R 21
+aws dynamodb describe-table --table-name "cumulo-weather-$ENV" \
+  --query 'Table.ProvisionedThroughput.{W:WriteCapacityUnits,R:ReadCapacityUnits}'
+# expect: W 5, R 3
+```
+
+19 WCU / 24 RCU against the Region's always-free 25 / 25. Then confirm the non-resource is genuinely absent — an empty list here is the assertion that nothing can scale this past the free tier:
+
+```bash
+aws application-autoscaling describe-scalable-targets --service-namespace dynamodb
+# expect: {"ScalableTargets": []}
+```
+
+**B4. Confirm no drift.**
+
+```bash
+terraform plan -detailed-exitcode
+echo $?   # expect 0
+```
+
+**B5. Smoke-test the adapters against the real tables.** This is the only check that exercises TTL, sparse GSI behaviour, and `BETWEEN` range semantics — the three things unit tests cannot prove:
+
+```bash
+CUMULO_ENV="$(terraform output -raw environment)" pnpm --filter @cumulo/storage smoke
+```
+
+Every line PASS, exit 0, and no residual items (the script re-queries to prove it).
+
+### Teardown rehearsal
+
+Teardown is a project requirement, so it is exercised rather than documented. Unlike bootstrap's, this one has no ordering trap — the state lives in a bucket another stack owns, so nothing is destroying its own foundation.
+
+**What it costs you: all the data, irrecoverably.** No PITR, no final snapshot, no export — deliberate, per ADR 0002. The archive weather cache embodies spent Open-Meteo quota and re-fetching it spends the quota again.
+
+```bash
+terraform destroy
+```
+
+Verify from AWS rather than from Terraform:
+
+```bash
+aws dynamodb list-tables --query "TableNames[?starts_with(@, 'cumulo-')]"
+# expect: []
+aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query 'MetricAlarms[].AlarmName'
+# expect: []
+```
+
+Then re-apply and re-verify, because a teardown that cannot be reversed is only half a rehearsal:
+
+```bash
+terraform apply
+terraform plan -detailed-exitcode ; echo $?   # expect 0
+CUMULO_ENV="$(terraform output -raw environment)" pnpm --filter @cumulo/storage smoke
+```
+
+Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the next spin-up. **Leave the tables up at the end**: #11, #12, #14, and #16 need them, and they cost $0 sitting there, which is the entire point of the capacity decision.
+
+---
+
 ## Cost
 
-`eu-west-1`, and the amounts are not rounded down for effect — the stack really is this cheap, which is the reason a remote backend is affordable at all under the ~$100/month ceiling.
+`eu-west-1`, and the amounts are not rounded down for effect — the stacks really are this cheap, which is the reason a remote backend is affordable at all under the ~$100/month ceiling.
+
+### Bootstrap stack
 
 | Resource group                                                                       | Billing basis                                                                                                                                     | Estimate                       |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
@@ -421,3 +562,25 @@ Notes on why nothing here grows:
 - **SSE-S3, not SSE-KMS.** State is encrypted at rest either way; a customer-managed KMS key would add a monthly key charge plus per-request charges to the one stack whose entire purpose includes being tearable down to $0.
 - **The native lockfile has no standing charge.** A DynamoDB lock table would sit in the account billing for existence even while idle; the lockfile is an object that exists only during an operation.
 - **No NAT gateway, no load balancer, no VPC endpoint** — this stack creates nothing with an hourly rate. That is the property to preserve when adding to it: per-request costs at this volume are noise, and hourly ones are the whole budget.
+
+### Storage stack
+
+The figures and the workload they are computed from are [ADR 0002](../docs/adr/0002-storage-split.md)'s; they are restated here because a cost table that lives only inside a decision record is not somewhere an operator looks. Sized against ~50 sites over ~30 locations, hourly, a 48-hour horizon, two models, 90-day retention: ~4.6 M write units/month and ~3.5 GB retained.
+
+| Resource group                                                       | Billing basis                                                                                                             | Estimate     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **Provisioned capacity** (`series` 14 WCU / 21 RCU, `weather` 5 / 3) | 19 WCU / 24 RCU against the always-free **25 WCU / 25 RCU per Region**, which does not expire after twelve months         | **$0.00/mo** |
+| **On-demand tables** (`sites` + both GSIs, `metrics`)                | $0.625/M write request units, $0.125/M read request units — thousands of requests/month, and $0 while idle                | **$0.00/mo** |
+| **Storage** (all four tables)                                        | ~3.5 GB inside the always-free **25 GB**                                                                                  | **$0.00/mo** |
+| **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                                        | **$0.00/mo** |
+| **Backups / recovery**                                               | PITR off ($0.20/GB-month avoided), no on-demand backups, no exports, AWS-owned encryption key rather than a ~$1/month CMK | **$0.00/mo** |
+| **Total**                                                            |                                                                                                                           | **$0.00/mo** |
+
+Genuinely zero, not a rounding error — and unlike the bootstrap stack, this one has no sub-cent line at all.
+
+Notes on what would change that:
+
+- **The free capacity allowance is a hard edge, not a discount.** Crossing 25 WCU or 25 RCU in the Region bills the excess at $0.00065/WCU-hour and $0.00013/RCU-hour. This is why `tables.tf` has no auto-scaling and says so at length: an `aws_appautoscaling_target` is the one change that crosses that edge without appearing in anyone's plan review.
+- **The pool is Region-wide and shared.** 19/24 of 25/25 leaves 6 WCU / 1 RCU. That slack is not a growth reserve — the standing rule (a new table defaults to on-demand unless its load is batch-shaped) is what stops it being needed.
+- **The honest inversion.** At list price this same allocation would cost ≈ $11.30/month against all-on-demand's ≈ $2.88, because a 7% duty cycle is exactly what on-demand pricing exists to serve. Provisioned wins here only because the tier is free, and ADR 0002 says so rather than pretending it is the better engineering answer.
+- **Nothing here has an hourly rate**, which is the property to preserve. Per-request DynamoDB costs at this volume are noise; a VPC, a NAT gateway, or a database instance would be the whole budget — the comparison ADR 0002 turned on.

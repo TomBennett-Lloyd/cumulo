@@ -1,0 +1,8 @@
+/*
+ * The single stylesheet an app imports. Everything the design system
+ * contributes to a page is reachable from here, so consumers import it once:
+ *
+ *   import '@cumulo/ui/styles.css';
+ */
+@import './tokens/tokens.css';
+@import './attribution/attribution.css';

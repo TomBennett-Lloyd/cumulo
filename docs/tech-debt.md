@@ -25,17 +25,17 @@ Entry format:
 - What: the plan pinned four exports and the band is not one of them, so it stays module-private. #19's fleet aggregate needs exactly this vocabulary (summing per-site bands into a fleet band), and without a decision it will re-declare the concept in a second place. Decide before #19: export the schema and its inferred type, or standardize on `NonNullable<Forecast['uncertainty']>` as the referencing idiom. Either is defensible; silently having neither is what produces the duplicate.
 - Source: #10 review cycle 1
 
-## 2026-07-30 — Antimeridian double-representation in longitude bounds
-
-- Where: `packages/shared/src/weather-reading.ts`, `packages/shared/src/site.ts`
-- What: `longitude` accepts both −180 and +180, which are the same meridian. One physical location can therefore produce two distinct `locationId` partition keys (ADR 0002 rounds lat/long to 2 dp) and two separate Open-Meteo fetches for identical weather — a correctness split and an API-frugality leak. The fix is normalization at key-derivation time, which is #13's key-function territory, not a schema bound.
-- Source: #10 review cycle 1
-
 ## 2026-07-30 — Latitude/longitude are unbranded, so a swapped pair parses cleanly
 
 - Where: `packages/shared/src/weather-reading.ts`, `packages/shared/src/site.ts`
 - What: both files declare `latitude`/`longitude` as bare `z.number()` with copy-pasted bounds. Structurally the two are the same type, so `{ latitude: -6.26, longitude: 53.35 }` — Dublin's coordinates transposed — parses without complaint and sends a weather fetch to a field in Kazakhstan; the duplicated bounds also drift independently. `typing.md` rule 1 names exactly this (physical-unit confusion, with lat vs lon as its worked example) as the case for branded types. The fix is one shared branded coordinate schema adopted by `site.ts`, ingestion (#11), and ADR 0002's `locationId` key function (#13) in a single move — a coordinated cross-module change, not a bound tweak, and it feeds the #50 branding retrofit. Adjacent to the antimeridian entry above: both are the same missing coordinate abstraction seen from different sides.
 - Source: #10 review cycle 2
+
+## 2026-07-30 — site.test.ts bounds are not mutation-proof
+
+- Where: `packages/shared/src/site.test.ts`
+- What: single acceptance fixture with no boundary values, so `.gte`/`.lte` inclusivity mutants survive on lat/lon, `capacityKw`, tilt, azimuth — the same gap class closed for the #10 schemas (boundary-acceptance + single-mutation rejection tables). Bring `site.test.ts` up to the same pattern, ideally alongside the #50 branding retrofit since fixtures change anyway. Cycle-3 mutation check found the same residue in `weather-reading.test.ts`: the upper edges of the four irradiance caps (1500) and the wind cap (120) are unpinned — five `boundaryCases` rows close it; batch with this entry.
+- Source: #10 review cycle 2 fix agent (discovered)
 
 ## 2026-07-30 — `.optional()` under `exactOptionalPropertyTypes` admits explicit `undefined`
 
@@ -79,6 +79,54 @@ Entry format:
 - What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI does not run these scripts at all) and #48 (no shellcheck gate).
 - Source: #42
 
+## 2026-07-31 — `@smithy/core` is a direct dependency whose major we do not own
+
+- Where: `packages/storage/package.json` (`"@smithy/core": "^3.31.1"`), `packages/storage/src/client.ts`:3 (`ConfiguredRetryStrategy` from `@smithy/core/retry`)
+- What: pinning the retry curve (ADR 0002 Consequence 5) needs `ConfiguredRetryStrategy`, which is only reachable from `@smithy/core` — an SDK-_internal_ package. Declaring it directly makes us the range-owner of a major version that is really owned by `@aws-sdk/client-dynamodb`: the two ranges can be bumped independently, and a resolution where our `ConfiguredRetryStrategy` is a different copy from the one the DynamoDB client's retry middleware is built against would break the pinned strategy at runtime. Today they dedupe to one copy, and the `toBeInstanceOf(ConfiguredRetryStrategy)` assertion in `packages/storage/src/client.test.ts`:155 would fail if they split — so this is latent, not live. The fix is repo-level rather than package-level (a pnpm catalog entry, or a stated policy that smithy ranges are aligned to the SDK's), and until it exists every future package that needs to pin retry behaviour re-takes the same coupling on its own.
+- Source: #13 review cycle 1
+
+## 2026-07-31 — Duplicate item keys in write requests surface as StorageError, not caller bugs
+
+- Where: `packages/storage/src/weather-adapter.ts` (`putArchiveDay`, `putForecastWeather`), `packages/storage/src/series-adapter.ts` (`putForecasts`, `putGenerationReadings`)
+- What: two readings/forecasts sharing a key pass every precondition and reach DynamoDB, which rejects the whole request (`ValidationException`) — wrapped as `StorageError`, pointing operators at AWS instead of the caller. The read path already de-duplicates for exactly this reason (`listFetchedArchiveDays`); the reasoning wasn't carried to writes. Different answers per method: the transaction path can take a cheap Set-based precondition; the chunked batch paths need a policy call (reject vs last-wins dedupe). Not a data-integrity bug — rejection is atomic and loud.
+- Source: #13 review cycle 2
+
+## 2026-07-31 — Chart treatment specifies the horizon boundary but not interior gaps
+
+- Where: `docs/design/chart-treatment.md`, `apps/web/src/preview/TokensPreview.tsx` (chart placeholder), #19's real chart component
+- What: the treatment doc pins how the actuals series ends at the forecast-horizon boundary, but says nothing about missing data _inside_ the measured range. A mid-series null is a partial result and must read as one — the actuals line has to break at the gap, never interpolate a straight segment across it, which would draw a measurement that was never taken (error-handling.md rule 5: partial results are labeled partial, in the API response and the UI). The preview's flat-map-and-join path shape has no notion of a break, so it would silently bridge any gap it was handed; today that is invisible only because the placeholder data is dense. Root cause is the unspecified case, not the placeholder — so the fix is one move across the treatment doc (state the interior-gap rule alongside the boundary rule) and #19's chart component (segment the path, or emit `null` and let the renderer break), not a patch to either alone.
+- Source: #15 review cycle 1
+
+## 2026-07-31 — Length half of the frontend gate is unenforced outside its allow-list
+
+- Where: `stylelint.config.mjs` (`scale-unlimited/declaration-strict-value` property list), `apps/web/src/preview/preview.css`, `packages/ui/src/tokens/tokens.css`
+- What: cycle 2 closed the colour half of the gate (colour-bearing shorthands now demand tokens), but the length half is still allow-list-shaped and the list names only spacing-ish properties. A raw size therefore reaches the page through any property it omits — `width`, `height`, `max-width`, `inset`, `flex-basis`, `border-width`, `letter-spacing`, `stroke-width`, `grid-template-columns`. This is not hypothetical: committed CSS already depends on it (`max-width: 44rem` in preview.css), so the gate as shipped says "no arbitrary sizes" while the repo contains arbitrary sizes. Colour had a property-agnostic backstop available (hex and colour-function literals are recognisable by pattern anywhere); lengths have none, because a length is legal syntax in every property. So the only fix is extending the allow-list, and that cannot be done as a config tweak: the token set has spacing, type-scale and radii, but no measure (`--measure-prose`) or layout-size category, so adding `max-width` today would fail the very stylesheet it guards with no token to point at. Root cause is a missing token category, not a missing rule — a design-system scope ticket that adds the categories and closes the list in one move.
+- Source: #15 review cycle 2
+
+## 2026-07-31 — Neither lint gate has a committed regression test
+
+- Where: `stylelint.config.mjs`, `eslint.config.mjs`, `package.json` (`verify`)
+- What: both review cycles found real holes in these gates (cycle 1: property-agnostic colours; cycle 2: colour-bearing shorthands, and `lab()`/`lch()` missing from the ESLint regex), and both were found by ad-hoc probing — scratch stylesheets and scratch `.tsx` files, run by hand, deleted afterwards. Nothing in the repo now proves any of it. The gates are exactly the kind of config where a silent regression is invisible: a mistyped property name, a dropped array entry, or an `overrides` block widening its `files` glob all leave `pnpm verify` green, because a gate that stops firing produces _no_ output. testing.md rule 4 ("every bug fix lands with a regression test that fails on the pre-fix code") applies to config fixes as much as to source, and it has now been skipped twice. The ratchet is a fixture pair run under vitest — a should-fail stylesheet asserting a specific error count, a should-pass clean stylesheet, and a tokens-exemption control proving the one legitimate escape still works — plus the equivalent for the ESLint colour-literal selectors. Cross-cutting (it needs a test harness that shells out to the linters and a home for the fixtures), so it is a ticket rather than an addendum to this diff.
+- Source: #15 review cycle 2
+
+## 2026-07-31 — JSX presentation attributes escape both halves of the gate
+
+- Where: `eslint.config.mjs` (`no-restricted-syntax` block), `docs/design/chart-treatment.md`, #19's SVG chart component
+- What: the two gates divide the world into CSS files (stylelint) and colour-shaped string literals in TS/TSX (ESLint). SVG presentation attributes fall between them: `<line stroke="red" stroke-width="2" />` is not a CSS declaration, and `"red"` is not a hex or colour-function literal, so nothing objects. `JSXAttribute[name.name="style"]` is already banned, which shows the selector shape is available — the omission is the attribute _name list_, not the technique. This matters now rather than in the abstract because #19 is an SVG chart: `stroke`, `fill`, `stop-color`, `stroke-width` are the natural way to write one, and they are precisely the attributes that carry design values. The fix is a deliberate restriction on those attribute names (permitting `var(--token)` strings and the handful of genuine keywords like `none`/`currentColor`), decided once so the chart is written against it rather than retrofitted after review.
+- Source: #15 review cycle 2
+
+## 2026-07-31 — Chart treatment never states the time-axis clock
+
+- Where: `docs/design/chart-treatment.md`, `apps/web/src/preview/TokensPreview.tsx` (chart placeholder), #19's real chart component
+- What: the doc specifies the horizon boundary, series treatment and colour roles, but never says which clock the time axis runs on — site-local or UTC — nor what happens across a DST transition. For a solar product that is load-bearing, not a detail: rendered in UTC, an Irish summer forecast puts its peak an hour off solar noon, and the chart reads as a modelling error to anyone who knows the physics. The DST days are worse, because the axis must either show a 23- or 25-hour day or silently drop/duplicate an hour. Nothing downstream can supply the answer by default: the forecast payload carries UTC instants (`UtcIsoTimestamp`), so the renderer has to be told to convert, and site-local means carrying a timezone per site through to the axis. Same shape as the interior-gap entry above — an unspecified case in the treatment doc that #19 will resolve by accident if it is not decided first — so the fix spans the doc and the component, and the two should be settled together.
+- Source: #15 review cycle 2
+
+## 2026-07-31 — `pnpm verify` never builds: export maps and CSS entry drift ship green
+
+- Where: root `package.json` (`verify`), `apps/web/package.json` (`build`), `packages/ui` export map, `apps/web/src/main.tsx`
+- What: no gate runs `vite build` or resolves `@cumulo/ui`'s export conditions/CSS imports — `main.tsx` has no test and vitest resolves neither, so a broken `exports` entry, renamed `styles.css`, or missing `@import` renders the demo unstyled while CI stays green. Fix is cross-cutting: `build` scripts in every buildable package, `pnpm -r build` joining `verify`, and a decision on artifact paths vs the `dist/**` lint exemptions.
+- Source: #15 review cycle 3
+
 ## 2026-07-30 — Terraform guard logic has no way to exercise its failure path
 
 - Where: `infra/bootstrap/budget.tf` (the `data.aws_ssm_parameter.notification_email` postcondition); no `*.tftest.hcl` anywhere in `infra/`
@@ -90,3 +138,15 @@ Entry format:
 - Where: `infra/bootstrap/budget.tf` (`aws_budgets_budget.monthly_cost_ceiling`)
 - What: no `cost_types` block, so the budget uses the AWS defaults, which subtract credits and refunds. On an account carrying promotional credits the meter can therefore run well past $100/month of gross usage while net cost stays under threshold and nothing alerts — the alarm reports what will be billed, not what is being consumed. That is a defensible reading of "cost ceiling" for a project whose ceiling is about the bank balance, and it is the current deliberate choice; it stops being defensible the moment credits land on the account, because the whole point of the ceiling is to catch runaway usage _before_ it is expensive. Revisit if credits appear (or before any AWS-credits programme is used for this project): either add `cost_types { include_credit = true, include_refund = false }`, or add a second usage-oriented budget beside the billed-cost one. Not a fix for this diff — it is a policy decision about what the number means, and it wants the account's credit state as an input.
 - Source: #38 review cycle 1
+
+## 2026-07-31 — `test:scripts` hand-enumerates its harnesses, and hides the second one's results
+
+- Where: root `package.json` (`test:scripts`), `.claude/scripts/*.test.sh`
+- What: `test:scripts` is a literal list — `bash …/worktree-lifecycle.test.sh && bash …/check-adr-index.test.sh`. Two failure modes, both silent. A third harness added next to these two is green-by-absence until someone remembers to extend the string, which is the same drift class #47/#64 just fixed one level up (CI enumerating `verify`'s gates instead of calling the composite) — fixed for the CI→`verify` edge and left in place for the `verify`→harnesses edge. And `&&` short-circuits: when the first harness fails the second never runs, so a red run reports one harness's findings and conceals the other's, turning what should be one fix-everything cycle into two. Real fix is discovery plus a floor: `find .claude/scripts -name '*.test.sh'` driving a loop that runs every harness, accumulates exit codes rather than short-circuiting, and fails loudly if the search matched nothing — a script rather than a package.json one-liner, which is why it is a ticket and not an addendum here.
+- Source: #75 review cycle 1
+
+## 2026-07-31 — ADR row grammar and the ADR immutability policy are on a collision course
+
+- Where: `.claude/scripts/check-adr-index.sh` (`row_re`), `docs/adr/README.md`
+- What: `row_re` anchors on `\)[[:space:]]*$`, so an index row may carry nothing after the link. Meanwhile `docs/adr/README.md` states ADRs are immutable once merged and are superseded rather than edited — and the first supersession will want the index to say so: `- [0002 — Storage split](0002-storage-split.md) — superseded by 0007`. The gate will reject that row as malformed, correctly by its own grammar, at the exact moment the policy is first exercised. Whoever hits it will be mid-supersession and will reach for the quickest unblock, which is loosening the trailing anchor to `.*$` and thereby giving up the strictness the grammar exists for. The decision wants making before then, not under pressure: extend the grammar with an optional, _structured_ status suffix the gate can parse and check (a `superseded by NNNN` that must name a real ADR closes a drift hole the index has today), or rule that supersession is recorded only in the ADR bodies and the index stays link-only. Either is defensible; discovering the conflict during a supersession is not.
+- Source: #75 review cycle 1
