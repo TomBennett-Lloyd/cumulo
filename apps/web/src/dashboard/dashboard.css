@@ -47,6 +47,53 @@
   font-size: var(--text-sm);
 }
 
+/* Sixty rows is taller than the map beside them, and an aside that grows to fit
+   pushes the detail panel — the thing a selection is *for* — below the fold. So
+   the fleet scrolls within a fixed measure and the panel stays where the reader
+   left it. The height is the residual the CSS gate documents: no token category
+   describes a scroll measure. */
+.dashboard-fleet {
+  display: grid;
+  gap: var(--space-3);
+  max-height: 18rem;
+  margin-top: var(--space-3);
+  overflow-y: auto;
+}
+
+/* This looks like `.forecast-failure` in site-panels.css, and deliberately so:
+   same column, same idiom — what failed, and a way to try again. They are not
+   shared, because they are free to diverge: a fleet that will not load may one
+   day take over the column entirely, which a single site's failed forecast
+   never would. If a third one appears, extract the idiom then. */
+.dashboard-failure {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+
+.dashboard-failure-message {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.dashboard-retry {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
 /* Below the width where two columns still leave the map usable, the fleet
  * column moves under it. It is never dropped: the list is the map's table view,
  * and a narrow screen is exactly where a reader is most likely to need it. */
