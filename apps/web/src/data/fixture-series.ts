@@ -1,33 +1,37 @@
 import {
-  canonicalFleetSeed,
-  generateFleet,
   utcIsoTimestampSchema,
   type Forecast,
   type GenerationReading,
   type Site,
-  type UtcIsoTimestamp,
 } from '@cumulo/shared';
 
-import type { DataResult, FleetDataProvider, RangeHours } from './provider';
+import type { RangeHours } from './fleet-data-source';
 
 /**
- * A deterministic `FleetDataProvider` over synthetic data — the demo's data source until the
- * Fleet API (#14) exists.
+ * Deterministic synthetic series for the chart views — the arithmetic behind
+ * `DemoFleetDataSource`'s window-scoped reads.
  *
- * Determinism is the point: no clock, no randomness, no environment. "Now" is pinned to
- * {@link FIXTURE_NOW}, so the same call always yields the same bytes and a chart test can assert
- * exact numbers. Every irregular-looking value comes from {@link seededUnit}, keyed by site and
- * hour, so the series is reproducible in Node, the browser and CI alike.
+ * Determinism is the point: no clock, no randomness, no environment. "Now" is
+ * pinned to {@link FIXTURE_NOW}, so the same call always yields the same bytes
+ * and a chart test can assert exact numbers. Every irregular-looking value comes
+ * from {@link seededUnit}, keyed by site and hour, so the series is reproducible
+ * in Node, the browser and CI alike.
  *
- * Exported as a plain object of standalone arrows rather than a `createFixtureProvider()` factory:
- * the provider holds no state, so a factory would be the closure shape `docs/standards/structure.md`
- * rule 2 bans, and a class would put a `this.` marker on state that does not exist. Every function
- * below is top-level and context-free; the object literal at the bottom is only the composition
- * step.
+ * Kept apart from the demo source's *other* generator — the clock-relative one
+ * behind `getSiteForecast` — deliberately (`structure.md` rule 7). The two look
+ * alike and mean different things: that one exists so a site created seconds ago
+ * has no forecast and then does, which requires a real clock, while this one
+ * exists so a chart's numbers can be asserted, which forbids one. Changing
+ * either would not make the other wrong.
+ *
+ * Top-level arrows over a state-holding object: nothing here is stateful, so
+ * there is no `this.` to justify and no captured scope to trace
+ * (`structure.md` rules 1 and 2).
  */
 
 /** The instant this fixture calls "now". Actuals stop here; forecasts continue past it. */
-const FIXTURE_NOW = '2026-07-30T12:00:00Z';
+export const FIXTURE_NOW = '2026-07-30T12:00:00Z';
+
 const FIXTURE_NOW_MS = Date.parse(FIXTURE_NOW);
 const FIXTURE_ISSUED_AT = utcIsoTimestampSchema.parse(FIXTURE_NOW);
 
@@ -69,7 +73,7 @@ const roundTo = (value: number, decimals: number): number => {
   return Math.round(value * factor) / factor;
 };
 
-const toTimestamp = (epochMs: number): UtcIsoTimestamp =>
+const toTimestamp = (epochMs: number) =>
   utcIsoTimestampSchema.parse(new Date(epochMs).toISOString().replace(/\.\d{3}Z$/u, 'Z'));
 
 const SUNRISE_HOUR_UTC = 6;
@@ -188,13 +192,22 @@ const hoursInRange = (range: RangeHours): readonly number[] => {
   return instants;
 };
 
-const FIXTURE_SITES = generateFleet(canonicalFleetSeed);
-
-const forecastsForSite = (site: Site, siteIndex: number, range: RangeHours): readonly Forecast[] =>
+/**
+ * One site's forecast series over the window, hourly and ascending.
+ *
+ * `siteIndex` is the site's position in the fleet it was drawn from, and it is
+ * what keys the weather: two sites with identical hardware still get different
+ * days, and the same site gets the same day every time it is asked.
+ */
+export const fixtureForecasts = (
+  site: Site,
+  siteIndex: number,
+  range: RangeHours,
+): readonly Forecast[] =>
   hoursInRange(range).map((epochMs) => forecastAt({ site, siteIndex, epochMs }));
 
 /** Measurements exist only for hours that have already happened — the forecast horizon has none. */
-const actualsForSite = (
+export const fixtureActuals = (
   site: Site,
   siteIndex: number,
   range: RangeHours,
@@ -202,73 +215,3 @@ const actualsForSite = (
   hoursInRange(range)
     .filter((epochMs) => epochMs <= FIXTURE_NOW_MS)
     .map((epochMs) => actualAt({ site, siteIndex, epochMs }));
-
-/**
- * Resolve a site id against the fixture fleet.
- *
- * An unknown id is an expected failure, not a bug: the caller may hold a stale id. It comes back
- * as a `failed` result naming the operation and the id (`error-handling.md` rules 1 and 4) rather
- * than as an empty series, which would read as "this site generates nothing".
- */
-const findSite = (operation: string, siteId: string): DataResult<SiteHour> => {
-  const siteIndex = FIXTURE_SITES.findIndex((candidate) => candidate.id === siteId);
-  const site = FIXTURE_SITES[siteIndex];
-  if (site === undefined) {
-    return {
-      status: 'failed',
-      error: `${operation}: no site in the fixture fleet with id ${siteId}`,
-    };
-  }
-  return { status: 'ready', data: { site, siteIndex, epochMs: FIXTURE_NOW_MS } };
-};
-
-const listSites = (): Promise<DataResult<readonly Site[]>> =>
-  Promise.resolve({ status: 'ready', data: FIXTURE_SITES });
-
-const siteForecasts = (
-  siteId: string,
-  range: RangeHours,
-): Promise<DataResult<readonly Forecast[]>> => {
-  const found = findSite('siteForecasts', siteId);
-  if (found.status === 'failed') {
-    return Promise.resolve(found);
-  }
-  const { site, siteIndex } = found.data;
-  return Promise.resolve({ status: 'ready', data: forecastsForSite(site, siteIndex, range) });
-};
-
-const siteActuals = (
-  siteId: string,
-  range: RangeHours,
-): Promise<DataResult<readonly GenerationReading[]>> => {
-  const found = findSite('siteActuals', siteId);
-  if (found.status === 'failed') {
-    return Promise.resolve(found);
-  }
-  const { site, siteIndex } = found.data;
-  return Promise.resolve({ status: 'ready', data: actualsForSite(site, siteIndex, range) });
-};
-
-const fleetForecasts = (range: RangeHours): Promise<DataResult<readonly Forecast[]>> =>
-  Promise.resolve({
-    status: 'ready',
-    data: FIXTURE_SITES.flatMap((site, siteIndex) => forecastsForSite(site, siteIndex, range)),
-  });
-
-const fleetActuals = (range: RangeHours): Promise<DataResult<readonly GenerationReading[]>> =>
-  Promise.resolve({
-    status: 'ready',
-    data: FIXTURE_SITES.flatMap((site, siteIndex) => actualsForSite(site, siteIndex, range)),
-  });
-
-/** The composition step: no state, no captured variables, nothing to trace. */
-export const fixtureProvider: FleetDataProvider = {
-  listSites,
-  siteForecasts,
-  siteActuals,
-  fleetForecasts,
-  fleetActuals,
-};
-
-/** Exported for tests and for views that want to label the fixture's pinned "now". */
-export { FIXTURE_NOW };

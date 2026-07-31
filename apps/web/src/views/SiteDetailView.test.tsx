@@ -9,7 +9,7 @@ import {
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { DataResult, FleetDataProvider, RangeHours } from '../data/provider';
+import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { joinSiteSeries, SiteDetailView } from './SiteDetailView';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
@@ -78,16 +78,22 @@ interface SeriesRequest {
 }
 
 interface StubConfig {
-  readonly sites: DataResult<readonly Site[]>;
+  readonly sites: FleetSourceResult<readonly Site[]>;
   readonly series: ReadonlyMap<string, SiteSeriesFixture>;
   /** Non-null makes both per-site calls fail, the way an unreachable API would. */
   readonly seriesError: string | null;
 }
 
+/** The wire failure the stub returns when `seriesError` is set — one arm, one message. */
+const seriesFailure = (message: string): FleetSourceResult<never> => ({
+  kind: 'error',
+  error: { code: 'network', message },
+});
+
 /**
- * A hand-rolled `FleetDataProvider`. Our own interface, so there is nothing to
- * mock: the stub answers the same five calls the fixture provider and the API
- * provider answer, and the tests assert on what the view rendered, not on the
+ * A hand-rolled `FleetDataSource`. Our own interface, so there is nothing to
+ * mock: the stub answers the same calls the demo source and the future HTTP
+ * source answer, and the tests assert on what the view rendered, not on the
  * stub having been called — except where the *request* is the behaviour under
  * test (the range picker), which is why it records them (testing.md rule 3).
  *
@@ -95,7 +101,7 @@ interface StubConfig {
  * visible marker that the recorded requests and the answers share state
  * (structure.md rule 2).
  */
-class StubProvider implements FleetDataProvider {
+class StubFleetSource implements FleetDataSource {
   readonly forecastRequests: SeriesRequest[] = [];
   readonly actualRequests: SeriesRequest[] = [];
   private readonly config: StubConfig;
@@ -104,48 +110,57 @@ class StubProvider implements FleetDataProvider {
     this.config = config;
   }
 
-  readonly listSites = (): Promise<DataResult<readonly Site[]>> =>
+  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> =>
     Promise.resolve(this.config.sites);
 
   readonly siteForecasts = (
     siteId: string,
     range: RangeHours,
-  ): Promise<DataResult<readonly Forecast[]>> => {
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
     this.forecastRequests.push({ siteId, range });
-    return Promise.resolve<DataResult<readonly Forecast[]>>(
+    return Promise.resolve<FleetSourceResult<readonly Forecast[]>>(
       this.config.seriesError === null
-        ? { status: 'ready', data: this.config.series.get(siteId)?.forecasts ?? [] }
-        : { status: 'failed', error: this.config.seriesError },
+        ? { kind: 'ok', value: this.config.series.get(siteId)?.forecasts ?? [] }
+        : seriesFailure(this.config.seriesError),
     );
   };
 
   readonly siteActuals = (
     siteId: string,
     range: RangeHours,
-  ): Promise<DataResult<readonly GenerationReading[]>> => {
+  ): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
     this.actualRequests.push({ siteId, range });
-    return Promise.resolve<DataResult<readonly GenerationReading[]>>(
+    return Promise.resolve<FleetSourceResult<readonly GenerationReading[]>>(
       this.config.seriesError === null
-        ? { status: 'ready', data: this.config.series.get(siteId)?.actuals ?? [] }
-        : { status: 'failed', error: this.config.seriesError },
+        ? { kind: 'ok', value: this.config.series.get(siteId)?.actuals ?? [] }
+        : seriesFailure(this.config.seriesError),
     );
   };
 
-  readonly fleetForecasts = (range: RangeHours): Promise<DataResult<readonly Forecast[]>> =>
-    Promise.resolve<DataResult<readonly Forecast[]>>({
-      status: 'failed',
-      error: `fleetForecasts range=${String(range)}: the site view never aggregates`,
-    });
+  readonly fleetForecasts = (range: RangeHours): Promise<FleetSourceResult<readonly Forecast[]>> =>
+    Promise.resolve(
+      seriesFailure(`fleetForecasts range=${String(range)}: the site view never aggregates`),
+    );
 
-  readonly fleetActuals = (range: RangeHours): Promise<DataResult<readonly GenerationReading[]>> =>
-    Promise.resolve<DataResult<readonly GenerationReading[]>>({
-      status: 'failed',
-      error: `fleetActuals range=${String(range)}: the site view never aggregates`,
-    });
+  readonly fleetActuals = (
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
+    Promise.resolve(
+      seriesFailure(`fleetActuals range=${String(range)}: the site view never aggregates`),
+    );
+
+  // The site view reads; it never writes, and it never asks the poll's question.
+  readonly getSiteForecast = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    throw new Error('StubFleetSource: the site view must not call getSiteForecast');
+  };
+
+  readonly createSite = (): Promise<FleetSourceResult<Site>> => {
+    throw new Error('StubFleetSource: the site view never writes to the fleet');
+  };
 }
 
 const configWith = (fixtures: ReadonlyMap<string, SiteSeriesFixture>): StubConfig => ({
-  sites: { status: 'ready', data: [SUNNYSIDE, HARBOUR] },
+  sites: { kind: 'ok', value: [SUNNYSIDE, HARBOUR] },
   series: fixtures,
   seriesError: null,
 });
@@ -157,10 +172,10 @@ const BOTH_SITES = configWith(
   ]),
 );
 
-const renderView = (config: StubConfig): StubProvider => {
-  const provider = new StubProvider(config);
-  render(<SiteDetailView provider={provider} />);
-  return provider;
+const renderView = (config: StubConfig): StubFleetSource => {
+  const dataSource = new StubFleetSource(config);
+  render(<SiteDetailView dataSource={dataSource} />);
+  return dataSource;
 };
 
 const attributionHref = async (): Promise<string | null> =>
@@ -210,7 +225,7 @@ describe('joinSiteSeries', () => {
 });
 
 describe('SiteDetailView', () => {
-  it('says it is loading before the provider has answered', () => {
+  it('says it is loading before the source has answered', () => {
     renderView(BOTH_SITES);
 
     expect(screen.getByText('Loading the site list…')).toBeDefined();
@@ -218,7 +233,7 @@ describe('SiteDetailView', () => {
   });
 
   it('shows why the site list could not be loaded', async () => {
-    renderView({ ...BOTH_SITES, sites: { status: 'failed', error: 'listSites: network refused' } });
+    renderView({ ...BOTH_SITES, sites: seriesFailure('listSites: network refused') });
 
     expect((await screen.findByRole('alert')).textContent).toBe(
       'Could not load the site list: listSites: network refused',
@@ -247,18 +262,18 @@ describe('SiteDetailView', () => {
     expect(screen.queryByText('6.0')).toBeNull();
   });
 
-  it('asks the provider for 168 hours when the 7 d range is picked', async () => {
-    const provider = renderView(BOTH_SITES);
+  it('asks the source for 168 hours when the 7 d range is picked', async () => {
+    const dataSource = renderView(BOTH_SITES);
     await screen.findByText('6.0');
 
     fireEvent.click(screen.getByRole('button', { name: '7 d' }));
 
     expect(await screen.findByText('6.0')).toBeDefined();
-    expect(provider.forecastRequests).toEqual([
+    expect(dataSource.forecastRequests).toEqual([
       { siteId: SUNNYSIDE.id, range: 24 },
       { siteId: SUNNYSIDE.id, range: 168 },
     ]);
-    expect(provider.actualRequests).toEqual(provider.forecastRequests);
+    expect(dataSource.actualRequests).toEqual(dataSource.forecastRequests);
     expect(screen.getByRole('button', { name: '7 d' }).getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -292,9 +307,9 @@ describe('SiteDetailView Open-Meteo attribution', () => {
   const states: readonly { readonly name: string; readonly config: StubConfig }[] = [
     {
       name: 'the site list failed',
-      config: { ...BOTH_SITES, sites: { status: 'failed', error: 'listSites: boom' } },
+      config: { ...BOTH_SITES, sites: seriesFailure('listSites: boom') },
     },
-    { name: 'the fleet is empty', config: { ...BOTH_SITES, sites: { status: 'ready', data: [] } } },
+    { name: 'the fleet is empty', config: { ...BOTH_SITES, sites: { kind: 'ok', value: [] } } },
     { name: 'the series failed', config: { ...BOTH_SITES, seriesError: 'siteForecasts: boom' } },
     { name: 'the site has no forecast', config: configWith(new Map()) },
     { name: 'the chart is drawn', config: BOTH_SITES },

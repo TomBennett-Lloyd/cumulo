@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { forecastSchema, type CreateSiteInput, type Forecast, type Site } from '@cumulo/shared';
+import {
+  forecastSchema,
+  type CreateSiteInput,
+  type Forecast,
+  type GenerationReading,
+  type Site,
+} from '@cumulo/shared';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -125,22 +131,46 @@ class ScriptedFleetDataSource implements FleetDataSource {
     this.answer = answer;
   }
 
-  listSites(): Promise<FleetSourceResult<readonly Site[]>> {
+  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> => {
     this.calls.push('listSites');
     return Promise.resolve({ kind: 'ok', value: [] });
-  }
+  };
 
-  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>> {
+  readonly createSite = (input: CreateSiteInput): Promise<FleetSourceResult<Site>> => {
     this.calls.push(`createSite:${input.name}`);
     return Promise.resolve({ kind: 'ok', value: { id: SITE_ID, ...input } });
-  }
+  };
 
-  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>> {
+  readonly getSiteForecast = (
+    siteId: Site['id'],
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
     this.calls.push(`getSiteForecast:${siteId}`);
     const callIndex = this.forecastCalls;
     this.forecastCalls += 1;
     return this.answer({ elapsedMs: Date.now() - this.startedAtMs, callIndex });
-  }
+  };
+
+  /*
+   * The window-scoped reads are the chart views' surface, not the poll's. They
+   * throw rather than answer: this suite exists to prove *which* reads the loop
+   * makes, and a stub that quietly served a fleet-wide window would let the one
+   * failure it guards against pass unnoticed.
+   */
+  readonly siteForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    throw new Error('ScriptedFleetDataSource: the forecast poll must not call siteForecasts');
+  };
+
+  readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+    throw new Error('ScriptedFleetDataSource: the forecast poll must not call siteActuals');
+  };
+
+  readonly fleetForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    throw new Error('ScriptedFleetDataSource: the forecast poll must not fan out over the fleet');
+  };
+
+  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+    throw new Error('ScriptedFleetDataSource: the forecast poll must not fan out over the fleet');
+  };
 }
 
 /** Move the simulated clock and let React commit whatever that produced. */

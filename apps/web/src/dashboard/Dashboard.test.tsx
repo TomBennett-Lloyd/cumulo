@@ -83,7 +83,7 @@ class FlakyFleetSource implements FleetDataSource {
   private listAttempts = 0;
   private readonly fleet = new DemoFleetDataSource();
 
-  listSites(): Promise<FleetSourceResult<readonly Site[]>> {
+  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> => {
     this.listAttempts += 1;
 
     return this.listAttempts === 1
@@ -92,15 +92,22 @@ class FlakyFleetSource implements FleetDataSource {
           error: { code: 'network', message: 'Fleet API unreachable' },
         })
       : this.fleet.listSites();
-  }
+  };
 
-  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>> {
-    return this.fleet.createSite(input);
-  }
+  readonly createSite = (input: CreateSiteInput): Promise<FleetSourceResult<Site>> =>
+    this.fleet.createSite(input);
 
-  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>> {
-    return this.fleet.getSiteForecast(siteId);
-  }
+  readonly getSiteForecast = (
+    siteId: Site['id'],
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => this.fleet.getSiteForecast(siteId);
+
+  // The window-scoped reads belong to the chart views; the dashboard never makes
+  // them, so they pass straight through to the demo fleet rather than growing a
+  // second set of canned answers here.
+  readonly siteForecasts = this.fleet.siteForecasts;
+  readonly siteActuals = this.fleet.siteActuals;
+  readonly fleetForecasts = this.fleet.fleetForecasts;
+  readonly fleetActuals = this.fleet.fleetActuals;
 }
 
 /** A site the demo fleet is guaranteed to contain — same seed, same first entry. */

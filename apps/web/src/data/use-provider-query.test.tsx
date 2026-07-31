@@ -3,7 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { DataResult } from './provider';
+import type { FleetSourceResult } from './fleet-data-source';
 import { useProviderQuery } from './use-provider-query';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
@@ -12,7 +12,9 @@ afterEach(() => {
   cleanup();
 });
 
-type StringResult = DataResult<string>;
+type StringResult = FleetSourceResult<string>;
+
+const ready = (value: string): StringResult => ({ kind: 'ok', value });
 
 /** A promise whose resolution the test drives, so "slow" and "fast" are exact, not timing-based. */
 interface Deferred {
@@ -46,39 +48,54 @@ const renderQuery = (initialProps: QueryProps) =>
   renderHook((props: QueryProps) => useProviderQuery(props.query, props.key), { initialProps });
 
 describe('useProviderQuery', () => {
-  it('reports loading until the provider answers, then the data', async () => {
+  it('reports loading until the source answers, then the data', async () => {
     const first = deferred();
     const { result } = renderQuery({ query: () => first.promise, key: ['sites'] });
 
     expect(result.current).toEqual({ status: 'loading' });
 
-    await first.settle({ status: 'ready', data: 'sites' });
+    await first.settle(ready('sites'));
 
     expect(result.current).toEqual({ status: 'ready', data: 'sites' });
   });
 
-  it('surfaces a failed result as a failed state rather than throwing', async () => {
+  it('surfaces an error result as a failed state rather than throwing', async () => {
+    const error = { code: 'network', message: 'siteForecasts: boom' } as const;
     const { result } = renderQuery({
-      query: () => Promise.resolve({ status: 'failed', error: 'siteForecasts: boom' }),
+      query: () => Promise.resolve<StringResult>({ kind: 'error', error }),
       key: ['forecasts'],
     });
 
     await waitFor(() => {
-      expect(result.current).toEqual({ status: 'failed', error: 'siteForecasts: boom' });
+      expect(result.current).toEqual({ status: 'failed', error });
     });
+  });
+
+  it('carries the error code through, so a view could branch on it', async () => {
+    const error = { code: 'rate-limited', message: 'not now', retryAfterSeconds: 30 } as const;
+    const { result } = renderQuery({
+      query: () => Promise.resolve<StringResult>({ kind: 'error', error }),
+      key: ['forecasts'],
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('failed');
+    });
+    expect(result.current.status === 'failed' && result.current.error.code).toBe('rate-limited');
+    expect(result.current.status === 'failed' && result.current.error.retryAfterSeconds).toBe(30);
   });
 
   it('refetches when the key changes', async () => {
     const first = deferred();
     const second = deferred();
     const { result, rerender } = renderQuery({ query: () => first.promise, key: ['site-a'] });
-    await first.settle({ status: 'ready', data: 'site-a data' });
+    await first.settle(ready('site-a data'));
 
     rerender({ query: () => second.promise, key: ['site-b'] });
 
     expect(result.current).toEqual({ status: 'loading' });
 
-    await second.settle({ status: 'ready', data: 'site-b data' });
+    await second.settle(ready('site-b data'));
 
     expect(result.current).toEqual({ status: 'ready', data: 'site-b data' });
   });
@@ -89,7 +106,7 @@ describe('useProviderQuery', () => {
       throw new Error('a re-render with an equal key must not refetch');
     };
     const { result, rerender } = renderQuery({ query: () => first.promise, key: ['site-a', 24] });
-    await first.settle({ status: 'ready', data: 'site-a data' });
+    await first.settle(ready('site-a data'));
 
     rerender({ query: unreachable, key: ['site-a', 24] });
 
@@ -102,11 +119,11 @@ describe('useProviderQuery', () => {
     const { result, rerender } = renderQuery({ query: () => slowFirst.promise, key: ['site-a'] });
 
     rerender({ query: () => fastSecond.promise, key: ['site-b'] });
-    await fastSecond.settle({ status: 'ready', data: 'site-b data' });
+    await fastSecond.settle(ready('site-b data'));
 
     expect(result.current).toEqual({ status: 'ready', data: 'site-b data' });
 
-    await slowFirst.settle({ status: 'ready', data: 'site-a data' });
+    await slowFirst.settle(ready('site-a data'));
 
     expect(result.current).toEqual({ status: 'ready', data: 'site-b data' });
   });
