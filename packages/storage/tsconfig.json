@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // This package is Node-only (AWS SDK, timers, `process` in the operator
+    // scripts). Listed explicitly rather than relying on automatic @types
+    // discovery, which pnpm's symlinked layout does not pick up here.
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"]
+}

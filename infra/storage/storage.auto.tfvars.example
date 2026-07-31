@@ -1,0 +1,11 @@
+# Copy to storage.auto.tfvars (gitignored). Terraform loads *.auto.tfvars
+# automatically for every command run in this directory, so there is no
+# -var-file flag to remember or forget.
+
+aws_region = "eu-west-1"
+
+# Optional. Defaults to "dev", and appears in every table name as
+# cumulo-<table>-<environment>. Changing it creates a fresh, empty set of
+# tables rather than renaming the existing ones — DynamoDB has no rename, so
+# Terraform destroys and recreates, and the data goes with it.
+# environment = "dev"

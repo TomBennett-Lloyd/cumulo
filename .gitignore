@@ -7,6 +7,12 @@ coverage/
 # Agent git worktrees (created by .claude tooling inside the repo)
 .claude/worktrees/
 
+# pvlib golden-fixture generator (tools/pvlib-fixtures) — an offline, human-run
+# Python environment. Never in CI, never on the deploy path; the fixtures it
+# writes are committed, the environment that produced them is not.
+tools/pvlib-fixtures/.venv/
+__pycache__/
+
 # Environment & secrets
 .env
 .env.*

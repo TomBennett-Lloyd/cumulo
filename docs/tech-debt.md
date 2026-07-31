@@ -25,17 +25,17 @@ Entry format:
 - What: the plan pinned four exports and the band is not one of them, so it stays module-private. #19's fleet aggregate needs exactly this vocabulary (summing per-site bands into a fleet band), and without a decision it will re-declare the concept in a second place. Decide before #19: export the schema and its inferred type, or standardize on `NonNullable<Forecast['uncertainty']>` as the referencing idiom. Either is defensible; silently having neither is what produces the duplicate.
 - Source: #10 review cycle 1
 
-## 2026-07-30 — Antimeridian double-representation in longitude bounds
-
-- Where: `packages/shared/src/weather-reading.ts`, `packages/shared/src/site.ts`
-- What: `longitude` accepts both −180 and +180, which are the same meridian. One physical location can therefore produce two distinct `locationId` partition keys (ADR 0002 rounds lat/long to 2 dp) and two separate Open-Meteo fetches for identical weather — a correctness split and an API-frugality leak. The fix is normalization at key-derivation time, which is #13's key-function territory, not a schema bound.
-- Source: #10 review cycle 1
-
 ## 2026-07-30 — Latitude/longitude are unbranded, so a swapped pair parses cleanly
 
 - Where: `packages/shared/src/weather-reading.ts`, `packages/shared/src/site.ts`
 - What: both files declare `latitude`/`longitude` as bare `z.number()` with copy-pasted bounds. Structurally the two are the same type, so `{ latitude: -6.26, longitude: 53.35 }` — Dublin's coordinates transposed — parses without complaint and sends a weather fetch to a field in Kazakhstan; the duplicated bounds also drift independently. `typing.md` rule 1 names exactly this (physical-unit confusion, with lat vs lon as its worked example) as the case for branded types. The fix is one shared branded coordinate schema adopted by `site.ts`, ingestion (#11), and ADR 0002's `locationId` key function (#13) in a single move — a coordinated cross-module change, not a bound tweak, and it feeds the #50 branding retrofit. Adjacent to the antimeridian entry above: both are the same missing coordinate abstraction seen from different sides.
 - Source: #10 review cycle 2
+
+## 2026-07-30 — site.test.ts bounds are not mutation-proof
+
+- Where: `packages/shared/src/site.test.ts`
+- What: single acceptance fixture with no boundary values, so `.gte`/`.lte` inclusivity mutants survive on lat/lon, `capacityKw`, tilt, azimuth — the same gap class closed for the #10 schemas (boundary-acceptance + single-mutation rejection tables). Bring `site.test.ts` up to the same pattern, ideally alongside the #50 branding retrofit since fixtures change anyway. Cycle-3 mutation check found the same residue in `weather-reading.test.ts`: the upper edges of the four irradiance caps (1500) and the wind cap (120) are unpinned — five `boundaryCases` rows close it; batch with this entry.
+- Source: #10 review cycle 2 fix agent (discovered)
 
 ## 2026-07-30 — `.optional()` under `exactOptionalPropertyTypes` admits explicit `undefined`
 
@@ -73,11 +73,29 @@ Entry format:
 - What: `is_merged` runs `git fetch origin main` in the main checkout, so a dry sweep issues one fetch per candidate — writing remote-tracking refs and objects, plus whatever `gc --auto` decides. The mutation is additive and cannot lose work, so the safety property holds, but the distinction matters: the comments now say "destroys nothing" rather than "read-only". Making the fetch conditional on non-dry-run (or hoisting one fetch per sweep) would both restore the stronger property and remove N-1 redundant network calls.
 - Source: #42
 
+## 2026-07-31 — `createPhysicsForecast` throws on boundary-accepted inputs, with no caller policy
+
+- Where: `packages/forecast/src/physics-forecast.ts` (`createPhysicsForecast`'s final `forecastSchema.parse`), `packages/forecast/src/irradiance.ts` (`MINIMUM_COS_ZENITH_FOR_PROJECTION_RATIO`)
+- What: the final parse is an uncaught throw, justified as a bug guard — but its bounds are reachable from inputs `siteSchema` and `weatherReadingSchema` both accept, so the throw is not exclusively a programmer-error signal. Route: Hay-Davies floors cos(zenith) at 0.01745 (pvlib GH 432), capping `Rb` near 57.3; the circumsolar term is DHI · A · Rb, so with the anisotropy index A = 1.089 at the measured point the amplification is 62.4x. Measured on a schema-valid Dublin site (tilt 90, azimuth 89.47) at 2026-03-20T07:00:00Z with every irradiance field at its 1500 W/m² cap: POA 95 241 W/m², cell 3870 °C, DC −5478 kW, AC −5259 kW — three separate `forecastSchema` bounds violated. Root cause is not the guard (fail-fast is right) but the missing decision one layer up: error-handling rule 1 splits expected failures (values) from bugs (exceptions), and an implausible-but-accepted weather hour is the former wearing the latter's clothes. #13's forecast Lambda and #16's hindcast need one policy between them — abort the cycle on a ZodError, or have the forecast package return a typed expected failure for out-of-range results so a single bad upstream hour cannot take down a fleet-wide run. Decision input for those tickets, not a change to this diff.
+- Source: #12 review cycle 1
+
 ## 2026-07-30 — Lifecycle tooling has an undeclared python3 dependency
 
 - Where: `.claude/scripts/worktree-lib.sh`:20,68 (and the porcelain parsing in `reap-worktree.sh`)
 - What: a Node/pnpm repo's worktree tooling hard-depends on `python3` for realpath resolution, `worktree list --porcelain` parsing, and JSON handling. Failure is safe (exit 2 everywhere) but total, and it is invisible in `package.json` and CI, so a host without `python3` gets a lifecycle system that silently does nothing useful. `gh pr list --json headRefOid --jq …` and `git worktree list --porcelain -z` would remove most of the need. Related to #47 (CI did not run these scripts at all; fixed by #64) and #48 (no shellcheck gate; fixed by #69 — shellcheck itself has nothing to say about an undeclared `python3`, so this entry survives the gate).
 - Source: #42
+
+## 2026-07-31 — `@smithy/core` is a direct dependency whose major we do not own
+
+- Where: `packages/storage/package.json` (`"@smithy/core": "^3.31.1"`), `packages/storage/src/client.ts`:3 (`ConfiguredRetryStrategy` from `@smithy/core/retry`)
+- What: pinning the retry curve (ADR 0002 Consequence 5) needs `ConfiguredRetryStrategy`, which is only reachable from `@smithy/core` — an SDK-_internal_ package. Declaring it directly makes us the range-owner of a major version that is really owned by `@aws-sdk/client-dynamodb`: the two ranges can be bumped independently, and a resolution where our `ConfiguredRetryStrategy` is a different copy from the one the DynamoDB client's retry middleware is built against would break the pinned strategy at runtime. Today they dedupe to one copy, and the `toBeInstanceOf(ConfiguredRetryStrategy)` assertion in `packages/storage/src/client.test.ts`:155 would fail if they split — so this is latent, not live. The fix is repo-level rather than package-level (a pnpm catalog entry, or a stated policy that smithy ranges are aligned to the SDK's), and until it exists every future package that needs to pin retry behaviour re-takes the same coupling on its own.
+- Source: #13 review cycle 1
+
+## 2026-07-31 — Duplicate item keys in write requests surface as StorageError, not caller bugs
+
+- Where: `packages/storage/src/weather-adapter.ts` (`putArchiveDay`, `putForecastWeather`), `packages/storage/src/series-adapter.ts` (`putForecasts`, `putGenerationReadings`)
+- What: two readings/forecasts sharing a key pass every precondition and reach DynamoDB, which rejects the whole request (`ValidationException`) — wrapped as `StorageError`, pointing operators at AWS instead of the caller. The read path already de-duplicates for exactly this reason (`listFetchedArchiveDays`); the reasoning wasn't carried to writes. Different answers per method: the transaction path can take a cheap Set-based precondition; the chunked batch paths need a policy call (reject vs last-wins dedupe). Not a data-integrity bug — rejection is atomic and loud.
+- Source: #13 review cycle 2
 
 ## 2026-07-31 — Chart treatment specifies the horizon boundary but not interior gaps
 

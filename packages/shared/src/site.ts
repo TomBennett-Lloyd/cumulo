@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { utcIsoTimestampSchema } from './timestamp';
+
 /**
  * A single rooftop PV installation in the fleet.
  *
@@ -19,3 +21,39 @@ export const siteSchema = z.object({
 });
 
 export type Site = z.infer<typeof siteSchema>;
+
+/**
+ * How a site joined the fleet.
+ *
+ * This is not decoration: ADR 0002 makes `origin` the basis of a structural
+ * exemption. The `user-sites-by-age` index is written only for `user` sites, so
+ * the seed fleet is invisible to eviction (#29) as a property of the data
+ * model rather than of a filter a later change could forget.
+ */
+export const siteOriginSchema = z.enum(['seed', 'user']);
+
+export type SiteOrigin = z.infer<typeof siteOriginSchema>;
+
+/**
+ * A site as the fleet control plane holds it — the domain attributes ADR 0002
+ * stores in `cumulo-sites` alongside the `siteSchema` fields.
+ *
+ * - `origin` — see {@link siteOriginSchema}
+ * - `createdAt` — the eviction order for user sites (#29), and the reason
+ *   `gsiCreatedAt` sorts the way it does
+ * - `active` — whether the forecast cycle should still fetch weather for this
+ *   site; an inactive site is structurally absent from the `by-location` index
+ *   rather than filtered out of its results
+ *
+ * Derived with `.extend` rather than redeclared, so the physics fields have
+ * exactly one definition (architecture rule 2). No key attribute appears here:
+ * `pk`, `locationId` and the `gsi*` attributes are computed by the storage
+ * adapter from these fields and never round-trip as domain data.
+ */
+export const fleetSiteSchema = siteSchema.extend({
+  origin: siteOriginSchema,
+  createdAt: utcIsoTimestampSchema,
+  active: z.boolean(),
+});
+
+export type FleetSite = z.infer<typeof fleetSiteSchema>;
