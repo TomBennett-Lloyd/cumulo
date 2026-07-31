@@ -16,11 +16,28 @@
 # Non-blocking by contract: always exits 0. A failed install is reported as text
 # for the session to act on, never as a refusal to start.
 #
+# The tree to prepare comes from the event's `cwd` — where the session actually
+# is — and never from $CLAUDE_PROJECT_DIR (#74), which is pinned to the directory
+# Claude Code was started in. Reading the pinned value inverted this hook's whole
+# purpose: a session opened in a fresh worktree would find node_modules present
+# in the MAIN checkout, conclude there was nothing to do, and leave the worktree
+# it was supposed to prepare without deps.
+#
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 
-root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}"
-[ -n "$root" ] || exit 0
+lib="$(dirname -- "${BASH_SOURCE[0]}")/hook-context.sh"
+# shellcheck source=./hook-context.sh
+if ! . "$lib"; then
+  echo "ensure-deps: could not load $lib — deps were not checked for this session." >&2
+  exit 0
+fi
+
+# $PWD is the fallback, not a second opinion: Claude Code runs hooks in the
+# session's working directory, so it is the same answer by another route when the
+# event carries no `cwd` (a hand-run of this script, say).
+cwd=$(hook_event_field "$(read_hook_event)" cwd)
+root=$(repo_root_for "${cwd:-$PWD}") || exit 0
 [ -f "$root/pnpm-lock.yaml" ] || exit 0
 [ -d "$root/node_modules" ] && exit 0
 
