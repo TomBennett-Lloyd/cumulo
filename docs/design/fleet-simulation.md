@@ -26,18 +26,25 @@ computation stay trivial at demo scale.
 
 | Location   | Latitude | Longitude |
 | ---------- | -------- | --------- |
-| Dublin     | 53.3498  | -6.2603   |
-| Cork       | 51.8985  | -8.4756   |
-| Galway     | 53.2707  | -9.0568   |
-| Limerick   | 52.6638  | -8.6267   |
-| Belfast    | 54.5973  | -5.9301   |
-| London     | 51.5072  | -0.1276   |
-| Manchester | 53.4808  | -2.2426   |
-| Birmingham | 52.4862  | -1.8904   |
-| Bristol    | 51.4545  | -2.5879   |
-| Leeds      | 53.8008  | -1.5491   |
-| Edinburgh  | 55.9533  | -3.1883   |
-| Cardiff    | 51.4816  | -3.1791   |
+| Dublin     | 53.35    | -6.26     |
+| Cork       | 51.90    | -8.48     |
+| Galway     | 53.27    | -9.06     |
+| Limerick   | 52.66    | -8.63     |
+| Belfast    | 54.60    | -5.93     |
+| London     | 51.51    | -0.13     |
+| Manchester | 53.48    | -2.24     |
+| Birmingham | 52.49    | -1.89     |
+| Bristol    | 51.45    | -2.59     |
+| Leeds      | 53.80    | -1.55     |
+| Edinburgh  | 55.95    | -3.19     |
+| Cardiff    | 51.48    | -3.18     |
+
+Each centre is the city's real coordinate **snapped to the centre of its `locationId` bucket** —
+exact at 2 decimal places, the width `packages/shared/src/location.ts` de-duplicates weather at.
+That is not cosmetic: it is half of the co-location invariant in the budget section below. The
+snap moves a centre by at most half a bucket, ~550 m in latitude and ~350 m in longitude at these
+latitudes, which is an order of magnitude inside Open-Meteo's own model grid — the weather at the
+snapped point is the weather at the city, and the displacement buys an exact fetch count.
 
 Real cities rather than a uniform scatter, because the fleet has to look like a fleet: rooftop
 PV follows housing stock, not graph paper. The 12 centres span roughly 51.4°N to 56.0°N, which
@@ -49,18 +56,23 @@ so fleet aggregation smooths across real decorrelated cloud cover rather than ac
 artefact of picking round numbers: weather is fetched per _location_, so five sites sharing a
 location share one weather fetch. See the budget section below for what that buys.
 
-**Jitter of ±0.02° latitude and ±0.03° longitude**, uniform, applied to each site's cluster
-centre — roughly ±2 km in each axis at these latitudes (a degree of longitude is shorter than a
-degree of latitude here, hence the asymmetry). Sites are neighbours in the same town, not
-stacked on one pin: map markers separate visually, and no downstream code can accidentally
-depend on co-located sites having byte-identical coordinates. The offset is small enough that
-sites in a cluster genuinely share weather, which is what makes the de-duplication honest rather
-than a rounding trick.
+**Jitter of ±0.004° on both axes**, uniform, applied to each site's cluster centre — roughly
+±450 m north–south and ±270 m east–west at these latitudes. Sites are neighbours on the same few
+streets, not stacked on one pin: map markers separate visually, and no downstream code can
+accidentally depend on co-located sites having byte-identical coordinates.
 
-Jittered coordinates are **rounded to 5 decimal places** — about a metre at these latitudes. That
-is three orders of magnitude finer than the jitter box, so sites stay distinct and stay inside
-their cluster, while the stored record reads like something a person could have entered rather
-than a float carrying the full residue of a PRNG draw.
+The bound is derived, not chosen for looks. A site keeps its centre's `locationId` only while it
+stays within **half a bucket — 0.005°** — of a bucket-centred point, so 0.004° is the largest
+round number that leaves margin for the 5 dp coordinate rounding below (up to 0.000005°) and for
+float representation. Both axes share the figure because the constraint lives on the bucket grid,
+which is square in degrees, not on the ground, where a degree of longitude is shorter than a
+degree of latitude. Widen it past 0.005 and clusters start straddling bucket boundaries; the
+fleet's weather call volume rises silently, so `fleet.test.ts` asserts the invariant directly.
+
+Jittered coordinates are **rounded to 5 decimal places** — about a metre at these latitudes,
+a few hundred times finer than the jitter box, so sites stay distinct and stay inside their
+cluster, while the stored record reads like something a person could have entered rather than a
+float carrying the full residue of a PRNG draw.
 
 ## Distributions
 
@@ -117,9 +129,11 @@ described below, which is what makes the whole thing reproducible and trivially 
 
 ## Weather locations and the Open-Meteo budget
 
-**The fleet implies 12 distinct weather locations by design, because sites are co-located in
-clusters.** The worst case — no de-duplication at all, one fetch per site — is 60. At the
-platform's hourly ingestion cadence:
+**The fleet implies exactly 12 distinct weather locations by construction, not by luck.** Two
+generator choices make it a property of the data rather than a hope about it: cluster centres sit
+at the centre of their `locationId` bucket, and the jitter half-width is strictly less than half
+a bucket, so no site can round into a neighbour's bucket. The worst case — no de-duplication at
+all, one fetch per site — is 60. At the platform's hourly ingestion cadence:
 
 | Case                      | Locations | Calls/hour | Calls/day |
 | ------------------------- | --------- | ---------- | --------- |
@@ -135,11 +149,19 @@ the same quota, and for a re-run after a failed cycle, without any of those need
 conversation.
 
 The 5-sites-per-location choice is therefore worth a **5× reduction in weather calls** — the
-single largest lever this ticket has on the platform's API frugality constraint. That said,
-**the de-duplication mechanism itself is not owned here.** This ticket produces a fleet whose
-sites are co-located so that de-duplication has something to collapse; #11 (ingestion) owns the
-`locationId` rounding function and the actual "fetch once per location" behaviour. The 288
-figure is what #11 achieves given this fleet, not something this generator enforces.
+single largest lever this ticket has on the platform's API frugality constraint. The mechanism is
+split across two modules and the split matters: `locationId` (`packages/shared/src/location.ts`)
+defines the bucket, ingestion (#11) does the actual "fetch once per location" collapse, and this
+generator is responsible for placing sites so that the collapse has something to collapse. The
+288 figure is what #11 achieves given this fleet — and, since #78, something the generator
+guarantees rather than merely hopes for.
+
+That guarantee was originally absent. The centres carried their full 4 dp coordinates and the
+jitter box was two to five times wider than the bucket, so the canonical fleet spread across
+**58** locations, near the 60-call worst case: the 5× lever this section claimed did not exist.
+It was found while implementing #11's de-duplication, and fixed in the generator (#78) rather
+than by lowering the claim, because co-location is this ticket's stated reason for clustering
+sites at all.
 
 One note for sizing elsewhere in the repo: ADR 0002 sized DynamoDB capacity against an assumed
 ~50 sites over ~30 locations. This fleet is 60 sites over 12 locations — 20% more per-site series

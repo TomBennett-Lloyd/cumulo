@@ -1,7 +1,8 @@
 /*
  * Every stylesheet in this app, in one place and in cascade order.
  *
- * Tokens first: everything below resolves `var(--…)` against them. The rest is
+ * Tokens first: everything below resolves `var(--…)` against them, and a sheet
+ * loaded ahead of the declarations it consumes has nothing to read. The rest is
  * one convention rather than two — a component that imported its own CSS would
  * put that file's position in the cascade at the mercy of module evaluation
  * order, which is a bundler detail no reviewer can see from the component. The
@@ -14,6 +15,8 @@ import './map/map.css';
 import './add-site/add-site.css';
 import './dashboard/site-panels.css';
 import './preview/preview.css';
+import './charts/charts.css';
+import './views/views.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

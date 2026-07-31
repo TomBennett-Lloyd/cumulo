@@ -30,8 +30,16 @@ const OPENING_ZOOM = Math.floor(INITIAL_ZOOM);
  */
 const ISLANDS: MapViewport = { zoom: OPENING_ZOOM, bounds: [-20, 48, 10, 60] };
 
-/** Zoomed onto the Dublin cluster centre, close enough for its five to separate. */
-const DUBLIN: MapViewport = { zoom: 12, bounds: [-6.4, 53.28, -6.1, 53.42] };
+/**
+ * Zoomed onto the Dublin cluster centre, close enough for its five to separate.
+ *
+ * The zoom tracks the fleet's jitter, not taste. #78 tightened that jitter to
+ * ±0.004° so every site in a cluster shares one weather bucket, which put the
+ * five Dublin roofs inside a box roughly a seventh the width of the old one —
+ * and a zoom that separated them before now shows a cluster. If a future change
+ * to `jitterDegrees` breaks these tests, this constant is what follows it.
+ */
+const DUBLIN: MapViewport = { zoom: 15, bounds: [-6.28, 53.34, -6.24, 53.36] };
 
 /** The first five sites the generator emits are Dublin's; see `fleet.ts`. */
 const dublinSites = fleet.slice(0, 5);

@@ -45,6 +45,17 @@ elif [ "$main_branch" != "main" ]; then
   printf "WARN main checkout is on '%s' — should be parked on main (CLAUDE.md Workflow)\n" "$main_branch"
 fi
 
+# --- base ref: one refresh for the whole sweep -------------------------------------------
+# The fetch used to live inside is_merged, which meant a sweep paid one per candidate — and a
+# dry sweep wrote remote-tracking refs and objects for every worktree it merely looked at.
+# Now it happens once here, not at all under --dry-run, and every child is told the base ref is
+# already as fresh as this run will make it. Exported rather than passed as a flag because it
+# describes the run, not the target: anything reap spawns inherits the same answer.
+if [ "$dry_run" = "0" ]; then
+  fetch_main "$main_dir"
+fi
+export WORKTREE_FETCH_MAIN=0
+
 list=$(git -C "$main_dir" worktree list --porcelain) || exit 2
 paths=$(printf '%s' "$list" | python3 -c '
 import os, sys
@@ -73,11 +84,17 @@ while IFS= read -r wt; do
       ;;
   esac
 
+  # < /dev/null, not tidiness: this loop reads the worktree list from the process's own stdin,
+  # and a child that reads stdin reads the entries the loop has not reached yet. reap runs a
+  # caller-supplied $WORKTREE_GH_CMD, so "the child never reads stdin" is not ours to promise.
+  # The worktrees it swallowed would then be skipped in silence — a backstop reporting
+  # "kept 1" over a repo holding five worktrees looks exactly like a backstop with nothing to
+  # do, which is the one failure mode a backstop must not have.
   if [ "$dry_run" = "1" ]; then
-    "$script_dir/reap-worktree.sh" "$wt" --dry-run
+    "$script_dir/reap-worktree.sh" "$wt" --dry-run </dev/null
     rc=$?
   else
-    "$script_dir/reap-worktree.sh" "$wt"
+    "$script_dir/reap-worktree.sh" "$wt" </dev/null
     rc=$?
   fi
 
@@ -95,9 +112,10 @@ EOF
 
 # --- stale admin entries: reported, never pruned -----------------------------------------
 # This used to run `git worktree prune` unconditionally, which destroyed admin data under
-# --dry-run. Note the guarantee is "--dry-run destroys nothing", NOT "--dry-run is read-only":
-# is_merged still runs `git fetch origin main`, which writes remote-tracking refs and objects.
-# That is additive and cannot lose work, but do not restate it as read-only.
+# --dry-run. The guarantee used to stop at "--dry-run destroys nothing" because is_merged
+# fetched per candidate, writing remote-tracking refs and objects; with that fetch hoisted
+# above the loop and skipped in dry mode, a dry run now writes nothing to the repository at
+# all — no ref, no object, no admin entry.
 # Reporting is now the behaviour in BOTH modes, for a reason beyond dry-run:
 # reap-worktree.sh removes worktrees via `git worktree remove`, which cleans up its own admin
 # dir, so a sweep never leaves an entry of its own to prune. Prune could therefore only ever

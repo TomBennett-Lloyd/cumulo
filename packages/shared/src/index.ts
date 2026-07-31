@@ -1,4 +1,17 @@
-export { forecastModelSchema, type ForecastModel, forecastSchema, type Forecast } from './forecast';
+export {
+  aggregateFleetForecast,
+  type FleetForecastPoint,
+  aggregateFleetActuals,
+  type FleetActualsPoint,
+} from './aggregation';
+export {
+  forecastModelSchema,
+  type ForecastModel,
+  forecastSchema,
+  type Forecast,
+  uncertaintyBandSchema,
+  type UncertaintyBand,
+} from './forecast';
 export { generationReadingSchema, type GenerationReading } from './generation-reading';
 export { locationId, type GeoCoordinates } from './location';
 export {

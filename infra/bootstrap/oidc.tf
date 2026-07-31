@@ -54,24 +54,30 @@ data "aws_iam_policy_document" "github_actions_trust" {
     # The trailing claim is an exact-match allowlist rather than a `:*`
     # wildcard: a wildcard would let *any* workflow context in this repo assume
     # the role, including tags, non-main branch refs, and whatever event
-    # contexts GitHub adds to the `sub` claim in future. Two values, no more.
+    # contexts GitHub adds to the `sub` claim in future. One value, no more:
+    # **only a push to `main` may assume this role.**
     #
-    # The `pull_request` entry exists for exactly one reason: the `oidc-smoke`
-    # check must be able to run pre-merge, and it can only do that while this
-    # role has ZERO attached permissions (see below) — assuming it proves the
-    # trust path and grants nothing.
+    # That one value used to be two. A PR-context subject sat alongside it for
+    # exactly one reason — so the `oidc-smoke` check could run pre-merge — and
+    # that was safe only while this role had ZERO attached permissions:
+    # assuming it proved the trust path and granted nothing. The comment that
+    # used to be here said the change attaching the first permission had to
+    # delete that entry in the same PR. Issue #11 attached it
+    # (`infra/ingestion/deploy.tf`, updating the ingestion function's code), so
+    # the entry is gone. A PR-context run is triggerable by any fork author, so
+    # it must never hold deploy permissions (issue #7 security constraints,
+    # 2026-07-30).
     #
-    # THEREFORE: the PR that attaches the first permission to this role MUST
-    # delete the `pull_request` line in the same change. A pull_request-context
-    # run is triggerable by any fork PR author, so it must never hold deploy
-    # permissions (issue #7 security constraints, 2026-07-30).
+    # THE RULE OUTLIVES ITS FIRST APPLICATION. Nothing an unmerged contributor
+    # controls goes back in this list — not a PR context, not a branch pattern,
+    # not a workflow-dispatch-from-a-fork context. Pre-merge OIDC coverage is
+    # what was traded away here; recovering it needs a *second* role that is
+    # permanently permissionless, not a second entry here. See the header
+    # comment in .github/workflows/oidc-smoke.yml.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        "${var.github_subject_prefix}:ref:refs/heads/main",
-        "${var.github_subject_prefix}:pull_request",
-      ]
+      values   = ["${var.github_subject_prefix}:ref:refs/heads/main"]
     }
   }
 }
@@ -85,10 +91,21 @@ resource "aws_iam_role" "github_actions" {
   # One hour: a workflow that needs longer than this has a different problem.
   max_session_duration = 3600
 
-  # No inline policies and no managed policy attachments, by design. The smoke
-  # test this role exists to prove (`aws sts get-caller-identity`) requires zero
-  # permissions, so the bootstrap can be verified end to end without granting
-  # anything. Each later service ticket attaches its own least-privilege policy
-  # for the resources it owns (ADR 0001: infrastructure ownership follows
-  # service boundaries) — a broad deploy policy here would undo that.
+  # This stack still attaches nothing — no inline policies, no managed policy
+  # attachments — and that is by design rather than by not having got round to
+  # it: the smoke test this role exists to prove (`aws sts get-caller-identity`)
+  # requires zero permissions, so the bootstrap was verifiable end to end before
+  # a single grant existed.
+  #
+  # Grants now do exist. Each service ticket attaches its own least-privilege
+  # policy for the resources it owns, from its own stack (ADR 0001:
+  # infrastructure ownership follows service boundaries) — `#11` was the first,
+  # in `infra/ingestion/deploy.tf`. Keeping them there rather than here is what
+  # makes `terraform destroy` on a service take that service's deploy rights
+  # with it, and a broad deploy policy in this file would undo all of it.
+  #
+  # The consequence for anyone reading this file for the role's real
+  # permissions: they are not in it, and never will be. The account is the only
+  # complete answer —
+  # `aws iam list-role-policies --role-name cumulo-github-actions`.
 }

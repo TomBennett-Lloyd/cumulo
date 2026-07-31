@@ -25,7 +25,7 @@ export type ForecastModel = z.infer<typeof forecastModelSchema>;
  * Both quantiles carry the same 0–50 kW bounds as `acPowerKw`: same quantity,
  * same unit, same site, so a runaway ML p90 is exactly what the cap is for.
  */
-const uncertaintyBandSchema = z
+export const uncertaintyBandSchema = z
   .object({
     p10AcPowerKw: z.number().gte(0).lte(50),
     p90AcPowerKw: z.number().gte(0).lte(50),
@@ -34,6 +34,13 @@ const uncertaintyBandSchema = z
     message: 'p10AcPowerKw must not exceed p90AcPowerKw',
     path: ['p10AcPowerKw'],
   });
+
+/**
+ * Exported in its own right, not as `NonNullable<Forecast['uncertainty']>`: fleet aggregation
+ * consumes and produces band-shaped values detached from any one `Forecast`, and the derived
+ * idiom names a field rather than a concept and cannot parse anything at runtime.
+ */
+export type UncertaintyBand = z.infer<typeof uncertaintyBandSchema>;
 
 /**
  * A single-hour PV output forecast for one site, from one model.

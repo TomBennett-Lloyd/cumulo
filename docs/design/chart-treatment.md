@@ -72,6 +72,16 @@ Composition rules that keep both legible where they overlap:
   direct label in `--color-chart-axis-label`, at the last timestamp with a measurement. Actuals
   stop there; band and median continue. The boundary is marked once, in chrome, rather than by
   dashing the forecast line.
+- **A gap _inside_ a series breaks the line. It is never bridged.** The horizon rule above says
+  where the measurements stop; this says what a missing hour before that boundary looks like. A
+  null actual ends the run and the line restarts after the gap, so the actuals series is drawn once
+  per contiguous run of measured samples rather than as one path through the hole. The same holds
+  for the band: an hour whose forecast carries no P10–P90 is a point estimate, and the band's
+  polygon and bound hairlines are drawn once per contiguous run of banded samples. A straight
+  segment across a gap is a value that was never measured or never modelled, drawn with exactly the
+  confidence of the values on either side of it — partial data is labelled partial, in the chart as
+  much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted
+  connector, no faded segment, nothing that could be read as an estimate of what was missing.
 
 ## Legend
 
@@ -98,6 +108,13 @@ Direct labels ride the marks to _supplement_ the legend, never to replace it, an
 the endpoint of the actuals line, the peak of the median, the band width at the horizon. A number
 on every point is chaos and goes unread.
 
+**A direct label never runs off the plot.** A label placed relative to its mark reads outwards
+until that would cross the plot edge, then flips and reads inwards from the same mark; where it
+fits on neither side it pins to the near edge rather than overflow. This applies to every label
+positioned by a mark — the horizon label, the hover readout — because the mark that needs labelling
+most is usually the last one, and a label clipped at the edge is worse than one overlapping its own
+rule.
+
 ## Grid, axes, and the single-axis rule
 
 - **Gridlines: `--color-chart-grid`, hairline (1px), solid, horizontal only.** Never dashed —
@@ -110,6 +127,33 @@ on every point is chaos and goes unread.
   alignment between two y-scales is arbitrary and invents a correlation the data does not contain.
   Two measures of different scale become two charts, small multiples, or both series indexed to a
   common base on one axis.
+
+## The time axis
+
+**The time axis runs on UTC.** Tick labels are UTC wall time — `HH:mm`, gaining a short weekday
+prefix (`Thu 14:00`) from a full day of span onwards, which is exactly when a wall-clock time can
+appear twice on one axis and a bare `14:00` stops identifying a point. A day, not two: the default
+24 h window plots 24 hours back and 24 forward, so it carries 48 hours of ticks whose first and
+last read the same hour, and unprefixed they name two different moments identically — in the chart
+and in the table twin's row headers.
+The rendered value is never the reader's local zone, and never a per-site local zone.
+Settled in [#19](https://github.com/TomBennett-Lloyd/cumulo/issues/19) rather than left to whoever
+writes the next chart, for two reasons:
+
+- **The data is UTC and nothing carries a timezone.** Forecasts and readings hold `UtcIsoTimestamp`
+  instants, and no site record carries a timezone through to a renderer. Site-local labelling is
+  therefore a data change, not a formatting option — it wants a timezone on the site first.
+- **UTC has no DST transition, so every rendered day is 24 hours.** A local axis has to show a 23-
+  or 25-hour day twice a year, or silently drop or duplicate an hour. An axis that quietly loses an
+  hour is the exact class of error the forecast-accuracy work exists to detect, and it would be
+  introduced by the chrome.
+
+The cost is accepted rather than hidden: through British and Irish summer time the modelled peak
+sits an hour to the left of local solar noon, which reads as a modelling error to anyone who knows
+where solar noon is. So a chart shown to readers who are not holding this document owes the clock
+in words somewhere in its chrome — an axis title, a caption, or the table twin's heading. A
+per-site local axis stays open as a product decision, gated on carrying a timezone per site; it is
+not a rendering tweak.
 
 ## Categorical series order
 
