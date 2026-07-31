@@ -79,7 +79,11 @@ resource "aws_lambda_function" "ingestion" {
   #
   # Changing this number means changing INGESTION_LAMBDA_TIMEOUT_MS in
   # cycle-budget.ts to match — it mirrors this value and cites this file, as
-  # this comment cites it. Nothing gates that pairing yet; see #123.
+  # this comment cites it. That pairing is gated: `pnpm check:infra-mirrors`,
+  # in the `verify` composite and so in CI, compares the two and fails on a
+  # one-sided edit (#123). The pair is declared in
+  # .claude/scripts/check-infra-mirrors.sh, which is also where the next such
+  # pair goes.
   #
   # A healthy twelve-location cycle finishes in seconds, so if the deadline ever
   # fires in production the constants above are wrong at their source, not the
