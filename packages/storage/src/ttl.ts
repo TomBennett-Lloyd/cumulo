@@ -25,7 +25,10 @@ const SECONDS_PER_DAY = 86_400;
  * `retentionDays * 86400` to a UTC instant is exact, whereas anything that goes
  * through a local calendar shifts by an hour across a DST boundary.
  */
-export function expiresAtEpochSeconds(validTime: UtcIsoTimestamp, retentionDays: number): number {
+export const expiresAtEpochSeconds = (
+  validTime: UtcIsoTimestamp,
+  retentionDays: number,
+): number => {
   if (!Number.isInteger(retentionDays) || retentionDays < 1) {
     throw new Error(
       `expiresAtEpochSeconds: retentionDays must be a positive integer, got ${String(retentionDays)}`,
@@ -37,4 +40,4 @@ export function expiresAtEpochSeconds(validTime: UtcIsoTimestamp, retentionDays:
     throw new Error(`expiresAtEpochSeconds: validTime is not a parseable instant: '${validTime}'`);
   }
   return Math.floor(validTimeMs / 1000) + retentionDays * SECONDS_PER_DAY;
-}
+};

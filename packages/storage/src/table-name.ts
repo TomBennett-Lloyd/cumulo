@@ -19,11 +19,11 @@ export type StorageTable = 'sites' | 'series' | 'weather' | 'metrics';
  */
 const ENVIRONMENT_PATTERN = /^[a-z0-9-]+$/;
 
-export function storageTableName(table: StorageTable, env: string): string {
+export const storageTableName = (table: StorageTable, env: string): string => {
   if (!ENVIRONMENT_PATTERN.test(env)) {
     throw new Error(
       `storageTableName: environment must match ${ENVIRONMENT_PATTERN.source}, got '${env}'`,
     );
   }
   return `cumulo-${table}-${env}`;
-}
+};
