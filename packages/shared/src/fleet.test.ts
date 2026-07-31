@@ -120,9 +120,17 @@ describe('generateFleet', () => {
   it('keeps every cluster centre at the centre of its own locationId bucket', () => {
     // Half of the co-location invariant below. A centre that is not bucket-exact puts its
     // jitter box across a bucket boundary, and the cluster stops being one weather fetch.
+    //
+    // Asserted on the *number*, not on `locationId`'s string. Comparing the id to a locally
+    // recomputed `toFixed(2)` was a tautology: both sides round, so any centre at all passes —
+    // including the 4 dp centres of before #78, which is the exact regression this test exists
+    // to catch. A centre is bucket-exact only if rounding it to the bucket changes nothing.
     for (const centre of expectedClusterCentres) {
-      expect(locationId(centre)).toBe(
-        `${centre.latitude.toFixed(2)},${centre.longitude.toFixed(2)}`,
+      expect(centre.latitude, `${centre.name} latitude is not bucket-exact`).toBe(
+        Number(centre.latitude.toFixed(2)),
+      );
+      expect(centre.longitude, `${centre.name} longitude is not bucket-exact`).toBe(
+        Number(centre.longitude.toFixed(2)),
       );
     }
   });

@@ -76,19 +76,29 @@ of 60**, and since #78 the 12 is structural rather than incidental: cluster cent
 of their `locationId` bucket and the jitter half-width is strictly less than half a bucket, so no
 site can round into a neighbour's bucket (`docs/design/fleet-simulation.md`).
 
+A location costs **one or two calls, not one**: `fetch-forecast.ts` retries a transient failure
+(5xx, network error, timeout) exactly once, so a cycle's call count is between one and two per
+location. The percentages below are all computed on **two attempts per location** — the ceiling, not
+the expectation, since the retry only fires when a request actually failed.
+
 At the hourly cadence, against the free tier's 10,000 calls/day, 5,000/hour and 600/minute:
 
 | Window              | Free-tier limit | De-duplicated (12 locations) | Worst case, no de-dup (60) |
 | ------------------- | --------------- | ---------------------------- | -------------------------- |
-| Per cycle           | —               | 12                           | 60                         |
-| Per hour (1 cycle)  | 5,000           | 12 — **0.24%**               | 60 — **1.2%**              |
-| Per day (24 cycles) | 10,000          | 288 — **2.9%**               | 1,440 — **14.4%**          |
-| Per minute (burst)  | 600             | 12 — **2.0%**                | 60 — **10%**               |
+| Per cycle           | —               | 12–24                        | 60–120                     |
+| Per hour (1 cycle)  | 5,000           | 24 — **0.48%**               | 120 — **2.4%**             |
+| Per day (24 cycles) | 10,000          | 576 — **5.8%**               | 2,880 — **28.8%**          |
+| Per minute (burst)  | 600             | 24 — **4.0%**                | 120 — **20%**              |
 
-Every figure is inside every limit, including the worst case in which de-duplication achieves
-nothing at all. The per-minute row is deliberately pessimistic: `runCycle` issues its fetches
-sequentially, so a cycle's calls are spread across its own duration, and the row assumes instead
-that all of them land in the same minute.
+Every figure is inside every limit, and each one stacks its worst cases: every location retried, on
+top of de-duplication achieving nothing at all. In the expected case — no retries, de-duplication
+working — the daily figure is 288 calls, 2.9% of the quota. The per-minute row is pessimistic for a
+third reason: `runCycle` issues its fetches sequentially, so a cycle's calls are spread across its
+own duration, and the row assumes instead that all of them land in the same minute.
+
+The one row worth watching is the no-de-dup day at 28.8%. It is not reachable by the canonical
+fleet — post-#78 co-location is structural — but it is the number that matters if #17's
+visitor-added sites ever land at 60 distinct locations.
 
 The headroom is the point. It leaves room for visitor-added sites at new locations, for the
 hindcast archive fetches of #16 drawing on the same daily quota, and for re-running a failed cycle,

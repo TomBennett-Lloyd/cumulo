@@ -26,7 +26,7 @@ import {
  * does not.
  */
 
-const QUEUE_URL = 'https://sqs.eu-west-1.amazonaws.com/123456789012/cumulo-ingestion-test';
+const QUEUE_URL = 'https://sqs.eu-west-1.amazonaws.com/123456789012/cumulo-weather-readings-test';
 
 const forecastReadingSchema = weatherReadingSchema.extend({ kind: z.literal('forecast') });
 

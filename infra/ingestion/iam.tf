@@ -88,9 +88,17 @@ data "aws_iam_policy_document" "ingestion" {
   # creating one — and a function that cannot create log groups cannot create
   # one outside Terraform's ownership that teardown would then leave behind.
   #
-  # The `:*` suffix is the log *streams* inside the group; the group ARN itself
-  # already ends in `:*`, which is why this reads as a doubled wildcard and is
-  # nonetheless the correct resource for PutLogEvents.
+  # The `:*` suffix matches the log *streams* inside the group, which is what
+  # CreateLogStream and PutLogEvents actually act on — a grant on the bare group
+  # ARN authorises neither.
+  #
+  # It is appended here rather than inherited: `aws_cloudwatch_log_group.arn`
+  # comes back from the provider with its trailing `:*` **stripped**, even though
+  # the ARN CloudWatch Logs itself reports carries one. So the interpolation
+  # below yields exactly one wildcard, not two. Anyone "tidying" this into
+  # `aws_cloudwatch_log_group.ingestion.arn` alone would leave the function
+  # unable to write its own logs — and the only symptom would be an empty log
+  # group, which reads exactly like a function that never ran.
   statement {
     sid = "WriteOwnLogs"
     actions = [

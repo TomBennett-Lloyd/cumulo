@@ -30,6 +30,36 @@ resource "aws_cloudwatch_event_target" "ingestion" {
 # grant on the rule. Without this the rule fires, EventBridge is refused, and
 # the only evidence is the rule's FailedInvocations metric — a schedule that is
 # silently doing nothing.
+# EventBridge invokes a function **asynchronously**, and Lambda's default async
+# policy retries a failed invocation twice — roughly one and three minutes later.
+# That default is wrong for this function in a way nothing else would surface:
+#
+#   - the handler throws CycleFailedError whenever *any* location did not publish
+#     (apps/ingestion/src/handler.ts), so a single rate-limited location fails the
+#     whole invocation and Lambda re-runs the entire cycle;
+#   - a retried cycle re-fetches every location, including the ones Open-Meteo
+#     just rate-limited. That is precisely the hot-retry-on-429 that
+#     fetch-forecast.ts refuses to do at the request level, reintroduced one layer
+#     up, against the same hard quota CLAUDE.md caps;
+#   - and it re-stores and re-publishes the locations that already succeeded,
+#     sending #12 a duplicate message for a horizon that was never in doubt.
+#
+# The hourly schedule is the retry. It re-fetches the same idempotent 48-hour
+# horizon an hour later, which is the correct backoff for every failure the cycle
+# reports — a rate limit, a provider outage, or a queue that was briefly gone.
+resource "aws_lambda_function_event_invoke_config" "ingestion" {
+  function_name = aws_lambda_function.ingestion.function_name
+
+  maximum_retry_attempts = 0
+
+  # 60 s is the API's minimum, and the right value here for the same reason the
+  # retries are zero: an invocation that has been sitting in Lambda's async queue
+  # longer than a minute is one whose work the next cycle will redo from fresher
+  # data anyway. Expiring it keeps a backlog from stacking cycles on top of each
+  # other; the discard is visible on the function's AsyncEventsDropped metric.
+  maximum_event_age_in_seconds = 60
+}
+
 resource "aws_lambda_permission" "eventbridge" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.ingestion.function_name

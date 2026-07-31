@@ -97,7 +97,11 @@ export const createIngestionSqsClient = (): SQSClient =>
 
 export interface SqsWeatherPublisherDeps {
   readonly client: SQSClient;
-  /** The full queue URL, e.g. `https://sqs.<region>.amazonaws.com/<account>/cumulo-ingestion-<env>`. */
+  /**
+   * The full queue URL of `cumulo-weather-readings-<env>` (ADR 0004, and
+   * `infra/ingestion/transport.tf`), e.g.
+   * `https://sqs.<region>.amazonaws.com/<account>/cumulo-weather-readings-<env>`.
+   */
   readonly queueUrl: string;
 }
 

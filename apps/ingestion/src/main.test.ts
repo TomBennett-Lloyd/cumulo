@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * runs once per module graph, so every case needs a fresh one.
  */
 
-const QUEUE_URL = 'https://sqs.eu-west-1.amazonaws.com/123456789012/cumulo-ingestion-test';
+const QUEUE_URL = 'https://sqs.eu-west-1.amazonaws.com/123456789012/cumulo-weather-readings-test';
 
 const stubEnv = (values: Record<string, string | undefined>): void => {
   for (const [key, value] of Object.entries(values)) {
@@ -52,7 +52,7 @@ describe('the ingestion composition root', () => {
   });
 
   it('a queue url that is not a url fails startup, not the first publish', async () => {
-    stubEnv({ CUMULO_ENV: 'test', QUEUE_URL: 'cumulo-ingestion-test' });
+    stubEnv({ CUMULO_ENV: 'test', QUEUE_URL: 'cumulo-weather-readings-test' });
 
     const error = await importFailure();
 
