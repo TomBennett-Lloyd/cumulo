@@ -1,6 +1,6 @@
 # Architecture standards
 
-**Trigger:** adding a module, package, or service; adding a dependency between packages; unsure where new code belongs.
+**Trigger:** adding a module, package, or service; adding a dependency between packages; restating an infrastructure value in code; unsure where new code belongs.
 
 ## Rules
 

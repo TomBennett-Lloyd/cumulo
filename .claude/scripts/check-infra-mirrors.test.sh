@@ -20,6 +20,16 @@
 # default path — and the shipped MIRRORS record's own paths — could be broken
 # and the suite would still be green (testing.md rule 7).
 #
+# DEPENDENCY, named because it is not one the sibling harnesses take: the cases
+# that need a fixture variant differing in one line edit it with `perl` rather
+# than writing the whole file out again, which is what check-adr-index.test.sh
+# and check-module-names.test.sh do. It buys a diff a reader can see at a glance
+# — "this fixture is the good one, minus its top-level timeout" — at the cost of
+# a tool the other harnesses do not require. `perl` is on macOS and on GitHub's
+# ubuntu runner images, so this does not narrow where the suite runs. Every such
+# edit is followed by a fixture_has/fixture_lacks assertion, because `perl -pi`
+# reports success for a substitution that matched nothing.
+#
 # Usage: bash .claude/scripts/check-infra-mirrors.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
 set -uo pipefail
@@ -160,11 +170,17 @@ fixture_lacks() { # fixture_lacks <file> <fixed-string>
   fi
 }
 
+run_script_with() { # run_script_with <bash> <script> <args...>
+  local interpreter="$1" script="$2"
+  shift 2
+  out=$("$interpreter" "$script" "$@" 2>&1)
+  rc=$?
+}
+
 run_check_with() { # run_check_with <bash> <args...>
   local interpreter="$1"
   shift
-  out=$("$interpreter" "$CHECK" "$@" 2>&1)
-  rc=$?
+  run_script_with "$interpreter" "$CHECK" "$@"
 }
 
 run_check() { # run_check <args...>
@@ -278,7 +294,50 @@ expect_out "OK"
 end
 
 # ==========================================================================================
-# 9. the attribute is read from ITS resource, not the file
+# 9. a trailing line comment on the constant is not a change of shape
+# ==========================================================================================
+# The Terraform reader strips a trailing comment, so the TypeScript reader has to
+# as well — asymmetry here would refuse the single most ordinary edit anybody
+# makes next to a mirrored number, and refuse it with a message whose every
+# clause ("exported, a plain integer, on one line") is already true of the line
+# being rejected.
+begin "a trailing // comment on the constant is accepted"
+fixture ts_comment 300 300_000
+must perl -pi -e 's{^export const INGESTION_LAMBDA_TIMEOUT_MS = 300_000;$}{export const INGESTION_LAMBDA_TIMEOUT_MS = 300_000; // five minutes}' "$DIR/$TS_REL"
+fixture_has "$DIR/$TS_REL" '= 300_000; // five minutes'
+run_check "$DIR"
+expect_rc 0 "$rc"
+expect_out "OK"
+end
+
+# ==========================================================================================
+# 10. the empty-list guard is a branch, so it gets a case
+# ==========================================================================================
+# The gate's own protection against green-by-absence is the one branch no fixture
+# can reach, because MIRRORS is baked into the shipped script. Reaching it means
+# running a COPY of the shipped gate with the record line removed — which is also
+# the only case here that proves the guard is wired to anything at all. Without
+# it, replacing the condition with `false` leaves every other case green.
+begin "a gate with no records left exits 2 rather than reporting OK"
+fixture empty_list 300 300_000
+EMPTY_GATE="$TMP_ROOT/check-infra-mirrors-no-records.sh"
+must grep -v -F -- "$TF_REL|" "$CHECK" >"$EMPTY_GATE"
+fixture_has "$EMPTY_GATE" 'MIRRORS=('
+fixture_lacks "$EMPTY_GATE" "$TF_REL|"
+for interpreter in $BASHES; do
+  case_ctx="$interpreter"
+  run_script_with "$interpreter" "$EMPTY_GATE" "$DIR"
+  expect_rc 2 "$rc"
+  expect_out "the MIRRORS list is empty"
+  expect_out "green by absence, not green"
+  expect_not_out "OK"
+  expect_not_out "unbound variable"
+done
+case_ctx=""
+end
+
+# ==========================================================================================
+# 11. the attribute is read from ITS resource, not the file
 # ==========================================================================================
 # `retention_in_days` is not `timeout`, but a same-named attribute in a later
 # resource is the realistic version of this: a reader scoped to the file rather
@@ -301,7 +360,7 @@ expect_not_out "900"
 end
 
 # ==========================================================================================
-# 10. an attribute nested in a sub-block is not the resource's own
+# 12. an attribute nested in a sub-block is not the resource's own
 # ==========================================================================================
 # The four-space case. `timeout` inside `environment { … }` belongs to that block;
 # reading it as the function's would be a comparison against a value AWS never
@@ -320,7 +379,7 @@ expect_out "declares no top-level 'timeout' attribute"
 end
 
 # ==========================================================================================
-# 11. a Terraform value that stopped being a plain number
+# 13. a Terraform value that stopped being a plain number
 # ==========================================================================================
 # `timeout = var.function_timeout` is a legitimate refactor and an illegitimate
 # comparison: the gate has no variable resolution and must say so rather than
@@ -336,7 +395,7 @@ expect_out "BLOCKED"
 end
 
 # ==========================================================================================
-# 12. a constant that stopped being an exported integer literal
+# 14. a constant that stopped being an exported integer literal
 # ==========================================================================================
 begin "a derived or unexported constant is a non-verdict"
 for variant in "const INGESTION_LAMBDA_TIMEOUT_MS = 300_000;" \
@@ -353,7 +412,7 @@ case_ctx=""
 end
 
 # ==========================================================================================
-# 13. the resource itself is gone or renamed
+# 15. the resource itself is gone or renamed
 # ==========================================================================================
 # The rename case: an `aws_lambda_function "ingest"` would leave the gate with
 # nothing to read, and "nothing to read" must not resolve to "nothing wrong".
@@ -367,7 +426,7 @@ expect_out 'declares no resource "aws_lambda_function" "ingestion"'
 end
 
 # ==========================================================================================
-# 14. either file missing at the declared path
+# 16. either file missing at the declared path
 # ==========================================================================================
 begin "a mirrored file that has moved exits 2, not 0"
 for missing in "$TF_REL" "$TS_REL"; do
@@ -385,7 +444,7 @@ case_ctx=""
 end
 
 # ==========================================================================================
-# 15. a root that is not there at all
+# 17. a root that is not there at all
 # ==========================================================================================
 begin "a nonexistent root exits 2, not 1"
 run_check "$TMP_ROOT/does-not-exist"

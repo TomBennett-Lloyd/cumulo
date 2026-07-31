@@ -85,10 +85,23 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #                     300000" is only agreement if somebody says which unit is
 #                     which.
 #
-# The next pairs are expected from #12's consumer (its function timeout is
-# already coupled to `visibility_timeout_seconds` in
-# infra/ingestion/transport.tf, which says so in prose) and from #16's archive
-# backfill. Both are one line here.
+# What this record shape can and cannot express, stated because the two
+# couplings already queued are NOT one line here — the record hard-codes both
+# the extraction modes (a Terraform resource attribute against a TypeScript
+# constant) and the relation (equality, up to a scale factor):
+#
+#   * #12's consumer is coupled to `visibility_timeout_seconds` in
+#     infra/ingestion/transport.tf, which is Terraform on BOTH sides, and at a
+#     ratio (6x) rather than a unit conversion.
+#   * infra/api/lambda.tf's `timeout = 15` is bounded by API Gateway's 30 s
+#     integration ceiling — an INEQUALITY, against a value AWS owns and no file
+#     here declares.
+#
+# Neither fits, and the record reader refuses a seventh field rather than
+# silently ignoring it, so extending to them is a change to this script and not
+# an added line. That is deliberate for now — the shapes are guesses until the
+# tickets land — and it is recorded in docs/tech-debt.md so the next author
+# meets the limit before designing around it rather than after.
 MIRRORS=(
   "infra/ingestion/lambda.tf|aws_lambda_function.ingestion|timeout|apps/ingestion/src/cycle-budget.ts|INGESTION_LAMBDA_TIMEOUT_MS|1000"
 )
@@ -201,10 +214,17 @@ tf_attribute_value() { # tf_attribute_value <file> <type> <name> <attr>
 # numeric separators removed. Exported on purpose: a mirror is a claim about a
 # module's public surface, and a private constant is not one another file — or
 # this gate — is entitled to hold Terraform to.
+#
+# A trailing `// …` is accepted and ignored, for the same reason
+# strip_hcl_comment exists on the Terraform side: a comment after the value is
+# the most ordinary thing to write next to a mirrored number, it changes nothing
+# about the number, and a gate that refused it would refuse with a message
+# ("exported, a plain integer, on one line") every clause of which is already
+# true of the line in front of the reader.
 ts_constant_value() { # ts_constant_value <file> <name>
   local file="$1" name="$2"
   local line matches=0 value=""
-  local const_re="^export const $name([[:space:]]*:[^=]*)?[[:space:]]*=[[:space:]]*([0-9][0-9_]*)[[:space:]]*;[[:space:]]*$"
+  local const_re="^export const $name([[:space:]]*:[^=]*)?[[:space:]]*=[[:space:]]*([0-9][0-9_]*)[[:space:]]*;[[:space:]]*(//.*)?$"
 
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line%$'\r'}
