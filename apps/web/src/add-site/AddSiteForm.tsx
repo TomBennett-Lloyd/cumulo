@@ -1,7 +1,6 @@
 import { createSiteInputSchema, type CreateSiteInput } from '@cumulo/shared';
 import { useId, useState, type ReactElement, type SubmitEvent } from 'react';
 
-import './add-site.css';
 import type { CreationRefusal } from './creation-throttle';
 
 /** The fields the visitor fills in. Coordinates come from the map, not from here. */
@@ -206,7 +205,11 @@ export interface AddSiteFormProps {
   readonly onCancel: () => void;
   /** A creation is in flight; the button says so and refuses a second click. */
   readonly submitting: boolean;
-  /** The throttle's refusal, or `null` while the visitor is inside their allowance. */
+  /**
+   * The throttle's last refusal, or `null` while the visitor is inside their
+   * allowance. Shown as a stated wait; it does not lock the form, because the
+   * wait is only re-counted when the visitor presses again.
+   */
   readonly refusal: CreationRefusal | null;
   /** What the fleet said when it rejected the last creation, if anything. */
   readonly error: string | null;
@@ -328,7 +331,15 @@ export const AddSiteForm = ({
         <button type="button" className="add-site-cancel" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="add-site-submit" disabled={submitting || refusal !== null}>
+        {/*
+          Disabled while a creation is in flight, and never for a refusal. A
+          refusal states a wait, and nothing re-renders this form when that wait
+          elapses — so a button disabled by one would stay disabled under a
+          frozen countdown that is wrong a second later. Live, it stays honest:
+          the throttle's check costs nothing and spends nothing, so a second
+          press either creates the site or restates the wait as it now stands.
+        */}
+        <button type="submit" className="add-site-submit" disabled={submitting}>
           {submitting ? 'Adding site…' : 'Add site'}
         </button>
       </div>

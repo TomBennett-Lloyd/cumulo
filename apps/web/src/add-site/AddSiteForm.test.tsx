@@ -164,17 +164,34 @@ describe('AddSiteForm', () => {
     expect(fieldMessage('Tilt')).toBe('');
   });
 
-  it('explains the budget when the throttle refuses, and will not submit', () => {
+  it('explains the budget when the throttle refuses', () => {
+    renderForm({ refusal: { retryAfterSeconds: 42 } });
+
+    expect(screen.getByRole('status').textContent).toMatch(
+      /request budget, wait 42s before adding another site/,
+    );
+  });
+
+  /*
+   * A refusal states a wait; it must not become a dead end.
+   *
+   * Disabling the button here looks like the safe choice and is the trap: this
+   * form never learns that the wait has elapsed — nothing re-renders it on a
+   * timer — so a disabled button stays disabled for as long as the visitor
+   * leaves the form open, under a frozen "wait 42s" that is a lie within a
+   * second of being painted. Leaving it live is what makes the wait honest: a
+   * click re-asks the throttle, which is side-effect-free, and the visitor gets
+   * either the creation or a freshly counted wait.
+   */
+  it('stays submittable while refused, so the stated wait can be re-tested', () => {
     const { onSubmit } = renderForm({ refusal: { retryAfterSeconds: 42 } });
 
-    const notice = screen.getByRole('status');
-    expect(notice.textContent).toMatch(/request budget, wait 42s before adding another site/);
-
     const submit = screen.getByRole('button', { name: 'Add site' });
-    expect(submit).toHaveProperty('disabled', true);
+    expect(submit).toHaveProperty('disabled', false);
 
     fireEvent.click(submit);
-    expect(onSubmit).not.toHaveBeenCalled();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a second click while a creation is in flight', () => {

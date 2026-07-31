@@ -1,7 +1,6 @@
 import type { Site } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
-import './site-panels.css';
 import { capacityLabel } from './site-format';
 
 export interface SiteListProps {

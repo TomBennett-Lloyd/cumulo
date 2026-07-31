@@ -3,14 +3,32 @@ import { canonicalFleetSeed, generateFleet } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 import type { MapPoint, MapViewport } from './clustering';
 import { buildClusterIndex, clusterSizeBand, pointsForViewport } from './clustering';
+import { INITIAL_ZOOM } from './framing';
 
 const fleet = generateFleet(canonicalFleetSeed);
 
 /**
+ * The clustering level the map actually opens on.
+ *
+ * Read off the shipped constant rather than written as a number: the twelve
+ * knots below are a promise about what a visitor sees on first paint, so a test
+ * that pinned its own zoom could stay green while the map opened on a zoom that
+ * shows something else entirely (`testing.md` rule 7). Floored because
+ * supercluster indexes one tree per integer zoom.
+ */
+const OPENING_ZOOM = Math.floor(INITIAL_ZOOM);
+
+/**
  * Ireland and the UK on screen together — the framing `MapView` opens on, and
  * the one `map-treatment.md` describes as "twelve knots of five".
+ *
+ * The bounds are wider than any real window at this zoom, deliberately: what
+ * this fixture is for is the zoom-and-radius pair that decides how the fleet
+ * collapses, and bounds only decide what is cropped out of view. The real
+ * viewport at this zoom was measured in a browser at roughly
+ * [-16.3, 50.5, 7.3, 58.4] — inside these bounds, with the whole fleet in frame.
  */
-const ISLANDS: MapViewport = { zoom: 5, bounds: [-11, 49.5, 2, 59] };
+const ISLANDS: MapViewport = { zoom: OPENING_ZOOM, bounds: [-20, 48, 10, 60] };
 
 /** Zoomed onto the Dublin cluster centre, close enough for its five to separate. */
 const DUBLIN: MapViewport = { zoom: 12, bounds: [-6.4, 53.28, -6.1, 53.42] };
@@ -57,7 +75,7 @@ describe('clusterSizeBand', () => {
 });
 
 describe('pointsForViewport', () => {
-  it('collapses the sixty-site fleet into twelve clusters of five over Ireland and the UK', () => {
+  it('collapses the sixty-site fleet into twelve clusters of five on the opening frame', () => {
     const points = pointsForViewport(buildClusterIndex(fleet), ISLANDS, null);
 
     expect(points).toHaveLength(12);
@@ -144,7 +162,7 @@ describe('pointsForViewport', () => {
 
   it('keeps clusters in fleet order, so panning cannot reshuffle the focus sequence', () => {
     const points = pointsForViewport(buildClusterIndex(fleet), ISLANDS, null);
-    const wholeMap: MapViewport = { zoom: 5, bounds: [-180, -85, 180, 85] };
+    const wholeMap: MapViewport = { zoom: OPENING_ZOOM, bounds: [-180, -85, 180, 85] };
     const panned = pointsForViewport(buildClusterIndex(fleet), wholeMap, null);
 
     expect(panned.map(appearanceOf)).toEqual(points.map(appearanceOf));

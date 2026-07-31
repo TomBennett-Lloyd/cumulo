@@ -89,14 +89,25 @@ interface OrderedMapPoint {
  * is maplibre's tile size, so a supercluster zoom is a maplibre zoom with no
  * conversion.
  *
- * 24px is `--space-6`: the marker hit target, and the smallest cluster bubble.
- * Two knots closer together than one bubble cannot read as two things, so that
- * is the distance at which they should have collapsed into one. It is smaller
- * than supercluster's default 40 because the fleet's twelve centres include
- * Bristol and Cardiff, 40km apart: at 40px they stay merged until zoom 6, which
- * would show the reader ten knots on a map the design says has twelve.
+ * 12px is an empirical number, and the honest justification is the test rather
+ * than a token: it is the radius at which the fleet's twelve seeded centres
+ * still read as twelve knots at the zoom the map opens on
+ * (`framing.ts`'s `INITIAL_ZOOM`, floored to level 4). The pair that decides it
+ * is Bristol and Cardiff, about 40km apart — at supercluster's default 40px
+ * they stay merged until zoom 6, and at 24px until zoom 5, either of which
+ * shows a reader ten knots on a map `map-treatment.md` promises has twelve.
+ *
+ * An earlier version of this comment argued 24px from `--space-6`, the marker
+ * hit target: two knots closer together than one bubble cannot read as two
+ * things. That reasoning is appealing and was wrong in the direction that
+ * matters — it fixed the radius to a rendered length while the thing being
+ * promised is a *count* at a *specific zoom*, and the two only coincide by
+ * luck. Cluster bubbles can therefore overlap slightly at some zooms, which is
+ * the accepted cost of the count being right on the frame every visitor sees
+ * first. `clustering.test.ts` reads both shipped constants, so a change to
+ * either that breaks the twelve fails there.
  */
-const CLUSTER_RADIUS_PIXELS = 24;
+const CLUSTER_RADIUS_PIXELS = 12;
 
 /** Bands step rather than scale — people compare circle areas badly. */
 const MEDIUM_BAND_MIN_COUNT = 10;

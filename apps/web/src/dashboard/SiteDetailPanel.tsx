@@ -3,7 +3,6 @@ import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
 
-import './site-panels.css';
 import type { ForecastViewState } from './forecast-view-state';
 import {
   acPowerLabel,

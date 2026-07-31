@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_CREATION_WINDOW_MS } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import type { DataResult, FleetDataSource } from '../data/fleet-data-source';
 import { Dashboard } from './Dashboard';
@@ -289,10 +290,39 @@ describe('Dashboard', () => {
     submitDraft();
     await settle();
 
+    // Refused, not sent — and the button stays live, because the wait it states
+    // can only be re-counted by pressing it again (see the recovery test below).
     expect(screen.getByText(/wait \d+s before adding another site/)).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Add site' }).hasAttribute('disabled')).toBe(true);
     expect(createSite).toHaveBeenCalledTimes(3);
     expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(63);
+  });
+
+  it('lets a refused visitor through once the window has slid, from the same open form', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const createSite = vi.spyOn(dataSource, 'createSite');
+    renderDashboard(dataSource);
+    await settle();
+
+    await addSite();
+    await addSite();
+    await addSite();
+
+    clickMap();
+    submitDraft();
+    await settle();
+
+    expect(screen.getByText(/wait \d+s before adding another site/)).toBeDefined();
+    expect(createSite).toHaveBeenCalledTimes(3);
+
+    // Nothing re-renders this form on a timer, so if the refusal disabled the
+    // button the visitor would sit under a frozen wait forever. Pressing again
+    // after the window has slid is the whole recovery path.
+    await advanceBy(DEFAULT_CREATION_WINDOW_MS);
+    submitDraft();
+    await settle();
+
+    expect(createSite).toHaveBeenCalledTimes(4);
+    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(64);
   });
 
   it('gives up on a first forecast that never arrives, and can be asked again', async () => {

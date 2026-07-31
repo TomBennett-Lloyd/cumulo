@@ -7,8 +7,11 @@ import type { ReactElement, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { Theme } from '../theme';
 import { basemapStyleUrl } from './basemap';
+import type { MapPosition } from './clustering';
+import { INITIAL_CENTER, INITIAL_ZOOM } from './framing';
 import { MapAttributionStrip } from './MapAttributionStrip';
 import { MapContext } from './MapContext';
+import { isMarkerClick } from './map-click';
 
 /*
  * Tell maplibre where its worker is, once, before any map exists.
@@ -34,23 +37,32 @@ import { MapContext } from './MapContext';
  */
 setWorkerUrl(workerUrl);
 
-/** A position on the map, named in the domain's vocabulary rather than GL's. */
-export interface MapPosition {
-  readonly longitude: number;
-  readonly latitude: number;
-}
+/*
+ * A position on the map, named in the domain's vocabulary rather than GL's.
+ *
+ * Declared by `clustering.ts` and re-exported here rather than restated: it is
+ * one concept, and two structurally identical copies would be the same bug as
+ * two schemas for one domain type — agreeing today, free to drift tomorrow.
+ * `clustering.ts` owns it because that module is pure and this one is the
+ * adapter; the re-export keeps `MapView`'s public surface complete for callers
+ * who reach for the map's own vocabulary.
+ */
+export type { MapPosition };
 
 export interface MapViewProps {
   readonly theme: Theme;
-  /** Fired for clicks on the map itself; overlay markers handle their own. */
+  /**
+   * Fired for clicks on the basemap itself.
+   *
+   * Overlay clicks are excluded here rather than by each overlay: maplibre
+   * mounts markers inside the very container this handler is bound to, so
+   * without that filter a marker press would arrive as a map click too — see
+   * `isMarkerClick`.
+   */
   readonly onMapClick?: (position: MapPosition) => void;
   /** Overlays — markers, clusters — which reach the map through `MapContext`. */
   readonly children?: ReactNode;
 }
-
-/** Framing that puts Ireland and the UK on screen together — the seed fleet. */
-const INITIAL_CENTER: [number, number] = [-4.5, 54.6];
-const INITIAL_ZOOM = 4.6;
 
 /**
  * The map surface: a maplibre instance, the overlays drawn on it, and the
@@ -97,9 +109,40 @@ export const MapView = ({ theme, onMapClick, children }: MapViewProps): ReactEle
       attributionControl: false,
     });
 
+    /*
+     * Keep the canvas the size of its container, ourselves.
+     *
+     * maplibre already watches the container — and throws away the first thing
+     * it sees. `Map._setupResizeObserver` guards its callback with
+     * `if (!initialResizeEventCaptured) { initialResizeEventCaptured = true;
+     * return; }`, reasoning that the delivery the spec fires on `observe()`
+     * merely restates the size measured at construction. That holds only while
+     * the container's size is settled by then. When the layout resolves a frame
+     * later — a grid column that has not been distributed yet, a pane or window
+     * that resizes just after load — the corrected size arrives *as* that first
+     * delivery, is discarded, and nothing further is ever emitted. The canvas
+     * then keeps a size the container has not had since first paint, and the
+     * map paints into a corner of itself.
+     *
+     * Measured here, not theorised: the dashboard opened with a 400×183 canvas
+     * inside an 816×469 container, and every marker crowded into the top-left
+     * eighth of the map. A bare `instance.resize()` after construction does not
+     * fix it — at that moment the container still measures 400×183, and the
+     * growth that follows is exactly the delivery maplibre drops. Only an
+     * observer of our own sees it.
+     */
+    const resizeObserver = new ResizeObserver(() => {
+      instance.resize();
+    });
+
+    resizeObserver.observe(container);
+
     setMap(instance);
 
     return () => {
+      // Observer first: a delivery arriving after `remove()` would resize a map
+      // that no longer has a canvas to resize.
+      resizeObserver.disconnect();
       setMap(null);
       instance.remove();
     };
@@ -115,6 +158,13 @@ export const MapView = ({ theme, onMapClick, children }: MapViewProps): ReactEle
     }
 
     const handleClick = (event: MapMouseEvent): void => {
+      // A marker press reaches this handler too — maplibre mounts markers inside
+      // the container it binds to — and answering it here would open "add a site
+      // here" on top of the site the visitor just selected.
+      if (isMarkerClick(event.originalEvent.target)) {
+        return;
+      }
+
       onMapClickRef.current?.({ longitude: event.lngLat.lng, latitude: event.lngLat.lat });
     };
 
