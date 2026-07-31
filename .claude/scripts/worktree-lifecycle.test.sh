@@ -11,7 +11,21 @@
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 
-SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
+shipped_scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
+# The scripts under test, overridable so the same cases can be run against an older revision as
+# a negative control (testing.md rule 4: a regression case is only worth its line count once it
+# has been seen to fail on the pre-fix code). Same convention as lint-shell.test.sh's
+# LINT_SHELL_GATE, but a directory rather than a file: these four scripts source and exec each
+# other by name, so they can only be swapped as a set.
+#
+#   mkdir /tmp/pre
+#   for s in worktree-lib reap-worktree rebranch-worktree sweep-worktrees; do
+#     git show <rev>:.claude/scripts/$s.sh >/tmp/pre/$s.sh
+#   done
+#   WORKTREE_SCRIPTS_DIR=/tmp/pre bash .claude/scripts/worktree-lifecycle.test.sh
+#
+# Unset — how `pnpm test:scripts` runs it — is the shipped set.
+SCRIPTS=${WORKTREE_SCRIPTS_DIR:-$shipped_scripts}
 
 tmp_raw=$(mktemp -d) || exit 2
 bg_pids=""
@@ -141,6 +155,27 @@ advance_main() {
   must gitc "$ROOT/main" push --quiet origin main
 }
 
+# advance_origin <message> -> a commit pushed to origin from a throwaway clone: main moves
+# behind this fixture's main checkout's back, so its refs/remotes/origin/main is provably
+# stale until something fetches. That staleness is what makes a fetch observable at all —
+# origin_head and tracking_ref below differ exactly while no fetch has happened.
+advance_origin() {
+  must rm -rf "$ROOT/upstream"
+  must git clone --quiet "$ROOT/origin.git" "$ROOT/upstream"
+  commit_in "$ROOT/upstream" "$1"
+  must gitc "$ROOT/upstream" push --quiet origin main
+}
+
+origin_head() { git -C "$ROOT/origin.git" rev-parse refs/heads/main; }
+tracking_ref() { git -C "$ROOT/main" rev-parse refs/remotes/origin/main; }
+
+# expect_stale_fixture — origin really is ahead of the main checkout's tracking ref, so
+# "the ref did not move" means "nothing fetched" rather than "there was nothing to fetch".
+expect_stale_fixture() {
+  [ "$(origin_head)" != "$(tracking_ref)" ] ||
+    bad "fixture is wrong: origin/main is already up to date, so a fetch would be a no-op"
+}
+
 gh_stub_prs() { # <path> <sha> — gh reporting one merged PR whose head was <sha>
   cat >"$1" <<EOF
 #!/usr/bin/env bash
@@ -152,6 +187,16 @@ EOF
 gh_stub_none() { # <path> — gh reporting no merged PR for the branch
   cat >"$1" <<'EOF'
 #!/usr/bin/env bash
+printf '[]\n'
+EOF
+  must chmod +x "$1"
+}
+
+gh_stub_stdin_eater() { # <path> — gh that drains stdin before answering, as a pager or a
+  # prompt-reading tool would. Whatever it swallows, its caller never sees.
+  cat >"$1" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null
 printf '[]\n'
 EOF
   must chmod +x "$1"
@@ -664,6 +709,179 @@ rc=$?
 expect_rc 2 "$rc"
 expect_out "ERROR reap-worktree.sh exited 2 for $ROOT/wt-c"
 expect_out "swept 1, kept 1, failed 1"
+end
+
+# ==========================================================================================
+# 23. a stdin-reading child cannot eat the worktree list out from under the sweep
+# ==========================================================================================
+# The loop reads its candidates from the sweep's own stdin, so before `< /dev/null` the first
+# child inherited the rest of the list. reap runs a caller-supplied $WORKTREE_GH_CMD, which is
+# where a stdin reader realistically comes from. The damage is silent rather than destructive:
+# skipped worktrees are kept, and the summary line looks healthy either way — which is why the
+# assertion is the per-worktree lines AND the count.
+begin "sweep gives each reap its own stdin, so a stdin-reading child cannot eat the worktree list"
+fixture sweepstdin
+add_wt a wt-a
+add_wt b wt-b
+add_wt c wt-c
+# Unmerged commits are what make reap consult gh at all: an ancestor-merged branch never
+# reaches the stub, so the fixture has to give every candidate a reason to ask.
+commit_in "$ROOT/wt-a" work-a
+commit_in "$ROOT/wt-b" work-b
+commit_in "$ROOT/wt-c" work-c
+gh_stub_stdin_eater "$ROOT/gh"
+out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh" 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "KEPT $ROOT/wt-a — unmerged"
+expect_out "KEPT $ROOT/wt-b — unmerged"
+expect_out "KEPT $ROOT/wt-c — unmerged"
+expect_out "swept 0, kept 3"
+end
+
+# ==========================================================================================
+# 24. the min-age probe measures the target's admin dir, not the enclosing repo's
+# ==========================================================================================
+# Cumulo nests worktrees inside the main checkout, so a worktree that has lost its .git file
+# answers every "which repo are you?" question with the MAIN checkout — and reap used to ask
+# exactly that question, via `rev-parse --absolute-git-dir` run inside the target. The fixture
+# makes the two answers disagree: the worktree's own admin dir has been idle for years while
+# the main checkout was touched a moment ago.
+begin "reap's min-age probe reads the worktree's own admin dir, not the enclosing repo's"
+fixture adminnested
+# Mirrors the real layout: .gitignore carries .claude/worktrees/ so nested worktrees are
+# invisible to the main checkout's status.
+must printf 'wt/\n' >>"$ROOT/main/.gitignore"
+must gitc "$ROOT/main" add -A
+must gitc "$ROOT/main" commit --quiet -m ignore-nested-worktrees
+must gitc "$ROOT/main" push --quiet origin main
+add_wt feat main/wt
+commit_in "$ROOT/main/wt" work
+backdate_git_dir "$ROOT/main/wt"
+must rm "$ROOT/main/wt/.git"
+must touch "$ROOT/main/.git/index" "$ROOT/main/.git"
+gh_stub_none "$ROOT/gh"
+# Guard ON: this case is about which directory the guard looks at, so pinning it to 0 would
+# test nothing.
+run_reap "$ROOT/gh" 60 "$ROOT/main/wt"
+expect_rc 1 "$rc"
+# The refusal must come from the merge state — the truthful answer for this branch — and not
+# from a min-age probe that measured the main checkout and mistook it for this worktree.
+expect_out "— unmerged"
+expect_not_out "recently-active"
+expect_exists "$ROOT/main/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 25. --dry-run writes nothing, including remote-tracking refs
+# ==========================================================================================
+# is_merged used to fetch on every call, so a dry sweep updated origin/main (and pulled
+# objects) for each candidate it inspected. Nothing was destroyed, but a dry run that mutates
+# the repository is not the promise the flag makes.
+begin "sweep --dry-run fetches nothing, leaving origin/main exactly where it was"
+fixture sweepdryfetch
+add_wt feat wt
+advance_origin upstream-work
+expect_stale_fixture
+stale=$(tracking_ref) || exit 2
+gh_stub_none "$ROOT/gh"
+out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP"
+expect_eq "origin/main after a dry sweep" "$(tracking_ref)" "$stale"
+end
+
+# ==========================================================================================
+# 26. a real sweep refreshes the base ref once, for the whole run
+# ==========================================================================================
+# Hoisting the fetch is only correct if the sweep still does it and the children stop doing it,
+# so the stub reap here reports the signal it was handed and cannot fetch anything itself: any
+# movement of origin/main during this run therefore came from the sweep's single fetch. Case 27
+# is the other half — that a reap handed that signal really does skip its fetch.
+begin "a non-dry sweep refreshes origin/main itself and tells its children not to fetch again"
+fixture sweepfetchonce
+add_wt a wt-a
+add_wt b wt-b
+advance_origin upstream-work
+expect_stale_fixture
+ahead=$(origin_head) || exit 2
+must mkdir -p "$ROOT/scripts"
+must cp "$SCRIPTS/sweep-worktrees.sh" "$SCRIPTS/worktree-lib.sh" "$ROOT/scripts/"
+cat >"$ROOT/scripts/reap-worktree.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'KEPT %s — stub (fetch-knob=%s)\n' "$1" "${WORKTREE_FETCH_MAIN-unset}"
+exit 1
+EOF
+must chmod +x "$ROOT/scripts/reap-worktree.sh"
+out=$(cd "$ROOT/main" && bash "$ROOT/scripts/sweep-worktrees.sh" 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "fetch-knob=0"
+expect_not_out "fetch-knob=unset"
+expect_out "swept 0, kept 2"
+expect_eq "origin/main after a real sweep" "$(tracking_ref)" "$ahead"
+end
+
+# ==========================================================================================
+# 27. reap fetches for itself, unless its caller says it already did
+# ==========================================================================================
+# Negative control on the signal case 26 asserts the sweep sends: run the real reap both ways
+# over the same stale fixture. If the knob were dead, both halves would leave the same ref.
+begin "reap refreshes origin/main by default and skips it when the caller already has"
+fixture reapfetch
+add_wt a wt-a
+add_wt b wt-b
+advance_origin upstream-work
+expect_stale_fixture
+stale=$(tracking_ref) || exit 2
+ahead=$(origin_head) || exit 2
+# A gh that fails keeps the case honest: both halves must resolve via ancestry, so neither can
+# pass by accidentally consulting GitHub.
+gh_stub_broken "$ROOT/gh"
+
+out=$(env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 WORKTREE_FETCH_MAIN=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt-a" 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "REAPED"
+expect_eq "origin/main with WORKTREE_FETCH_MAIN=0" "$(tracking_ref)" "$stale"
+
+run_reap "$ROOT/gh" 0 "$ROOT/wt-b"
+expect_rc 0 "$rc"
+expect_out "REAPED"
+expect_eq "origin/main with the knob at its default" "$(tracking_ref)" "$ahead"
+end
+
+# ==========================================================================================
+# 28. a direct reap --dry-run writes nothing either
+# ==========================================================================================
+# The fetch guard has two halves — the dry-run mode and the parent's no-fetch signal — and
+# case 27 only exercises the signal. `reap-worktree.sh <path> --dry-run` run by hand is a
+# documented entry point with no sweep above it to carry the signal, so without this case the
+# whole `dry_run` half could be deleted and the suite would not notice.
+begin "reap --dry-run fetches nothing even with no parent telling it not to"
+fixture reapdryfetch
+add_wt feat wt
+advance_origin upstream-work
+expect_stale_fixture
+stale=$(tracking_ref) || exit 2
+# gh must never be reached: the fixture resolves via ancestry against the stale ref, so a
+# failing stub turns any detour through GitHub into a visible failure rather than a pass.
+gh_stub_broken "$ROOT/gh"
+# -u, not merely "we did not set it": an inherited WORKTREE_FETCH_MAIN=0 would make this case
+# pass by testing case 27's half of the guard all over again.
+out=$(env -u WORKTREE_FETCH_MAIN WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt" --dry-run 2>&1)
+rc=$?
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP"
+expect_eq "origin/main after a dry reap" "$(tracking_ref)" "$stale"
+expect_exists "$ROOT/wt/file.txt"
+expect_branch "$ROOT/main" feat
 end
 
 # ==========================================================================================
