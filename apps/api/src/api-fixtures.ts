@@ -1,9 +1,14 @@
 import {
   createSiteInputSchema,
   fleetSiteSchema,
+  forecastSchema,
+  generationReadingSchema,
   type CreateSiteInput,
   type FleetSite,
+  type Forecast,
+  type GenerationReading,
 } from '@cumulo/shared';
+import type { SeriesPoint } from '@cumulo/storage';
 
 import type { ApiRequest } from './http/gateway-event';
 import type { ApiResponse } from './http/response';
@@ -53,6 +58,61 @@ export const siteInput = (overrides: Partial<CreateSiteInput> = {}): CreateSiteI
     capacityKw: 3.5,
     ...overrides,
   });
+
+/**
+ * The forecast vintage and valid hour the series fixtures share, so a test that
+ * asserts on a window is asserting on numbers it can read here rather than on
+ * whatever "now" happened to be.
+ */
+export const ISSUED_AT = '2026-07-31T12:00:00Z';
+export const VALID_TIME = '2026-07-31T13:00:00Z';
+
+/** The branded timestamps arrive as plain strings; the parse below applies the brand. */
+type ForecastOverrides = Partial<Omit<Forecast, 'validTime' | 'issuedAt'>> & {
+  readonly validTime?: string;
+  readonly issuedAt?: string;
+};
+
+export const forecast = (overrides: ForecastOverrides = {}): Forecast =>
+  forecastSchema.parse({
+    siteId: RANELAGH_ID,
+    model: 'physics',
+    validTime: VALID_TIME,
+    issuedAt: ISSUED_AT,
+    weatherSource: 'open-meteo',
+    poaIrradianceWm2: 640,
+    acPowerKw: 2.8,
+    ...overrides,
+  });
+
+type GenerationReadingOverrides = Partial<Omit<GenerationReading, 'validTime'>> & {
+  readonly validTime?: string;
+};
+
+export const generationReading = (overrides: GenerationReadingOverrides = {}): GenerationReading =>
+  generationReadingSchema.parse({
+    siteId: RANELAGH_ID,
+    validTime: VALID_TIME,
+    acPowerKw: 2.4,
+    ...overrides,
+  });
+
+/**
+ * The two `SeriesPoint` variants, built from the fixtures above.
+ *
+ * A stubbed `querySeriesRange` returns these, so a test writes the *interleaved*
+ * list the real adapter produces — which is the input the split under test
+ * actually has to cope with — rather than two tidy pre-separated arrays.
+ */
+export const forecastPoint = (overrides: ForecastOverrides = {}): SeriesPoint => ({
+  type: 'forecast',
+  forecast: forecast(overrides),
+});
+
+export const generationPoint = (overrides: GenerationReadingOverrides = {}): SeriesPoint => ({
+  type: 'generation',
+  reading: generationReading(overrides),
+});
 
 export const apiRequest = (overrides: Partial<ApiRequest> = {}): ApiRequest => ({
   method: 'GET',

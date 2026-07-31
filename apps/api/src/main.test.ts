@@ -69,7 +69,7 @@ describe('the api composition root', () => {
     expect(String(error)).toContain('Staging Env');
   });
 
-  it('a complete environment exports a handler and the sites routes', async () => {
+  it('a complete environment exports a handler and the sites and series routes', async () => {
     vi.stubEnv('CUMULO_ENV', 'test');
 
     const main = await import('./main');
@@ -83,6 +83,8 @@ describe('the api composition root', () => {
       'GET /v1/sites/{siteId}',
       'PUT /v1/sites/{siteId}',
       'DELETE /v1/sites/{siteId}',
+      'GET /v1/sites/{siteId}/forecast',
+      'GET /v1/sites/{siteId}/series',
     ]);
   });
 });

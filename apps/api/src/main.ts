@@ -1,9 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
 import { utcIsoTimestampSchema, type UtcIsoTimestamp } from '@cumulo/shared';
-import { SiteAdapter, createStorageDocumentClient, storageTableName } from '@cumulo/storage';
+import {
+  SeriesAdapter,
+  SiteAdapter,
+  createStorageDocumentClient,
+  storageTableName,
+} from '@cumulo/storage';
 import { z } from 'zod';
 
+import { getSiteForecast } from './forecast/get-site-forecast';
+import { getSiteSeries } from './forecast/get-site-series';
 import { parseGatewayEvent } from './http/gateway-event';
 import { describeZodIssues, errorResponse, type ApiResponse } from './http/response';
 import { routeRequest, type Route } from './http/router';
@@ -100,6 +107,19 @@ const sites = new SiteAdapter({
 });
 
 /**
+ * The `cumulo-series` adapter, for the two read-only routes below.
+ *
+ * Both use `querySeriesRange` and nothing else, so the IAM policy this function
+ * runs under grants `Query` on this table and no write action at all — the
+ * `Pick<SeriesAdapter, 'querySeriesRange'>` in each handler's deps type is the
+ * compile-time half of the same statement.
+ */
+const series = new SeriesAdapter({
+  client: documentClient,
+  tableName: storageTableName('series', env.CUMULO_ENV),
+});
+
+/**
  * The API's clock, as a dependency rather than a `new Date()` inside a handler.
  *
  * Fixed-width to the second, because ADR 0002's range queries rely on
@@ -148,6 +168,18 @@ export const routes: readonly Route[] = [
     method: 'DELETE',
     segments: ['v1', 'sites', { param: siteIdParamName }],
     handle: (request) => deleteSite({ sites }, request),
+  },
+  // The two series reads. Four segments each, so neither can shadow — or be
+  // shadowed by — `GET /v1/sites/{siteId}` above, which matches three.
+  {
+    method: 'GET',
+    segments: ['v1', 'sites', { param: siteIdParamName }, 'forecast'],
+    handle: (request) => getSiteForecast({ sites, series, now }, request),
+  },
+  {
+    method: 'GET',
+    segments: ['v1', 'sites', { param: siteIdParamName }, 'series'],
+    handle: (request) => getSiteSeries({ sites, series }, request),
   },
 ];
 
