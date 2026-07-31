@@ -43,7 +43,7 @@ resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
 
-  alarm_description = "The hourly Cumulo ingestion cycle errored. Either the Lambda itself failed, or the handler threw CycleFailedError because at least one location did not publish — the log's ingestion.cycle.summary entry says which, and how many of how many."
+  alarm_description = "The hourly Cumulo ingestion cycle errored. Either the Lambda itself failed, or the handler threw CycleFailedError because at least one location did not publish — the log's ingestion.cycle.summary entry says which, and how many of how many. Check its skippedForDeadline count first: non-zero means the cycle ran out of its time budget and stopped starting locations, which is pathology in one of the three effects rather than a fleet problem (see CYCLE_DEADLINE_MS in apps/ingestion/src/cycle-budget.ts). The summary's deferred count does NOT contribute to this alarm — locations held back by MAX_LOCATIONS_PER_CYCLE are scheduled work that a later cycle picks up, not failures."
 }
 
 resource "aws_cloudwatch_metric_alarm" "dlq_not_empty" {

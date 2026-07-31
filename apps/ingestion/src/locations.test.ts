@@ -2,7 +2,13 @@ import { canonicalFleetSeed, fleetSiteSchema, generateFleet, locationId } from '
 import type { FleetSite, Site } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
-import { activeFetchLocations } from './locations';
+import {
+  CYCLE_ROTATION_PERIOD_MS,
+  activeFetchLocations,
+  rotationOffset,
+  selectCycleLocations,
+  type FetchLocation,
+} from './locations';
 
 /**
  * The canonical demo fleet: 60 sites in 12 co-located clusters
@@ -115,5 +121,91 @@ describe('activeFetchLocations', () => {
     expect(ids).toEqual([...ids].sort());
     expect(ids.at(0)).toBe('51.45,-2.59');
     expect(ids.at(-1)).toBe('55.95,-3.19');
+  });
+});
+
+/** Four fetch locations, named by their ids, in the ascending order the cycle visits. */
+const fourLocations: FetchLocation[] = [
+  { locationId: 'a', latitude: 1, longitude: 1 },
+  { locationId: 'b', latitude: 2, longitude: 2 },
+  { locationId: 'c', latitude: 3, longitude: 3 },
+  { locationId: 'd', latitude: 4, longitude: 4 },
+];
+
+const idsOf = (locations: readonly FetchLocation[]): string[] =>
+  locations.map((location) => location.locationId);
+
+describe('rotationOffset', () => {
+  it('advances by one location per hour and wraps', () => {
+    const midnight = Date.parse('2026-07-31T00:00:00Z');
+    const hour = (n: number): number => midnight + n * CYCLE_ROTATION_PERIOD_MS;
+
+    // Midnight on this date is an exact multiple of four hours since the epoch,
+    // which is why the sequence starts at 0 — asserted rather than assumed.
+    expect(rotationOffset(hour(0), 4)).toBe(0);
+    expect(rotationOffset(hour(1), 4)).toBe(1);
+    expect(rotationOffset(hour(3), 4)).toBe(3);
+    expect(rotationOffset(hour(4), 4)).toBe(0);
+  });
+
+  it('holds steady within an hour, so two cycles in one hour agree', () => {
+    const start = Date.parse('2026-07-31T05:00:00Z');
+
+    expect(rotationOffset(start, 7)).toBe(rotationOffset(start + 59 * 60_000, 7));
+  });
+
+  it('an empty fleet has nowhere to rotate to', () => {
+    expect(rotationOffset(Date.now(), 0)).toBe(0);
+  });
+});
+
+describe('selectCycleLocations', () => {
+  it('takes the whole fleet when it fits under the cap', () => {
+    const selection = selectCycleLocations(fourLocations, { offset: 0, maxLocations: 10 });
+
+    expect(idsOf(selection.selected)).toEqual(['a', 'b', 'c', 'd']);
+    expect(selection.deferred).toEqual([]);
+  });
+
+  it('defers everything past the cap rather than dropping it', () => {
+    // Both halves come back, because the cycle reports on every active
+    // location — a cap that shortened the list would be the same silent
+    // truncation #115 was filed about.
+    const selection = selectCycleLocations(fourLocations, { offset: 0, maxLocations: 2 });
+
+    expect(idsOf(selection.selected)).toEqual(['a', 'b']);
+    expect(idsOf(selection.deferred)).toEqual(['c', 'd']);
+  });
+
+  it('rotates the window so a later offset serves what an earlier one deferred', () => {
+    const first = selectCycleLocations(fourLocations, { offset: 0, maxLocations: 2 });
+    const third = selectCycleLocations(fourLocations, { offset: 2, maxLocations: 2 });
+
+    expect(idsOf(third.selected)).toEqual(['c', 'd']);
+    expect(idsOf(third.selected)).toEqual(idsOf(first.deferred));
+  });
+
+  it('wraps the rotation without losing or duplicating a location', () => {
+    for (let offset = 0; offset < fourLocations.length; offset += 1) {
+      const selection = selectCycleLocations(fourLocations, { offset, maxLocations: 3 });
+      const covered = [...idsOf(selection.selected), ...idsOf(selection.deferred)];
+
+      expect(covered.sort()).toEqual(['a', 'b', 'c', 'd']);
+    }
+  });
+
+  it('rejects a cap that would starve the whole cycle', () => {
+    // A zero cap skips everything while looking like a configured value; it is
+    // a violated invariant, so it throws at the composition root's first cycle
+    // rather than producing a fleet-wide skip nobody asked for.
+    expect(() => selectCycleLocations(fourLocations, { offset: 0, maxLocations: 0 })).toThrow(
+      /positive integer/,
+    );
+  });
+
+  it('rejects an offset outside the list', () => {
+    expect(() => selectCycleLocations(fourLocations, { offset: 9, maxLocations: 2 })).toThrow(
+      /outside/,
+    );
   });
 });
