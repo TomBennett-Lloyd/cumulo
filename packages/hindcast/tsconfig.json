@@ -12,5 +12,9 @@
     // of a package that has no DOM.
     "types": ["node"]
   },
-  "include": ["src", "fixtures"]
+  // `scripts` joins the compiled surface so the operator CLI — which is absent
+  // from `pnpm test` because it needs an AWS session and spends Open-Meteo
+  // quota — cannot rot silently against the adapters it wires together. Same
+  // reasoning, and the same include line, as `packages/storage/tsconfig.json`.
+  "include": ["src", "fixtures", "scripts"]
 }

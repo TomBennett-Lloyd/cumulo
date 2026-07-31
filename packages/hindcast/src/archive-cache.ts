@@ -32,14 +32,15 @@ import {
  * covered?" — the shape `@cumulo/storage`'s `WeatherAdapter.listFetchedArchiveDays`
  * returns, declared here as the *consumer's* half of the contract.
  *
- * Declared rather than imported because `@cumulo/hindcast` deliberately does not
- * depend on `@cumulo/storage`: that package is an AWS-SDK-bearing adapter layer,
- * and this one is offline orchestration over pure day math
+ * Declared rather than imported because no module under `src/` imports
+ * `@cumulo/storage`: that package is an AWS-SDK-bearing adapter layer, and this
+ * one is offline orchestration over pure day math
  * (`docs/standards/architecture.md` rule 3). Inverting the dependency keeps every
  * test in this package runnable against a `Map` with no SDK in the graph, and the
  * real adapter is checked against {@link ArchiveDayStore} by the compiler at the
- * one place the two meet — the backfill entry point that passes a `WeatherAdapter`
- * in. This is the port half of one contract, not a second definition of it: there
+ * one place the two meet — `scripts/run-hindcast.ts`, the operator entry point,
+ * which is the package's only importer of `@cumulo/storage` and passes a real
+ * `WeatherAdapter` in. This is the port half of one contract, not a second definition of it: there
  * is no second implementation of these semantics anywhere, and if the adapter's
  * answer changed shape, that wiring site would stop compiling.
  *

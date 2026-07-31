@@ -8,6 +8,17 @@ export {
   type FetchArchiveRun,
 } from './archive-cache';
 export {
+  runHindcast,
+  type ArchiveReadingStore,
+  type HindcastCoverage,
+  type HindcastDeps,
+  type HindcastInput,
+  type HindcastOutcome,
+  type HindcastWeatherStore,
+  type IncompleteArchiveCoverage,
+  type MetricsSink,
+} from './hindcast';
+export {
   fetchArchiveDays,
   parseArchiveResponse,
   archiveResponseSchema,
