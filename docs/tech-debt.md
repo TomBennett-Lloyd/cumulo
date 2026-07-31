@@ -43,11 +43,11 @@ Entry format:
 - What: Zod's `.optional()` produces `uncertainty?: T | undefined`, so `{ uncertainty: undefined }` parses even with `exactOptionalPropertyTypes` on — the key is present with an undefined value. DynamoDB `PutItem` marshalling throws on exactly that unless `removeUndefinedValues: true` is set on the document client. #13 needs a house rule (set the marshalling option, or strip undefined keys at the adapter boundary) so this fails at one known place rather than at runtime per-field.
 - Source: #10 review cycle 1
 
-## 2026-07-30 — Self-protection guards match paths as globs, not literals
+## 2026-07-31 — `is_clean` asks the worktree directory which repo it belongs to
 
-- Where: `.claude/scripts/reap-worktree.sh`:84,109; `.claude/scripts/sweep-worktrees.sh`:69
-- What: `case "$path" in "$wt" | "$wt"/*)` expands `$wt` as a glob pattern. A worktree path containing `[`, `*` or `?` can fail to match its own literal cwd, bypassing both the `own-cwd` and `live-session` guards — reap could then remove the directory the running session sits in. No work is lost (the tree must still be clean and merged to reach that point), and the repo's `<n>-<slug>` naming never produces such a path, so this is latent rather than live. The literal form is `[ "${pwd_canon#"$wt"}" != "$pwd_canon" ]`; the idiom repeats in three places, so the fix is one shared helper rather than three edits.
-- Source: #42
+- Where: `.claude/scripts/worktree-lib.sh` (`is_clean`), called from `reap-worktree.sh` and `rebranch-worktree.sh`
+- What: `is_clean` runs `git -C "$wt" status`, which discovers the repository by walking up from that directory. Cumulo nests worktrees inside the main checkout, so a worktree whose `.git` file is missing answers with the **main checkout** — `is_clean` then reports the main checkout's status while reap believes it is describing the target. Same root cause and same fix direction as the min-age probe, which #83 moved onto the admin dir the main repo records for the worktree; `is_clean` was left alone because it takes a path, not an admin dir, and threading one in as an optional second argument is the mode-flag shape `structure.md` rule 7 warns about. Fail-safe today: reaching a destructive action still requires `git worktree remove`, which refuses to validate a worktree with no `.git` file, so reap exits 2 with nothing deleted. Wants one decision covering both callers — hand `is_clean` an explicit repo (`--git-dir` plus `--work-tree`), or have reap refuse a worktree whose `.git` link does not resolve to its recorded admin dir before any probe runs at all.
+- Source: #83
 
 ## 2026-07-30 — Nothing resolves a stale worktree admin entry
 
