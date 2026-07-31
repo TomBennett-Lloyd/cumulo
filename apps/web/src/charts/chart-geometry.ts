@@ -31,8 +31,16 @@ const AXIS_TICK_COUNT = 5;
 const DEFAULT_MAX_X_LABELS = 8;
 /** An all-zero series still gets an axis rather than a degenerate 0–0 scale. */
 const MINIMUM_AXIS_MAX_KW = 1;
-/** Above this span a bare `HH:mm` repeats often enough to need a weekday. */
-const MULTI_DAY_SPAN_HOURS = 48;
+/**
+ * From a full day of span onwards a wall-clock time can repeat, so a bare
+ * `HH:mm` stops identifying a point and the label needs a weekday.
+ *
+ * A day exactly, not two: the default 24 h view spans 24 hours of ticks and
+ * therefore prints its first and last tick as the same time — which is the
+ * moment the treatment's criterion bites, not some later one. Below a day no
+ * time can appear twice and the prefix would be noise on every tick.
+ */
+const WEEKDAY_PREFIX_MINIMUM_SPAN_HOURS = 24;
 const MS_PER_HOUR = 3_600_000;
 const WEEKDAY_LABELS: readonly string[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -103,14 +111,14 @@ export const xTickIndices = (
 };
 
 /**
- * UTC wall-clock label for an instant. Series spanning more than two days get a
- * short weekday prefix, because `14:00` alone stops identifying a point once the
- * axis carries several of them.
+ * UTC wall-clock label for an instant. Series spanning a day or more get a
+ * short weekday prefix, because `14:00` alone stops identifying a point as soon
+ * as the axis can carry two of them.
  */
 export const tickLabelFor = (validTimeIso: string, spanHours: number): string => {
   const instant = new Date(validTimeIso);
   const time = `${padded(instant.getUTCHours())}:${padded(instant.getUTCMinutes())}`;
-  if (spanHours <= MULTI_DAY_SPAN_HOURS) {
+  if (spanHours < WEEKDAY_PREFIX_MINIMUM_SPAN_HOURS) {
     return time;
   }
   const weekday = WEEKDAY_LABELS[instant.getUTCDay()];
@@ -178,4 +186,55 @@ export const tooltipAnchorX = ({ snappedX, tooltipWidth, plot }: TooltipAnchorPa
   return rightAnchor + tooltipWidth <= plot.right
     ? rightAnchor
     : Math.max(plot.left, snappedX - TOOLTIP_GAP - tooltipWidth);
+};
+
+/** SVG user units between the horizon rule and the words naming it. */
+const HORIZON_LABEL_GAP = 6;
+
+export interface HorizonLabelParams {
+  /** The horizon rule's x, in SVG user units. */
+  readonly ruleX: number;
+  /** Rendered advance width of the label text — an estimate, from the caller. */
+  readonly labelWidth: number;
+  readonly plot: PlotRect;
+}
+
+export interface HorizonLabelAnchor {
+  readonly x: number;
+  /** SVG `text-anchor`: which end of the label sits at `x`. */
+  readonly textAnchor: 'start' | 'end';
+}
+
+/**
+ * Where the "forecast horizon" label goes, given where the rule landed.
+ *
+ * The same decision `tooltipAnchorX` makes, in the form text needs: the label
+ * reads rightwards from the rule until that would push it past the plot, then
+ * flips and reads leftwards into the rule instead. Without the flip a late
+ * horizon runs off the canvas — a 7-day window puts the rule seven eighths
+ * across the plot, and the label rendered as "forecast hori…".
+ *
+ * The limit is the plot rect, not the view box, even though the view box is
+ * wider: the margin beyond the plot belongs to the last x-axis tick label,
+ * which is centred on `plot.right` and already spends it.
+ *
+ * A label too wide for the plot on either side pins its left edge to the left
+ * plot edge, matching the tooltip's rule — a label overlapping its own rule is
+ * still readable, one whose first word is off the canvas is not.
+ */
+export const horizonLabelAnchor = ({
+  ruleX,
+  labelWidth,
+  plot,
+}: HorizonLabelParams): HorizonLabelAnchor => {
+  const rightAnchor = ruleX + HORIZON_LABEL_GAP;
+  if (rightAnchor + labelWidth <= plot.right) {
+    return { x: rightAnchor, textAnchor: 'start' };
+  }
+  // End-anchored, so the text runs from `x` leftwards and its far edge is
+  // `x - labelWidth` — which is what the floor below keeps inside the plot.
+  return {
+    x: Math.max(plot.left + labelWidth, ruleX - HORIZON_LABEL_GAP),
+    textAnchor: 'end',
+  };
 };

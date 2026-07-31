@@ -124,8 +124,11 @@ on every point is chaos and goes unread.
 ## The time axis
 
 **The time axis runs on UTC.** Tick labels are UTC wall time — `HH:mm`, gaining a short weekday
-prefix (`Thu 14:00`) once the series spans more than two days and a bare time stops identifying a
-point. The rendered value is never the reader's local zone, and never a per-site local zone.
+prefix (`Thu 14:00`) from a full day of span onwards, which is exactly when a wall-clock time can
+appear twice on one axis and a bare `14:00` stops identifying a point. A day, not two: the default
+24 h window spans 24 hours of ticks, so its first and last tick are the same hour, and unprefixed
+they name two different moments identically — in the chart and in the table twin's row headers.
+The rendered value is never the reader's local zone, and never a per-site local zone.
 Settled in [#19](https://github.com/TomBennett-Lloyd/cumulo/issues/19) rather than left to whoever
 writes the next chart, for two reasons:
 

@@ -121,6 +121,24 @@ Entry format:
 - What: the clock itself is now settled and written down — #19 chose UTC, the treatment doc states it with the DST reasoning, and `chart-geometry.ts` labels through `getUTC*` accessors only. What remains is the obligation that decision carries: the treatment says a chart owes its clock in words somewhere in its chrome, and neither the axis nor the table twin says "UTC" anywhere. A reader in Ireland in July sees the modelled peak an hour left of local solar noon with nothing on screen to explain it, which reads as a modelling error rather than a labelling convention. The change is small per chart (an axis title, a caption suffix) but the wording is design-system-wide — every future chart and table twin inherits it — so it wants deciding once alongside the UI vocabulary rather than invented per component. The separate, larger question of a per-site _local_ axis stays open and is gated on carrying a timezone per site.
 - Source: #15 review cycle 2; the doc half was closed by #19 C7
 
+## 2026-07-31 — A length-1 run renders as nothing, so isolated measurements are invisible
+
+- Where: `apps/web/src/charts/chart-series.ts` (`contiguousRuns`, `polylinePoints`, `bandPolygonPoints`), `apps/web/src/charts/ForecastChart.tsx` (`actualsElements`, `bandElements`), `docs/design/chart-treatment.md` ("Median forecast and actuals")
+- What: breaking a series at its gaps is right, and the consequence was not designed. A run of one sample becomes a `<polyline>` with a single vertex and a band polygon with two coincident edges — both render nothing at all. So an hour measured between two gaps, or a lone banded hour, is drawn as empty chart while a neighbouring pair of hours draws a line; the value exists only in the table twin, and the chart silently understates how much was measured. Exactly the shape of the interior-gap entry this branch closed: an unspecified case that the component resolves by accident. The treatment should say what an isolated sample looks like (the obvious answer is the marker vocabulary it already defines for end-dots, ≥ 8px and ringed in `--color-surface`), and the component should render runs of one as marks rather than as degenerate paths — one move across doc and component, not a patch to either.
+- Source: #19 review cycle 1
+
+## 2026-07-31 — Two wordings for the same empty-fleet condition
+
+- Where: `apps/web/src/views/SiteDetailView.tsx` ("No sites in the fleet yet"), `apps/web/src/views/FleetAggregateView.tsx` (`NO_SITES_TEXT`, "No active sites yet")
+- What: the same fact — the fleet has no sites — reaches the reader in two different sentences depending on which tab they are on, and one of them says "active" while nothing in the data model distinguishes active from inactive. The copy for empty, loading, failed and partial states is product vocabulary, not per-component prose: `views.css` already treats these four as one family with a colour each, and the strings drifted anyway because nothing holds them. Wants a shared copy module (or a documented vocabulary) covering the four state families across every view, so a third view cannot invent a fifth wording. Batch with the parked "say UTC in the chrome" decision above — both are the same missing decision about who owns user-facing wording in `apps/web`.
+- Source: #19 review cycle 1
+
+## 2026-07-31 — The chart's keyboard readout is announced to nobody
+
+- Where: `apps/web/src/charts/ForecastChart.tsx` (`role="img"` + `tabIndex={0}` on the `<svg>`), `apps/web/src/charts/forecast-chart-hover.tsx` (`ForecastChartHoverLayer`), `docs/design/chart-treatment.md` ("Hover layer and the table view")
+- What: arrowing through the series updates the tooltip visually, and a screen reader says nothing — `role="img"` collapses the subtree to its `aria-label`, so the readout's text is not in the accessibility tree at all, and there is no live region to announce the change. The treatment's "keyboard focus shows exactly what hover shows" is met for a sighted keyboard user and not for an AT user, which is the population the sentence sounds like it is about. The table twin is the sanctioned relief and it is present, so this is a gap in what we claim rather than an unreachable value. Three candidate answers — an `aria-live` region carrying the active sample's readout, `role="application"`-style semantics with a described-by target, or documenting the table as the AT path and dropping the focus affordance's implied promise — and the choice binds every future chart, so it wants deciding once with the treatment doc rather than per component.
+- Source: #19 review cycle 1
+
 ## 2026-07-31 — `pnpm verify` never builds: export maps and CSS entry drift ship green
 
 - Where: root `package.json` (`verify`), `apps/web/package.json` (`build`), `packages/ui` export map, `apps/web/src/main.tsx`

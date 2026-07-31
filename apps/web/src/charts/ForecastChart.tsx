@@ -7,6 +7,7 @@ import {
 } from 'react';
 import {
   axisTicks,
+  horizonLabelAnchor,
   niceAxisMax,
   tickLabelFor,
   xForIndex,
@@ -87,8 +88,16 @@ const VIEW_BOX_HEIGHT = 194;
 const VIEW_BOX = `0 0 ${String(CHART_VIEW_BOX_WIDTH)} ${String(VIEW_BOX_HEIGHT)}`;
 const Y_LABEL_GAP = 10;
 const X_LABEL_GAP = 18;
-const HORIZON_LABEL_GAP = 6;
 const HORIZON_LABEL_BASELINE = 8;
+/**
+ * Advance width of "forecast horizon" at `--text-xs`, rounded up. Estimated
+ * rather than measured: `getComputedTextLength` needs a laid-out DOM, which
+ * would make a pure render depend on the browser and jsdom report zero. Erring
+ * wide only flips the label early, which is harmless; erring narrow is the
+ * clipping this constant exists to prevent. Exported so a test can assert the
+ * label's whole extent, not just its anchor.
+ */
+export const HORIZON_LABEL_WIDTH = 84;
 const AXIS_TITLE_BASELINE = 10;
 /** ≥ 8px across, per the treatment's countable-markers rule. */
 const MARKER_RADIUS = 4;
@@ -162,9 +171,20 @@ const actualsElements = (
     />
   ));
 
-/** Marked once, in chrome — never by dashing the forecast line. */
+/**
+ * Marked once, in chrome — never by dashing the forecast line.
+ *
+ * The label's side is a decision, not a constant: a horizon late in the window
+ * (the 7-day view puts it seven eighths across) would push a right-hand label
+ * off the canvas, so `horizonLabelAnchor` flips it to read leftwards instead.
+ */
 const horizonElements = (lastMeasuredIndex: number, scale: ChartScale): readonly ReactElement[] => {
   const x = xForIndex(lastMeasuredIndex, scale.pointCount, scale.plot);
+  const label = horizonLabelAnchor({
+    ruleX: x,
+    labelWidth: HORIZON_LABEL_WIDTH,
+    plot: scale.plot,
+  });
   return [
     <line
       key="rule"
@@ -177,8 +197,9 @@ const horizonElements = (lastMeasuredIndex: number, scale: ChartScale): readonly
     <text
       key="label"
       className="forecast-chart-axis-label"
-      x={x + HORIZON_LABEL_GAP}
+      x={label.x}
       y={scale.plot.top + HORIZON_LABEL_BASELINE}
+      textAnchor={label.textAnchor}
     >
       forecast horizon
     </text>,

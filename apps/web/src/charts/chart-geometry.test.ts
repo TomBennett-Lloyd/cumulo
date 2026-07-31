@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   axisTicks,
+  horizonLabelAnchor,
   niceAxisMax,
   snapToNearestIndex,
   spanHoursBetween,
@@ -110,8 +111,8 @@ describe('xTickIndices', () => {
 
 describe('tickLabelFor', () => {
   it('labels an instant in UTC wall time, not the reader local zone', () => {
-    expect(tickLabelFor('2026-07-30T13:00:00Z', 24)).toBe('13:00');
-    expect(tickLabelFor('2026-07-30T00:30:00Z', 24)).toBe('00:30');
+    expect(tickLabelFor('2026-07-30T13:00:00Z', 12)).toBe('13:00');
+    expect(tickLabelFor('2026-07-30T00:30:00Z', 12)).toBe('00:30');
   });
 
   // The clock decision is load-bearing for a solar product (docs/tech-debt.md,
@@ -123,7 +124,10 @@ describe('tickLabelFor', () => {
     try {
       process.env.TZ = 'Asia/Tokyo';
 
-      expect(tickLabelFor('2026-07-30T13:00:00Z', 24)).toBe('13:00');
+      // 16:00 UTC on a Thursday is 01:00 the following Friday in Tokyo, so
+      // both halves of the label differ if either accessor reads the host.
+      expect(tickLabelFor('2026-07-30T16:00:00Z', 24)).toBe('Thu 16:00');
+      expect(tickLabelFor('2026-07-30T16:00:00Z', 12)).toBe('16:00');
     } finally {
       process.env.TZ = ambient;
     }
@@ -131,7 +135,18 @@ describe('tickLabelFor', () => {
 
   it('prefixes a short weekday once a bare time stops identifying a point', () => {
     expect(tickLabelFor('2026-07-30T14:00:00Z', 168)).toBe('Thu 14:00');
-    expect(tickLabelFor('2026-07-30T14:00:00Z', 48)).toBe('14:00');
+    expect(tickLabelFor('2026-07-30T14:00:00Z', 48)).toBe('Thu 14:00');
+  });
+
+  /*
+   * The threshold is a full day, not two. A series spanning exactly 24 hours
+   * carries the same wall-clock time at both ends — the default view does
+   * precisely this, and shipped two ticks reading `12:00` with nothing to tell
+   * them apart. Below a day no time can repeat, so the prefix is noise.
+   */
+  it('prefixes the weekday from a full day of span, where a time can first repeat', () => {
+    expect(tickLabelFor('2026-07-30T12:00:00Z', 24)).toBe('Thu 12:00');
+    expect(tickLabelFor('2026-07-30T12:00:00Z', 23.9)).toBe('12:00');
   });
 });
 
@@ -201,6 +216,50 @@ describe('tooltipAnchorX', () => {
     const overwide = PLOT.right - PLOT.left + 1;
 
     expect(tooltipAnchorX({ snappedX: 100, tooltipWidth: overwide, plot: PLOT })).toBe(PLOT.left);
+  });
+});
+
+describe('horizonLabelAnchor', () => {
+  // Wide enough that the flip happens well inside the plot, as the real label does.
+  const LABEL_WIDTH = 84;
+
+  it('reads rightwards from the rule while the label fits before the plot edge', () => {
+    const anchor = horizonLabelAnchor({ ruleX: 200, labelWidth: LABEL_WIDTH, plot: PLOT });
+
+    expect(anchor.textAnchor).toBe('start');
+    expect(anchor.x).toBeGreaterThan(200);
+    expect(anchor.x + LABEL_WIDTH).toBeLessThanOrEqual(PLOT.right);
+  });
+
+  /*
+   * The case that shipped clipped. In the 7-day window the horizon lands seven
+   * eighths across the plot, and a start-anchored label ran past the right edge
+   * of the canvas — the reader saw "forecast hori…".
+   */
+  it('flips to the left of the rule rather than run off the right edge', () => {
+    const anchor = horizonLabelAnchor({ ruleX: 420, labelWidth: LABEL_WIDTH, plot: PLOT });
+
+    expect(anchor.textAnchor).toBe('end');
+    expect(anchor.x).toBeLessThan(420);
+    expect(anchor.x - LABEL_WIDTH).toBeGreaterThanOrEqual(PLOT.left);
+  });
+
+  it('keeps the whole label inside the plot at every position the rule can take', () => {
+    for (let ruleX = PLOT.left; ruleX <= PLOT.right; ruleX += 1) {
+      const anchor = horizonLabelAnchor({ ruleX, labelWidth: LABEL_WIDTH, plot: PLOT });
+      const leftEdge = anchor.textAnchor === 'start' ? anchor.x : anchor.x - LABEL_WIDTH;
+
+      expect(leftEdge).toBeGreaterThanOrEqual(PLOT.left);
+      expect(leftEdge + LABEL_WIDTH).toBeLessThanOrEqual(PLOT.right);
+    }
+  });
+
+  it('pins the label to the left plot edge when it fits on neither side', () => {
+    const overwide = PLOT.right - PLOT.left + 1;
+    const anchor = horizonLabelAnchor({ ruleX: 430, labelWidth: overwide, plot: PLOT });
+
+    expect(anchor.textAnchor).toBe('end');
+    expect(anchor.x - overwide).toBe(PLOT.left);
   });
 });
 

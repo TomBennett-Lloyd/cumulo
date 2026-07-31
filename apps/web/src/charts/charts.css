@@ -169,8 +169,14 @@
   text-align: right;
 }
 
+/* A hairline is a hairline, not a quarter of a spacing step: `--space-1 / 4`
+ * borrowed a token that means "gap between things" to express a border width,
+ * and would change thickness if the spacing scale were ever retuned. The
+ * longhands are the idiom `views.css` and `.swatch-chip` already use. */
 .forecast-chart-table thead th {
-  border-bottom: calc(var(--space-1) / 4) solid var(--color-border);
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: var(--color-border);
   color: var(--color-text-muted);
   font-weight: var(--font-weight-medium);
 }

@@ -3,7 +3,8 @@
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex } from './chart-geometry';
-import { CHART_PLOT } from './ForecastChart';
+import type { ForecastChartPoint } from './chart-series';
+import { CHART_PLOT, HORIZON_LABEL_WIDTH } from './ForecastChart';
 import {
   banded,
   bare,
@@ -20,6 +21,34 @@ afterEach(cleanup);
 
 const vertexCount = (mark: Element): number =>
   (mark.getAttribute('points') ?? '').split(' ').length;
+
+const MS_PER_HOUR = 3_600_000;
+/** The fixture provider's 7-day window: 168 hours back, now, and 24 forward. */
+const WEEK_RANGE_POINT_COUNT = 193;
+const WEEK_RANGE_LAST_MEASURED_INDEX = 168;
+
+/**
+ * The series shape the 7-day view actually renders. Its horizon sits seven
+ * eighths across the plot, which is where the label ran off the right of the
+ * canvas and rendered as "forecast hori…".
+ */
+const weekRangeSeries = (): readonly ForecastChartPoint[] =>
+  Array.from({ length: WEEK_RANGE_POINT_COUNT }, (_unused, index) => ({
+    validTimeIso: new Date(Date.UTC(2026, 6, 23, 12) + index * MS_PER_HOUR).toISOString(),
+    medianKw: 4,
+    band: { p10Kw: 3, p90Kw: 5 },
+    actualKw: index <= WEEK_RANGE_LAST_MEASURED_INDEX ? 3.5 : null,
+  }));
+
+const horizonLabel = (container: HTMLElement): Element => {
+  const found = [...container.querySelectorAll('.forecast-chart-axis-label')].find(
+    (element) => element.textContent === 'forecast horizon',
+  );
+  if (found === undefined) {
+    throw new Error('no horizon label');
+  }
+  return found;
+};
 
 describe('ForecastChart', () => {
   it('renders the uncertainty band as a fill with no fill-opacity attribute', () => {
@@ -108,6 +137,43 @@ describe('ForecastChart', () => {
     expect(horizon.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, CHART_PLOT)));
     expect(horizon.getAttribute('x1')).toBe(horizon.getAttribute('x2'));
     expect(container.textContent).toContain('forecast horizon');
+  });
+
+  it('labels the horizon to the right of its rule while there is room for it', () => {
+    const container = renderChart(SERIES);
+    const label = horizonLabel(container);
+    const ruleX = Number(requireMark(container, '.forecast-chart-horizon').getAttribute('x1'));
+
+    expect(label.getAttribute('text-anchor')).toBe('start');
+    expect(Number(label.getAttribute('x'))).toBeGreaterThan(ruleX);
+    expect(Number(label.getAttribute('x')) + HORIZON_LABEL_WIDTH).toBeLessThanOrEqual(
+      CHART_PLOT.right,
+    );
+  });
+
+  /*
+   * The 7-day window shipped with this label clipped off the canvas. The
+   * assertion is the whole extent of the text, not just its anchor: an anchor
+   * inside the plot with the words running out of it is the defect.
+   */
+  it('flips the horizon label inwards when the horizon sits late in the window', () => {
+    const container = renderChart(weekRangeSeries());
+    const label = horizonLabel(container);
+    const anchorX = Number(label.getAttribute('x'));
+    const ruleX = xForIndex(WEEK_RANGE_LAST_MEASURED_INDEX, WEEK_RANGE_POINT_COUNT, CHART_PLOT);
+
+    expect(requireMark(container, '.forecast-chart-horizon').getAttribute('x1')).toBe(
+      String(ruleX),
+    );
+    // Where the words actually end, which depends on which end is anchored —
+    // an anchor inside the plot with the text running out of it is the defect.
+    const rightEdge =
+      label.getAttribute('text-anchor') === 'end' ? anchorX : anchorX + HORIZON_LABEL_WIDTH;
+
+    expect(rightEdge).toBeLessThanOrEqual(CHART_PLOT.right);
+    expect(label.getAttribute('text-anchor')).toBe('end');
+    expect(anchorX).toBeLessThan(ruleX);
+    expect(anchorX - HORIZON_LABEL_WIDTH).toBeGreaterThanOrEqual(CHART_PLOT.left);
   });
 
   it('omits the horizon and its marker when nothing has been measured', () => {
