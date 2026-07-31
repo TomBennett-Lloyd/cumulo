@@ -152,9 +152,13 @@ export interface MetricsPeriod {
  * distinct results, not a collision.
  *
  * The period is an object with named half-open bounds so the two same-shaped
- * timestamps cannot be swapped at a call site. #16 owns `errorMetricsSchema`
- * and may need a different period granularity; amending this function is its
- * call to make.
+ * timestamps cannot be swapped at a call site. #16 settled the granularity
+ * question this signature left open: a hindcast evaluates an arbitrary range,
+ * routinely shorter than a day (a single cloudy afternoon), which a day-granular
+ * key would make unrepresentable — so the timestamp pair stands unchanged, and
+ * `errorMetricsSchema.period` (`metrics.ts`) carries exactly this shape so that
+ * `metricsSortKey(metrics.period, metrics.model, metrics.baseline)` composes
+ * straight from a parsed row.
  */
 export const metricsSortKey = (
   period: MetricsPeriod,
