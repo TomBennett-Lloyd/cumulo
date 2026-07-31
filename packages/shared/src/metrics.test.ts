@@ -193,6 +193,19 @@ describe('persistenceBaselineSeries', () => {
   it('produces no points for no observations', () => {
     expect(persistenceBaselineSeries([])).toEqual([]);
   });
+
+  it('shifts by a sub-hour offset that still lands on a whole second', () => {
+    expect(persistenceBaselineSeries([at(elevenPm, 4)], 0.5)).toEqual([
+      { validTime: '2026-07-30T23:30:00Z', acPowerKw: 4 },
+    ]);
+  });
+
+  it('throws on an offset that is not a whole number of seconds rather than truncating it', () => {
+    // 0.0001 h is 360 ms. Truncating that to the second would hand back a point
+    // labelled with an instant it is not from — a silent one-off in every metric
+    // computed against it — so the instant has to be unrepresentable, not rounded.
+    expect(() => persistenceBaselineSeries([at(elevenPm, 4)], 0.0001)).toThrow();
+  });
 });
 
 describe('errorMetricsSchema', () => {

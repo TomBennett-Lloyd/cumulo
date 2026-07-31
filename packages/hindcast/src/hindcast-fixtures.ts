@@ -1,38 +1,39 @@
 import {
   generationReadingSchema,
-  locationId,
   siteSchema,
   utcIsoTimestampSchema,
   type ErrorMetrics,
   type GenerationReading,
-  type GeoCoordinates,
   type MetricsPeriod,
   type UtcIsoTimestamp,
-  type WeatherReading,
 } from '@cumulo/shared';
 
-import type { ArchiveDayCoverage, FetchArchiveRun } from './archive-cache';
+import type { FetchArchiveRun } from './archive-cache';
 import type { UtcDay } from './archive-days';
-import type { HindcastDeps, HindcastWeatherStore, MetricsSink } from './hindcast';
-import type { ArchiveWeatherReading } from './open-meteo-archive';
+import {
+  DUBLIN,
+  HOURS_PER_DAY,
+  InMemoryArchiveStore,
+  daylight,
+  daysBetween,
+  hourOf,
+  wholeDay,
+} from './archive-fixtures';
+import type { HindcastDeps, MetricsSink } from './hindcast';
 
 /**
  * The world `hindcast.test.ts` runs a hindcast in: one site, one two-day period,
- * synthetic weather and actuals, and in-memory implementations of the three
- * ports `runHindcast` takes.
+ * synthetic actuals, and the three ports `runHindcast` takes wired together.
  *
  * Split out of the test file rather than inlined, on the same principle as
- * `packages/storage/src/adapters/weather/weather-fixtures.ts`: a builder set is the shared
- * *setup*, and keeping it here is what leaves each test short enough to read as
- * a statement about behaviour (`docs/standards/structure.md` rule 4).
+ * `packages/storage/src/adapters/weather/weather-fixtures.ts`: a builder set is
+ * the shared *setup*, and keeping it here is what leaves each test short enough
+ * to read as a statement about behaviour (`docs/standards/structure.md` rule 4).
  *
- * The fakes implement the ports for real rather than recording calls: the store
- * refuses a marker with no readings, and `queryArchiveRange` honours the
- * half-open window exactly as the adapter's `BETWEEN` does. A mock asserted for
- * its own sake would prove nothing (`docs/standards/testing.md` rule 3).
+ * The archive half — the store, and what a day of weather looks like — comes
+ * from `archive-fixtures.ts`, shared with the coverage tests because both stand
+ * in for the same real `WeatherAdapter`.
  */
-
-export const DUBLIN: GeoCoordinates = { latitude: 53.35, longitude: -6.26 };
 
 const stamp = (value: string): UtcIsoTimestamp => utcIsoTimestampSchema.parse(value);
 
@@ -57,35 +58,7 @@ export const PERIOD: MetricsPeriod = {
 /** Weeks after the period: a hindcast issues its forecast long after the fact. */
 export const ISSUED_AT = stamp('2026-07-01T09:00:00Z');
 
-export const HOURS_PER_DAY = 24;
-
-const MS_PER_DAY = 86_400_000;
-
-/** A crude but strictly positive daylight curve: zero before 05:00 and from 19:00. */
-const daylight = (hour: number): number => Math.max(0, Math.sin(((hour - 5) / 14) * Math.PI));
-
-export const hourOf = (day: UtcDay, hour: number): UtcIsoTimestamp =>
-  stamp(`${day}T${String(hour).padStart(2, '0')}:00:00Z`);
-
-const archiveHour = (day: UtcDay, hour: number): ArchiveWeatherReading => {
-  const sun = daylight(hour);
-  return {
-    ...DUBLIN,
-    validTime: hourOf(day, hour),
-    kind: 'archive',
-    source: 'open-meteo',
-    shortwaveRadiationWm2: 700 * sun,
-    directRadiationWm2: 500 * sun,
-    diffuseRadiationWm2: 200 * sun,
-    directNormalIrradianceWm2: 800 * sun,
-    temperature2mC: 15,
-    windSpeed10mMs: 4,
-    cloudCoverPct: 40,
-  };
-};
-
-const wholeDay = (day: UtcDay): ArchiveWeatherReading[] =>
-  Array.from({ length: HOURS_PER_DAY }, (_, hour) => archiveHour(day, hour));
+export { HOURS_PER_DAY, InMemoryArchiveStore, hourOf };
 
 /**
  * Actuals with a per-day yield factor, so no day repeats the day before it.
@@ -114,63 +87,9 @@ const observedDay = (day: UtcDay): GenerationReading[] =>
 export const observationsOver = (days: readonly UtcDay[]): GenerationReading[] =>
   days.flatMap(observedDay);
 
-const daysBetween = (firstDay: UtcDay, lastDay: UtcDay): UtcDay[] => {
-  const firstMs = Date.parse(`${firstDay}T00:00:00Z`);
-  const count = (Date.parse(`${lastDay}T00:00:00Z`) - firstMs) / MS_PER_DAY + 1;
-  return Array.from({ length: count }, (_, offset) =>
-    new Date(firstMs + offset * MS_PER_DAY).toISOString().slice(0, 10),
-  );
-};
-
-export interface StoreOptions {
-  /** Days the store answers `undetermined` for, as DynamoDB declining a key would. */
-  readonly undeterminedDays?: readonly UtcDay[];
-}
-
-export class InMemoryWeatherStore implements HindcastWeatherStore {
-  private readonly storedDays = new Map<string, readonly ArchiveWeatherReading[]>();
-  private readonly undeterminedDays: ReadonlySet<UtcDay>;
-
-  constructor(options: StoreOptions = {}) {
-    this.undeterminedDays = new Set(options.undeterminedDays ?? []);
-  }
-
-  listFetchedArchiveDays(
-    coords: GeoCoordinates,
-    days: readonly UtcDay[],
-  ): Promise<ArchiveDayCoverage> {
-    const partition = locationId(coords);
-    const undetermined = days.filter((day) => this.undeterminedDays.has(day));
-    const fetched = new Set(days.filter((day) => this.storedDays.has(`${partition}#${day}`)));
-    return Promise.resolve(
-      undetermined.length === 0
-        ? { status: 'complete', fetched }
-        : { status: 'incomplete', fetched, undeterminedDays: undetermined },
-    );
-  }
-
-  putArchiveDay(day: UtcDay, readings: readonly ArchiveWeatherReading[]): Promise<void> {
-    const [first] = readings;
-    if (first === undefined) {
-      return Promise.reject(new Error(`refusing to mark ${day} with no readings`));
-    }
-    this.storedDays.set(`${locationId(first)}#${day}`, readings);
-    return Promise.resolve();
-  }
-
-  queryArchiveRange(
-    coords: GeoCoordinates,
-    fromInclusive: UtcIsoTimestamp,
-    toExclusive: UtcIsoTimestamp,
-  ): Promise<WeatherReading[]> {
-    const prefix = `${locationId(coords)}#`;
-    const readings = [...this.storedDays]
-      .filter(([key]) => key.startsWith(prefix))
-      .flatMap(([, day]) => day)
-      .filter((reading) => reading.validTime >= fromInclusive && reading.validTime < toExclusive);
-    return Promise.resolve(readings);
-  }
-}
+/** One reading at an arbitrary instant, for the cases that need a stray point. */
+export const observationAt = (validTime: UtcIsoTimestamp, acPowerKw: number): GenerationReading =>
+  generationReadingSchema.parse({ siteId: SITE.id, validTime, acPowerKw });
 
 class RecordingMetricsSink implements MetricsSink {
   readonly published: ErrorMetrics[] = [];
@@ -223,8 +142,8 @@ export interface Harness {
   readonly fetches: FetchStub;
 }
 
-/** The three ports wired together, with the store exposed for a two-run test. */
-export const harness = (fetches: FetchStub, store = new InMemoryWeatherStore()): Harness => {
+/** The three ports wired together, with the store injectable for a two-run test. */
+export const harness = (fetches: FetchStub, store = new InMemoryArchiveStore()): Harness => {
   const sink = new RecordingMetricsSink();
   return {
     deps: { weatherAdapter: store, fetchArchiveRun: fetches.fetchArchiveRun, metricsAdapter: sink },

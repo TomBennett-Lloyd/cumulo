@@ -209,18 +209,30 @@ export const skillScore = (input: SkillScoreInput): number | null =>
 
 const MILLISECONDS_PER_HOUR = 60 * 60 * 1000;
 
-const FRACTIONAL_SECONDS = /\.\d{3}Z$/;
+/**
+ * Exactly `.000`, never `\.\d{3}`.
+ *
+ * `toISOString()` always emits milliseconds, which `utcIsoTimestampSchema` rejects on purpose
+ * (variable width breaks the chronological string ordering ADR 0002's range queries rely on), so a
+ * whole-second instant has to have its `.000` removed before the parse. The narrowness is the point:
+ * a pattern matching *any* three digits would strip `.360` just as happily, which silently rounds a
+ * sub-second offset down to the second instead of rejecting it — and a baseline point quietly moved
+ * off the instant it claims is precisely the corruption these metrics exist to measure. Matching
+ * only the zero case leaves every other millisecond value in the string, where the parse below
+ * refuses it.
+ */
+const ZERO_MILLISECONDS = /\.000Z$/;
 
 /**
- * `Date` arithmetic, re-serialised to the fixed-width form the domain uses. `toISOString()` always
- * emits milliseconds, which `utcIsoTimestampSchema` rejects on purpose (variable width breaks the
- * chronological string ordering ADR 0002's range queries rely on), so they are stripped before the
- * parse rather than after it.
+ * `Date` arithmetic, re-serialised to the fixed-width form the domain uses.
+ *
+ * Throws, via the parse, on any offset that is not a whole number of seconds — see
+ * {@link ZERO_MILLISECONDS} for why that is a refusal rather than a rounding.
  */
 const shiftHours = (validTime: UtcIsoTimestamp, offsetHours: number): UtcIsoTimestamp => {
   const shifted = new Date(new Date(validTime).getTime() + offsetHours * MILLISECONDS_PER_HOUR);
 
-  return utcIsoTimestampSchema.parse(shifted.toISOString().replace(FRACTIONAL_SECONDS, 'Z'));
+  return utcIsoTimestampSchema.parse(shifted.toISOString().replace(ZERO_MILLISECONDS, 'Z'));
 };
 
 /**

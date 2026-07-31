@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HOURS_PER_DAY,
   ISSUED_AT,
-  InMemoryWeatherStore,
+  InMemoryArchiveStore,
   PERIOD,
   PERIOD_DAYS,
   RUN_UP_DAY,
@@ -12,6 +12,7 @@ import {
   archiveFetchStub,
   harness,
   hourOf,
+  observationAt,
   observationsOver,
   rateLimitedFetchStub,
 } from './hindcast-fixtures';
@@ -116,6 +117,29 @@ describe('runHindcast over a covered period', () => {
     expect(sink.published).toHaveLength(2);
   });
 
+  it('scores nothing on an observation at the period bound, baseline included', async () => {
+    const scored = completeOutcome(await scoreFixturePeriod(harness(archiveFetchStub(1)).deps));
+
+    const { deps } = harness(archiveFetchStub(1));
+    // `endExclusive` itself — the first instant outside the window. The model
+    // never replays this hour, so the model metrics cannot notice it; the
+    // *baseline* can, because the observation 24 hours earlier shifts onto
+    // exactly this stamp. Without the in-period restriction that stray pair
+    // joins the baseline RMSE and silently moves the published skill score for
+    // an hour nothing was scored on.
+    const atTheBound = observationAt(PERIOD.endExclusive, 2.5);
+    const withStray = completeOutcome(
+      await runHindcast(deps, {
+        site: SITE,
+        period: PERIOD,
+        observations: [...observationsOver([RUN_UP_DAY, ...PERIOD_DAYS]), atTheBound],
+        issuedAt: ISSUED_AT,
+      }),
+    );
+
+    expect(withStray.metrics).toEqual(scored.metrics);
+  });
+
   it('draws the first day of the period from observations made before it', async () => {
     const withRunUp = completeOutcome(await scoreFixturePeriod(harness(archiveFetchStub(1)).deps));
 
@@ -167,7 +191,7 @@ describe('runHindcast refusals', () => {
   });
 
   it('computes nothing when storage cannot say which archive days are cached', async () => {
-    const store = new InMemoryWeatherStore({ undeterminedDays: ['2026-06-02'] });
+    const store = new InMemoryArchiveStore({ undeterminedDays: ['2026-06-02'] });
     // A budget of zero: any request at all rejects, so "fetched nothing" is
     // proven by the run completing.
     const { deps, sink, fetches } = harness(archiveFetchStub(0), store);

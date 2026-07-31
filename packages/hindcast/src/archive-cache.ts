@@ -1,6 +1,6 @@
 import { locationId, type GeoCoordinates } from '@cumulo/shared';
 
-import { contiguousDayRuns, type UtcDay } from './archive-days';
+import { contiguousDayRuns, type DayRun, type UtcDay } from './archive-days';
 import {
   MAX_ARCHIVE_REQUEST_DAYS,
   type ArchiveFetchResult,
@@ -138,6 +138,34 @@ export type ArchiveCoverageOutcome =
     };
 
 /**
+ * The days a request asked for that its answer never mentioned — in neither
+ * `completeDays` nor `incompleteDays`.
+ *
+ * This is not a hypothetical. A truncated payload produces it directly: 36 hours
+ * returned for a three-day request yields one whole day, one short day, and a
+ * third day the response simply has no rows for. Without this, that day falls
+ * out of `alreadyCached`, `fetched` *and* `unavailableDays` while the outcome
+ * stays `ready` — so a hindcast computes metrics over a window with a hole in it
+ * that nothing in the outcome reports. That is exactly the half-truth
+ * `docs/standards/error-handling.md` rule 5 forbids, and the day is unavailable
+ * in precisely the sense the outcome already has a word for: no marker was
+ * written, so a later run retries it.
+ *
+ * Bounds are compared as strings because `UtcDay` is fixed-width `YYYY-MM-DD`,
+ * where lexicographic order is calendar order.
+ */
+const unansweredDays = (
+  run: DayRun,
+  missingDays: readonly UtcDay[],
+  result: Extract<ArchiveFetchResult, { status: 'ok' }>,
+): UtcDay[] => {
+  const answered = new Set<UtcDay>([...result.completeDays.keys(), ...result.incompleteDays]);
+  return missingDays.filter(
+    (day) => day >= run.firstDay && day <= run.lastDay && !answered.has(day),
+  );
+};
+
+/**
  * Make sure every day in `days` is either cached in `cumulo-weather` or known to
  * be unavailable, fetching the gaps and nothing else.
  *
@@ -179,13 +207,14 @@ export const ensureArchiveCoverage = async (
   }
 
   const alreadyCached = requestedDays.filter((day) => coverage.fetched.has(day));
-  const missingDays = new Set(requestedDays.filter((day) => !coverage.fetched.has(day)));
+  const missingDayList = requestedDays.filter((day) => !coverage.fetched.has(day));
+  const missingDays = new Set(missingDayList);
 
   const storedDays: UtcDay[] = [];
   const unavailableDays: UtcDay[] = [];
   let apiCallCount = 0;
 
-  for (const run of contiguousDayRuns([...missingDays], MAX_ARCHIVE_REQUEST_DAYS)) {
+  for (const run of contiguousDayRuns(missingDayList, MAX_ARCHIVE_REQUEST_DAYS)) {
     const result = await deps.fetchArchiveRun(coords, run.firstDay, run.lastDay);
     apiCallCount += 1;
 
@@ -221,14 +250,21 @@ export const ensureArchiveCoverage = async (
       storedDays.push(day);
     }
 
-    unavailableDays.push(...result.incompleteDays.filter((day) => missingDays.has(day)));
+    unavailableDays.push(
+      ...result.incompleteDays.filter((day) => missingDays.has(day)),
+      ...unansweredDays(run, missingDayList, result),
+    );
   }
 
   return {
     status: 'ready',
     alreadyCached,
     fetched: storedDays,
-    unavailableDays,
+    // Sorted here rather than assembled in order: a run contributes its
+    // provider-reported incomplete days and its unanswered ones as two groups,
+    // which can interleave, and every list this function returns is promised in
+    // calendar order.
+    unavailableDays: unavailableDays.sort(),
     apiCallCount,
   };
 };

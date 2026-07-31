@@ -48,11 +48,20 @@ import {
  *   (`docs/standards/architecture.md` rules 3 and 7).
  *
  * Order matters once, and it is the order below: coverage is settled *before*
- * anything is computed, and a period whose archive could not be completed writes
- * **no** metrics at all. A partially covered window still produces perfectly
- * plausible numbers — they would simply be scored over whichever hours happened
- * to be cached, which is exactly the kind of quiet corruption
+ * anything is computed. A window whose coverage could not be **established** —
+ * storage could not say what is cached, or the quota ran out mid-backfill —
+ * writes no metrics at all, because scoring whichever hours happened to already
+ * be cached is exactly the quiet corruption
  * `docs/standards/error-handling.md` rule 5 exists to prevent.
+ *
+ * A window whose coverage *was* established but has holes in it — days
+ * Open-Meteo has no whole day of data for — is a different case and does
+ * publish: those days are absent from the archive rather than absent from this
+ * run, asking again now changes nothing, and refusing to score a season because
+ * one day is missing would be its own dishonesty. The holes come back in the
+ * outcome's `coverage.unavailableDays`. They are **not** recorded on the metrics
+ * row itself, so a later reader of `cumulo-metrics` cannot see them — a
+ * schema-level gap logged in `docs/tech-debt.md` rather than papered over here.
  */
 
 /**

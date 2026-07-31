@@ -26,7 +26,13 @@ export const TABLE_NAME = 'cumulo-metrics-test';
 
 export const SITE_ID = '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
 
-export const at = (iso: string): UtcIsoTimestamp => utcIsoTimestampSchema.parse(iso);
+/**
+ * Unexported: the two periods below are what tests want, and the branded-stamp
+ * builder that makes them is an implementation detail of this module. A test
+ * needing its own instant parses one itself rather than reaching for a fixture
+ * helper that would then look like part of the shared contract.
+ */
+const at = (iso: string): UtcIsoTimestamp => utcIsoTimestampSchema.parse(iso);
 
 /** The evaluation window every fixture below scores: one UTC day. */
 export const JULY_30: MetricsPeriod = {

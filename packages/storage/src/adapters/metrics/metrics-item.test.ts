@@ -1,7 +1,14 @@
 import { metricsSortKey } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
-import { JULY_30, JULY_31, errorMetrics, mlItem, physicsItem } from './metrics-fixtures';
+import {
+  JULY_30,
+  JULY_31,
+  errorMetrics,
+  mlItem,
+  noSkillItem,
+  physicsItem,
+} from './metrics-fixtures';
 import { fromItem, metricsPeriodPrefix, toItem } from './metrics-item';
 
 /**
@@ -55,10 +62,17 @@ describe('metricsPeriodPrefix', () => {
 });
 
 describe('fromItem', () => {
-  it('round-trips a domain value through the stored shape', () => {
-    const metrics = errorMetrics({ skillScore: null });
+  it('round-trips a stored null skill score without inventing a value for it', () => {
+    // Anchored on the literal stored item rather than on `toItem`'s output: a
+    // fixture that agreed with the code under test by construction would prove
+    // nothing about the wire shape, and "no comparison available" is a real
+    // state of the world (`metrics.ts`) that has to survive the table in both
+    // directions rather than come back as a missing field or a zero.
+    const metrics = fromItem(noSkillItem);
 
-    expect(fromItem(toItem(metrics))).toEqual(metrics);
+    expect(metrics.skillScore).toBeNull();
+    expect(metrics.period).toEqual(JULY_31);
+    expect(toItem(metrics)).toEqual(noSkillItem);
   });
 
   it('returns no key attribute as a domain field', () => {
