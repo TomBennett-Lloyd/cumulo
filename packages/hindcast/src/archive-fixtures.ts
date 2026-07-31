@@ -1,6 +1,7 @@
 import {
   locationId,
   utcIsoTimestampSchema,
+  type ArchiveWeatherReading,
   type GeoCoordinates,
   type UtcIsoTimestamp,
   type WeatherReading,
@@ -9,7 +10,6 @@ import {
 import type { ArchiveDayCoverage } from './archive-cache';
 import type { UtcDay } from './archive-days';
 import type { HindcastWeatherStore } from './hindcast';
-import type { ArchiveWeatherReading } from './open-meteo-archive';
 
 /**
  * What an archive day looks like, and where a test puts one.

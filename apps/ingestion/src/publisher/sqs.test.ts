@@ -1,10 +1,13 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { weatherReadingSchema } from '@cumulo/shared';
+import {
+  forecastWeatherReadingSchema,
+  weatherReadingSchema,
+  type ForecastWeatherReading,
+} from '@cumulo/shared';
 import { mockClient } from 'aws-sdk-client-mock';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import type { ForecastWeatherReading } from '../open-meteo/response';
 import {
   INGESTION_SEND_MAX_ATTEMPTS,
   SqsWeatherPublisher,
@@ -27,13 +30,11 @@ import {
 
 const QUEUE_URL = 'https://sqs.eu-west-1.amazonaws.com/123456789012/cumulo-weather-readings-test';
 
-const forecastReadingSchema = weatherReadingSchema.extend({ kind: z.literal('forecast') });
-
 /** Dublin, at the centre of its `locationId` bucket. */
 const DUBLIN = { latitude: 53.35, longitude: -6.26 };
 
 const readingAt = (hour: number): ForecastWeatherReading =>
-  forecastReadingSchema.parse({
+  forecastWeatherReadingSchema.parse({
     latitude: DUBLIN.latitude,
     longitude: DUBLIN.longitude,
     validTime: `2026-07-31T${String(hour % 24).padStart(2, '0')}:00:00Z`,

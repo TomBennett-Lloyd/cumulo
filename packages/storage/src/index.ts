@@ -72,7 +72,5 @@ export { MetricsAdapter } from './adapters/metrics/metrics-adapter';
 export { WeatherAdapter, type ArchiveDayCoverage } from './adapters/weather/weather-adapter';
 export {
   FORECAST_WEATHER_RETENTION_DAYS,
-  type ArchiveWeatherReading,
-  type ForecastWeatherReading,
   type WeatherLocation,
 } from './adapters/weather/weather-item';

@@ -6,15 +6,15 @@ import {
   weatherReadingSchema,
 } from '@cumulo/shared';
 import type {
+  ArchiveWeatherReading,
   FleetSite,
   Forecast,
   ForecastModel,
+  ForecastWeatherReading,
   GenerationReading,
   UtcIsoTimestamp,
   WeatherReading,
 } from '@cumulo/shared';
-
-import type { ArchiveWeatherReading, ForecastWeatherReading } from '../../src/index';
 
 /**
  * The values a smoke run writes to the live tables, and where it writes them.
