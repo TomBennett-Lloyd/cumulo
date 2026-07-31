@@ -1,4 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The golden-fixture test reads its committed reference data off disk, so this
+    // package's tests (and only its tests) need Node's globals. Naming `node` explicitly
+    // keeps the ambient surface to exactly that: nothing else leaks in from `@types/*`.
+    "types": ["node"]
+  },
   "include": ["src"]
 }
