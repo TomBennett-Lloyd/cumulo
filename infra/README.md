@@ -2,14 +2,17 @@
 
 All AWS infrastructure lives here as Terraform. Nothing is created by hand in the console — if it exists in the account, it exists in a `.tf` file, because the alternative is infrastructure that cannot be torn down and a cost ceiling that cannot be trusted.
 
-A **stack** is one directory under `infra/`, applied independently, with its own state. There are two today:
+A **stack** is one directory under `infra/`, applied independently, with its own state. There are three today:
 
-| Stack       | Directory          | Owns                                                                                                          |
-| ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm. |
-| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.    |
+| Stack       | Directory          | Owns                                                                                                                                                     |
+| ----------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                            |
+| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                               |
+| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), and two alarms. |
 
 `storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
+
+`ingestion` depends on `bootstrap` in exactly the same one direction, for exactly the same reason: its state lives in `bootstrap`'s bucket, and nothing else. Its relationship to `storage` is deliberately weaker than a dependency — **there is no cross-stack reference of any kind**. No `terraform_remote_state` data source, no output consumed, no ARN passed in. `ingestion`'s IAM policy names `cumulo-sites-<env>` and `cumulo-weather-<env>` by assembling them from the naming convention ADR 0002 fixed, which `storageTableName()` in `@cumulo/storage` also mirrors, so the two stacks share a convention rather than a wire. `ingestion` therefore plans and applies while `storage` is mid-apply, or before `storage` exists at all; what it cannot do is run a _cycle_ against tables that are not there. The one operator obligation that follows is that both stacks are applied with the same `environment` and into the same region, since a table ARN is regional and the suffix is in the name.
 
 Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables.
 
@@ -524,9 +527,11 @@ Verify from AWS rather than from Terraform:
 ```bash
 aws dynamodb list-tables --query "TableNames[?starts_with(@, 'cumulo-')]"
 # expect: []
-aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query 'MetricAlarms[].AlarmName'
+aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query "MetricAlarms[?ends_with(AlarmName, 'throttle')].AlarmName"
 # expect: []
 ```
+
+The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the ingestion stack's two (`…-errors`, `…-dlq-…-not-empty`) are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
 
 Then re-apply and re-verify, because a teardown that cannot be reversed is only half a rehearsal:
 
@@ -537,6 +542,177 @@ CUMULO_ENV="$(terraform output -raw environment)" pnpm --filter @cumulo/storage 
 ```
 
 Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the next spin-up. **Leave the tables up at the end**: #11, #12, #14, and #16 need them, and they cost $0 sitting there, which is the entire point of the capacity decision.
+
+---
+
+## Runbook: the ingestion stack
+
+One Lambda, one hourly EventBridge rule, one SQS queue with its dead-letter queue, one log group, one execution role, and two alarms — the whole of [issue #11](https://github.com/TomBennett-Lloyd/cumulo/issues/11)'s infrastructure, per [ADR 0004](../docs/adr/0004-ingestion-transport.md). Every command runs from `infra/ingestion/`:
+
+```bash
+cd infra/ingestion
+```
+
+**Prerequisites**, in this order and for these reasons:
+
+1. **The bootstrap stack applied** — this stack's state lives in the bucket bootstrap creates.
+2. **The storage stack applied**, with the same `environment` and in the same region. Not a Terraform dependency: nothing here references storage's state or outputs, and a plan succeeds without it. It is a _runtime_ prerequisite — the IAM policy grants access to `cumulo-sites-<env>` and `cumulo-weather-<env>` by name, so applying against absent tables produces a stack that plans, applies, and then fails its first cycle in CloudWatch.
+3. **An operator credential session** — see [Operator prerequisites](#operator-prerequisites).
+4. **A built Lambda artefact**, which is the one prerequisite the other two runbooks do not have.
+
+**There is no override dance here** (convention 6), exactly as in the storage runbook: the bucket already exists, so this stack inits straight against S3 in both directions.
+
+### Phase A — build, configure, and plan
+
+**A1. Build the artefact. This comes first, not last.**
+
+```bash
+pnpm --filter @cumulo/ingestion build
+ls -l ../../apps/ingestion/dist/handler.zip
+```
+
+`apps/ingestion/dist/handler.zip` is a fixed contract between that build script and `lambda.tf`, not something Terraform discovers or produces — a `null_resource` shelling out to pnpm during a plan is the kind of infrastructure that works on exactly one machine. Terraform reads the file to compute `source_code_hash`, which is what makes a rebuilt artefact actually deploy instead of comparing equal on filename alone.
+
+Skip this step and `terraform plan` stops with `No Lambda artefact at apps/ingestion/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all three stacks on every push and builds nothing.
+
+**A2. Create the two gitignored local files from their committed examples.**
+
+```bash
+cp ingestion.auto.tfvars.example ingestion.auto.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Set `aws_region` in `ingestion.auto.tfvars`, and both `region` and `bucket` in `backend.hcl`. Same region as bootstrap and storage — the backend and the provider have to agree on where the bucket lives, and a DynamoDB table ARN is regional, so a mismatch here silently grants access to tables in a region that has none. The bucket name is `cumulo-tfstate-` followed by the account id:
+
+```bash
+aws sts get-caller-identity --query Account --output text
+```
+
+`environment` needs no entry; it defaults to `dev`. If you set it, set the same value in `storage.auto.tfvars` — it is in the queue, function, log group, and granted table names.
+
+**A3. Confirm none of that is visible to git.**
+
+```bash
+git status --short   # expect no output for infra/ingestion/
+```
+
+`dist/` is gitignored too, so the artefact from A1 does not appear either.
+
+**A4. Initialise against the real backend.**
+
+```bash
+terraform init -backend-config=backend.hcl
+```
+
+**A5. Plan.** The tee target is outside the repo on purpose, so a plan output file cannot be committed:
+
+```bash
+terraform plan -no-color | tee ~/cumulo-ingestion-plan.txt
+```
+
+Expect **`Plan: 11 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the Lambda permission, the execution role, its inline policy, and the two alarms. Any other count means the configuration is not what this document describes; stop and find out why. The three data sources (`aws_caller_identity` and the two IAM policy documents) are read rather than created and add nothing to the count.
+
+**A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, queue-name shape, the timeout numbers — and label it `awaiting-review`. Per convention 7, quote shapes rather than digits.
+
+### Phase B — apply and prove the cycle
+
+The heading differs from the storage runbook's only so the two sections have distinct anchors, the same reason its Phase A differs from bootstrap's.
+
+**B1. Apply.**
+
+```bash
+terraform apply
+```
+
+**B2. Confirm what exists.**
+
+```bash
+terraform state list   # expect 14 lines — the 11 resources plus the 3 data sources
+```
+
+**B3. Capture the two identifiers other things need.** Both come from `terraform output`, never hand-assembled and never retyped: a queue URL is **server-assigned**, and a URL guessed from an account id and a queue name is how a configuration ends up pointing at a queue that does not exist.
+
+```bash
+terraform output -raw queue_url
+terraform output -raw function_name
+```
+
+The queue URL embeds the account id, so it is a convention-7 value: it goes into #12's stack configuration and into your shell, never into a committed file, a PR body, or an issue comment.
+
+**B4. Prove the schedule is armed** — that the rule exists, is enabled, and points at the function:
+
+```bash
+ENV="$(terraform output -raw environment)"
+aws events describe-rule --name "cumulo-ingestion-hourly-$ENV" --query '{Schedule:ScheduleExpression,State:State}'
+# expect: cron(7 * * * ? *), ENABLED
+aws events list-targets-by-rule --rule "cumulo-ingestion-hourly-$ENV" --query 'Targets[].Arn'
+# expect: one ARN, the ingestion function
+```
+
+**B5. Invoke a cycle by hand rather than waiting until minute 7.** The handler takes no event payload, so an empty object is the whole invocation:
+
+```bash
+aws lambda invoke --function-name "$(terraform output -raw function_name)" \
+  --payload '{}' --cli-binary-format raw-in-base64-out /dev/stdout
+```
+
+Expect a `CycleReport` and no `FunctionError`. A `FunctionError` carrying `CycleFailedError` is the intended signal that some location did not publish — read the `ingestion.cycle.summary` log line for how many of how many:
+
+```bash
+aws logs tail "/aws/lambda/$(terraform output -raw function_name)" --since 10m
+```
+
+**B6. Confirm the messages actually landed.** This is the only check that exercises the whole path — fetch, DynamoDB write, publish — end to end. Until #12 exists there is no consumer, so a cycle's messages sit in the queue:
+
+```bash
+aws sqs get-queue-attributes --queue-url "$(terraform output -raw queue_url)" \
+  --attribute-names ApproximateNumberOfMessages
+# expect 12 for the canonical fleet: one message per distinct weather location
+```
+
+Then confirm the DLQ is empty, which is the state the alarm in `alarms.tf` exists to keep true. Its URL is looked up by name rather than derived from the main queue's — a queue URL is server-assigned, and string-editing one into another is exactly the hand-assembly B3 warns against:
+
+```bash
+DLQ_URL="$(aws sqs get-queue-url --queue-name "cumulo-weather-readings-dlq-$ENV" --output text)"
+aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names ApproximateNumberOfMessages
+# expect 0
+```
+
+**Drain the queue before leaving it**, or the first thing #12's consumer sees is a backlog of stale hand-invoked cycles: `aws sqs purge-queue --queue-url "$(terraform output -raw queue_url)"`.
+
+**B7. Confirm no drift.**
+
+```bash
+terraform plan -detailed-exitcode
+echo $?   # expect 0
+```
+
+A `2` here immediately after an apply usually means the artefact was rebuilt in between — `source_code_hash` changed, so Terraform correctly wants to deploy it.
+
+### Teardown
+
+Teardown is a project requirement, so it is stated rather than assumed. This stack has no ordering trap at all: its state lives in a bucket another stack owns, nothing here is another stack's foundation, and — unlike the Kinesis stream ADR 0004 replaced — every resource in it is free whether it is destroyed or forgotten.
+
+```bash
+terraform destroy
+```
+
+Verify from AWS rather than from Terraform:
+
+```bash
+aws lambda list-functions --query "Functions[?starts_with(FunctionName, 'cumulo-ingestion')].FunctionName"
+# expect: []
+aws sqs list-queues --queue-name-prefix cumulo-weather-readings --query 'QueueUrls'
+# expect: null
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/cumulo-ingestion --query 'logGroups[].logGroupName'
+# expect: []
+```
+
+That last one is the one worth actually running. Lambda creates its own never-expiring log group on first invocation if Terraform has not declared one, and a group created that way is outside Terraform's ownership — so it survives `destroy` and bills for storage indefinitely. `lambda.tf` declares the group explicitly and the execution role has no `logs:CreateLogGroup`, which is what makes an empty list here a property of the design rather than luck.
+
+Keep `backend.hcl` and `ingestion.auto.tfvars` — both are still correct for the next spin-up. To spin back up, run [Phase A](#phase-a--build-configure-and-plan) then [Phase B](#phase-b--apply-and-prove-the-cycle) back to back, starting from the build.
+
+**Whether to leave it up** is a real choice, unlike storage's. The stack costs $0 idle either way, but a stack that is up is *running*: it fetches from Open-Meteo every hour, spending quota (~288 calls/day against the free 10,000) and filling the queue with messages nothing is consuming until #12 lands. Leaving it running is the right default while #12 is being built and the wrong one afterwards if the queue is not being drained. Disabling the rule (`aws events disable-rule --name "cumulo-ingestion-hourly-$ENV"`) stops the cycles without destroying anything — but it is drift, and the next `terraform apply` re-enables it, which is the correct behaviour and worth knowing before it surprises you.
 
 ---
 
@@ -584,3 +760,26 @@ Notes on what would change that:
 - **The pool is Region-wide and shared.** 19/24 of 25/25 leaves 6 WCU / 1 RCU. That slack is not a growth reserve — the standing rule (a new table defaults to on-demand unless its load is batch-shaped) is what stops it being needed.
 - **The honest inversion.** At list price this same allocation would cost ≈ $11.30/month against all-on-demand's ≈ $2.88, because a 7% duty cycle is exactly what on-demand pricing exists to serve. Provisioned wins here only because the tier is free, and ADR 0002 says so rather than pretending it is the better engineering answer.
 - **Nothing here has an hourly rate**, which is the property to preserve. Per-request DynamoDB costs at this volume are noise; a VPC, a NAT gateway, or a database instance would be the whole budget — the comparison ADR 0002 turned on.
+
+### Ingestion stack
+
+The figures are [ADR 0004](../docs/adr/0004-ingestion-transport.md)'s, restated here because a cost table that lives only inside a decision record is not somewhere an operator looks. Sized against the canonical fleet: 12 distinct weather locations, one cycle an hour — **~720 invocations/month** and **12 messages per cycle**.
+
+| Resource group                                                   | Billing basis                                                                                                                                                        | Estimate     |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **Lambda invocations** (`aws_lambda_function.ingestion`)         | ~720/month against the always-free **1,000,000 requests/month**                                                                                                      | **$0.00/mo** |
+| **Lambda compute**                                               | 256 MB × even a full 300 s cycle is ~54,000 GB-seconds/month, ~13% of the always-free **400,000 GB-seconds**; a real cycle is a fraction of it                       | **$0.00/mo** |
+| **Schedule** (`aws_cloudwatch_event_rule` + target + permission) | EventBridge scheduled rules and their invocations are **not charged** — $0 by pricing, not by allowance                                                              | **$0.00/mo** |
+| **SQS** (queue + DLQ)                                            | ~8,760 sends + ~8,760 deletes + the consumer mapping's ~657,000 long-polling receives ≈ **~675,000 requests/month** against the always-free **1,000,000**, no expiry | **$0.00/mo** |
+| **CloudWatch logs** (30-day retention on one group)              | ~13 JSON lines/hour — kilobytes/month against the free **5 GB** of ingestion and **5 GB** of storage                                                                 | **$0.00/mo** |
+| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                   | 2 joining storage's 4, inside the always-free **10 CloudWatch alarms**; Lambda and SQS metrics are free                                                              | **$0.00/mo** |
+| **Total**                                                        |                                                                                                                                                                      | **$0.00/mo** |
+
+**No resource in this stack bills for existing**, which is the whole of ADR 0004: the Kinesis stream three earlier documents assumed would have cost ≈ $29.20/month on-demand or ≈ $10.95 provisioned — 29% and 11% of the entire ~$100/month ceiling — to move ~175 MB at 0.02% utilisation. With this stack applied, the platform's total standing cost is $0 and `terraform destroy` takes it to $0 in a different sense: nothing left at all.
+
+Notes on what would change that:
+
+- **The SQS request allowance is the number to watch, not the send count.** Sends are ~8,760/month and immaterial; the ~657,000 polling receives are two-thirds of the free million, and they belong to #12's event source mapping rather than to anything in this stack. A **second** ESM-driven queue crosses the million (ADR 0004 revisit trigger 5). The cost of crossing is cents — $0.40/million beyond the free tier, so even doubling the polling floor is ~$0.27/month — but "$0" would stop being literally true.
+- **The Lambda timeout is a cost ceiling as well as a correctness one.** 300 s at 256 MB is the worst case the free GB-second allowance is measured against; raising either without raising the other is fine, raising both is the change to think about.
+- **A forgotten stack is free but not inert.** Unlike every other resource in the platform, this one _does things_ while nobody is looking: an enabled schedule spends ~288 Open-Meteo calls/day against the 10,000/day free tier and grows an unconsumed queue. That is a quota and hygiene concern, not a billing one — see the teardown section above.
+- **Nothing here has an hourly rate**, the same property the other two stacks preserve. The one change that would break it is a VPC configuration on the function: a Lambda in a VPC needing outbound internet access needs a NAT Gateway at ~$32/month, which is a third of the ceiling for a function that only talks to public AWS endpoints and Open-Meteo.

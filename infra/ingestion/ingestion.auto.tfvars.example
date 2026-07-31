@@ -1,0 +1,14 @@
+# Copy to ingestion.auto.tfvars (gitignored). Terraform loads *.auto.tfvars
+# automatically for every command run in this directory, so there is no
+# -var-file flag to remember or forget.
+#
+# Must be the same region as the storage stack: this stack's IAM policy names
+# storage's tables by ARN, and a table ARN is regional.
+
+aws_region = "eu-west-1"
+
+# Optional. Defaults to "dev", and appears in the queue, DLQ, function and log
+# group names — and in the storage table names the IAM policy grants access to.
+# Must match the storage stack's `environment` or the grants point at tables
+# that do not exist.
+# environment = "dev"
