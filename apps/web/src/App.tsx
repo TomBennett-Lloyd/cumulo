@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { Dashboard } from './dashboard/Dashboard';
-import { fixtureProvider } from './data/fixture-provider';
-import type { FleetDataProvider } from './data/provider';
+import { DemoFleetDataSource } from './data/demo-fleet-data-source';
+import type { FleetDataSource } from './data/fleet-data-source';
 import { TokensPreview } from './preview/TokensPreview';
 import type { Theme } from './theme';
 import { resolveInitialTheme, THEME_STORAGE_KEY } from './theme';
@@ -51,20 +51,20 @@ const VIEW_OPTIONS: readonly ViewOption[] = [
 const DEFAULT_VIEW: View = 'map';
 
 /**
- * The data source for the chart views, chosen once at module scope.
+ * The app's fleet, chosen once at module scope.
  *
- * Every view takes its provider as a prop and holds no opinion about which one
- * it got, so this single binding is the whole seam: #19 ships the deterministic
- * fixtures, and the Fleet API provider (#14) replaces this line once that
- * exists. Choosing per render would give two mounted views two different fleets.
+ * One source for every surface — the map dashboard that writes to the fleet and
+ * the two chart views that read it — which is what makes a site added on the map
+ * a site the fleet aggregate counts. `apps/web` briefly had two of these, built
+ * in parallel against two interfaces (#105); this single binding is what closing
+ * that issue means in practice.
  *
- * The map dashboard reaches the fleet through its own `FleetDataSource` instead,
- * because it also *writes* — creating a site, then polling for the forecast that
- * follows. That `apps/web` now has two read surfaces is a real duplication and a
- * deliberate, temporary one: unifying them is #105, and it wants settling before
- * either surface grows an HTTP implementation.
+ * Every view takes the source as a prop and holds no opinion about which one it
+ * got, so this line is the whole seam: the deterministic demo fleet today, the
+ * HTTP source over the Fleet API (#14) once that is deployed. Choosing per
+ * render would give two mounted views two different fleets.
  */
-const provider: FleetDataProvider = fixtureProvider;
+const fleetDataSource: FleetDataSource = new DemoFleetDataSource();
 
 interface ViewNavProps {
   readonly view: View;
@@ -96,15 +96,15 @@ const ViewNav = (props: ViewNavProps): ReactElement => (
  * differently — leaving it tears down the maplibre instance and rebuilds it on
  * return, which costs a basemap fetch but keeps one WebGL context in play.
  */
-const viewBody = (view: View, dataProvider: FleetDataProvider, theme: Theme): ReactElement => {
+const viewBody = (view: View, dataSource: FleetDataSource, theme: Theme): ReactElement => {
   if (view === 'map') {
-    return <Dashboard theme={theme} />;
+    return <Dashboard theme={theme} dataSource={dataSource} />;
   }
   if (view === 'fleet') {
-    return <FleetAggregateView provider={dataProvider} />;
+    return <FleetAggregateView dataSource={dataSource} />;
   }
   if (view === 'site') {
-    return <SiteDetailView provider={dataProvider} />;
+    return <SiteDetailView dataSource={dataSource} />;
   }
   return <TokensPreview />;
 };
@@ -173,7 +173,7 @@ export const App = ({ initialView = DEFAULT_VIEW }: AppProps = {}): ReactElement
 
       <ViewNav view={view} onSelect={setView} />
 
-      {viewBody(view, provider, theme)}
+      {viewBody(view, fleetDataSource, theme)}
     </div>
   );
 };

@@ -4,7 +4,7 @@ import type { ReactElement } from 'react';
 import { useId, useState } from 'react';
 
 import { ForecastChart, type ForecastChartPoint } from '../charts/ForecastChart';
-import type { DataResult, FleetDataProvider, RangeHours } from '../data/provider';
+import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
 import { RangePicker } from './range-picker';
 
@@ -13,8 +13,8 @@ import { RangePicker } from './range-picker';
  *
  * The view owns three things and nothing else: which site, which window, and
  * which of the data layer's states is on screen. All arithmetic above the
- * provider is the display join in {@link joinSiteSeries}; drawing belongs to
- * `ForecastChart`, and fetching to `FleetDataProvider`, so this file has no
+ * data source is the display join in {@link joinSiteSeries}; drawing belongs to
+ * `ForecastChart`, and fetching to `FleetDataSource`, so this file has no
  * opinion about either.
  *
  * **Nothing here ever renders blank.** Loading, failed, no-forecast and
@@ -29,7 +29,7 @@ import { RangePicker } from './range-picker';
  */
 
 export interface SiteDetailViewProps {
-  readonly provider: FleetDataProvider;
+  readonly dataSource: FleetDataSource;
 }
 
 /** Both series for one site and window, fetched together so they share a state. */
@@ -91,26 +91,26 @@ export const joinSiteSeries = (
 };
 
 /**
- * Both provider calls as one result: either series failing makes the pair
+ * Both source calls as one result: either series failing makes the pair
  * failed, because a chart of forecasts with the measurements silently missing
  * would claim the horizon is now.
  */
 const loadSiteSeries = async (
-  provider: FleetDataProvider,
+  dataSource: FleetDataSource,
   siteId: string,
   range: RangeHours,
-): Promise<DataResult<SiteSeries>> => {
+): Promise<FleetSourceResult<SiteSeries>> => {
   const [forecasts, actuals] = await Promise.all([
-    provider.siteForecasts(siteId, range),
-    provider.siteActuals(siteId, range),
+    dataSource.siteForecasts(siteId, range),
+    dataSource.siteActuals(siteId, range),
   ]);
-  if (forecasts.status === 'failed') {
+  if (forecasts.kind === 'error') {
     return forecasts;
   }
-  if (actuals.status === 'failed') {
+  if (actuals.kind === 'error') {
     return actuals;
   }
-  return { status: 'ready', data: { forecasts: forecasts.data, actuals: actuals.data } };
+  return { kind: 'ok', value: { forecasts: forecasts.value, actuals: actuals.value } };
 };
 
 interface SitePickerProps {
@@ -144,18 +144,18 @@ const SitePicker = (props: SitePickerProps): ReactElement => {
 };
 
 interface SiteSeriesPanelProps {
-  readonly provider: FleetDataProvider;
+  readonly dataSource: FleetDataSource;
   readonly site: Site;
   readonly range: RangeHours;
 }
 
 const SiteSeriesPanel = (props: SiteSeriesPanelProps): ReactElement => {
-  const { provider, site, range } = props;
+  const { dataSource, site, range } = props;
   // The key names every input the query reads, which is `useProviderQuery`'s
   // contract: changing site or window is a different request, and a superseded
   // one is dropped rather than allowed to overwrite the current chart.
   const state = useProviderQuery(
-    () => loadSiteSeries(provider, site.id, range),
+    () => loadSiteSeries(dataSource, site.id, range),
     ['site-series', site.id, range],
   );
 
@@ -165,7 +165,7 @@ const SiteSeriesPanel = (props: SiteSeriesPanelProps): ReactElement => {
   if (state.status === 'failed') {
     return (
       <p className="view-error" role="alert">
-        Could not load the forecast for {site.name}: {state.error}
+        Could not load the forecast for {site.name}: {state.error.message}
       </p>
     );
   }
@@ -190,7 +190,7 @@ const SiteSeriesPanel = (props: SiteSeriesPanelProps): ReactElement => {
 };
 
 interface SiteDetailBodyProps {
-  readonly provider: FleetDataProvider;
+  readonly dataSource: FleetDataSource;
   readonly sitesState: QueryState<readonly Site[]>;
   readonly selectedSiteId: string | null;
   readonly onSelectSite: (siteId: string) => void;
@@ -207,7 +207,7 @@ const SiteDetailBody = (props: SiteDetailBodyProps): ReactElement => {
   if (sitesState.status === 'failed') {
     return (
       <p className="view-error" role="alert">
-        Could not load the site list: {sitesState.error}
+        Could not load the site list: {sitesState.error.message}
       </p>
     );
   }
@@ -232,14 +232,14 @@ const SiteDetailBody = (props: SiteDetailBodyProps): ReactElement => {
           onSelect={props.onSelectRange}
         />
       </div>
-      <SiteSeriesPanel provider={props.provider} site={site} range={props.range} />
+      <SiteSeriesPanel dataSource={props.dataSource} site={site} range={props.range} />
     </>
   );
 };
 
 export const SiteDetailView = (props: SiteDetailViewProps): ReactElement => {
-  const { provider } = props;
-  const sitesState = useProviderQuery(provider.listSites, ['site-list']);
+  const { dataSource } = props;
+  const sitesState = useProviderQuery(dataSource.listSites, ['site-list']);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
 
@@ -254,7 +254,7 @@ export const SiteDetailView = (props: SiteDetailViewProps): ReactElement => {
       </header>
 
       <SiteDetailBody
-        provider={provider}
+        dataSource={dataSource}
         sitesState={sitesState}
         selectedSiteId={selectedSiteId}
         onSelectSite={setSelectedSiteId}

@@ -4,6 +4,8 @@ export {
   aggregateFleetActuals,
   type FleetActualsPoint,
 } from './aggregation';
+export { apiErrorCodeSchema, type ApiErrorCode, apiErrorSchema, type ApiError } from './api-error';
+export { attributionSchema, type Attribution, openMeteoAttribution } from './attribution';
 export {
   forecastModelSchema,
   type ForecastModel,

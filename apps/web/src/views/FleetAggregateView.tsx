@@ -12,7 +12,7 @@ import { OpenMeteoAttribution } from '@cumulo/ui';
 import { useState, type ReactElement } from 'react';
 
 import { ForecastChart, type ForecastChartPoint } from '../charts/ForecastChart';
-import type { FleetDataProvider, RangeHours } from '../data/provider';
+import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
 import { RangePicker, rangeLabel } from './range-picker';
 
@@ -34,9 +34,9 @@ import { RangePicker, rangeLabel } from './range-picker';
  * `SiteDetailView` and does not own.
  */
 
-/** Presentational chrome only: the provider is the view's single input. */
+/** Presentational chrome only: the data source is the view's single input. */
 export interface FleetAggregateViewProps {
-  readonly provider: FleetDataProvider;
+  readonly dataSource: FleetDataSource;
 }
 
 const DEFAULT_RANGE: RangeHours = 24;
@@ -211,25 +211,25 @@ const viewBody = (state: QueryState<FleetData>, range: RangeHours): ReactElement
     return loadingLine();
   }
   if (state.status === 'failed') {
-    // The provider's message already names the operation it failed (error-handling.md rule 4);
+    // The source's message already names the operation it failed (error-handling.md rule 4);
     // this sentence supplies the surface the reader is looking at.
-    return errorLine(`Could not load the fleet aggregate: ${state.error}`);
+    return errorLine(`Could not load the fleet aggregate: ${state.error.message}`);
   }
   return readyBody(state.data, range);
 };
 
 /**
- * Query keys name the range and nothing else: `provider` is fixed for the view's lifetime (the app
- * shell picks one at module scope), so it is not an input that can change under a mounted view.
+ * Query keys name the range and nothing else: `dataSource` is fixed for the view's lifetime (the
+ * app shell picks one at module scope), so it is not an input that can change under a mounted view.
  */
-export const FleetAggregateView = ({ provider }: FleetAggregateViewProps): ReactElement => {
+export const FleetAggregateView = ({ dataSource }: FleetAggregateViewProps): ReactElement => {
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
-  const sites = useProviderQuery(provider.listSites, ['fleet-sites']);
+  const sites = useProviderQuery(dataSource.listSites, ['fleet-sites']);
   const forecasts = useProviderQuery(
-    () => provider.fleetForecasts(range),
+    () => dataSource.fleetForecasts(range),
     ['fleet-forecasts', range],
   );
-  const actuals = useProviderQuery(() => provider.fleetActuals(range), ['fleet-actuals', range]);
+  const actuals = useProviderQuery(() => dataSource.fleetActuals(range), ['fleet-actuals', range]);
 
   return (
     <section className="view">

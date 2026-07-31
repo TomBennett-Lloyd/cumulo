@@ -5,10 +5,17 @@ import {
   generateFleet,
   type CreateSiteInput,
   type Forecast,
+  type GenerationReading,
   type Site,
 } from '@cumulo/shared';
 
-import type { FleetSourceResult, FleetDataError, FleetDataSource } from './fleet-data-source';
+import { fixtureActuals, fixtureForecasts } from './fixture-series';
+import type {
+  FleetSourceResult,
+  FleetDataError,
+  FleetDataSource,
+  RangeHours,
+} from './fleet-data-source';
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -70,6 +77,11 @@ const daylightFraction = (hourOfDayUtc: number): number => {
  * exactly what the panel would receive from the real API — including branded
  * timestamps. A parse failure here would be a bug in this function rather than
  * an expected failure, which is why it throws rather than returning a result.
+ *
+ * Clock-relative on purpose, and therefore not the same generator as
+ * `fixture-series.ts`: the demo's headline minute is a site that has *no*
+ * forecast and then has one, which only a moving clock can express. The chart
+ * views need the opposite property and get the pinned one.
  */
 const syntheticForecasts = (site: Site, nowMs: number): readonly Forecast[] => {
   const issuedAtMs = Math.floor(nowMs / MS_PER_HOUR) * MS_PER_HOUR;
@@ -99,6 +111,35 @@ const failure = (error: FleetDataError): FleetSourceResult<never> => ({ kind: 'e
 const siteNotFound = (siteId: string): FleetSourceResult<never> =>
   failure({ code: 'not-found', message: `No forecast for site ${siteId} yet` });
 
+/** A site together with its position in the fleet, which is what keys its weather. */
+interface FleetPosition {
+  readonly site: Site;
+  readonly siteIndex: number;
+}
+
+/**
+ * Resolve a site id against the fleet.
+ *
+ * An unknown id is an expected failure, not a bug: the caller may hold a stale
+ * id. It comes back as an error naming the operation and the id
+ * (`error-handling.md` rules 1 and 4) rather than as an empty series, which
+ * would read as "this site generates nothing".
+ */
+const locateSite = (
+  sites: readonly Site[],
+  operation: string,
+  siteId: string,
+): FleetSourceResult<FleetPosition> => {
+  const siteIndex = sites.findIndex((candidate) => candidate.id === siteId);
+  const site = sites[siteIndex];
+  return site === undefined
+    ? failure({
+        code: 'not-found',
+        message: `${operation}: no site in the fleet with id ${siteId}`,
+      })
+    : { kind: 'ok', value: { site, siteIndex } };
+};
+
 export interface DemoFleetDataSourceOptions {
   /** Injected clock. Tests drive the first-forecast delay through this. */
   readonly now?: () => number;
@@ -111,9 +152,14 @@ export interface DemoFleetDataSourceOptions {
  * session has added, with a first forecast that arrives on a delay.
  *
  * A class rather than a factory over captured variables (`structure.md` rule 2)
- * because the three methods genuinely share mutable state — the site list, the
+ * because the members genuinely share mutable state — the site list, the
  * creation times, the clock — and `this.` is what makes that visible to a
- * reader holding only one method.
+ * reader holding only one of them.
+ *
+ * Members are arrow properties rather than prototype methods because
+ * `FleetDataSource` declares them as properties: the chart views hand
+ * `source.listSites` straight to a hook, and a detached prototype method would
+ * arrive there with no `this` and no site list.
  *
  * The delay is the point. A site whose forecast appeared instantly would let
  * the dashboard ship without ever rendering its pending state, and the pending
@@ -134,11 +180,10 @@ export class DemoFleetDataSource implements FleetDataSource {
     this.sites = [...generateFleet(canonicalFleetSeed)];
   }
 
-  listSites(): Promise<FleetSourceResult<readonly Site[]>> {
-    return Promise.resolve({ kind: 'ok', value: [...this.sites] });
-  }
+  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> =>
+    Promise.resolve({ kind: 'ok', value: [...this.sites] });
 
-  createSite(input: CreateSiteInput): Promise<FleetSourceResult<Site>> {
+  readonly createSite = (input: CreateSiteInput): Promise<FleetSourceResult<Site>> => {
     // The static type says this cannot fail; the schema says whether the
     // *values* are in range, which no type in this codebase encodes. This is
     // the boundary the Fleet API will enforce for real, so the demo enforces it
@@ -159,9 +204,11 @@ export class DemoFleetDataSource implements FleetDataSource {
     this.createdAtMsById.set(site.id, this.now());
 
     return Promise.resolve({ kind: 'ok', value: site });
-  }
+  };
 
-  getSiteForecast(siteId: Site['id']): Promise<FleetSourceResult<readonly Forecast[]>> {
+  readonly getSiteForecast = (
+    siteId: Site['id'],
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
     const site = this.sites.find((candidate) => candidate.id === siteId);
     if (site === undefined) {
       return Promise.resolve(siteNotFound(siteId));
@@ -174,5 +221,43 @@ export class DemoFleetDataSource implements FleetDataSource {
     }
 
     return Promise.resolve({ kind: 'ok', value: syntheticForecasts(site, nowMs) });
-  }
+  };
+
+  readonly siteForecasts = (
+    siteId: Site['id'],
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    const found = locateSite(this.sites, 'siteForecasts', siteId);
+    return Promise.resolve(
+      found.kind === 'error'
+        ? found
+        : { kind: 'ok', value: fixtureForecasts(found.value.site, found.value.siteIndex, range) },
+    );
+  };
+
+  readonly siteActuals = (
+    siteId: Site['id'],
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+    const found = locateSite(this.sites, 'siteActuals', siteId);
+    return Promise.resolve(
+      found.kind === 'error'
+        ? found
+        : { kind: 'ok', value: fixtureActuals(found.value.site, found.value.siteIndex, range) },
+    );
+  };
+
+  readonly fleetForecasts = (range: RangeHours): Promise<FleetSourceResult<readonly Forecast[]>> =>
+    Promise.resolve({
+      kind: 'ok',
+      value: this.sites.flatMap((site, siteIndex) => fixtureForecasts(site, siteIndex, range)),
+    });
+
+  readonly fleetActuals = (
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
+    Promise.resolve({
+      kind: 'ok',
+      value: this.sites.flatMap((site, siteIndex) => fixtureActuals(site, siteIndex, range)),
+    });
 }

@@ -11,7 +11,7 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { DataResult, FleetDataProvider, RangeHours } from '../data/provider';
+import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { FleetAggregateView, joinFleetSeries } from './FleetAggregateView';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
@@ -93,12 +93,12 @@ const ACTUALS: readonly GenerationReading[] = [
 
 /** The canned answers to the three calls the fleet view makes. */
 interface StubFleet {
-  readonly sites: DataResult<readonly Site[]>;
-  readonly forecasts: DataResult<readonly Forecast[]>;
-  readonly actuals: DataResult<readonly GenerationReading[]>;
+  readonly sites: FleetSourceResult<readonly Site[]>;
+  readonly forecasts: FleetSourceResult<readonly Forecast[]>;
+  readonly actuals: FleetSourceResult<readonly GenerationReading[]>;
 }
 
-const ready = <T,>(data: T): DataResult<T> => ({ status: 'ready', data });
+const ready = <T,>(value: T): FleetSourceResult<T> => ({ kind: 'ok', value });
 
 const FULL_FLEET: StubFleet = {
   sites: ready(SITES),
@@ -122,46 +122,59 @@ const FORECASTLESS_FLEET: StubFleet = { ...FULL_FLEET, forecasts: ready([]) };
 
 const FAILED_FLEET: StubFleet = {
   ...FULL_FLEET,
-  forecasts: { status: 'failed', error: 'fleetForecasts range=24: upstream timed out' },
+  forecasts: {
+    kind: 'error',
+    error: { code: 'network', message: 'fleetForecasts range=24: upstream timed out' },
+  },
 };
 
 /**
- * A `FleetDataProvider` over canned results, recording the ranges it was asked for.
+ * A `FleetDataSource` over canned results, recording the ranges it was asked for.
  *
- * A class rather than a `createStubProvider(canned)` closure factory (`structure.md` rule 2): the
+ * A class rather than a `createStubSource(canned)` closure factory (`structure.md` rule 2): the
  * members genuinely share the canned data and the recorded ranges, and `this.` is what makes that
  * sharing visible. The members are arrow properties because the interface's are — the view detaches
- * `provider.listSites` and passes it straight to a hook.
+ * `dataSource.listSites` and passes it straight to a hook.
  */
-class StubProvider implements FleetDataProvider {
+class StubFleetSource implements FleetDataSource {
   readonly forecastRanges: RangeHours[] = [];
 
   constructor(private readonly canned: StubFleet) {}
 
-  readonly listSites = (): Promise<DataResult<readonly Site[]>> =>
+  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> =>
     Promise.resolve(this.canned.sites);
 
-  readonly fleetForecasts = (range: RangeHours): Promise<DataResult<readonly Forecast[]>> => {
+  readonly fleetForecasts = (
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
     this.forecastRanges.push(range);
     return Promise.resolve(this.canned.forecasts);
   };
 
-  readonly fleetActuals = (): Promise<DataResult<readonly GenerationReading[]>> =>
+  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
     Promise.resolve(this.canned.actuals);
 
-  // Per-site data is not this view's surface; being called for it is a bug worth a loud crash
-  // rather than a `failed` result the view would render as an ordinary upstream problem.
-  readonly siteForecasts = (): Promise<DataResult<readonly Forecast[]>> => {
-    throw new Error('StubProvider: the fleet view must not call siteForecasts');
+  // Per-site data and writing are not this view's surface; being called for either is a bug worth
+  // a loud crash rather than an error result the view would render as an ordinary upstream problem.
+  readonly siteForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    throw new Error('StubFleetSource: the fleet view must not call siteForecasts');
   };
 
-  readonly siteActuals = (): Promise<DataResult<readonly GenerationReading[]>> => {
-    throw new Error('StubProvider: the fleet view must not call siteActuals');
+  readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+    throw new Error('StubFleetSource: the fleet view must not call siteActuals');
+  };
+
+  readonly getSiteForecast = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    throw new Error('StubFleetSource: the fleet view must not call getSiteForecast');
+  };
+
+  readonly createSite = (): Promise<FleetSourceResult<Site>> => {
+    throw new Error('StubFleetSource: the fleet view never writes to the fleet');
   };
 }
 
-const renderSettled = async (provider: FleetDataProvider): Promise<HTMLElement> => {
-  const { container } = render(<FleetAggregateView provider={provider} />);
+const renderSettled = async (dataSource: FleetDataSource): Promise<HTMLElement> => {
+  const { container } = render(<FleetAggregateView dataSource={dataSource} />);
   await waitFor(() => {
     expect(screen.queryByText(LOADING_PATTERN)).toBeNull();
   });
@@ -177,9 +190,9 @@ const attributionHref = (): string | null =>
   screen.getByRole('link', { name: 'Open-Meteo.com' }).getAttribute('href');
 
 describe('FleetAggregateView', () => {
-  it('says it is loading, with the credit already in place, before the provider answers', async () => {
-    const provider = new StubProvider(FULL_FLEET);
-    render(<FleetAggregateView provider={provider} />);
+  it('says it is loading, with the credit already in place, before the source answers', async () => {
+    const dataSource = new StubFleetSource(FULL_FLEET);
+    render(<FleetAggregateView dataSource={dataSource} />);
 
     expect(screen.getByText(LOADING_PATTERN).textContent).toBe('Loading the fleet aggregate…');
     expect(attributionHref()).toBe('https://open-meteo.com/');
@@ -190,7 +203,7 @@ describe('FleetAggregateView', () => {
   });
 
   it('shows the shared aggregation totals — summed median and summed P10/P90 — in the table twin', async () => {
-    const container = await renderSettled(new StubProvider(FULL_FLEET));
+    const container = await renderSettled(new StubFleetSource(FULL_FLEET));
 
     // 2 + 4 and 3 + 5 kW medians; bands 1–3 with 3–6, and 2–4 with 4–7. Nothing in the component
     // computes these: they are the shared aggregation's output, rendered.
@@ -201,14 +214,14 @@ describe('FleetAggregateView', () => {
   });
 
   it('states the fleet size when every displayed hour has the whole fleet in it', async () => {
-    await renderSettled(new StubProvider(FULL_FLEET));
+    await renderSettled(new StubFleetSource(FULL_FLEET));
 
     expect(screen.getByText(/Aggregated from/u).textContent).toBe('Aggregated from 2 sites');
     expect(screen.queryByText(/Partial aggregate/u)).toBeNull();
   });
 
   it('labels the aggregate partial, with both counts, when an hour is missing a site', async () => {
-    await renderSettled(new StubProvider(PARTIAL_FLEET));
+    await renderSettled(new StubFleetSource(PARTIAL_FLEET));
 
     expect(screen.getByText(/Partial aggregate/u).textContent).toBe(
       'Partial aggregate: some hours include only 1 of 2 sites.',
@@ -217,7 +230,7 @@ describe('FleetAggregateView', () => {
   });
 
   it('still draws the chart when the aggregate is partial, rather than withholding it', async () => {
-    const container = await renderSettled(new StubProvider(PARTIAL_FLEET));
+    const container = await renderSettled(new StubFleetSource(PARTIAL_FLEET));
 
     // Both hours are still plotted; 07:00 simply carries site A alone.
     expect(tableRowValues(container)).toEqual([
@@ -227,7 +240,7 @@ describe('FleetAggregateView', () => {
   });
 
   it('explains an empty fleet instead of drawing a chart of nothing', async () => {
-    const container = await renderSettled(new StubProvider(EMPTY_FLEET));
+    const container = await renderSettled(new StubFleetSource(EMPTY_FLEET));
 
     expect(screen.getByText('No active sites yet')).toBeDefined();
     expect(container.querySelector('svg')).toBeNull();
@@ -235,30 +248,30 @@ describe('FleetAggregateView', () => {
   });
 
   it('explains a fleet with sites but no forecast hours', async () => {
-    const container = await renderSettled(new StubProvider(FORECASTLESS_FLEET));
+    const container = await renderSettled(new StubFleetSource(FORECASTLESS_FLEET));
 
     expect(screen.getByText('No fleet forecast available for this range yet')).toBeDefined();
     expect(container.querySelector('svg')).toBeNull();
   });
 
-  it('shows the provider failure verbatim, framed by the surface that failed', async () => {
-    await renderSettled(new StubProvider(FAILED_FLEET));
+  it('shows the source failure verbatim, framed by the surface that failed', async () => {
+    await renderSettled(new StubFleetSource(FAILED_FLEET));
 
     expect(screen.getByText(/Could not load the fleet aggregate/u).textContent).toBe(
       'Could not load the fleet aggregate: fleetForecasts range=24: upstream timed out',
     );
   });
 
-  it('asks the provider for 168 hours when the 7 d control is pressed', async () => {
-    const provider = new StubProvider(FULL_FLEET);
-    await renderSettled(provider);
+  it('asks the source for 168 hours when the 7 d control is pressed', async () => {
+    const dataSource = new StubFleetSource(FULL_FLEET);
+    await renderSettled(dataSource);
 
-    expect(provider.forecastRanges).toEqual([24]);
+    expect(dataSource.forecastRanges).toEqual([24]);
 
     fireEvent.click(screen.getByRole('button', { name: '7 d' }));
 
     await waitFor(() => {
-      expect(provider.forecastRanges).toEqual([24, 168]);
+      expect(dataSource.forecastRanges).toEqual([24, 168]);
     });
     expect(screen.getByRole('button', { name: '7 d' }).getAttribute('aria-pressed')).toBe('true');
   });
@@ -267,9 +280,9 @@ describe('FleetAggregateView', () => {
     ['a full aggregate', FULL_FLEET],
     ['a partial aggregate', PARTIAL_FLEET],
     ['an empty fleet', EMPTY_FLEET],
-    ['a provider failure', FAILED_FLEET],
+    ['a source failure', FAILED_FLEET],
   ])('credits Open-Meteo when showing %s', async (_label, canned) => {
-    await renderSettled(new StubProvider(canned));
+    await renderSettled(new StubFleetSource(canned));
 
     expect(attributionHref()).toBe('https://open-meteo.com/');
   });

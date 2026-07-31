@@ -18,6 +18,10 @@ const validSite = {
   capacityKw: 4.2,
 };
 
+/** Fixture builder: the same site minus one field, for the required-field tests. */
+const withoutField = (site: Record<string, unknown>, field: string): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(site).filter(([name]) => name !== field));
+
 /** The site's numeric fields — every field carrying a range bound. */
 type NumericField = {
   [K in keyof Site]: Site[K] extends number ? K : never;
@@ -111,16 +115,70 @@ describe('siteSchema', () => {
   });
 });
 
+const validCreateSiteInput = withoutField(validSite, 'id');
+
+describe('createSiteInputSchema', () => {
+  it('accepts a proposed site carrying every domain field but no id', () => {
+    const result = createSiteInputSchema.safeParse(validCreateSiteInput);
+
+    expect(result.success).toBe(true);
+  });
+
+  // Derived by `.omit`, so the physics bounds are the *same* bounds. Driving the
+  // siteSchema table through this schema is the assertion: a bound relaxed on
+  // the request shape alone — the classic parallel-DTO drift — fails here.
+  it.each(outOfRangeCases)('rejects %s of %s — %s', (field, value) => {
+    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
+
+    expect(result.success).toBe(false);
+  });
+
+  it.each(boundaryCases)('accepts %s of exactly %s — %s', (field, value) => {
+    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a proposed site missing a required field', () => {
+    const result = createSiteInputSchema.safeParse(
+      withoutField(validCreateSiteInput, 'capacityKw'),
+    );
+
+    expect(result.success).toBe(false);
+  });
+
+  /**
+   * The id belongs to the server. `.omit()` enforces that by *stripping* the
+   * key rather than failing the parse, so this asserts on the parsed output: a
+   * client that sends an id gets it dropped, not honoured, and nothing
+   * downstream can mistake a caller's guess for an id.
+   *
+   * The exact key set, rather than only `id`'s absence, is what makes this bite
+   * in both directions — a schema that dropped a real field, or grew one, fails
+   * here too.
+   */
+  it('drops an id a caller tries to choose for itself, and keeps every other field', () => {
+    const result = createSiteInputSchema.safeParse(validSite);
+
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('id');
+    expect(result.data && Object.keys(result.data).sort()).toEqual([
+      'azimuthDegrees',
+      'capacityKw',
+      'latitude',
+      'longitude',
+      'name',
+      'tiltDegrees',
+    ]);
+  });
+});
+
 const validFleetSite = {
   ...validSite,
   origin: 'seed',
   createdAt: '2026-07-30T14:00:00Z',
   active: true,
 };
-
-/** Fixture builder: the same fleet site minus one field, for the required-field tests. */
-const withoutField = (site: Record<string, unknown>, field: string): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(site).filter(([name]) => name !== field));
 
 describe('siteOriginSchema', () => {
   it.each(['seed', 'user'])('accepts origin %s', (origin) => {
@@ -183,47 +241,5 @@ describe('fleetSiteSchema', () => {
       'origin',
       'tiltDegrees',
     ]);
-  });
-});
-
-const validCreateSiteInput = withoutField(validSite, 'id');
-
-describe('createSiteInputSchema', () => {
-  it('accepts a proposed site carrying every domain field but no id', () => {
-    const result = createSiteInputSchema.safeParse(validCreateSiteInput);
-
-    expect(result.success).toBe(true);
-  });
-
-  // Derived by `.omit`, so the physics bounds are the *same* bounds. Driving the
-  // siteSchema table through this schema is the assertion: a bound relaxed on
-  // the request shape alone — the classic parallel-DTO drift — fails here.
-  it.each(outOfRangeCases)('rejects %s of %s — %s', (field, value) => {
-    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
-
-    expect(result.success).toBe(false);
-  });
-
-  it.each(boundaryCases)('accepts %s of exactly %s — %s', (field, value) => {
-    const result = createSiteInputSchema.safeParse({ ...validCreateSiteInput, [field]: value });
-
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects a proposed site missing a required field', () => {
-    const result = createSiteInputSchema.safeParse(
-      withoutField(validCreateSiteInput, 'capacityKw'),
-    );
-
-    expect(result.success).toBe(false);
-  });
-
-  // The id belongs to the server. A client that sends one gets it dropped, not
-  // honoured — so nothing downstream can mistake a caller's guess for an id.
-  it('drops an id a caller tries to choose for itself', () => {
-    const result = createSiteInputSchema.safeParse(validSite);
-
-    expect(result.success).toBe(true);
-    expect(result.data && 'id' in result.data).toBe(false);
   });
 });

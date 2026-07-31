@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { DemoFleetDataSource } from './demo-fleet-data-source';
+import { FIXTURE_NOW } from './fixture-series';
 
 /** A mutable instant the tests move by hand — the source never reads a real clock. */
 interface MutableClock {
@@ -176,5 +177,78 @@ describe('DemoFleetDataSource', () => {
     // same millisecond must not exist (`testing.md` rule 7: the injected clock
     // above is the knob, and this test runs with it off).
     expect(pending.kind === 'error' && pending.error.code).toBe('not-found');
+  });
+});
+
+/**
+ * The window-scoped reads the chart views make. They are the same fleet as the
+ * calls above — one source, one site list — but a different question: a window
+ * of history rather than "is there a forecast yet".
+ */
+describe('DemoFleetDataSource window-scoped reads', () => {
+  const seededSiteId = seedFleet[0]?.id ?? '';
+
+  it('serves one site over a window, ascending and hourly', async () => {
+    const source = new DemoFleetDataSource();
+
+    const result = await source.siteForecasts(seededSiteId, 24);
+    const forecasts = result.kind === 'ok' ? result.value : [];
+    const validTimes = forecasts.map((forecast) => forecast.validTime);
+
+    // 24 h back + the current hour + the 24 h horizon.
+    expect(forecasts).toHaveLength(49);
+    expect(validTimes).toEqual([...validTimes].sort());
+    expect(new Set(validTimes).size).toBe(validTimes.length);
+  });
+
+  it('measures nothing later than the pinned fixture now', async () => {
+    const source = new DemoFleetDataSource();
+
+    const result = await source.siteActuals(seededSiteId, 168);
+    const actuals = result.kind === 'ok' ? result.value : [];
+
+    expect(actuals.length).toBeGreaterThan(0);
+    expect(actuals.every((actual) => actual.validTime <= FIXTURE_NOW)).toBe(true);
+  });
+
+  it('reports an unknown site id as not-found, naming the operation and the id', async () => {
+    const source = new DemoFleetDataSource();
+
+    const forecasts = await source.siteForecasts('not-a-site', 24);
+    const actuals = await source.siteActuals('not-a-site', 24);
+
+    expect(forecasts.kind === 'error' && forecasts.error.code).toBe('not-found');
+    expect(forecasts.kind === 'error' && forecasts.error.message).toContain('siteForecasts');
+    expect(forecasts.kind === 'error' && forecasts.error.message).toContain('not-a-site');
+    expect(actuals.kind === 'error' && actuals.error.message).toContain('siteActuals');
+  });
+
+  it('serves every site from the fleet-level calls', async () => {
+    const source = new DemoFleetDataSource();
+
+    const forecasts = await source.fleetForecasts(24);
+    const actuals = await source.fleetActuals(24);
+    const siteIds = (points: readonly { readonly siteId: string }[]): number =>
+      new Set(points.map((point) => point.siteId)).size;
+
+    expect(forecasts.kind === 'ok' && siteIds(forecasts.value)).toBe(seedFleet.length);
+    expect(forecasts.kind === 'ok' && forecasts.value).toHaveLength(seedFleet.length * 49);
+    expect(actuals.kind === 'ok' && siteIds(actuals.value)).toBe(seedFleet.length);
+  });
+
+  /**
+   * The point of the unification (#105): one source means a site added on the
+   * map is a site the chart views aggregate, rather than two fleets that agree
+   * only by having started from the same seed.
+   */
+  it('includes a site created this session in the fleet-level series', async () => {
+    const source = new DemoFleetDataSource();
+    const created = await source.createSite(validInput);
+    const createdId = created.kind === 'ok' ? created.value.id : '';
+
+    const result = await source.fleetForecasts(24);
+    const forecasts = result.kind === 'ok' ? result.value : [];
+
+    expect(forecasts.some((forecast) => forecast.siteId === createdId)).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-import type { RangeHours } from '../data/provider';
+import type { RangeHours } from '../data/fleet-data-source';
 
 /**
  * The window picker both chart views carry, and the labels that name a window
@@ -8,7 +8,7 @@ import type { RangeHours } from '../data/provider';
  *
  * Extracted rather than left duplicated because the two copies had the same
  * intent (`structure.md` rule 7): the offered windows are a property of what
- * `FleetDataProvider` can serve, not of the view asking, so adding a 72 h
+ * `FleetDataSource` can serve, not of the view asking, so adding a 72 h
  * window or renaming `7 d` would leave any copy that missed the change simply
  * wrong. What differs between the two call sites is the group's accessible name
  * — "which range?" means a forecast window on one view and an aggregation
