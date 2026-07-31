@@ -58,16 +58,18 @@ the status (plus `Retry-After` when present), never on the body.
 
 ## Routes
 
-| Route                       | Semantics                                                                                                       |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `GET /v1/sites`             | 200 `{ sites: FleetSite[] }` — the whole fleet, seed and user, active or not.                                   |
-| `POST /v1/sites`            | 201 with the created site. `id`, `origin: 'user'`, `createdAt` and `active` are server-assigned.                |
-| `GET /v1/sites/{siteId}`    | 200 with the site; 404 if unknown; 400 if the id is not a uuid.                                                 |
-| `PUT /v1/sites/{siteId}`    | 200 with the updated site. Read-modify-write preserving `id`, `origin`, `createdAt`, `active`. Last write wins. |
-| `DELETE /v1/sites/{siteId}` | 204 empty when a site was removed; 404 when there was nothing to remove.                                        |
-| `GET /openapi.json`         | 200 with the OpenAPI 3.0 document, built at start-up from the zod schemas.                                      |
-| `GET /docs`                 | 200 `text/html` — Swagger UI, pointed at `/openapi.json` on the same origin.                                    |
-| `GET /docs/{asset}`         | 200 with an allowlisted Swagger UI asset; 404 for every other name.                                             |
+| Route                             | Semantics                                                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/sites`                   | 200 `{ sites: FleetSite[] }` — the whole fleet, seed and user, active or not.                                   |
+| `POST /v1/sites`                  | 201 with the created site. `id`, `origin: 'user'`, `createdAt` and `active` are server-assigned.                |
+| `GET /v1/sites/{siteId}`          | 200 with the site; 404 if unknown; 400 if the id is not a uuid.                                                 |
+| `PUT /v1/sites/{siteId}`          | 200 with the updated site. Read-modify-write preserving `id`, `origin`, `createdAt`, `active`. Last write wins. |
+| `DELETE /v1/sites/{siteId}`       | 204 empty when a site was removed; 404 when there was nothing to remove.                                        |
+| `GET /v1/sites/{siteId}/forecast` | 200 `{ forecasts, attribution }` from now, `hours` ∈ 24/48/168 (default 48). Empty is 200.                      |
+| `GET /v1/sites/{siteId}/series`   | 200 `{ forecasts, actuals, attribution }` over required `from`/`to`; span > 336 h is 400.                       |
+| `GET /openapi.json`               | 200 with the OpenAPI 3.0 document, built at start-up from the zod schemas.                                      |
+| `GET /docs`                       | 200 `text/html` — Swagger UI, pointed at `/openapi.json` on the same origin.                                    |
+| `GET /docs/{asset}`               | 200 with an allowlisted Swagger UI asset; 404 for every other name.                                             |
 
 `POST /v1/sites` is unauthenticated and enforces **no site cap**. That is deliberate: #14's cost
 guard on this endpoint is the API Gateway stage throttle (10 rps, burst 20) configured in
