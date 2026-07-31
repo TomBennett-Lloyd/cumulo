@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The captured Open-Meteo response is imported as a module by the adapter
+    // tests, rather than read off disk, so the compiler checks the fixture's
+    // shape against the parser instead of leaving it an untyped blob.
+    "resolveJsonModule": true,
+    // This package speaks HTTP: `fetch`, `AbortSignal`, `URL`/`URLSearchParams`
+    // and `structuredClone` all come from Node's ambient globals. Named
+    // explicitly because with `types` unset this toolchain pulls nothing from
+    // `node_modules/@types` — and naming only `node` keeps browser globals out
+    // of a package that has no DOM.
+    "types": ["node"]
+  },
+  // `scripts` joins the compiled surface so the operator CLI — which is absent
+  // from `pnpm test` because it needs an AWS session and spends Open-Meteo
+  // quota — cannot rot silently against the adapters it wires together. Same
+  // reasoning, and the same include line, as `packages/storage/tsconfig.json`.
+  "include": ["src", "fixtures", "scripts"]
+}
