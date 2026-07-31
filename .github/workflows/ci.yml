@@ -22,9 +22,11 @@ jobs:
       # green-by-absence. Calling the composite makes CI a caller like any other,
       # so a gate added to `verify` is automatically enforced here.
       # The cost is real but small: GitHub shows one step's timing and one
-      # failure marker instead of per-gate ones. The composite runs in a fixed
-      # order (lint -> typecheck -> test -> test:scripts -> format:check) and
-      # stops at the first failure, so the log still names the failing gate.
+      # failure marker instead of per-gate ones. The composite runs its gates in
+      # a fixed order and stops at the first failure, so the log still names the
+      # failing one. Which gates those are is deliberately not written here —
+      # package.json is the single place that list lives, and restating it would
+      # re-create exactly the duplicate this step exists to remove.
       # Gate completeness beats step granularity.
       - run: pnpm verify
 
