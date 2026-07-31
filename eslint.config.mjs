@@ -173,7 +173,6 @@ export default tseslint.config(
   {
     files: [
       'apps/web/src/preview/TokensPreview.tsx',
-      'packages/forecast/src/solar-position.ts',
       'packages/storage/scripts/smoke.ts',
       'packages/storage/src/series-adapter.test.ts',
       'packages/storage/src/site-adapter.test.ts',
