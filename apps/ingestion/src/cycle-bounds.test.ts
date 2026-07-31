@@ -202,14 +202,6 @@ describe('runCycle bounds', () => {
     expect(report).toMatchObject({
       activeLocations: 4,
       published: 2,
-      failed: 1,
-      deferred: 1,
-      skippedForDeadline: 0,
-    });
-
-    expect(report).toMatchObject({
-      activeLocations: 4,
-      published: 2,
       // The rate-limited location is a failure; the capped one is not.
       failed: 1,
       deferred: 1,

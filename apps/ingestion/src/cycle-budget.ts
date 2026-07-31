@@ -37,15 +37,22 @@ import { INGESTION_SEND_MAX_ATTEMPTS, INGESTION_SEND_REQUEST_TIMEOUT_MS } from '
  * time must be left in reserve for a location already in flight?* — which is
  * exactly what {@link CYCLE_DEADLINE_MS} subtracts.
  *
- * **One term is knowingly priced at zero.** The smithy standard retry strategy
- * honours a server-supplied retry hint, which can extend any single retry by up
- * to 5,000 ms beyond the computed delay (verified in the installed
- * `@smithy/core` 3.31.1). Neither DynamoDB nor SQS sends `Retry-After` in normal
- * operation, so it never fires in practice — but the identity below is exact and
- * carries no slack, so if one ever did, the function timeout becomes reachable by
- * that much. Recorded in `docs/tech-debt.md` rather than priced in, because
- * pricing it would roughly double {@link LOCATION_WORST_MS} to insure against
- * something neither service does.
+ * **Two terms are knowingly priced at zero**, and the identity below carries no
+ * slack, so each is a way the function timeout becomes reachable rather than
+ * unreachable. Both are recorded in `docs/tech-debt.md` rather than priced in,
+ * because pricing either would inflate {@link LOCATION_WORST_MS} substantially
+ * to insure against something that does not happen in practice:
+ *
+ * 1. The smithy standard retry strategy honours a server-supplied retry hint,
+ *    which can extend any single retry by up to 5,000 ms beyond the computed
+ *    delay (verified in the installed `@smithy/core` 3.31.1). Neither DynamoDB
+ *    nor SQS sends `Retry-After` in normal operation.
+ * 2. The pinned request timeouts bound the time to the **first response**, not
+ *    the whole attempt: the timer is cleared when response headers arrive and
+ *    the body is still streaming, and neither client sets `socketTimeout`. A
+ *    response whose body stalls after its headers is unbounded. These are small
+ *    single-chunk JSON responses, so that is remote — but it means the two
+ *    per-request terms below are bounds on time-to-first-response.
  *
  * **Every other term is imported.** Nothing here restates a number that lives
  * somewhere else, because a copied constant is how the previous budget went

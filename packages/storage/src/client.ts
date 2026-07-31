@@ -165,12 +165,20 @@ export const createStorageDocumentClient = (
         // this flag. A timeout that logs is not a bound, and the budget in
         // `@cumulo/ingestion` treats this one as arithmetic.
         //
-        // `socketTimeout` is deliberately left unset. `requestTimeout` is a
-        // single absolute timer started when the request is issued and cleared
-        // when it settles, so it already bounds the whole round trip;
-        // `socketTimeout` measures *inactivity* instead, which would fire
-        // earlier on a slow-but-progressing response and add a second term to
-        // price for no extra guarantee.
+        // What this buys, stated precisely: `requestTimeout` bounds the time to
+        // the **first response** — its timer is armed when the request is
+        // issued and cleared when the `response` event fires, which is when
+        // headers arrive and the body is still an open stream. A response whose
+        // headers arrive and whose body then stalls is bounded by nothing here.
+        //
+        // `socketTimeout` is what would bound that, and it is deliberately left
+        // unset: it is an *inactivity* timer, so it fires on a slow-but-
+        // progressing response too, and it would add a term
+        // `@cumulo/ingestion`'s cycle budget has to price. These are small
+        // single-chunk JSON responses, so a mid-body stall is remote — but it
+        // is a real gap rather than a covered case, and `docs/tech-debt.md`
+        // records it against the budget's zero-slack identity rather than
+        // leaving this comment to claim more than the flag delivers.
         throwOnRequestTimeout: true,
       }),
     });
