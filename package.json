@@ -10,7 +10,7 @@
     "lint:sh": "bash .claude/scripts/lint-shell.sh",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
-    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh",
+    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh && bash .claude/scripts/lint-shell.test.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm lint && pnpm lint:sh && pnpm typecheck && pnpm test && pnpm test:scripts && pnpm format:check",
