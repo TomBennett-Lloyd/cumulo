@@ -113,10 +113,20 @@ index() {
   local dir="$1"
   shift
   {
-    printf '# Architecture Decision Records\n\n'
-    printf 'Format: copy `0000-template.md` -> `NNNN-short-title.md`. See\n'
-    printf '[architecture.md](../standards/architecture.md) for when to write one.\n\n'
-    printf '## Index\n\n'
+    # A quoted heredoc, not printf: this prose is literal, and it carries
+    # backticks and brackets that a single-quoted printf argument makes look
+    # like a command substitution somebody forgot to double-quote (SC2016).
+    # <<'EOF' says "no expansion here" in the syntax itself, so the reader and
+    # the shell linter agree with each other for free.
+    cat <<'EOF'
+# Architecture Decision Records
+
+Format: copy `0000-template.md` -> `NNNN-short-title.md`. See
+[architecture.md](../standards/architecture.md) for when to write one.
+
+## Index
+
+EOF
     local row
     for row in "$@"; do printf '%s\n' "$row"; done
   } >"$dir/README.md"

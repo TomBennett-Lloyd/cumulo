@@ -6,12 +6,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "pnpm lint:js && pnpm lint:css",
+    "lint": "pnpm lint:js && pnpm lint:css && pnpm lint:sh",
     "lint:js": "eslint --max-warnings 0 .",
     "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
+    "lint:sh": "bash .claude/scripts/lint-shell.sh",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
-    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh && bash .claude/scripts/check-adr-index.test.sh",
+    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh && bash .claude/scripts/check-adr-index.test.sh && bash .claude/scripts/lint-shell.test.sh",
     "check:adr-index": "bash .claude/scripts/check-adr-index.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
