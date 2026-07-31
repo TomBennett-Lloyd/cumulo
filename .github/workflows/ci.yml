@@ -90,3 +90,11 @@ jobs:
         run: terraform -chdir=infra/ingestion init -backend=false -lockfile=readonly
       - name: terraform validate (ingestion)
         run: terraform -chdir=infra/ingestion validate
+      # The api stack validates without a built Lambda artefact, deliberately —
+      # `fileexists` guards the `source_code_hash` call and a resource
+      # precondition carries the missing-artefact error at plan time instead.
+      # Same asymmetry as the ingestion stack: CI never runs a build.
+      - name: terraform init (api)
+        run: terraform -chdir=infra/api init -backend=false -lockfile=readonly
+      - name: terraform validate (api)
+        run: terraform -chdir=infra/api validate

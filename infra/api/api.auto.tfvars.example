@@ -1,0 +1,15 @@
+# Copy to api.auto.tfvars (gitignored). Terraform loads *.auto.tfvars
+# automatically for every command run in this directory, so there is no
+# -var-file flag to remember or forget.
+#
+# Must be the same region as the storage stack: this stack's IAM policy names
+# storage's tables by ARN, and a table ARN is regional.
+
+aws_region = "eu-west-1"
+
+# Optional. Defaults to "dev", and appears in the function, log group, HTTP API,
+# execution role and deploy-policy names — and in the storage table names the
+# IAM policy grants access to, and in the CUMULO_ENV the function resolves table
+# names from at runtime. Must match the storage stack's `environment` or the
+# grants and the lookups both point at tables that do not exist.
+# environment = "dev"

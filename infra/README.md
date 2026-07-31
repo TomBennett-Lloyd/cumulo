@@ -2,17 +2,20 @@
 
 All AWS infrastructure lives here as Terraform. Nothing is created by hand in the console — if it exists in the account, it exists in a `.tf` file, because the alternative is infrastructure that cannot be torn down and a cost ceiling that cannot be trusted.
 
-A **stack** is one directory under `infra/`, applied independently, with its own state. There are three today:
+A **stack** is one directory under `infra/`, applied independently, with its own state. There are four today:
 
-| Stack       | Directory          | Owns                                                                                                                                                                                               |
-| ----------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                                                                      |
-| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                                                                         |
-| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), two alarms, and the CI deploy grant for its own function. |
+| Stack       | Directory          | Owns                                                                                                                                                                                                   |
+| ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                                                                          |
+| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                                                                             |
+| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), two alarms, and the CI deploy grant for its own function.     |
+| `api`       | `infra/api/`       | The fleet API Lambda and the API Gateway HTTP API of [ADR 0005](../docs/adr/0005-fleet-api-hosting.md), including the stage throttle that bounds its bill, two alarms, and the CI deploy grant for it. |
 
 `storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
 
 `ingestion` depends on `bootstrap` in exactly the same one direction, for exactly the same reason: its state lives in `bootstrap`'s bucket, and nothing else. Its relationship to `storage` is deliberately weaker than a dependency — **there is no cross-stack reference of any kind**. No `terraform_remote_state` data source, no output consumed, no ARN passed in. `ingestion`'s IAM policy names `cumulo-sites-<env>` and `cumulo-weather-<env>` by assembling them from the naming convention ADR 0002 fixed, which `storageTableName()` in `@cumulo/storage` also mirrors, so the two stacks share a convention rather than a wire. `ingestion` therefore plans and applies while `storage` is mid-apply, or before `storage` exists at all; what it cannot do is run a _cycle_ against tables that are not there. The one operator obligation that follows is that both stacks are applied with the same `environment` and into the same region, since a table ARN is regional and the suffix is in the name.
+
+`api` sits in exactly the same shape as `ingestion`, one stack later: its state lives in `bootstrap`'s bucket, it attaches its own deploy grant to `bootstrap`'s shared role, and **it has no cross-stack reference to `storage` at all** — `cumulo-sites-<env>` and `cumulo-series-<env>` are assembled from the naming convention, not read from an output. The same operator obligation follows (same region, same `environment`), plus one that is unique to this stack: it is the only one whose input is the public internet, so the stage throttle in `infra/api/gateway.tf` is load-bearing configuration rather than tuning. [ADR 0005](../docs/adr/0005-fleet-api-hosting.md) computes the worst-case bill from those two numbers; changing them changes the bound.
 
 Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables.
 
@@ -535,7 +538,7 @@ aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query "MetricAlarms
 # expect: []
 ```
 
-The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the ingestion stack's two (`…-errors`, `…-dlq-…-not-empty`) are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
+The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the other stacks' — ingestion's two (`…-errors`, `…-dlq-…-not-empty`) and the api stack's two (`cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`) — are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
 
 Then re-apply and re-verify, because a teardown that cannot be reversed is only half a rehearsal:
 
@@ -755,6 +758,179 @@ Keep `backend.hcl` and `ingestion.auto.tfvars` — both are still correct for th
 
 ---
 
+## Runbook: the api stack
+
+One Lambda, one API Gateway HTTP API with its `$default` stage, integration and catch-all route, one log group, one execution role, two alarms, one Lambda permission, and one deploy grant on the shared GitHub Actions role — the whole of [issue #14](https://github.com/TomBennett-Lloyd/cumulo/issues/14)'s infrastructure, per [ADR 0005](../docs/adr/0005-fleet-api-hosting.md). Every command runs from `infra/api/`:
+
+```bash
+cd infra/api
+```
+
+**This is the first stack in the platform that is reachable from the public internet**, and the one property to hold onto while reading the rest: the write endpoint is unauthenticated by design (ADR 0001 — auth is #30), so the stage throttle is what turns "we hope nobody hammers the demo" into an arithmetic bound of ≈ $36/month. It is two lines in `gateway.tf`, and an apply that dropped them would remove the bound silently.
+
+**Prerequisites**, in this order and for these reasons:
+
+1. **The bootstrap stack applied** — this stack's state lives in the bucket bootstrap creates, and it attaches an inline policy to the role bootstrap owns, so `data.aws_iam_role.github_actions` fails at plan time if bootstrap has not run.
+2. **The storage stack applied**, with the same `environment` and in the same region. Not a Terraform dependency: nothing here references storage's state or outputs, and a plan succeeds without it. It is a _runtime_ prerequisite — the IAM policy grants access to `cumulo-sites-<env>` and `cumulo-series-<env>` by name, and the function resolves those same names from `CUMULO_ENV`, so applying against absent tables produces a stack that plans, applies, and then 500s on its first request.
+3. **An operator credential session** — see [Operator prerequisites](#operator-prerequisites).
+4. **A built Lambda artefact**, exactly as the ingestion runbook requires one.
+
+**There is no override dance here** (convention 6): the bucket already exists, so this stack inits straight against S3 in both directions.
+
+### Phase A — build, configure, and plan the API
+
+The same A/B split as every other runbook, and for the same reason: `.tf` files require human review before they are applied, and a plan is exactly the artefact a reviewer needs.
+
+**A1. Build the artefact. This comes first, not last.**
+
+```bash
+pnpm --filter @cumulo/api build
+ls -l ../../apps/api/dist/handler.zip
+```
+
+`apps/api/dist/handler.zip` is a fixed contract between that build script and `lambda.tf`. It carries the bundled handler **and** the pinned `swagger-ui-dist` assets that serve `/docs`, per ADR 0005's Swagger decision — one artefact, one lifecycle, so the rendered spec and the running API cannot disagree.
+
+Skip this step and `terraform plan` stops with `No Lambda artefact at apps/api/dist/handler.zip` and the command to run. `terraform validate` deliberately does **not** need it, which is what lets CI validate this stack on every push while building nothing.
+
+**A2. Create the two gitignored local files from their committed examples.**
+
+```bash
+cp api.auto.tfvars.example api.auto.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Set `aws_region` in `api.auto.tfvars`, and both `region` and `bucket` in `backend.hcl`. Same region as bootstrap and storage — a DynamoDB table ARN is regional, so a mismatch silently grants access to tables in a region that has none. The bucket name is `cumulo-tfstate-` followed by the account id:
+
+```bash
+aws sts get-caller-identity --query Account --output text
+```
+
+`environment` needs no entry; it defaults to `dev`. If you set it, set the same value in `storage.auto.tfvars` — it is in the function, API, role, log group and granted table names, and in `CUMULO_ENV`.
+
+**A3. Confirm none of that is visible to git.**
+
+```bash
+git status --short   # expect no output for infra/api/
+```
+
+`dist/` is gitignored too, so the artefact from A1 does not appear either.
+
+**A4. Initialise against the real backend.**
+
+```bash
+terraform init -backend-config=backend.hcl
+```
+
+**A5. Plan.** The tee target is outside the repo on purpose, so a plan output file cannot be committed:
+
+```bash
+terraform plan -no-color | tee ~/cumulo-api-plan.txt
+```
+
+Expect **`Plan: 12 to add, 0 to change, 0 to destroy.`** — the function, its log group, the HTTP API, the integration, the `$default` route, the `$default` stage, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
+
+**Read the throttle in the plan before approving it.** `default_route_settings` should show `throttling_rate_limit = 10` and `throttling_burst_limit = 20`. Those two numbers are the bound in ADR 0005's cost table; a plan that does not show them is a plan that costs something else.
+
+**A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, the throttle numbers, the function name — and label it `awaiting-review`.
+
+### Phase B — apply and prove the endpoint
+
+**B1. Apply.**
+
+```bash
+terraform apply
+```
+
+**B2. Confirm what exists.**
+
+```bash
+terraform state list   # expect 17 lines — the 12 resources plus the 5 data sources
+```
+
+The deploy grant is the one resource in this stack that lives on something another stack owns, so confirm it landed where it was meant to rather than trusting the count — and confirm ingestion's is still there beside it:
+
+```bash
+aws iam list-role-policies --role-name cumulo-github-actions
+# expect: cumulo-api-deploy-<env> and cumulo-ingestion-deploy-<env>
+```
+
+**B3. Capture the endpoint.** It comes from `terraform output`, never hand-assembled and never retyped: the api id is **server-assigned**, so a URL guessed from a template points at nothing.
+
+```bash
+API_ENDPOINT="$(terraform output -raw api_endpoint)"
+echo "$API_ENDPOINT"   # https://<api-id>.execute-api.<region>.amazonaws.com
+```
+
+Unlike the ingestion stack's queue URL this value embeds no account id, so it is safe to quote in a PR body or an issue comment.
+
+**B4. Confirm the throttle is really on the stage** — read it back from AWS rather than from Terraform's opinion of AWS, because this is the setting the cost argument rests on:
+
+```bash
+API_ID="$(aws apigatewayv2 get-apis --query "Items[?Name=='cumulo-api-$(terraform output -raw environment)'].ApiId" --output text)"
+aws apigatewayv2 get-stage --api-id "$API_ID" --stage-name '$default' \
+  --query 'DefaultRouteSettings.{Rate:ThrottlingRateLimit,Burst:ThrottlingBurstLimit}'
+# expect: Rate 10.0, Burst 20
+```
+
+**B5. Smoke the deployed API.** The endpoint, the docs and the try-it-out flow are [issue #14](https://github.com/TomBennett-Lloyd/cumulo/issues/14)'s acceptance criteria, and the full runbook for them — including the 429 spot-check — lives with the service in `apps/api/README.md`. The three-command version:
+
+```bash
+curl -fsS "$API_ENDPOINT/openapi.json" | head -c 200
+curl -fsS "$API_ENDPOINT/v1/sites"
+open "$API_ENDPOINT/docs"
+```
+
+**Empty arrays are the expected answer, not a failure.** Until #12's forecast service is deployed and writing rows, `GET /v1/sites/{siteId}/forecast` returns `200` with `forecasts: []` — deliberate behaviour (a just-created site legitimately has no points yet), and what #17's poll keys on.
+
+**B6. Confirm no drift.**
+
+```bash
+terraform plan -detailed-exitcode
+echo $?   # expect 0
+```
+
+A `2` here has the same two causes as in the ingestion runbook: an artefact rebuilt since the apply, or a CI deploy. See the next section.
+
+### The deploy path: what CI ships for the API
+
+The heading differs from the ingestion runbook's only so the two sections have distinct anchors, the same reason the phases above differ from that runbook's.
+
+`.github/workflows/deploy-api.yml` updates the function's **code** on every push to `main` that touches `apps/api/**`, `packages/shared/**`, `packages/storage/**`, or the lockfile. It does nothing else, and it cannot: `deploy.tf` grants `cumulo-github-actions` exactly `lambda:UpdateFunctionCode` and `lambda:GetFunction` on this one function ARN.
+
+There is no `UpdateFunctionConfiguration` in that grant, so timeout, memory and environment stay reviewable `.tf` changes — and, more to the point on this stack, **there is no `apigatewayv2` permission of any kind**, so no workflow can move the throttle, the CORS configuration, or the routes. The cost guard is reachable only through a reviewed diff in this directory.
+
+Authentication is OIDC and there is no AWS secret in the repository. The role is assumed with a session named `deploy-api-<run-id>`, so CloudTrail traces an `UpdateFunctionCode` back to the run — and therefore the commit — that made it. The `source_code_hash` drift this creates is real, expected and bounded, exactly as described in the [ingestion deploy-path section](#the-deploy-path-what-ci-ships-and-what-terraform-owns) above.
+
+### Teardown of the api stack
+
+No ordering trap: this stack's state lives in a bucket another stack owns, nothing here is another stack's foundation, and every resource in it is free whether it is destroyed or forgotten.
+
+```bash
+terraform destroy
+```
+
+Verify from AWS rather than from Terraform:
+
+```bash
+aws lambda list-functions --query "Functions[?starts_with(FunctionName, 'cumulo-api')].FunctionName"
+# expect: []
+aws apigatewayv2 get-apis --query "Items[?starts_with(Name, 'cumulo-api')].Name"
+# expect: []
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/cumulo-api --query 'logGroups[].logGroupName'
+# expect: []
+
+aws iam list-role-policies --role-name cumulo-github-actions
+# expect: no cumulo-api-deploy-<env> entry — the role survives, its api grant does not
+```
+
+The last two are the ones worth actually running, for the same reasons the ingestion runbook gives: a log group Lambda created for itself outlives `destroy` and bills forever, and a destroyed service must not leave a live deploy permission behind on a role that outlives it.
+
+Keep `backend.hcl` and `api.auto.tfvars` — both are still correct for the next spin-up. To spin back up, run [Phase A](#phase-a--build-configure-and-plan-the-api) then [Phase B](#phase-b--apply-and-prove-the-endpoint) back to back, starting from the build.
+
+**Whether to leave it up.** Unlike ingestion, this stack does nothing while nobody is looking — it is request-driven, so an idle API is genuinely inert as well as free. The reason to think about it anyway is the opposite one: it is public. Leaving it up means leaving an unauthenticated write endpoint on the internet, bounded by the throttle and by nothing else until #29 lands. That is an accepted risk for a portfolio demo and a deliberate one; it is not an oversight.
+
+---
+
 ## Cost
 
 `eu-west-1`, and the amounts are not rounded down for effect — the stacks really are this cheap, which is the reason a remote backend is affordable at all under the ~$100/month ceiling.
@@ -822,3 +998,39 @@ Notes on what would change that:
 - **The Lambda timeout is a cost ceiling as well as a correctness one.** 300 s at 256 MB is the worst case the free GB-second allowance is measured against; raising either without raising the other is fine, raising both is the change to think about.
 - **A forgotten stack is free but not inert.** Unlike every other resource in the platform, this one _does things_ while nobody is looking: an enabled schedule spends ~288 Open-Meteo calls/day against the 10,000/day free tier and grows an unconsumed queue. That is a quota and hygiene concern, not a billing one — see the teardown section above.
 - **Nothing here has an hourly rate**, the same property the other two stacks preserve. The one change that would break it is a VPC configuration on the function: a Lambda in a VPC needing outbound internet access needs a NAT Gateway at ~$32/month, which is a third of the ceiling for a function that only talks to public AWS endpoints and Open-Meteo.
+
+### API stack
+
+The figures are [ADR 0005](../docs/adr/0005-fleet-api-hosting.md)'s, restated here because a cost table that lives only inside a decision record is not somewhere an operator looks. **This is the first stack whose volume is not a property of a schedule**, so it is costed twice: at the expected regime (a portfolio demo — order 10,000 requests/month including Swagger UI's assets) and at the bound (the stage throttle pegged continuously for a 30-day month, 25.92M requests).
+
+| Resource group                                                             | Billing basis                                                                                                                                          | Idle / demo  |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| **HTTP API requests** (`aws_apigatewayv2_api` + stage, route, integration) | $1.00 per million for the first 300M/month. **No per-hour charge, no minimum, no per-stage fee** — this is the line an ALB would have made ≈ $16.43/mo | **$0.00/mo** |
+| **Lambda invocations** (`aws_lambda_function.api`)                         | ~10,000/month against the always-free **1,000,000 requests/month**                                                                                     | **$0.00/mo** |
+| **Lambda compute**                                                         | 256 MB × ~100 ms is 0.025 GB-s/request, so the always-free **400,000 GB-seconds** covers 16M requests/month                                            | **$0.00/mo** |
+| **CloudWatch logs** (30-day retention on one group)                        | Kilobytes/month at demo volume against the free **5 GB** of ingestion                                                                                  | **$0.00/mo** |
+| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                             | 2 joining storage's 4 and ingestion's 2 — **8 of the always-free 10**; API Gateway and Lambda metrics are free                                         | **$0.00/mo** |
+| **IAM** (execution role, inline policies, Lambda permission)               | Roles and policies are free                                                                                                                            | **$0.00/mo** |
+| **Standing total**                                                         |                                                                                                                                                        | **$0.00/mo** |
+
+**Standing cost is $0** — no resource in this stack bills for existing, which is the property ADR 0004 established and ADR 0005 was written to protect. An API somebody forgets to destroy costs nothing, exactly like the queue.
+
+The marginal cost is where this stack differs from every other one, and it is the number to know:
+
+| Line               | Rate                                                                     | Per 1M requests |
+| ------------------ | ------------------------------------------------------------------------ | --------------- |
+| HTTP API requests  | $1.00/M (first 300M/month)                                               | $1.00           |
+| Lambda requests    | $0.20/M beyond the always-free million                                   | $0.20           |
+| Lambda compute     | $0.0000166667/GB-s — free up to ~16M requests/month at 256 MB and 100 ms | $0.00           |
+| **Marginal total** |                                                                          | **$1.20**       |
+
+At the demo regime that is about **one cent a month**. At the bound — 10 requests/second held continuously for 30 days — it is **≈ $36/month**: $25.92 of gateway requests, $5.18 of Lambda requests, $4.13 of compute past the free allowance, and ~$0.75 of log ingestion past the free 5 GB. Roughly a third of the ~$100/month ceiling, sustained, under continuous abuse.
+
+Notes on what would change that:
+
+- **The throttle is the bound.** Delete `default_route_settings` from `infra/api/gateway.tf` and the worst case stops being finite; nothing else in the platform would notice until the bootstrap stack's budget alarm fired at 50% of $100. Those two numbers belong in review whenever this stack changes.
+- **The 12-month API Gateway free tier is deliberately not counted.** New accounts get 1M HTTP API calls/month for twelve months. Every figure above is quoted at list price with it assumed absent, because a cost claim that rests on an expiring allowance expires with it. The always-free Lambda and CloudWatch allowances _are_ counted; they do not expire.
+- **Swagger UI is the request-hungry page.** A `/docs` view is roughly four or five billed gateway requests plus as many invocations (HTML, CSS, the bundle, `/openapi.json`), which is where the per-request premium lands hardest. It is cents at demo volume; if it ever became a material share of traffic, ADR 0005 revisit trigger 4 says to put the assets on a CDN.
+- **Crossing ~16M requests/month is the revisit point for compute**, not for requests: that is where Lambda's 400,000 free GB-seconds runs out at 256 MB, and the marginal cost per million starts rising with function duration instead of staying flat.
+- **The alarm allowance is now the tight one.** Eight of ten used. The ninth and tenth are free; the eleventh is $0.10/month, at which point "$0.00/mo" in these tables stops being literally true.
+- **Nothing here has an hourly rate**, the property all four stacks preserve.
