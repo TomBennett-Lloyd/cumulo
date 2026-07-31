@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@cumulo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@cumulo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
