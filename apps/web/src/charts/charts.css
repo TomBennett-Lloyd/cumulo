@@ -172,7 +172,10 @@
 /* A hairline is a hairline, not a quarter of a spacing step: `--space-1 / 4`
  * borrowed a token that means "gap between things" to express a border width,
  * and would change thickness if the spacing scale were ever retuned. The
- * longhands are the idiom `views.css` and `.swatch-chip` already use. */
+ * idiom is `views.css`'s — longhands with a plain `1px` width. `preview.css`
+ * splits the difference (longhands, but the calc value) in `.swatch-chip`,
+ * `.map-marker` and its own table rule; see docs/tech-debt.md on why the gate
+ * cannot see the difference. */
 .forecast-chart-table thead th {
   border-bottom-width: 1px;
   border-bottom-style: solid;
