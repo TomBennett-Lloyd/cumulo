@@ -32,6 +32,7 @@ Policy:
 - Writing or changing TypeScript types, or tempted by `any`/an assertion/a loose object shape? → `docs/standards/typing.md`
 - Writing or modifying a React component, hook, or `useEffect`? → `docs/standards/react.md`
 - Adding a module, package, service, or cross-package dependency? → `docs/standards/architecture.md`
+- Creating or splitting a file, extracting/naming a helper, choosing function vs class, or copy-pasting code? → `docs/standards/structure.md`
 - Writing a `catch`, or deciding what happens when something fails? → `docs/standards/error-handling.md`
 - Writing or modifying tests, or deciding what to test? → `docs/standards/testing.md`
 

@@ -12,9 +12,11 @@
 
 4. **Service boundaries are the ones in the ADR — resist fragmenting further.** Ingestion, forecast, fleet API, web. A new deployable needs an ADR arguing for it (independent scaling/failure/deploy cadence), not just a new concern. New concerns default to new _modules_ inside existing services.
 
-5. **No `utils/` dumping ground.** Name modules by domain (`irradiance.ts`, `aggregation.ts`), not by genericness. If code has no domain name, question whether it belongs here at all.
+5. **No `utils/` dumping ground.** Name modules by domain (`irradiance.ts`, `aggregation.ts`), not by genericness. If code has no domain name, question whether it belongs here at all. The `check:module-names` gate in `verify` enforces the filename half of this — a bare `utils.*` module fails the build, not just review.
 
 6. **Significant decisions get an ADR** (`docs/adr/`, template there). Significant = expensive to reverse, cross-service, or surprising to a newcomer. The service split, the DynamoDB/Postgres split, and the PV-model runtime are all ADR-worthy; a function's internal shape is not.
+
+7. **Functions by default; a class only where methods genuinely share state.** `this.` is the marker that makes that state visible — which is exactly what a factory closing over variables hides. One **flat** base class is acceptable for shared _mechanism_ that needs instance state (the storage adapters' error-wrapping helper is the motivating example). No hierarchies: a class extending anything other than a base that itself extends nothing is a review blocker (`Error` subclasses excepted). No speculative polymorphism: an abstract method needs ≥2 implementations in the same PR. And a detached method loses its `this`, so inject the object, not the method — `@typescript-eslint/unbound-method` enforces that.
 
 ## Why
 
