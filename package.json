@@ -11,10 +11,11 @@
     "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
-    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh",
+    "test:scripts": "bash .claude/scripts/worktree-lifecycle.test.sh && bash scripts/check-adr-index.test.sh",
+    "check:adr-index": "bash scripts/check-adr-index.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:scripts && pnpm format:check",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm check:adr-index && pnpm test:scripts && pnpm format:check",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "lint-staged": {
