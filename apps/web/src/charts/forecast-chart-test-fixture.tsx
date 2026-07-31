@@ -1,0 +1,83 @@
+import { render } from '@testing-library/react';
+import { ForecastChart, type ForecastChartPoint } from './ForecastChart';
+
+/**
+ * Shared fixtures and DOM lookups for the `ForecastChart` suites. The static
+ * chart and its hover layer are tested in separate files (`structure.md` rule
+ * 4), but they exercise the same component over the same series — so the
+ * builders live here rather than in two copies that would have to be changed
+ * together to stay meaningful (`structure.md` rule 7).
+ */
+
+const iso = (hour: number): string => `2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`;
+
+export const banded = (
+  hour: number,
+  medianKw: number,
+  actualKw: number | null,
+): ForecastChartPoint => ({
+  validTimeIso: iso(hour),
+  medianKw,
+  band: { p10Kw: medianKw - 1, p90Kw: medianKw + 1 },
+  actualKw,
+});
+
+/** No `band` key at all — a point estimate, not a band of `undefined`. */
+export const bare = (
+  hour: number,
+  medianKw: number,
+  actualKw: number | null,
+): ForecastChartPoint => ({
+  validTimeIso: iso(hour),
+  medianKw,
+  actualKw,
+});
+
+/** Five samples, banded throughout, measured up to a horizon at index 2. */
+export const SERIES: readonly ForecastChartPoint[] = [
+  banded(6, 1, 0.9),
+  banded(9, 4, 3.8),
+  banded(12, 6, 5.9),
+  banded(15, 5, null),
+  banded(18, 2, null),
+];
+
+export const renderChart = (points: readonly ForecastChartPoint[]): HTMLElement => {
+  const { container } = render(
+    <ForecastChart
+      points={points}
+      ariaLabel="Sunnyside Farm: forecast and actuals"
+      tableCaption="Table view — Sunnyside Farm, kW"
+    />,
+  );
+  return container;
+};
+
+/** Scoped to the plot, so legend swatches wearing the same classes stay out. */
+export const marks = (container: HTMLElement, selector: string): readonly Element[] => [
+  ...container.querySelectorAll(`.forecast-chart > ${selector}`),
+];
+
+export const requireMark = (container: HTMLElement, selector: string): Element => {
+  const found = marks(container, selector)[0];
+  if (found === undefined) {
+    throw new Error(`no mark matching ${selector}`);
+  }
+  return found;
+};
+
+export const requireSvg = (container: HTMLElement): SVGSVGElement => {
+  const svg = container.querySelector<SVGSVGElement>('svg.forecast-chart');
+  if (svg === null) {
+    throw new Error('no chart svg');
+  }
+  return svg;
+};
+
+export const tableCells = (
+  container: HTMLElement,
+  rowIndex: number,
+): readonly (string | null)[] => {
+  const row = [...container.querySelectorAll('.forecast-chart-table tbody tr')][rowIndex];
+  return [...(row?.querySelectorAll('td') ?? [])].map((cell) => cell.textContent);
+};

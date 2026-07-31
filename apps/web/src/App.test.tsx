@@ -13,7 +13,18 @@ afterEach(() => {
   delete document.documentElement.dataset.theme;
 });
 
-describe('App', () => {
+/**
+ * The shell is tested against the real fixture provider, not a stub: what these
+ * tests are for is the wiring — that the switcher mounts the view it names and
+ * that the view finds a data source at all. A stub here would pass with the
+ * provider unplugged, which is the one failure the chunk exists to rule out.
+ * Each test therefore awaits the rendered chart, which is also what settles the
+ * provider's promises before the test ends.
+ */
+const FLEET_CHART_LABEL = /Fleet aggregate forecast and measured output/;
+const SITE_CHART_LABEL = /forecast and measured generation/;
+
+describe('App theming', () => {
   it('themes the document light before anyone touches the toggle', () => {
     render(<App />);
 
@@ -42,5 +53,79 @@ describe('App', () => {
     fireEvent.click(toggle);
 
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('App view switcher', () => {
+  it('opens on the fleet aggregate, drawn from the fixture fleet', async () => {
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'Fleet aggregate' })).toBeDefined();
+    expect(await screen.findByRole('img', { name: FLEET_CHART_LABEL })).toBeDefined();
+  });
+
+  it('replaces the fleet view with one site when the site tab is pressed', async () => {
+    render(<App />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Site forecast' }));
+
+    expect(await screen.findByRole('img', { name: SITE_CHART_LABEL })).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Fleet aggregate' })).toBeNull();
+    expect(screen.queryByRole('img', { name: FLEET_CHART_LABEL })).toBeNull();
+  });
+
+  it('shows the token preview on its tab, and no chart view with it', async () => {
+    render(<App />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Design tokens' }));
+
+    expect(screen.getByRole('heading', { name: 'Colour' })).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Fleet aggregate' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Site forecast' })).toBeNull();
+  });
+
+  it('returns to the fleet view from another tab', async () => {
+    render(<App />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
+    fireEvent.click(screen.getByRole('button', { name: 'Design tokens' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fleet aggregate' }));
+
+    expect(await screen.findByRole('img', { name: FLEET_CHART_LABEL })).toBeDefined();
+  });
+
+  it('reports which view is showing through the nav buttons', async () => {
+    render(<App />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
+    const pressedStates = (): readonly (string | null)[] =>
+      screen
+        .getAllByRole('button', { name: /Fleet aggregate|Site forecast|Design tokens/ })
+        .map((button) => button.getAttribute('aria-pressed'));
+
+    expect(pressedStates()).toEqual(['true', 'false', 'false']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Site forecast' }));
+    await screen.findByRole('img', { name: SITE_CHART_LABEL });
+
+    expect(pressedStates()).toEqual(['false', 'true', 'false']);
+  });
+});
+
+describe('App attribution', () => {
+  it('credits Open-Meteo exactly once on the fleet view', async () => {
+    render(<App />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
+
+    expect(screen.getAllByRole('link', { name: 'Open-Meteo.com' })).toHaveLength(1);
+  });
+
+  it('credits Open-Meteo exactly once on the site view', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Site forecast' }));
+    await screen.findByRole('img', { name: SITE_CHART_LABEL });
+
+    expect(screen.getAllByRole('link', { name: 'Open-Meteo.com' })).toHaveLength(1);
   });
 });
