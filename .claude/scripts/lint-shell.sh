@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# The static-analysis gate for shell, i.e. what `pnpm lint` is for TypeScript.
-# Wired into `pnpm verify` as `lint:sh`, so every caller of the composite — CI,
-# an agent, a human about to commit — inherits it (CLAUDE.md: a gate that is not
-# in `verify` is a gate somebody will forget to run).
+# The static-analysis gate for shell — the third linter, alongside `lint:js`
+# (eslint) and `lint:css` (stylelint). It hangs off the same `pnpm lint`
+# aggregate they do rather than off `verify` directly, so "the linters" stays one
+# name; `verify` inherits it through `lint`, and with it every caller of the
+# composite — CI, an agent, a human about to commit (CLAUDE.md: a gate that is
+# not in `verify` is a gate somebody will forget to run).
 #
 # The file list is DISCOVERED, never hard-coded. A gate that enumerates its own
 # inputs goes stale the moment somebody adds a script, and #47 was filed for

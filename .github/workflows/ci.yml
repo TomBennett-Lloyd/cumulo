@@ -22,17 +22,20 @@ jobs:
       # green-by-absence. Calling the composite makes CI a caller like any other,
       # so a gate added to `verify` is automatically enforced here.
       # The cost is real but small: GitHub shows one step's timing and one
-      # failure marker instead of per-gate ones. The composite runs in a fixed
-      # order (lint -> lint:sh -> typecheck -> test -> test:scripts ->
-      # format:check) and stops at the first failure, so the log still names the
-      # failing gate. Gate completeness beats step granularity.
+      # failure marker instead of per-gate ones. The composite runs its gates in
+      # a fixed order and stops at the first failure, so the log still names the
+      # failing one. Which gates those are is deliberately not written here —
+      # package.json is the single place that list lives, and restating it would
+      # re-create exactly the duplicate this step exists to remove.
+      # Gate completeness beats step granularity.
       #
-      # No `apt-get install shellcheck` step for the lint:sh gate: the runner
-      # image ships it. Verified against actions/runner-images, not assumed —
-      # images/ubuntu/Ubuntu2404-Readme.md (ubuntu-latest today) lists shellcheck
-      # 0.9.0-1, and Ubuntu2204-Readme.md lists 0.8.0-2, so the pin survives the
-      # next ubuntu-latest rollover too. If a future image drops it, lint:sh
-      # hard-fails with install instructions rather than passing by skipping.
+      # No `apt-get install shellcheck` step, even though the composite shells
+      # out to it: the runner image ships shellcheck. Verified against
+      # actions/runner-images, not assumed — images/ubuntu/Ubuntu2404-Readme.md
+      # (ubuntu-latest today) lists shellcheck 0.9.0-1, and Ubuntu2204-Readme.md
+      # lists 0.8.0-2, so this survives the next ubuntu-latest rollover too. If a
+      # future image drops it, the shell gate hard-fails with install
+      # instructions rather than passing by skipping.
       # Open caveat, first checked on this PR's own CI run: local Homebrew is on
       # 0.11.0, so the runner lints with an older shellcheck than a developer
       # does. Newer versions add checks, which makes CI the more permissive of
