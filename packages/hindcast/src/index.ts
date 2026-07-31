@@ -1,5 +1,13 @@
 export { utcDaysCovering, contiguousDayRuns, type UtcDay, type DayRun } from './archive-days';
 export {
+  ensureArchiveCoverage,
+  type ArchiveCoverageDeps,
+  type ArchiveCoverageOutcome,
+  type ArchiveDayCoverage,
+  type ArchiveDayStore,
+  type FetchArchiveRun,
+} from './archive-cache';
+export {
   fetchArchiveDays,
   parseArchiveResponse,
   archiveResponseSchema,
