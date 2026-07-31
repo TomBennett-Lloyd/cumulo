@@ -1,0 +1,398 @@
+// @vitest-environment jsdom
+
+import { forecastSchema, type CreateSiteInput, type Forecast, type Site } from '@cumulo/shared';
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { DataResult, FleetDataSource } from './fleet-data-source';
+import { useFirstForecast } from './use-first-forecast';
+
+const SITE_ID = '3c3d3e3f-0000-4000-8000-000000000001';
+const OTHER_SITE_ID = '3c3d3e3f-0000-4000-8000-000000000002';
+
+/** The instant every fake-timer test starts from, so elapsed time is readable. */
+const START_MS = Date.UTC(2026, 6, 31, 9, 0, 0);
+
+/** What the stub knows when it answers one poll. */
+interface PollContext {
+  /** Simulated milliseconds since the source was constructed. */
+  readonly elapsedMs: number;
+  /** 0 for the first forecast poll, 1 for the second, and so on. */
+  readonly callIndex: number;
+}
+
+type ForecastAnswer = (context: PollContext) => Promise<DataResult<readonly Forecast[]>>;
+
+type ForecastResolver = (result: DataResult<readonly Forecast[]>) => void;
+
+const oneForecast = (siteId: string): readonly Forecast[] => [
+  forecastSchema.parse({
+    siteId,
+    model: 'physics',
+    validTime: '2026-07-31T10:00:00Z',
+    issuedAt: '2026-07-31T09:00:00Z',
+    weatherSource: 'open-meteo',
+    poaIrradianceWm2: 620,
+    acPowerKw: 3.1,
+  }),
+];
+
+const forecastReady = (siteId: string): DataResult<readonly Forecast[]> => ({
+  kind: 'ok',
+  value: oneForecast(siteId),
+});
+
+const notFound = (siteId: string): DataResult<never> => ({
+  kind: 'error',
+  error: { code: 'not-found', message: `No forecast for site ${siteId} yet` },
+});
+
+const rateLimited = (retryAfterSeconds: number): DataResult<never> => ({
+  kind: 'error',
+  error: {
+    code: 'rate-limited',
+    message: 'The fleet is rate-limiting forecast reads',
+    retryAfterSeconds,
+  },
+});
+
+const networkDown = (): DataResult<never> => ({
+  kind: 'error',
+  error: { code: 'network', message: 'The fleet did not answer' },
+});
+
+/** The demo pipeline's shape: nothing until it finishes, then the series. */
+const forecastAfterMs =
+  (availableAfterMs: number, siteId: string): ForecastAnswer =>
+  (context) =>
+    Promise.resolve(
+      context.elapsedMs >= availableAfterMs ? forecastReady(siteId) : notFound(siteId),
+    );
+
+const alwaysAnswering =
+  (answer: DataResult<readonly Forecast[]>): ForecastAnswer =>
+  () =>
+    Promise.resolve(answer);
+
+/** Rate-limited once, then the ordinary wait — the backoff is what the test measures. */
+const rateLimitedFirst =
+  (retryAfterSeconds: number, siteId: string): ForecastAnswer =>
+  (context) =>
+    Promise.resolve(context.callIndex === 0 ? rateLimited(retryAfterSeconds) : notFound(siteId));
+
+/**
+ * Answers nothing on its own: each call parks its resolver in the array the
+ * test owns and passed in, so the test decides when — and whether — a poll that
+ * is already in flight ever comes back.
+ */
+const deferredAnswer =
+  (resolvers: ForecastResolver[]): ForecastAnswer =>
+  () =>
+    new Promise<DataResult<readonly Forecast[]>>((resolve) => {
+      resolvers.push(resolve);
+    });
+
+const answerCall = (
+  resolvers: readonly ForecastResolver[],
+  index: number,
+  result: DataResult<readonly Forecast[]>,
+): void => {
+  const resolve = resolvers[index];
+  if (resolve === undefined) {
+    throw new Error(`The hook has not made forecast call ${String(index)}`);
+  }
+  resolve(result);
+};
+
+/**
+ * A `FleetDataSource` that records every call it receives and answers forecast
+ * polls from an injected policy.
+ *
+ * The call log is the point: this chunk's headline constraint is *which*
+ * partition the loop reads (ADR 0002's review), and a log of exact call
+ * arguments is the only way to prove a fleet fan-out never happened. Hence a
+ * class rather than three loose spies — the log and the answer policy are
+ * shared state (`structure.md` rule 2).
+ */
+class ScriptedFleetDataSource implements FleetDataSource {
+  /** Every call, in order: `listSites`, `createSite:<name>` or `getSiteForecast:<siteId>`. */
+  readonly calls: string[] = [];
+  private readonly answer: ForecastAnswer;
+  private readonly startedAtMs = Date.now();
+  private forecastCalls = 0;
+
+  constructor(answer: ForecastAnswer) {
+    this.answer = answer;
+  }
+
+  listSites(): Promise<DataResult<readonly Site[]>> {
+    this.calls.push('listSites');
+    return Promise.resolve({ kind: 'ok', value: [] });
+  }
+
+  createSite(input: CreateSiteInput): Promise<DataResult<Site>> {
+    this.calls.push(`createSite:${input.name}`);
+    return Promise.resolve({ kind: 'ok', value: { id: SITE_ID, ...input } });
+  }
+
+  getSiteForecast(siteId: Site['id']): Promise<DataResult<readonly Forecast[]>> {
+    this.calls.push(`getSiteForecast:${siteId}`);
+    const callIndex = this.forecastCalls;
+    this.forecastCalls += 1;
+    return this.answer({ elapsedMs: Date.now() - this.startedAtMs, callIndex });
+  }
+}
+
+/** Move the simulated clock and let React commit whatever that produced. */
+const advanceBy = async (ms: number): Promise<void> => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+
+/** Let already-resolved promises settle without moving the clock. */
+const settle = async (): Promise<void> => {
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
+
+/** Simulated milliseconds since the watch began. */
+const simulatedElapsedMs = (): number => Date.now() - START_MS;
+
+interface WatchProps {
+  readonly siteId: Site['id'] | null;
+}
+
+describe('useFirstForecast', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(START_MS);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  // The ticket's headline promise, measured rather than asserted by structure:
+  // a pipeline that takes 48 s must be visible within one poll of finishing.
+  it('shows a 48-second forecast inside the ticket’s minute, one poll after it exists', async () => {
+    const source = new ScriptedFleetDataSource(forecastAfterMs(48_000, SITE_ID));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    expect(watch.result.current.state.status).toBe('pending');
+
+    await advanceBy(45_000);
+    const waiting = watch.result.current.state;
+    expect(waiting.status === 'pending' && waiting.elapsedSeconds).toBe(45);
+
+    while (watch.result.current.state.status === 'pending' && simulatedElapsedMs() < 60_000) {
+      await advanceBy(1_000);
+    }
+
+    const ready = watch.result.current.state;
+    expect(ready.status).toBe('ready');
+    expect(ready.status === 'ready' && ready.forecasts[0]?.siteId).toBe(SITE_ID);
+    expect(simulatedElapsedMs()).toBeLessThanOrEqual(53_000);
+  });
+
+  // ADR 0002's review of this ticket: a per-site read is ~0.5 read units, the
+  // fleet fan-out ~25. A loop that re-listed the fleet would let three open
+  // tabs exhaust the table's capacity between them.
+  it('reads only the watched site’s own partition, never the fleet fan-out', async () => {
+    const source = new ScriptedFleetDataSource(forecastAfterMs(48_000, SITE_ID));
+    renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(50_000);
+
+    expect(source.calls.length).toBeGreaterThan(1);
+    expect(new Set(source.calls)).toEqual(new Set([`getSiteForecast:${SITE_ID}`]));
+  });
+
+  it('stops polling once the forecast is ready', async () => {
+    const source = new ScriptedFleetDataSource(forecastAfterMs(48_000, SITE_ID));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(50_000);
+    expect(watch.result.current.state.status).toBe('ready');
+    const callsAtReady = source.calls.length;
+    // Both timers are gone, not just the poll: a deadline left running would
+    // fire later and overwrite a forecast the visitor is already reading.
+    expect(vi.getTimerCount()).toBe(0);
+
+    await advanceBy(60_000);
+
+    expect(source.calls.length).toBe(callsAtReady);
+    expect(watch.result.current.state.status).toBe('ready');
+  });
+
+  // A `ready` state carrying no forecasts would render the panel's table with
+  // no rows, which reads as "this site produces nothing" rather than "still
+  // waiting" — so an empty series is a wait, not an arrival.
+  it('keeps waiting when the fleet answers with an empty forecast series', async () => {
+    const source = new ScriptedFleetDataSource(alwaysAnswering({ kind: 'ok', value: [] }));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(10_000);
+
+    expect(watch.result.current.state.status).toBe('pending');
+    expect(source.calls.length).toBeGreaterThan(1);
+  });
+
+  it('gives up at the 90-second deadline as a timeout, naming the site it waited for', async () => {
+    const source = new ScriptedFleetDataSource(alwaysAnswering(notFound(SITE_ID)));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(89_000);
+    expect(watch.result.current.state.status).toBe('pending');
+
+    await advanceBy(1_000);
+
+    const failed = watch.result.current.state;
+    expect(failed.status).toBe('failed');
+    expect(failed.status === 'failed' && failed.reason).toBe('timeout');
+    expect(failed.status === 'failed' && failed.message).toContain(SITE_ID);
+  });
+
+  it('resumes polling when the visitor retries a wait that timed out', async () => {
+    const source = new ScriptedFleetDataSource(alwaysAnswering(notFound(SITE_ID)));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(90_000);
+    const callsAtDeadline = source.calls.length;
+    await advanceBy(30_000);
+    expect(source.calls.length).toBe(callsAtDeadline);
+
+    act(() => {
+      watch.result.current.retry();
+    });
+    await settle();
+
+    expect(watch.result.current.state.status).toBe('pending');
+    expect(source.calls.length).toBeGreaterThan(callsAtDeadline);
+  });
+
+  // A fault is not a wait: the panel says something different for each, so the
+  // reason has to reflect what was actually seen (`forecast-view-state.ts`).
+  it('reports a deadline reached through faults as an error carrying the last message', async () => {
+    const source = new ScriptedFleetDataSource(alwaysAnswering(networkDown()));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(90_000);
+
+    const failed = watch.result.current.state;
+    expect(failed.status === 'failed' && failed.reason).toBe('error');
+    expect(failed.status === 'failed' && failed.message).toBe('The fleet did not answer');
+    // It kept polling through the faults rather than giving up on the first one.
+    expect(source.calls.length).toBeGreaterThan(1);
+  });
+
+  it('waits out a stated rate-limit backoff before polling again', async () => {
+    const source = new ScriptedFleetDataSource(rateLimitedFirst(12, SITE_ID));
+    renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    expect(source.calls).toHaveLength(1);
+
+    await advanceBy(11_999);
+    expect(source.calls).toHaveLength(1);
+
+    await advanceBy(1);
+    expect(source.calls).toHaveLength(2);
+  });
+
+  // A server saying "wait 1 second" must not make the loop poll five times
+  // faster than its own cadence (`error-handling.md` rule 3).
+  it('never polls faster than its own cadence when the stated backoff is shorter', async () => {
+    const source = new ScriptedFleetDataSource(rateLimitedFirst(1, SITE_ID));
+    renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    await advanceBy(4_999);
+    expect(source.calls).toHaveLength(1);
+
+    await advanceBy(1);
+    expect(source.calls).toHaveLength(2);
+  });
+
+  it('makes no call and leaves no timer after unmount, even when a poll answers late', async () => {
+    const resolvers: ForecastResolver[] = [];
+    const source = new ScriptedFleetDataSource(deferredAnswer(resolvers));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+    await settle();
+
+    watch.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+
+    // The abandoned request comes back after the component is gone, carrying
+    // the ordinary "not yet". Without the stale-run guard that answer would
+    // schedule the next poll from a run nobody is watching — which is what the
+    // call log and timer count below catch.
+    await act(async () => {
+      answerCall(resolvers, 0, notFound(SITE_ID));
+      await Promise.resolve();
+    });
+    await advanceBy(60_000);
+
+    expect(source.calls).toEqual([`getSiteForecast:${SITE_ID}`]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('discards the answer to a poll for a site the visitor has moved on from', async () => {
+    const resolvers: ForecastResolver[] = [];
+    const source = new ScriptedFleetDataSource(deferredAnswer(resolvers));
+    const watch = renderHook(({ siteId }: WatchProps) => useFirstForecast(source, siteId), {
+      initialProps: { siteId: SITE_ID },
+    });
+    await settle();
+
+    watch.rerender({ siteId: OTHER_SITE_ID });
+    await settle();
+    expect(source.calls).toEqual([
+      `getSiteForecast:${SITE_ID}`,
+      `getSiteForecast:${OTHER_SITE_ID}`,
+    ]);
+
+    // The first site's forecast lands after the watch moved to the second one.
+    await act(async () => {
+      answerCall(resolvers, 0, forecastReady(SITE_ID));
+      await Promise.resolve();
+    });
+
+    expect(watch.result.current.state.status).toBe('pending');
+  });
+
+  it('starts no polling at all while no site is being watched', async () => {
+    const source = new ScriptedFleetDataSource(alwaysAnswering(forecastReady(SITE_ID)));
+    const watch = renderHook(({ siteId }: WatchProps) => useFirstForecast(source, siteId), {
+      initialProps: { siteId: null },
+    });
+
+    await advanceBy(90_000);
+
+    expect(source.calls).toEqual([]);
+    expect(watch.result.current.state).toEqual({ status: 'pending', elapsedSeconds: 0 });
+  });
+
+  /*
+   * `testing.md` rule 7. Every test above neuters the clock — fake timers are
+   * the only way to reach a 90-second deadline in a unit suite — so one test
+   * has to run the configuration that ships: the real clock, real timers, and
+   * the module's own cadence and deadline constants, none of which are
+   * injectable. It proves the part of the promise that needs no clock at all:
+   * the first poll is issued on mount rather than one interval later, which is
+   * what makes a site whose forecast already exists render immediately.
+   */
+  it('polls immediately on mount with the real clock and the shipped constants', async () => {
+    vi.useRealTimers();
+    const source = new ScriptedFleetDataSource(alwaysAnswering(forecastReady(SITE_ID)));
+
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+    await settle();
+
+    expect(watch.result.current.state.status).toBe('ready');
+    expect(source.calls).toEqual([`getSiteForecast:${SITE_ID}`]);
+  });
+});
