@@ -174,3 +174,15 @@ Entry format:
 - Where: this file — e.g. the python3 entry cites `worktree-lib.sh`:20,68 where the second call now sits at :75; the `test:scripts` entry quotes the script literal as two harnesses after this branch made it three; two more pointer corrections were needed on this very PR (#69 closing review)
 - What: entries that pin a claim to a line number or a copied code literal go stale the moment an unrelated change moves the code — and a stale pointer sends whoever picks the entry up to a place that does not contain the thing, or silently understates the blast radius. This is the same drift class the pinning entry above diagnoses in `README.md` prose, recursing into the debt log itself. Fix is a convention for this file, not more edits: cite files and symbol/section names (function names, headings, config keys), never bare line numbers; describe code rather than quoting it verbatim unless the quote is the finding. Wants one line in this file's header stating the rule.
 - Source: #69 closing review
+
+## 2026-07-31 — Supersession is now stated in two places the gate never cross-validates
+
+- Where: `.claude/scripts/check-adr-index.sh` (`check_supersessions`, `adr_status_value`), `docs/adr/README.md` (index annotation grammar)
+- What: #85 validates an index row's `— superseded by NNNN` annotation and an ADR file's `Status:` line each in isolation, so the gate sanctions exactly the disagreement it exists to prevent: an index row can say superseded while the file still says `accepted`, and vice versa, both exiting 0. Three adjacent soft spots share the scan-rather-than-parse root cause: the first `Status:` line in a header wins, so a second, conflicting `Status:` line (the plausible "added instead of replaced" edit) is never read; a self-referential `superseded by 0001` inside `0001-*.md` passes; and the number is regex-scraped from free text, so `superseded by 00021` resolves against `0002`. One fix shape: parse (status, pointer) per file and per row, then require agreement and sanity in one place.
+- Source: #85 review cycle 1
+
+## 2026-07-31 — ADR Status vocabulary is duplicated between the template and the gate
+
+- Where: `docs/adr/0000-template.md` (the `Status:` menu line), `.claude/scripts/check-adr-index.sh` (the status `case`)
+- What: the allowed vocabulary (`proposed | accepted | superseded by NNNN`) lives in the template's prose and again in the gate's `case`, with nothing binding them — adding a value to the template makes the gate reject conforming ADRs, and extending the gate leaves the template lying. Same restated-list drift class as the `README.md`/`.githooks/pre-commit` gate-list entry. Cheapest fix: the gate derives the vocabulary by reading the template's menu line (the template is already excluded from per-file checks, so reading it is safe), making the template the single source. Also: the two harness cases exercising the new `${hits[@]+…}` empty-array guard run only under the default `bash`, not the `$BASHES` loop the harness header commits to — on CI (bash ≥ 4.4) the 3.2 guard is unexercised; wrap one variant in the loop when next touching the harness.
+- Source: #85 review cycle 1
