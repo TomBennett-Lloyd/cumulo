@@ -1,17 +1,44 @@
 # Review-feedback log
 
-Every substantive piece of human review feedback — on plans or PRs — gets an entry here as it is addressed. `/retro` mines this log to update standards and agent guidance; a category going quiet across consecutive reviews is the evidence for graduating that gate toward autonomy (a flag flip in `.claude/workflow.json`, proposed as its own PR, decided by the user).
+Every substantive piece of human review feedback — on plans or PRs — gets an entry here as it is addressed. `/retro` mines this log to update standards and agent guidance, and the graduation rule below reads its categories, so the vocabulary has to mean something: it is declared here, closed, and trued up to what the entries actually say.
 
-Entry format:
+## Entry format
 
 ```
-## YYYY-MM-DD — PR/issue #n — <short-slug>
-- Category: plan | code-style | architecture | testing | other
-- Feedback: what the user asked for, verbatim where short
-- Action: what changed in response (code fix, standards edit, agent-guidance edit, or none + why)
+## YYYY-MM-DD — [PR/issue #n — ]<short-slug>
+
+- **Category**: one category from the vocabulary below
+- **Feedback**: what the user asked for, verbatim where short
+- **Why**: why the feedback is right — the reasoning or evidence behind it, not a restatement of it
+- **How applied**: what changed in response (code fix, standards edit, agent-guidance edit, config flip, or none + why)
 ```
 
-One entry per distinct feedback item; the slug names that item's subject and disambiguates multiple items arising from the same review.
+One entry per distinct feedback item; the slug names that item's subject and disambiguates multiple items arising from the same review. The `PR/issue #n` segment is present when the feedback attaches to one PR or issue, and omitted when it arrived in chat outside any single one — name the PRs in the body instead.
+
+The first eleven entries use an earlier unbolded `Category / Feedback / Action` triplet, where `Action` covers what `Why` and `How applied` now separate. They stand exactly as written: the entries are the record, so the declaration is trued up to them and never the other way round.
+
+## Category vocabulary
+
+Closed list — every entry's category is one of these:
+
+- **plan** — the shape of a plan before it is executed: scope, chunking, sequencing, acceptance criteria, what a ticket defers.
+- **code-style** — how code is written within an already-agreed structure: naming, function and module shape, hooks and scripts, formatting gates.
+- **architecture** — decisions that ossify: interfaces, data models, infrastructure topology, ADR content.
+- **testing** — what is tested, how, and what counts as evidence. No entries yet; kept declared so test feedback has a home, and see the graduation rule for why an empty category is not a quiet one.
+- **convention** — a documentation or process convention the repo follows, distinct from the code it describes (e.g. how ADRs are amended).
+- **gate-calibration** — where an approval gate sits: which changes need the human, which run autonomously, recorded when the gate itself moves.
+- **approved-no-changes** — the owner approved a human-gated change with no revisions requested. Logged because a quiet category has to be distinguishable from an unlogged one.
+- **other** — feedback that genuinely fits none of the above. Reach for it last: the three entries using it are merge-policy, worktree-lifecycle and verification-rigour items that predate `gate-calibration` and `convention`.
+
+A parenthesised qualifier after the category — `other (verification rigour)`, `issue #2 (plan review)` — is a permitted annotation, not a category. Only the bare word before the parenthesis counts as the category. A feedback item that needs a category not listed here adds one to this list in the same PR as the entry — that is what keeps the list both closed and honest.
+
+## Graduation rule
+
+A category going quiet across consecutive reviews is the evidence for graduating that gate toward autonomy (a flag flip in `.claude/workflow.json`, proposed as its own PR, decided by the user). In terms of the vocabulary above:
+
+- Quiet means no change-requesting entry in that category. **approved-no-changes** entries are positive evidence of quiet, not entries against the subject category.
+- **gate-calibration** entries record a gate that has already moved. They are the rule's output, not its input, and never count as evidence for the next move.
+- A category with no entries at all has never been exercised. That is absence of evidence, not evidence of quiet, and cannot on its own graduate a gate.
 
 ---
 
