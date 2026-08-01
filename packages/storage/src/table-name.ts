@@ -7,8 +7,12 @@
  * the code side is one function rather than a string literal per adapter.
  */
 
-/** The four tables of ADR 0002's single-store design. */
-export type StorageTable = 'sites' | 'series' | 'weather' | 'metrics';
+/**
+ * The tables of ADR 0002's single-store design, plus `abuse` — #29's per-IP
+ * limiter state, which is request-shaped rather than part of the domain model
+ * but is created by the same stack and named by the same convention.
+ */
+export type StorageTable = 'sites' | 'series' | 'weather' | 'metrics' | 'abuse';
 
 /**
  * Mirrors the `environment` variable validation in `infra/storage/variables.tf`.

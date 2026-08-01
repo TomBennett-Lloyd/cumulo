@@ -9,6 +9,7 @@ import {
   describeZodIssues,
   errorResponse,
   jsonResponse,
+  rateLimitedResponse,
   zodIssueDetails,
 } from './response';
 
@@ -66,9 +67,17 @@ describe('jsonResponse', () => {
 describe('errorResponse', () => {
   it('derives the status from the code, so the contract cannot be mispaired', () => {
     expect(errorResponse('validation_failed', 'no').statusCode).toBe(400);
+    expect(errorResponse('forbidden', 'no').statusCode).toBe(403);
     expect(errorResponse('not_found', 'no').statusCode).toBe(404);
+    expect(errorResponse('rate_limited', 'no').statusCode).toBe(429);
     expect(errorResponse('internal', 'no').statusCode).toBe(500);
-    expect(apiErrorStatus).toEqual({ validation_failed: 400, not_found: 404, internal: 500 });
+    expect(apiErrorStatus).toEqual({
+      validation_failed: 400,
+      forbidden: 403,
+      not_found: 404,
+      rate_limited: 429,
+      internal: 500,
+    });
   });
 
   it('produces a body that validates against the shared apiErrorSchema', () => {
@@ -92,6 +101,42 @@ describe('errorResponse', () => {
 
     expect(body.details).toEqual(details);
   });
+});
+
+describe('rateLimitedResponse', () => {
+  it('pairs 429 with rate_limited, so a client branching on either agrees with itself', () => {
+    // The half of the contract a caller sees. The *other* 429 — API Gateway's
+    // throttle, generated before this Lambda runs — carries a body this parse
+    // would reject, which is why the contract says to map on status.
+    const response = rateLimitedResponse(60);
+
+    expect(response.statusCode).toBe(429);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('rate_limited');
+  });
+
+  it('names the wait in the retry-after header, in seconds', () => {
+    expect(rateLimitedResponse(3_600).headers['retry-after']).toBe('3600');
+  });
+
+  it('states the same wait in the message a human reads', () => {
+    // One argument, two renderings: the header a client parses cannot disagree
+    // with the sentence an operator sees in a terminal.
+    expect(apiErrorSchema.parse(jsonBodyOf(rateLimitedResponse(3_600))).message).toContain('3600');
+  });
+
+  it('still declares JSON alongside the retry hint', () => {
+    expect(rateLimitedResponse(60).headers['content-type']).toBe('application/json');
+  });
+
+  it.each([0, -60, 1.5, Number.NaN])(
+    'rejects a retry hint of %s — not a positive whole number of seconds',
+    (seconds) => {
+      // A violated invariant rather than a domain outcome: a `retry-after` a
+      // client cannot parse is read as "retry now", straight back into the
+      // limiter that just refused.
+      expect(() => rateLimitedResponse(seconds)).toThrow(/positive integer/);
+    },
+  );
 });
 
 describe('zodIssueDetails', () => {

@@ -10,6 +10,12 @@ import { errorResponse, type ApiResponse } from './response';
  * it already parses. What a framework would give us is exactly what this file
  * is: match a method and a path, extract the parameters, and decide what an
  * unmatched request means.
+ *
+ * Matching is **exact, deliberately**, because this table is not the only thing
+ * that matches these paths: API Gateway matches its own declared route keys
+ * against the raw path to decide which throttle applies. A router that accepted
+ * spellings the gateway does not would let a caller pick the looser limit — see
+ * {@link canonicalPathSegments}, where that reasoning lives.
  */
 
 /** A path segment that captures its value under `param` rather than matching a literal. */
@@ -27,6 +33,12 @@ export type PathSegment = string | PathParameter;
  * all", and the handler owns "is this JSON the thing I need", which is what
  * keeps a single `validation_failed` shape across both without a `try`/`catch`
  * per handler.
+ *
+ * `sourceIp`, `originHeader` and `ownOrigin` ride through from
+ * {@link ApiRequest} unchanged. The router makes no decision with any of them —
+ * the abuse protections are wrappers around individual handlers in `main.ts`,
+ * not a middleware layer here — but the wrapper receives a `RouteRequest`, so
+ * the three have to survive the trip.
  */
 export interface RouteRequest {
   readonly method: string;
@@ -34,6 +46,9 @@ export interface RouteRequest {
   readonly query: Record<string, string>;
   readonly params: Record<string, string>;
   readonly body: unknown;
+  readonly sourceIp: string;
+  readonly originHeader: string | undefined;
+  readonly ownOrigin: string;
 }
 
 export type RouteHandler = (request: RouteRequest) => Promise<ApiResponse>;
@@ -51,12 +66,46 @@ export interface RouteMatch {
 }
 
 /**
- * Empty segments are dropped, so `/v1/sites`, `/v1/sites/` and `//v1//sites`
- * are one resource. The alternative — 404 on a trailing slash — is a distinction
- * no caller means to draw.
+ * The segments of a **canonical** path, or `undefined` for anything else.
+ *
+ * Canonical means: a leading `/`, and no empty segment after it. So `/v1/sites`
+ * matches and `/v1/sites/`, `//v1//sites` and `/v1//sites` do not — they fall
+ * through to the 404 below.
+ *
+ * This used to normalise instead, dropping empty segments so a trailing slash
+ * named the same resource. That read as generosity and was a hole. **API
+ * Gateway matches its declared route keys against the raw path, exactly**, and
+ * `infra/api/gateway.tf` declares `POST /v1/sites`, `PUT /v1/sites/{siteId}`
+ * and `DELETE /v1/sites/{siteId}` precisely so the stage can throttle those
+ * three at 2 rps / burst 4 instead of the stage-wide 10 / 20 (ADR 0006 layer
+ * 2). A request to `POST /v1/sites/` does not match that key, so it fell
+ * through to `$default` — and a normalising router then served it as a create.
+ * One trailing slash bought a 5× looser write throttle, which is the opposite
+ * of a distinction no caller means to draw.
+ *
+ * Refusing to match is the fix that keeps the two tables agreeing on what a
+ * route *is*, rather than teaching the gateway every spelling of every path:
+ * slash variants declared at the gateway would be six more route keys to keep
+ * in step with this file, and the next non-canonical form (`/v1//sites`) would
+ * still be uncovered. The cost is that `GET /docs/` is now a 404 where it used
+ * to render — accepted: `/docs` is what the runbook and every Swagger UI asset
+ * URL use, and those are absolute (`/docs/swagger-ui.css`), so nothing in the
+ * page depends on the trailing form.
+ *
+ * The gateway's exact-match behaviour is confirmed live by issue #29's E2
+ * evidence run, which watches the tighter limit bite on `POST /v1/sites`.
  */
-const pathSegments = (path: string): string[] =>
-  path.split('/').filter((segment) => segment !== '');
+const canonicalPathSegments = (path: string): string[] | undefined => {
+  const [leading, ...segments] = path.split('/');
+
+  // A path that does not start with `/` has no leading empty piece, and one
+  // with a doubled or trailing slash has an empty piece among the rest.
+  if (leading !== '' || segments.includes('')) {
+    return undefined;
+  }
+
+  return segments;
+};
 
 const matchSegments = (
   pattern: readonly PathSegment[],
@@ -95,7 +144,10 @@ export const matchRoute = (
   routes: readonly Route[],
   request: ApiRequest,
 ): RouteMatch | undefined => {
-  const actual = pathSegments(request.path);
+  const actual = canonicalPathSegments(request.path);
+  if (actual === undefined) {
+    return undefined;
+  }
 
   for (const route of routes) {
     if (route.method !== request.method) {
@@ -137,7 +189,9 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *
  * - **No route matches** → 404 `not_found`. Method mismatch included: a 405
  *   would tell an unauthenticated caller which methods a path supports, and the
- *   error contract has one code for "there is nothing here" on purpose.
+ *   error contract has one code for "there is nothing here" on purpose. A
+ *   non-canonical path (`/v1/sites/`, `//v1//sites`) is "no route matches" for
+ *   the gateway-parity reason on {@link canonicalPathSegments}.
  * - **A body that is not JSON** → 400 `validation_failed`, before the handler
  *   runs. A handler never sees text it would have to `JSON.parse` itself.
  *
@@ -164,6 +218,9 @@ export const routeRequest = async (
     query: request.query,
     params: match.params,
     body: parsed.body,
+    sourceIp: request.sourceIp,
+    originHeader: request.originHeader,
+    ownOrigin: request.ownOrigin,
   });
 
   return response;

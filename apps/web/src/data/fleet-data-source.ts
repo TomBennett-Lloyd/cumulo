@@ -82,22 +82,33 @@ export type RangeHours = 24 | 48 | 168;
  * ## What a transport maps onto `FleetDataError`
  *
  * The Fleet API answers failures with `apiErrorSchema` bodies from
- * `@cumulo/shared` — `validation_failed` (400), `not_found` (404), `internal`
- * (500) — plus gateway-generated 429s, which are produced by API Gateway's
- * stage throttle before the Lambda runs and therefore carry the gateway's own
- * body rather than an `apiErrorSchema` one. The HTTP source consequently maps
- * on **status**, the one part of the contract every arm is reachable from:
+ * `@cumulo/shared`, in five codes — `validation_failed` (400), `forbidden`
+ * (403), `not_found` (404), `rate_limited` (429) and `internal` (500). The one
+ * failure that does *not* arrive in that shape is a gateway-generated 429:
+ * API Gateway's stage and per-route throttles answer before the Lambda runs and
+ * carry the gateway's own body, so 429 is the one status reachable with either
+ * body. The HTTP source consequently maps on **status**, the one part of the
+ * contract every arm is reachable from:
  *
  * - **404** (`not_found`) → `not-found`. Covers an unknown site *and* a site
  *   whose first forecast does not exist yet; the poll treats both as "wait".
- * - **429** (gateway throttle) → `rate-limited`, with `retryAfterSeconds` taken
- *   from the `Retry-After` header when the response carries one and left absent
- *   when it does not — absent means "no stated wait", not zero.
+ * - **429** (a gateway throttle, or the API's own per-IP limiter) →
+ *   `rate-limited`, with `retryAfterSeconds` taken from the `Retry-After` header
+ *   when the response carries one and left absent when it does not — absent
+ *   means "no stated wait", not zero. The limiter's 429s always carry it; the
+ *   gateway's do not, which is exactly why the field is optional.
  * - **400** (`validation_failed`), or a 2xx body that fails its zod parse →
  *   `invalid-response`. Both mean the bytes on the wire cannot be believed, and
  *   neither is worth repeating unchanged.
  * - **5xx** (`internal`), or a `fetch` that rejects → `network`. Retryable as
  *   is, on a backoff.
+ *
+ * **403** (`forbidden`) has no arm here yet, and that is a statement rather than
+ * an omission: this interface exposes no write, so nothing above this line can
+ * provoke one. The API refuses a write whose `Origin` it does not serve (#29),
+ * so the day an add-a-site call lands here, the deployment's origin has to be in
+ * the API's `CUMULO_WEB_ORIGINS` — and `403` needs an arm of its own, because it
+ * is the one failure a backoff cannot fix.
  *
  * A 200 carrying an empty series is **not** an error: the API answers a
  * forecast-less site with `200 { "forecasts": [], "attribution": {…} }` — the

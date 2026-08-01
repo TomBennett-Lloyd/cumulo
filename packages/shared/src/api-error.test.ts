@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { apiErrorCodeSchema, apiErrorSchema, type ApiErrorCode } from './api-error';
 
-const codes: readonly ApiErrorCode[] = ['validation_failed', 'not_found', 'internal'];
+const codes: readonly ApiErrorCode[] = [
+  'validation_failed',
+  'not_found',
+  'forbidden',
+  'rate_limited',
+  'internal',
+];
 
 const validationFailure = {
   code: 'validation_failed',
@@ -18,18 +24,24 @@ describe('apiErrorCodeSchema', () => {
     expect(result.data).toBe(code);
   });
 
-  it('rejects a code outside the three the API speaks', () => {
-    expect(apiErrorCodeSchema.safeParse('rate_limited').success).toBe(false);
+  it('rejects a code outside the set the API speaks', () => {
+    // `unauthorized` specifically: the API has no credentials to demand, so a
+    // refusal on policy is `forbidden` and there is no 401 anywhere in the
+    // contract. A code added here to mean "log in" would be a contract this
+    // service cannot honour.
+    expect(apiErrorCodeSchema.safeParse('unauthorized').success).toBe(false);
   });
 
-  // Not decoration: `rate_limited` above is the specific absence that matters.
-  // Throttled responses come from the gateway's stage limit before the Lambda
-  // runs, so they never carry this body — clients map 429 on the status. A code
-  // added here without that carve-out being revisited fails this test.
-  it('speaks exactly the three codes the status mapping covers', () => {
+  // The set is the contract, so it is pinned rather than sampled: `apiErrorStatus`
+  // in the API is an exhaustive `Record<ApiErrorCode, number>`, and every code
+  // added here has to be given a status and a documented meaning before it can
+  // reach a caller. A code added without that fails here first.
+  it('speaks exactly the five codes the status mapping covers', () => {
     expect([...apiErrorCodeSchema.options].sort()).toEqual([
+      'forbidden',
       'internal',
       'not_found',
+      'rate_limited',
       'validation_failed',
     ]);
   });

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { utcIsoTimestampSchema, type UtcIsoTimestamp } from '@cumulo/shared';
 import {
+  AbuseAdapter,
   SeriesAdapter,
   SiteAdapter,
   createStorageDocumentClient,
@@ -9,20 +10,28 @@ import {
 } from '@cumulo/storage';
 import { z } from 'zod';
 
+import { IpLimiter } from './abuse/ip-limiter';
+import { checkWriteOrigin } from './abuse/origin-check';
 import { getSiteForecast } from './forecast/get-site-forecast';
 import { getSiteSeries } from './forecast/get-site-series';
 import { parseGatewayEvent } from './http/gateway-event';
-import { describeZodIssues, errorResponse, type ApiResponse } from './http/response';
-import { routeRequest, type Route } from './http/router';
+import {
+  describeZodIssues,
+  errorResponse,
+  rateLimitedResponse,
+  type ApiResponse,
+} from './http/response';
+import { routeRequest, type Route, type RouteRequest } from './http/router';
 import { docsAssetParamName } from './openapi/docs-assets';
 import { docsPageResponse, serveDocsAsset, type DocsAssetDeps } from './openapi/docs-page';
 import { openApiDocumentResponse } from './openapi/document';
 import { createSite, type CreateSiteDeps } from './sites/create-site';
-import { deleteSite } from './sites/delete-site';
+import { deleteSite, type DeleteSiteDeps } from './sites/delete-site';
 import { getSite } from './sites/get-site';
 import { listSites } from './sites/list-sites';
 import { siteIdParamName } from './sites/site-id-param';
 import { updateSite } from './sites/update-site';
+import { describeThrown } from './thrown-detail';
 
 /**
  * The composition root, and the module the bundled artifact's `handler` export
@@ -50,9 +59,16 @@ import { updateSite } from './sites/update-site';
  * real environment name must satisfy is `storageTableName`'s, which mirrors
  * `infra/storage/variables.tf`, and restating the pattern here would make a
  * third copy of it.
+ *
+ * `CUMULO_WEB_ORIGINS` is optional because the deployment that has no browser
+ * front-end yet is a valid deployment: the API's own origin is always allowed
+ * (it is where `/docs` is served from), and this variable only ever *adds*.
+ * `infra/api/variables.tf` defaults it to the empty string, which parses to no
+ * extra origins rather than to a misconfiguration.
  */
 export const apiEnvSchema = z.object({
   CUMULO_ENV: z.string().min(1),
+  CUMULO_WEB_ORIGINS: z.string().optional(),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
@@ -71,19 +87,6 @@ export const parseApiEnv = (source: Record<string, string | undefined>): ApiEnv 
   }
   return parsed.data;
 };
-
-/**
- * One rendering of an unknown thrown value, for the boundary's log line.
- *
- * `unknown` is the honest parameter type — JavaScript allows throwing anything,
- * and a thrown string is precisely the case where a naive `.message` would log
- * `undefined` and lose the incident. `apps/ingestion` carries the same rendering
- * in its own module: apps never import from apps (`architecture.md` rule 1), and
- * promoting a five-line log helper into a shared package is a decision worth
- * making on purpose rather than as a side effect of this chunk.
- */
-const describeThrown = (error: unknown): string =>
-  error instanceof Error ? `${error.name}: ${error.message}` : `non-Error thrown (${typeof error})`;
 
 /**
  * The production log sink: one JSON object per line, which is what makes
@@ -110,12 +113,14 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter, for the two read-only routes below.
+ * The `cumulo-series` adapter: `querySeriesRange` for the two read routes, and
+ * `deleteSiteSeries` for the cleanup that follows a deleted or evicted site.
  *
- * Both use `querySeriesRange` and nothing else, so the IAM policy this function
- * runs under grants `Query` on this table and no write action at all — the
- * `Pick<SeriesAdapter, 'querySeriesRange'>` in each handler's deps type is the
- * compile-time half of the same statement.
+ * Nothing here *writes* a series point — forecasts are #12's and actuals are
+ * #16's — so the IAM policy this function runs under grants Query, DeleteItem
+ * and BatchWriteItem on this table and neither PutItem nor UpdateItem
+ * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps type
+ * is the compile-time half of the same statement.
  */
 const series = new SeriesAdapter({
   client: documentClient,
@@ -135,7 +140,100 @@ const now = (): UtcIsoTimestamp =>
 
 const newSiteId = (): string => randomUUID();
 
-const createSiteDeps: CreateSiteDeps = { sites, now, newSiteId };
+/**
+ * The `cumulo-abuse` table's adapter and the limiter over it, built once per
+ * container so the limiter's block cache survives between invocations — which
+ * is the whole reason a repeat offender costs nothing to refuse
+ * (`abuse/ip-limiter.ts`).
+ */
+const abuse = new AbuseAdapter({
+  client: documentClient,
+  tableName: storageTableName('abuse', env.CUMULO_ENV),
+});
+
+const limiter = new IpLimiter({
+  abuse,
+  nowEpochSeconds: () => Math.floor(Date.now() / 1000),
+});
+
+/**
+ * The browser origins allowed on write routes *in addition to* the API's own.
+ *
+ * Comma-separated, trimmed, empties dropped — so `""`, `" "` and an unset
+ * variable all mean the same thing, and a trailing comma in a Terraform-built
+ * string is not a silently-allowed empty origin. Exported for its test: the
+ * behaviour worth pinning is that the sloppy spellings collapse rather than
+ * producing an origin no browser will ever send.
+ */
+export const parseWebOrigins = (value: string | undefined): readonly string[] =>
+  value === undefined
+    ? []
+    : value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter((origin) => origin !== '');
+
+const webOrigins = parseWebOrigins(env.CUMULO_WEB_ORIGINS);
+
+/**
+ * The per-IP limiter in front of one route (ADR 0006 layer 1).
+ *
+ * Applied per route rather than as a blanket middleware, because *which* routes
+ * are limited is a deliberate list and not a default. The three writes and the
+ * span-capped series read are limited: each one either changes state or reads a
+ * range whose cost a caller chooses. `GET /v1/sites`, `GET …/forecast`,
+ * `/openapi.json` and the two `/docs` routes are not: they are the pages a
+ * reviewer clicks through, their cost per request is fixed and small, and the
+ * stage throttle already bounds them. A limiter that made reading the docs
+ * spend abuse-table writes would be paying to defend the cheapest thing here.
+ */
+const rateLimited = async (
+  request: RouteRequest,
+  handle: () => Promise<ApiResponse>,
+): Promise<ApiResponse> => {
+  const decision = await limiter.check(request.sourceIp);
+  return decision.allowed ? handle() : rateLimitedResponse(decision.retryAfterSeconds);
+};
+
+/**
+ * A write route: the origin check first, then the limiter, then the handler.
+ *
+ * Origin first because it is free — no I/O, no abuse-table write — so a
+ * drive-by script that sends no `Origin` is refused without spending anything.
+ * Defined in terms of {@link rateLimited} rather than beside it so that the two
+ * cannot disagree about what limiting means.
+ *
+ * `request.ownOrigin` is derived per request from the gateway's `domainName`,
+ * so nothing here hard-codes a hostname the stack assigns at create time — and
+ * Swagger UI's "try it out", served from this same origin, passes by
+ * construction.
+ */
+const guardedWrite = (
+  request: RouteRequest,
+  handle: () => Promise<ApiResponse>,
+): Promise<ApiResponse> => {
+  if (!checkWriteOrigin([request.ownOrigin, ...webOrigins], request.originHeader)) {
+    return Promise.resolve(
+      errorResponse(
+        'forbidden',
+        "requests to this endpoint must send an allowed Origin header — see the README's abuse-protection section",
+      ),
+    );
+  }
+
+  return rateLimited(request, handle);
+};
+
+/**
+ * The two handlers that change the fleet's size, and so the two that need the
+ * counter, the eviction index, the series cleanup and a log sink. Named
+ * constants rather than object literals in the route table below: both are
+ * built once per container, and a reader looking for what a write route can
+ * reach finds it here rather than inline among ten routes.
+ */
+const createSiteDeps: CreateSiteDeps = { sites, series, now, newSiteId, log: jsonLineLog };
+
+const deleteSiteDeps: DeleteSiteDeps = { sites, series, log: jsonLineLog };
 
 /**
  * Where the bundled Swagger UI assets are, decided here because it is a fact
@@ -156,18 +254,20 @@ const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', imp
  * its client and table name on `this`, so a detached method would arrive at a
  * handler already broken. The `Pick<SiteAdapter, …>` in each handler's deps type
  * does the narrowing instead — free at runtime, and it cannot lose a binding.
+ *
+ * The `guardedWrite`/`rateLimited` wrappers are the abuse protections, and this
+ * table is the only place that says which routes carry them. Reading down the
+ * `handle` column is how a reviewer answers "what is limited?" — the four
+ * wrapped routes and no others. The route keys the gateway throttles separately
+ * (`infra/api/gateway.tf`, ADR 0006 layer 2) are the three `guardedWrite` ones,
+ * and those two lists have to be edited together.
  */
 export const routes: readonly Route[] = [
   { method: 'GET', segments: ['v1', 'sites'], handle: () => listSites({ sites }) },
-  // No site-cap check here, deliberately. The cap counter transaction, per-IP
-  // limiting, eviction and auto-block are #29's scope; #14's cost guard on this
-  // unauthenticated write is the API Gateway stage throttle (10 rps / burst 20)
-  // configured in `infra/api`. A cap enforced here without #29's counter would
-  // be a race, not a guard.
   {
     method: 'POST',
     segments: ['v1', 'sites'],
-    handle: (request) => createSite(createSiteDeps, request),
+    handle: (request) => guardedWrite(request, () => createSite(createSiteDeps, request)),
   },
   {
     method: 'GET',
@@ -177,12 +277,12 @@ export const routes: readonly Route[] = [
   {
     method: 'PUT',
     segments: ['v1', 'sites', { param: siteIdParamName }],
-    handle: (request) => updateSite({ sites }, request),
+    handle: (request) => guardedWrite(request, () => updateSite({ sites }, request)),
   },
   {
     method: 'DELETE',
     segments: ['v1', 'sites', { param: siteIdParamName }],
-    handle: (request) => deleteSite({ sites }, request),
+    handle: (request) => guardedWrite(request, () => deleteSite(deleteSiteDeps, request)),
   },
   // The two series reads. Four segments each, so neither can shadow — or be
   // shadowed by — `GET /v1/sites/{siteId}` above, which matches three.
@@ -194,7 +294,11 @@ export const routes: readonly Route[] = [
   {
     method: 'GET',
     segments: ['v1', 'sites', { param: siteIdParamName }, 'series'],
-    handle: (request) => getSiteSeries({ sites, series }, request),
+    // The one limited read: `from`/`to` let a caller choose how much of a
+    // partition to read (up to `MAX_SERIES_SPAN_HOURS`), so its cost per
+    // request is the caller's to pick. No origin check — reads are not writes,
+    // and the web app must be able to plot a site from wherever it is served.
+    handle: (request) => rateLimited(request, () => getSiteSeries({ sites, series }, request)),
   },
   // The self-documenting half of the API (ADR 0005): the document, the page
   // that renders it, and the page's assets, all from this function and this

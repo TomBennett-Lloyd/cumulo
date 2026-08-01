@@ -1,7 +1,15 @@
 import { apiErrorSchema } from '@cumulo/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { gatewayEvent, jsonBodyOf } from './api-fixtures';
+import { MAX_LIMITED_REQUESTS_PER_WINDOW } from './abuse/ip-limiter';
+import {
+  OWN_ORIGIN,
+  RANELAGH_ID,
+  SOURCE_IP,
+  gatewayEvent,
+  jsonBodyOf,
+  siteInput,
+} from './api-fixtures';
 import type { ApiResponse } from './http/response';
 import type { Route } from './http/router';
 
@@ -173,5 +181,163 @@ describe('the top-level error boundary', () => {
 
     expect(response.statusCode).toBe(200);
     expect(logged).toEqual([]);
+  });
+});
+
+describe('parseWebOrigins', () => {
+  beforeEach(() => {
+    vi.stubEnv('CUMULO_ENV', 'test');
+  });
+
+  it('collapses every spelling of "no extra origins" to the same empty list', async () => {
+    // Terraform's `web_origins` defaults to `""`, and a variable set to a
+    // trailing comma or a stray space must not become an origin no browser
+    // will ever send — which would be an allow-list entry that silently
+    // matches nothing.
+    const { parseWebOrigins } = await import('./main');
+
+    expect(parseWebOrigins(undefined)).toEqual([]);
+    expect(parseWebOrigins('')).toEqual([]);
+    expect(parseWebOrigins('  ,  ,')).toEqual([]);
+  });
+
+  it('splits and trims a comma-separated list', async () => {
+    const { parseWebOrigins } = await import('./main');
+
+    expect(parseWebOrigins('https://a.example, https://b.example')).toEqual([
+      'https://a.example',
+      'https://b.example',
+    ]);
+  });
+});
+
+/**
+ * The abuse protections, exercised through the real route table (#29).
+ *
+ * Which routes carry the limiter and the origin check is a decision that lives
+ * in `main.ts` and nowhere else, so it is only observable here — a unit test of
+ * the wrappers would prove they work and say nothing about where they are
+ * applied, which is the half that gets wrong in review.
+ *
+ * The storage adapters are stubbed at the prototype rather than injected: the
+ * composition root builds them itself, on purpose (that is what makes it the
+ * composition root), and stubbing the class the fresh module graph is about to
+ * instantiate is the one seam that does not require inventing an injection
+ * point for the benefit of a test.
+ */
+describe('the abuse protections on the route table', () => {
+  const stubStorage = async () => {
+    const storage = await import('@cumulo/storage');
+
+    const getBlock = vi
+      .spyOn(storage.AbuseAdapter.prototype, 'getBlock')
+      .mockResolvedValue({ blocked: false });
+    const incrementRateWindow = vi
+      .spyOn(storage.AbuseAdapter.prototype, 'incrementRateWindow')
+      .mockResolvedValue(1);
+    vi.spyOn(storage.AbuseAdapter.prototype, 'putBlock').mockResolvedValue(undefined);
+    vi.spyOn(storage.SiteAdapter.prototype, 'listFleetSites').mockResolvedValue([]);
+    vi.spyOn(storage.SiteAdapter.prototype, 'createUserSiteWithCap').mockResolvedValue({
+      created: true,
+    });
+    vi.spyOn(storage.SiteAdapter.prototype, 'getFleetSite').mockResolvedValue({ found: false });
+
+    return { getBlock, incrementRateWindow };
+  };
+
+  const postSite = (headers: Record<string, string>): Record<string, unknown> =>
+    gatewayEvent({
+      method: 'POST',
+      rawPath: '/v1/sites',
+      headers,
+      body: JSON.stringify(siteInput()),
+    });
+
+  const jsonHeaders = { 'content-type': 'application/json' };
+
+  beforeEach(() => {
+    vi.stubEnv('CUMULO_ENV', 'test');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('leaves the unlimited reads alone — listing the fleet never touches the abuse table', async () => {
+    const { getBlock, incrementRateWindow } = await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(gatewayEvent({ method: 'GET', rawPath: '/v1/sites' }));
+
+    expect(response.statusCode).toBe(200);
+    expect(getBlock).not.toHaveBeenCalled();
+    expect(incrementRateWindow).not.toHaveBeenCalled();
+  });
+
+  it('refuses a write with no Origin header, before spending anything on the limiter', async () => {
+    const { getBlock, incrementRateWindow } = await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(postSite(jsonHeaders));
+
+    expect(response.statusCode).toBe(403);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('forbidden');
+    // Origin is checked first because it is free: a drive-by script costs no
+    // abuse-table write.
+    expect(getBlock).not.toHaveBeenCalled();
+    expect(incrementRateWindow).not.toHaveBeenCalled();
+  });
+
+  it('admits a write from the origin it was served from — Swagger UI’s try-it-out', async () => {
+    const { getBlock } = await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(postSite({ ...jsonHeaders, origin: OWN_ORIGIN }));
+
+    expect(response.statusCode).toBe(201);
+    expect(getBlock).toHaveBeenCalledWith(SOURCE_IP);
+  });
+
+  it('admits a write from a configured web origin', async () => {
+    vi.stubEnv('CUMULO_WEB_ORIGINS', 'https://web.example');
+    await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(postSite({ ...jsonHeaders, origin: 'https://web.example' }));
+
+    expect(response.statusCode).toBe(201);
+  });
+
+  it('answers 429 rate_limited with a retry-after once the window is spent', async () => {
+    const { incrementRateWindow } = await stubStorage();
+    incrementRateWindow.mockResolvedValue(MAX_LIMITED_REQUESTS_PER_WINDOW + 1);
+    const { handler } = await import('./main');
+
+    const response = await handler(postSite({ ...jsonHeaders, origin: OWN_ORIGIN }));
+
+    expect(response.statusCode).toBe(429);
+    // The header is the difference between a client that backs off and one that
+    // hot-retries into the block it just earned.
+    expect(response.headers['retry-after']).toBe('3600');
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('rate_limited');
+  });
+
+  it('limits the span-capped series read, whose cost per request the caller picks', async () => {
+    const { getBlock } = await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(
+      gatewayEvent({
+        method: 'GET',
+        rawPath: `/v1/sites/${RANELAGH_ID}/series`,
+        queryStringParameters: { from: '2026-07-31T00:00:00Z', to: '2026-07-31T06:00:00Z' },
+      }),
+    );
+
+    // The site is stubbed away, so the answer is a 404 — what this proves is
+    // that the limiter ran first, with no Origin header in sight: a read is not
+    // a write, and the web app must be able to plot from wherever it is served.
+    expect(response.statusCode).toBe(404);
+    expect(getBlock).toHaveBeenCalledWith(SOURCE_IP);
   });
 });

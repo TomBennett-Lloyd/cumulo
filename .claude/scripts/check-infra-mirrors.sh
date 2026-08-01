@@ -93,9 +93,13 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #   * #12's consumer is coupled to `visibility_timeout_seconds` in
 #     infra/ingestion/transport.tf, which is Terraform on BOTH sides, and at a
 #     ratio (6x) rather than a unit conversion.
-#   * infra/api/lambda.tf's `timeout = 15` is bounded by API Gateway's 30 s
+#   * infra/api/lambda.tf's `timeout = 15` is ALSO bounded by API Gateway's 30 s
 #     integration ceiling — an INEQUALITY, against a value AWS owns and no file
-#     here declares.
+#     here declares. That half is still not expressible. The equality half of
+#     the same number — the API's own budget sizing itself against the deployed
+#     timeout — is an ordinary record and is in the list below (#29); the two
+#     should not be confused, and adding the second changed nothing about the
+#     first.
 #
 # Neither fits, and the record reader refuses a seventh field rather than
 # silently ignoring it, so extending to them is a change to this script and not
@@ -104,6 +108,7 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 # meets the limit before designing around it rather than after.
 MIRRORS=(
   "infra/ingestion/lambda.tf|aws_lambda_function.ingestion|timeout|apps/ingestion/src/cycle-budget.ts|INGESTION_LAMBDA_TIMEOUT_MS|1000"
+  "infra/api/lambda.tf|aws_lambda_function.api|timeout|apps/api/src/request-budget.ts|API_LAMBDA_TIMEOUT_MS|1000"
 )
 
 # Green-by-absence, the failure mode a list-driven gate dies of: an empty list

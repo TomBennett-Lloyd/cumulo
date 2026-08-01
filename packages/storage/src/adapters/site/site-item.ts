@@ -5,6 +5,7 @@ import {
   type FleetSite,
   type SitePhysics,
 } from '@cumulo/shared';
+import { z } from 'zod';
 
 /**
  * The wire format of a `cumulo-sites` item: the key attributes ADR 0002's
@@ -23,19 +24,51 @@ export const FLEET_PARTITION = 'FLEET';
 export const USER_SITES_PARTITION = 'USER';
 
 /**
+ * The sort key of the fleet's counter item — ADR 0002's `#META#counters` row,
+ * which holds `userSiteCount` and is the item #29's cap transaction conditions
+ * on.
+ *
+ * It shares the `FLEET` partition with the sites it counts, which is the whole
+ * point: a `TransactWriteItems` can then hold both the new site and the
+ * increment, so "40 user sites" is an invariant DynamoDB enforces rather than
+ * one a read-then-write hopes for.
+ */
+export const COUNTERS_SORT_KEY = '#META#counters';
+
+/**
  * Lower bound of the site-id range in `SiteAdapter.listFleetSites`.
  *
  * Site ids are uuids, so they begin with a hex digit or a letter — all of which
  * sort at or after `'0'`. ADR 0002 also puts metadata in this partition at
- * `#META#…` sort keys (#29's counter item), and `'#'` (0x23) sorts *before*
- * `'0'` (0x30). So the range condition excludes non-site items structurally: a
- * future metadata item cannot leak into the fleet list and fail
- * `fleetSiteSchema.parse`, and nobody has to remember to filter it out.
+ * `#META#…` sort keys — since #29 that is {@link COUNTERS_SORT_KEY}, a real
+ * item rather than a hypothetical one — and `'#'` (0x23) sorts *before* `'0'`
+ * (0x30). So the range condition excludes non-site items structurally: the
+ * counter cannot leak into the fleet list and fail `fleetSiteSchema.parse`, and
+ * nobody has to remember to filter it out.
  */
 export const MIN_SITE_ID = '0';
 
 /** Mirrors the `by-location` index in `infra/storage/tables.tf`. */
 export const BY_LOCATION_INDEX = 'by-location';
+
+/** Mirrors the `user-sites-by-age` index in `infra/storage/tables.tf`. */
+export const USER_SITES_INDEX = 'user-sites-by-age';
+
+/**
+ * What a `user-sites-by-age` hit yields once parsed: the base-table site id.
+ *
+ * The index is KEYS_ONLY, so DynamoDB projects the table keys (`pk`, `siteId`)
+ * alongside the index keys and nothing else — which is exactly what eviction
+ * needs, an id rather than a site. Parsed rather than trusted because an index
+ * response is as much a boundary as a table read is (typing rule 3), and an
+ * item without a `siteId` would otherwise become an eviction addressed at
+ * `undefined`.
+ */
+const userSiteKeySchema = z.object({ siteId: z.string().min(1) });
+
+/** A projected `user-sites-by-age` item → the id of the site it points at. */
+export const toUserSiteId = (item: Record<string, unknown>): string =>
+  userSiteKeySchema.parse(item).siteId;
 
 /**
  * A `cumulo-sites` item: the domain fields of a {@link FleetSite}, with `id`

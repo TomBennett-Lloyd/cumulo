@@ -1,8 +1,15 @@
 # The function's execution role. ADR 0005 reduced least privilege for this
 # service to one sentence — "the execution role gets `GetItem, PutItem,
 # DeleteItem, Query` on the sites table and `Query` only on the series table;
-# the API reads and writes nothing else" — and this file is that sentence, plus
+# the API reads and writes nothing else" — and this file was that sentence, plus
 # the log group it writes.
+#
+# #29 widens it in four named places, and ADR 0006 is where each is argued:
+# `UpdateItem` on the sites table for the cap counter, `Query` on the
+# `user-sites-by-age` index for oldest-first eviction, deletes on the series
+# table for the cleanup that follows an eviction, and the three item actions on
+# the new abuse table. Each is one statement below with the caller named. The
+# sentence is longer; the property it states is the same one.
 #
 # Nothing here is a managed policy. `AWSLambdaBasicExecutionRole` would grant
 # logs:* across every log group in the account, which is broader than this
@@ -27,6 +34,19 @@ locals {
 
   sites_table_arn  = "${local.dynamodb_table_arn_prefix}/cumulo-sites-${var.environment}"
   series_table_arn = "${local.dynamodb_table_arn_prefix}/cumulo-series-${var.environment}"
+
+  # The abuse table (#29): per-IP request windows and blocks, on-demand, TTL'd.
+  # Same naming convention as the four above, resolved at runtime by
+  # storageTableName('abuse', …) in @cumulo/storage.
+  abuse_table_arn = "${local.dynamodb_table_arn_prefix}/cumulo-abuse-${var.environment}"
+
+  # An index ARN is the table ARN plus /index/<name>, and a grant on the table
+  # does not cover it — which is why this is a separate statement below rather
+  # than a wildcard on the sites table. The name mirrors the
+  # `global_secondary_index` block in infra/storage/tables.tf and
+  # `USER_SITES_INDEX` in @cumulo/storage; all three are the same string, and a
+  # typo here is an AccessDenied at eviction time, not a plan error.
+  user_sites_index_arn = "${local.sites_table_arn}/index/user-sites-by-age"
 }
 
 data "aws_iam_policy_document" "lambda_trust" {
@@ -46,47 +66,104 @@ resource "aws_iam_role" "api" {
 }
 
 data "aws_iam_policy_document" "api" {
-  # The sites table, read and written. Four actions, one per CRUD route:
-  # `Query` is `listFleetSites` (the base table's single `FLEET` partition),
-  # `GetItem` is `getFleetSite`, `PutItem` is both create and the write half of
-  # PUT's read-modify-write, `DeleteItem` is DELETE.
+  # The sites table, read and written. `Query` is `listFleetSites` (the base
+  # table's single `FLEET` partition), `GetItem` is `getFleetSite`, `PutItem` is
+  # both create and the write half of PUT's read-modify-write, `DeleteItem` is
+  # DELETE.
   #
-  # The `sites` table carries two GSIs and neither is listed here, deliberately:
-  # an index ARN is the table ARN plus /index/<name> and is *not* covered by a
-  # grant on the table, so omitting them is a real restriction rather than an
-  # oversight. No route in apps/api reads an index — `listFleetSites` and
-  # `listActiveSitePhysicsAtLocation` are different callers, and the second one
-  # belongs to #12's forecast service with its own grant. If an API route ever
-  # queries an index, this statement is what has to change, which is the point.
+  # `UpdateItem` is #29's addition, and it is not an update to a *site*: it is
+  # the `ADD userSiteCount :one` half of the cap transaction on the counter item
+  # at (`FLEET`, `#META#counters`), which lives in this same table (ADR 0002).
+  # TransactWriteItems carries no IAM action of its own — each item in the
+  # transaction is authorised as the plain action it performs — so the create,
+  # evict-and-create and counted-delete transactions in @cumulo/storage need
+  # exactly Put, Update and Delete here and nothing more. Still no
+  # `BatchWriteItem`: PUT stays a read-modify-write through `putFleetSite` so
+  # the whole item is one reviewed shape, and nothing writes more than one site
+  # at a time.
   #
-  # There is no `BatchWriteItem` and no `UpdateItem`: PUT is a read-modify-write
-  # through `putFleetSite` precisely so the whole item is one reviewed shape,
-  # and nothing here writes more than one site at a time.
+  # The `sites` table's two GSIs are still not covered by this statement — an
+  # index ARN is the table ARN plus /index/<name>, and a grant on the table is
+  # not a grant on its indexes. `user-sites-by-age` gets its own statement
+  # below; `by-location` deliberately gets none, because
+  # `listActiveSitePhysicsAtLocation` belongs to #12's forecast service with its
+  # own grant and no API route reads it.
   statement {
     sid = "ReadWriteFleetSites"
     actions = [
       "dynamodb:GetItem",
       "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
       "dynamodb:DeleteItem",
       "dynamodb:Query",
     ]
     resources = [local.sites_table_arn]
   }
 
-  # The series table, read only. `querySeriesRange` is the single caller, behind
-  # `GET /v1/sites/{siteId}/forecast` and `GET /v1/sites/{siteId}/series`, and
-  # both are reads by construction: the API stores nothing — forecast rows are
-  # written by #12 and actuals by #16.
+  # The eviction index, read only. `oldestUserSite` queries
+  # `user-sites-by-age` — partition `gsiUserSites`, sorted by `gsiCreatedAt`,
+  # ascending, Limit 1 — to find the oldest *user* site when a create hits the
+  # cap. The index is sparse by construction (ADR 0002): seed sites carry no
+  # `gsiUserSites` attribute, so they are not in it, and eviction cannot reach
+  # them however the query is written. That structural exemption is the reason
+  # this is a Query on an index and not a scan-and-filter on the table.
   #
-  # No write action of any kind, which is the grant-level statement of that
-  # property. It is also where #29's X3 cleanup will surface: range-deleting a
-  # deleted site's series rows needs `dynamodb:DeleteItem` here, and until then
-  # orphaned rows expire on ADR 0002's 90-day TTL. No GSI ARN, same reason as
-  # above.
+  # `Query` only. Nothing writes through an index — a write to the base table is
+  # what maintains it — so a write action here would be meaningless as well as
+  # broader.
   statement {
-    sid       = "ReadSeries"
+    sid       = "QueryUserSitesByAge"
     actions   = ["dynamodb:Query"]
+    resources = [local.user_sites_index_arn]
+  }
+
+  # The series table: read, and — as of #29 — deleted from. `querySeriesRange`
+  # is still the only read caller, behind `GET /v1/sites/{siteId}/forecast` and
+  # `GET /v1/sites/{siteId}/series`; the API creates no series row, because
+  # forecast rows are written by #12 and actuals by #16. There is deliberately
+  # no `PutItem` and no `UpdateItem`, which is the grant-level statement of
+  # that.
+  #
+  # `DeleteItem` and `BatchWriteItem` are X3, exactly as this comment used to
+  # predict it: when a site is deleted or evicted, `deleteSiteSeries` queries
+  # its partition and drains the keys back through batched deletes, instead of
+  # leaving orphaned rows to ADR 0002's 90-day TTL. `BatchWriteItem` is the
+  # batching itself and `DeleteItem` is what each request in a batch is
+  # authorised as — the batch API grants neither on its own. No GSI ARN; the
+  # series table has none.
+  statement {
+    sid = "ReadAndPruneSeries"
+    actions = [
+      "dynamodb:Query",
+      "dynamodb:DeleteItem",
+      "dynamodb:BatchWriteItem",
+    ]
     resources = [local.series_table_arn]
+  }
+
+  # The abuse table (#29), the per-IP limiter's whole state. Three actions and
+  # no more:
+  #
+  #   * `UpdateItem` — `ADD requestCount :one` on the current 60-second window
+  #     item, which is the counting itself: an atomic increment that returns the
+  #     new count, so two concurrent requests from one IP cannot both read the
+  #     same number.
+  #   * `GetItem` — the block lookup on the request path.
+  #   * `PutItem` — writing a block when a window overflows.
+  #
+  # No `DeleteItem`: blocks expire on the table's TTL rather than being cleared
+  # by the function, so nothing this role can do shortens a block. Lifting one
+  # early is an operator action with operator credentials (the runbook's
+  # `aws dynamodb delete-item`), which is the right place for it. No `Query`
+  # either — every access is by the exact `pk`.
+  statement {
+    sid = "ReadWriteAbuseState"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+    ]
+    resources = [local.abuse_table_arn]
   }
 
   # Logs, restricted to this function's own group. No logs:CreateLogGroup: the

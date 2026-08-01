@@ -46,3 +46,48 @@ variable "environment" {
     error_message = "environment must be lowercase alphanumerics and hyphens, e.g. dev — it is interpolated directly into function, API and table names."
   }
 }
+
+variable "web_origins" {
+  description = <<-EOT
+    Comma-separated browser origins allowed to call the write routes, beyond the
+    API's own origin, which the function always allows and never needs told
+    (it reads it from the request's own domain name). Passed to the function as
+    CUMULO_WEB_ORIGINS; the origin check itself is in apps/api and is documented
+    in that README's abuse-protection section.
+
+    Empty by default, and that default is correct today: the only browser that
+    calls a write route right now is the Swagger UI this API serves itself, and
+    that is same-origin. #144 adds the CloudFront URL here and #21 the custom
+    domain — as tfvars values, when those origins exist. Neither belongs in a
+    committed file: an origin hard-coded in Terraform is an origin that outlives
+    the deployment it was true for, and this stack's whole naming convention is
+    that environment-specific strings come in as variables.
+
+    This is friction, not authentication. It stops a drive-by script and a
+    cross-site page in a browser, both of which cannot choose their Origin
+    header; it stops nothing that sets the header itself, and it is not meant
+    to. ADR 0006 records that as a stated non-goal.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    # Each entry must be a bare origin — scheme, host, optional port, and
+    # nothing else. A trailing slash or a path is the failure this catches, and
+    # it is worth a validation because of how quietly it fails: the check in
+    # apps/api compares against the browser's Origin header, which never carries
+    # either, so "https://example.com/" matches nothing and the origin it was
+    # added for stays locked out with no error anywhere.
+    #
+    # Whitespace around a comma is rejected rather than trimmed, and on purpose:
+    # what the function splits is this exact string, so anything this validation
+    # forgives is something the runtime comparison may not. A loud plan-time
+    # error naming the fix beats a value that applies cleanly and matches
+    # nothing.
+    condition = var.web_origins == "" || alltrue([
+      for origin in split(",", var.web_origins) :
+      can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]+)?$", origin))
+    ])
+    error_message = "web_origins must be a comma-separated list of bare origins, e.g. https://example.cloudfront.net,http://localhost:5173 — scheme and host only, no trailing slash and no path."
+  }
+}

@@ -5,6 +5,7 @@ import {
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import type { Forecast, GenerationReading, UtcIsoTimestamp } from '@cumulo/shared';
+import { z } from 'zod';
 
 import {
   DYNAMODB_BATCH_WRITE_SIZE,
@@ -65,6 +66,55 @@ import {
 type SeriesWriteRequest = NonNullable<
   NonNullable<NonNullable<BatchWriteCommandInput['RequestItems']>[string]>[number]
 >;
+
+/**
+ * The key of a stored series item, as {@link SeriesAdapter.deleteSiteSeries}
+ * reads it back off a projected Query.
+ *
+ * A parse rather than a cast: a Query response is a boundary like any other
+ * (typing rule 3), and a key attribute missing from it would otherwise become a
+ * `DeleteRequest` addressed at `undefined` — which DynamoDB would reject for
+ * the whole batch, taking the deletable items down with it.
+ */
+const seriesKeySchema = z.object({ siteId: z.string().min(1), sk: z.string().min(1) });
+
+/**
+ * What one bounded cleanup pass did. Three facts, all always present, because
+ * an operator reading the log line needs all three to tell the cases apart:
+ * a pass that finished the job (`declinedCount` 0 and `budgetReached` false),
+ * one the table pushed back on (`declinedCount` > 0), and one that simply ran
+ * out of budget with rows still to go (`budgetReached`). The last two mean
+ * different things — capacity versus arithmetic — and want different responses.
+ *
+ * A flat record rather than a discriminated union (`docs/standards/typing.md`
+ * rule 4) because these are not modes: the two limits can and do occur
+ * together, and a union would have to invent a precedence between them that
+ * nothing in the domain justifies.
+ */
+export interface SeriesCleanupOutcome {
+  readonly deletedCount: number;
+  /** Enumerated, batched, and handed back by DynamoDB undeleted. */
+  readonly declinedCount: number;
+  /** The pass stopped at its item budget, so the partition may hold more. */
+  readonly budgetReached: boolean;
+}
+
+/**
+ * The failure policy for cleanup deletes: send once, report what bounced, never
+ * re-send (`docs/standards/error-handling.md` rule 3, stated at the one place
+ * that uses it).
+ *
+ * The adapter's configured policy re-sends declined items twice more, which is
+ * right for the write paths — an ingestion cycle's forecasts are data nobody
+ * else will produce. It is wrong here twice over. A declined delete means the
+ * `series` table just said it is out of write capacity, and the items in
+ * question are rows that the 90-day TTL will remove for free; re-sending spends
+ * the contended capacity that the hourly cycle needs, to bring forward a
+ * deletion that costs nothing to defer. It also triples the pass's worst case,
+ * from one round trip to three — and this drain runs after the caller's write
+ * has committed, where wall-clock is the scarce thing.
+ */
+const SERIES_CLEANUP_BATCH_POLICY: BatchPolicy = { maxAttempts: 1, baseDelayMs: 0 };
 
 export class SeriesAdapter extends StorageAdapterBase {
   private readonly batchPolicy: BatchPolicy;
@@ -153,6 +203,89 @@ export class SeriesAdapter extends StorageAdapterBase {
   }
 
   /**
+   * Deletes up to `maxItems` of one site's series points (X3) — the cleanup
+   * that follows a deleted or evicted site.
+   *
+   * Read-then-delete rather than a range delete, because DynamoDB has no range
+   * delete: the keys have to be enumerated first. The Query projects the two
+   * key attributes alone, which keeps the read charge to the smallest item size
+   * DynamoDB bills.
+   *
+   * **Bounded, and the bound is the point.** A site's partition holds one row
+   * per hour per forecast model plus one per hour of actuals, kept for the
+   * 90-day retention window of `ttl.ts`: order 2,160 rows per model for a site that
+   * has existed that long, and eviction picks the *oldest* user site, which is
+   * exactly the one holding the most. Draining that partition is ~87 batches
+   * per model, each one a `BatchWriteItem` whose worst case is the whole
+   * storage retry budget — so an unbounded drain is unbounded in wall-clock
+   * terms, and it runs *after* the caller's write has committed. On the API's
+   * create path that turns a committed 201 into a function timeout and a
+   * gateway 504, losing the only copy of the new site's id. The caller
+   * therefore states how much it can afford (`SERIES_CLEANUP_MAX_ITEMS` in
+   * `apps/api/src/request-budget.ts` derives it from the function timeout), and
+   * this method never exceeds it: **one** Query, then **one** drain of at most
+   * `maxItems` keys.
+   *
+   * Capacity says the same thing as latency here. Those deletes draw on the
+   * `series` table's provisioned 14 WCU, shared with the hourly ingestion
+   * cycle, so 2,160 deletes is ~154 seconds of the table's entire write budget
+   * spent on a site nobody is reading. The 90-day TTL removes the remainder for
+   * free and asynchronously, which is what makes a small bound the right answer
+   * rather than a regrettable one.
+   *
+   * Newest-first (`ScanIndexForward: false`) because a bounded pass should
+   * reclaim the rows that would otherwise linger longest: `expiresAt` is
+   * `validTime` + the retention window, so the newest rows are the last to
+   * expire on their own.
+   *
+   * The drain runs under {@link SERIES_CLEANUP_BATCH_POLICY} rather than this
+   * adapter's configured policy — see that constant for why re-sending declined
+   * deletes is the wrong move on this path specifically.
+   */
+  async deleteSiteSeries(siteId: string, maxItems: number): Promise<SeriesCleanupOutcome> {
+    if (!Number.isInteger(maxItems) || maxItems < 0) {
+      throw new Error(
+        `deleteSiteSeries: maxItems must be a non-negative integer, got ${String(maxItems)}`,
+      );
+    }
+    if (maxItems === 0) {
+      return { deletedCount: 0, declinedCount: 0, budgetReached: true };
+    }
+
+    const page = await this.sending('deleteSiteSeries', { siteId }, () =>
+      this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: 'siteId = :siteId',
+          ExpressionAttributeValues: { ':siteId': siteId },
+          ProjectionExpression: 'siteId, sk',
+          ScanIndexForward: false,
+          Limit: maxItems,
+        }),
+      ),
+    );
+
+    const keys = (page.Items ?? []).map((item) => seriesKeySchema.parse(item));
+    const outcome = await this.drainWriteRequests(
+      'deleteSiteSeries',
+      keys.map((Key) => ({ DeleteRequest: { Key } })),
+      SERIES_CLEANUP_BATCH_POLICY,
+    );
+    const declinedCount = outcome.status === 'partial' ? outcome.unprocessedCount : 0;
+
+    return {
+      deletedCount: keys.length - declinedCount,
+      declinedCount,
+      // `LastEvaluatedKey` is DynamoDB saying it stopped before the end of the
+      // partition. At exactly `maxItems` remaining rows it is set even though
+      // nothing is left, so this is "the pass hit its budget", not "rows
+      // definitely remain" — which is why it is named for the budget and why
+      // the caller logs it rather than acting on it.
+      budgetReached: page.LastEvaluatedKey !== undefined,
+    };
+  }
+
+  /**
    * Writes every item, re-submitting whatever DynamoDB declines, and reports
    * the leftovers as a count rather than as silence.
    */
@@ -160,8 +293,31 @@ export class SeriesAdapter extends StorageAdapterBase {
     operation: string,
     items: readonly (ForecastItem | GenerationReadingItem)[],
   ): Promise<BatchWriteOutcome> {
-    const requests: SeriesWriteRequest[] = items.map((item) => ({ PutRequest: { Item: item } }));
+    return this.drainWriteRequests(
+      operation,
+      items.map((item) => ({ PutRequest: { Item: item } })),
+      this.batchPolicy,
+    );
+  }
 
+  /**
+   * Drains a list of write requests — puts or deletes alike — through the batch
+   * machinery, reporting what never landed.
+   *
+   * Shared by the write paths and by {@link deleteSiteSeries} because the
+   * mechanism is one thing: `BatchWriteItem` answers 200 while handing back
+   * what it declined, and every caller of it has to re-submit and then report
+   * honestly. A change to that loop would otherwise have to be made twice
+   * (`docs/standards/structure.md` rule 7). The request list and the retry
+   * policy differ between callers, and both are parameters rather than a mode
+   * flag — the policy especially, since "how hard to push" is exactly where a
+   * cleanup and an ingestion write legitimately disagree.
+   */
+  private async drainWriteRequests(
+    operation: string,
+    requests: readonly SeriesWriteRequest[],
+    policy: BatchPolicy,
+  ): Promise<BatchWriteOutcome> {
     const outcome = await this.sending(operation, undefined, () =>
       drainBatches(
         async (batch) => {
@@ -172,7 +328,7 @@ export class SeriesAdapter extends StorageAdapterBase {
         },
         requests,
         DYNAMODB_BATCH_WRITE_SIZE,
-        this.batchPolicy,
+        policy,
       ),
     );
 

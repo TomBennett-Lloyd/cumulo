@@ -82,6 +82,10 @@ jobs:
         run: terraform -chdir=infra/bootstrap init -backend=false -lockfile=readonly
       - name: terraform validate (bootstrap)
         run: terraform -chdir=infra/bootstrap validate
+      - name: terraform init (alerting)
+        run: terraform -chdir=infra/alerting init -backend=false -lockfile=readonly
+      - name: terraform validate (alerting)
+        run: terraform -chdir=infra/alerting validate
       - name: terraform init (storage)
         run: terraform -chdir=infra/storage init -backend=false -lockfile=readonly
       - name: terraform validate (storage)

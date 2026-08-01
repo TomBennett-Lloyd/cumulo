@@ -1,0 +1,19 @@
+# Copy to alerting.auto.tfvars (gitignored). Terraform loads *.auto.tfvars
+# automatically for every command run in this directory, so there is no
+# -var-file flag to remember or forget.
+#
+# Must be the same region as every other stack. The topic ARN the alarm stacks
+# assemble is regional (arn:aws:sns:<region>:<account-id>:cumulo-alerts-<env>),
+# so a topic applied into a different region than the alarms is a set of alarms
+# whose action points at nothing — and CloudWatch does not complain about that
+# at apply time, only by never delivering.
+#
+# It is also the region /cumulo/notification-email lives in: SSM parameters are
+# regional too, and this stack reads that one.
+
+aws_region = "eu-west-1"
+
+# Optional. Defaults to "dev", and appears in the topic name. Must match the
+# `environment` of every stack whose alarms target this topic, for the same
+# reason as the region above.
+# environment = "dev"

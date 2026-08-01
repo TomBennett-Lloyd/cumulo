@@ -42,6 +42,7 @@ export {
   type FleetSite,
   sitePhysicsSchema,
   type SitePhysics,
+  MAX_USER_SITES,
 } from './site';
 export {
   type SeriesKind,

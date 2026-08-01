@@ -1,0 +1,15 @@
+# Copy to backend.hcl (gitignored) and fill in the two account-specific values.
+# Consumed by:  terraform init -backend-config=backend.hcl
+#
+# `bucket` is the bootstrap stack's `state_bucket_name` output — always
+# cumulo-tfstate-<account-id>. This stack does not create it; bootstrap must be
+# applied first. `region` must match `aws_region` in alerting.auto.tfvars: the
+# backend and the provider have to agree on where the bucket lives.
+#
+# `key` is NOT set here. It is committed in backend.tf as
+# alerting/terraform.tfstate — the state key prefix is the stack's directory
+# name (infra/README.md convention 2), which is a repo-wide convention rather
+# than an account-specific value.
+
+bucket = "cumulo-tfstate-000000000000"
+region = "eu-west-1"

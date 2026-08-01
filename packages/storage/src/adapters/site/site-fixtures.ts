@@ -1,4 +1,4 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { fleetSiteSchema, type FleetSite } from '@cumulo/shared';
 import { mockClient } from 'aws-sdk-client-mock';
@@ -106,6 +106,29 @@ export const ranelaghProjectedItem = {
 };
 
 export const ddbMock = mockClient(DynamoDBDocumentClient);
+
+/**
+ * A `TransactWriteItems` rejection as DynamoDB really sends one: one
+ * cancellation reason per requested item, in request order, with `None` for the
+ * items that were fine.
+ *
+ * Built from the SDK's own exception class rather than from a hand-made object
+ * with a matching `name`, because the ordering-and-shape of
+ * `CancellationReasons` is the assumption `SiteAdapter`'s cap and eviction
+ * logic rests on — a stand-in would pin the stand-in.
+ */
+export const transactionCancelled = (...codes: readonly string[]): TransactionCanceledException =>
+  new TransactionCanceledException({
+    message: 'Transaction cancelled, please refer cancellation reasons for specific reasons',
+    $metadata: {},
+    CancellationReasons: codes.map((Code) => ({ Code })),
+  });
+
+/** The code DynamoDB reports for an item whose `ConditionExpression` was false. */
+export const CONDITION_FAILED = 'ConditionalCheckFailed';
+
+/** The code DynamoDB reports for an item that was itself fine. */
+export const NO_REASON = 'None';
 
 export const adapter = (): SiteAdapter =>
   new SiteAdapter({

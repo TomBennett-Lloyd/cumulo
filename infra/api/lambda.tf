@@ -56,6 +56,13 @@ resource "aws_lambda_function" "api" {
   # what makes a hung request diagnosable: Lambda times out first, so the
   # evidence is a Lambda timeout log line and an `Errors` data point rather than
   # a gateway 504 with nothing behind it.
+  #
+  # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS`
+  # (`apps/api/src/request-budget.ts`), which sizes the series-cleanup budget
+  # against it — #29 needed a handler to know how long it may keep starting
+  # DynamoDB requests. This file still owns the deployed value; the two are held
+  # equal by `pnpm check:infra-mirrors` in the `verify` composite, so lowering
+  # this number shrinks that budget in the same commit or fails the build.
   timeout = 15
 
   # 256 MB, and this number is load-bearing beyond performance: it is the figure
@@ -73,6 +80,18 @@ resource "aws_lambda_function" "api" {
       # storageTableName() in @cumulo/storage. Passed rather than baked in, so
       # a second environment is a variable change and not a code change.
       CUMULO_ENV = var.environment
+
+      # Extra browser origins the write routes accept, comma-separated (#29).
+      # Empty here and empty by default: the API always allows its own origin,
+      # computed per request from the gateway's domain name, so the Swagger UI
+      # this function serves needs no entry. variables.tf carries the rest: what
+      # this defends against, what it deliberately does not, and why #144's and
+      # #21's origins arrive as tfvars rather than as edits to this file.
+      #
+      # An empty string rather than an absent variable: the value is always
+      # present and always this variable, so "not configured" is one shape at
+      # runtime instead of two.
+      CUMULO_WEB_ORIGINS = var.web_origins
     }
   }
 

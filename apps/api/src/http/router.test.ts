@@ -37,10 +37,34 @@ describe('matchRoute', () => {
     expect(match?.params).toEqual({ siteId: 'abc-123' });
   });
 
-  it('treats a trailing slash as the same resource', () => {
+  it('does not match a trailing slash, which the gateway throttles differently', () => {
+    // Not pedantry — gateway parity. `infra/api/gateway.tf` declares
+    // `POST /v1/sites` as a route key so the stage can throttle it at 2 rps
+    // instead of 10, and API Gateway matches that key against the raw path.
+    // A router that normalised `/v1/sites/` into the same resource would let a
+    // caller opt into the 5× looser limit with one character.
     const routes = [recordingRoute('GET', ['v1', 'sites'], [])];
 
-    expect(matchRoute(routes, apiRequest({ path: '/v1/sites/' }))).toBeDefined();
+    expect(matchRoute(routes, apiRequest({ path: '/v1/sites/' }))).toBeUndefined();
+  });
+
+  it('does not match doubled or leading empty segments', () => {
+    const routes = [recordingRoute('GET', ['v1', 'sites'], [])];
+
+    expect(matchRoute(routes, apiRequest({ path: '//v1//sites' }))).toBeUndefined();
+    expect(matchRoute(routes, apiRequest({ path: '/v1//sites' }))).toBeUndefined();
+  });
+
+  it('still matches the canonical path, and captures from the canonical form', () => {
+    // The other half of the change: tightening matching must not cost the
+    // spelling every real client actually sends.
+    const routes = [recordingRoute('GET', ['v1', 'sites'], [])];
+
+    expect(matchRoute(routes, apiRequest({ path: '/v1/sites' }))).toBeDefined();
+    expect(
+      matchRoute([recordingRoute('GET', siteIdSegments, [])], apiRequest({ path: '/v1/sites/abc' }))
+        ?.params,
+    ).toEqual({ siteId: 'abc' });
   });
 
   it('does not match a longer or shorter path', () => {
@@ -129,6 +153,24 @@ describe('routeRequest', () => {
 
     expect(response.statusCode).toBe(400);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('validation_failed');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('answers 404 for a write to a trailing-slash path, without calling the handler', async () => {
+    // The end-to-end shape of the gateway-parity rule: `POST /v1/sites/` does
+    // not match API Gateway's `POST /v1/sites` route key, so it arrives via
+    // `$default` carrying the stage's looser throttle. It must not create a
+    // site. Confirmed live against the deployed API by issue #29's E2 run.
+    const seen: RouteRequest[] = [];
+    const routes = [recordingRoute('POST', ['v1', 'sites'], seen)];
+
+    const response = await routeRequest(
+      routes,
+      apiRequest({ method: 'POST', path: '/v1/sites/', rawBody: '{"name":"Ranelagh"}' }),
+    );
+
+    expect(response.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
     expect(seen).toHaveLength(0);
   });
 

@@ -18,7 +18,8 @@
 #     receives are the ~657,000/month ADR 0004 already counted in the platform's
 #     ~675,000 against the always-free 1,000,000. No new cost line, only the
 #     resource that realises the one already budgeted.
-#   * CloudWatch — one alarm, the ninth of the free 10; Lambda metrics are free;
+#   * CloudWatch — one alarm, the tenth and last of the free 10; Lambda metrics
+#     are free;
 #     ~12 log lines an hour at 30-day retention is pennies at most against the
 #     free 5 GB of ingestion.
 #   * IAM — the execution role, its inline policy, and the deploy grant are all

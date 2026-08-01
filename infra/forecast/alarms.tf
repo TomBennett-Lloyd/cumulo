@@ -19,16 +19,41 @@
 # an idle demo, which is the normal state, would sit permanently in
 # INSUFFICIENT_DATA and nobody would notice the day it changed.
 #
-# No `alarm_actions`, mirroring infra/storage/alarms.tf, infra/ingestion/alarms.tf
-# and infra/api/alarms.tf: there is nowhere to send them yet. Notification wiring
-# (SNS topic, subscriptions) arrives with #29, which owns that area. An alarm
-# with no action is still visible in the CloudWatch console and in
-# `aws cloudwatch describe-alarms --state-value ALARM`, and creating a topic here
-# purely to have an action would be infrastructure nobody reads.
+# `alarm_actions` and `ok_actions`, mirroring infra/storage/alarms.tf,
+# infra/ingestion/alarms.tf and infra/api/alarms.tf: they point at the platform
+# alerts topic that infra/alerting owns (#29). This file used to say there was
+# nowhere to send them yet; there is now, and the local below explains why the
+# ARN is assembled rather than read.
 #
-# Cost: one alarm, the ninth of the always-free 10 CloudWatch alarms (storage's
-# four, ingestion's two, the api's two, this one). $0 — and the tenth is the last
-# free one.
+# `ok_actions` as well as `alarm_actions` for the reason the other three give:
+# this alarm's failure is an hourly burst that may well succeed on the next
+# cycle, and without the recovery mail the only way to learn it cleared is to go
+# and look — which is the behaviour these files exist to avoid depending on.
+#
+# Cost: one alarm, the tenth of the always-free 10 CloudWatch alarms (storage's
+# four, ingestion's three, the api's two, this one). $0 — and it is the last
+# free one: the eleventh bills $0.10/month. The platform-wide count and the
+# obligations that come with crossing it live in the "CloudWatch alarm budget"
+# subsection of infra/README.md, which owns that number.
+
+locals {
+  # The alerting stack (infra/alerting) owns this topic. Its ARN is assembled
+  # from the naming convention rather than read through a
+  # `terraform_remote_state` data source — the same deliberate coupling this
+  # stack already uses for the queue ARN in event-source.tf and the table ARNs
+  # in iam.tf, which is also where `data.aws_caller_identity.current` is
+  # declared: the stacks share a convention, not a wire, so this one plans while
+  # alerting's state is mid-apply, or before alerting exists at all.
+  #
+  # The obligation that buys: alerting must be applied with the same
+  # `environment` and into the same region. Note that this is a *softer* failure
+  # than the event-source mapping's — a missing queue fails `terraform apply`,
+  # whereas a missing topic does not fail anything at all. CloudWatch accepts an
+  # action pointing at a topic that does not exist and reports it only by never
+  # delivering, which is why the alerting runbook proves delivery from AWS
+  # rather than from a green apply.
+  alerts_topic_arn = "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cumulo-alerts-${var.environment}"
+}
 
 resource "aws_cloudwatch_metric_alarm" "forecast_errors" {
   alarm_name  = "cumulo-forecast-${var.environment}-errors"
@@ -52,6 +77,9 @@ resource "aws_cloudwatch_metric_alarm" "forecast_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
+
+  alarm_actions = [local.alerts_topic_arn]
+  ok_actions    = [local.alerts_topic_arn]
 
   alarm_description = "A Cumulo forecast invocation failed outright — bad configuration, an initialisation crash, or the 50 s timeout. Note what this alarm does NOT cover: a message the handler could not process is returned as a batch item failure, retried, and eventually dead-lettered, where cumulo-weather-readings-dlq-<env>-not-empty (ingestion stack) is the alarm that fires. So this one firing means the function itself is broken rather than one location's data. Start with `aws logs tail /aws/lambda/cumulo-forecast-<env>` and check whether the invocations reached the handler at all."
 }

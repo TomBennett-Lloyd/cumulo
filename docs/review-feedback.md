@@ -122,3 +122,10 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 - **Feedback**: "my concern is that the numbers being wrong in that document could create an impression that could cause confusion even if the file isn't explicitly read and interpreted wrong … i wonder whether there are certain cases where updating an ADR (with a note as to what was updated and why at the bottom) might be better than keeping them as immutable?" — confirmed: "the change to the adr convention sounds good".
 - **Why**: Planners are instructed to read ADRs before code, so stale authoritative numbers propagate into plans silently (observed risk: #136's planner derived arithmetic from ADR 0004; #122's plan cited ADR 0002's consequences). Classic ADR immutability protects against retconning decisions, but its archival half is redundant with git history; what it costs is single-source-of-truth for current state — the property agents need most.
 - **How applied**: `docs/adr/README.md` gains the Amendments convention (decisions/rationale/status immutable, supersession for changed decisions; stated values the code legitimately moved are trued up inline + dated `## Amendments` footer entry naming old → new, driver, and the owning code location; guardrail — an amendment never touches reasoning). First worked example: ADR 0002's retry figures (4 → 2 attempts, #122). Closes #138.
+
+## 2026-08-01 — adr-0006-abuse-protection
+
+- **Category**: approved-no-changes
+- **Feedback**: "approve" — owner ratified ADR 0006's four decisions as presented: MAX_USER_SITES = 40, the 30/60 s → 1 h block threshold, no WAF (HTTP-API unattachable; CloudFront-in-front recorded as the upgrade path with the limiter-identity prerequisite), and the free-10 alarm allocation with the 11th at $0.10/month.
+- **Why**: `docs/adr/**` is a humanAlways path; the ADR is where the decisions that ossify live, and the four numbers above are the ones a future reader will hold the owner to.
+- **How applied**: PR #147 merged on the approval; C8's live evidence run (E1–E7) closes #29 against the deployed behaviour.
