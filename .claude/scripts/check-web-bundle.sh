@@ -11,9 +11,17 @@
 # apps/web/src/preview/tokens-harness-contract.test.ts) that read import
 # statements off disk. They catch the one regression that was likely — a static
 # import re-fusing the lazy map chunk — and are blind to everything else: a new
-# heavy dependency landing in the entry, a manualChunks change, a `<script>` tag
-# added to index.html. This gate measures the artefact instead, so those cases
-# fail on a number rather than on nobody noticing.
+# heavy dependency landing in the entry, a manualChunks change. This gate
+# measures the artefact instead, so those cases fail on a number rather than on
+# nobody noticing.
+#
+# What a green run does NOT say, so it is not read for more than it holds: the
+# budget is a statement about dist/assets/index-*.js and only that file. Weight
+# that lands beside it passes untouched — a second module script in index.html
+# emits its own asset this glob never sees — and so does weight that never
+# reaches dist/ at all, such as a CDN `<script>` tag in index.html. The rest of
+# dist/ is read only by the containment scan, which looks for gallery markers,
+# not for size.
 #
 # The advisory half of the split is deliberately NOT here. Vite's
 # `build.chunkSizeWarningLimit` (apps/web/vite.config.ts) owns the lazy map
@@ -117,7 +125,7 @@ HARNESS_DOCUMENT="$ROOT/$WEB_DIR/tokens.html"
 # One list, two uses: the census below proves each marker still exists in the
 # gallery source, and the containment scan proves none of them reaches dist/. A
 # marker added to the ban without the census would be a grep that can only ever
-# pass.
+# pass. The census reads non-test source only — see its own comment for why.
 MARKERS=('swatch-chip' 'Direction B')
 
 no_build() {
@@ -173,12 +181,25 @@ fi
 entry=${entries[0]}
 
 # --- 3. the marker census (vacuity guard) ---------------------------------------------------
+#
+# Test files are excluded, and that exclusion is the whole check: src/preview/
+# holds tokens-harness-contract.test.ts, whose header quotes both markers as
+# prose because it documents this gate. A census that read it would stay
+# satisfied after the real emitters had been renamed — green while the
+# containment scan below had rotted into a grep for strings nothing emits, which
+# is the one failure this section exists to prevent (found in review of #142).
+# Only source that can actually put a marker into dist/ may vouch for it.
+#
+# `--exclude` is a GNU/BSD grep extension rather than POSIX — the one place this
+# script reaches past a plain grep. Both greps it can meet carry it: BSD grep
+# 2.6.0 (macOS, checked directly) and GNU grep (the CI runner). If a third ever
+# appears, enumerate the emitter files instead of widening this flag.
 
 [ -d "$PREVIEW_SRC" ] || vacuous "no $WEB_DIR/src/preview directory under $ROOT"
 
 for marker in "${MARKERS[@]}"; do
-  if ! grep -rqF -- "$marker" "$PREVIEW_SRC"; then
-    vacuous "the marker '$marker' no longer appears under $WEB_DIR/src/preview"
+  if ! grep -rqF --exclude='*.test.*' -- "$marker" "$PREVIEW_SRC"; then
+    vacuous "the marker '$marker' no longer appears in non-test source under $WEB_DIR/src/preview"
   fi
 done
 

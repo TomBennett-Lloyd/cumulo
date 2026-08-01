@@ -61,3 +61,9 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - Where: `requestJson` in `apps/web/src/data/http-fleet-data-source.ts`; the `network` cause list on `FleetDataError` in `apps/web/src/data/fleet-data-source.ts`
 - What: no `AbortSignal` exists anywhere in `apps/web`, so a stalled fetch never settles — and the `seriesInFlight` entry it owns is only removed on settlement, so that `(site, range)` stays wedged on a promise that never resolves while the view spins with no failure to report. `error-handling.md` rule 3 wants timeout/backoff/final-failure visible at the call site, and `FleetDataError`'s own doc already advertises "timeout" as a network cause that nothing currently produces. The fix is a policy decision for every browser-side external call (which deadline, whether an abort maps to `network` or a distinct arm, how the retry advice reads), not a per-call patch.
 - Source: #150 review cycle 2
+
+## 2026-08-02 — The bundle gate's "stale build" verdict only detects multi-entry staleness
+
+- Where: `check-web-bundle.sh` (`.claude/scripts/`), the exit-2 "stale artefacts" branch and the `Exit:` contract line
+- What: the gate advertises exit 2 for a "missing or stale build", but the only staleness it detects is two-plus `index-*.js` files; a single leftover entry from an earlier build passes and returns a verdict about code nobody has. Harmless in CI (fresh dist every run) but the normal developer state once #111 wires the gate into `verify`. Related diagnosis-honesty nit: the multi-entry message prescribes `rm -rf apps/web/dist`, which in CI would actually indicate a chunk-name collision, not staleness. Wants a freshness signal (e.g. compare dist mtime against the newest source mtime, or a build-stamp file) decided together with #111's verify wiring.
+- Source: #142 review cycle 1

@@ -38,10 +38,13 @@ import { describe, expect, it } from 'vitest';
  *     && ! grep -rq "swatch-chip" apps/web/dist \
  *     && ! grep -rq "Direction B" apps/web/dist
  *
- * — refusing a verdict (exit 2) if either marker has stopped appearing under
- * `src/preview/`, which is the one way a grep like this rots into a pass. This
- * source contract remains the fast layer: it runs inside `verify` without a
- * build, and it names the offending import.
+ * — refusing a verdict (exit 2) if either marker has stopped appearing in the
+ * *non-test* source under `src/preview/`, which is the one way a grep like this
+ * rots into a pass. The census skips `*.test.*` deliberately, and this file is
+ * the reason: the block above quotes both markers, so a census that read test
+ * files would be satisfied by this comment alone once the real emitters had been
+ * renamed. This source contract remains the fast layer: it runs inside `verify`
+ * without a build, and it names the offending import.
  *
  * The two markers are load-bearing and were chosen by elimination: `swatch-chip`
  * is a class emitted only by `preview.css`, and `Direction B` is palette prose

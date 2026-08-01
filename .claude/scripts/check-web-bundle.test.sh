@@ -329,7 +329,7 @@ for marker_file in preview.css TokensPreview.tsx; do
   must text_file "$DIR/apps/web/src/preview/$marker_file" 'const renamed = true;'
   run_check "$DIR"
   expect_rc 2 "$rc"
-  expect_out "no longer appears under apps/web/src/preview"
+  expect_out "no longer appears in non-test source under apps/web/src/preview"
   expect_out "Update the markers in this script"
   expect_not_out "check-web-bundle: OK"
 done
@@ -337,16 +337,56 @@ case_ctx=""
 end
 
 # ==========================================================================================
-# 11. a root that is not there at all
+# 11. a marker surviving only in a test file is no verdict either
 # ==========================================================================================
+# The loophole the census had in review: src/preview/ really does contain a test file that
+# quotes both markers in prose — tokens-harness-contract.test.ts documents this gate's
+# assertions verbatim. A census over the whole directory is satisfied by that comment alone,
+# so renaming the class and rewording the palette heading left the gate green while the
+# containment scan below had become a grep for strings nothing emits. Case 10 cannot see
+# this: it deletes the markers from the whole tree. Only a file that could actually put a
+# marker into dist/ may vouch for one.
+begin "markers surviving only in a *.test.ts under src/preview exit 2, not 0"
+fixture markers_only_in_test
+must text_file "$DIR/apps/web/src/preview/preview.css" '.renamed-chip {'
+must text_file "$DIR/apps/web/src/preview/TokensPreview.tsx" 'const heading = "Direction C";'
+must text_file "$DIR/apps/web/src/preview/tokens-harness-contract.test.ts" \
+  '// asserts: ! grep -rq "swatch-chip" dist && ! grep -rq "Direction B" dist'
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "no longer appears in non-test source under apps/web/src/preview"
+expect_not_out "check-web-bundle: OK"
+end
+
+# ==========================================================================================
+# 12. argument errors reach a verdict of "no verdict"
+# ==========================================================================================
+# A bad invocation must never read as a passing bundle. Each of these runs against a tree
+# the gate would otherwise pass (or, for the first, no tree at all), so 2 here is the parser
+# refusing rather than the assertions holding.
 begin "a nonexistent root exits 2, not 1"
 run_check "$TMP_ROOT/does-not-exist"
 expect_rc 2 "$rc"
 expect_out "not a directory"
 end
 
+begin "an unknown option exits 2"
+run_check --nope
+expect_rc 2 "$rc"
+expect_out "unknown option"
+expect_not_out "check-web-bundle: OK"
+end
+
+begin "a second REPO_ROOT argument exits 2"
+fixture two_roots
+run_check "$DIR" "$DIR"
+expect_rc 2 "$rc"
+expect_out "expected at most one REPO_ROOT"
+expect_not_out "check-web-bundle: OK"
+end
+
 # ==========================================================================================
-# 12. the shipped default path (no argument), against the real repo
+# 13. the shipped default path (no argument), against the real repo
 # ==========================================================================================
 # Every case above pins REPO_ROOT to a fixture, so without this one the default path could
 # be broken and the suite would still be green (testing.md rule 7).
