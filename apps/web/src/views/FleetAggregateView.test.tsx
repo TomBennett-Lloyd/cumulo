@@ -17,7 +17,7 @@ import type {
   FleetSourceResult,
   RangeHours,
 } from '../data/fleet-data-source';
-import { FleetAggregateView, joinFleetSeries } from './FleetAggregateView';
+import { FleetAggregateView } from './FleetAggregateView';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
 // itself — every render has to be torn down explicitly or later queries match two views.
@@ -295,63 +295,5 @@ describe('FleetAggregateView', () => {
     await renderSettled(new StubFleetSource(canned));
 
     expect(attributionHref()).toBe('https://open-meteo.com/');
-  });
-});
-
-describe('joinFleetSeries', () => {
-  it('carries the fleet band onto the chart point', () => {
-    const joined = joinFleetSeries(
-      [
-        {
-          validTime: timestamp(6),
-          acPowerKw: 6,
-          uncertainty: band(4, 9),
-          contributingSiteCount: 2,
-        },
-      ],
-      [],
-    );
-
-    expect(joined).toEqual([
-      {
-        validTimeIso: '2026-07-30T06:00:00Z',
-        medianKw: 6,
-        band: { p10Kw: 4, p90Kw: 9 },
-        actualKw: null,
-      },
-    ]);
-  });
-
-  it('joins a measurement to its own hour and leaves an unmeasured hour null', () => {
-    const joined = joinFleetSeries(
-      [
-        { validTime: timestamp(6), acPowerKw: 6, contributingSiteCount: 2 },
-        { validTime: timestamp(7), acPowerKw: 8, contributingSiteCount: 2 },
-      ],
-      [{ validTime: timestamp(6), acPowerKw: 5, contributingSiteCount: 2 }],
-    );
-
-    expect(joined.map((point) => point.actualKw)).toEqual([5, null]);
-  });
-
-  it('omits the band key entirely for an hour with no uncertainty', () => {
-    const joined = joinFleetSeries(
-      [{ validTime: timestamp(6), acPowerKw: 6, contributingSiteCount: 2 }],
-      [],
-    );
-
-    expect(joined.filter((point) => 'band' in point)).toEqual([]);
-  });
-
-  it('drops a measurement whose hour has no forecast point, keeping the forecast x-domain', () => {
-    const joined = joinFleetSeries(
-      [{ validTime: timestamp(6), acPowerKw: 6, contributingSiteCount: 2 }],
-      [
-        { validTime: timestamp(6), acPowerKw: 5, contributingSiteCount: 2 },
-        { validTime: timestamp(5), acPowerKw: 1, contributingSiteCount: 1 },
-      ],
-    );
-
-    expect(joined.map((point) => point.validTimeIso)).toEqual(['2026-07-30T06:00:00Z']);
   });
 });

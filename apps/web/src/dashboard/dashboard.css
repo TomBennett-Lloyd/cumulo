@@ -1,31 +1,56 @@
 /*
- * Dashboard layout: map beside the fleet column.
+ * Dashboard layout: map beside the panel column.
  *
  * Tokens only (stylelint.config.mjs). Lengths that no token category covers —
  * the column measure and the map's height — are the documented residual of the
- * CSS gate, so they are written as `rem`/`vh` and kept to this file's two
- * layout decisions rather than spread through the components.
+ * CSS gate, so they are written as `rem`/`vh` and kept to this file's layout
+ * decisions rather than spread through the components.
+ *
+ * The surface fills the shell rather than growing down the page (#148): `.app`
+ * is a `100dvh` column, `.app-main` is the flexible remainder, and this grid
+ * takes all of it. That is what lets the map be given a height it can actually
+ * fill, and what makes the panel column — not the document — the thing that
+ * scrolls.
  */
 
 .dashboard {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+
+  /*
+   * The panel column's floor is set by the chart inside it, not by taste.
+   * `ForecastChart` draws into a 480-unit viewBox (`CHART_VIEW_BOX_WIDTH` in
+   * ../charts/ForecastChart.tsx) and scales to its container, so the column's
+   * width decides how small the chart's own type renders. At the 26rem floor,
+   * minus a panel card's `--space-4` padding either side, the SVG lays out at
+   * roughly 384px — a scale of about 0.8, which puts `--text-xs` tick labels at
+   * about 9.6px. That is the floor of legibility, so it is the floor of the
+   * column. The 30rem ceiling keeps the map the larger half at every width the
+   * two columns survive at.
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(26rem, 30rem);
   gap: var(--space-4);
-  align-items: stretch;
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--space-4);
 }
 
-/* The map needs a height from somewhere — it has no intrinsic one — and this is
- * the element that knows how much of the viewport the dashboard is worth. */
+/* The map needs a height from somewhere — it has no intrinsic one — and now the
+ * shell hands it a real one: the full grid row. The minimum is the point below
+ * which a basemap stops being worth drawing. */
 .dashboard-map {
-  height: 70vh;
+  height: 100%;
   min-height: 24rem;
 }
 
+/* The column scrolls, the page does not. Its content is a stack of panels of
+ * unknown total height, and the alternative — letting it push the grid taller —
+ * would put a scrollbar on the document and move the map off screen. */
 .dashboard-aside {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   min-width: 0;
+  overflow-y: auto;
 }
 
 .dashboard-slot {
@@ -94,15 +119,27 @@
   cursor: pointer;
 }
 
-/* Below the width where two columns still leave the map usable, the fleet
+/* Below the width where two columns still leave the map usable, the panel
  * column moves under it. It is never dropped: the list is the map's table view,
- * and a narrow screen is exactly where a reader is most likely to need it. */
-@media (width < 60rem) {
+ * and a narrow screen is exactly where a reader is most likely to need it.
+ *
+ * Stacked, the surface is taller than the viewport by construction, so the
+ * fixed-height arrangement is abandoned wholesale: the grid stops filling a
+ * viewport it no longer fits in, the map takes a fraction of the screen, and
+ * the column gives its scroll back to the page. Two nested scrollers on a
+ * narrow screen is the one arrangement worse than a long page. The breakpoint
+ * matches `.app`'s in app.css — they describe the same moment. */
+@media (width < 64rem) {
   .dashboard {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
   }
 
   .dashboard-map {
     height: 50vh;
+  }
+
+  .dashboard-aside {
+    overflow-y: visible;
   }
 }

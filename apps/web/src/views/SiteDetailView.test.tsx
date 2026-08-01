@@ -15,7 +15,7 @@ import type {
   FleetSourceResult,
   RangeHours,
 } from '../data/fleet-data-source';
-import { joinSiteSeries, SiteDetailView } from './SiteDetailView';
+import { SiteDetailView } from './SiteDetailView';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
 // never registers itself.
@@ -189,49 +189,6 @@ const renderView = (config: StubConfig): StubFleetSource => {
 
 const attributionHref = async (): Promise<string | null> =>
   (await screen.findByRole('link', { name: 'Open-Meteo.com' })).getAttribute('href');
-
-describe('joinSiteSeries', () => {
-  it('joins each forecast to the measurement recorded for the same instant', () => {
-    const points = joinSiteSeries([banded(SUNNYSIDE.id, 9, 4)], [reading(SUNNYSIDE.id, 9, 3.8)]);
-
-    expect(points).toEqual([
-      {
-        validTimeIso: '2026-07-30T09:00:00Z',
-        medianKw: 4,
-        band: { p10Kw: 3.5, p90Kw: 4.5 },
-        actualKw: 3.8,
-      },
-    ]);
-  });
-
-  it('leaves an unmeasured hour null rather than carrying the previous value forward', () => {
-    const points = joinSiteSeries(
-      [banded(SUNNYSIDE.id, 9, 4), banded(SUNNYSIDE.id, 12, 6)],
-      [reading(SUNNYSIDE.id, 9, 3.8)],
-    );
-
-    expect(points.map((point) => point.actualKw)).toEqual([3.8, null]);
-  });
-
-  it('omits the band key entirely for a point-estimate forecast', () => {
-    const points = joinSiteSeries([pointEstimate(SUNNYSIDE.id, 9, 4)], []);
-
-    expect(points[0]).not.toHaveProperty('band');
-  });
-
-  it('drops a measurement whose hour was never forecast, and sorts by time', () => {
-    const points = joinSiteSeries(
-      [banded(SUNNYSIDE.id, 12, 6), banded(SUNNYSIDE.id, 9, 4)],
-      [reading(SUNNYSIDE.id, 3, 0.1), reading(SUNNYSIDE.id, 12, 5.9)],
-    );
-
-    expect(points.map((point) => point.validTimeIso)).toEqual([
-      '2026-07-30T09:00:00Z',
-      '2026-07-30T12:00:00Z',
-    ]);
-    expect(points.map((point) => point.actualKw)).toEqual([null, 5.9]);
-  });
-});
 
 describe('SiteDetailView', () => {
   it('says it is loading before the source has answered', () => {

@@ -50,9 +50,12 @@
   background: var(--color-bg);
 }
 
-/* Keyboard focus gets the selected treatment *plus* the platform outline, which
-   is deliberately not suppressed here (map-treatment.md: everything reachable
-   by pointer is reachable without one). */
+/* Keyboard focus gets the selected treatment *plus* the app-wide focus ring —
+   the `:focus-visible` rule in `@cumulo/ui`'s styles.css, painted in
+   `--color-focus-ring` (issue #93). That ring is deliberately not suppressed
+   here (map-treatment.md: everything reachable by pointer is reachable without
+   one); this rule only layers the row's own colour on top of it, which the
+   zero-specificity `:where()` in that rule is what makes possible. */
 .site-row:focus-visible {
   border-color: var(--color-map-marker-selected);
 }
@@ -124,6 +127,17 @@
   margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+}
+
+/* The site panel's forecast region: a stack of whichever states are on screen —
+   the range picker, a pending or failed line, a partial-data notice, the chart.
+   Deliberately *not* `.forecast-section` below, which justifies its items to
+   the start: that was right for a table sized by its content and wrong for a
+   chart whose SVG is `width: 100%` and would collapse to its own max-content
+   inside a start-justified track. */
+.site-panel-forecast {
+  display: grid;
+  gap: var(--space-3);
 }
 
 /* ── Forecast section ────────────────────────────────────────────────────── */

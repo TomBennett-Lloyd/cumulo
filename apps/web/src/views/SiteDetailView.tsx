@@ -1,10 +1,11 @@
-import type { Forecast, GenerationReading, Site } from '@cumulo/shared';
+import type { Site } from '@cumulo/shared';
 import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
 import { useId, useState } from 'react';
 
-import { ForecastChart, type ForecastChartPoint } from '../charts/ForecastChart';
-import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
+import { ForecastChart } from '../charts/ForecastChart';
+import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
+import { joinSiteSeries, loadSiteSeries } from '../dashboard/site-series';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
 import { RangePicker } from './range-picker';
 
@@ -32,86 +33,7 @@ export interface SiteDetailViewProps {
   readonly dataSource: FleetDataSource;
 }
 
-/** Both series for one site and window, fetched together so they share a state. */
-interface SiteSeries {
-  readonly forecasts: readonly Forecast[];
-  readonly actuals: readonly GenerationReading[];
-}
-
 const DEFAULT_RANGE: RangeHours = 24;
-
-/**
- * One forecast plus its measurement, if an hour with that exact `validTime` was
- * measured. The `band` key is built conditionally rather than assigned
- * `undefined`: under `exactOptionalPropertyTypes` an absent band and a band of
- * `undefined` are different values, and the chart draws only the former as a
- * point estimate.
- */
-const toChartPoint = (
-  forecast: Forecast,
-  actualByTime: ReadonlyMap<string, number>,
-): ForecastChartPoint => {
-  const measured = actualByTime.get(forecast.validTime);
-  const point = {
-    validTimeIso: forecast.validTime,
-    medianKw: forecast.acPowerKw,
-    actualKw: measured ?? null,
-  };
-  return forecast.uncertainty === undefined
-    ? point
-    : {
-        ...point,
-        band: {
-          p10Kw: forecast.uncertainty.p10AcPowerKw,
-          p90Kw: forecast.uncertainty.p90AcPowerKw,
-        },
-      };
-};
-
-/**
- * The display join: one chart point per forecast, ascending by time.
- *
- * The forecast series defines the x-domain, so a measurement whose hour was
- * never forecast is dropped rather than appended. Adding it would put a sample
- * on the axis with no forecast beneath it, which reads as a forecast of zero —
- * and the honest fix for a gap in the forecast series is a gap, not an actual
- * standing in for one. Sorting is lexicographic because `UtcIsoTimestamp` is
- * fixed-width UTC, where string order *is* chronological order.
- */
-export const joinSiteSeries = (
-  forecasts: readonly Forecast[],
-  actuals: readonly GenerationReading[],
-): readonly ForecastChartPoint[] => {
-  const actualByTime = new Map<string, number>(
-    actuals.map((actual) => [actual.validTime, actual.acPowerKw]),
-  );
-  return [...forecasts]
-    .sort((left, right) => left.validTime.localeCompare(right.validTime))
-    .map((forecast) => toChartPoint(forecast, actualByTime));
-};
-
-/**
- * Both source calls as one result: either series failing makes the pair
- * failed, because a chart of forecasts with the measurements silently missing
- * would claim the horizon is now.
- */
-const loadSiteSeries = async (
-  dataSource: FleetDataSource,
-  siteId: string,
-  range: RangeHours,
-): Promise<FleetSourceResult<SiteSeries>> => {
-  const [forecasts, actuals] = await Promise.all([
-    dataSource.siteForecasts(siteId, range),
-    dataSource.siteActuals(siteId, range),
-  ]);
-  if (forecasts.kind === 'error') {
-    return forecasts;
-  }
-  if (actuals.kind === 'error') {
-    return actuals;
-  }
-  return { kind: 'ok', value: { forecasts: forecasts.value, actuals: actuals.value } };
-};
 
 interface SitePickerProps {
   readonly sites: readonly Site[];

@@ -1,19 +1,17 @@
 import {
   aggregateFleetActuals,
   aggregateFleetForecast,
-  type FleetActualsPoint,
-  type FleetForecastPoint,
   type Forecast,
   type GenerationReading,
   type Site,
-  type UtcIsoTimestamp,
 } from '@cumulo/shared';
 import { OpenMeteoAttribution } from '@cumulo/ui';
 import { useState, type ReactElement } from 'react';
 
-import { ForecastChart, type ForecastChartPoint } from '../charts/ForecastChart';
+import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
+import { joinFleetSeries, minimumContributingSites } from '../dashboard/fleet-series';
 import { RangePicker, rangeLabel } from './range-picker';
 
 /**
@@ -21,9 +19,10 @@ import { RangePicker, rangeLabel } from './range-picker';
  *
  * The summing is not here. `aggregateFleetForecast` / `aggregateFleetActuals` in `@cumulo/shared`
  * own every kilowatt of arithmetic (`architecture.md` rule 3), including the comonotonic band
- * addition whose statistical position is stated in that module; this file joins their output to the
- * chart's point shape and decides what to say about it. There is deliberately no `+` over a power
- * value below — if one appears, a second definition of "the fleet total" has been created.
+ * addition whose statistical position is stated in that module, and `dashboard/fleet-series.ts`
+ * joins their output to the chart's point shape. What is left here is the decision of what to say
+ * about it. There is deliberately no `+` over a power value below — if one appears, a second
+ * definition of "the fleet total" has been created.
  *
  * Honesty about partial results is a rendered feature, not a log line (`error-handling.md` rule 5):
  * an hour that only some sites contributed to still draws, but the view says how many of the
@@ -44,55 +43,6 @@ const DEFAULT_RANGE: RangeHours = 24;
 const LOADING_TEXT = 'Loading the fleet aggregate…';
 const NO_SITES_TEXT = 'No active sites yet';
 const NO_FORECAST_TEXT = 'No fleet forecast available for this range yet';
-
-/**
- * The thinnest hour on display — the count the partial notice quotes.
- *
- * Seeded from the first point rather than from `Infinity` so an empty series answers 0 instead of a
- * number no caller could render.
- */
-const minimumContributingSites = (points: readonly FleetForecastPoint[]): number =>
-  points.reduce(
-    (lowest, point) => Math.min(lowest, point.contributingSiteCount),
-    points[0]?.contributingSiteCount ?? 0,
-  );
-
-/**
- * Zip the two aggregated series into the chart's point shape.
- *
- * The forecast series is the x-domain: an aggregated actual whose hour has no forecast point is
- * dropped, because the chart has nowhere to put it and inventing a column would imply a forecast
- * that was never made. An hour with no measurement carries `actualKw: null`, which the chart draws
- * as a gap rather than a bridged line.
- */
-export const joinFleetSeries = (
-  points: readonly FleetForecastPoint[],
-  actuals: readonly FleetActualsPoint[],
-): readonly ForecastChartPoint[] => {
-  const measuredByHour = new Map<UtcIsoTimestamp, number>(
-    actuals.map((actual) => [actual.validTime, actual.acPowerKw]),
-  );
-
-  return points.map((point) => {
-    const joined = {
-      validTimeIso: point.validTime,
-      medianKw: point.acPowerKw,
-      actualKw: measuredByHour.get(point.validTime) ?? null,
-    };
-
-    // The key is omitted, never set to `undefined`: under `exactOptionalPropertyTypes` those are
-    // different values, and the chart reads absence as "point estimate, draw no band".
-    return point.uncertainty === undefined
-      ? joined
-      : {
-          ...joined,
-          band: {
-            p10Kw: point.uncertainty.p10AcPowerKw,
-            p90Kw: point.uncertainty.p90AcPowerKw,
-          },
-        };
-  });
-};
 
 /** The three provider calls this view makes, once both have answered. */
 interface FleetData {
