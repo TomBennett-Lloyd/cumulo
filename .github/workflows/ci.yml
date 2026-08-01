@@ -42,6 +42,47 @@ jobs:
       # the two — the safe direction, but not a pinned one.
       - run: pnpm verify
 
+  # The only job here that produces a build, and the one deliberate exception to
+  # the rule the comment above states — that CI calls the `verify` composite and
+  # never a hand-picked gate.
+  #
+  # (a) Why not a gate inside `verify`: `verify` has no build step at all, and
+  #     whether it should is #111's question — per-package `build` scripts,
+  #     `pnpm -r build` joining the composite, the artefact-path vs `dist/**`
+  #     lint-exemption decision, and the verify-time cost. Answering half of it
+  #     here would be reworked when #111 lands. So the split is drawn where it
+  #     costs nothing: the gate *script* takes a repo root and builds nothing, so
+  #     #111 can call it from `verify` unchanged, at which point this job folds
+  #     into the composite and disappears. Its test harness is already in
+  #     `verify` today (run-script-tests.sh discovers it) — only the production
+  #     call site is waiting on #111.
+  # (b) Why not a step appended to `checks`: it runs in parallel, so wall time is
+  #     unchanged, and a red "web-build" names the failing surface directly
+  #     rather than hiding inside a composite step. The build is ~0.6 s; the cost
+  #     is the ~1 min checkout+install, parallel and well inside the free tier.
+  # (c) The entry budget lives only in .claude/scripts/check-web-bundle.sh and is
+  #     deliberately not restated here — one enforced copy, per that constant's
+  #     own comment.
+  # (d) The advisory half of the size story is Vite's `chunkSizeWarningLimit`
+  #     (apps/web/vite.config.ts), whose warning about the lazily imported map
+  #     chunk prints in the build step's log; the assert step lists every
+  #     dist/assets file by size there too. Advisory in the log, enforced on the
+  #     entry chunk only.
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: build web (production)
+        run: pnpm --filter @cumulo/web build
+      - name: assert bundle properties
+        run: bash .claude/scripts/check-web-bundle.sh
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:
@@ -97,7 +138,8 @@ jobs:
       # The api stack validates without a built Lambda artefact, deliberately —
       # `fileexists` guards the `source_code_hash` call and a resource
       # precondition carries the missing-artefact error at plan time instead.
-      # Same asymmetry as the ingestion stack: CI never runs a build.
+      # Same asymmetry as the ingestion stack: CI builds no Lambda artefact (the
+      # web-build job above builds the browser bundle and nothing else).
       - name: terraform init (api)
         run: terraform -chdir=infra/api init -backend=false -lockfile=readonly
       - name: terraform validate (api)

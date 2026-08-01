@@ -16,11 +16,11 @@ import { describe, expect, it } from 'vitest';
  * gallery — no swatch grid, no palette prose, no `preview.css`.
  *
  * No unit test can see that property. Every component under `src/preview/`
- * still renders correctly in jsdom whether it is bundle-reachable or not, and
- * CI never runs `vite build` (#142) — so a single `import { TokensPreview }
- * from './preview/TokensPreview'` added by someone reaching for a swatch, or a
- * stray `import './preview/preview.css'` in `src/main.tsx`, would fuse the
- * gallery back into the shipped entry chunk with every other gate green.
+ * still renders correctly in jsdom whether it is bundle-reachable or not — so a
+ * single `import { TokensPreview } from './preview/TokensPreview'` added by
+ * someone reaching for a swatch, or a stray `import './preview/preview.css'` in
+ * `src/main.tsx`, would fuse the gallery back into the shipped entry chunk with
+ * every gate in `verify` green.
  *
  * The scan therefore covers the whole app source tree rather than the two files
  * the extraction touched, and matches on the `preview` path segment rather than
@@ -29,12 +29,19 @@ import { describe, expect, it } from 'vitest';
  * gallery's own modules import each other, and that is the arrangement being
  * protected, not a violation of it.
  *
- * Manual proof of the property this stands in for, run against a real build:
+ * The dist-level proof of the property this stands in for is no longer a manual
+ * one: CI's `web-build` job builds `apps/web` and runs
+ * `.claude/scripts/check-web-bundle.sh` on every push and PR (#142), and that
+ * script asserts exactly this block against the real build —
  *
- *   rm -rf apps/web/dist && pnpm --filter @cumulo/web build \
- *     && test ! -e apps/web/dist/tokens.html \
+ *   test ! -e apps/web/dist/tokens.html \
  *     && ! grep -rq "swatch-chip" apps/web/dist \
  *     && ! grep -rq "Direction B" apps/web/dist
+ *
+ * — refusing a verdict (exit 2) if either marker has stopped appearing under
+ * `src/preview/`, which is the one way a grep like this rots into a pass. This
+ * source contract remains the fast layer: it runs inside `verify` without a
+ * build, and it names the offending import.
  *
  * The two markers are load-bearing and were chosen by elimination: `swatch-chip`
  * is a class emitted only by `preview.css`, and `Direction B` is palette prose
@@ -123,9 +130,11 @@ describe('tokens harness isolation', () => {
   it('never promotes the harness page into the build input', () => {
     // Naming `tokens.html` in `build.rollupOptions.input` is exactly the
     // regression this guards: it would ship the whole gallery from a two-line
-    // config edit, and since CI never runs `vite build` (#142) no other gate
-    // would notice. The config mentions the file nowhere today, so any mention
-    // at all is the change worth stopping to look at.
+    // config edit, and no gate inside `verify` would notice — CI's `web-build`
+    // job would (#142), on the gallery bytes landing in dist/, but this is the
+    // test that names the config line that put them there. The config mentions
+    // the file nowhere today, so any mention at all is the change worth
+    // stopping to look at.
     expect(readFileSync(VITE_CONFIG, 'utf8')).not.toContain('tokens.html');
   });
 });
