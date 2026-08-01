@@ -56,15 +56,16 @@ describe('the per-location worst case', () => {
     expect(STORE_BATCHES_PER_LOCATION).toBe(2);
   });
 
-  it('prices one batch write at four SDK attempts plus the pinned storage backoff', () => {
-    // 4 × 3 s + (1 + 2 + 4) s. The 12 s of request timeout is the term #115
-    // added: before the storage client pinned one, this was unbounded.
-    expect(STORE_SEND_WORST_MS).toBe(19_000);
+  it('prices one batch write at two SDK attempts plus the pinned storage backoff', () => {
+    // 2 × 3 s + 1 s. The 6 s of request timeout is the term #115 added: before
+    // the storage client pinned one, this was unbounded. The attempt count is
+    // two rather than four because #122 left throttling to the drain layer.
+    expect(STORE_SEND_WORST_MS).toBe(7_000);
   });
 
-  it('prices a store at the two retry layers stacked, which is the dominant term', () => {
-    // 2 batches × (3 drain attempts × 19 s + 0.6 s of drain backoff).
-    expect(STORE_WORST_MS).toBe(115_200);
+  it('prices a store at the drain attempts over the collapsed send worst case, which is the dominant term', () => {
+    // 2 batches × (3 drain attempts × 7 s + 0.6 s of drain backoff).
+    expect(STORE_WORST_MS).toBe(43_200);
     expect(STORE_WORST_MS).toBeGreaterThan(FETCH_WORST_MS + PUBLISH_WORST_MS);
   });
 
@@ -74,7 +75,7 @@ describe('the per-location worst case', () => {
 
   it('sums all three effects, none of them priced at zero', () => {
     // The defect #115 named: the old budget counted the fetch and nothing else.
-    expect(LOCATION_WORST_MS).toBe(146_700);
+    expect(LOCATION_WORST_MS).toBe(74_700);
     expect(LOCATION_WORST_MS).toBe(FETCH_WORST_MS + STORE_WORST_MS + PUBLISH_WORST_MS);
     expect(FETCH_WORST_MS).toBeGreaterThan(0);
     expect(STORE_WORST_MS).toBeGreaterThan(0);
@@ -91,13 +92,13 @@ describe('the cycle deadline', () => {
     expect(CYCLE_DEADLINE_MS + LOCATION_WORST_MS + SHUTDOWN_MARGIN_MS).toBe(
       INGESTION_LAMBDA_TIMEOUT_MS,
     );
-    expect(CYCLE_DEADLINE_MS).toBe(148_300);
+    expect(CYCLE_DEADLINE_MS).toBe(220_300);
   });
 
   it('is long enough to be worth having', () => {
     // A negative or trivial deadline would make every cycle skip everything
     // while still passing the identity above — the identity alone is not
-    // enough. At 148 s a healthy cycle (well under a second per location) has
+    // enough. At 220 s a healthy cycle (well under a second per location) has
     // room for far more locations than the cap allows.
     expect(CYCLE_DEADLINE_MS).toBeGreaterThan(0);
     expect(CYCLE_DEADLINE_MS).toBeGreaterThan(LOCATION_WORST_MS / 2);

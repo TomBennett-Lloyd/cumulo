@@ -55,17 +55,17 @@ resource "aws_lambda_function" "ingestion" {
   # What replaced it is a bound the code enforces. apps/ingestion/src/
   # cycle-budget.ts multiplies out one location's genuinely worst case from the
   # constants the three effects declare — FETCH_WORST_MS ≈ 21 s, STORE_WORST_MS
-  # ≈ 115 s, PUBLISH_WORST_MS ≈ 10.5 s, so LOCATION_WORST_MS ≈ 147 s — and
+  # ≈ 43 s, PUBLISH_WORST_MS ≈ 10.5 s, so LOCATION_WORST_MS ≈ 75 s — and
   # derives
   #
   #   CYCLE_DEADLINE_MS = INGESTION_LAMBDA_TIMEOUT_MS  (300_000, this value)
-  #                     - LOCATION_WORST_MS            (≈ 147_000)
+  #                     - LOCATION_WORST_MS            (≈ 75_000)
   #                     - SHUTDOWN_MARGIN_MS           (5_000)
-  #                     ≈ 148_000
+  #                     ≈ 220_000
   #
   # runCycle checks that deadline before starting each location and never
   # interrupts one in flight, so the last location it can possibly start
-  # finishes by 148 + 147 = 295 s, leaving 5 s to flush the summary log line.
+  # finishes by 220 + 75 = 295 s, leaving 5 s to flush the summary log line.
   # The function timeout is therefore **unreachable by construction** rather
   # than merely generous — which matters because a Lambda killed at its timeout
   # is the one ingestion failure that produces no CycleFailedError, no summary,
