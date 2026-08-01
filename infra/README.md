@@ -2,13 +2,14 @@
 
 All AWS infrastructure lives here as Terraform. Nothing is created by hand in the console — if it exists in the account, it exists in a `.tf` file, because the alternative is infrastructure that cannot be torn down and a cost ceiling that cannot be trusted.
 
-A **stack** is one directory under `infra/`, applied independently, with its own state. There are four today:
+A **stack** is one directory under `infra/`, applied independently, with its own state. There are five today:
 
 | Stack       | Directory          | Owns                                                                                                                                                                                                   |
 | ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                                                                          |
+| `alerting`  | `infra/alerting/`  | The platform alerts SNS topic every other stack's alarms notify, and its email subscription.                                                                                                           |
 | `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                                                                             |
-| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), two alarms, and the CI deploy grant for its own function.     |
+| `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), three alarms, and the CI deploy grant for its own function.   |
 | `api`       | `infra/api/`       | The fleet API Lambda and the API Gateway HTTP API of [ADR 0005](../docs/adr/0005-fleet-api-hosting.md), including the stage throttle that bounds its bill, two alarms, and the CI deploy grant for it. |
 
 `storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
@@ -17,7 +18,9 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 
 `api` sits in exactly the same shape as `ingestion`, one stack later: its state lives in `bootstrap`'s bucket, it attaches its own deploy grant to `bootstrap`'s shared role, and **it has no cross-stack reference to `storage` at all** — `cumulo-sites-<env>` and `cumulo-series-<env>` are assembled from the naming convention, not read from an output. The same operator obligation follows (same region, same `environment`), plus one that is unique to this stack: it is the only one whose input is the public internet, so the stage throttle in `infra/api/gateway.tf` is load-bearing configuration rather than tuning. [ADR 0005](../docs/adr/0005-fleet-api-hosting.md) computes the worst-case bill from those two numbers; changing them changes the bound.
 
-Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables.
+`alerting` is the newest, and it is the one stack every other stack points at. It holds the SNS topic that `storage`, `ingestion`, and `api` send their alarm state changes to — and it holds it **without a single cross-stack reference in either direction**. The alarm stacks assemble `arn:aws:sns:<region>:<account-id>:cumulo-alerts-<environment>` from the naming convention, exactly as they assemble table ARNs, so the topic is an interface rather than an output: `alerting` can be applied before or after them, and a plan of any stack succeeds while another is mid-apply. The obligation is the familiar one, with one new failure mode worth stating plainly — same region, same `environment`, because an SNS ARN carries both, and a mismatch is **not** an apply error. CloudWatch accepts an alarm action pointing at a topic that does not exist and reports it only by never delivering, which is why the alerting runbook proves delivery from AWS rather than from a green apply.
+
+Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables. So is `alerting`, and more sharply: every stack that has an alarm would notice its absence, and a per-stack topic would multiply the one genuinely manual step in this repo — confirming an email subscription by hand — by the number of stacks, for no gain in routing to a single recipient.
 
 **The one rule that has no exceptions:** no long-lived AWS credentials, anywhere. GitHub Actions authenticates by OIDC and holds no keys. A human operator holds short-term credentials in their own shell, and those never enter this repo, a Terraform variable, or an Actions secret. The single section of this document where operator credentials are discussed at all is [Operator prerequisites](#operator-prerequisites).
 
@@ -414,7 +417,131 @@ That does not dilute convention 8. Bootstrap's "deliberately minimal" property i
 
 Email subscribers are attached to the budget directly rather than through SNS. Budget notifications need no subscription confirmation, whereas an SNS email subscription requires a human to click a link and, until they do, cannot be deleted for three days — a teardown that blocks for three days is not a teardown.
 
+The `alerting` stack does not overturn that reasoning; it is the case where the same reasoning runs out. A CloudWatch alarm action **must** be an ARN, so alarms cannot reach an inbox without a topic, and the three-day floor becomes an operator obligation — confirm the subscription promptly — rather than a design that can avoid it. The two stacks read the same `/cumulo/notification-email` parameter and arrive at the same inbox by the two different routes their resources require. Keeping the topic out of `bootstrap` is convention 1 again: the budget must outlive everything billable, whereas a topic with no alarms pointing at it is dead weight, so their lifecycles are genuinely different.
+
 **A quiet forecast alarm is not a broken one.** FORECASTED notifications need roughly five weeks of usage history before AWS will produce a forecast at all, so on a young account that threshold is simply silent. The three ACTUAL thresholds work from the first billing period and cover the gap.
+
+---
+
+## Runbook: the alerting stack
+
+One SNS topic and one email subscription — the destination for every CloudWatch alarm in the platform, per [issue #29](https://github.com/TomBennett-Lloyd/cumulo/issues/29). Every command runs from `infra/alerting/`:
+
+```bash
+cd infra/alerting
+```
+
+**Prerequisites:** the bootstrap stack applied (this stack's state lives in the bucket bootstrap creates, and `/cumulo/notification-email` is created in bootstrap's step A1), and an operator credential session — see [Operator prerequisites](#operator-prerequisites).
+
+**Apply it any time after bootstrap.** There is no ordering constraint against `storage`, `ingestion` or `api` in either direction: those stacks assemble this topic's ARN from the naming convention rather than reading an output, so they plan and apply whether or not the topic exists. Applying `alerting` **last** is therefore legal and is also the mistake worth naming — in the window before it exists, every alarm in the account has an action pointing at nothing and fails to deliver silently. Apply it early.
+
+**There is no override dance here** (convention 6). The state bucket already exists, so this stack inits straight against S3.
+
+### Phase A — configure and plan the topic
+
+**A1. Create the two gitignored local files from their committed examples.**
+
+```bash
+cp alerting.auto.tfvars.example alerting.auto.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Set `aws_region` in `alerting.auto.tfvars`, and both `region` and `bucket` in `backend.hcl`. The region must match every other stack's: an SNS ARN is regional, the alarm stacks build it from `var.aws_region`, and `/cumulo/notification-email` is a regional SSM parameter this stack has to be able to read.
+
+`environment` needs no entry; it defaults to `dev`. It must match the `environment` the alarm stacks were applied with, because it is part of the topic name they assemble.
+
+**A2. Confirm none of that is visible to git.**
+
+```bash
+git status --short   # expect no output for infra/alerting/
+```
+
+**A3. Initialise against the real backend.**
+
+```bash
+terraform init -backend-config=backend.hcl
+```
+
+**A4. Plan.** The tee target is outside the repo on purpose, so a plan output file cannot be committed:
+
+```bash
+terraform plan -no-color | tee ~/cumulo-alerting-plan.txt
+```
+
+Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — the topic and its email subscription. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count. Any other count means the configuration is not what this document describes; stop and find out why.
+
+**If the plan fails with the "must hold a single plain email address" message**, the parameter holds a display name, angle brackets, or a comma-separated list. That is a deliberate `postcondition` in `topic.tf`, mirroring `bootstrap/budget.tf`: AWS accepts a malformed endpoint, creates a subscription that looks healthy, and never delivers — which would silence every alarm in the platform. Fix the parameter and re-plan.
+
+**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy).
+
+### Phase B — apply, confirm, and prove delivery
+
+**B1. Apply.**
+
+```bash
+terraform apply
+```
+
+**B2. Confirm the subscription from the inbox.** SNS sends a confirmation mail to the address in the parameter; open it and click the link. **This is the one manual step in this repository, and it is not optional.** Terraform creates the subscription in `PendingConfirmation` and reports a clean apply either way — a green apply is not evidence that alerts will be delivered.
+
+Confirm it promptly for a second reason: an unconfirmed SNS subscription cannot be deleted for three days, which would put a three-day floor under `terraform destroy` of this stack. A confirmed one deletes immediately.
+
+**B3. Prove the subscription is real.** Read it back from AWS, not from Terraform's opinion of AWS. The assertion is the absence of the literal string `PendingConfirmation`:
+
+```bash
+aws sns list-subscriptions-by-topic \
+  --topic-arn "$(terraform output -raw topic_arn)" \
+  --query 'Subscriptions[].{Protocol:Protocol,Arn:SubscriptionArn}'
+# expect: Protocol "email" and an Arn ending in a subscription id
+# NOT:    "PendingConfirmation"
+```
+
+**B4. Confirm no drift.**
+
+```bash
+terraform plan -detailed-exitcode
+echo $?   # expect 0
+```
+
+**B5. Prove an alarm actually reaches the inbox.** This is the only check that exercises the whole path — assembled ARN, topic policy, subscription — and none of the three fails loudly on its own. Drive one alarm into ALARM by hand and wait for the mail:
+
+```bash
+aws cloudwatch set-alarm-state \
+  --alarm-name "cumulo-api-dev-request-flood" \
+  --state-value ALARM \
+  --state-reason "alerting runbook B5 notification smoke"
+```
+
+The mail arrives within a minute or so. The alarm returns to OK on its next evaluation without further action, and `ok_actions` means that recovery arrives as a second mail — which is itself the proof that the recovery half of the wiring works.
+
+If nothing arrives, check in this order: the subscription is confirmed (B3); the alarm's `AlarmActions` names the topic that actually exists (`aws cloudwatch describe-alarms --alarm-names … --query 'MetricAlarms[].AlarmActions'` against `terraform output -raw topic_arn` — a region or `environment` mismatch between stacks shows up here and nowhere else); and the topic has not acquired server-side encryption, which silently blocks CloudWatch from publishing (see the comment in `topic.tf`).
+
+**B6. Confirm the platform's alarm count matches the budget below.**
+
+```bash
+aws cloudwatch describe-alarms --alarm-name-prefix cumulo- \
+  --query 'length(MetricAlarms)'
+# expect: 9 — see "CloudWatch alarm budget" in the Cost section
+```
+
+### Teardown
+
+```bash
+terraform destroy
+```
+
+Expect `2 to destroy`. It completes immediately **provided the subscription was confirmed**; an unconfirmed one blocks for three days, which is the whole reason B2 is written as an obligation rather than a suggestion.
+
+Verify from AWS rather than from Terraform:
+
+```bash
+aws sns list-topics --query "Topics[?contains(TopicArn, 'cumulo-alerts')]"
+# expect: []
+```
+
+Destroying this stack does not break any other stack's apply — the alarms keep an action pointing at an ARN that no longer resolves, and CloudWatch neither complains nor delivers. **That is the failure mode to remember:** a torn-down alerting stack looks exactly like a healthy one from every other stack's perspective. Tear it down last, or accept that nothing is watching.
+
+**Leave the topic up at the end.** It costs $0 sitting there, and every alarm in the account is pointing at it.
 
 ---
 
@@ -538,7 +665,7 @@ aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query "MetricAlarms
 # expect: []
 ```
 
-The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the other stacks' — ingestion's two (`…-errors`, `…-dlq-…-not-empty`) and the api stack's two (`cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`) — are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
+The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the other stacks' — ingestion's three (`…-errors`, `…-dlq-…-not-empty`, `cumulo-ingestion-<env>-async-dropped`) and the api stack's two (`cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`) — are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
 
 Then re-apply and re-verify, because a teardown that cannot be reversed is only half a rehearsal:
 
@@ -554,7 +681,7 @@ Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the 
 
 ## Runbook: the ingestion stack
 
-One Lambda, one hourly EventBridge rule, one SQS queue with its dead-letter queue, one log group, one execution role, two alarms, and one deploy grant on the shared GitHub Actions role — the whole of [issue #11](https://github.com/TomBennett-Lloyd/cumulo/issues/11)'s infrastructure, per [ADR 0004](../docs/adr/0004-ingestion-transport.md). Every command runs from `infra/ingestion/`:
+One Lambda, one hourly EventBridge rule, one SQS queue with its dead-letter queue, one log group, one execution role, three alarms, and one deploy grant on the shared GitHub Actions role — the whole of [issue #11](https://github.com/TomBennett-Lloyd/cumulo/issues/11)'s infrastructure, per [ADR 0004](../docs/adr/0004-ingestion-transport.md), plus the cycle-starvation alarm [issue #29](https://github.com/TomBennett-Lloyd/cumulo/issues/29) added. Every command runs from `infra/ingestion/`:
 
 ```bash
 cd infra/ingestion
@@ -619,7 +746,7 @@ terraform init -backend-config=backend.hcl
 terraform plan -no-color | tee ~/cumulo-ingestion-plan.txt
 ```
 
-Expect **`Plan: 13 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the async invoke config that pins the function's retry policy to zero, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
+Expect **`Plan: 14 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the async invoke config that pins the function's retry policy to zero, the Lambda permission, the execution role, its inline policy, the three alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
 
 **A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, queue-name shape, the timeout numbers — and label it `awaiting-review`. Per convention 7, quote shapes rather than digits.
 
@@ -954,6 +1081,26 @@ Notes on why nothing here grows:
 - **The native lockfile has no standing charge.** A DynamoDB lock table would sit in the account billing for existence even while idle; the lockfile is an object that exists only during an operation.
 - **No NAT gateway, no load balancer, no VPC endpoint** — this stack creates nothing with an hourly rate. That is the property to preserve when adding to it: per-request costs at this volume are noise, and hourly ones are the whole budget.
 
+### Alerting stack
+
+Sized against the thing it is built to carry: **nine alarms that should each fire zero times.**
+
+| Resource group                                                                  | Billing basis                                                                                                            | Estimate     |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------ |
+| **Topic** (`aws_sns_topic.alerts`)                                              | SNS bills requests and deliveries, **not existence** — there is no per-topic or per-hour charge                          | **$0.00/mo** |
+| **Publishes** (one per alarm state change)                                      | First **1,000,000 requests/month** free, then $0.50/M                                                                    | **$0.00/mo** |
+| **Email deliveries** (`aws_sns_topic_subscription.notification_email`)          | First **1,000 notifications/month** free, then $2.00 per 100,000                                                         | **$0.00/mo** |
+| **Notification parameter** (`/cumulo/notification-email`, read via data source) | SSM Parameter Store standard tier, encrypted with the default KMS key — no charge for the parameter and none for the key | **$0.00/mo** |
+| **Total**                                                                       |                                                                                                                          | **$0.00/mo** |
+
+The alarms themselves are **not** costed here. They belong to the stacks that create them, and the allowance they draw on is platform-wide — see [CloudWatch alarm budget](#cloudwatch-alarm-budget) below.
+
+Notes on what would change that:
+
+- **Encryption is the line item deliberately absent.** Server-side encryption with a customer-managed KMS key would add ~$1/month plus request charges — and, before that, it would break delivery: the AWS-managed `alias/aws/sns` key does not grant CloudWatch permission to publish, so an encrypted topic accepts alarm actions and silently drops them. `topic.tf` says so at the point of temptation. The content being protected is an alarm name and a state reason, both already public in this repository.
+- **The free delivery tier is 1,000 emails/month, and reaching it is the alarm.** Nine alarms firing and recovering would have to average more than sixteen state changes each per day to cross it. That is not a bill, it is a platform on fire.
+- **Nothing here has an hourly rate**, the property every stack in this repo preserves.
+
 ### Storage stack
 
 The figures and the workload they are computed from are [ADR 0002](../docs/adr/0002-storage-split.md)'s; they are restated here because a cost table that lives only inside a decision record is not somewhere an operator looks. Sized against ~50 sites over ~30 locations, hourly, a 48-hour horizon, two models, 90-day retention: ~4.6 M write units/month and ~3.5 GB retained.
@@ -963,7 +1110,7 @@ The figures and the workload they are computed from are [ADR 0002](../docs/adr/0
 | **Provisioned capacity** (`series` 14 WCU / 21 RCU, `weather` 5 / 3) | 19 WCU / 24 RCU against the always-free **25 WCU / 25 RCU per Region**, which does not expire after twelve months         | **$0.00/mo** |
 | **On-demand tables** (`sites` + both GSIs, `metrics`)                | $0.625/M write request units, $0.125/M read request units — thousands of requests/month, and $0 while idle                | **$0.00/mo** |
 | **Storage** (all four tables)                                        | ~3.5 GB inside the always-free **25 GB**                                                                                  | **$0.00/mo** |
-| **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                                        | **$0.00/mo** |
+| **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 of the platform's 9, inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                   | **$0.00/mo** |
 | **Backups / recovery**                                               | PITR off ($0.20/GB-month avoided), no on-demand backups, no exports, AWS-owned encryption key rather than a ~$1/month CMK | **$0.00/mo** |
 | **Total**                                                            |                                                                                                                           | **$0.00/mo** |
 
@@ -987,7 +1134,7 @@ The figures are [ADR 0004](../docs/adr/0004-ingestion-transport.md)'s, restated 
 | **Schedule** (`aws_cloudwatch_event_rule` + target + permission) | EventBridge scheduled rules and their invocations are **not charged** — $0 by pricing, not by allowance                                                              | **$0.00/mo** |
 | **SQS** (queue + DLQ)                                            | ~8,760 sends + ~8,760 deletes + the consumer mapping's ~657,000 long-polling receives ≈ **~675,000 requests/month** against the always-free **1,000,000**, no expiry | **$0.00/mo** |
 | **CloudWatch logs** (30-day retention on one group)              | ~13 JSON lines/hour — kilobytes/month against the free **5 GB** of ingestion and **5 GB** of storage                                                                 | **$0.00/mo** |
-| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                   | 2 joining storage's 4, inside the always-free **10 CloudWatch alarms**; Lambda and SQS metrics are free                                                              | **$0.00/mo** |
+| **Alarms** (3 × `aws_cloudwatch_metric_alarm`)                   | 3 joining storage's 4, inside the always-free **10 CloudWatch alarms**; Lambda and SQS metrics are free                                                              | **$0.00/mo** |
 | **Total**                                                        |                                                                                                                                                                      | **$0.00/mo** |
 
 **No resource in this stack bills for existing**, which is the whole of ADR 0004: the Kinesis stream three earlier documents assumed would have cost ≈ $29.20/month on-demand or ≈ $10.95 provisioned — 29% and 11% of the entire ~$100/month ceiling — to move ~175 MB at 0.02% utilisation. With this stack applied, the platform's total standing cost is $0 and `terraform destroy` takes it to $0 in a different sense: nothing left at all.
@@ -1009,7 +1156,7 @@ The figures are [ADR 0005](../docs/adr/0005-fleet-api-hosting.md)'s, restated he
 | **Lambda invocations** (`aws_lambda_function.api`)                         | ~10,000/month against the always-free **1,000,000 requests/month**                                                                                     | **$0.00/mo** |
 | **Lambda compute**                                                         | 256 MB × ~100 ms is 0.025 GB-s/request, so the always-free **400,000 GB-seconds** covers 16M requests/month                                            | **$0.00/mo** |
 | **CloudWatch logs** (30-day retention on one group)                        | Kilobytes/month at demo volume against the free **5 GB** of ingestion                                                                                  | **$0.00/mo** |
-| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                             | 2 joining storage's 4 and ingestion's 2 — **8 of the always-free 10**; API Gateway and Lambda metrics are free                                         | **$0.00/mo** |
+| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                             | 2 joining storage's 4 and ingestion's 3 — **9 of the always-free 10**; API Gateway and Lambda metrics are free                                         | **$0.00/mo** |
 | **IAM** (execution role, inline policies, Lambda permission)               | Roles and policies are free                                                                                                                            | **$0.00/mo** |
 | **Standing total**                                                         |                                                                                                                                                        | **$0.00/mo** |
 
@@ -1032,5 +1179,38 @@ Notes on what would change that:
 - **The 12-month API Gateway free tier is deliberately not counted.** New accounts get 1M HTTP API calls/month for twelve months. Every figure above is quoted at list price with it assumed absent, because a cost claim that rests on an expiring allowance expires with it. The always-free Lambda and CloudWatch allowances _are_ counted; they do not expire.
 - **Swagger UI is the request-hungry page.** A `/docs` view is roughly four or five billed gateway requests plus as many invocations (HTML, CSS, the bundle, `/openapi.json`), which is where the per-request premium lands hardest. It is cents at demo volume; if it ever became a material share of traffic, ADR 0005 revisit trigger 4 says to put the assets on a CDN.
 - **Crossing ~16M requests/month is the revisit point for compute**, not for requests: that is where Lambda's 400,000 free GB-seconds runs out at 256 MB, and the marginal cost per million starts rising with function duration instead of staying flat.
-- **The alarm allowance is now the tight one.** Eight of ten used. The ninth and tenth are free; the eleventh is $0.10/month, at which point "$0.00/mo" in these tables stops being literally true.
-- **Nothing here has an hourly rate**, the property all four stacks preserve.
+- **The alarm allowance is now the tight one.** Nine of ten used, and it is a platform-wide allowance rather than this stack's — see [CloudWatch alarm budget](#cloudwatch-alarm-budget) below, which owns the count.
+- **Nothing here has an hourly rate**, the property all five stacks preserve.
+
+### CloudWatch alarm budget
+
+CloudWatch's always-free tier is **10 alarms per account**, and it is the only allowance in this platform that is genuinely close to its edge. It is also the only one no single stack can see: alarms are created in four directories, the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
+
+**Counted at the time of writing, from the `.tf` files rather than from a previous edition of this document:**
+
+| Stack       | Alarms | Which                                                                                                                        |
+| ----------- | -----: | ---------------------------------------------------------------------------------------------------------------------------- |
+| `storage`   |      4 | `cumulo-{series,weather}-<env>-{read,write}-throttle` — two resources expanded by `for_each` over the two provisioned tables |
+| `ingestion` |      3 | `cumulo-ingestion-<env>-errors`, `cumulo-weather-readings-dlq-<env>-not-empty`, `cumulo-ingestion-<env>-async-dropped`       |
+| `api`       |      2 | `cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`                                                                     |
+| `alerting`  |      0 | It is the destination, not a source                                                                                          |
+| **Total**   |  **9** | **One of the always-free ten still unallocated**                                                                             |
+
+Verify it against the account rather than trusting the table:
+
+```bash
+aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query 'length(MetricAlarms)'
+# expect: 9
+```
+
+**The decision, which is what #126 asked for.** The tenth alarm is reserved for [#136](https://github.com/TomBennett-Lloyd/cumulo/issues/136)'s forecast runtime, which needs an `Errors` alarm on the same argument the ingestion one rests on: a scheduled deployable whose output is invisible needs something watching. That is a reservation, not a rule — whoever gets there first takes it — but a PR claiming the tenth against a weaker argument should expect to be asked why #136's is not the better use of the last free slot.
+
+**Past ten, alarms bill $0.10 each per month, and the obligation is honesty rather than restraint.** $0.10/month is not a number worth contorting a design around; a silently false cost table is. So a PR that takes the platform past ten **must** do three things in the same change:
+
+1. state the new total in its description, and why the alarm earns its slot;
+2. update this table and the per-stack `Alarms` rows in the cost tables above;
+3. replace the affected **$0.00/mo** totals with the real figure — eleven alarms make it $0.10/mo, not $0.
+
+That third one is the point. Every cost claim in this document is quoted at list price with expiring allowances deliberately uncounted (see the API stack's note on the 12-month gateway tier), and a "$0.00/mo" that quietly means "$0.10/mo" would be the first place that discipline broke.
+
+**Two things that do not consume the allowance**, worth knowing before anyone economises in the wrong direction: composite alarms are billed separately at $0.50/month each and do not draw on the free ten, and a single alarm resource expanded by `for_each` costs one slot **per instance** — `storage`'s two resources are four alarms, which is why the table counts instances rather than `resource` blocks.
