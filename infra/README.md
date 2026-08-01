@@ -670,7 +670,7 @@ aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query "MetricAlarms
 # expect: []
 ```
 
-The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the other stacks' — ingestion's three (`…-errors`, `…-dlq-…-not-empty`, `cumulo-ingestion-<env>-async-dropped`) and the api stack's two (`cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`) — are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
+The filter is what keeps this assertion honest now that more than one stack creates `cumulo-` alarms: the four throttle alarms are storage's, and the other stacks' — ingestion's three (`…-errors`, `…-dlq-…-not-empty`, `cumulo-ingestion-<env>-async-dropped`), the api stack's two (`cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`), and forecast's one (`cumulo-forecast-<env>-errors`) — are expected to survive a storage teardown. A bare prefix query would have started reporting a failed teardown the day ingestion was applied.
 
 Then re-apply and re-verify, because a teardown that cannot be reversed is only half a rehearsal:
 
@@ -680,7 +680,7 @@ terraform plan -detailed-exitcode ; echo $?   # expect 0
 CUMULO_ENV="$(terraform output -raw environment)" pnpm --filter @cumulo/storage smoke
 ```
 
-Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the next spin-up. **Leave the tables up at the end**: #11, #12, #14, and #16 need them, and they cost $0 sitting there, which is the entire point of the capacity decision.
+Keep `backend.hcl` and `storage.auto.tfvars` — both are still correct for the next spin-up. **Leave the tables up at the end**: #11, #136, #14, and #16 need them, and they cost $0 sitting there, which is the entire point of the capacity decision.
 
 ---
 
@@ -699,7 +699,7 @@ cd infra/ingestion
 1. **The bootstrap stack applied** — this stack's state lives in the bucket bootstrap creates, and since #11 this stack also attaches an inline policy to the role bootstrap owns, so `data.aws_iam_role.github_actions` fails at plan time if bootstrap has not run.
 2. **The storage stack applied**, with the same `environment` and in the same region. Not a Terraform dependency: nothing here references storage's state or outputs, and a plan succeeds without it. It is a _runtime_ prerequisite — the IAM policy grants access to `cumulo-sites-<env>` and `cumulo-weather-<env>` by name, so applying against absent tables produces a stack that plans, applies, and then fails its first cycle in CloudWatch.
 3. **An operator credential session** — see [Operator prerequisites](#operator-prerequisites).
-4. **A built Lambda artefact**, which is the one prerequisite the other two runbooks do not have.
+4. **A built Lambda artefact** — the one prerequisite the bootstrap, alerting and storage runbooks do not have. This is the first stack to need one; the api and forecast runbooks inherit it.
 
 **There is no override dance here** (convention 6), exactly as in the storage runbook: the bucket already exists, so this stack inits straight against S3 in both directions.
 
@@ -714,7 +714,7 @@ ls -l ../../apps/ingestion/dist/handler.zip
 
 `apps/ingestion/dist/handler.zip` is a fixed contract between that build script and `lambda.tf`, not something Terraform discovers or produces — a `null_resource` shelling out to pnpm during a plan is the kind of infrastructure that works on exactly one machine. Terraform reads the file to compute `source_code_hash`, which is what makes a rebuilt artefact actually deploy instead of comparing equal on filename alone.
 
-Skip this step and `terraform plan` stops with `No Lambda artefact at apps/ingestion/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all three stacks on every push and builds nothing.
+Skip this step and `terraform plan` stops with `No Lambda artefact at apps/ingestion/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all six stacks on every push and builds nothing.
 
 **A2. Create the two gitignored local files from their committed examples.**
 
@@ -768,7 +768,7 @@ terraform apply
 **B2. Confirm what exists.**
 
 ```bash
-terraform state list   # expect 18 lines — the 13 resources plus the 5 data sources
+terraform state list   # expect 19 lines — the 14 resources plus the 5 data sources
 ```
 
 The deploy grant is the one resource in this stack that lives on something another stack owns, so confirm it landed where it was meant to rather than trusting the count:
@@ -785,7 +785,7 @@ terraform output -raw queue_url
 terraform output -raw function_name
 ```
 
-The queue URL embeds the account id, so it is a convention-7 value: it goes into #12's stack configuration and into your shell, never into a committed file, a PR body, or an issue comment.
+The queue URL embeds the account id, so it is a convention-7 value: it goes into #136's stack configuration and into your shell, never into a committed file, a PR body, or an issue comment.
 
 **B4. Prove the schedule is armed** — that the rule exists, is enabled, and points at the function:
 
@@ -810,7 +810,7 @@ Expect a `CycleReport` and no `FunctionError`. A `FunctionError` carrying `Cycle
 aws logs tail "/aws/lambda/$(terraform output -raw function_name)" --since 10m
 ```
 
-**B6. Confirm the messages actually landed.** This is the only check that exercises the whole path — fetch, DynamoDB write, publish — end to end. Until #12 exists there is no consumer, so a cycle's messages sit in the queue:
+**B6. Confirm the messages actually landed.** This is the only check that exercises the whole path — fetch, DynamoDB write, publish — end to end. Until #136's forecast stack exists there is no consumer, so a cycle's messages sit in the queue:
 
 ```bash
 aws sqs get-queue-attributes --queue-url "$(terraform output -raw queue_url)" \
@@ -826,7 +826,7 @@ aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names Approximat
 # expect 0
 ```
 
-**Drain the queue before leaving it**, or the first thing #12's consumer sees is a backlog of stale hand-invoked cycles: `aws sqs purge-queue --queue-url "$(terraform output -raw queue_url)"`.
+**Drain the queue before leaving it**, or the first thing #136's consumer sees is a backlog of stale hand-invoked cycles: `aws sqs purge-queue --queue-url "$(terraform output -raw queue_url)"`.
 
 **B7. Confirm no drift.**
 
@@ -886,7 +886,7 @@ The log-group one is the other one worth actually running. Lambda creates its ow
 
 Keep `backend.hcl` and `ingestion.auto.tfvars` — both are still correct for the next spin-up. To spin back up, run [Phase A](#phase-a--build-configure-and-plan) then [Phase B](#phase-b--apply-and-prove-the-cycle) back to back, starting from the build.
 
-**Whether to leave it up** is a real choice, unlike storage's. The stack costs $0 idle either way, but a stack that is up is *running*: it fetches from Open-Meteo every hour, spending quota (~288 calls/day against the free 10,000) and filling the queue with messages nothing is consuming until #12 lands. Leaving it running is the right default while #12 is being built and the wrong one afterwards if the queue is not being drained. Disabling the rule (`aws events disable-rule --name "cumulo-ingestion-hourly-$ENV"`) stops the cycles without destroying anything — but it is drift, and the next `terraform apply` re-enables it, which is the correct behaviour and worth knowing before it surprises you.
+**Whether to leave it up** is a real choice, unlike storage's. The stack costs $0 idle either way, but a stack that is up is *running*: it fetches from Open-Meteo every hour, spending quota (~288 calls/day against the free 10,000) and filling the queue with messages nothing is consuming until #136 lands. Leaving it running is the right default while #136 is being built and the wrong one afterwards if the queue is not being drained. Disabling the rule (`aws events disable-rule --name "cumulo-ingestion-hourly-$ENV"`) stops the cycles without destroying anything — but it is drift, and the next `terraform apply` re-enables it, which is the correct behaviour and worth knowing before it surprises you.
 
 ---
 
@@ -1012,7 +1012,7 @@ curl -fsS "$API_ENDPOINT/v1/sites"
 open "$API_ENDPOINT/docs"
 ```
 
-**Empty arrays are the expected answer, not a failure.** Until #12's forecast service is deployed and writing rows, `GET /v1/sites/{siteId}/forecast` returns `200` with `forecasts: []` — deliberate behaviour (a just-created site legitimately has no points yet), and what #17's poll keys on.
+**Empty arrays are the expected answer, not a failure.** Until #136's forecast service is deployed and writing rows, `GET /v1/sites/{siteId}/forecast` returns `200` with `forecasts: []` — deliberate behaviour (a just-created site legitimately has no points yet), and what #17's poll keys on.
 
 **B6. Confirm no drift.**
 
@@ -1065,7 +1065,7 @@ Keep `backend.hcl` and `api.auto.tfvars` — both are still correct for the next
 
 ## Runbook: the forecast stack
 
-One Lambda, one event source mapping onto ingestion's queue, one log group, one execution role, one alarm, and one deploy grant on the shared GitHub Actions role — the whole of [issue #136](https://github.com/TomBennett-Lloyd/cumulo/issues/136)'s infrastructure, per [ADR 0003](../docs/adr/0003-pv-model-runtime.md) and [ADR 0004](../docs/adr/0004-ingestion-transport.md). Note that ADR 0004 and the ingestion runbook above both call this consumer "#12" — that was the physics-forecast ticket, and the deployable that wraps it is #136. Every command runs from `infra/forecast/`:
+One Lambda, one event source mapping onto ingestion's queue, one log group, one execution role, one alarm, and one deploy grant on the shared GitHub Actions role — the whole of [issue #136](https://github.com/TomBennett-Lloyd/cumulo/issues/136)'s infrastructure, per [ADR 0003](../docs/adr/0003-pv-model-runtime.md) and [ADR 0004](../docs/adr/0004-ingestion-transport.md). Note that ADR 0004 calls this consumer "#12" throughout — that was the physics-forecast ticket, and the deployable that wraps it is #136. The ADR is immutable so the label stands there; every runbook in this document names #136. Every command runs from `infra/forecast/`:
 
 ```bash
 cd infra/forecast
@@ -1307,7 +1307,7 @@ The figures and the workload they are computed from are [ADR 0002](../docs/adr/0
 | **Provisioned capacity** (`series` 14 WCU / 21 RCU, `weather` 5 / 3) | 19 WCU / 24 RCU against the always-free **25 WCU / 25 RCU per Region**, which does not expire after twelve months         | **$0.00/mo** |
 | **On-demand tables** (`sites` + both GSIs, `metrics`)                | $0.625/M write request units, $0.125/M read request units — thousands of requests/month, and $0 while idle                | **$0.00/mo** |
 | **Storage** (all four tables)                                        | ~3.5 GB inside the always-free **25 GB**                                                                                  | **$0.00/mo** |
-| **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 of the platform's 9, inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                   | **$0.00/mo** |
+| **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 of the platform's 10, inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                  | **$0.00/mo** |
 | **Backups / recovery**                                               | PITR off ($0.20/GB-month avoided), no on-demand backups, no exports, AWS-owned encryption key rather than a ~$1/month CMK | **$0.00/mo** |
 | **Total**                                                            |                                                                                                                           | **$0.00/mo** |
 
@@ -1338,10 +1338,10 @@ The figures are [ADR 0004](../docs/adr/0004-ingestion-transport.md)'s, restated 
 
 Notes on what would change that:
 
-- **The SQS request allowance is the number to watch, not the send count.** Sends are ~8,760/month and immaterial; the ~657,000 polling receives are two-thirds of the free million, and they belong to #12's event source mapping rather than to anything in this stack. A **second** ESM-driven queue crosses the million (ADR 0004 revisit trigger 5). The cost of crossing is cents — $0.40/million beyond the free tier, so even doubling the polling floor is ~$0.27/month — but "$0" would stop being literally true.
+- **The SQS request allowance is the number to watch, not the send count.** Sends are ~8,760/month and immaterial; the ~657,000 polling receives are two-thirds of the free million, and they belong to #136's event source mapping rather than to anything in this stack. A **second** ESM-driven queue crosses the million (ADR 0004 revisit trigger 5). The cost of crossing is cents — $0.40/million beyond the free tier, so even doubling the polling floor is ~$0.27/month — but "$0" would stop being literally true.
 - **The Lambda timeout is a cost ceiling as well as a correctness one.** 300 s at 256 MB is the worst case the free GB-second allowance is measured against; raising either without raising the other is fine, raising both is the change to think about.
 - **A forgotten stack is free but not inert.** Unlike every other resource in the platform, this one _does things_ while nobody is looking: an enabled schedule spends ~288 Open-Meteo calls/day against the 10,000/day free tier and grows an unconsumed queue. That is a quota and hygiene concern, not a billing one — see the teardown section above.
-- **Nothing here has an hourly rate**, the same property the other two stacks preserve. The one change that would break it is a VPC configuration on the function: a Lambda in a VPC needing outbound internet access needs a NAT Gateway at ~$32/month, which is a third of the ceiling for a function that only talks to public AWS endpoints and Open-Meteo.
+- **Nothing here has an hourly rate**, the property all six stacks preserve. The one change that would break it is a VPC configuration on the function: a Lambda in a VPC needing outbound internet access needs a NAT Gateway at ~$32/month, which is a third of the ceiling for a function that only talks to public AWS endpoints and Open-Meteo.
 
 ### API stack
 
