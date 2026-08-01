@@ -41,34 +41,7 @@ interface MapMarkerAnchorProps {
  * render.
  */
 const MapMarkerAnchor = ({ map, position, children }: MapMarkerAnchorProps): ReactElement => {
-  const [element] = useState(() => {
-    const anchor = document.createElement('div');
-
-    /*
-     * Claim the shell's semantics before maplibre can.
-     *
-     * `Marker.addTo` in maplibre 6.0.0 stamps `role="button"` and
-     * `aria-label="Map marker"` onto any marker element that has neither — the
-     * two `hasAttribute` guards are its whole condition, and 6.0.0 applies them
-     * to supplied elements as well as its own. Left alone, that wraps the real
-     * `<button>` inside a second interactive element and gives all sixty
-     * markers the same accessible name, so the fleet reads to a screen reader
-     * as sixty things called "Map marker".
-     *
-     * Declaring a role first satisfies the role guard: this div positions
-     * something, it is not itself a control. The label guard only takes
-     * `hasAttribute` for an answer, so that half is undone after the fact
-     * rather than pre-empted with a placeholder — an `aria-label` on a
-     * presentational element is prohibited by ARIA, and leaving an empty one
-     * behind would trade a wrong name for a malformed one.
-     *
-     * Fixed upstream in 6.1.0, which leaves custom elements alone; this stays
-     * until the dependency moves.
-     */
-    anchor.setAttribute('role', 'presentation');
-
-    return anchor;
-  });
+  const [element] = useState(() => document.createElement('div'));
 
   // The marker's lifetime on the map is the external system here (react.md
   // rule 1); its contents are React's business and go through the portal.
@@ -76,8 +49,6 @@ const MapMarkerAnchor = ({ map, position, children }: MapMarkerAnchorProps): Rea
     const marker = new Marker({ element })
       .setLngLat([position.longitude, position.latitude])
       .addTo(map);
-
-    element.removeAttribute('aria-label');
 
     return () => {
       marker.remove();
