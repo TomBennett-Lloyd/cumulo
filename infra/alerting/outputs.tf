@@ -13,7 +13,7 @@
 #
 # ---------------------------------------------------------------------------
 # IDLE COST: $0/month. See the arithmetic in topic.tf — SNS bills requests and
-# deliveries, not existence, and nine alarms that should each fire zero times
+# deliveries, not existence, and ten alarms that should each fire zero times
 # will not reach either free tier's floor.
 # ---------------------------------------------------------------------------
 

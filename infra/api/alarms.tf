@@ -35,10 +35,11 @@
 # minutes of the traffic starting. A state change nobody is emailed about is a
 # trigger nobody pulls.
 #
-# Cost: two alarms, joining storage's four and ingestion's three — nine of the
-# always-free ten. The platform-wide count and who gets the tenth live in the
-# alarm-budget subsection of infra/README.md; past ten, alarms bill $0.10 each
-# per month and every "$0.00/mo" in that document stops being literally true.
+# Cost: two alarms, joining storage's four, ingestion's three and forecast's one
+# — ten of the always-free ten, which are now fully allocated. The platform-wide
+# count lives in the alarm-budget subsection of infra/README.md; the eleventh
+# alarm bills $0.10 each per month, at which point every "$0.00/mo" in that
+# document stops being literally true unless the same PR updates it.
 
 locals {
   # The alerting stack (infra/alerting) owns this topic. Its ARN is assembled

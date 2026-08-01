@@ -1,7 +1,7 @@
 # Where alarms go.
 #
 # Every `aws_cloudwatch_metric_alarm` in this repo was created without an
-# `alarm_actions` list, and each of the three alarms.tf files said the same
+# `alarm_actions` list, and each of the four alarms.tf files said the same
 # thing in its header: there is nowhere to send them yet, notification wiring
 # arrives with #29. This is that arrival. Until now the alarms were real but
 # passive — visible to `aws cloudwatch describe-alarms --state-value ALARM` and
@@ -22,10 +22,10 @@
 #     existence, so a forgotten topic costs nothing (the property every stack in
 #     this repo preserves).
 #   * Email deliveries: the first 1,000/month are free, then $2.00 per 100,000.
-#     Nine alarms that should each fire zero times will not approach 1,000, and
+#     Ten alarms that should each fire zero times will not approach 1,000, and
 #     an alarm flapping often enough to would be a much louder problem than its
 #     bill.
-#   * Publishes: the first 1,000,000 requests/month are free. Nine alarms.
+#   * Publishes: the first 1,000,000 requests/month are free. Ten alarms.
 
 # The recipient address, read exactly as infra/bootstrap/budget.tf reads it, and
 # for exactly the reasons documented there and in infra/README.md convention 7:

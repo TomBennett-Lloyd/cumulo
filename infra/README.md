@@ -23,7 +23,7 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 
 There is a second coupling between those two stacks that no dependency graph shows: `infra/forecast/lambda.tf`'s `timeout = 50` and `infra/ingestion/transport.tf`'s `visibility_timeout_seconds = 300` are the two halves of ADR 0004's 6× floor, and raising the first without the second is a correctness bug that nothing mechanical will catch. Both files carry the obligation in a comment; `docs/tech-debt.md` records why the `check:infra-mirrors` gate cannot express it.
 
-`alerting` is the newest, and it is the one stack every other stack points at. It holds the SNS topic that `storage`, `ingestion`, and `api` send their alarm state changes to — and it holds it **without a single cross-stack reference in either direction**. The alarm stacks assemble `arn:aws:sns:<region>:<account-id>:cumulo-alerts-<environment>` from the naming convention, exactly as they assemble table ARNs, so the topic is an interface rather than an output: `alerting` can be applied before or after them, and a plan of any stack succeeds while another is mid-apply. The obligation is the familiar one, with one new failure mode worth stating plainly — same region, same `environment`, because an SNS ARN carries both, and a mismatch is **not** an apply error. CloudWatch accepts an alarm action pointing at a topic that does not exist and reports it only by never delivering, which is why the alerting runbook proves delivery from AWS rather than from a green apply.
+`alerting` is the newest, and it is the one stack every other stack points at. It holds the SNS topic that `storage`, `ingestion`, `api`, and `forecast` send their alarm state changes to — and it holds it **without a single cross-stack reference in either direction**. The alarm stacks assemble `arn:aws:sns:<region>:<account-id>:cumulo-alerts-<environment>` from the naming convention, exactly as they assemble table ARNs, so the topic is an interface rather than an output: `alerting` can be applied before or after them, and a plan of any stack succeeds while another is mid-apply. The obligation is the familiar one, with one new failure mode worth stating plainly — same region, same `environment`, because an SNS ARN carries both, and a mismatch is **not** an apply error. CloudWatch accepts an alarm action pointing at a topic that does not exist and reports it only by never delivering, which is why the alerting runbook proves delivery from AWS rather than from a green apply.
 
 Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables. So is `alerting`, and more sharply: every stack that has an alarm would notice its absence, and a per-stack topic would multiply the one genuinely manual step in this repo — confirming an email subscription by hand — by the number of stacks, for no gain in routing to a single recipient.
 
@@ -526,7 +526,7 @@ If nothing arrives, check in this order: the subscription is confirmed (B3); the
 ```bash
 aws cloudwatch describe-alarms --alarm-name-prefix cumulo- \
   --query 'length(MetricAlarms)'
-# expect: 9 — see "CloudWatch alarm budget" in the Cost section
+# expect: 10 — see "CloudWatch alarm budget" in the Cost section
 ```
 
 ### Teardown
@@ -1280,7 +1280,7 @@ Notes on why nothing here grows:
 
 ### Alerting stack
 
-Sized against the thing it is built to carry: **nine alarms that should each fire zero times.**
+Sized against the thing it is built to carry: **ten alarms that should each fire zero times.**
 
 | Resource group                                                                  | Billing basis                                                                                                            | Estimate     |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------ |
@@ -1295,7 +1295,7 @@ The alarms themselves are **not** costed here. They belong to the stacks that cr
 Notes on what would change that:
 
 - **Encryption is the line item deliberately absent.** Server-side encryption with a customer-managed KMS key would add ~$1/month plus request charges — and, before that, it would break delivery: the AWS-managed `alias/aws/sns` key does not grant CloudWatch permission to publish, so an encrypted topic accepts alarm actions and silently drops them. `topic.tf` says so at the point of temptation. The content being protected is an alarm name and a state reason, both already public in this repository.
-- **The free delivery tier is 1,000 emails/month, and reaching it is the alarm.** Nine alarms firing and recovering would have to average more than sixteen state changes each per day to cross it. That is not a bill, it is a platform on fire.
+- **The free delivery tier is 1,000 emails/month, and reaching it is the alarm.** Every state change is one delivery — an alarm that fires and recovers sends two — so ten alarms cross 1,000 in a 30-day month only by averaging more than **three state changes each per day**. That is not a bill, it is a platform on fire.
 - **Nothing here has an hourly rate**, the property every stack in this repo preserves.
 
 ### Storage stack
@@ -1353,7 +1353,7 @@ The figures are [ADR 0005](../docs/adr/0005-fleet-api-hosting.md)'s, restated he
 | **Lambda invocations** (`aws_lambda_function.api`)                         | ~10,000/month against the always-free **1,000,000 requests/month**                                                                                     | **$0.00/mo** |
 | **Lambda compute**                                                         | 256 MB × ~100 ms is 0.025 GB-s/request, so the always-free **400,000 GB-seconds** covers 16M requests/month                                            | **$0.00/mo** |
 | **CloudWatch logs** (30-day retention on one group)                        | Kilobytes/month at demo volume against the free **5 GB** of ingestion                                                                                  | **$0.00/mo** |
-| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                             | 2 joining storage's 4 and ingestion's 3 — **9 of the always-free 10**; API Gateway and Lambda metrics are free                                         | **$0.00/mo** |
+| **Alarms** (2 × `aws_cloudwatch_metric_alarm`)                             | 2 of the platform's 10, alongside storage's 4, ingestion's 3 and forecast's 1; API Gateway and Lambda metrics are free                                 | **$0.00/mo** |
 | **IAM** (execution role, inline policies, Lambda permission)               | Roles and policies are free                                                                                                                            | **$0.00/mo** |
 | **Standing total**                                                         |                                                                                                                                                        | **$0.00/mo** |
 
@@ -1376,7 +1376,7 @@ Notes on what would change that:
 - **The 12-month API Gateway free tier is deliberately not counted.** New accounts get 1M HTTP API calls/month for twelve months. Every figure above is quoted at list price with it assumed absent, because a cost claim that rests on an expiring allowance expires with it. The always-free Lambda and CloudWatch allowances _are_ counted; they do not expire.
 - **Swagger UI is the request-hungry page.** A `/docs` view is roughly four or five billed gateway requests plus as many invocations (HTML, CSS, the bundle, `/openapi.json`), which is where the per-request premium lands hardest. It is cents at demo volume; if it ever became a material share of traffic, ADR 0005 revisit trigger 4 says to put the assets on a CDN.
 - **Crossing ~16M requests/month is the revisit point for compute**, not for requests: that is where Lambda's 400,000 free GB-seconds runs out at 256 MB, and the marginal cost per million starts rising with function duration instead of staying flat.
-- **The alarm allowance is now the tight one.** Nine of ten used, and it is a platform-wide allowance rather than this stack's — see [CloudWatch alarm budget](#cloudwatch-alarm-budget) below, which owns the count.
+- **The alarm allowance is now the binding one.** All ten are used, and it is a platform-wide allowance rather than this stack's — see [CloudWatch alarm budget](#cloudwatch-alarm-budget) below, which owns the count and the obligations on the eleventh.
 - **Nothing here has an hourly rate**, the property all six stacks preserve.
 
 ### Forecast stack
@@ -1390,7 +1390,7 @@ Sized against the same canonical fleet the ingestion figures use, from the other
 | **Event source mapping** (`aws_lambda_event_source_mapping`) | The resource is free; its ~657,000 polling receives/month are the ones already counted in the ingestion stack's SQS line, not a second charge                      | **$0.00/mo** |
 | **DynamoDB writes** (`cumulo-series` via BatchWriteItem)     | ~2,880 items/hour against the storage stack's provisioned **14 WCU**, which is inside the always-free 25 — this stack adds load, not a line                        | **$0.00/mo** |
 | **CloudWatch logs** (30-day retention on one group)          | ~12 JSON lines/hour — kilobytes/month against the free **5 GB** of ingestion                                                                                       | **$0.00/mo** |
-| **Alarms** (1 × `aws_cloudwatch_metric_alarm`)               | 1 joining storage's 4, ingestion's 2 and the api's 2 — **9 of the always-free 10**; Lambda metrics are free                                                        | **$0.00/mo** |
+| **Alarms** (1 × `aws_cloudwatch_metric_alarm`)               | 1 joining storage's 4, ingestion's 3 and the api's 2 — **10 of the always-free 10**; Lambda metrics are free                                                       | **$0.00/mo** |
 | **Total**                                                    |                                                                                                                                                                    | **$0.00/mo** |
 
 **No resource in this stack bills for existing**, and the reason is worth stating precisely: the stack's only genuinely new consumption is Lambda compute, and its largest term — the SQS polling — was budgeted by ADR 0004 before this stack existed. Applying it does not move the platform's total standing cost off $0.
@@ -1399,12 +1399,12 @@ Notes on what would change that:
 
 - **This is the stack that consumes the free GB-second allowance fastest.** ~28% at the worst case, against ingestion's ~13%, because invocation count is driven by fleet locations rather than by a clock. Doubling the fleet's distinct locations doubles this line; the timeout is the multiplier, so the 6× coupling with the queue's visibility timeout is a cost decision as well as a correctness one.
 - **`maximum_concurrency` is a throttle guard, not a cost guard.** Raising it does not cost more — the same messages are processed either way — but it drives more simultaneous write units at a 14 WCU table, and the bill for crossing that allowance is $0.00065/WCU-hour. The cap keeps the platform inside the free capacity rather than inside a budget.
-- **The alarm allowance is now genuinely tight.** Nine of ten used. The tenth is the last free one, and #29's notification wiring is the likeliest claimant.
+- **The alarm allowance is now spent.** This alarm is the tenth of ten, and #29's notification wiring — which arrived with the alerting stack — is what every one of them now notifies. The eleventh bills $0.10/month; see [CloudWatch alarm budget](#cloudwatch-alarm-budget).
 - **Nothing here has an hourly rate**, the property all six stacks preserve. The change that would break it is the same one as ingestion's: a VPC configuration on the function, which for outbound internet needs a NAT Gateway at ~$32/month — and this function does not talk to the internet at all, only to DynamoDB and SQS.
 
 ### CloudWatch alarm budget
 
-CloudWatch's always-free tier is **10 alarms per account**, and it is the only allowance in this platform that is genuinely close to its edge. It is also the only one no single stack can see: alarms are created in four directories, the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
+CloudWatch's always-free tier is **10 alarms per account**, and it is now exactly spent. It is also the only allowance no single stack can see: alarms are created in five directories, the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
 
 **Counted at the time of writing, from the `.tf` files rather than from a previous edition of this document:**
 
@@ -1413,17 +1413,18 @@ CloudWatch's always-free tier is **10 alarms per account**, and it is the only a
 | `storage`   |      4 | `cumulo-{series,weather}-<env>-{read,write}-throttle` — two resources expanded by `for_each` over the two provisioned tables |
 | `ingestion` |      3 | `cumulo-ingestion-<env>-errors`, `cumulo-weather-readings-dlq-<env>-not-empty`, `cumulo-ingestion-<env>-async-dropped`       |
 | `api`       |      2 | `cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`                                                                     |
+| `forecast`  |      1 | `cumulo-forecast-<env>-errors`                                                                                               |
 | `alerting`  |      0 | It is the destination, not a source                                                                                          |
-| **Total**   |  **9** | **One of the always-free ten still unallocated**                                                                             |
+| **Total**   | **10** | **The always-free ten, fully allocated**                                                                                     |
 
 Verify it against the account rather than trusting the table:
 
 ```bash
 aws cloudwatch describe-alarms --alarm-name-prefix cumulo- --query 'length(MetricAlarms)'
-# expect: 9
+# expect: 10
 ```
 
-**The decision, which is what #126 asked for.** The tenth alarm is reserved for [#136](https://github.com/TomBennett-Lloyd/cumulo/issues/136)'s forecast runtime, which needs an `Errors` alarm on the same argument the ingestion one rests on: a scheduled deployable whose output is invisible needs something watching. That is a reservation, not a rule — whoever gets there first takes it — but a PR claiming the tenth against a weaker argument should expect to be asked why #136's is not the better use of the last free slot.
+**The decision, which is what #126 asked for.** The tenth alarm went to [#136](https://github.com/TomBennett-Lloyd/cumulo/issues/136)'s forecast runtime, on the same argument the ingestion one rests on: a deployable whose output is invisible needs something watching. That was the reservation this subsection recorded while #136 was in flight, and #136 took it. **There is no free slot left**, so the next alarm anywhere in the platform is the eleventh and costs money — which makes the rule below binding rather than hypothetical.
 
 **Past ten, alarms bill $0.10 each per month, and the obligation is honesty rather than restraint.** $0.10/month is not a number worth contorting a design around; a silently false cost table is. So a PR that takes the platform past ten **must** do three things in the same change:
 
