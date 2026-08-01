@@ -20,12 +20,16 @@ import {
  * **What this module does and does not buy.** It bounds the *cleanup*'s
  * contribution to an invocation. It does not make the timeout unreachable the
  * way `CYCLE_DEADLINE_MS` does for ingestion, and claiming otherwise would be
- * arithmetic theatre: three storage round trips is already the worst case of an
- * evicting create before any cleanup starts (see {@link DYNAMODB_REQUEST_WORST_MS}),
- * which exceeds {@link API_LAMBDA_TIMEOUT_MS} on its own. That gap is older than
- * this module and is recorded in `docs/tech-debt.md` ("the API's 15 s timeout is
- * not derived from the storage retry budget"). What changed here is that the
- * cleanup is no longer the *unbounded* term in the sum.
+ * arithmetic theatre: three storage round trips is the **best** case of an
+ * evicting create before any cleanup starts — the capped create, the oldest-site
+ * lookup, the evict-and-create — and `createSite` may retry that trio up to
+ * `MAX_EVICTION_ATTEMPTS` times when it loses a race, so nine round trips is the
+ * worst case, ≈ 63 s at {@link DYNAMODB_REQUEST_WORST_MS}. Even the best case
+ * exceeds {@link API_LAMBDA_TIMEOUT_MS} on its own. That gap is older than this
+ * module and is recorded in `docs/tech-debt.md` ("The API's 15 s timeout and the
+ * storage client's retry budget are two unreconciled numbers"), which now names
+ * this loop as the write-path half of it. What changed here is that the cleanup
+ * is no longer the *unbounded* term in the sum.
  */
 
 /**
