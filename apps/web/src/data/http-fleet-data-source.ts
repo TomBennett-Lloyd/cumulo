@@ -211,8 +211,11 @@ export class HttpFleetDataSource implements FleetDataSource {
   private readonly siteUrl = (siteId: string): string =>
     `${this.baseUrl}/v1/sites/${encodeURIComponent(siteId)}`;
 
-  private readonly fetchSeries = async (
-    key: string,
+  /**
+   * One `/series` read. Knows nothing about the in-flight map — the sharing is
+   * {@link seriesFor}'s, and so is the bookkeeping that goes with it.
+   */
+  private readonly fetchSeries = (
     siteId: string,
     range: RangeHours,
   ): Promise<FleetSourceResult<SiteSeriesResponse>> => {
@@ -222,18 +225,12 @@ export class HttpFleetDataSource implements FleetDataSource {
       to: utcSecondIso(nowMs + SERIES_HORIZON_HOURS * MS_PER_HOUR),
     });
 
-    try {
-      return await this.requestJson(
-        `siteSeries (site ${siteId}, ${String(range)}h)`,
-        `${this.siteUrl(siteId)}/series?${window.toString()}`,
-        siteSeriesResponseSchema,
-        GET_INIT,
-      );
-    } finally {
-      // Settled, so the next selection of this pair is a fresh read rather than
-      // a cached one — this shares a request, it does not cache a response.
-      this.seriesInFlight.delete(key);
-    }
+    return this.requestJson(
+      `siteSeries (site ${siteId}, ${String(range)}h)`,
+      `${this.siteUrl(siteId)}/series?${window.toString()}`,
+      siteSeriesResponseSchema,
+      GET_INIT,
+    );
   };
 
   private readonly seriesFor = (
@@ -246,7 +243,31 @@ export class HttpFleetDataSource implements FleetDataSource {
       return inFlight;
     }
 
-    const request = this.fetchSeries(key, siteId, range);
+    /*
+     * The entry is cleared by a `.finally` *here*, not by a `finally` block
+     * inside the request — and that difference is the whole bug this shape
+     * exists to avoid.
+     *
+     * Building the window can fail before any request is made: a clock that
+     * returned a non-finite instant makes `toISOString` throw `RangeError`, and
+     * `utcSecondIso` parses rather than asserts, so a malformed instant throws
+     * `ZodError`. Both are bugs and correctly throw (`error-handling.md`
+     * rule 1) — but both happen before the request exists, which is precisely
+     * where an inner `finally` runs too early. It would delete a key the `set`
+     * below had not written yet, and the failed promise would then be stored
+     * *permanently*: every later read of this (site, range) would be handed the
+     * same failure for the life of the page.
+     *
+     * Cleared from here, neither failure can wedge the map. A synchronous
+     * throw never reaches the `set` at all, and a rejection reaches the
+     * `.finally` as a microtask — which cannot run before the `set` on the
+     * line after it.
+     */
+    const request = this.fetchSeries(siteId, range).finally(() => {
+      // Settled, so the next selection of this pair is a fresh read rather than
+      // a cached one — this shares a request, it does not cache a response.
+      this.seriesInFlight.delete(key);
+    });
     this.seriesInFlight.set(key, request);
     return request;
   };
@@ -307,6 +328,15 @@ export class HttpFleetDataSource implements FleetDataSource {
     // The fan-out owns its own site list rather than taking one: a caller
     // holding a stale list would silently fan out over sites that no longer
     // exist, and a fleet-wide 404 is not what "the fleet failed" should mean.
+    //
+    // `hours={range}` below is a FORWARD horizon, not the look-back `RangeHours`
+    // describes: `/forecast` is the only fleet-wide read that is not metered by
+    // the per-IP limiter (a `/series` fan-out would spend one metered request
+    // per site against a 30-per-60-seconds budget), and it serves future hours
+    // only. So the fleet aggregate shows no history, and it is capped by how
+    // far ahead the deployed pipeline has written — ~48 h — which means every
+    // range beyond that renders identically. Closing the gap needs either a
+    // fleet-aggregate endpoint or an actuals producer, not a change here (#148).
     const sites = await this.listSites();
     if (sites.kind === 'error') {
       return sites;

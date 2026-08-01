@@ -1,116 +1,21 @@
 import { openMeteoAttribution } from '@cumulo/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { FleetDataError, FleetSourceResult } from './fleet-data-source';
 import { HttpFleetDataSource } from './http-fleet-data-source';
-
-const BASE_URL = 'https://api.example.test';
-
-/** 2026-08-01T12:00:00Z — the instant every window in these tests is measured from. */
-const NOW_MS = Date.UTC(2026, 7, 1, 12, 0, 0);
-
-const SITE_A = '11111111-1111-4111-8111-111111111111';
-const SITE_B = '22222222-2222-4222-8222-222222222222';
-
-const fleetSite = (id: string, name: string): unknown => ({
-  id,
-  name,
-  latitude: 51.5,
-  longitude: -0.12,
-  tiltDegrees: 35,
-  azimuthDegrees: 180,
-  capacityKw: 4.2,
-  origin: 'seed',
-  createdAt: '2026-07-01T00:00:00Z',
-  active: true,
-});
-
-const forecastPoint = (siteId: string, acPowerKw: number): unknown => ({
-  siteId,
-  model: 'physics',
-  validTime: '2026-08-01T13:00:00Z',
-  issuedAt: '2026-08-01T12:00:00Z',
-  weatherSource: 'open-meteo',
-  poaIrradianceWm2: 800,
-  acPowerKw,
-});
-
-const jsonResponse = (body: unknown, status: number): Response =>
-  new Response(JSON.stringify(body), { status });
-
-interface RecordedCall {
-  readonly url: string;
-  readonly init: RequestInit | undefined;
-}
-
-/** `fetch` accepts three input shapes; the source only ever passes the first. */
-const requestUrl = (input: RequestInfo | URL): string => {
-  if (typeof input === 'string') {
-    return input;
-  }
-  return input instanceof URL ? input.href : input.url;
-};
-
-/** The request body as the object it was serialised from, or a failed test. */
-const sentJson = (init: RequestInit | undefined): unknown => {
-  const body = init?.body;
-  if (typeof body !== 'string') {
-    throw new Error(`expected a JSON string body, received ${typeof body}`);
-  }
-  return JSON.parse(body);
-};
-
-/**
- * A `fetch` stand-in that answers from a URL-keyed responder and records what
- * it was asked for.
- *
- * A class rather than a factory returning functions (`structure.md` rule 2):
- * the recorder and the transport share the call log, and `this.` is what says
- * so. `calls.length` is the frugality assertion these tests are built around —
- * how many requests a UI interaction costs is behaviour, not mock theatre.
- */
-class FetchRecorder {
-  readonly calls: RecordedCall[] = [];
-  private readonly respond: (url: string) => Response | Promise<Response>;
-
-  constructor(respond: (url: string) => Response | Promise<Response>) {
-    this.respond = respond;
-  }
-
-  readonly fetchFn: typeof fetch = (input, init) => {
-    const url = requestUrl(input);
-    this.calls.push({ url, init });
-    return Promise.resolve(this.respond(url));
-  };
-}
-
-const sourceAnswering = (
-  respond: (url: string) => Response | Promise<Response>,
-): { source: HttpFleetDataSource; recorder: FetchRecorder } => {
-  const recorder = new FetchRecorder(respond);
-  return {
-    recorder,
-    source: new HttpFleetDataSource({
-      baseUrl: BASE_URL,
-      fetchFn: recorder.fetchFn,
-      now: () => NOW_MS,
-    }),
-  };
-};
-
-const expectFailure = (result: FleetSourceResult<unknown>): FleetDataError => {
-  if (result.kind !== 'error') {
-    throw new Error(`expected a failure result, received ${JSON.stringify(result)}`);
-  }
-  return result.error;
-};
-
-const expectValue = <T>(result: FleetSourceResult<T>): T => {
-  if (result.kind !== 'ok') {
-    throw new Error(`expected a success result, received ${JSON.stringify(result)}`);
-  }
-  return result.value;
-};
+import {
+  BASE_URL,
+  clockReading,
+  expectFailure,
+  expectValue,
+  FetchRecorder,
+  fleetSite,
+  forecastPoint,
+  jsonResponse,
+  sentJson,
+  SITE_A,
+  SITE_B,
+  sourceAnswering,
+} from './http-fleet-data-source-fixtures';
 
 describe('HttpFleetDataSource reads', () => {
   it('unwraps the sites envelope and drops a trailing slash from the base URL', async () => {
@@ -261,6 +166,23 @@ describe('HttpFleetDataSource series window', () => {
     expect(recorder.calls).toHaveLength(2);
   });
 
+  it('clears the shared entry when building the window throws, so the next read still reaches the API', async () => {
+    const { source, recorder } = sourceAnswering(
+      () => jsonResponse(seriesPayload, 200),
+      clockReading([Number.NaN]),
+    );
+
+    // A non-finite instant is a bug, so it throws rather than becoming a result
+    // — and it throws before any request is made.
+    await expect(source.siteForecasts(SITE_A, 24)).rejects.toBeInstanceOf(RangeError);
+    expect(recorder.calls).toHaveLength(0);
+
+    // The wedge this guards: with the rejected promise still in the in-flight
+    // map, this second read would be handed the same RangeError forever.
+    expect(expectValue(await source.siteForecasts(SITE_A, 24))).toEqual(seriesPayload.forecasts);
+    expect(recorder.calls).toHaveLength(1);
+  });
+
   it('keeps distinct site/range selections on their own requests', async () => {
     const { source, recorder } = sourceAnswering(() => jsonResponse(seriesPayload, 200));
 
@@ -333,5 +255,53 @@ describe('HttpFleetDataSource fleet fan-out', () => {
 
     expect(expectValue(await source.fleetActuals(168))).toEqual([]);
     expect(recorder.calls).toHaveLength(0);
+  });
+});
+
+describe('HttpFleetDataSource fan-out pacing', () => {
+  /** A distinct valid site id per index, so nine of them cost one line. */
+  const pacedSiteId = (index: number): string => {
+    const digit = String(index);
+    return `${digit.repeat(8)}-${digit.repeat(4)}-4${digit.repeat(3)}-8${digit.repeat(3)}-${digit.repeat(12)}`;
+  };
+
+  /**
+   * One more site than the fan-out launches per second, which is the whole
+   * point: at eight or fewer, pacing and firing everything at once are
+   * indistinguishable, and the other fan-out tests above run two sites.
+   */
+  const NINE_SITES = Array.from({ length: 9 }, (_, index) =>
+    fleetSite(pacedSiteId(index), `Paced ${String(index)}`),
+  );
+
+  const forecastCallCount = (recorder: FetchRecorder): number =>
+    recorder.calls.filter((call) => call.url.includes('/forecast')).length;
+
+  it('launches eight of nine fan-out forecasts within the first second and the ninth only after it', async () => {
+    vi.useFakeTimers();
+    try {
+      const { source, recorder } = sourceAnswering((url) =>
+        url.endsWith('/v1/sites')
+          ? jsonResponse({ sites: NINE_SITES }, 200)
+          : jsonResponse({ forecasts: [], attribution: openMeteoAttribution }, 200),
+      );
+
+      const fanOut = source.fleetForecasts(48);
+
+      // Stops short of the one-second pacing wait, so everything that is not
+      // blocked on that wait has settled. An unpaced fan-out would have spent
+      // all nine requests by here — the API's shared 10/second stage throttle
+      // is what that would be walking into.
+      await vi.advanceTimersByTimeAsync(999);
+      expect(forecastCallCount(recorder)).toBe(8);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(forecastCallCount(recorder)).toBe(9);
+      expect(expectValue(await fanOut)).toEqual([]);
+    } finally {
+      // Restored in a `finally` so one failed expectation cannot leave every
+      // later test in the file running on a frozen clock.
+      vi.useRealTimers();
+    }
   });
 });

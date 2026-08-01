@@ -62,6 +62,16 @@ export type FleetSourceResult<T> =
  * A closed union rather than `number`: a source must be able to serve every
  * value, and adding a window should fail to compile everywhere it is switched
  * on rather than silently return nothing.
+ *
+ * Per-site reads honour the look-back. **Fleet-level reads cannot.** The only
+ * fleet-wide read an HTTP source may fan out over without tripping the API's
+ * per-IP limiter is the per-site `/forecast` route, and that route returns
+ * *future* hours — so the HTTP source's fleet-level implementation necessarily
+ * reinterprets this window as a forward horizon (see
+ * {@link FleetDataSource.fleetForecasts}). Fleet-level range selection is
+ * therefore horizon-capped in live mode: it selects how far *ahead* the
+ * aggregate reaches, it shows no history, and any two ranges past the deployed
+ * pipeline's write depth render identically.
  */
 export type RangeHours = 24 | 48 | 168;
 
@@ -188,6 +198,13 @@ export interface FleetDataSource {
    * rule 3), so this returns the raw series and the view aggregates. Until the
    * API grows a fleet-level endpoint this is a client-side fan-out — noted as
    * out of scope on #14 rather than hidden here.
+   *
+   * That fan-out spends `range` as a **forward horizon**, not as the look-back
+   * {@link RangeHours} otherwise describes: the unmetered per-site `/forecast`
+   * route serves future hours only, and fanning out over `/series` instead
+   * would trip the API's per-IP limiter (one request per site, against 30 per
+   * 60 seconds). An implementation is free to serve the look-back if it can —
+   * the demo source does — but no implementation is required to.
    */
   readonly fleetForecasts: (range: RangeHours) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
