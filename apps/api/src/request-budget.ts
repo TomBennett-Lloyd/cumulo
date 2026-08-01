@@ -23,13 +23,18 @@ import {
  * arithmetic theatre: three storage round trips is the **best** case of an
  * evicting create before any cleanup starts — the capped create, the oldest-site
  * lookup, the evict-and-create — and `createSite` may retry that trio up to
- * `MAX_EVICTION_ATTEMPTS` times when it loses a race, so nine round trips is the
- * worst case, ≈ 63 s at {@link DYNAMODB_REQUEST_WORST_MS}. Even the best case
- * exceeds {@link API_LAMBDA_TIMEOUT_MS} on its own. That gap is older than this
- * module and is recorded in `docs/tech-debt.md` ("The API's 15 s timeout and the
- * storage client's retry budget are two unreconciled numbers"), which now names
- * this loop as the write-path half of it. What changed here is that the cleanup
- * is no longer the *unbounded* term in the sum.
+ * `MAX_STORE_ATTEMPTS` times when it loses a race, so 12 × 3 = **36** round
+ * trips is the worst case, ≈ 252 s at {@link DYNAMODB_REQUEST_WORST_MS}, plus
+ * the ≤ 3.55 s this route now deliberately *sleeps* between those attempts
+ * (`sites/conflict-retry.ts`: eleven backoffs capped at 50, 100, 200, then 400
+ * ms). Even the best case exceeds {@link API_LAMBDA_TIMEOUT_MS} on its own.
+ * That gap is older than this module and is recorded in `docs/tech-debt.md`
+ * ("The API's 15 s timeout and the storage client's retry budget are two
+ * unreconciled numbers"), which now names this loop as the write-path half of
+ * it — #155 widened the loop's budget from 3 attempts to 12 to absorb the
+ * transaction conflicts #29 measured, so these numbers deepen that entry rather
+ * than settling it, and #165 owns the reconciliation. What changed in this
+ * module is only that the cleanup is no longer the *unbounded* term in the sum.
  */
 
 /**

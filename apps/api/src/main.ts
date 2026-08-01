@@ -141,6 +141,17 @@ const now = (): UtcIsoTimestamp =>
 const newSiteId = (): string => randomUUID();
 
 /**
+ * The real timer, for the write routes' backoff between contended transaction
+ * attempts (`sites/conflict-retry.ts` owns the curve; this is only the clock it
+ * runs on). A dependency rather than a `setTimeout` inside the loop, so those
+ * routes' tests observe the delays without waiting them out.
+ */
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/**
  * The `cumulo-abuse` table's adapter and the limiter over it, built once per
  * container so the limiter's block cache survives between invocations — which
  * is the whole reason a repeat offender costs nothing to refuse
@@ -231,7 +242,15 @@ const guardedWrite = (
  * built once per container, and a reader looking for what a write route can
  * reach finds it here rather than inline among ten routes.
  */
-const createSiteDeps: CreateSiteDeps = { sites, series, now, newSiteId, log: jsonLineLog };
+const createSiteDeps: CreateSiteDeps = {
+  sites,
+  series,
+  now,
+  newSiteId,
+  log: jsonLineLog,
+  sleep,
+  random: Math.random,
+};
 
 const deleteSiteDeps: DeleteSiteDeps = { sites, series, log: jsonLineLog };
 
