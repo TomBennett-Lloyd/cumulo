@@ -10,11 +10,11 @@
  * library it belongs to.
  */
 import '@cumulo/ui/styles.css';
+import './app.css';
 import './dashboard/dashboard.css';
 import './map/map.css';
 import './add-site/add-site.css';
 import './dashboard/site-panels.css';
-import './preview/preview.css';
 import './charts/charts.css';
 import './views/views.css';
 

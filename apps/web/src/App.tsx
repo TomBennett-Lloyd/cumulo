@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { Dashboard } from './dashboard/Dashboard';
 import { DemoFleetDataSource } from './data/demo-fleet-data-source';
 import type { FleetDataSource } from './data/fleet-data-source';
-import { TokensPreview } from './preview/TokensPreview';
 import type { Theme } from './theme';
 import { resolveInitialTheme, THEME_STORAGE_KEY } from './theme';
 import { FleetAggregateView } from './views/FleetAggregateView';
@@ -13,9 +12,8 @@ import { SiteDetailView } from './views/SiteDetailView';
  * The web app shell: a view switcher, the theme toggle, and the one place the
  * app decides where its data comes from.
  *
- * Four surfaces sit behind the nav — the fleet map a visitor can add a site to,
- * the fleet aggregate, one site's forecast against its measurements, and the
- * design-token preview that proves `@cumulo/ui` resolves in both themes. The
+ * Three surfaces sit behind the nav — the fleet map a visitor can add a site to,
+ * the fleet aggregate, and one site's forecast against its measurements. The
  * switcher is local state rather than a router: there is no URL to share yet,
  * and a router is a decision in its own right rather than something to arrive
  * at sideways here.
@@ -29,7 +27,7 @@ import { SiteDetailView } from './views/SiteDetailView';
  * the toggle.
  */
 
-type View = 'map' | 'fleet' | 'site' | 'tokens';
+type View = 'map' | 'fleet' | 'site';
 
 interface ViewOption {
   readonly id: View;
@@ -40,13 +38,11 @@ const VIEW_OPTIONS: readonly ViewOption[] = [
   { id: 'map', label: 'Fleet map' },
   { id: 'fleet', label: 'Fleet aggregate' },
   { id: 'site', label: 'Site forecast' },
-  { id: 'tokens', label: 'Design tokens' },
 ];
 
 /**
  * The map opens the app: it is the surface a visitor can act on — add a site,
- * watch its first forecast arrive — and the charts explain what came out. Tokens
- * are the supporting evidence and sit last.
+ * watch its first forecast arrive — and the charts explain what came out.
  */
 const DEFAULT_VIEW: View = 'map';
 
@@ -103,10 +99,7 @@ const viewBody = (view: View, dataSource: FleetDataSource, theme: Theme): ReactE
   if (view === 'fleet') {
     return <FleetAggregateView dataSource={dataSource} />;
   }
-  if (view === 'site') {
-    return <SiteDetailView dataSource={dataSource} />;
-  }
-  return <TokensPreview />;
+  return <SiteDetailView dataSource={dataSource} />;
 };
 
 export interface AppProps {
@@ -152,7 +145,7 @@ export const App = ({ initialView = DEFAULT_VIEW }: AppProps = {}): ReactElement
           <p className="app-subtitle">
             Residential solar fleet forecasting. Sites on a map you can add to, modelled output with
             its uncertainty band against what the panels actually generated — per site and summed
-            across the fleet — plus the design tokens every view is built from.
+            across the fleet.
           </p>
         </div>
         <button
