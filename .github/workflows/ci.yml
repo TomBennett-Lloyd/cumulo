@@ -98,3 +98,12 @@ jobs:
         run: terraform -chdir=infra/api init -backend=false -lockfile=readonly
       - name: terraform validate (api)
         run: terraform -chdir=infra/api validate
+      # The forecast stack validates without a built artefact for the same
+      # reason the two above do. It is also the stack where validate earns its
+      # keep hardest: the event source mapping's scaling_config carries a
+      # provider-enforced floor (maximum_concurrency >= 2), so a value below it
+      # fails here rather than at somebody's apply.
+      - name: terraform init (forecast)
+        run: terraform -chdir=infra/forecast init -backend=false -lockfile=readonly
+      - name: terraform validate (forecast)
+        run: terraform -chdir=infra/forecast validate

@@ -40,6 +40,8 @@ export {
   type SiteOrigin,
   fleetSiteSchema,
   type FleetSite,
+  sitePhysicsSchema,
+  type SitePhysics,
 } from './site';
 export {
   type SeriesKind,
@@ -51,7 +53,9 @@ export {
   metricsSortKey,
 } from './storage-key';
 export { generateFleet, canonicalFleetSeed } from './fleet';
+export { describeThrown } from './thrown-detail';
 export { utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
+export { weatherMessageSchema, type WeatherMessage } from './weather-message';
 export {
   weatherReadingSchema,
   type WeatherReading,
@@ -61,3 +65,4 @@ export {
   type ArchiveWeatherReading,
 } from './weather-reading';
 export { weatherSourceSchema, type WeatherSource } from './weather-source';
+export { describeZodIssues } from './zod-issue-detail';

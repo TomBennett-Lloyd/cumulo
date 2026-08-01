@@ -1,3 +1,4 @@
+import { describeThrown } from '@cumulo/shared';
 import type { BatchWriteOutcome, SiteAdapter, WeatherAdapter } from '@cumulo/storage';
 
 import {
@@ -8,7 +9,6 @@ import {
 } from './locations';
 import type { FetchForecastForLocation, FetchForecastOutcome } from './open-meteo/fetch-forecast';
 import type { WeatherPublisher } from './publisher/weather-publisher';
-import { describeThrown } from './thrown-detail';
 
 /**
  * One ingestion cycle: list the fleet, collapse it to the locations worth fetching

@@ -39,15 +39,17 @@
  *   ADR 0002's key attributes live between `toItem` and `fromItem` and nowhere
  *   else, and a type that names them outside the package would make them look
  *   like domain data.
- * - the reading types the weather adapter's parameters and returns are written
- *   in — `ForecastWeatherReading`, `ArchiveWeatherReading` and `WeatherReading`
- *   itself. These are domain schema types, so they come from `@cumulo/shared`
- *   and a caller imports them from there (#91). Re-exporting them here would
- *   give one definition three import paths and imply this package owns a
- *   concept it only consumes — the opposite of `architecture.md` rule 2. Which
- *   is why `WeatherLocation`, just below, *is* exported: it is a `Pick` of the
- *   shared reading describing what this package keys on, and it exists nowhere
- *   else.
+ * - the domain schema types the adapters' parameters and returns are written in
+ *   — `ForecastWeatherReading`, `ArchiveWeatherReading`, `WeatherReading` and,
+ *   since #136, `SitePhysics`. These come from `@cumulo/shared` and a caller
+ *   imports them from there (#91). Re-exporting them here would give one
+ *   definition three import paths and imply this package owns a concept it only
+ *   consumes — the opposite of `architecture.md` rule 2. `SitePhysics` had to
+ *   move for a second reason: the forecast service takes it as an input, and it
+ *   would otherwise have reached that service through a package it does not
+ *   otherwise need. Which is why `WeatherLocation`, just below, *is* exported:
+ *   it is a `Pick` of the shared reading describing what this package keys on,
+ *   and it exists nowhere else.
  *
  * Tests reach past this file by relative path on purpose — they test the
  * modules, not the promise.
@@ -74,7 +76,6 @@ export { SERIES_RETENTION_DAYS } from './ttl';
 export { type BatchingAdapterDeps, type StorageAdapterDeps } from './adapters/storage-adapter-base';
 
 export { SiteAdapter, type GetFleetSiteResult } from './adapters/site/site-adapter';
-export { type SitePhysics } from './adapters/site/site-item';
 export { SeriesAdapter } from './adapters/series/series-adapter';
 export { type SeriesPoint } from './adapters/series/series-item';
 export { MetricsAdapter } from './adapters/metrics/metrics-adapter';

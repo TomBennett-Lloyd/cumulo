@@ -1,5 +1,5 @@
 import { DeleteCommand, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import type { FleetSite } from '@cumulo/shared';
+import type { FleetSite, SitePhysics } from '@cumulo/shared';
 
 import { StorageAdapterBase } from '../storage-adapter-base';
 
@@ -10,7 +10,6 @@ import {
   fromItem,
   toItem,
   toSitePhysics,
-  type SitePhysics,
 } from './site-item';
 
 /**

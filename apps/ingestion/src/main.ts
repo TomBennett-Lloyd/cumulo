@@ -1,3 +1,4 @@
+import { describeZodIssues } from '@cumulo/shared';
 import {
   SiteAdapter,
   WeatherAdapter,
@@ -11,7 +12,6 @@ import type { CycleBudget } from './cycle';
 import { createHandler, jsonLineLog, type IngestionHandler } from './handler';
 import { fetchForecast, type ForecastFetchDeps } from './open-meteo/fetch-forecast';
 import { SqsWeatherPublisher, createIngestionSqsClient } from './publisher/sqs';
-import { describeZodIssues } from './zod-issue-detail';
 
 /**
  * The composition root, and the module the bundled artifact's `handler` export

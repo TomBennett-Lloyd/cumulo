@@ -1,11 +1,11 @@
 import {
+  describeZodIssues,
   forecastWeatherReadingSchema,
   type ForecastWeatherReading,
   type WeatherReading,
 } from '@cumulo/shared';
 import { z } from 'zod';
 
-import { describeZodIssues } from '../zod-issue-detail';
 import type { ForecastLocation, HourlyVariable } from './url';
 
 /**

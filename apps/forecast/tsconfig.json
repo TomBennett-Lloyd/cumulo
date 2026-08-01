@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "resolveJsonModule": true,
+    // Ambient globals are opted into explicitly: with `types` unset this toolchain
+    // pulls nothing from `node_modules/@types`, so `console` and `process` fail to
+    // resolve. This app runs on Node, so it names `node` — and nothing else, which
+    // keeps browser globals out of a service that has no DOM.
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
