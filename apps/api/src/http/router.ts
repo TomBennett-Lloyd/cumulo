@@ -27,6 +27,12 @@ export type PathSegment = string | PathParameter;
  * all", and the handler owns "is this JSON the thing I need", which is what
  * keeps a single `validation_failed` shape across both without a `try`/`catch`
  * per handler.
+ *
+ * `sourceIp`, `originHeader` and `ownOrigin` ride through from
+ * {@link ApiRequest} unchanged. The router makes no decision with any of them —
+ * the abuse protections are wrappers around individual handlers in `main.ts`,
+ * not a middleware layer here — but the wrapper receives a `RouteRequest`, so
+ * the three have to survive the trip.
  */
 export interface RouteRequest {
   readonly method: string;
@@ -34,6 +40,9 @@ export interface RouteRequest {
   readonly query: Record<string, string>;
   readonly params: Record<string, string>;
   readonly body: unknown;
+  readonly sourceIp: string;
+  readonly originHeader: string | undefined;
+  readonly ownOrigin: string;
 }
 
 export type RouteHandler = (request: RouteRequest) => Promise<ApiResponse>;
@@ -164,6 +173,9 @@ export const routeRequest = async (
     query: request.query,
     params: match.params,
     body: parsed.body,
+    sourceIp: request.sourceIp,
+    originHeader: request.originHeader,
+    ownOrigin: request.ownOrigin,
   });
 
   return response;

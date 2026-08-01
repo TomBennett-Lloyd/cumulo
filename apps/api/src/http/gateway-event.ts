@@ -14,7 +14,7 @@ import { describeZodIssues } from './response';
  * data `unknown` until a schema parses it — a hand-installed `.d.ts` would let
  * the compiler believe a shape nothing checked, which is exactly the class of
  * bug a malformed event causes at 3am. Parsing also documents the *slice* this
- * service depends on: five fields out of a payload with about forty.
+ * service depends on: eight fields out of a payload with about forty.
  */
 
 /**
@@ -27,14 +27,27 @@ import { describeZodIssues } from './response';
  * request that simply had no query string. Being strict about a field's *type*
  * and liberal about its absence is the useful combination.
  *
- * `headers` is parsed as part of the v2 shape but deliberately not surfaced on
- * {@link ApiRequest}: no route reads a header yet, and a field on the request
- * type that nothing consumes is an invitation to start branching on transport
- * detail. Adding it is one line the day a route needs one.
+ * `sourceIp` and `domainName` are **required**, unlike the absent-able fields
+ * above. Both feed the abuse protections on the write path (#29) — the per-IP
+ * limiter keys on one, the origin check builds this deployment's own origin
+ * from the other — and a limiter that cannot tell who is calling is not a
+ * limiter. Making them required means a payload without them fails the parse and
+ * takes the boundary's 500 path, rather than every request quietly sharing one
+ * `'unknown'` bucket. The gateway sends both on every payload-v2 invocation.
+ *
+ * `headers` is parsed as part of the v2 shape, and exactly one header reaches
+ * {@link ApiRequest}: `origin`. Payload v2 lowercases header names, so `origin`
+ * is the key to read and `Origin` would never match — an assumption the fixture
+ * encodes and issue #29's live evidence step confirms against the deployed API.
+ * The rest stay unsurfaced, because a field on the request type that nothing
+ * consumes is an invitation to start branching on transport detail.
  */
 const gatewayEventSchema = z.object({
   rawPath: z.string(),
-  requestContext: z.object({ http: z.object({ method: z.string() }) }),
+  requestContext: z.object({
+    http: z.object({ method: z.string(), sourceIp: z.string() }),
+    domainName: z.string(),
+  }),
   body: z.string().nullish(),
   isBase64Encoded: z.boolean().nullish(),
   queryStringParameters: z.record(z.string(), z.string()).nullish(),
@@ -48,12 +61,27 @@ const gatewayEventSchema = z.object({
  * question, and whether that JSON is a valid site is the handler's. Splitting
  * those three is what lets "not JSON at all" be one 400 in one place rather
  * than a `try`/`catch` in every handler that accepts a body.
+ *
+ * The last three fields are the abuse protections' inputs, and they are stated
+ * here — in the service's own vocabulary — rather than left for each caller to
+ * dig out of the payload. `ownOrigin` in particular is a *derived* fact: the
+ * origin this very request arrived at, which is what makes the origin check on
+ * writes work with no hard-coded hostname anywhere. The API's own domain is
+ * server-assigned at create time (`infra/api`), so any constant would be a
+ * guess, and Swagger UI's "try it out" — served from this same origin — passes
+ * the check by construction.
  */
 export interface ApiRequest {
   readonly method: string;
   readonly path: string;
   readonly query: Record<string, string>;
   readonly rawBody: string | undefined;
+  /** The caller's address, as the gateway resolved it. The limiter's key. */
+  readonly sourceIp: string;
+  /** The `Origin` request header, absent on anything that is not a browser. */
+  readonly originHeader: string | undefined;
+  /** `https://<this deployment's host>` — the origin a same-origin call sends. */
+  readonly ownOrigin: string;
 }
 
 /**
@@ -85,7 +113,8 @@ export const parseGatewayEvent = (event: unknown): ApiRequest => {
     );
   }
 
-  const { rawPath, requestContext, body, isBase64Encoded, queryStringParameters } = parsed.data;
+  const { rawPath, requestContext, body, isBase64Encoded, queryStringParameters, headers } =
+    parsed.data;
 
   return {
     method: requestContext.http.method,
@@ -93,5 +122,11 @@ export const parseGatewayEvent = (event: unknown): ApiRequest => {
     query: queryStringParameters ?? {},
     rawBody:
       body === null || body === undefined ? undefined : decodeBody(body, isBase64Encoded === true),
+    sourceIp: requestContext.http.sourceIp,
+    originHeader: headers?.origin,
+    // `https` unconditionally: an API Gateway HTTP API has no plaintext
+    // listener, so a request that reached this function reached it over TLS and
+    // a browser's `Origin` for it can only ever carry this scheme.
+    ownOrigin: `https://${requestContext.domainName}`,
   };
 };

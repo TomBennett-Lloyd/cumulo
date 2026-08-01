@@ -887,7 +887,7 @@ Keep `backend.hcl` and `ingestion.auto.tfvars` — both are still correct for th
 
 ## Runbook: the api stack
 
-One Lambda, one API Gateway HTTP API with its `$default` stage, integration and catch-all route, one log group, one execution role, two alarms, one Lambda permission, and one deploy grant on the shared GitHub Actions role — the whole of [issue #14](https://github.com/TomBennett-Lloyd/cumulo/issues/14)'s infrastructure, per [ADR 0005](../docs/adr/0005-fleet-api-hosting.md). Every command runs from `infra/api/`:
+One Lambda, one API Gateway HTTP API with its `$default` stage and integration, four routes — the catch-all plus the three declared write routes that carry a tighter 2 rps / burst 4 throttle ([ADR 0006](../docs/adr/0006-demo-abuse-protection.md), #29) — one log group, one execution role, two alarms, one Lambda permission, and one deploy grant on the shared GitHub Actions role. That is [issue #14](https://github.com/TomBennett-Lloyd/cumulo/issues/14)'s infrastructure per [ADR 0005](../docs/adr/0005-fleet-api-hosting.md), plus #29's write throttles. Every command runs from `infra/api/`:
 
 ```bash
 cd infra/api
@@ -954,9 +954,9 @@ terraform init -backend-config=backend.hcl
 terraform plan -no-color | tee ~/cumulo-api-plan.txt
 ```
 
-Expect **`Plan: 12 to add, 0 to change, 0 to destroy.`** — the function, its log group, the HTTP API, the integration, the `$default` route, the `$default` stage, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
+Expect **`Plan: 15 to add, 0 to change, 0 to destroy.`** — the function, its log group, the HTTP API, the integration, the `$default` route, the **three declared write routes** (`aws_apigatewayv2_route.write` is a `for_each` over three route keys, so it counts as three), the `$default` stage, the Lambda permission, the execution role, its inline policy, the two alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
 
-**Read the throttle in the plan before approving it.** `default_route_settings` should show `throttling_rate_limit = 10` and `throttling_burst_limit = 20`. Those two numbers are the bound in ADR 0005's cost table; a plan that does not show them is a plan that costs something else.
+**Read both throttles in the plan before approving it.** `default_route_settings` should show `throttling_rate_limit = 10` and `throttling_burst_limit = 20` — the bound in ADR 0005's cost table. The three `route_settings` blocks should show `2` and `4` on the write route keys, which is ADR 0006's layer 2. A plan that does not show them is a plan that costs something else.
 
 **A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, the throttle numbers, the function name — and label it `awaiting-review`.
 
@@ -971,7 +971,7 @@ terraform apply
 **B2. Confirm what exists.**
 
 ```bash
-terraform state list   # expect 17 lines — the 12 resources plus the 5 data sources
+terraform state list   # expect 20 lines — the 15 resources plus the 5 data sources
 ```
 
 The deploy grant is the one resource in this stack that lives on something another stack owns, so confirm it landed where it was meant to rather than trusting the count — and confirm ingestion's is still there beside it:
@@ -1054,7 +1054,7 @@ The last two are the ones worth actually running, for the same reasons the inges
 
 Keep `backend.hcl` and `api.auto.tfvars` — both are still correct for the next spin-up. To spin back up, run [Phase A](#phase-a--build-configure-and-plan-the-api) then [Phase B](#phase-b--apply-and-prove-the-endpoint) back to back, starting from the build.
 
-**Whether to leave it up.** Unlike ingestion, this stack does nothing while nobody is looking — it is request-driven, so an idle API is genuinely inert as well as free. The reason to think about it anyway is the opposite one: it is public. Leaving it up means leaving an unauthenticated write endpoint on the internet, bounded by the throttle and by nothing else until #29 lands. That is an accepted risk for a portfolio demo and a deliberate one; it is not an oversight.
+**Whether to leave it up.** Unlike ingestion, this stack does nothing while nobody is looking — it is request-driven, so an idle API is genuinely inert as well as free. The reason to think about it anyway is the opposite one: it is public. Leaving it up means leaving an unauthenticated write endpoint on the internet. What bounds it is the layered posture [ADR 0006](../docs/adr/0006-demo-abuse-protection.md) records — an `Origin` check and a per-IP limiter with an auto-block inside the function, the 2 rps write throttle and the 10 rps stage throttle at the gateway, and a hard cap of 40 user sites with oldest-first eviction in the data model. That is an accepted risk for a portfolio demo and a deliberate one; it is not an oversight.
 
 ---
 

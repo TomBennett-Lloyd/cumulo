@@ -114,11 +114,24 @@ export const generationPoint = (overrides: GenerationReadingOverrides = {}): Ser
   reading: generationReading(overrides),
 });
 
+/**
+ * The address and host every fixture below shares, so a test about *one* IP or
+ * *one* origin says which by overriding rather than by repeating the default.
+ * `203.0.113.0/24` is RFC 5737's documentation range — it can never be a real
+ * caller.
+ */
+export const SOURCE_IP = '203.0.113.1';
+export const API_DOMAIN = 'abc123.execute-api.eu-west-1.amazonaws.com';
+export const OWN_ORIGIN = `https://${API_DOMAIN}`;
+
 export const apiRequest = (overrides: Partial<ApiRequest> = {}): ApiRequest => ({
   method: 'GET',
   path: '/v1/sites',
   query: {},
   rawBody: undefined,
+  sourceIp: SOURCE_IP,
+  originHeader: undefined,
+  ownOrigin: OWN_ORIGIN,
   ...overrides,
 });
 
@@ -128,6 +141,9 @@ export const routeRequest = (overrides: Partial<RouteRequest> = {}): RouteReques
   query: {},
   params: {},
   body: undefined,
+  sourceIp: SOURCE_IP,
+  originHeader: undefined,
+  ownOrigin: OWN_ORIGIN,
   ...overrides,
 });
 
@@ -137,31 +153,47 @@ export interface GatewayEventOverrides {
   readonly body?: string | null;
   readonly isBase64Encoded?: boolean;
   readonly queryStringParameters?: Record<string, string> | null;
+  readonly headers?: Record<string, string> | null;
+  readonly sourceIp?: string;
+  readonly domainName?: string;
 }
 
 /**
  * An API Gateway HTTP API payload-v2 event, with the fields this service does
- * **not** read left in place — `version`, `routeKey`, `requestContext.sourceIp`
+ * **not** read left in place — `version`, `routeKey`, `requestContext.requestId`
  * and friends. A fixture trimmed to the parsed slice would agree with the schema
  * by construction and prove nothing about a real invocation.
+ *
+ * `sourceIp` and `domainName` are separate overrides rather than parts of the
+ * `...rest` spread because both live *inside* `requestContext`, where a
+ * top-level spread cannot reach them — and a fixture that silently ignored an
+ * override would make a limiter test pass by testing one address twice.
  */
 export const gatewayEvent = (overrides: GatewayEventOverrides = {}): Record<string, unknown> => {
-  const { method = 'GET', rawPath = '/v1/sites', ...rest } = overrides;
+  const {
+    method = 'GET',
+    rawPath = '/v1/sites',
+    sourceIp = SOURCE_IP,
+    domainName = API_DOMAIN,
+    headers = { 'content-type': 'application/json', 'user-agent': 'vitest' },
+    ...rest
+  } = overrides;
 
   return {
     version: '2.0',
     routeKey: '$default',
     rawPath,
     rawQueryString: '',
-    headers: { 'content-type': 'application/json', 'user-agent': 'vitest' },
+    headers,
     requestContext: {
       accountId: 'anonymous',
       apiId: 'abc123',
+      domainName,
       http: {
         method,
         path: rawPath,
         protocol: 'HTTP/1.1',
-        sourceIp: '203.0.113.1',
+        sourceIp,
         userAgent: 'vitest',
       },
       requestId: 'req-1',

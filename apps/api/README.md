@@ -15,6 +15,8 @@ discipline: there is no HTTP client in this package to misuse.
 | `http/gateway-event.ts`         | Parses the API Gateway payload-v2 event into an `ApiRequest`. No `@types/aws-lambda`.  |
 | `http/response.ts`              | The response shape, the `apiErrorSchema` failure body, and response-schema validation. |
 | `http/router.ts`                | The route table and its matcher. 404 on no match, 400 on a body that is not JSON.      |
+| `abuse/ip-limiter.ts`           | The per-IP limiter and its policy numbers, over the `cumulo-abuse` table.              |
+| `abuse/origin-check.ts`         | Pure `Origin` allow-list check for the write routes. Friction, not auth.               |
 | `sites/site-id-param.ts`        | The `{siteId}` path parameter, validated once for the three routes that take one.      |
 | `sites/*.ts`                    | One module per route: list, create, get, update, delete.                               |
 | `forecast/known-site.ts`        | The "is there such a site at all" gate both series routes open with.                   |
@@ -23,7 +25,8 @@ discipline: there is no HTTP client in this package to misuse.
 | `forecast/get-site-forecast.ts` | `GET …/forecast` — the next 24/48/168 hours, with attribution. Empty is a 200.         |
 | `forecast/get-site-series.ts`   | `GET …/series` — forecasts and actuals over an explicit window, span-capped.           |
 | `openapi/components.ts`         | `components.schemas`, generated from the zod schemas the handlers parse with.          |
-| `openapi/paths.ts`              | One documented operation per registered route. Statuses read from `apiErrorStatus`.    |
+| `openapi/paths.ts`              | One documented operation per registered route.                                         |
+| `openapi/responses.ts`          | What each error means to a caller. Statuses read from `apiErrorStatus`, never retyped. |
 | `openapi/document.ts`           | The document, assembled once at module load, and `GET /openapi.json`.                  |
 | `openapi/docs-assets.ts`        | The exact-filename asset allowlist — also the build's copy manifest.                   |
 | `openapi/docs-page.ts`          | The Swagger UI page and the `/docs/{asset}` route that serves its assets.              |
@@ -51,15 +54,19 @@ Every failing route answers with a body validating against `apiErrorSchema` from
 Each code is pinned to exactly one status, in `apiErrorStatus`, so a call site cannot mispair them —
 `errorResponse` takes the code and derives the status.
 
-| Code                | Status | Meaning                                                                |
-| ------------------- | ------ | ---------------------------------------------------------------------- |
-| `validation_failed` | 400    | Malformed JSON, a path id that is not a uuid, or a body failing zod.   |
-| `not_found`         | 404    | Unknown route **or** unknown entity — one code, deliberately.          |
-| `internal`          | 500    | The boundary caught something unexpected. Detail goes to the log only. |
+| Code                | Status | Meaning                                                                            |
+| ------------------- | ------ | ---------------------------------------------------------------------------------- |
+| `validation_failed` | 400    | Malformed JSON, a path id that is not a uuid, or a body failing zod.               |
+| `forbidden`         | 403    | A write whose `Origin` this deployment does not serve. No credential fixes it.     |
+| `not_found`         | 404    | Unknown route **or** unknown entity — one code, deliberately.                      |
+| `rate_limited`      | 429    | This service's per-IP limiter refused. Carries a `retry-after` header, in seconds. |
+| `internal`          | 500    | The boundary caught something unexpected. Detail goes to the log only.             |
 
-**429 is not in the enum.** Throttled responses come from the gateway's stage-level rate limit
-before this Lambda is invoked, so they carry the gateway's own body. Clients map rate limiting on
-the status (plus `Retry-After` when present), never on the body.
+**429 has two producers and only one of them speaks this schema.** API Gateway's throttles — the
+stage limit and the per-route write limits — answer before this Lambda is invoked, in the gateway's
+own `{ "message": … }` body that no code here shapes. The per-IP limiter below answers with
+`rate_limited` in the table above. So a client cannot recognise throttling from the body and must
+not try: **map on the status**, and read `Retry-After` when it is present rather than requiring it.
 
 ## Routes
 
@@ -76,26 +83,82 @@ the status (plus `Retry-After` when present), never on the body.
 | `GET /docs`                       | 200 `text/html` — Swagger UI, pointed at `/openapi.json` on the same origin.                                    |
 | `GET /docs/{asset}`               | 200 with an allowlisted Swagger UI asset; 404 for every other name.                                             |
 
-`POST /v1/sites` is unauthenticated and enforces **no site cap**. That is deliberate: #14's cost
-guard on this endpoint is the API Gateway stage throttle (10 rps, burst 20) configured in
-`infra/api`. The cap counter transaction, per-IP limiting, eviction and auto-block are #29's scope,
-and a cap enforced in the handler without #29's counter would be a race rather than a guard.
+`POST /v1/sites` is unauthenticated and **capped at 40 user-created sites** (`MAX_USER_SITES` in
+`@cumulo/shared`). The cap is not a refusal: a create against a full fleet still answers 201, having
+first evicted the **oldest user site** to make room. The seed fleet is exempt structurally rather
+than by a check — eviction reads a sparse GSI that only user sites are written into (ADR 0002's
+`user-sites-by-age`), so there is no code path along which a seed site can be chosen. The count
+itself is a counter item updated in the same DynamoDB transaction as the site row, which is what
+makes "at most 40" a guarantee rather than a race between two concurrent creates.
 
-Deleting a site does **not** delete its `cumulo-series` rows. They carry ADR 0002's 90-day TTL and
-expire on their own, and nothing reads them meanwhile because every series route looks the site up
-first. An explicit range-delete of the orphans (access pattern X3) belongs with #29's eviction
-machinery.
+Deleting a site — by eviction or by `DELETE` — also prunes its `cumulo-series` rows, best-effort
+(access pattern X3). "Best-effort" is the honest word: the cleanup is awaited and its failures are
+logged (`api.site.series-cleanup-failed`, `api.site.series-cleanup-incomplete`) but never fail the
+request, because the site is already gone by then and a 500 would be a lie about the operation the
+caller asked for. Anything left behind is unreachable — every series route resolves the site first —
+and expires under ADR 0002's 90-day TTL.
+
+## Abuse protection
+
+The write path is public by design (ADR 0001 — auth is #30), so what bounds it is a stack of layers
+rather than a gate. [ADR 0006](../../docs/adr/0006-demo-abuse-protection.md) records the reasoning;
+this is the operational summary, with the layer that bites first stated per regime.
+
+| Layer                                  | Limit                                 | Answers    | Bites first when                         |
+| -------------------------------------- | ------------------------------------- | ---------- | ---------------------------------------- |
+| 0. `Origin` check (writes only)        | An allow-list, not a credential       | 403        | A client sends no `Origin` at all.       |
+| 1. Per-IP limiter (`abuse/ip-limiter`) | 30 requests / 60 s → **1-hour block** | 429 + body | One address, low parallelism.            |
+| 2. Per-route gateway throttle          | 2 rps, burst 4, on the three writes   | 429        | Sustained write volume from anywhere.    |
+| 3. Stage throttle                      | 10 rps, burst 20 (ADR 0005, ≈ $36/mo) | 429        | Sustained total volume from anywhere.    |
+| 4. Account Lambda concurrency          | 10, shared with ingestion             | 503        | **High parallelism** — measured, see S5. |
+
+**Which routes the limiter covers** is a deliberate list, and it lives in `main.ts`'s route table:
+the three writes plus `GET /v1/sites/{siteId}/series`, each of which either changes state or reads a
+range whose size the caller picks. `GET /v1/sites`, `GET …/forecast`, `/openapi.json` and the two
+`/docs` routes are unlimited — fixed, small cost per request, and already bounded by layer 3. A
+limiter that made loading the docs page spend abuse-table writes would be paying to defend the
+cheapest thing here.
+
+Three properties of the limiter are deliberate and worth knowing before you tune it:
+
+- **Fixed windows, so up to 2× the limit can pass across a boundary.** 30 requests at `11:00:59` and
+  30 more at `11:01:00` are two full windows and neither trips. A sliding window would cost a read
+  of every timestamp in the last minute, on every request. The threshold is friction against
+  scripts, not an invariant anything's correctness rests on.
+- **It fails closed.** If the `cumulo-abuse` table is unreadable the limited routes 500 rather than
+  waving requests through. Fail-open would make the defence removable by whatever is already
+  breaking DynamoDB, at the moment it is most wanted.
+- **Blocks are cached in the container.** A blocked address is refused with no I/O for as long as
+  the Lambda container lives, which is what stops a caller that just earned an hour's block from
+  billing us for re-learning it a thousand times. The table is still the record — a cold container
+  reads it.
+
+**What the `Origin` check deliberately does not defend against.** Any non-browser client that sets
+the header: `curl -H "Origin: …"` sails straight through, and that is the point. It buys exactly two
+things — a drive-by scanner sending no `Origin` is refused for free, and a third-party page cannot
+drive a visitor's browser at this API, because a browser sets `Origin` itself and a page cannot
+forge another site's. It is friction, not authentication, and calling it security would be the kind
+of mistake that gets trusted with something it cannot hold. The API's own origin is always allowed
+(derived per request from the gateway's `domainName`, so Swagger UI's try-it-out works by
+construction); `CUMULO_WEB_ORIGINS` adds browser origins beside it.
 
 ## Configuration
 
 `main.ts` parses `process.env` through a zod schema at module scope, so a wrong deployment fails
 during initialization rather than mid-request.
 
-| Variable     | Purpose                                                                |
-| ------------ | ---------------------------------------------------------------------- |
-| `CUMULO_ENV` | Environment suffix of the DynamoDB table names (`cumulo-sites-<env>`). |
+| Variable             | Purpose                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------- |
+| `CUMULO_ENV`         | Environment suffix of the DynamoDB table names (`cumulo-sites-<env>`).                 |
+| `CUMULO_WEB_ORIGINS` | Optional, comma-separated. Browser origins allowed on writes **beside** the API's own. |
 
 `AWS_REGION` is not listed because Lambda always sets it and the SDK reads it directly.
+
+`CUMULO_WEB_ORIGINS` is optional because a deployment with no browser front-end is a valid
+deployment: the API's own origin is always allowed, and this variable only ever adds. `infra/api`
+defaults it to `""`, which parses to no extra origins rather than to a misconfiguration. #144
+populates it with the CloudFront URL and #21 with the custom domain — neither is hard-coded here or
+there, because both are server-assigned.
 
 ## Build
 
@@ -193,12 +256,24 @@ a page that renders is already evidence that three routes work. Then exercise **
 - `POST /v1/sites` — expect `201` and a body whose `id`, `origin: "user"`, `createdAt` and `active`
   the server assigned. The response is the only source of that id; nothing predicts it.
 
-**That POST creates a real site in a real table.** The next ingestion cycle will fetch weather for
-its location, so unless you meant to add a permanent site to the demo fleet, remove it with the id
-the response gave you:
+Try-it-out passes the write routes' `Origin` check for free: the browser sets `Origin` to the page's
+own origin, which is this API's, because `/docs` is served from the same Lambda (ADR 0005). **From a
+terminal you have to send it yourself** — a bare `curl` gets `403 forbidden`, which is the check
+working rather than a broken deployment:
 
 ```bash
-curl -fsS -X DELETE -o /dev/null -w '%{http_code}\n' "$API_ENDPOINT/v1/sites/<id-from-the-201>"
+curl -fsS -X POST "$API_ENDPOINT/v1/sites" \
+  -H 'content-type: application/json' -H "Origin: $API_ENDPOINT" \
+  -d '{"name":"Smoke test","latitude":53.3245,"longitude":-6.2601,"tiltDegrees":35,"azimuthDegrees":180,"capacityKw":4.2}'
+```
+
+**That POST creates a real site in a real table.** The next ingestion cycle will fetch weather for
+its location, so unless you meant to add a permanent site to the demo fleet, remove it with the id
+the response gave you — `DELETE` and `PUT` need the same header, for the same reason:
+
+```bash
+curl -fsS -X DELETE -o /dev/null -w '%{http_code}\n' \
+  -H "Origin: $API_ENDPOINT" "$API_ENDPOINT/v1/sites/<id-from-the-201>"
 # expect: 204
 ```
 
@@ -209,20 +284,30 @@ distinction #17's first-forecast poll keys on (`404` means the id is wrong, `[]`
 waiting). A reviewer clicking try-it-out on those two routes should expect empty arrays and read
 them as correct.
 
-**S5. The throttle is live.** This is the cost guard the whole stack's bill argument rests on
-(ADR 0005), so it is worth one burst to see it fire rather than trusting the console:
+**S5. The limits are live.** These are the guards the whole stack's bill argument rests on
+(ADR 0005, ADR 0006), so it is worth one burst to see them fire rather than trusting the console:
 
 ```bash
 for _ in $(seq 1 40); do
   curl -s -o /dev/null -w '%{http_code}\n' "$API_ENDPOINT/v1/sites" &
 done | sort | uniq -c
-# expect two lines: some 200s and some 429s
+# expect a mix dominated by 503, with some 200s and possibly some 429s
 ```
 
-Forty concurrent requests against a burst limit of 20 must produce some `429`s; a run that is all
-`200` means the stage throttle is not doing what `infra/api/gateway.tf` says it does — stop and read
-the stage back (that runbook's B4). The exact split varies with how the requests interleave and is
-not worth pinning.
+**Expect `503`s to dominate, not `429`s** — this is the measured behaviour (issue #29, 2026-08-01:
+forty parallel requests returned 11 × `200` and 29 × `503`, with **zero** `429`s), and the reason is
+layer 4 of the [abuse-protection table](#abuse-protection). The account's Lambda concurrency limit
+is 10 and it is shared with ingestion, so at this parallelism requests are rejected _at Lambda_
+before enough of them reach the gateway's per-second bucket to exhaust a burst of 20. The stage
+throttle is real and is what bounds the bill under sustained load; it is simply not the layer that
+bites first at forty-at-once. A run that is all `200` means something is wrong with both — stop and
+read the stage back (that runbook's B4).
+
+The `429`s worth deliberately provoking are the per-IP limiter's, which need volume rather than
+parallelism: 31 serial requests to a limited route inside one minute earns a `429` with an
+`apiErrorSchema` body, `"code": "rate_limited"` and a `retry-after` header — and a one-hour block on
+your address, so do this knowing how to clear it (`aws dynamodb delete-item --table-name
+cumulo-abuse-<env> --key '{"pk":{"S":"BLOCK#<your-ip>"}}'`).
 
 Two details in that one-liner are load-bearing. The `&` is what makes the requests concurrent — a
 serial loop cannot exceed a rate limit of 10 per second by much and will report forty `200`s from a
@@ -230,6 +315,7 @@ working throttle. And the pipe hangs off `done`, not off a `wait`: the backgroun
 the loop's stdout, so `sort` sees their codes and finishes when the last one closes the pipe.
 Piping `wait` instead sorts an empty stream while the codes scroll past on the terminal.
 
-A `429` here comes from the gateway, before this Lambda is invoked, so its body is the gateway's own
-`{ "message": … }` and not an `apiErrorSchema` body. That asymmetry is the contract
-described under [Error contract](#error-contract): clients map rate limiting on the status.
+A `429` from the gateway arrives before this Lambda is invoked, so its body is the gateway's own
+`{ "message": … }` and not an `apiErrorSchema` body; one from the per-IP limiter is an `apiErrorSchema`
+body. That split is the contract described under [Error contract](#error-contract): clients map rate
+limiting on the status, never on the body.

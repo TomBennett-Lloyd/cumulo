@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 
 import { describe, expect, it } from 'vitest';
 
-import { gatewayEvent } from '../api-fixtures';
+import { API_DOMAIN, OWN_ORIGIN, gatewayEvent } from '../api-fixtures';
 
 import { parseGatewayEvent } from './gateway-event';
 
@@ -47,6 +47,54 @@ describe('parseGatewayEvent', () => {
   it('a request with no body has no body, whether the field is absent or null', () => {
     expect(parseGatewayEvent(gatewayEvent()).rawBody).toBeUndefined();
     expect(parseGatewayEvent(gatewayEvent({ body: null })).rawBody).toBeUndefined();
+  });
+
+  it('carries the caller’s address through, which is the limiter’s key', () => {
+    expect(parseGatewayEvent(gatewayEvent({ sourceIp: '198.51.100.7' })).sourceIp).toBe(
+      '198.51.100.7',
+    );
+  });
+
+  it('builds this deployment’s own origin from the domain the request arrived at', () => {
+    // Derived rather than configured: the api id in that hostname is assigned
+    // by AWS at create time, so any constant in this repo would be a guess.
+    const request = parseGatewayEvent(gatewayEvent());
+
+    expect(request.ownOrigin).toBe(OWN_ORIGIN);
+    expect(request.ownOrigin).toBe(`https://${API_DOMAIN}`);
+  });
+
+  it('reads the Origin header under the lowercase name payload v2 uses', () => {
+    const request = parseGatewayEvent(gatewayEvent({ headers: { origin: 'https://example.com' } }));
+
+    expect(request.originHeader).toBe('https://example.com');
+  });
+
+  it('a request with no Origin header has none — the drive-by client case', () => {
+    expect(parseGatewayEvent(gatewayEvent({ headers: {} })).originHeader).toBeUndefined();
+    expect(parseGatewayEvent(gatewayEvent({ headers: null })).originHeader).toBeUndefined();
+  });
+
+  it('rejects an event with no source address rather than limiting everyone as one caller', () => {
+    // Required, unlike the absent-able fields above. A limiter that cannot tell
+    // callers apart is not a limiter, so this takes the boundary's 500 path.
+    // The request context is rebuilt rather than mutated, so the missing field
+    // is visible in the test rather than in a `delete` two lines up.
+    const event = {
+      ...gatewayEvent(),
+      requestContext: { domainName: API_DOMAIN, http: { method: 'GET', path: '/v1/sites' } },
+    };
+
+    expect(() => parseGatewayEvent(event)).toThrow('sourceIp');
+  });
+
+  it('rejects an event with no domain name, which no origin could be derived from', () => {
+    const event = {
+      ...gatewayEvent(),
+      requestContext: { http: { method: 'GET', path: '/v1/sites', sourceIp: '203.0.113.1' } },
+    };
+
+    expect(() => parseGatewayEvent(event)).toThrow('domainName');
   });
 
   it('throws naming the fields when the payload is not a v2 event', () => {
