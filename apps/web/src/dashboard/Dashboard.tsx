@@ -10,8 +10,8 @@ import type { FleetDataSource } from '../data/fleet-data-source';
 import { useFirstForecast } from '../data/use-first-forecast';
 import type { MapPosition } from '../map/MapView';
 import type { Theme } from '../theme';
+import { LazyMapRegion } from './LazyMapRegion';
 import type { MapRegionComponent } from './MapRegion';
-import { MapRegion } from './MapRegion';
 import { SiteDetailPanel } from './SiteDetailPanel';
 import { SiteList } from './SiteList';
 
@@ -121,7 +121,12 @@ export interface DashboardProps {
   readonly theme: Theme;
   /** Where the fleet lives. Defaults to the in-memory demo fleet. */
   readonly dataSource?: FleetDataSource;
-  /** The map half. Defaults to the real one — see {@link MapRegionComponent}. */
+  /**
+   * The map half. Defaults to the real one, loaded on demand — see
+   * {@link MapRegionComponent} for the seam and `LazyMapRegion` for why the
+   * default arrives behind a `Suspense` boundary rather than in the entry
+   * chunk.
+   */
   readonly mapRegion?: MapRegionComponent;
 }
 
@@ -146,7 +151,7 @@ export interface DashboardProps {
 export const Dashboard = ({
   theme,
   dataSource = demoFleetDataSource,
-  mapRegion: MapRegionSlot = MapRegion,
+  mapRegion: MapRegionSlot = LazyMapRegion,
 }: DashboardProps): ReactElement => {
   const [load, setLoad] = useState<FleetLoad>({ status: 'loading' });
   /** Bumping this is how the retry button asks the listing effect to run again. */

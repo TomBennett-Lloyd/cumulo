@@ -32,6 +32,21 @@
   min-height: 0;
 }
 
+/* What occupies the canvas while the map's chunk is in flight (see
+ * `LazyMapRegion.tsx`). It wears `.map-canvas` as well as this class, so it
+ * inherits the same flex sizing the real canvas gets and the swap moves
+ * nothing — this rule only says what is drawn inside that box. */
+.map-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
 /* Wrapping to two lines is the narrow-width behaviour, in place of collapsing
  * either credit behind a control. */
 .map-attribution {
