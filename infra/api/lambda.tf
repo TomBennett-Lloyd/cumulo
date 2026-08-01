@@ -56,6 +56,13 @@ resource "aws_lambda_function" "api" {
   # what makes a hung request diagnosable: Lambda times out first, so the
   # evidence is a Lambda timeout log line and an `Errors` data point rather than
   # a gateway 504 with nothing behind it.
+  #
+  # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS`
+  # (`apps/api/src/request-budget.ts`), which sizes the series-cleanup budget
+  # against it — #29 needed a handler to know how long it may keep starting
+  # DynamoDB requests. This file still owns the deployed value; the two are held
+  # equal by `pnpm check:infra-mirrors` in the `verify` composite, so lowering
+  # this number shrinks that budget in the same commit or fails the build.
   timeout = 15
 
   # 256 MB, and this number is load-bearing beyond performance: it is the figure

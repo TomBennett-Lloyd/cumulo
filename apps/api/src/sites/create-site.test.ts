@@ -5,10 +5,15 @@ import {
   utcIsoTimestampSchema,
   type FleetSite,
 } from '@cumulo/shared';
-import { StorageError, type BatchWriteOutcome, type OldestUserSiteResult } from '@cumulo/storage';
+import {
+  StorageError,
+  type SeriesCleanupOutcome,
+  type OldestUserSiteResult,
+} from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import { jsonBodyOf, RANELAGH_ID, RATHMINES_ID, routeRequest, siteInput } from '../api-fixtures';
+import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
 import { createSite, createSiteEvictionExhaustedEvent, type CreateSiteDeps } from './create-site';
 import { seriesCleanupFailedEvent } from './series-cleanup';
@@ -17,6 +22,13 @@ const CREATED_AT = utcIsoTimestampSchema.parse('2026-07-31T09:00:00Z');
 
 /** A third id, for the tests where the index names a different site each look. */
 const RINGSEND_ID = '5b2c9d1e-3f4a-4b5c-8d6e-7f8a9b0c1d2e';
+
+/** A cleanup pass that emptied the partition and hit neither of its limits. */
+const CLEAN_SWEEP: SeriesCleanupOutcome = {
+  deletedCount: 3,
+  declinedCount: 0,
+  budgetReached: false,
+};
 
 /**
  * A fleet the tests drive through its storage answers rather than through a
@@ -34,13 +46,15 @@ interface FleetScript {
   readonly oldest?: readonly OldestUserSiteResult[];
   /** One answer per attempt: `true` evicted, `false` lost the race. */
   readonly evictions?: readonly boolean[];
-  readonly cleanup?: () => Promise<BatchWriteOutcome>;
+  readonly cleanup?: () => Promise<SeriesCleanupOutcome>;
 }
 
 interface FleetCalls {
   readonly written: FleetSite[];
   readonly evicted: string[];
   readonly cleaned: string[];
+  /** The item budget each pass was handed. */
+  readonly budgets: number[];
   readonly logged: Record<string, unknown>[];
   readonly oldestLookups: number[];
 }
@@ -60,6 +74,7 @@ const scriptedFleet = (
     written: [],
     evicted: [],
     cleaned: [],
+    budgets: [],
     logged: [],
     oldestLookups: [],
   };
@@ -98,9 +113,10 @@ const scriptedFleet = (
       },
     },
     series: {
-      deleteSiteSeries: (siteId) => {
+      deleteSiteSeries: (siteId, maxItems) => {
         calls.cleaned.push(siteId);
-        return script.cleanup?.() ?? Promise.resolve({ status: 'complete' });
+        calls.budgets.push(maxItems);
+        return script.cleanup?.() ?? Promise.resolve(CLEAN_SWEEP);
       },
     },
     now: () => CREATED_AT,
@@ -210,6 +226,10 @@ describe('POST /v1/sites', () => {
     await createSite(deps, postSite);
 
     expect(calls.cleaned).toEqual([RATHMINES_ID]);
+    // Bounded, and by the budget derived from the function timeout rather than
+    // by anything this handler chose: an unbounded pass after the create has
+    // committed is what loses the 201 carrying the new site's id.
+    expect(calls.budgets).toEqual([SERIES_CLEANUP_MAX_ITEMS]);
   });
 
   it('retries the create when the counter says full but the index has nothing to evict', async () => {

@@ -86,7 +86,7 @@ export {
   type AbuseAdapterDeps,
   type BlockStatus,
 } from './adapters/abuse/abuse-adapter';
-export { SeriesAdapter } from './adapters/series/series-adapter';
+export { SeriesAdapter, type SeriesCleanupOutcome } from './adapters/series/series-adapter';
 export { type SeriesPoint } from './adapters/series/series-item';
 export { MetricsAdapter } from './adapters/metrics/metrics-adapter';
 export { WeatherAdapter, type ArchiveDayCoverage } from './adapters/weather/weather-adapter';

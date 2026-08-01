@@ -115,13 +115,36 @@ expect_not_out() { # expect_not_out <substring>
 TF_REL=infra/ingestion/lambda.tf
 TS_REL=apps/ingestion/src/cycle-budget.ts
 
+# The second shipped record (#29). Every case below drives its assertions
+# through the ingestion pair; this one is written at agreeing values and left
+# alone, because the gate refuses to check anything at all while a declared pair
+# is unreadable — so a fixture missing it would send every case down the BLOCKED
+# path and prove nothing about the case it was written for. It is written by the
+# same builder rather than once at setup, since each fixture is a fresh tree.
+API_TF_REL=infra/api/lambda.tf
+API_TS_REL=apps/api/src/request-budget.ts
+
 # fixture <name> <tf-timeout-seconds> <ts-literal> -> sets DIR to a fresh tree
-# holding exactly the two files the gate reads. The Terraform file is written in
+# holding the files the gate reads. The Terraform files are written in
 # `terraform fmt` layout, which is the layout CI enforces and the gate's reader
 # assumes: two-space attributes, a lone `}` at column 0.
 fixture() { # fixture <name> <tf-timeout> <ts-literal>
   DIR="$TMP_ROOT/$1"
   must mkdir -p "$DIR/$(dirname "$TF_REL")" "$DIR/$(dirname "$TS_REL")"
+  must mkdir -p "$DIR/$(dirname "$API_TF_REL")" "$DIR/$(dirname "$API_TS_REL")"
+  cat >"$DIR/$API_TF_REL" <<EOF
+resource "aws_lambda_function" "api" {
+  function_name = local.function_name
+
+  timeout = 15
+
+  memory_size = 256
+}
+EOF
+  cat >"$DIR/$API_TS_REL" <<EOF
+/** The function timeout in \`$API_TF_REL\`, mirrored. */
+export const API_LAMBDA_TIMEOUT_MS = 15_000;
+EOF
   cat >"$DIR/$TF_REL" <<EOF
 resource "aws_lambda_function" "ingestion" {
   function_name = local.function_name
@@ -225,8 +248,9 @@ begin "a tree whose constant matches the Terraform value passes"
 fixture agree 300 300_000
 run_check "$DIR"
 expect_rc 0 "$rc"
-expect_out "OK — 1 mirrored value(s) agree"
+expect_out "OK — 2 mirrored value(s) agree"
 expect_out "aws_lambda_function.ingestion.timeout = 300"
+expect_out "aws_lambda_function.api.timeout = 15"
 expect_not_out "ERROR"
 end
 
@@ -321,9 +345,10 @@ end
 begin "a gate with no records left exits 2 rather than reporting OK"
 fixture empty_list 300 300_000
 EMPTY_GATE="$TMP_ROOT/check-infra-mirrors-no-records.sh"
-must grep -v -F -- "$TF_REL|" "$CHECK" >"$EMPTY_GATE"
+must grep -v -F -e "$TF_REL|" -e "$API_TF_REL|" "$CHECK" >"$EMPTY_GATE"
 fixture_has "$EMPTY_GATE" 'MIRRORS=('
 fixture_lacks "$EMPTY_GATE" "$TF_REL|"
+fixture_lacks "$EMPTY_GATE" "$API_TF_REL|"
 for interpreter in $BASHES; do
   case_ctx="$interpreter"
   run_script_with "$interpreter" "$EMPTY_GATE" "$DIR"

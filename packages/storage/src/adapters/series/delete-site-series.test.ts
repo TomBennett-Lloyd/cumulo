@@ -8,23 +8,31 @@ import {
   TABLE_NAME,
   deleteRequestKeys,
   hourlyForecasts,
-  instantPolicy,
   mockedAdapter,
 } from './series-fixtures';
 import { toForecastItem } from './series-item';
 
 /**
- * X3: removing an evicted site's series. DynamoDB has no range delete, so the
- * keys have to be listed and then deleted — and both halves have a way of
- * lying. The Query pages at 1 MB, so a caller that ignored `LastEvaluatedKey`
- * would leave a tail behind; `BatchWriteItem` answers 200 while declining
- * items, so a caller that ignored `UnprocessedItems` would report a cleanup it
- * did not do. These tests are about both.
+ * X3: removing a departed site's series, under a caller-stated budget.
+ *
+ * Two things have a way of lying here and the tests are about both. The listing
+ * Query stops at `Limit` or at 1 MB and says so only through
+ * `LastEvaluatedKey`, so a caller that ignored it would report a partition
+ * emptied when it was merely sampled; and `BatchWriteItem` answers 200 while
+ * declining items, so a caller that ignored `UnprocessedItems` would report a
+ * cleanup it did not do. The outcome carries both facts separately because
+ * they mean different things to an operator — arithmetic versus capacity.
+ *
+ * The budget itself is not this adapter's decision. It is derived from the API
+ * function timeout in `apps/api/src/request-budget.ts`; here it is just a
+ * number the caller states, and these tests pin that the adapter obeys it.
  *
  * Contract tests per `docs/standards/testing.md` rule 3 — assertions are on the
  * command input that would reach DynamoDB, or on the outcome derived from a
  * DynamoDB-shaped response.
  */
+
+const BUDGET = 25;
 
 /** What the projected Query hands back: the two key attributes and nothing else. */
 const projectedKeys = (count: number): Record<string, string>[] =>
@@ -39,9 +47,9 @@ describe('deleteSiteSeries', () => {
     ddb.on(QueryCommand).resolves({ Items: projectedKeys(2) });
     ddb.on(BatchWriteCommand).resolves({});
 
-    const outcome = await adapter.deleteSiteSeries(SITE_ID);
+    const outcome = await adapter.deleteSiteSeries(SITE_ID, BUDGET);
 
-    expect(outcome).toEqual({ status: 'complete' });
+    expect(outcome).toEqual({ deletedCount: 2, declinedCount: 0, budgetReached: false });
     expect(ddb.commandCalls(QueryCommand)[0]?.args[0].input).toEqual({
       TableName: TABLE_NAME,
       KeyConditionExpression: 'siteId = :siteId',
@@ -49,57 +57,105 @@ describe('deleteSiteSeries', () => {
       // Only the keys: the item bodies would be read capacity spent on data
       // that is about to be deleted.
       ProjectionExpression: 'siteId, sk',
+      // Newest first — those rows have the longest left to live under the TTL,
+      // so a bounded pass reclaims the most by taking them.
+      ScanIndexForward: false,
+      Limit: BUDGET,
     });
     expect(deleteRequestKeys(ddb)).toEqual([projectedKeys(2)]);
   });
 
-  it('deletes every page of a partition, not just the first', async () => {
-    const lastEvaluatedKey = { siteId: SITE_ID, sk: 'T#2026-07-30T00:00:00Z#FC#physics' };
+  it('makes exactly one listing request, however much the partition holds', async () => {
+    // The bound that matters: the old unbounded version walked every page of a
+    // partition that reaches thousands of rows, and did it after the caller's
+    // write had already committed.
     const { adapter, ddb } = mockedAdapter();
-    ddb
-      .on(QueryCommand)
-      .resolvesOnce({ Items: projectedKeys(1), LastEvaluatedKey: lastEvaluatedKey })
-      .resolves({ Items: projectedKeys(2).slice(1) });
+    ddb.on(QueryCommand).resolves({
+      Items: projectedKeys(BUDGET),
+      LastEvaluatedKey: { siteId: SITE_ID, sk: 'T#2026-07-30T00:00:00Z#FC#physics' },
+    });
     ddb.on(BatchWriteCommand).resolves({});
 
-    await adapter.deleteSiteSeries(SITE_ID);
+    await adapter.deleteSiteSeries(SITE_ID, BUDGET);
 
-    expect(ddb.commandCalls(QueryCommand)[1]?.args[0].input.ExclusiveStartKey).toEqual(
-      lastEvaluatedKey,
-    );
-    expect(deleteRequestKeys(ddb).flat()).toHaveLength(2);
+    expect(ddb.commandCalls(QueryCommand)).toHaveLength(1);
   });
 
-  it('splits a full site partition into DynamoDB-sized batches', async () => {
-    // ~97 points is what an evicted site actually holds: four days of hourly
-    // forecasts is already past one batch, so the chunking is not incidental.
+  it('reports hitting its budget rather than claiming the partition is clean', async () => {
     const { adapter, ddb } = mockedAdapter();
-    ddb.on(QueryCommand).resolves({ Items: projectedKeys(97) });
+    ddb.on(QueryCommand).resolves({
+      Items: projectedKeys(BUDGET),
+      LastEvaluatedKey: { siteId: SITE_ID, sk: 'T#2026-07-30T00:00:00Z#FC#physics' },
+    });
     ddb.on(BatchWriteCommand).resolves({});
 
-    await adapter.deleteSiteSeries(SITE_ID);
-
-    expect(deleteRequestKeys(ddb).map((batch) => batch.length)).toEqual([25, 25, 25, 22]);
+    expect(await adapter.deleteSiteSeries(SITE_ID, BUDGET)).toEqual({
+      deletedCount: BUDGET,
+      declinedCount: 0,
+      budgetReached: true,
+    });
   });
 
-  it('reports a drain that never finished rather than claiming a clean sweep', async () => {
+  it('never sends more than one batch of deletes', async () => {
+    // A budget is only a budget if the drain honours it: at one batch's worth
+    // of keys there is exactly one round trip, so the pass costs the two
+    // DynamoDB requests it was priced at.
+    const { adapter, ddb } = mockedAdapter();
+    ddb.on(QueryCommand).resolves({ Items: projectedKeys(BUDGET) });
+    ddb.on(BatchWriteCommand).resolves({});
+
+    await adapter.deleteSiteSeries(SITE_ID, BUDGET);
+
+    expect(deleteRequestKeys(ddb).map((batch) => batch.length)).toEqual([BUDGET]);
+  });
+
+  it('re-sends nothing that DynamoDB declined, and counts it instead', async () => {
+    // Deletes that bounce mean the table is out of write capacity. Re-sending
+    // would spend the capacity the ingestion cycle needs, to bring forward a
+    // deletion the TTL performs for free.
     const unprocessed = [{ DeleteRequest: { Key: projectedKeys(1)[0] ?? {} } }];
-    const { adapter, ddb } = mockedAdapter(instantPolicy([]));
+    const { adapter, ddb } = mockedAdapter();
     ddb.on(QueryCommand).resolves({ Items: projectedKeys(3) });
     ddb.on(BatchWriteCommand).resolves({ UnprocessedItems: { [TABLE_NAME]: unprocessed } });
 
-    expect(await adapter.deleteSiteSeries(SITE_ID)).toEqual({
-      status: 'partial',
-      unprocessedCount: 1,
+    expect(await adapter.deleteSiteSeries(SITE_ID, BUDGET)).toEqual({
+      deletedCount: 2,
+      declinedCount: 1,
+      budgetReached: false,
     });
+    expect(ddb.commandCalls(BatchWriteCommand)).toHaveLength(1);
   });
 
   it('sends no write at all for a site that has no series yet', async () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(QueryCommand).resolves({});
 
-    expect(await adapter.deleteSiteSeries(SITE_ID)).toEqual({ status: 'complete' });
+    expect(await adapter.deleteSiteSeries(SITE_ID, BUDGET)).toEqual({
+      deletedCount: 0,
+      declinedCount: 0,
+      budgetReached: false,
+    });
     expect(ddb.commandCalls(BatchWriteCommand)).toHaveLength(0);
+  });
+
+  it('touches the table not at all when the budget is zero', async () => {
+    // Reachable by construction: the budget is derived from the function
+    // timeout, and a timeout low enough to price out the delete batch leaves
+    // the whole job to the TTL. It must not become a listing nobody deletes.
+    const { adapter, ddb } = mockedAdapter();
+
+    expect(await adapter.deleteSiteSeries(SITE_ID, 0)).toEqual({
+      deletedCount: 0,
+      declinedCount: 0,
+      budgetReached: true,
+    });
+    expect(ddb.calls()).toHaveLength(0);
+  });
+
+  it('refuses a budget that is not a whole number of items', async () => {
+    const { adapter } = mockedAdapter();
+
+    await expect(adapter.deleteSiteSeries(SITE_ID, -1)).rejects.toThrow('non-negative integer');
   });
 
   it('refuses a projected item missing a key, rather than deleting an undefined key', async () => {
@@ -107,7 +163,7 @@ describe('deleteSiteSeries', () => {
     ddb.on(QueryCommand).resolves({ Items: [{ siteId: SITE_ID }] });
     ddb.on(BatchWriteCommand).resolves({});
 
-    await expect(adapter.deleteSiteSeries(SITE_ID)).rejects.toThrow();
+    await expect(adapter.deleteSiteSeries(SITE_ID, BUDGET)).rejects.toThrow();
     expect(ddb.commandCalls(BatchWriteCommand)).toHaveLength(0);
   });
 
@@ -116,7 +172,7 @@ describe('deleteSiteSeries', () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(QueryCommand).rejects(cause);
 
-    const error = await captureStorageError(() => adapter.deleteSiteSeries(SITE_ID));
+    const error = await captureStorageError(() => adapter.deleteSiteSeries(SITE_ID, BUDGET));
 
     expect(error.context).toEqual({
       operation: 'deleteSiteSeries',

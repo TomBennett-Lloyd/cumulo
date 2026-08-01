@@ -95,11 +95,24 @@ locals {
   # The three unauthenticated write routes, as API Gateway route keys:
   # "<METHOD> <path>", with path parameters in braces. These strings are a
   # contract with the route table in apps/api/src/main.ts — same methods, same
-  # paths, `{siteId}` where that table has `{ param: siteIdParamName }`. A key
-  # that does not match a real path is not an error anywhere: the route simply
-  # never matches, requests keep falling through to `$default`, and the throttle
-  # below silently protects nothing. That is the failure mode to look for if a
-  # write ever stops being rate-limited.
+  # paths, `{siteId}` where that table has `{ param: siteIdParamName }`.
+  #
+  # Both ways of breaking that contract fail the same way — silently, by the
+  # request falling through to `$default` at the stage's 10/20 instead of
+  # matching here at 2/4 — and neither is an error anywhere:
+  #
+  #   * A key that names no real path never matches, so the throttle protects
+  #     nothing. That is the first thing to check if a write stops being
+  #     rate-limited.
+  #   * Gateway matching is exact on the literal segments, and a router that
+  #     normalises paths is not — so a spelling the gateway does not recognise
+  #     but the router accepts (a trailing slash, a doubled separator) reaches
+  #     the handler with the stage limit rather than this one, which is a
+  #     bypass, not a 404. The two halves therefore have to agree on what a path
+  #     is: `apps/api/src/http/router.ts` must reject non-canonical paths rather
+  #     than normalise them, and that requirement exists because of this block.
+  #     Reintroducing normalisation there reopens the hole here, in a file the
+  #     change would not touch.
   #
   # One list, used twice below — by the route resources and by the stage's
   # `route_settings` — so the declared routes and the throttled routes cannot
@@ -172,10 +185,15 @@ resource "aws_apigatewayv2_stage" "default" {
   # burst — reads and the docs pages keep the stage's 10/20. Two things follow
   # from the tighter number, and both are the point:
   #
-  #   * It bounds the write bill directly. Every limited request also costs an
-  #     abuse-table write (the per-IP window counter in apps/api), so the write
-  #     rate is what the abuse table's on-demand bill is computed from in
-  #     ADR 0006 — not the stage's 10 rps.
+  #   * It bounds the *write-route share* of the bill. Every limited request
+  #     also costs an abuse-table write (the per-IP window counter in apps/api),
+  #     and this caps how much of that traffic can be a write. It does not cap
+  #     the abuse-table bill: ADR 0006 computes that from the stage ceiling's
+  #     25.92M requests/month, correctly, because the limited-route list
+  #     includes `GET /v1/sites/{siteId}/series` — a read, which keeps the
+  #     stage's 10/20 and is metered by the limiter all the same. Anyone
+  #     re-deriving that number from 2 rps will get a figure five times too
+  #     small.
   #   * It bites before the stage limit on exactly these routes, which is what
   #     makes the layering observable: a POST flood 429s at 2 rps with the
   #     gateway's own (non-`ApiError`) body while a GET flood from the same
