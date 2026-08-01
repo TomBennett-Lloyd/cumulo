@@ -1,5 +1,9 @@
-# The four DynamoDB tables of ADR 0002 — the whole of Cumulo's persistence.
-# There is no relational store; the ADR concluded against its own issue title.
+# The DynamoDB tables of ADR 0002 — the whole of Cumulo's persistence. There is
+# no relational store; the ADR concluded against its own issue title.
+#
+# Four of them are the ADR's own domain tables. The fifth, `abuse`, is #29's
+# per-IP limiter state: not a domain concept, but created and named here because
+# it is the same store, the same convention, and the same cost ceiling.
 #
 # ---------------------------------------------------------------------------
 # APPLICATION AUTO SCALING IS DELIBERATELY ABSENT. THIS IS A NON-RESOURCE.
@@ -35,8 +39,8 @@
 # arrives with an arithmetic argument rather than an estimate.
 # ---------------------------------------------------------------------------
 #
-# Settings common to all four, each one an idle-billing decision (ADR 0002,
-# "Table settings"), stated once here rather than repeated in four comments:
+# Settings common to all of them, each one an idle-billing decision (ADR 0002,
+# "Table settings"), stated once here rather than repeated per table:
 #
 #   * point_in_time_recovery off — $0.20/GB-month to protect data the owner has
 #     decided is disposable. Every stored fact is refetchable from Open-Meteo or
@@ -293,6 +297,53 @@ resource "aws_dynamodb_table" "metrics" {
   attribute {
     name = "sk"
     type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = false
+  }
+
+  deletion_protection_enabled = false
+}
+
+# 5. Abuse — #29's per-IP request limiter state. Two row kinds share one hash
+#    key `pk`: `RATE#<ip>#<windowStart>` counts one address's requests in one
+#    fixed window, and `BLOCK#<ip>` records an address blocked until an instant.
+#    There is no sort key because nothing ever asks for a range of this data —
+#    every access is one exact address and one exact window or block.
+#
+#    This table exists because the API is anonymous and an HTTP API gives us no
+#    other lever: usage plans and API keys are a REST-API feature, and WAF
+#    cannot associate with an HTTP API at all (REST/ALB/CloudFront only). So
+#    per-address limiting is application state, and this is where it lives.
+#
+#    ON-DEMAND, by the standing rule at the top of this file: its load is
+#    request-shaped — one write per limited request from whoever is knocking —
+#    so there is no volume to size a provisioned number against, and none of it
+#    may come out of the shared free 25/25 pool that the two batch-shaped tables
+#    depend on. Under abuse the request rate is bounded by the gateway throttles
+#    in `infra/api/gateway.tf` rather than by anything here.
+#
+#    Every row carries `expiresAt`, so stored size stays at roughly "addresses
+#    seen in the last few minutes" and storage is free. TTL deletion is
+#    asynchronous and not punctual, which is why the adapter compares
+#    `blockedUntil` to a clock instead of treating a surviving row as a live
+#    block (`packages/storage/src/adapters/abuse/abuse-adapter.ts`).
+resource "aws_dynamodb_table" "abuse" {
+  name         = "cumulo-abuse-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  table_class  = "STANDARD"
+
+  hash_key = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
   }
 
   point_in_time_recovery {

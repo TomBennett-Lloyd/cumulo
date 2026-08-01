@@ -8,6 +8,7 @@ describe('storageTableName', () => {
     expect(storageTableName('series', 'dev')).toBe('cumulo-series-dev');
     expect(storageTableName('weather', 'dev')).toBe('cumulo-weather-dev');
     expect(storageTableName('metrics', 'dev')).toBe('cumulo-metrics-dev');
+    expect(storageTableName('abuse', 'dev')).toBe('cumulo-abuse-dev');
   });
 
   it('carries the environment through unchanged', () => {

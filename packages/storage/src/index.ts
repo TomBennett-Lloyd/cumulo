@@ -73,8 +73,19 @@ export { SERIES_RETENTION_DAYS } from './ttl';
 
 export { type BatchingAdapterDeps, type StorageAdapterDeps } from './adapters/storage-adapter-base';
 
-export { SiteAdapter, type GetFleetSiteResult } from './adapters/site/site-adapter';
+export {
+  SiteAdapter,
+  type CreateUserSiteResult,
+  type EvictAndCreateResult,
+  type GetFleetSiteResult,
+  type OldestUserSiteResult,
+} from './adapters/site/site-adapter';
 export { type SitePhysics } from './adapters/site/site-item';
+export {
+  AbuseAdapter,
+  type AbuseAdapterDeps,
+  type BlockStatus,
+} from './adapters/abuse/abuse-adapter';
 export { SeriesAdapter } from './adapters/series/series-adapter';
 export { type SeriesPoint } from './adapters/series/series-item';
 export { MetricsAdapter } from './adapters/metrics/metrics-adapter';

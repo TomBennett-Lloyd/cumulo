@@ -5,6 +5,7 @@ import {
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import type { Forecast, GenerationReading, UtcIsoTimestamp } from '@cumulo/shared';
+import { z } from 'zod';
 
 import {
   DYNAMODB_BATCH_WRITE_SIZE,
@@ -65,6 +66,17 @@ import {
 type SeriesWriteRequest = NonNullable<
   NonNullable<NonNullable<BatchWriteCommandInput['RequestItems']>[string]>[number]
 >;
+
+/**
+ * The key of a stored series item, as {@link SeriesAdapter.deleteSiteSeries}
+ * reads it back off a projected Query.
+ *
+ * A parse rather than a cast: a Query response is a boundary like any other
+ * (typing rule 3), and a key attribute missing from it would otherwise become a
+ * `DeleteRequest` addressed at `undefined` — which DynamoDB would reject for
+ * the whole batch, taking the deletable items down with it.
+ */
+const seriesKeySchema = z.object({ siteId: z.string().min(1), sk: z.string().min(1) });
 
 export class SeriesAdapter extends StorageAdapterBase {
   private readonly batchPolicy: BatchPolicy;
@@ -153,6 +165,43 @@ export class SeriesAdapter extends StorageAdapterBase {
   }
 
   /**
+   * Deletes every series point of one site (X3) — the cleanup that follows an
+   * evicted site, so the fleet cap bounds stored rows and not merely site rows.
+   *
+   * Read-then-delete rather than a range delete, because DynamoDB has no range
+   * delete: the keys have to be enumerated first. The Query projects the two
+   * key attributes alone, which keeps the read charge to the smallest item size
+   * DynamoDB bills and means an evicted site's ~97 points cost a fraction of an
+   * RCU to list.
+   *
+   * The deletes then draw on the `series` table's provisioned 14 WCU, shared
+   * with the hourly ingestion cycle. A full ~97-item partition is ~97 write
+   * units — under 7 seconds at 14 WCU with no burst assumed, and normally
+   * instant against the burst reserve. That is fine for a fire-and-report
+   * cleanup running behind a user's create: the outcome is returned rather than
+   * awaited-and-ignored, so a partial drain is a fact the caller can log rather
+   * than an orphan nobody hears about (the 90-day TTL is the backstop, not the
+   * plan).
+   */
+  async deleteSiteSeries(siteId: string): Promise<BatchWriteOutcome> {
+    const items = await this.queryAllPages(
+      'deleteSiteSeries',
+      { siteId },
+      {
+        TableName: this.tableName,
+        KeyConditionExpression: 'siteId = :siteId',
+        ExpressionAttributeValues: { ':siteId': siteId },
+        ProjectionExpression: 'siteId, sk',
+      },
+    );
+
+    return this.drainWriteRequests(
+      'deleteSiteSeries',
+      items.map((item) => ({ DeleteRequest: { Key: seriesKeySchema.parse(item) } })),
+    );
+  }
+
+  /**
    * Writes every item, re-submitting whatever DynamoDB declines, and reports
    * the leftovers as a count rather than as silence.
    */
@@ -160,8 +209,27 @@ export class SeriesAdapter extends StorageAdapterBase {
     operation: string,
     items: readonly (ForecastItem | GenerationReadingItem)[],
   ): Promise<BatchWriteOutcome> {
-    const requests: SeriesWriteRequest[] = items.map((item) => ({ PutRequest: { Item: item } }));
+    return this.drainWriteRequests(
+      operation,
+      items.map((item) => ({ PutRequest: { Item: item } })),
+    );
+  }
 
+  /**
+   * Drains a list of write requests — puts or deletes alike — through the batch
+   * machinery, reporting what never landed.
+   *
+   * Shared by the write paths and by {@link deleteSiteSeries} because the
+   * mechanism is one thing: `BatchWriteItem` answers 200 while handing back
+   * what it declined, and every caller of it has to re-submit and then report
+   * honestly. A change to that loop would otherwise have to be made twice
+   * (`docs/standards/structure.md` rule 7). Only the request list differs, and
+   * that is a parameter rather than a mode flag.
+   */
+  private async drainWriteRequests(
+    operation: string,
+    requests: readonly SeriesWriteRequest[],
+  ): Promise<BatchWriteOutcome> {
     const outcome = await this.sending(operation, undefined, () =>
       drainBatches(
         async (batch) => {
