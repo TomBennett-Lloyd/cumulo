@@ -37,7 +37,7 @@
 import {
   forecastSchema,
   type Forecast,
-  type Site,
+  type SitePhysics,
   type UtcIsoTimestamp,
   type WeatherReading,
 } from '@cumulo/shared';
@@ -119,8 +119,16 @@ const HOUR_MIDPOINT_OFFSET_MS = 30 * 60 * 1000;
 
 /** Everything `createPhysicsForecast` needs to emit one forecast row. */
 export interface CreatePhysicsForecastInput {
-  /** The installation being forecast — its coordinates, geometry and nameplate. */
-  readonly site: Site;
+  /**
+   * The installation being forecast — its coordinates, geometry and nameplate.
+   *
+   * `SitePhysics` rather than `Site`: those are exactly the fields the chain
+   * reads, and it is also what `SiteAdapter.listActiveSitePhysicsAtLocation`
+   * returns, so the forecast service can pass a projected index item straight
+   * in. A full `Site` is structurally assignable, so callers holding one — the
+   * hindcast harness, the golden fixtures — need no conversion.
+   */
+  readonly site: SitePhysics;
   /** The weather hour to run the chain on. */
   readonly weather: WeatherReading;
   /** Forecast vintage: which cycle produced this row. A parameter, never a clock read. */
@@ -140,7 +148,7 @@ export interface CreatePhysicsForecastInput {
  * here.
  */
 export const runPhysicsChain = (
-  site: Site,
+  site: SitePhysics,
   weather: WeatherReading,
   params: Partial<PhysicsParams> = {},
 ): PhysicsChainResult => {
