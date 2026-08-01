@@ -9,10 +9,13 @@
  * top to bottom here, which is not true when each phrase lives inside the JSX
  * that happens to render it.
  *
- * The word "active" is deliberately gone. "No active sites yet" asserted a
- * distinction the data model does not make — there is no inactive site to
- * contrast with — and a sentence that implies a state the system cannot be in
- * teaches the reader something false (#104's finding).
+ * The word "active" is deliberately gone. The old fleet view's empty line called
+ * them active sites, which asserted a distinction the data model does not make —
+ * there is no inactive site to contrast with — and a sentence that implies a
+ * state the system cannot be in teaches the reader something false (#104's
+ * finding). The phrase is not quoted here on purpose: C7's acceptance is a grep
+ * for it across `apps/web/src`, and a comment explaining the removal would be
+ * the one thing keeping that grep from going quiet.
  *
  * Scope: this covers the panel column's state copy. The chart-clock wording
  * #104 also names ("as of", the hour labels' zone) stays with the chart, and

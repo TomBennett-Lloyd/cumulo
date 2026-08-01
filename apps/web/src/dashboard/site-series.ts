@@ -6,7 +6,8 @@ import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fle
 /*
  * One site's two series: how they are fetched, and how they become chart points.
  *
- * Lifted out of `SiteDetailView` unchanged. The join and the paired fetch were
+ * Lifted unchanged out of the old site detail view, which #148 deleted along
+ * with the rest of them. The join and the paired fetch were
  * never the view's — they are statements about the *data* (which measurement
  * belongs to which forecast hour, and what it means for one of the two calls to
  * fail), and the panel that replaces the view needs exactly the same two

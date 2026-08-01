@@ -5,7 +5,8 @@ import type { ForecastChartPoint } from '../charts/ForecastChart';
 /*
  * The fleet aggregate, as the chart's point shape — and how complete it is.
  *
- * Lifted out of `FleetAggregateView` so the panel column can render the fleet
+ * Lifted out of the old fleet aggregate view (deleted with the rest of them in
+ * #148) so the panel column can render the fleet
  * without importing a whole view (`structure.md` rule 1: these were always
  * standalone functions over explicit inputs, and only their file said
  * otherwise). Both are pure and take what they read, so they are unit-testable

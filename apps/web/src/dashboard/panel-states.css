@@ -8,8 +8,8 @@
  * The shapes are inherited from those rules deliberately — this is the same
  * design, given one name.
  *
- * Colour carries meaning where a token pair carries meaning, exactly as in
- * views.css: `--color-danger` says a request failed, `--color-warning` says the
+ * Colour carries meaning where a token pair carries meaning, as the deleted
+ * views.css did: `--color-danger` says a request failed, `--color-warning` says the
  * answer arrived but is incomplete, and muted text says neither happened. Every
  * value is a token — the gate in stylelint.config.mjs, not a style choice
  * (react.md rule 5).

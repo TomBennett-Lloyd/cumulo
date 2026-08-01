@@ -27,6 +27,15 @@ import type { MapRegionProps } from './MapRegion';
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
 const CLICK_POSITION = { latitude: 53.5, longitude: -5.5 };
 
+/**
+ * What `AddSiteForm` names a site dropped at {@link CLICK_POSITION}.
+ *
+ * Restated here rather than derived, because it is the *form's* naming rule
+ * being relied on: a test that computed the name the same way the form does
+ * would still pass if both were wrong together.
+ */
+const CREATED_SITE_NAME = 'Site at 53.5000, -5.5000';
+
 /** The demo pipeline's own first-forecast latency, which this suite does not override. */
 const DEMO_FIRST_FORECAST_DELAY_MS = 45_000;
 
@@ -135,14 +144,31 @@ const advanceBy = async (ms: number): Promise<void> => {
 /** Lets already-resolved promises (the listing, a creation) settle without moving the clock. */
 const settle = (): Promise<void> => advanceBy(0);
 
-const renderDashboard = (dataSource: FleetDataSource): void => {
-  render(<Dashboard theme="light" dataSource={dataSource} mapRegion={StubMapRegion} />);
+const renderDashboard = (dataSource: FleetDataSource): HTMLElement => {
+  const { container } = render(
+    <Dashboard theme="light" dataSource={dataSource} mapRegion={StubMapRegion} />,
+  );
+  return container;
 };
 
 const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
 
-const forecastTable = (): HTMLElement | null =>
-  screen.queryByRole('table', { name: 'Forecast AC output by hour' });
+/**
+ * The site panel's chart, once one is drawn — the panel's own ready state.
+ *
+ * Queried by the chart's table twin rather than by its SVG because the rows are
+ * what the assertions below count, and because the caption names the site: the
+ * fleet panel draws a chart too, and a query that matched any chart would go
+ * green on the wrong one the day the fleet panel stopped being hidden.
+ */
+const siteChartTable = (siteName: string): HTMLElement | null =>
+  screen.queryByRole('table', { name: `Table view — ${siteName}, kW` });
+
+/** The panel column's resting state, whether or not it is the visible context. */
+const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
+
+const attributionLinks = (): readonly HTMLElement[] =>
+  screen.getAllByRole('link', { name: 'Open-Meteo.com' });
 
 const clickMap = (): void => {
   fireEvent.click(screen.getByRole('button', { name: 'Click the map' }));
@@ -188,13 +214,16 @@ describe('Dashboard', () => {
     expect(listSites).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the detail panel for a site selected on the map, and marks its row', async () => {
+  it('swaps the fleet panel for the panel of a site selected on the map, and marks its row', async () => {
     const site = firstSeededSite();
-    renderDashboard(new DemoFleetDataSource());
+    const container = renderDashboard(new DemoFleetDataSource());
     await settle();
+
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
 
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
     expect(
       within(fleetList())
@@ -227,20 +256,22 @@ describe('Dashboard', () => {
     await settle();
 
     // The site exists and is selected; its forecast does not exist yet, and the
-    // panel says so rather than showing an empty table.
-    expect(screen.getByRole('status').textContent).toContain('Generating first forecast');
-    expect(forecastTable()).toBeNull();
+    // panel says so rather than showing an empty chart. The wait is a plain
+    // `aria-busy` label, not a live region mounted with its text already inside
+    // it (`react.md`, "Async surface convention") — so it is found by its words.
+    expect(screen.getByText(/Generating first forecast/u)).toBeDefined();
+    expect(siteChartTable(CREATED_SITE_NAME)).toBeNull();
 
     // Stops at the first second the forecast is on screen, so the elapsed time
     // below is when it *became* visible rather than when this test looked.
     while (
-      forecastTable() === null &&
+      siteChartTable(CREATED_SITE_NAME) === null &&
       Date.now() - submittedAtMs < CREATION_TO_FORECAST_BUDGET_MS
     ) {
       await advanceBy(CLOCK_STEP_MS);
     }
 
-    const table = forecastTable();
+    const table = siteChartTable(CREATED_SITE_NAME);
 
     if (table === null) {
       throw new Error(
@@ -279,7 +310,7 @@ describe('Dashboard', () => {
     // The id polled for is the one the source minted and returned. A dashboard
     // that predicted an id locally would be polling a site that does not exist,
     // and would wait out the whole deadline on it.
-    expect(created.name).toBe('Site at 53.5000, -5.5000');
+    expect(created.name).toBe(CREATED_SITE_NAME);
     expect(getSiteForecast).toHaveBeenCalledWith(created.id);
     expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(61);
   });
@@ -348,14 +379,17 @@ describe('Dashboard', () => {
 
     const failure = screen.getByRole('alert');
 
-    expect(failure.textContent).toContain('Forecast unavailable');
-    expect(forecastTable()).toBeNull();
+    // The column's own sentence, not the poll's diagnostic one: nothing went
+    // wrong, the pipeline is behind, and what the reader can do about it is
+    // wait longer.
+    expect(failure.textContent).toContain('No forecast arrived within 90 seconds');
+    expect(siteChartTable(CREATED_SITE_NAME)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
 
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.getByRole('status').textContent).toContain('Generating first forecast');
+    expect(screen.getByText(/Generating first forecast/u)).toBeDefined();
   });
 
   it('says why the fleet is missing rather than showing an empty list', async () => {
@@ -370,5 +404,115 @@ describe('Dashboard', () => {
 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
+  });
+});
+
+/*
+ * The context swap: one region of the column, three things that can occupy it.
+ *
+ * These are assertions about *which* context is on screen and about what that
+ * costs, which is why several of them read the `hidden` attribute directly. The
+ * distinction the design turns on — hidden versus unmounted — is invisible to a
+ * role query, because a `hidden` subtree is out of the accessibility tree
+ * either way. Only the DOM can say whether the panel is still there behind it,
+ * and "still there" is the whole point.
+ */
+describe('Dashboard context region', () => {
+  it('gives the region back on close, without re-summing a fleet it never lost', async () => {
+    const site = firstSeededSite();
+    const dataSource = new DemoFleetDataSource();
+    // Counted on the real source rather than through a canned one: what is
+    // under test is how many fan-outs the *composition* spends, so the calls
+    // have to be the ones the shipping panel actually makes.
+    const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
+    const container = renderDashboard(dataSource);
+    await settle();
+
+    expect(fleetForecasts).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await settle();
+
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
+    // One sum across the whole select-and-close round trip. In live mode a
+    // second one is a paced fan-out of one request per site — which is what
+    // keeping the panel mounted buys, and what an unmount on every deselection
+    // would spend.
+    expect(fleetForecasts).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a draft take the region without losing the site the reader had open', async () => {
+    const site = firstSeededSite();
+    const container = renderDashboard(new DemoFleetDataSource());
+    await settle();
+
+    fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+
+    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
+
+    clickMap();
+
+    // The draft outranks both the site and the fleet, and neither is unmounted
+    // *because* it was outranked — the selection survives underneath it.
+    expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Add site' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Cancelling hands the reader back the site they were reading, not the
+    // fleet they had left. A dashboard that cleared the selection when a draft
+    // opened would land on the fleet panel here.
+    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('re-sums the fleet when a site is added to it', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
+    renderDashboard(dataSource);
+    await settle();
+
+    expect(fleetForecasts).toHaveBeenCalledTimes(1);
+
+    await addSite();
+
+    // Creation is the one event that changes the sum, so it is the one event
+    // that re-spends the fan-out.
+    expect(fleetForecasts).toHaveBeenCalledTimes(2);
+  });
+});
+
+/*
+ * The column's credit, in every state the column can be in.
+ *
+ * The map's own strip is absent here — `StubMapRegion` renders no attribution —
+ * so a count of one is a count of the column's footer alone, and these tests
+ * would fail if the credit had been left inside a panel that comes and goes.
+ */
+describe('Dashboard attribution', () => {
+  it('keeps exactly one credit at the foot of the column in every fleet state', async () => {
+    // One render walked through all three states rather than three renders of
+    // one state each: the credit's whole job is to *survive*, and a footer that
+    // renders correctly from a fresh mount can still be lost on a transition.
+    // `FlakyFleetSource` is what makes the walk possible — loading, then a
+    // failed listing, then a retried one that succeeds.
+    renderDashboard(new FlakyFleetSource());
+
+    expect(attributionLinks()).toHaveLength(1);
+
+    await settle();
+
+    expect(screen.getByRole('alert').textContent).toContain('Fleet unavailable');
+    expect(attributionLinks()).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await settle();
+
+    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
+    expect(attributionLinks()).toHaveLength(1);
   });
 });

@@ -204,13 +204,17 @@ describe('App shell', () => {
 });
 
 describe('App attribution', () => {
-  it('credits Open-Meteo exactly once on the one surface', async () => {
-    // The CC BY obligation is one visible credit, not one per panel. With the
-    // three views collapsed into a single page, "exactly once" is now a
-    // property of the whole app rather than of whichever view was mounted.
+  it('credits Open-Meteo twice — once for the map, once for the panel column', async () => {
+    // Two, and exactly two, is the design rather than a tolerance. The surface
+    // has two halves that each display weather-derived data and each survive
+    // the other being empty: the map keeps its credit in its own strip, and the
+    // column keeps one at its foot that outlasts every context swap. What the
+    // count rules out is the failure the old views had — a credit per panel,
+    // multiplying with the panels and disappearing with whichever one happened
+    // to be unmounted (CC BY 4.0, CLAUDE.md hard constraints).
     await renderApp(StandInMapRegion);
 
-    expect(screen.getAllByRole('link', { name: 'Open-Meteo.com' })).toHaveLength(1);
+    expect(screen.getAllByRole('link', { name: 'Open-Meteo.com' })).toHaveLength(2);
   });
 });
 

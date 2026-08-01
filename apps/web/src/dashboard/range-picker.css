@@ -1,0 +1,42 @@
+/*
+ * The window picker's own sheet.
+ *
+ * These three rules are `views.css`'s `.view-range` block, moved verbatim apart
+ * from the class names and given the file the control now lives beside (#148).
+ * The rest of `views.css` — the chart views' headings, selects, status lines and
+ * footers — died with the views themselves: its state lines had already been
+ * superseded by `panel-states.css`, and everything else described pages that no
+ * longer exist.
+ *
+ * Every value is a token — the gate in stylelint.config.mjs, not a style choice
+ * (react.md rule 5).
+ */
+
+.range-picker {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Same shape as `.theme-toggle`, deliberately its own class: a range is a
+ * choice among three, and borrowing the toggle's selector would tie a data
+ * control to a chrome control that is free to change. */
+.range-picker-button {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+/* Base ink for the pressed state, not an accent or a chart slot — the same
+ * convention `.theme-toggle` follows in app.css, and for the same reason: those
+ * tokens carry data identity, and a control borrowing one would make "this
+ * window is selected" and "this site is selected" the same colour. */
+.range-picker-button[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-bg);
+}

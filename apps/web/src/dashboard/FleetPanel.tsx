@@ -11,9 +11,9 @@ import { useId, useState, type ReactElement } from 'react';
 import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
-import { RangePicker, rangeLabel } from '../views/range-picker';
 import { joinFleetSeries, minimumContributingSites } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
+import { RangePicker, rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 import {
   ADD_SITE_HINT,

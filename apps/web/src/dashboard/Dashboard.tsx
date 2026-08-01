@@ -1,4 +1,5 @@
 import type { CreateSiteInput, Site } from '@cumulo/shared';
+import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -10,10 +11,13 @@ import type { FleetDataSource } from '../data/fleet-data-source';
 import { useFirstForecast } from '../data/use-first-forecast';
 import type { MapPosition } from '../map/MapView';
 import type { Theme } from '../theme';
+import { FleetPanel } from './FleetPanel';
 import { LazyMapRegion } from './LazyMapRegion';
 import type { MapRegionComponent } from './MapRegion';
-import { SiteDetailPanel } from './SiteDetailPanel';
+import { PanelError, PanelPending } from './panel-states';
 import { SiteList } from './SiteList';
+import { SitePanel } from './SitePanel';
+import { LOADING_FLEET_LABEL } from './state-copy';
 
 /**
  * How the one-off fleet listing went.
@@ -83,6 +87,14 @@ interface FleetSectionProps {
  * A failed listing shows the reason and a retry rather than an empty list
  * (`error-handling.md` rule 5) — and still lists any site created since, because
  * that site exists, and hiding it would be the dishonest half of the same rule.
+ *
+ * Both off-happy-path arms are the column's shared primitives rather than markup
+ * of their own (`react.md`, "Async surface convention"). The waiting arm in
+ * particular used to be a `role="status"` mounted with its text already inside
+ * it, which announces nothing — it has no change to report — and only looked
+ * accessible; `PanelPending` is a plain `aria-busy` container instead, and the
+ * one live region left in this column is the failure's `role="alert"`, which
+ * really does arrive as a change.
  */
 const FleetSection = ({
   load,
@@ -92,22 +104,13 @@ const FleetSection = ({
   onRetryLoad,
 }: FleetSectionProps): ReactElement => {
   if (load.status === 'loading') {
-    return (
-      <p className="dashboard-slot-note" role="status">
-        Loading the fleet…
-      </p>
-    );
+    return <PanelPending label={LOADING_FLEET_LABEL} />;
   }
 
   return (
     <>
       {load.status === 'failed' && (
-        <div className="dashboard-failure" role="alert">
-          <p className="dashboard-failure-message">Fleet unavailable: {load.message}</p>
-          <button type="button" className="dashboard-retry" onClick={onRetryLoad}>
-            Try again
-          </button>
-        </div>
+        <PanelError message={`Fleet unavailable: ${load.message}`} onRetry={onRetryLoad} />
       )}
 
       {sites.length > 0 && (
@@ -131,14 +134,19 @@ export interface DashboardProps {
 }
 
 /**
- * The fleet dashboard: the map, the fleet as text beside it, and the flow that
- * turns a click on the map into a site with a forecast.
+ * The fleet dashboard: the map as the canvas, the panel column beside it, and
+ * the flow that turns a click on the map into a site with a forecast.
  *
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the list rows and the
- * detail panel all render from that one value, which is what makes selecting a
+ * context panel all render from that one value, which is what makes selecting a
  * site on the map and selecting it in the list the same act rather than two
  * views that agree by luck.
+ *
+ * The column is a context swap, not a set of stacked slots: one region shows the
+ * fleet's story, one site's, or a draft, and which one is a function of state
+ * rather than of a page the reader navigated to. `docs/design/dashboard-composition.md`
+ * records the rule and what it is buying.
  *
  * Two things it deliberately never does. It never re-lists the fleet: the
  * listing is a mount-time request, and a dashboard that polled it would fan out
@@ -267,6 +275,16 @@ export const Dashboard = ({
       </div>
 
       <aside className="dashboard-aside">
+        {/*
+         * The context region: one of three things, in a fixed place.
+         *
+         * A draft outranks a selection but deliberately does not clear it. The
+         * two are different questions — "where shall the new site go" and
+         * "which site am I reading" — and cancelling a draft should hand the
+         * reader back the site they had open rather than the fleet they had
+         * left. That is why the site panel's condition tests `draft` rather
+         * than the dashboard clearing `selectedSiteId` when a draft opens.
+         */}
         {draft !== null && (
           <AddSiteForm
             key={draftKey(draft)}
@@ -279,6 +297,35 @@ export const Dashboard = ({
             onCancel={closeDraft}
           />
         )}
+
+        {draft === null && selectedSite !== null && (
+          <SitePanel
+            dataSource={dataSource}
+            site={selectedSite}
+            firstForecast={forecast}
+            onRetryFirstForecast={retryForecast}
+            onClose={() => {
+              setSelectedSiteId(null);
+            }}
+          />
+        )}
+
+        {/*
+         * Mounted always, hidden when something else holds the region — which
+         * inverts, on purpose, the unmount-on-leave rule the old view nav
+         * followed. A fleet re-sum in live mode is a paced fan-out of one
+         * request per site (~8 s over 60 sites), so it is a thing to be spent
+         * once and kept, not re-spent every time a reader closes a site. The
+         * fleet's sum changes on exactly one event — a site being added — and
+         * `refreshToken` is that event, counted. Deselection is not an event:
+         * hiding the panel keeps its state, and unhiding it costs nothing.
+         */}
+        <FleetPanel
+          dataSource={dataSource}
+          sites={sites}
+          hidden={draft !== null || selectedSite !== null}
+          refreshToken={createdSites.length}
+        />
 
         <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
           <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
@@ -299,26 +346,17 @@ export const Dashboard = ({
           </div>
         </section>
 
-        {selectedSite === null ? (
-          <section className="dashboard-slot" aria-labelledby="dashboard-detail-heading">
-            <h2 className="dashboard-slot-heading" id="dashboard-detail-heading">
-              Site detail
-            </h2>
-            <p className="dashboard-slot-note">
-              Selecting a site — on the map or in the list — opens its forecast here. Clicking the
-              map anywhere else adds a site at that spot.
-            </p>
-          </section>
-        ) : (
-          <SiteDetailPanel
-            site={selectedSite}
-            forecast={forecast}
-            onClose={() => {
-              setSelectedSiteId(null);
-            }}
-            onRetry={retryForecast}
-          />
-        )}
+        {/*
+         * The column's one weather credit, at its foot rather than inside a
+         * panel. Every panel above it shows Open-Meteo-derived numbers, and a
+         * credit that lived in one of them would come and go with a selection
+         * — eventually absent exactly when it mattered. The map carries its own
+         * in its strip; two credits on one screen is the design, not an
+         * oversight (CC BY 4.0, CLAUDE.md hard constraints).
+         */}
+        <footer className="dashboard-aside-footer">
+          <OpenMeteoAttribution />
+        </footer>
       </aside>
     </div>
   );

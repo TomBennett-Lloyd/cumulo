@@ -131,85 +131,17 @@
 
 /* The site panel's forecast region: a stack of whichever states are on screen —
    the range picker, a pending or failed line, a partial-data notice, the chart.
-   Deliberately *not* `.forecast-section` below, which justifies its items to
-   the start: that was right for a table sized by its content and wrong for a
-   chart whose SVG is `width: 100%` and would collapse to its own max-content
-   inside a start-justified track. */
+   Nothing here justifies its items to the start, which the panel's earlier
+   `.forecast-section` did: that was right for a table sized by its content and
+   wrong for a chart whose SVG is `width: 100%` and would collapse to its own
+   max-content inside a start-justified track.
+
+   The whole `.forecast-*` block that used to close this file went with the
+   table-era site detail panel (#148). Its state lines are `panel-states.css`'s now, and
+   its standalone forecast table is the chart's own table twin, styled by
+   `.forecast-chart-table` in charts.css — a table beside a chart rather than one
+   instead of it. */
 .site-panel-forecast {
   display: grid;
   gap: var(--space-3);
-}
-
-/* ── Forecast section ────────────────────────────────────────────────────── */
-
-.forecast-section {
-  display: grid;
-  gap: var(--space-3);
-  justify-items: start;
-}
-
-.forecast-status {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.forecast-failure {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: start;
-  padding: var(--space-3);
-  border-style: solid;
-  border-width: calc(var(--space-1) / 4);
-  border-color: var(--color-danger);
-  border-radius: var(--radius-sm);
-}
-
-.forecast-failure-message {
-  margin: 0;
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-}
-
-.forecast-retry {
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-}
-
-.forecast-table {
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.forecast-caption {
-  margin: 0 0 var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  text-align: left;
-}
-
-.forecast-table th,
-.forecast-table td {
-  padding: var(--space-1) var(--space-3);
-  text-align: right;
-}
-
-.forecast-table thead th {
-  border-bottom: calc(var(--space-1) / 4) solid var(--color-border);
-  color: var(--color-text-muted);
-  font-weight: var(--font-weight-medium);
-}
-
-.forecast-table tbody th {
-  color: var(--color-text-muted);
-  font-weight: var(--font-weight-regular);
-  text-align: left;
 }

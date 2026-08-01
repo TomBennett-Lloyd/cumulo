@@ -66,57 +66,28 @@
   line-height: var(--leading-tight);
 }
 
-.dashboard-slot-note {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-/* Sixty rows is taller than the map beside them, and an aside that grows to fit
-   pushes the detail panel — the thing a selection is *for* — below the fold. So
-   the fleet scrolls within a fixed measure and the panel stays where the reader
-   left it. The height is the residual the CSS gate documents: no token category
-   describes a scroll measure. */
+/* The list, below its heading. It used to be a scroller of its own — sixty rows
+   are taller than the map beside them, and the old column put the site detail
+   panel *after* this section, so an unbounded list pushed the thing a selection
+   was for below the fold. The context swap (#148) moved that panel to the top of
+   the column, which removes the reason: the reader's context is already the
+   first thing in view, and a scroller nested inside the aside's own scroller was
+   only ever the cost of the old order. One scroller now, and it is the
+   column's. */
 .dashboard-fleet {
   display: grid;
   gap: var(--space-3);
-  max-height: 18rem;
   margin-top: var(--space-3);
-  overflow-y: auto;
 }
 
-/* This looks like `.forecast-failure` in site-panels.css, and deliberately so:
-   same column, same idiom — what failed, and a way to try again. They are not
-   shared, because they are free to diverge: a fleet that will not load may one
-   day take over the column entirely, which a single site's failed forecast
-   never would. If a third one appears, extract the idiom then. */
-.dashboard-failure {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: start;
-  padding: var(--space-3);
-  border-style: solid;
-  border-width: calc(var(--space-1) / 4);
-  border-color: var(--color-danger);
-  border-radius: var(--radius-sm);
-}
-
-.dashboard-failure-message {
-  margin: 0;
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-}
-
-.dashboard-retry {
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
+/* The credit sits at the foot of the column and belongs to the column, not to
+   whichever panel is currently above it — so it takes the top margin that
+   separates it from the last card and nothing else. `margin-top: auto` is
+   deliberate: in the flex column it pins the credit to the bottom when the
+   panels do not fill the height, and simply follows them when they do. */
+.dashboard-aside-footer {
+  margin-top: auto;
+  padding-top: var(--space-2);
 }
 
 /* Below the width where two columns still leave the map usable, the panel

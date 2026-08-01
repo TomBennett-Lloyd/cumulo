@@ -5,9 +5,9 @@ import { useId, useState } from 'react';
 import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
 import { useProviderQuery, type QueryState } from '../data/use-provider-query';
-import { RangePicker } from '../views/range-picker';
 import type { ForecastViewState } from './forecast-view-state';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
+import { RangePicker } from './range-picker';
 import { angleLabel, capacityLabel, coordinatesLabel } from './site-format';
 import { joinSiteSeries, loadSiteSeries, type SiteSeries } from './site-series';
 import {
