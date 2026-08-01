@@ -1,4 +1,4 @@
-import { apiErrorSchema, openMeteoAttribution } from '@cumulo/shared';
+import { apiErrorSchema, openMeteoAttribution, siteSeriesResponseSchema } from '@cumulo/shared';
 import type { GetFleetSiteResult, SeriesPoint } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -13,12 +13,7 @@ import {
   routeRequest,
 } from '../api-fixtures';
 
-import {
-  getSiteSeries,
-  MAX_SERIES_SPAN_HOURS,
-  siteSeriesResponseSchema,
-  type GetSiteSeriesDeps,
-} from './get-site-series';
+import { getSiteSeries, MAX_SERIES_SPAN_HOURS, type GetSiteSeriesDeps } from './get-site-series';
 
 interface Stub {
   readonly deps: GetSiteSeriesDeps;

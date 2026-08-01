@@ -1,8 +1,6 @@
 import {
-  attributionSchema,
-  forecastSchema,
-  generationReadingSchema,
   openMeteoAttribution,
+  siteSeriesResponseSchema,
   utcIsoTimestampSchema,
 } from '@cumulo/shared';
 import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
@@ -73,12 +71,6 @@ const seriesRangeSchema = z
     message: `the window must not exceed ${String(MAX_SERIES_SPAN_HOURS)} hours`,
     path: ['to'],
   });
-
-export const siteSeriesResponseSchema = z.object({
-  forecasts: z.array(forecastSchema),
-  actuals: z.array(generationReadingSchema),
-  attribution: attributionSchema,
-});
 
 export interface GetSiteSeriesDeps {
   readonly sites: Pick<SiteAdapter, 'getFleetSite'>;

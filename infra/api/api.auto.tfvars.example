@@ -13,3 +13,12 @@ aws_region = "eu-west-1"
 # names from at runtime. Must match the storage stack's `environment` or the
 # grants and the lookups both point at tables that do not exist.
 # environment = "dev"
+
+# Optional, empty by default. Comma-separated browser origins allowed to call
+# the write routes, beyond the API's own (which it always allows). Add a dev
+# machine's Vite origin here to add sites from `pnpm dev` against this
+# deployment — see apps/web/.env.example for the other half of that pairing.
+# This is friction, not authentication: it stops a drive-by script and a
+# cross-site page, and nothing that sets its own Origin header (ADR 0006 records
+# that as a stated non-goal). #144 adds the hosted SPA's origin alongside it.
+# web_origins = "http://localhost:5173"

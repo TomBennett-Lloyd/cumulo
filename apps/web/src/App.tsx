@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Dashboard } from './dashboard/Dashboard';
-import { DemoFleetDataSource } from './data/demo-fleet-data-source';
 import type { FleetDataSource } from './data/fleet-data-source';
+import { selectFleetDataSource } from './data/fleet-source-selection';
 import type { Theme } from './theme';
 import { ThemeToggle } from './ThemeToggle';
 import { useTheme } from './use-theme';
@@ -55,11 +55,14 @@ const DEFAULT_VIEW: View = 'map';
  * that issue means in practice.
  *
  * Every view takes the source as a prop and holds no opinion about which one it
- * got, so this line is the whole seam: the deterministic demo fleet today, the
- * HTTP source over the Fleet API (#14) once that is deployed. Choosing per
- * render would give two mounted views two different fleets.
+ * got, so this line is the whole seam: the deterministic demo fleet unless the
+ * build was pointed at a deployed Fleet API, in which case the HTTP source over
+ * it. Choosing per render would give two mounted views two different fleets.
+ *
+ * This is also the app's only read of `import.meta.env`; what the value means,
+ * and what a malformed one does, is `selectFleetDataSource`'s to say.
  */
-const fleetDataSource: FleetDataSource = new DemoFleetDataSource();
+const fleetDataSource: FleetDataSource = selectFleetDataSource(import.meta.env.VITE_API_BASE_URL);
 
 interface ViewNavProps {
   readonly view: View;

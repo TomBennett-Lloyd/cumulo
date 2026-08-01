@@ -1,7 +1,6 @@
 import {
-  attributionSchema,
-  forecastSchema,
   openMeteoAttribution,
+  siteForecastResponseSchema,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
 import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
@@ -58,17 +57,6 @@ const forecastHoursSchema = z
   .enum(FORECAST_HORIZON_HOURS)
   .default(DEFAULT_FORECAST_HORIZON_HOURS)
   .transform((hours) => Number.parseInt(hours, 10));
-
-/**
- * An object rather than a bare array, for `listSitesResponseSchema`'s reason —
- * a top-level array cannot grow a sibling field. Here it already has one: the
- * attribution is a peer of the data it credits, not a property repeated on
- * every point.
- */
-export const siteForecastResponseSchema = z.object({
-  forecasts: z.array(forecastSchema),
-  attribution: attributionSchema,
-});
 
 export interface GetSiteForecastDeps {
   readonly sites: Pick<SiteAdapter, 'getFleetSite'>;

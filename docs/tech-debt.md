@@ -49,3 +49,15 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - Source: #38 review cycle 1
 - Triage note (2026-07-31): deliberately left in the buffer rather than filed. It is a parked decision with an external trigger (credits appearing on the account), not debt to clear — an open issue would be picked up by backlog burning and correctly do nothing. Convert it the moment the trigger fires.
 - Triage note (2026-08-01): re-confirmed on the pass that emptied the other 29 entries. The trigger has not fired; this is the log's only survivor **by decision**, so its age is not evidence that triage is overdue.
+
+## 2026-08-01 — The mirror gate cannot read a Terraform value nested in a sub-block, so a real mirror stays a comment
+
+- Where: `.claude/scripts/check-infra-mirrors.sh`, `tf_attribute_value` (its two-space `attr_re`); the pair it refuses is `throttling_rate_limit` inside `default_route_settings` on `aws_apigatewayv2_stage.default` (`infra/api/gateway.tf`) against `FLEET_FANOUT_LAUNCHES_PER_SECOND` in `apps/web/src/data/http-fleet-data-source.ts`
+- What: the gate reads only attributes indented directly inside a `resource` block, so the API stage's throttle — a number the web fan-out genuinely sizes itself against — cannot be declared as a mirror at all (verified: the gate exits 2 with "declares no top-level attribute" when the pair is added), which leaves `architecture.md` rule 8 unsatisfiable for it and the citation comment as the only enforcement; the fix is sub-block addressing in the record (`resource.name.sub_block.attribute`), and it wants deciding alongside the record-shape limitation already captured by [#133](https://github.com/TomBennett-Lloyd/cumulo/issues/133) rather than twice.
+- Source: #150
+
+## 2026-08-01 — Browser-side fetches have no timeout policy, and the de-dup map inherits the hang
+
+- Where: `requestJson` in `apps/web/src/data/http-fleet-data-source.ts`; the `network` cause list on `FleetDataError` in `apps/web/src/data/fleet-data-source.ts`
+- What: no `AbortSignal` exists anywhere in `apps/web`, so a stalled fetch never settles — and the `seriesInFlight` entry it owns is only removed on settlement, so that `(site, range)` stays wedged on a promise that never resolves while the view spins with no failure to report. `error-handling.md` rule 3 wants timeout/backoff/final-failure visible at the call site, and `FleetDataError`'s own doc already advertises "timeout" as a network cause that nothing currently produces. The fix is a policy decision for every browser-side external call (which deadline, whether an abort maps to `network` or a distinct arm, how the retry advice reads), not a per-call patch.
+- Source: #150 review cycle 2

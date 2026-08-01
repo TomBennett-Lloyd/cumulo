@@ -4,9 +4,10 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { locationId, type SitePhysics } from '@cumulo/shared';
 
 import { SiteAdapter, storageTableName } from '../../src/index';
+import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
-import { ENVIRONMENT, smokeSite } from './smoke-data';
+import { smokeSite } from './smoke-data';
 
 /** The `cumulo-sites` checks: round trip, sparse GSI projection, fleet listing. */
 export const runSiteChecks = async (

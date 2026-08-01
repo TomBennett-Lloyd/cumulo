@@ -5,12 +5,11 @@ import {
   fleetSiteSchema,
   forecastSchema,
   generationReadingSchema,
+  listSitesResponseSchema,
+  siteForecastResponseSchema,
+  siteSeriesResponseSchema,
 } from '@cumulo/shared';
 import { z } from 'zod';
-
-import { siteForecastResponseSchema } from '../forecast/get-site-forecast';
-import { siteSeriesResponseSchema } from '../forecast/get-site-series';
-import { listSitesResponseSchema } from '../sites/list-sites';
 
 import type { SchemaObject } from './openapi-types';
 
@@ -37,14 +36,16 @@ import type { SchemaObject } from './openapi-types';
  */
 
 /**
- * The named map `components.schemas` is built from: six domain schemas from
- * `@cumulo/shared`, and the three response wrappers the handlers compose from
- * them.
+ * The named map `components.schemas` is built from nine schemas in
+ * `@cumulo/shared`: six domain schemas, and the three response wrappers composed
+ * from them.
  *
- * The wrappers live with their handlers rather than here, because the handler
- * is what makes them true — `jsonResponse` parses every body through its
- * wrapper before it reaches the wire, so the document promises exactly what the
- * response validation enforces.
+ * The wrappers live in the shared package rather than here because they are a
+ * two-app contract — the web client parses responses through the same objects
+ * this service answers with. That does not weaken what the document promises:
+ * `jsonResponse` parses every body through its wrapper before it reaches the
+ * wire, so the document still describes exactly what the response validation
+ * enforces.
  *
  * `as const` is what lets {@link componentRef} check a component name at compile
  * time: the literal names survive into the type below, so a renamed component

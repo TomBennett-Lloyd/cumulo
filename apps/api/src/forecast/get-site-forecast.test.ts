@@ -1,4 +1,9 @@
-import { apiErrorSchema, openMeteoAttribution, utcIsoTimestampSchema } from '@cumulo/shared';
+import {
+  apiErrorSchema,
+  openMeteoAttribution,
+  siteForecastResponseSchema,
+  utcIsoTimestampSchema,
+} from '@cumulo/shared';
 import type { GetFleetSiteResult, SeriesPoint } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -12,11 +17,7 @@ import {
   routeRequest,
 } from '../api-fixtures';
 
-import {
-  getSiteForecast,
-  siteForecastResponseSchema,
-  type GetSiteForecastDeps,
-} from './get-site-forecast';
+import { getSiteForecast, type GetSiteForecastDeps } from './get-site-forecast';
 
 /** The clock every case below runs on, so the expected windows are readable constants. */
 const NOW = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');

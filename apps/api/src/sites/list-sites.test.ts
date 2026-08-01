@@ -1,8 +1,9 @@
+import { listSitesResponseSchema } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import { fleetSite, jsonBodyOf, RATHMINES_ID } from '../api-fixtures';
 
-import { listSites, listSitesResponseSchema, type ListSitesDeps } from './list-sites';
+import { listSites, type ListSitesDeps } from './list-sites';
 
 const depsReturning = (...sites: ReturnType<typeof fleetSite>[]): ListSitesDeps => ({
   sites: { listFleetSites: () => Promise.resolve(sites) },

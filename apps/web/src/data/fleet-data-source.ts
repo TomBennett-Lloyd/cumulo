@@ -20,9 +20,15 @@ import type { CreateSiteInput, Forecast, GenerationReading, Site } from '@cumulo
  *   the wire is wrong", and in both cases repeating the identical request is
  *   pointless — so they share an arm rather than splitting one that no caller
  *   would branch on differently.
+ * - `forbidden` — the API refused this client on policy, not on content. The
+ *   one failure a retry cannot fix: nothing the caller can add to the request
+ *   makes it succeed, because what is wrong is *who is asking*. Its recourse is
+ *   a deployment change (`CUMULO_WEB_ORIGINS`), which is why it is not folded
+ *   into `invalid-response` — both are "do not repeat this", but only one of
+ *   them is fixable from inside the app.
  */
 export interface FleetDataError {
-  readonly code: 'network' | 'rate-limited' | 'not-found' | 'invalid-response';
+  readonly code: 'network' | 'rate-limited' | 'not-found' | 'invalid-response' | 'forbidden';
   /** Human-readable, and carrying the entity it is about (`error-handling.md` rule 4). */
   readonly message: string;
   /** Present only when the server stated a wait; absent is not "zero seconds". */
@@ -56,6 +62,16 @@ export type FleetSourceResult<T> =
  * A closed union rather than `number`: a source must be able to serve every
  * value, and adding a window should fail to compile everywhere it is switched
  * on rather than silently return nothing.
+ *
+ * Per-site reads honour the look-back. **Fleet-level reads cannot.** The only
+ * fleet-wide read an HTTP source may fan out over without tripping the API's
+ * per-IP limiter is the per-site `/forecast` route, and that route returns
+ * *future* hours — so the HTTP source's fleet-level implementation necessarily
+ * reinterprets this window as a forward horizon (see
+ * {@link FleetDataSource.fleetForecasts}). Fleet-level range selection is
+ * therefore horizon-capped in live mode: it selects how far *ahead* the
+ * aggregate reaches, it shows no history, and any two ranges past the deployed
+ * pipeline's write depth render identically.
  */
 export type RangeHours = 24 | 48 | 168;
 
@@ -100,15 +116,15 @@ export type RangeHours = 24 | 48 | 168;
  * - **400** (`validation_failed`), or a 2xx body that fails its zod parse →
  *   `invalid-response`. Both mean the bytes on the wire cannot be believed, and
  *   neither is worth repeating unchanged.
+ * - **403** (`forbidden`) → `forbidden`. The API refuses a write whose `Origin`
+ *   it does not serve, and refuses any request from a caller it has blocked for
+ *   abuse (#29). It is the one failure a retry cannot fix — the request is not
+ *   wrong, the *caller* is — so its recourse is deployment configuration: the
+ *   origin the app is served from has to be in the API's `CUMULO_WEB_ORIGINS`.
+ *   A view that renders this as "try again" is telling the visitor to do the one
+ *   thing that cannot work.
  * - **5xx** (`internal`), or a `fetch` that rejects → `network`. Retryable as
  *   is, on a backoff.
- *
- * **403** (`forbidden`) has no arm here yet, and that is a statement rather than
- * an omission: this interface exposes no write, so nothing above this line can
- * provoke one. The API refuses a write whose `Origin` it does not serve (#29),
- * so the day an add-a-site call lands here, the deployment's origin has to be in
- * the API's `CUMULO_WEB_ORIGINS` — and `403` needs an arm of its own, because it
- * is the one failure a backoff cannot fix.
  *
  * A 200 carrying an empty series is **not** an error: the API answers a
  * forecast-less site with `200 { "forecasts": [], "attribution": {…} }` — the
@@ -182,6 +198,13 @@ export interface FleetDataSource {
    * rule 3), so this returns the raw series and the view aggregates. Until the
    * API grows a fleet-level endpoint this is a client-side fan-out — noted as
    * out of scope on #14 rather than hidden here.
+   *
+   * That fan-out spends `range` as a **forward horizon**, not as the look-back
+   * {@link RangeHours} otherwise describes: the unmetered per-site `/forecast`
+   * route serves future hours only, and fanning out over `/series` instead
+   * would trip the API's per-IP limiter (one request per site, against 30 per
+   * 60 seconds). An implementation is free to serve the look-back if it can —
+   * the demo source does — but no implementation is required to.
    */
   readonly fleetForecasts: (range: RangeHours) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
