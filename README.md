@@ -44,6 +44,8 @@ Notes:
 - **Missing gitleaks is a hard failure**, not a warning. A silently skipped secret scanner is indistinguishable from a passing one, and a leaked credential is the one mistake a follow-up commit cannot undo.
 - **`--no-verify` skips all of this**, and pretending otherwise would be dishonest. It only moves the failure somewhere more expensive: CI cannot be skipped, and a secret that reaches a remote has to be rotated regardless of what happens to the history.
 
+One more local surface, and only local: the **design-token gallery**. Run `pnpm --filter @cumulo/web dev` and open <http://localhost:5173/tokens.html> to see every token in `@cumulo/ui` on screen in both themes. It is deliberately absent from the production build — `vite build` reads `index.html` alone, so `tokens.html` and everything under `apps/web/src/preview/` are zero bytes of the shipped app.
+
 ## How this repo is built
 
 This project is built with an agentic workflow (Claude Code) under tight human direction — and the workflow itself is part of the portfolio. Plans live in issue bodies, architecture decisions in [`docs/adr/`](docs/adr/), engineering standards in [`docs/standards/`](docs/standards/), design records in [`docs/design/`](docs/design/) (argued like ADRs, but reversible — the reasoning behind a component's numbers rather than a binding decision), and the agent/skill definitions in [`.claude/`](.claude/). Tech debt and process friction are tracked honestly in [`docs/tech-debt.md`](docs/tech-debt.md) and [`docs/friction-log.md`](docs/friction-log.md) and periodically converted into root-cause issues.

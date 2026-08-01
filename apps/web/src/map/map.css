@@ -106,8 +106,9 @@
  *    uncertain one, which means something specific and different.
  *
  * The class names are `map-site-*` rather than the `map-marker` the treatment's
- * prose uses, because `preview.css` already owns `.map-marker` for the static
- * marker specimens on the token page and both stylesheets are global.
+ * prose uses. They name what they style — a site on the map — and the tokens
+ * they read are still `--color-map-marker-*`, so the treatment's vocabulary is
+ * where it matters.
  *
  * Focus keeps the platform outline (no `outline: none` here, ever): the
  * selected fill is the *extra* focus signal, not a replacement for the ring the
