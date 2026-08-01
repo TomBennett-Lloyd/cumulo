@@ -9,13 +9,17 @@ import { THEME_STORAGE_KEY } from './theme';
  * Every test here opens the shell on a view other than its default, and that is
  * a stated limitation rather than a convenience.
  *
- * The app opens on the fleet map, which mounts maplibre, which needs WebGL,
- * which jsdom does not implement — a `render(<App />)` with no `initialView`
- * produces a failed-to-create-context error instead of a shell. Standing up a
- * fake maplibre to get past it would leave the suite asserting that a mock was
- * called (`testing.md` rule 3). So the shipping default is covered in a browser
- * or not at all, and what is asserted below — theming, the switcher, the
- * attribution obligation — is identical on every view.
+ * The app opens on the fleet map, and the map is now fetched on demand
+ * (`dashboard/LazyMapRegion.tsx`), so a `render(<App />)` with no `initialView`
+ * no longer throws on the spot — it returns the shell with a "Loading map…"
+ * placeholder in it, and only reaches maplibre a tick later when that chunk
+ * resolves. What it reaches then is unchanged: maplibre needs WebGL, which
+ * jsdom does not implement, so the default view still cannot be rendered
+ * through here. Standing up a fake maplibre to get past that would leave the
+ * suite asserting that a mock was called (`testing.md` rule 3). So the shipping
+ * default is covered in a browser or not at all (#107), and what is asserted
+ * below — theming, the switcher, the attribution obligation — is identical on
+ * every view.
  *
  * The chart views are tested against the real fixture provider, not a stub:
  * what these tests are for is the wiring — that the switcher mounts the view it

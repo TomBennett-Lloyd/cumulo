@@ -32,6 +32,36 @@
   min-height: 0;
 }
 
+/* What occupies the canvas when there is no canvas yet, or never will be: the
+ * loading placeholder and the load-failure message from `LazyMapRegion.tsx`.
+ * Both wear `.map-canvas` as well, so they inherit the sizing the real canvas
+ * gets and the swap moves nothing — these rules only say what is drawn inside
+ * that box. Shared here because they are the same idea (a message centred in
+ * the map's place) and would be wrong if only one of them changed; what
+ * separates them is only the weight the message carries. */
+.map-placeholder,
+.map-failure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+
+/* Muted: nothing has gone wrong, and the map is about to replace it. */
+.map-placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Full-strength text: this one is the final state, not a transient one. */
+.map-failure {
+  color: var(--color-text);
+}
+
 /* Wrapping to two lines is the narrow-width behaviour, in place of collapsing
  * either credit behind a control. */
 .map-attribution {
