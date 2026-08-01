@@ -19,11 +19,22 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  * retried by two independent layers, and each owns one job (#122):
  *
  * - The **drain layer** (`drainBatches` under `defaultBatchPolicy`, `./batch`)
- *   owns *throttling*. DynamoDB does not reject a throttled `BatchWriteItem`;
- *   it returns HTTP 200 and hands the declined items back as
- *   `UnprocessedItems`, which the SDK cannot see as a failure at all. That is
- *   ADR 0002 Consequence 4's own mechanism, and re-sending only the declined
- *   items is strictly better than re-sending the whole batch.
+ *   owns *partial* throttling — the common case. When DynamoDB declines some of
+ *   a `BatchWriteItem`'s items it does not reject the request at all: it answers
+ *   HTTP 200 and hands the declined items back as `UnprocessedItems`, which the
+ *   SDK cannot see as a failure. That is ADR 0002 Consequence 4's own
+ *   mechanism, and re-sending only the declined items is strictly better than
+ *   re-sending the whole batch.
+ *
+ *   One case escapes it, and it is worth stating precisely: when *none* of a
+ *   batch's items can be processed for insufficient provisioned throughput,
+ *   `BatchWriteItem` and `BatchGetItem` reject the whole request with
+ *   `ProvisionedThroughputExceededException` instead of reporting unprocessed
+ *   items. `drainBatches` only re-sends what `send` *returns*, so a rejection
+ *   propagates straight through it into a `StorageError` — there is nothing for
+ *   the drain layer to retry. A wholly-declined batch therefore rests on the
+ *   SDK layer's single retry alone, exactly like the non-batch paths below, and
+ *   is covered by the same accepted trade.
  * - The **SDK layer** — this constant — owns *transport* failures: a request
  *   timeout, a connection reset, a 5xx, a whole-request throttle rejection.
  *   Those are blips, so one retry is the whole budget.
@@ -35,19 +46,26 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *
  * **The batched paths are not all the paths — and the trade there is accepted,
  * not overlooked.** This constant governs *every* command the package issues,
- * and only the batched ones have a drain layer above them (`BatchWriteItem` and
- * `BatchGetItem`, in the series and weather adapters). Everywhere else the SDK
- * layer is the only retry layer there is:
+ * while a drain layer sits above only the batched ones (`BatchWriteItem` and
+ * `BatchGetItem`, in the series and weather adapters) and, per the exception
+ * above, only when a decline is partial. The rule, rather than an inventory
+ * that will silently fall out of date: **any command not draining
+ * `UnprocessedItems` has the SDK layer as its only retry layer.** As of #122
+ * that covers, representatively:
  *
- * - `SiteAdapter`'s `GetItem` and `PutItem`, and `MetricsAdapter`'s `PutItem`;
+ * - `SiteAdapter`'s `GetItem`, `PutItem` and `DeleteItem`, and
+ *   `MetricsAdapter`'s `PutItem`;
  * - the weather adapter's `TransactWriteItems`;
  * - every Query issued through `StorageAdapterBase.queryAllPages`
- *   (`./adapters/storage-adapter-base.ts`) — used by the series, metrics, site
- *   and weather adapters. It retries nothing itself, and because it paginates,
- *   each page is an independent opportunity to be throttled.
+ *   (`./adapters/storage-adapter-base.ts`), used by the series, metrics, site
+ *   and weather adapters — and `SeriesAdapter`'s bounded read, which walks
+ *   `LastEvaluatedKey` itself rather than through that helper. Neither retries
+ *   anything of its own, and because both paginate, every page is a fresh
+ *   opportunity to be throttled — on the provisioned `series` table in the
+ *   bounded case.
  *
- * On those paths throttling never appears as `UnprocessedItems`: a throttled
- * single request is rejected outright as
+ * On all of those, and on the wholly-declined batch above, throttling never
+ * arrives as `UnprocessedItems`: the request is rejected outright as
  * `ProvisionedThroughputExceededException`, which ADR 0002 names as the
  * expected failure mode of the provisioned `cumulo-series` and `cumulo-weather`
  * tables. So this change does cost them something real, stated plainly: a
