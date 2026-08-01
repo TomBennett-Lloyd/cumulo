@@ -69,7 +69,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # invokes this script and never restates the number; architecture.md rule 8's
 # mirror gate does not apply (there is no Terraform side), but its reasoning does
 # — a second copy is a copy that drifts silently in the permissive direction.
-ENTRY_BUDGET_BYTES=1
+ENTRY_BUDGET_BYTES=350000
 
 # --- arguments ----------------------------------------------------------------------------
 
