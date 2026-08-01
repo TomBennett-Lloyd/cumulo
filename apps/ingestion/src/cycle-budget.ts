@@ -37,10 +37,10 @@ import { INGESTION_SEND_MAX_ATTEMPTS, INGESTION_SEND_REQUEST_TIMEOUT_MS } from '
  * time must be left in reserve for a location already in flight?* — which is
  * exactly what {@link CYCLE_DEADLINE_MS} subtracts.
  *
- * **Two terms are knowingly priced at zero**, and the identity below carries no
- * slack, so each is a way the function timeout becomes reachable rather than
- * unreachable. Both are recorded in `docs/tech-debt.md` rather than priced in,
- * because pricing either would inflate {@link LOCATION_WORST_MS} substantially
+ * **Three terms are knowingly priced at zero**, and the identity below carries
+ * no slack, so each is a way the function timeout becomes reachable rather than
+ * unreachable. All three are recorded in `docs/tech-debt.md` rather than priced
+ * in, because pricing them would inflate {@link LOCATION_WORST_MS} substantially
  * to insure against something that does not happen in practice:
  *
  * 1. The smithy standard retry strategy honours a server-supplied retry hint,
@@ -53,15 +53,30 @@ import { INGESTION_SEND_MAX_ATTEMPTS, INGESTION_SEND_REQUEST_TIMEOUT_MS } from '
  *    response whose body stalls after its headers is unbounded. These are small
  *    single-chunk JSON responses, so that is remote — but it means the two
  *    per-request terms below are bounds on time-to-first-response.
+ * 3. Real time spent per attempt *outside* the request timeout — connection
+ *    setup, request signing, serialisation, and event-loop scheduling between a
+ *    timer firing and the next attempt starting — measured at ~15–70 ms per
+ *    command. #122 changed the regime rather than introducing the term. Under
+ *    the old stacked curve, exceeding a printed worst case required several
+ *    independent full-jitter draws to land near their caps at once, and that
+ *    concentration made it statistically unobservable. With one retry left, a
+ *    single near-maximum draw plus tens of milliseconds of overhead does exceed
+ *    {@link STORE_SEND_WORST_MS} on the all-attempts-timeout path — roughly 6%
+ *    of worst-case sends. It bites only when the last location a cycle starts
+ *    also takes its full worst case, and the excess totals well under
+ *    {@link SHUTDOWN_MARGIN_MS}, so it is logged rather than budgeted; whether
+ *    to buy slack for it is the open question in the tech-debt entry.
  *
  * **Every other term is imported.** Nothing here restates a number that lives
  * somewhere else, because a copied constant is how the previous budget went
  * stale without anyone noticing. The one exception is named and explained:
  * {@link SDK_THROTTLING_RETRY_DELAY_BASE_MS}, which belongs to the AWS SDK and
- * is not ours to pin. The payoff is mechanical: when #122
- * lands and a batch write stops costing four SDK attempts inside three drain
- * attempts, {@link LOCATION_WORST_MS} shrinks and {@link CYCLE_DEADLINE_MS}
- * widens on its own, with no comment left behind claiming otherwise.
+ * is not ours to pin. The payoff was mechanical, and #122 collected it: when a
+ * batch write stopped costing four SDK attempts inside three drain attempts,
+ * {@link LOCATION_WORST_MS} shrank and {@link CYCLE_DEADLINE_MS} widened on
+ * their own — the only edits that change was owed here were to the prose and to
+ * the literals the tests pin, so that no comment is left behind claiming
+ * otherwise.
  */
 
 /**
@@ -116,7 +131,7 @@ export const STORE_BATCHES_PER_LOCATION = Math.ceil(forecastHours / DYNAMODB_BAT
  * hitting {@link STORAGE_REQUEST_TIMEOUT_MS}, with the pinned storage backoff
  * spent in full between them.
  *
- * ≈ 19 s — `4 × 3 s + (1 + 2 + 4) s`. Before #115 this term did not exist:
+ * ≈ 7 s — `2 × 3 s + 1 s`. Before #115 this term did not exist:
  * without a pinned request timeout the SDK's default is no timeout at all, and
  * a stalled socket here was bounded by nothing this repo sets.
  */
@@ -127,14 +142,14 @@ export const STORE_SEND_WORST_MS =
 /**
  * Worst case for storing one location's readings.
  *
- * ≈ 115 s, and the dominant term by a wide margin. Two retry layers stack here:
- * `drainBatches` re-sends whatever `BatchWriteItem` declines
- * (`defaultBatchPolicy`, three attempts), and each of those sends is itself
- * retried by the SDK ({@link STORAGE_MAX_ATTEMPTS}, four attempts). One batch
- * can therefore cost twelve round trips under two independent backoff curves.
- * That stacking is tracked as #122; collapsing it is the single
- * largest reduction available to this budget, and this module is arranged so
- * that landing it needs no edit here.
+ * ≈ 43 s, and still the dominant term. Two retry layers meet here, with one
+ * responsibility each since #122: `drainBatches` re-sends whatever
+ * `BatchWriteItem` declines (`defaultBatchPolicy`, three attempts) and solely
+ * owns throttling, while the SDK ({@link STORAGE_MAX_ATTEMPTS}, two attempts)
+ * owns transport blips. One batch therefore costs at most six round trips
+ * (3 drain sends × 2 SDK attempts) — the stacking #122 collapsed, which was the
+ * single largest reduction available to this budget and cost this module no
+ * arithmetic edit to collect.
  */
 export const STORE_WORST_MS =
   STORE_BATCHES_PER_LOCATION *
@@ -152,7 +167,7 @@ export const PUBLISH_WORST_MS =
   backoffCeilingMs(INGESTION_SEND_MAX_ATTEMPTS, SDK_THROTTLING_RETRY_DELAY_BASE_MS);
 
 /**
- * All three of a location's effects at their bounded worst, ≈ 147 s.
+ * All three of a location's effects at their bounded worst, ≈ 75 s.
  *
  * Read this as "the reserve a location in flight may need", not as "how long a
  * location takes" — a healthy one costs well under a second. It is the number
@@ -183,7 +198,7 @@ export const INGESTION_LAMBDA_TIMEOUT_MS = 300_000;
 export const SHUTDOWN_MARGIN_MS = 5_000;
 
 /**
- * How long a cycle may keep *starting* locations, ≈ 148 s.
+ * How long a cycle may keep *starting* locations, ≈ 220 s.
  *
  * The deadline is checked before each location and never interrupts one in
  * flight, so the guarantee is: `elapsed at last start ≤ deadline`, plus at most

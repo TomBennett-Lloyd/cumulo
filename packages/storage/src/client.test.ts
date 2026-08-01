@@ -114,7 +114,7 @@ describe('createStorageDocumentClient', () => {
     expect(Object.keys(sentItem(handler)).sort()).toEqual(['powerKw', 'siteId', 'sk']);
   });
 
-  it('pins the resolved client to four attempts with the storage retry strategy', async () => {
+  it('pins the resolved client to two attempts with the storage retry strategy', async () => {
     // Built the way production builds it: no injected base client, so this is
     // the retry configuration adapters actually run under.
     const client = createStorageDocumentClient({ region: 'eu-west-1' });
@@ -147,39 +147,35 @@ describe('storageRetryDelayMs', () => {
 describe('createStorageRetryStrategy', () => {
   const throttled = { errorType: 'THROTTLING' } as const;
 
-  it('allows three retries and then refuses a fourth', async () => {
-    // Jitter forced to zero so the four attempts cost no wall-clock time; the
-    // delay arithmetic itself is covered above with the production random.
+  it('allows one retry and then refuses a second', async () => {
+    // The SDK layer's whole budget since #122: transport blips get one more go,
+    // and throttling on a batch is the drain layer's job, not this one's.
+    // Jitter forced to zero so the attempts cost no wall-clock time; the delay
+    // arithmetic itself is covered above with the production random.
     const strategy = createStorageRetryStrategy(() => 0);
 
-    let token = await strategy.acquireInitialRetryToken('test');
-    token = await strategy.refreshRetryTokenForRetry(token, throttled);
-    token = await strategy.refreshRetryTokenForRetry(token, throttled);
-    token = await strategy.refreshRetryTokenForRetry(token, throttled);
+    const token = await strategy.acquireInitialRetryToken('test');
+    const retried = await strategy.refreshRetryTokenForRetry(token, throttled);
 
-    expect(token.getRetryCount()).toBe(3);
-    await expect(strategy.refreshRetryTokenForRetry(token, throttled)).rejects.toThrow(
+    expect(retried.getRetryCount()).toBe(1);
+    await expect(strategy.refreshRetryTokenForRetry(retried, throttled)).rejects.toThrow(
       'No retry token available',
     );
   });
 
-  it('actually sleeps for the storage backoff between retries', async () => {
-    // 5 % of the 1000 ms base is 50 ms, then 5 % of 2000 ms is 100 ms. Observing
-    // those delays is what proves the pinned base reaches the SDK, rather than
-    // the SDK's own 500 ms throttling base being used.
+  it('actually sleeps for the storage backoff before the single retry', async () => {
+    // 5 % of the 1000 ms base is 50 ms. Observing that delay is what proves the
+    // pinned base reaches the SDK, rather than the SDK's own 500 ms throttling
+    // base — whose 5 % would be 25 ms, below the bound asserted here. Only one
+    // refresh is measurable: a second now throws rather than sleeping.
     const strategy = createStorageRetryStrategy(() => 0.05);
 
     const token = await strategy.acquireInitialRetryToken('test');
-    const firstStarted = Date.now();
-    const retried = await strategy.refreshRetryTokenForRetry(token, throttled);
-    const firstElapsed = Date.now() - firstStarted;
+    const startedAt = Date.now();
+    await strategy.refreshRetryTokenForRetry(token, throttled);
+    const elapsed = Date.now() - startedAt;
 
-    const secondStarted = Date.now();
-    await strategy.refreshRetryTokenForRetry(retried, throttled);
-    const secondElapsed = Date.now() - secondStarted;
-
-    expect(firstElapsed).toBeGreaterThanOrEqual(45);
-    expect(secondElapsed).toBeGreaterThanOrEqual(95);
+    expect(elapsed).toBeGreaterThanOrEqual(45);
   });
 });
 
@@ -197,18 +193,69 @@ describe('createStorageRetryStrategy', () => {
  * deadline to bite can.
  *
  * These are the slowest tests in the package, deliberately: they are the only
- * proof of the number the ingestion Lambda's whole time budget rests on.
+ * proof of the number the ingestion Lambda's whole time budget rests on. That
+ * budget's figure bounds *SDK-controlled* time; the end-to-end test below
+ * measures wall clock, so it allows a named overhead on top of it — see
+ * {@link WALL_CLOCK_OVERHEAD_MS}.
  */
 describe('createStorageDocumentClient request deadlines', () => {
   /**
-   * The worst case for one command, restated locally: four attempts at the
-   * pinned deadline plus the pinned backoff between them. `@cumulo/ingestion`
-   * derives the same figure as `STORE_SEND_WORST_MS`; this package cannot
-   * import that without depending on its own consumer, so the assertion below
-   * is bounded by the arithmetic rather than by a copied literal.
+   * The most the pinned backoff curve can sleep across one whole command:
+   * one sleep per retry {@link STORAGE_MAX_ATTEMPTS} allows, each taken at the
+   * very top of its own jitter window.
+   *
+   * Derived by driving the *production* curve — `storageRetryDelayMs`, the same
+   * function the strategy runs on — with a random source pinned to its maximum,
+   * rather than by restating its arithmetic here. So the doubling, and the
+   * `MAX_BACKOFF_DELAY_MS` ceiling that eventually flattens it, are followed
+   * automatically instead of being copied and left to drift. `fullJitterDelayMs`
+   * floors its result, so a real sleep is always strictly below this figure.
+   *
+   * This term used to be a literal — `* (1 + 2 + 4)` when the attempt count was
+   * 4, then `* 1` when #122 made it 2 — and that is a trap rather than a
+   * simplification: raise the count to 3 and the timeout term below scales while
+   * a literal backoff term does not, so the bound understates the true worst
+   * case by a whole base delay and the test starts failing *intermittently*
+   * instead of loudly. Intermittent red on the slowest test in the package is
+   * exactly the failure this describe block exists to prevent.
+   */
+  const retryBackoffCeilingMs = Array.from({ length: STORAGE_MAX_ATTEMPTS - 1 }, (_, retryIndex) =>
+    storageRetryDelayMs(retryIndex + 1, () => 1),
+  ).reduce((total, sleepMs) => total + sleepMs, 0);
+
+  /**
+   * The worst case for one command, restated locally: every attempt
+   * {@link STORAGE_MAX_ATTEMPTS} allows, each hitting the pinned deadline, plus
+   * the backoff ceiling above. `@cumulo/ingestion` derives the same figure as
+   * `STORE_SEND_WORST_MS`; this package cannot import that without depending on
+   * its own consumer, so the assertion below is bounded by the arithmetic
+   * rather than by a copied literal — every term now genuinely follows from the
+   * constants.
    */
   const commandWorstCaseMs =
-    STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + STORAGE_RETRY_BASE_DELAY_MS * (1 + 2 + 4);
+    STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + retryBackoffCeilingMs;
+
+  /**
+   * Wall-clock time the model above does not price, allowed for once, by name.
+   *
+   * `commandWorstCaseMs` prices only what the SDK controls: the per-attempt
+   * deadlines and the backoff between them. A real command also spends time
+   * connecting, signing, serialising and waiting on the event loop — the terms
+   * `@cumulo/ingestion`'s `cycle-budget.ts` knowingly prices at zero, and which
+   * `docs/tech-debt.md` records against that budget's zero-slack identity. This
+   * constant names that gap here rather than letting the assertion depend on it
+   * being invisible: before #122 three jitter draws had to land near their
+   * maxima together for the overhead to matter, so the exact bound passed by
+   * concentration; with one draw it overran roughly one run in twenty.
+   *
+   * Sized between two endpoints. Above: comfortably more than any CI scheduling
+   * noise. Below: well under 2,000 ms, so an extra attempt — which would add a
+   * whole {@link STORAGE_REQUEST_TIMEOUT_MS} of 3,000 ms — still fails this
+   * test deterministically. The attempt *count* is not left to the clock at
+   * all: `connectionsSoFar()` pins it exactly, which is what makes an allowance
+   * on the elapsed bound safe.
+   */
+  const WALL_CLOCK_OVERHEAD_MS = 500;
 
   interface TimedRejection {
     readonly error: unknown;
@@ -357,8 +404,9 @@ describe('createStorageDocumentClient request deadlines', () => {
           expect(elapsedMs).toBeGreaterThanOrEqual(
             STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS - 500,
           );
-          // ...and the whole thing still finished inside the budgeted bound.
-          expect(elapsedMs).toBeLessThanOrEqual(commandWorstCaseMs);
+          // ...and the whole thing still finished inside the budgeted bound,
+          // plus the wall-clock time that bound does not model.
+          expect(elapsedMs).toBeLessThanOrEqual(commandWorstCaseMs + WALL_CLOCK_OVERHEAD_MS);
           // Proof the command reached the fixture rather than the internet:
           // without it, a real endpoint refusing us would look like a passing
           // timeout test — which is exactly how an earlier draft of this file
