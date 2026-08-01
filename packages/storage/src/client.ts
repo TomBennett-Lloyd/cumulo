@@ -13,30 +13,53 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  */
 
 /**
- * Total attempts per request, initial send included — so three retries.
+ * Total attempts per request, initial send included — so exactly one retry.
  *
- * ADR 0002 Consequence 5 requires this to be pinned rather than inherited. The
- * SDK's *default* is 3 attempts with a 500 ms throttling base; its 2026
- * behaviour (4 attempts, 1000 ms throttling base) only switches on when the
- * `AWS_NEW_RETRIES_2026` environment variable is set, and it was verified
- * against the installed SDK (`@smithy/core` 3.31.x, `Retry.v2026`) that there
- * is no client-config route to that flag. Reading retry behaviour off an
- * environment variable would mean CI, Lambda and an operator's laptop backing
- * off differently against provisioned-capacity tables, so the numbers are set
- * here instead.
+ * **Which layer owns which failure.** A batch write is retried by two
+ * independent layers, and each owns one job (#122):
+ *
+ * - The **drain layer** (`drainBatches` under `defaultBatchPolicy`, `./batch`)
+ *   owns *throttling*. DynamoDB does not reject a throttled `BatchWriteItem`;
+ *   it returns HTTP 200 and hands the declined items back as
+ *   `UnprocessedItems`, which the SDK cannot see as a failure at all. That is
+ *   ADR 0002 Consequence 4's own mechanism, and re-sending only the declined
+ *   items is strictly better than re-sending the whole batch.
+ * - The **SDK layer** — this constant — owns *transport* failures: a request
+ *   timeout, a connection reset, a 5xx, a whole-request throttle rejection.
+ *   Those are blips, so one retry is the whole budget.
+ *
+ * Before #122 this was 4, and the two curves stacked: 3 drain attempts × 4
+ * sends = up to 12 round trips for one batch, both layers backing off over the
+ * same throttling. At 2 the ceiling is 3 × 2 = 6 round trips, and a batch's
+ * worst case is 21.6 s rather than 57.6 s.
+ *
+ * ADR 0002 Consequence 5's requirement is unchanged and is why the number lives
+ * here at all: pinned explicitly, never inherited. The SDK's *default* is 3
+ * attempts with a 500 ms throttling base; its 2026 behaviour (4 attempts,
+ * 1000 ms throttling base) only switches on when the `AWS_NEW_RETRIES_2026`
+ * environment variable is set, and it was verified against the installed SDK
+ * (`@smithy/core` 3.31.x, `Retry.v2026`) that there is no client-config route
+ * to that flag. Reading retry behaviour off an environment variable would mean
+ * CI, Lambda and an operator's laptop backing off differently against
+ * provisioned-capacity tables, so the numbers are set here instead.
  */
-export const STORAGE_MAX_ATTEMPTS = 4;
+export const STORAGE_MAX_ATTEMPTS = 2;
 
 /**
  * Delay base for retry backoff, in milliseconds — the cap on the first retry's
  * sleep, doubling thereafter.
  *
- * This is the *throttling* base of ADR 0002 Consequence 5, and it is applied to
- * every retryable error rather than only to throttling ones. The `series` and
- * `weather` tables are provisioned at 14/21 and 5/3 capacity units, so
- * throttling is the expected retryable failure here; backing off a full second
- * on the rarer transient errors too is the conservative direction, and it keeps
- * the policy a single number a reader can check against the ADR.
+ * This is the *throttling* base of ADR 0002 Consequence 5, pinned rather than
+ * inherited for the reasons on {@link STORAGE_MAX_ATTEMPTS}, and it is applied
+ * to every retryable error rather than only to throttling ones. Since #122 the
+ * errors it actually delays are transport blips — throttling on batch
+ * operations arrives as `UnprocessedItems` and is backed off by the drain layer
+ * instead — and there is exactly one such delay per request. A full second
+ * before the single retry is the conservative direction for a connection reset
+ * or a 5xx, and it keeps the policy a single number a reader can check against
+ * the ADR. It is deliberately left at 1000 while the attempt count drops: the
+ * collapse #122 wanted was of *stacked layers*, not of the pause before a
+ * retry.
  */
 export const STORAGE_RETRY_BASE_DELAY_MS = 1000;
 
