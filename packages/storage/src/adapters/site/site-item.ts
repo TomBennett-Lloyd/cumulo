@@ -1,4 +1,10 @@
-import { fleetSiteSchema, locationId, siteSchema, type FleetSite } from '@cumulo/shared';
+import {
+  fleetSiteSchema,
+  locationId,
+  sitePhysicsSchema,
+  type FleetSite,
+  type SitePhysics,
+} from '@cumulo/shared';
 import { z } from 'zod';
 
 /**
@@ -63,20 +69,6 @@ const userSiteKeySchema = z.object({ siteId: z.string().min(1) });
 /** A projected `user-sites-by-age` item → the id of the site it points at. */
 export const toUserSiteId = (item: Record<string, unknown>): string =>
   userSiteKeySchema.parse(item).siteId;
-
-/**
- * The physics parameters the forecast service reads for every active site at a
- * location (ADR 0002 access pattern F1).
- *
- * Derived by omission rather than redeclared, so the field definitions have one
- * home (`siteSchema`). The omitted field is exactly the one the `by-location`
- * index does not project — `name` — which is what makes this schema the
- * compile-time mirror of the INCLUDE projection in `infra/storage/tables.tf`.
- * If the projection changes, this line changes with it.
- */
-const sitePhysicsSchema = siteSchema.omit({ name: true });
-
-export type SitePhysics = z.infer<typeof sitePhysicsSchema>;
 
 /**
  * A `cumulo-sites` item: the domain fields of a {@link FleetSite}, with `id`
@@ -169,6 +161,13 @@ const domainAttributes = (item: Record<string, unknown>): Record<string, unknown
 export const fromItem = (item: Record<string, unknown>): FleetSite =>
   fleetSiteSchema.parse(domainAttributes(item));
 
-/** A projected `by-location` index item → the physics parameters F1 needs. */
+/**
+ * A projected `by-location` index item → the physics parameters F1 needs.
+ *
+ * `sitePhysicsSchema` is `@cumulo/shared`'s, not this package's: it is the
+ * domain shape the forecast service consumes, and it is `siteSchema` minus
+ * exactly the attribute the `by-location` INCLUDE projection omits (`name`), so
+ * a projection that stopped covering a physics field fails this parse.
+ */
 export const toSitePhysics = (item: Record<string, unknown>): SitePhysics =>
   sitePhysicsSchema.parse(domainAttributes(item));

@@ -1,9 +1,9 @@
 import { deepStrictEqual, ok } from 'node:assert/strict';
 
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { locationId } from '@cumulo/shared';
+import { locationId, type SitePhysics } from '@cumulo/shared';
 
-import { SiteAdapter, storageTableName, type SitePhysics } from '../../src/index';
+import { SiteAdapter, storageTableName } from '../../src/index';
 
 import { eventually, type CheckRunner } from './check-runner';
 import { ENVIRONMENT, smokeSite } from './smoke-data';

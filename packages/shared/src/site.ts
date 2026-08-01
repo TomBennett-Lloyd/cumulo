@@ -39,6 +39,26 @@ export const createSiteInputSchema = siteSchema.omit({ id: true });
 export type CreateSiteInput = z.infer<typeof createSiteInputSchema>;
 
 /**
+ * The physics parameters the forecast chain needs for one site: every field the
+ * model reads, and nothing it does not.
+ *
+ * Derived by omission rather than redeclared, so the bounds have one home
+ * (`architecture.md` rule 2). The omitted field is exactly the one the
+ * `by-location` index does not project — `name` — which makes this schema the
+ * compile-time mirror of the INCLUDE projection in `infra/storage/tables.tf`.
+ * If that projection changes, this line changes with it.
+ *
+ * It lives here rather than in `@cumulo/storage` because two services now need
+ * it and neither may import the other: the storage adapter parses the projected
+ * index items into it (ADR 0002 access pattern F1), and the forecast service
+ * takes it as the input to `createPhysicsForecast`. A full `Site` is
+ * structurally assignable to it, so callers holding one need no conversion.
+ */
+export const sitePhysicsSchema = siteSchema.omit({ name: true });
+
+export type SitePhysics = z.infer<typeof sitePhysicsSchema>;
+
+/**
  * How a site joined the fleet.
  *
  * This is not decoration: ADR 0002 makes `origin` the basis of a structural

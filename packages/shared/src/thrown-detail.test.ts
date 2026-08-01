@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { describeThrown } from './thrown-detail';
 
 /**
- * Both callers put this string into an outcome an operator reads — the adapter's
- * `unreachable` detail and a location's `failed` detail — so what is asserted here
- * is that the two facts an operator needs survive: what kind of failure it was, and
- * what it said.
+ * Every caller puts this string into an outcome an operator reads — ingestion's
+ * `unreachable` adapter detail, a location's `failed` detail — so what is asserted
+ * here is that the two facts an operator needs survive: what kind of failure it
+ * was, and what it said.
  */
 describe('describeThrown', () => {
   it('names the error class and its message', () => {

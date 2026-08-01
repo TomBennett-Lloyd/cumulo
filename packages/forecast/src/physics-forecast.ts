@@ -37,7 +37,7 @@
 import {
   forecastSchema,
   type Forecast,
-  type Site,
+  type SitePhysics,
   type UtcIsoTimestamp,
   type WeatherReading,
 } from '@cumulo/shared';
@@ -119,8 +119,16 @@ const HOUR_MIDPOINT_OFFSET_MS = 30 * 60 * 1000;
 
 /** Everything `createPhysicsForecast` needs to emit one forecast row. */
 export interface CreatePhysicsForecastInput {
-  /** The installation being forecast — its coordinates, geometry and nameplate. */
-  readonly site: Site;
+  /**
+   * The installation being forecast — its coordinates, geometry and nameplate.
+   *
+   * `SitePhysics` rather than `Site`: those are exactly the fields the chain
+   * reads, and it is also what `SiteAdapter.listActiveSitePhysicsAtLocation`
+   * returns, so the forecast service can pass a projected index item straight
+   * in. A full `Site` is structurally assignable, so callers holding one — the
+   * hindcast harness, the golden fixtures — need no conversion.
+   */
+  readonly site: SitePhysics;
   /** The weather hour to run the chain on. */
   readonly weather: WeatherReading;
   /** Forecast vintage: which cycle produced this row. A parameter, never a clock read. */
@@ -140,7 +148,7 @@ export interface CreatePhysicsForecastInput {
  * here.
  */
 export const runPhysicsChain = (
-  site: Site,
+  site: SitePhysics,
   weather: WeatherReading,
   params: Partial<PhysicsParams> = {},
 ): PhysicsChainResult => {
@@ -226,10 +234,19 @@ export const runPhysicsChain = (
  * evaluation midpoint sits at apparent zenith 89.9335°.
  *
  * So a throw here means "physically implausible input" as well as "bug in this package".
- * Both still warrant failing fast at this layer; what neither this function nor its caller
- * yet has is a policy for the first case — abort the cycle, or surface a typed expected
- * failure (error-handling rule 1). That decision belongs to #13's forecast Lambda and
- * #16's hindcast harness and is logged in `docs/tech-debt.md`, not settled here.
+ * Both still warrant failing fast at this layer, and on the live path the caller's half of
+ * that policy is now decided (#136). `apps/forecast/src/consume-message.ts` is the record
+ * boundary: it converts this throw into a `failed` outcome for the one message that carried
+ * the offending hour, and the queue's redrive — five receives, then the DLQ that
+ * `infra/ingestion/alarms.tf` watches — is both the retry and the operator signal. So an
+ * implausible hour costs one location's message rather than a fleet-wide run, and nothing
+ * about that policy needs this function to stop failing fast.
+ *
+ * Two halves stay open, and neither is this file's to settle: #16's hindcast harness, which
+ * replays offline and has no queue to fall back on, and the general expected-failure/bug
+ * boundary error-handling rule 1 draws for this package. Both live on issue #100 — the
+ * `docs/tech-debt.md` entry this comment used to cite was converted into that issue by the
+ * triage in 581ed5b and no longer exists.
  */
 export const createPhysicsForecast = (input: CreatePhysicsForecastInput): Forecast => {
   const { site, weather, issuedAt, params } = input;

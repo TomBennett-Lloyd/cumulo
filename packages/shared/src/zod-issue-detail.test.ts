@@ -4,10 +4,10 @@ import { z } from 'zod';
 import { describeZodIssues } from './zod-issue-detail';
 
 /**
- * The contract two callers depend on identically: a rejected Open-Meteo body and a
- * wrong deployment are both explained by this one line, so the properties asserted
- * here are the ones each of them needs — every issue listed, and every issue
- * locatable.
+ * The contract every caller depends on identically: a rejected Open-Meteo body and
+ * a wrong deployment are both explained by this one line, so the properties
+ * asserted here are the ones each of them needs — every issue listed, and every
+ * issue locatable.
  */
 const schema = z.object({
   hourly: z.object({ time: z.array(z.string()) }),

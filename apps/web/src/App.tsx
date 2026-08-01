@@ -115,10 +115,13 @@ export interface AppProps {
    *
    * This is the seam a router fills once `apps/web` has one — a URL decides the
    * view, and until then the default does. It is also the only way the shell can
-   * be tested: the map view mounts maplibre, which needs WebGL, which jsdom does
-   * not implement, so the tests below open on views they can actually render.
-   * That leaves the shipping default asserted by nothing in this suite — a real
-   * gap, logged in `docs/tech-debt.md`, and one only a browser harness closes.
+   * be tested: the map view loads maplibre through a dynamic import and mounts
+   * it, and maplibre needs WebGL, which jsdom does not implement — so a test
+   * opening on the default gets the loading placeholder, then a failure the
+   * moment that chunk resolves. The tests therefore open on views they can
+   * render through. That leaves the shipping default asserted by nothing in
+   * this suite — a real gap, logged in `docs/tech-debt.md` and tracked as #107,
+   * and one only a browser harness closes.
    */
   readonly initialView?: View;
 }

@@ -7,7 +7,7 @@ import {
   TransactWriteCommand,
   type TransactWriteCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import type { FleetSite } from '@cumulo/shared';
+import type { FleetSite, SitePhysics } from '@cumulo/shared';
 
 import { StorageAdapterBase } from '../storage-adapter-base';
 
@@ -22,7 +22,6 @@ import {
   toItem,
   toSitePhysics,
   toUserSiteId,
-  type SitePhysics,
 } from './site-item';
 
 /**

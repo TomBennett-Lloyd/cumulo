@@ -7,6 +7,7 @@ import {
   fleetSiteSchema,
   MAX_USER_SITES,
   siteOriginSchema,
+  sitePhysicsSchema,
   siteSchema,
   type Site,
 } from './site';
@@ -173,6 +174,43 @@ describe('createSiteInputSchema', () => {
       'name',
       'tiltDegrees',
     ]);
+  });
+});
+
+describe('sitePhysicsSchema', () => {
+  /**
+   * The projection contract, asserted as a key set rather than as "no name":
+   * the `by-location` index INCLUDEs exactly these attributes, so a field added
+   * to `siteSchema` without a matching change to `infra/storage/tables.tf` — or
+   * a field dropped from the projection — fails here rather than at the first
+   * parse of a live index item.
+   */
+  it('keeps every field the physics chain reads and drops the one the index omits', () => {
+    const result = sitePhysicsSchema.safeParse(validSite);
+
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('name');
+    expect(result.data && Object.keys(result.data).sort()).toEqual([
+      'azimuthDegrees',
+      'capacityKw',
+      'id',
+      'latitude',
+      'longitude',
+      'tiltDegrees',
+    ]);
+  });
+
+  // Derived by `.omit`, so the bounds are the *same* bounds: a projected index
+  // item carrying an impossible tilt is rejected exactly as a full site is.
+  it.each(outOfRangeCases)('rejects %s of %s — %s', (field, value) => {
+    const result = sitePhysicsSchema.safeParse({ ...validSite, [field]: value });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an item missing a projected attribute rather than defaulting it', () => {
+    // What a shrunken INCLUDE projection looks like on the way in.
+    expect(sitePhysicsSchema.safeParse(withoutField(validSite, 'capacityKw')).success).toBe(false);
   });
 });
 

@@ -1,7 +1,6 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { weatherReadingSchema, type ForecastWeatherReading } from '@cumulo/shared';
+import { weatherMessageSchema, type ForecastWeatherReading } from '@cumulo/shared';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
-import { z } from 'zod';
 
 import type { WeatherPublisher } from './weather-publisher';
 
@@ -10,11 +9,11 @@ import type { WeatherPublisher } from './weather-publisher';
  * location per cycle, carrying that location's whole horizon.
  *
  * Two things happen here and nowhere else. The first is the **payload contract**:
- * a message body is `@cumulo/shared`'s weather reading schema, parsed rather than
- * asserted, so the bytes on the queue are exactly the fields the shared schema
- * defines — no more (zod strips what it does not know about) and no less. The
- * forecast service (#12) parses the same schema on the way in, which is what makes
- * "the wire format" a single definition instead of two that currently agree
+ * a message body is `@cumulo/shared`'s `weatherMessageSchema`, parsed rather than
+ * asserted, so the bytes on the queue are exactly the fields that schema defines —
+ * no more (zod strips what it does not know about) and no less. The forecast
+ * service parses the same schema on the way in, which is what makes "the wire
+ * format" a single definition instead of two that currently agree
  * (`docs/standards/architecture.md` rule 2). Provenance is not a message attribute
  * or a queue convention: it is the readings' own `source` field, so a payload that
  * has been separated from its envelope still says where it came from.
@@ -31,15 +30,6 @@ import type { WeatherPublisher } from './weather-publisher';
  * `TimeoutError`, each pointing at a different fix — with a generic one in the very
  * log line an operator reads.
  */
-
-/**
- * The message body's schema: an array of shared weather readings.
- *
- * Exported because it is a contract, not an implementation detail — #12's consumer
- * parses the same array on the way out of the queue, and a test that asserts a
- * published body against anything else is asserting a copy.
- */
-export const weatherMessageSchema = z.array(weatherReadingSchema);
 
 /**
  * Total attempts per `SendMessage`, initial send included — so two retries.
@@ -144,8 +134,15 @@ export class SqsWeatherPublisher implements WeatherPublisher {
     if (readings.length === 0) {
       // Not a domain outcome: `parseForecastResponse` reports an all-unusable
       // response as `malformed` and `cycle.ts` never publishes one, so an empty
-      // batch here is a bug upstream (rule 1). Sending it would wake #12 with a
-      // message that says nothing — the kind of no-op that looks like success.
+      // batch here is a bug upstream (rule 1). Sending it would wake the forecast
+      // service with a message that says nothing — the kind of no-op that looks
+      // like success.
+      //
+      // `weatherMessageSchema.min(1)` refuses the same thing one line below, and
+      // deliberately so: that is the *contract's* refusal, which the consumer
+      // relies on too. This throw is the *sender's*, and it names the caller's
+      // mistake — "publishing a location with no readings" — rather than
+      // reporting a body that failed to parse.
       throw new Error('SqsWeatherPublisher: refusing to publish a location with no readings');
     }
 

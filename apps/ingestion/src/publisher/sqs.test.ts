@@ -1,6 +1,7 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import {
   forecastWeatherReadingSchema,
+  weatherMessageSchema,
   weatherReadingSchema,
   type ForecastWeatherReading,
 } from '@cumulo/shared';
@@ -8,12 +9,7 @@ import { mockClient } from 'aws-sdk-client-mock';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import {
-  INGESTION_SEND_MAX_ATTEMPTS,
-  SqsWeatherPublisher,
-  createIngestionSqsClient,
-  weatherMessageSchema,
-} from './sqs';
+import { INGESTION_SEND_MAX_ATTEMPTS, SqsWeatherPublisher, createIngestionSqsClient } from './sqs';
 
 /**
  * Contract tests for the SQS publisher: every assertion is on the command input

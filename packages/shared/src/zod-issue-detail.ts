@@ -1,11 +1,11 @@
 import type { ZodError } from 'zod';
 
 /**
- * One rendering of a zod parse failure, for the `detail` strings this service's
+ * One rendering of a zod parse failure, for the `detail` strings a service's
  * failures carry.
  *
- * Shared for the same reason `thrown-detail.ts` is: the Open-Meteo parser
- * explains why a response body was rejected and the composition root explains why
+ * Shared for the same reason `thrown-detail.ts` is: ingestion's Open-Meteo parser
+ * explains why a response body was rejected and its composition root explains why
  * the environment was, and both mean "say which field, and what was wrong with it".
  * They had drifted while agreeing — one guarded the empty path, the other did not —
  * which is what a duplicated intent looks like just before it becomes two formats.

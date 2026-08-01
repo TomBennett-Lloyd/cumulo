@@ -1,0 +1,24 @@
+{
+  "name": "@cumulo/forecast-service",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint --max-warnings 0 .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/main.mjs && cd dist && zip -q -X handler.zip main.mjs"
+  },
+  "dependencies": {
+    "@cumulo/forecast": "workspace:*",
+    "@cumulo/shared": "workspace:*",
+    "@cumulo/storage": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
