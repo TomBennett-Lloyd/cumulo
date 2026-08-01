@@ -74,11 +74,12 @@ here simply does not delete its message. The queue's visibility timeout (300 s, 
 
 The arithmetic, on the constants actually in the tree today:
 
-| Case                 | Mechanism                                                           | Time                            |
-| -------------------- | ------------------------------------------------------------------- | ------------------------------- |
-| Healthy              | 1 GSI query + 240 physics evaluations + 10 write pages              | well under 1 s; 1–2 s cold      |
-| DynamoDB outage      | first send rejects; the drain does not retry a rejection            | ≈ 14 s → `failed`, logs intact  |
-| Sustained throttling | every send returns HTTP 200 declining all 25 items, at full latency | ≈ 223 s, against a 50 s timeout |
+| Case                 | Mechanism                                                      | Time                            |
+| -------------------- | -------------------------------------------------------------- | ------------------------------- |
+| Healthy              | 1 GSI query + 240 physics evaluations + 10 write pages         | well under 1 s; 1–2 s cold      |
+| DynamoDB outage      | first send rejects; the drain does not retry a rejection       | ≈ 14 s → `failed`, logs intact  |
+| Throttling, mixed    | each send times out once, then a 200 declines all 25 items     | ≈ 223 s, against a 50 s timeout |
+| Throttling, pure 200 | each send returns 200 declining all 25 items, one attempt each | ≈ 96 s, against a 50 s timeout  |
 
 A canonical five-site location is `5 × 48 = 240` items, so `ceil(240 / 25)` = **10**
 `BatchWriteItem` pages. One send's worst case is `2 × 3 s + 1 s` = **7 s**
@@ -94,12 +95,21 @@ An **outage does not grind**: `drainBatches` re-sends only what a _successful_ r
 `failed` at ≈ 14 s including the site query, and the outcome entry and batch summary are both
 written well inside the timeout.
 
-The ≈ 216 s grind needs the opposite: every send **succeeding** at near-timeout latency while
-declining all of its items — sustained throttling against `cumulo-series`' provisioned 14 WCU (ADR
-0002), which is the regime the mapping's `maximum_concurrency = 2` exists to keep the fleet out of.
-Only there can an invocation reach the timeout, and only there is the cost worth naming: a killed
-invocation's logs stop mid-batch, so `forecast.batch.summary` is absent rather than reporting
-failures. Still diagnosable — `cumulo-forecast-<env>-errors` fires, and the storage stack's throttle
+The ≈ 216 s grind needs the opposite, and specifically a **mixed** regime rather than a purely
+declining one: each send's first attempt timing out, and its one SDK retry then answering HTTP 200
+with all 25 items unprocessed. That is what the 7 s per-send term prices — `2 × 3 s + 1 s` spends
+two attempts only when the first failed _retryably_, which a 200 never is. A **pure** 200-declining
+regime is therefore cheaper per send, not dearer: one attempt bounded at 3 s, so `3 × 3 s + 0.6 s`
+≈ 9.6 s per page and ≈ **96 s** over ten.
+
+Both are sustained throttling against `cumulo-series`' provisioned 14 WCU (ADR 0002) — a hot enough
+write burst is how a table both slows down and declines items — and both blow the 50 s timeout, so
+the conclusion does not depend on which one you get. Keeping the fleet out of either is what the
+mapping's `maximum_concurrency = 2` is for.
+
+Only in those regimes can an invocation reach the timeout, and only there is the cost worth naming:
+a killed invocation's logs stop mid-batch, so `forecast.batch.summary` is absent rather than
+reporting failures. Still diagnosable — `cumulo-forecast-<env>-errors` fires, and the storage stack's throttle
 alarm is lit at the same moment — but an absence, which a reader of these logs should know about.
 `handler.ts`'s module doc states the same arithmetic beside the code it governs.
 

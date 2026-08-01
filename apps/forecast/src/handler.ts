@@ -63,15 +63,21 @@ import { sqsEventSchema, type SqsBatchResponse } from './sqs-event';
  * query ahead of it the record is `failed` at ≈ 14 s — comfortably inside the
  * timeout, with its outcome entry and the batch summary both written.
  *
- * The ≈ 216 s grind needs the opposite of an outage: every send **succeeding**
- * (HTTP 200) at near-timeout latency while declining all 25 of its items. That is
- * sustained throttling — `cumulo-series` is provisioned at 14 WCU (ADR 0002), and
- * a hot enough write burst is exactly how a table answers 200-with-everything-
- * unprocessed, over and over, until the drain's three attempts per page are spent.
- * The mapping's `maximum_concurrency = 2` exists to keep the fleet's writes below
- * that regime in the first place.
+ * The ≈ 216 s grind needs the opposite of an outage, and specifically a **mixed**
+ * regime rather than a purely declining one: each send's first attempt timing out,
+ * and its one SDK retry then answering HTTP 200 with all 25 items unprocessed.
+ * That is what the 7 s per-send term actually prices — `2 × 3 s + 1 s` spends two
+ * attempts only when the first failed *retryably*, which a 200 never is.
  *
- * Only in *that* case can an invocation reach the 50 s timeout, and only there is
+ * A **pure** 200-declining regime is therefore cheaper per send, not dearer: one
+ * HTTP attempt bounded at 3 s to headers, so ≈ 9.6 s per page (`3 × 3 s + 0.6 s`)
+ * and ≈ 96 s over ten. Both regimes are sustained throttling — `cumulo-series` is
+ * provisioned at 14 WCU (ADR 0002), and a hot enough write burst is how a table
+ * both slows down and declines items — and both blow the 50 s timeout, so nothing
+ * below depends on which of the two you actually get. The mapping's
+ * `maximum_concurrency = 2` exists to keep the fleet's writes out of either.
+ *
+ * Only in *those* cases can an invocation reach the 50 s timeout, and only there is
  * the consequence worth naming: a killed invocation's logs stop mid-batch, so
  * `forecast.batch.summary` is absent rather than reporting failures. The absence
  * is still diagnosable — `cumulo-forecast-<env>-errors` fires on the
