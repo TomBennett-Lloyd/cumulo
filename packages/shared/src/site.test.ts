@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { canonicalFleetSeed, generateFleet } from './fleet';
+import { locationId } from './location';
 import {
   createSiteInputSchema,
   fleetSiteSchema,
+  MAX_USER_SITES,
   siteOriginSchema,
   siteSchema,
   type Site,
@@ -179,6 +182,49 @@ const validFleetSite = {
   createdAt: '2026-07-30T14:00:00Z',
   active: true,
 };
+
+describe('MAX_USER_SITES', () => {
+  /** Open-Meteo's free tier, as CLAUDE.md states it. */
+  const DAILY_CALL_ALLOWANCE = 10_000;
+  const CYCLES_PER_DAY = 24;
+
+  const seedFleet = generateFleet(canonicalFleetSeed);
+
+  /**
+   * The worst case, not the likely one: every user site at coordinates of its
+   * own, so the fleet's location count grows one-for-one with the cap.
+   *
+   * The seed half is *computed* from the generated fleet rather than written
+   * down, which is what makes these assertions load-bearing in both directions
+   * — the cap is what they are here to bound, but a seed fleet that grew, or a
+   * jitter box widened until a cluster stopped rounding into one bucket, moves
+   * the same number and fails the same way.
+   */
+  const worstCaseLocations =
+    new Set(seedFleet.map((site) => locationId(site))).size + MAX_USER_SITES;
+
+  it('prices the worst case at 52 locations — the seed fleet’s own plus one bucket per user site', () => {
+    expect(worstCaseLocations).toBe(52);
+
+    // 100 is ingestion's `MAX_LOCATIONS_PER_CYCLE`, restated because packages
+    // never import apps (architecture rule 1). The authoritative comparison, in
+    // terms of the constant itself, is in `apps/ingestion/src/cycle-budget.test.ts`
+    // — which is the side of the dependency edge that can see both numbers.
+    expect(worstCaseLocations).toBeLessThanOrEqual(100);
+  });
+
+  it('keeps a full day of hourly cycles inside the Open-Meteo daily allowance', () => {
+    expect(worstCaseLocations * CYCLES_PER_DAY).toBe(1_248);
+    expect(worstCaseLocations * CYCLES_PER_DAY).toBeLessThanOrEqual(DAILY_CALL_ALLOWANCE);
+  });
+
+  it('keeps the whole fleet inside the largest size ADR 0002 priced for writes', () => {
+    // 60 seed + 40 user = the ADR's 100-site headroom row, 14% of the free
+    // write allowance. Raising the cap past this point is allowed, but not
+    // silently: it means re-running that table, which is what this fails for.
+    expect(seedFleet.length + MAX_USER_SITES).toBeLessThanOrEqual(100);
+  });
+});
 
 describe('siteOriginSchema', () => {
   it.each(['seed', 'user'])('accepts origin %s', (origin) => {

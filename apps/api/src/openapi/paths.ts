@@ -50,13 +50,28 @@ const componentResponse = (description: string, name: ComponentSchemaName): Resp
 });
 
 /**
- * What each error code means to a caller, once, since the same three sentences
- * would otherwise be retyped on ten operations.
+ * What each error code means to a caller, once, since the same sentences would
+ * otherwise be retyped on ten operations.
+ *
+ * Exhaustive by type (`Record<ApiErrorCode, string>`), which is the mechanism
+ * that keeps it honest: a code added to `apiErrorCodeSchema` in `@cumulo/shared`
+ * is a type error here until someone decides what it means to a caller, rather
+ * than a code that reaches the published document undocumented.
  */
 const apiErrorDescriptions: Record<ApiErrorCode, string> = {
   validation_failed:
     'The request was rejected before anything was read. `details` names the fields at fault.',
+  forbidden: [
+    'Refused on policy rather than on content — the request is well-formed, but this',
+    'deployment does not serve it from where it came from. No credential makes it',
+    'succeed; there are none to present.',
+  ].join(' '),
   not_found: 'No such resource. An unknown route and an unknown site id both answer this way.',
+  rate_limited: [
+    'Refused by this service’s own rate limiter. `retry-after` names the wait in seconds.',
+    'The other 429 below is API Gateway’s throttle, which answers before this service',
+    'is invoked and does not use this body shape.',
+  ].join(' '),
   internal:
     'Something failed that this service did not predict. The detail is in the log, not in the body.',
 };

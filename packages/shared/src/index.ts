@@ -40,6 +40,7 @@ export {
   type SiteOrigin,
   fleetSiteSchema,
   type FleetSite,
+  MAX_USER_SITES,
 } from './site';
 export {
   type SeriesKind,

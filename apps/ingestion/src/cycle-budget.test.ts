@@ -1,3 +1,4 @@
+import { canonicalFleetSeed, generateFleet, locationId, MAX_USER_SITES } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -139,5 +140,24 @@ describe('the location cap', () => {
     // 0002's assumed scale — and room above both for #17's visitor sites,
     // which is why ingestion enforces its own bound rather than inheriting one.
     expect(MAX_LOCATIONS_PER_CYCLE).toBeGreaterThan(30);
+  });
+
+  /**
+   * The cross-check that closes the loop on #17's visitor sites, now that
+   * `MAX_USER_SITES` bounds how many of them exist at once.
+   *
+   * It lives on the ingestion side because this is the only side of the
+   * dependency edge that can see both numbers: `@cumulo/shared` owns the cap and
+   * cannot import an app (architecture rule 1), so the cap's own test can only
+   * restate 100 as a literal. Here it is the constant itself, which is what
+   * makes raising *either* number a red build rather than a silent deferral —
+   * a full fleet that exceeded this cap would not fail, it would quietly skip
+   * locations every hour as `location-cap` and be visible only in the report.
+   */
+  it('leaves room for a full user-site cap on top of the seed fleet, with no location deferred', () => {
+    const seedLocations = new Set(generateFleet(canonicalFleetSeed).map((site) => locationId(site)))
+      .size;
+
+    expect(seedLocations + MAX_USER_SITES).toBeLessThanOrEqual(MAX_LOCATIONS_PER_CYCLE);
   });
 });
