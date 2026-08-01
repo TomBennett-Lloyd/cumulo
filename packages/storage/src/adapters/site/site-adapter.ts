@@ -1,4 +1,7 @@
-import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
+import {
+  TransactionCanceledException,
+  TransactionConflictException,
+} from '@aws-sdk/client-dynamodb';
 import {
   DeleteCommand,
   GetCommand,
@@ -49,9 +52,14 @@ export type GetFleetSiteResult =
  * Outcome of a capped create (X1). A fleet already at its cap is an expected
  * domain outcome — the demo's whole point — so it is a value the caller must
  * handle, never an exception (`docs/standards/error-handling.md` rule 1).
+ *
+ * `conflict` is the other expected outcome: two concurrent creates contended on
+ * the counter item and DynamoDB cancelled this one. Nothing is wrong and the
+ * fleet may be nowhere near its cap — the caller simply lost a race and may try
+ * again (see {@link conflictCancelled}).
  */
 export type CreateUserSiteResult =
-  { readonly created: true } | { readonly created: false; readonly reason: 'cap' };
+  { readonly created: true } | { readonly created: false; readonly reason: 'cap' | 'conflict' };
 
 /** Outcome of the eviction lookup (X2). An empty user fleet is a value. */
 export type OldestUserSiteResult =
@@ -61,10 +69,13 @@ export type OldestUserSiteResult =
  * Outcome of an evict-and-create (X2). `oldest_gone` means another request
  * evicted the same site first — a lost race, which is ordinary under a public
  * write path and is reported so the caller can look up the new oldest and try
- * again.
+ * again. `conflict` is the other lost race: concurrent transactions contended
+ * on one of these items and DynamoDB cancelled this one, saying nothing about
+ * whether the oldest site is still there (see {@link conflictCancelled}).
  */
 export type EvictAndCreateResult =
-  { readonly evicted: true } | { readonly evicted: false; readonly reason: 'oldest_gone' };
+  | { readonly evicted: true }
+  | { readonly evicted: false; readonly reason: 'oldest_gone' | 'conflict' };
 
 /**
  * DynamoDB's cancellation code for a transaction item whose `ConditionExpression`
@@ -73,6 +84,50 @@ export type EvictAndCreateResult =
  * the write did not happen for a reason that is *not* a domain outcome.
  */
 const CONDITIONAL_CHECK_FAILED = 'ConditionalCheckFailed';
+
+/**
+ * DynamoDB's cancellation code for a transaction item that collided with
+ * another in-flight transaction on the same row — the counter item, in
+ * practice, which every capped create and counted delete writes.
+ */
+const TRANSACTION_CONFLICT = 'TransactionConflict';
+
+/** The code DynamoDB reports for an item that was itself fine. */
+const NO_CANCELLATION_REASON = 'None';
+
+/**
+ * Was this rejection nothing but a lost race between concurrent transactions?
+ *
+ * Two shapes carry that answer. A standalone `TransactionConflictException` is
+ * the whole request losing to an in-flight transaction; a
+ * `TransactionCanceledException` whose reasons are `TransactionConflict` (plus
+ * `None` for the items that were fine) is the same collision reported per item.
+ *
+ * The `every` clause is load-bearing, in the same way {@link cancelledOnlyBy}'s
+ * "and by nothing else" is. A cancellation mixing `TransactionConflict` with a
+ * `ConditionalCheckFailed` is not a bare race — a condition this adapter cares
+ * about also failed, and the domain verdict has to win. A cancellation mixing
+ * it with a capacity code (`ProvisionedThroughputExceeded`, `ThrottlingError`)
+ * is not a bare race either: retrying that against a throttled table is the
+ * thundering herd, and capacity classification is #166's decision to make, not
+ * this predicate's. Both stay a `StorageError`.
+ */
+const conflictCancelled = (cause: unknown): boolean => {
+  if (cause instanceof TransactionConflictException) {
+    return true;
+  }
+  if (!(cause instanceof TransactionCanceledException)) {
+    return false;
+  }
+  const reasons = cause.CancellationReasons ?? [];
+
+  return (
+    reasons.some((reason) => reason.Code === TRANSACTION_CONFLICT) &&
+    reasons.every(
+      (reason) => reason.Code === TRANSACTION_CONFLICT || reason.Code === NO_CANCELLATION_REASON,
+    )
+  );
+};
 
 /**
  * Was this rejection a transaction cancelled by the condition on item
@@ -88,11 +143,12 @@ const CONDITIONAL_CHECK_FAILED = 'ConditionalCheckFailed';
  * one condition whose failure is a *domain* answer; a second failed condition
  * in the same response means something the caller did not ask about went wrong
  * (a uuid that already exists), and that must not be reported as the domain
- * answer. A cancellation with no failed condition at all — capacity, a
- * conflicting concurrent transaction — is likewise not an answer: note that the
- * SDK does **not** retry `TransactionCanceledException` at all (`docs/tech-debt.md`),
- * so a capacity-cancelled transaction arrives here on its first and only
- * attempt and must surface as a `StorageError`, not as a full fleet.
+ * answer. A cancellation with no failed condition at all is likewise not *this*
+ * answer: a pure conflict is {@link conflictCancelled}'s to classify, and a
+ * capacity cancellation is nobody's — note that the SDK does **not** retry
+ * `TransactionCanceledException` at all (`docs/tech-debt.md`), so a
+ * capacity-cancelled transaction arrives here on its first and only attempt and
+ * must surface as a `StorageError`, not as a full fleet.
  */
 const cancelledOnlyBy = (cause: unknown, itemIndex: number): boolean => {
   if (!(cause instanceof TransactionCanceledException)) {
@@ -204,7 +260,7 @@ export class SiteAdapter extends StorageAdapterBase {
     requireUserOrigin('createUserSiteWithCap', site);
     requirePositiveInteger('createUserSiteWithCap', 'cap', cap);
 
-    const capReached = await this.transactUnless(
+    const outcome = await this.transactUnless(
       'createUserSiteWithCap',
       { pk: FLEET_PARTITION, siteId: site.id },
       CAP_COUNTER_ITEM,
@@ -228,7 +284,14 @@ export class SiteAdapter extends StorageAdapterBase {
       ],
     );
 
-    return capReached ? { created: false, reason: 'cap' } : { created: true };
+    switch (outcome) {
+      case 'condition_failed':
+        return { created: false, reason: 'cap' };
+      case 'conflict':
+        return { created: false, reason: 'conflict' };
+      case 'written':
+        return { created: true };
+    }
   }
 
   /**
@@ -279,7 +342,7 @@ export class SiteAdapter extends StorageAdapterBase {
   ): Promise<EvictAndCreateResult> {
     requireUserOrigin('evictAndCreateUserSite', site);
 
-    const oldestGone = await this.transactUnless(
+    const outcome = await this.transactUnless(
       'evictAndCreateUserSite',
       { pk: FLEET_PARTITION, siteId: evictSiteId },
       EVICTED_SITE_ITEM,
@@ -295,7 +358,14 @@ export class SiteAdapter extends StorageAdapterBase {
       ],
     );
 
-    return oldestGone ? { evicted: false, reason: 'oldest_gone' } : { evicted: true };
+    switch (outcome) {
+      case 'condition_failed':
+        return { evicted: false, reason: 'oldest_gone' };
+      case 'conflict':
+        return { evicted: false, reason: 'conflict' };
+      case 'written':
+        return { evicted: true };
+    }
   }
 
   /**
@@ -303,13 +373,13 @@ export class SiteAdapter extends StorageAdapterBase {
    *
    * `attribute_exists(siteId)` is the anti-double-decrement guard: without it a
    * repeated delete would keep subtracting from `userSiteCount` and eventually
-   * let the fleet grow past its cap. A cancelled transaction means the site was
-   * already gone, so nothing was deleted *and* nothing was decremented —
-   * reported as `{ deleted: false }`, the same idempotent answer
+   * let the fleet grow past its cap. A transaction cancelled by that condition
+   * means the site was already gone, so nothing was deleted *and* nothing was
+   * decremented — reported as `{ deleted: false }`, the same idempotent answer
    * `deleteFleetSite` gives.
    */
   async deleteUserSiteWithCount(siteId: string): Promise<{ deleted: boolean }> {
-    const alreadyGone = await this.transactUnless(
+    const outcome = await this.transactUnless(
       'deleteUserSiteWithCount',
       { pk: FLEET_PARTITION, siteId },
       DELETED_SITE_ITEM,
@@ -332,7 +402,12 @@ export class SiteAdapter extends StorageAdapterBase {
       ],
     );
 
-    return { deleted: !alreadyGone };
+    // INTERIM (#155 C1 → C3, same PR): this collapses `condition_failed` and
+    // `conflict` into one falsy answer, so a caller cannot yet tell "already
+    // gone" (a 404) from "lost a race" (worth retrying). C3 replaces this with
+    // a `DeleteUserSiteResult` union and teaches the delete route to retry.
+    // This mapping must not reach `main` on its own.
+    return { deleted: outcome === 'written' };
   }
 
   /** Every site in the fleet, seed and user, active and inactive (A2, I1). */
@@ -359,14 +434,32 @@ export class SiteAdapter extends StorageAdapterBase {
   }
 
   /**
-   * Sends a conditional transaction and answers exactly one question: did the
-   * condition on item `domainConditionItem` reject it?
+   * Sends a conditional transaction and answers how it ended: it was `written`,
+   * the condition on item `domainConditionItem` rejected it
+   * (`condition_failed`), or concurrent writers contended for the same rows
+   * (`conflict`).
    *
    * The three capped/counted writes above differ only in their items and in
    * which item carries the condition whose failure is a domain answer — same
    * intent, so the mechanism is shared rather than copied three times
    * (`docs/standards/structure.md` rule 7). What is *not* parameterised is what
-   * counts as a domain answer: that stays one rule, in {@link cancelledOnlyBy}.
+   * counts as a domain answer: that stays two rules, in
+   * {@link cancelledOnlyBy} and {@link conflictCancelled}. The condition is
+   * checked **first**, so when a cancellation carries both verdicts the domain
+   * answer wins.
+   *
+   * **This adapter never retries a conflict**, and that is a decision rather
+   * than an omission. ADR 0002's layer-ownership rule (Amendments, #122) gives
+   * each retry layer exactly one job, and the owner of a lost write race is the
+   * API route handler: only it knows that "try again" means re-reading the
+   * oldest site, and only it holds the request's overall time budget. Retrying
+   * here would put a second, invisible curve underneath that one — the stacked
+   * layers #122 pulled apart. Nor does the SDK layer cover this: verified
+   * against `@aws-sdk/client-dynamodb` 3.1098.0, neither
+   * `TransactionCanceledException` nor `TransactionConflictException` carries a
+   * `$retryable` trait, and neither name appears in `@smithy/core` 3.31.1's
+   * `THROTTLING_ERROR_CODES`/`TRANSIENT_ERROR_CODES` — so both shapes arrive
+   * here on their first and only attempt.
    *
    * Anything else — a different item's condition, a capacity cancellation, a
    * connection reset — is rethrown untouched so that the surrounding `sending`
@@ -379,14 +472,17 @@ export class SiteAdapter extends StorageAdapterBase {
     key: Record<string, string>,
     domainConditionItem: number,
     items: SiteTransactItems,
-  ): Promise<boolean> {
+  ): Promise<'written' | 'condition_failed' | 'conflict'> {
     return this.sending(operation, key, async () => {
       try {
         await this.client.send(new TransactWriteCommand({ TransactItems: items }));
-        return false;
+        return 'written';
       } catch (cause) {
         if (cancelledOnlyBy(cause, domainConditionItem)) {
-          return true;
+          return 'condition_failed';
+        }
+        if (conflictCancelled(cause)) {
+          return 'conflict';
         }
         throw cause;
       }
