@@ -53,20 +53,33 @@ import { sqsEventSchema, type SqsBatchResponse } from './sqs-event';
  * Ten pages is ≈ **216 s**, and the site query adds ≈ 7 s: ≈ **223 s**, more than
  * four times the function timeout.
  *
- * That number is stated rather than defended against, and the reason is the first
- * bullet above. It is only reachable under a total DynamoDB outage — every attempt
- * of every page timing out — and in that world the honest outcome is exactly what
- * happens: the invocation is killed, the message is redelivered, and after five
- * receives the DLQ alarm is what an operator sees. What is lost is this batch's
- * summary log line, not the work and not the signal. Ingestion had to build a
- * deadline precisely because for it, the lost report *was* the signal.
+ * ### Which failure actually produces that number — and which does not
  *
- * The consequence worth naming, since it is the one thing a deadline would buy:
- * during such an outage the logs for a killed invocation stop mid-batch, so
+ * It is worth being exact, because the obvious guess is wrong. A **DynamoDB
+ * outage does not grind**: `drainBatches` re-sends only what a *successful*
+ * response reported as `UnprocessedItems`, and a rejection from a send propagates
+ * out of the drain untouched (`packages/storage/src/batch.ts`). So an outage
+ * rejects on page 1 after that page's ≈ 7 s of SDK attempts, and with the site
+ * query ahead of it the record is `failed` at ≈ 14 s — comfortably inside the
+ * timeout, with its outcome entry and the batch summary both written.
+ *
+ * The ≈ 216 s grind needs the opposite of an outage: every send **succeeding**
+ * (HTTP 200) at near-timeout latency while declining all 25 of its items. That is
+ * sustained throttling — `cumulo-series` is provisioned at 14 WCU (ADR 0002), and
+ * a hot enough write burst is exactly how a table answers 200-with-everything-
+ * unprocessed, over and over, until the drain's three attempts per page are spent.
+ * The mapping's `maximum_concurrency = 2` exists to keep the fleet's writes below
+ * that regime in the first place.
+ *
+ * Only in *that* case can an invocation reach the 50 s timeout, and only there is
+ * the consequence worth naming: a killed invocation's logs stop mid-batch, so
  * `forecast.batch.summary` is absent rather than reporting failures. The absence
- * is diagnosable — the `cumulo-forecast-<env>-errors` alarm fires on the
- * invocation-level failure, which is the case `infra/forecast/alarms.tf` exists
- * for — but it is an absence, and a reader of these logs should know that.
+ * is still diagnosable — `cumulo-forecast-<env>-errors` fires on the
+ * invocation-level failure, which is what `infra/forecast/alarms.tf` exists for,
+ * and the storage stack's own throttle alarm is lit at the same moment — but it is
+ * an absence, and a reader of these logs should know that. Ingestion had to build a
+ * deadline precisely because for it the lost report *was* the only signal; here the
+ * message is still on the queue, and after five receives the DLQ alarm says so.
  */
 
 /** Emitted once per record, whatever became of it. */

@@ -234,10 +234,19 @@ export const runPhysicsChain = (
  * evaluation midpoint sits at apparent zenith 89.9335°.
  *
  * So a throw here means "physically implausible input" as well as "bug in this package".
- * Both still warrant failing fast at this layer; what neither this function nor its caller
- * yet has is a policy for the first case — abort the cycle, or surface a typed expected
- * failure (error-handling rule 1). That decision belongs to #13's forecast Lambda and
- * #16's hindcast harness and is logged in `docs/tech-debt.md`, not settled here.
+ * Both still warrant failing fast at this layer, and on the live path the caller's half of
+ * that policy is now decided (#136). `apps/forecast/src/consume-message.ts` is the record
+ * boundary: it converts this throw into a `failed` outcome for the one message that carried
+ * the offending hour, and the queue's redrive — five receives, then the DLQ that
+ * `infra/ingestion/alarms.tf` watches — is both the retry and the operator signal. So an
+ * implausible hour costs one location's message rather than a fleet-wide run, and nothing
+ * about that policy needs this function to stop failing fast.
+ *
+ * Two halves stay open, and neither is this file's to settle: #16's hindcast harness, which
+ * replays offline and has no queue to fall back on, and the general expected-failure/bug
+ * boundary error-handling rule 1 draws for this package. Both live on issue #100 — the
+ * `docs/tech-debt.md` entry this comment used to cite was converted into that issue by the
+ * triage in 581ed5b and no longer exists.
  */
 export const createPhysicsForecast = (input: CreatePhysicsForecastInput): Forecast => {
   const { site, weather, issuedAt, params } = input;
