@@ -1,11 +1,11 @@
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Dashboard } from './dashboard/Dashboard';
 import { DemoFleetDataSource } from './data/demo-fleet-data-source';
 import type { FleetDataSource } from './data/fleet-data-source';
-import { TokensPreview } from './preview/TokensPreview';
 import type { Theme } from './theme';
-import { resolveInitialTheme, THEME_STORAGE_KEY } from './theme';
+import { ThemeToggle } from './ThemeToggle';
+import { useTheme } from './use-theme';
 import { FleetAggregateView } from './views/FleetAggregateView';
 import { SiteDetailView } from './views/SiteDetailView';
 
@@ -13,23 +13,20 @@ import { SiteDetailView } from './views/SiteDetailView';
  * The web app shell: a view switcher, the theme toggle, and the one place the
  * app decides where its data comes from.
  *
- * Four surfaces sit behind the nav — the fleet map a visitor can add a site to,
- * the fleet aggregate, one site's forecast against its measurements, and the
- * design-token preview that proves `@cumulo/ui` resolves in both themes. The
+ * Three surfaces sit behind the nav — the fleet map a visitor can add a site to,
+ * the fleet aggregate, and one site's forecast against its measurements. The
  * switcher is local state rather than a router: there is no URL to share yet,
  * and a router is a decision in its own right rather than something to arrive
  * at sideways here.
  *
- * Theme resolution is deliberately not spelled out here — `resolveInitialTheme`
- * owns the precedence rule so it can be tested as the pure function it is, and
- * this component supplies only the two browser readings it needs. Both are read
- * once, in the lazy `useState` initialiser: a stored preference and a system
- * preference are the app's *starting* conditions, and re-reading them on every
- * render would let the browser quietly overrule a visitor who has since used
- * the toggle.
+ * Theming is deliberately not spelled out here: `useTheme` owns the whole
+ * mechanism — where the app starts, the document attribute, the persisted
+ * choice — and the shell only says where the toggle sits and passes the theme
+ * down to the map, which paints its basemap in it. The token gallery consumes
+ * the same hook, so what a reviewer checks on that page is what ships here.
  */
 
-type View = 'map' | 'fleet' | 'site' | 'tokens';
+type View = 'map' | 'fleet' | 'site';
 
 interface ViewOption {
   readonly id: View;
@@ -40,13 +37,11 @@ const VIEW_OPTIONS: readonly ViewOption[] = [
   { id: 'map', label: 'Fleet map' },
   { id: 'fleet', label: 'Fleet aggregate' },
   { id: 'site', label: 'Site forecast' },
-  { id: 'tokens', label: 'Design tokens' },
 ];
 
 /**
  * The map opens the app: it is the surface a visitor can act on — add a site,
- * watch its first forecast arrive — and the charts explain what came out. Tokens
- * are the supporting evidence and sit last.
+ * watch its first forecast arrive — and the charts explain what came out.
  */
 const DEFAULT_VIEW: View = 'map';
 
@@ -103,10 +98,7 @@ const viewBody = (view: View, dataSource: FleetDataSource, theme: Theme): ReactE
   if (view === 'fleet') {
     return <FleetAggregateView dataSource={dataSource} />;
   }
-  if (view === 'site') {
-    return <SiteDetailView dataSource={dataSource} />;
-  }
-  return <TokensPreview />;
+  return <SiteDetailView dataSource={dataSource} />;
 };
 
 export interface AppProps {
@@ -127,22 +119,8 @@ export interface AppProps {
 }
 
 export const App = ({ initialView = DEFAULT_VIEW }: AppProps = {}): ReactElement => {
-  const [theme, setTheme] = useState<Theme>(() =>
-    resolveInitialTheme(
-      window.localStorage.getItem(THEME_STORAGE_KEY),
-      window.matchMedia('(prefers-color-scheme: dark)').matches,
-    ),
-  );
+  const { theme, toggle } = useTheme();
   const [view, setView] = useState<View>(initialView);
-
-  // The `data-theme` attribute on <html> is what `tokens.css` keys its dark
-  // block off, and the document is outside React's tree — synchronising it is
-  // exactly the external-system case an effect is for (react.md rule 1).
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  const isDark = theme === 'dark';
 
   return (
     <div className="app">
@@ -152,26 +130,10 @@ export const App = ({ initialView = DEFAULT_VIEW }: AppProps = {}): ReactElement
           <p className="app-subtitle">
             Residential solar fleet forecasting. Sites on a map you can add to, modelled output with
             its uncertainty band against what the panels actually generated — per site and summed
-            across the fleet — plus the design tokens every view is built from.
+            across the fleet.
           </p>
         </div>
-        <button
-          type="button"
-          className="theme-toggle"
-          aria-pressed={isDark}
-          onClick={() => {
-            // Persisting belongs in the handler rather than in an effect
-            // watching `theme`: the write is what the visitor's click *means*,
-            // and an effect would also fire on first render, turning a system
-            // preference nobody chose into a stored choice.
-            const next: Theme = isDark ? 'light' : 'dark';
-
-            window.localStorage.setItem(THEME_STORAGE_KEY, next);
-            setTheme(next);
-          }}
-        >
-          Dark theme
-        </button>
+        <ThemeToggle theme={theme} onToggle={toggle} />
       </header>
 
       <ViewNav view={view} onSelect={setView} />

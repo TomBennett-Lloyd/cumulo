@@ -4,8 +4,8 @@
  * The rule the shell needs is a pure one — an explicit choice beats the system
  * hint, and the system hint beats the light default — so it lives here as a
  * function of its two inputs rather than inside a component where it could only
- * be tested by driving `localStorage` and `matchMedia`. `App.tsx` reads both
- * browser APIs once, hands the values in, and owns nothing but the wiring.
+ * be tested by driving `localStorage` and `matchMedia`. `use-theme.ts` reads
+ * both browser APIs once, hands the values in, and owns nothing but the wiring.
  */
 
 export type Theme = 'light' | 'dark';

@@ -66,16 +66,18 @@ afterEach(() => {
 });
 
 describe('App theming', () => {
-  it('themes the document light when nothing is stored and the system prefers light', () => {
-    render(<App initialView="tokens" />);
+  it('themes the document light when nothing is stored and the system prefers light', async () => {
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
 
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 
-  it('starts in the theme the visitor last chose', () => {
+  it('starts in the theme the visitor last chose', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');
 
-    render(<App initialView="tokens" />);
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
 
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(screen.getByRole('button', { name: 'Dark theme' }).getAttribute('aria-pressed')).toBe(
@@ -83,25 +85,28 @@ describe('App theming', () => {
     );
   });
 
-  it('follows the system preference when the visitor has never chosen', () => {
+  it('follows the system preference when the visitor has never chosen', async () => {
     stubSystemPrefersDark(true);
 
-    render(<App initialView="tokens" />);
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
 
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
-  it('lets a stored light choice overrule a dark system preference', () => {
+  it('lets a stored light choice overrule a dark system preference', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'light');
     stubSystemPrefersDark(true);
 
-    render(<App initialView="tokens" />);
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
 
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 
-  it('flips the document theme each time the toggle is pressed', () => {
-    render(<App initialView="tokens" />);
+  it('flips the document theme each time the toggle is pressed', async () => {
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
     const toggle = screen.getByRole('button', { name: 'Dark theme' });
 
     fireEvent.click(toggle);
@@ -113,8 +118,9 @@ describe('App theming', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 
-  it('reports the current theme through the toggle it lives on', () => {
-    render(<App initialView="tokens" />);
+  it('reports the current theme through the toggle it lives on', async () => {
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
     const toggle = screen.getByRole('button', { name: 'Dark theme' });
 
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
@@ -124,9 +130,10 @@ describe('App theming', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('remembers a theme the visitor picked, and only one they picked', () => {
+  it('remembers a theme the visitor picked, and only one they picked', async () => {
     stubSystemPrefersDark(true);
-    render(<App initialView="tokens" />);
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
 
     // Rendering dark because the system asked for it is not a choice, so
     // nothing is stored yet — otherwise the visitor's OS switching to light
@@ -140,14 +147,15 @@ describe('App theming', () => {
 });
 
 describe('App view switcher', () => {
-  it('offers the map first, then the chart views and the token preview', () => {
-    render(<App initialView="tokens" />);
+  it('offers the map first, then the chart views', async () => {
+    render(<App initialView="fleet" />);
+    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
 
     expect(
       screen
-        .getAllByRole('button', { name: /Fleet map|Fleet aggregate|Site forecast|Design tokens/ })
+        .getAllByRole('button', { name: /Fleet map|Fleet aggregate|Site forecast/ })
         .map((button) => button.textContent),
-    ).toEqual(['Fleet map', 'Fleet aggregate', 'Site forecast', 'Design tokens']);
+    ).toEqual(['Fleet map', 'Fleet aggregate', 'Site forecast']);
   });
 
   it('draws the fleet aggregate from the fixture fleet', async () => {
@@ -168,21 +176,11 @@ describe('App view switcher', () => {
     expect(screen.queryByRole('img', { name: FLEET_CHART_LABEL })).toBeNull();
   });
 
-  it('shows the token preview on its tab, and no chart view with it', async () => {
-    render(<App initialView="fleet" />);
-    await screen.findByRole('img', { name: FLEET_CHART_LABEL });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Design tokens' }));
-
-    expect(screen.getByRole('heading', { name: 'Colour' })).toBeDefined();
-    expect(screen.queryByRole('heading', { name: 'Fleet aggregate' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Site forecast' })).toBeNull();
-  });
-
   it('returns to the fleet view from another tab', async () => {
     render(<App initialView="fleet" />);
     await screen.findByRole('img', { name: FLEET_CHART_LABEL });
-    fireEvent.click(screen.getByRole('button', { name: 'Design tokens' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site forecast' }));
+    await screen.findByRole('img', { name: SITE_CHART_LABEL });
 
     fireEvent.click(screen.getByRole('button', { name: 'Fleet aggregate' }));
 
@@ -194,15 +192,15 @@ describe('App view switcher', () => {
     await screen.findByRole('img', { name: FLEET_CHART_LABEL });
     const pressedStates = (): readonly (string | null)[] =>
       screen
-        .getAllByRole('button', { name: /Fleet map|Fleet aggregate|Site forecast|Design tokens/ })
+        .getAllByRole('button', { name: /Fleet map|Fleet aggregate|Site forecast/ })
         .map((button) => button.getAttribute('aria-pressed'));
 
-    expect(pressedStates()).toEqual(['false', 'true', 'false', 'false']);
+    expect(pressedStates()).toEqual(['false', 'true', 'false']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Site forecast' }));
     await screen.findByRole('img', { name: SITE_CHART_LABEL });
 
-    expect(pressedStates()).toEqual(['false', 'false', 'true', 'false']);
+    expect(pressedStates()).toEqual(['false', 'false', 'true']);
   });
 });
 

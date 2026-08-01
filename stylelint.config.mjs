@@ -116,7 +116,7 @@ export default {
      * property the list omits — `width`, `height`, `max-width`, `inset`,
      * `flex-basis`, `border-width`, `letter-spacing`, `stroke-width`,
      * `grid-template-columns`, among others. Committed CSS already relies on
-     * this (e.g. `max-width: 44rem` in apps/web/src/preview/preview.css). There
+     * this (e.g. `max-width: 44rem` in apps/web/src/app.css). There
      * is no property-agnostic mirror for lengths because a length is legal
      * syntax everywhere, and adding these properties to the list above would
      * demand tokens that do not exist: the set has spacing, type, and radii
