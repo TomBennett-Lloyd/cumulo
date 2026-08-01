@@ -1,17 +1,19 @@
 {
   "planApproval": {
-    "mode": "required",
+    "mode": "auto",
     "alwaysRequiredFor": ["adr"],
-    "note": "While 'required', /plan-issue stops after posting every plan. After graduation to 'auto', plans for issues carrying any label in alwaysRequiredFor STILL stop for user approval \u2014 ADRs are major decisions and the user steers at this altitude. Graduation is proposed via retro PR; the user decides.",
+    "note": "Graduated 'required' -> 'auto' by the user, 2026-08-01 (see review-feedback: review-gate-graduation). /plan-issue posts the plan and proceeds to /execute, EXCEPT: plans for issues carrying any label in alwaysRequiredFor STILL stop for user approval — ADRs are major decisions and the user steers at this altitude — and any plan whose Risks section contains a question only the user can answer stops and surfaces it.",
     "debtBurn": "Issues labelled 'debt-burn' skip plan approval: the issue body IS the plan (triage only applies the label to small, proven, well-scoped work with named files and mechanical acceptance). Anything needing a re-structure or re-think is not labelled debt-burn and keeps the full gates."
   },
   "merge": {
-    "autoRule": "A PR auto-merges once CI is green iff it contains NO source-code files AND touches nothing under humanAlways paths. Source code = extensions .ts .tsx .js .mjs .cjs .sh .py .tf .sql \u2014 files whose structure (functions, modules, components) the user reviews. Markdown, JSON, YAML, and other plain config auto-merge.",
-    "humanAlways": ["docs/adr/**"],
-    "codeRule": "Human-review PRs: CI green, then label 'awaiting-review', notify the user with a short review guide, do NOT merge; continue with independent tickets while it waits.",
-    "note": "Propose relaxing via retro PR once review-feedback categories go quiet \u2014 the user decides.",
-    "debtBurnRule": "A PR closing a 'debt-burn'-labelled issue auto-merges once CI is green AND the review loop ended in APPROVE, even when it touches source code. Decided by the user 2026-07-30 (see review-feedback: debt-burn-lane). Bigger themes stay human-gated \u2014 and a decision pending with the user must never block the debt-burn lane.",
-    "refactorRule": "A behaviour-preserving refactor PR auto-merges once CI is green AND the review loop ended in APPROVE, when ALL hold: no exported API shape changes (no symbol added/removed/re-signatured in any package's public surface), no semantic change (existing test assertion content unmodified; goldens/fixtures byte-identical), and the PR body proves both. Anything that bakes in the shape of functions, classes, or module APIs \u2014 new abstractions, symbol renames/removals, signature changes \u2014 stays human-gated. Decided by the user 2026-07-31 (PR #80 precedent: mechanical table extraction auto-mergeable; #77 C3 class conversion not)."
+    "autoRule": "A PR auto-merges once CI is green iff it contains NO source-code files AND touches nothing under humanAlways paths. Source code = extensions .ts .tsx .js .mjs .cjs .sh .py .tf .sql — files whose structure (functions, modules, components) the user reviews. Markdown, JSON, YAML, and other plain config auto-merge.",
+    "reviewedSourceRule": "A source-code PR auto-merges once CI is green AND the review loop ended in APPROVE, unless it touches a humanAlways path. Graduated by the user 2026-08-01 (see review-feedback: review-gate-graduation) — the generalisation of debtBurnRule and refactorRule after every source PR this stretch (#95 #97 #114 #116 #119 #121 #124 #130 #131 #132) merged on exactly that evidence. The review loop's APPROVE is the load-bearing gate: no APPROVE, no merge, regardless of CI.",
+    "humanAlways": ["docs/adr/**", ".claude/workflow.json", "CLAUDE.md"],
+    "humanAlwaysRule": "PRs touching a humanAlways path: CI green, then label 'awaiting-review', notify the user with a short review guide, do NOT merge (chat approval from the user also unblocks); continue with independent tickets while it waits. ADRs decide direction; workflow.json and CLAUDE.md ARE the gates — they never pass through the gates they define.",
+    "mergeRitual": "Whoever merges a PR that carried 'awaiting-review': (1) the label comes off at merge, and (2) one line goes to docs/review-feedback.md — even when the verdict is just 'approved, no changes' (category: approved-no-changes). A quiet feedback category must be distinguishable from an unlogged one, or nothing can ever graduate; this ritual is what made reviewedSourceRule graduatable.",
+    "debtBurnRule": "A PR closing a 'debt-burn'-labelled issue auto-merges once CI is green AND the review loop ended in APPROVE, even when it touches source code. Decided by the user 2026-07-30 (see review-feedback: debt-burn-lane). Subsumed by reviewedSourceRule 2026-08-01 but kept as the planApproval half's anchor: debt-burn also skips plan approval.",
+    "refactorRule": "SUBSUMED by reviewedSourceRule 2026-08-01 — a behaviour-preserving refactor is a source PR and merges on CI green + review-loop APPROVE like any other. Kept for the historical calibration record (PR #80 vs #77 C3) until the next gate revision deletes it.",
+    "note": "Further relaxation (or tightening after a bad merge) is proposed via retro PR — the user decides. A merge later shown to be wrong reverts via a plain revert PR and gets a review-feedback entry naming what the review loop missed."
   },
   "feedbackLog": "docs/review-feedback.md"
 }

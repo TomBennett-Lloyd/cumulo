@@ -101,3 +101,10 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 - **Feedback**: "you're referencing files within a worktree, this is fragile as worktrees could end up being reaped. we should only reference files on main or files on another branch if not on main"
 - **Why**: Plans are durable (they live on issues); worktrees are not (reaped on merge or by sweep). The #19 plan's references into the `15-design-system` worktree were already dead when the user read it.
 - **How applied**: `planner.md` rule: repo-relative paths on `main`, or `<branch>:<path>` for unmerged files, never worktree paths; translate before posting. The #19 plan comment was edited to main-relative paths; #16/#17 audited clean.
+
+## 2026-08-01 — review-gate-graduation
+
+- **Category**: gate-calibration
+- **Feedback**: "ah yeah can we sort the human review gate issue, i'm hoping you can run a bit more autonomously" — following the 2026-07-31 retro's finding that human gates left no artefact (merged source PRs kept `awaiting-review`, no feedback-log entries), so no category could ever go quiet enough to graduate. During the same stretch the user approved every source PR without changes ("merge away on those PRs i've not reviewed them").
+- **Why**: Ten consecutive source PRs (#95, #97, #114, #116, #119, #121, #124, #130, #131, #132) merged on exactly CI-green + review-loop APPROVE, several with 2–3 review cycles catching real correctness bugs before merge. The internal review loop is doing the load-bearing review; the human gate on ordinary source PRs had become a latency cost with no recorded findings.
+- **How applied**: `merge.reviewedSourceRule` (source PRs auto-merge on CI green + review-loop APPROVE), `merge.humanAlways` extended to `.claude/workflow.json` and `CLAUDE.md` (the gates never pass through themselves), `merge.mergeRitual` (label off + one feedback line on every human-gated merge, even "approved, no changes"), and `planApproval.mode` → `auto` (ADR plans and user-only questions still stop). Tightening path stated in `merge.note`: a bad merge reverts by PR and logs what the review loop missed.
