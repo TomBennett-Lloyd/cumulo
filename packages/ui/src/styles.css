@@ -6,3 +6,23 @@
  */
 @import './tokens/tokens.css';
 @import './attribution/attribution.css';
+
+/*
+ * The one focus treatment every app inherits (issue #93). `:where()` holds the
+ * selector at zero specificity, so this only ever replaces the user agent's
+ * default ring: any component rule that wants more — `.site-row:focus-visible`,
+ * `.map-site-marker:focus-visible::before` — still wins without needing to
+ * out-specify the design system.
+ *
+ * Written as longhands rather than the `outline` shorthand because `outline` is
+ * a guarded shorthand: the CSS gate demands a bare `var()` for each of its
+ * sub-values, and the ring is half a space step, which only `calc()` can say
+ * (stylelint.config.mjs spells out the trade — write the longhands and each
+ * part is judged on its own terms, as the border rules already do).
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline-width: calc(var(--space-1) / 2);
+  outline-style: solid;
+  outline-color: var(--color-focus-ring);
+  outline-offset: calc(var(--space-1) / 4);
+}

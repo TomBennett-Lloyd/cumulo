@@ -256,6 +256,18 @@ describe('HttpFleetDataSource fleet fan-out', () => {
     expect(expectValue(await source.fleetActuals(168))).toEqual([]);
     expect(recorder.calls).toHaveLength(0);
   });
+
+  /**
+   * Pinned as a whole object rather than field by field: a source that grows a
+   * third capability, or quietly flips one to `true` without the endpoint that
+   * would justify it, fails here rather than letting the views promise history
+   * and measured output this transport cannot supply.
+   */
+  it('disclaims both fleet-level capabilities, matching the horizon-only fan-out and empty actuals above', () => {
+    const { source } = sourceAnswering(() => jsonResponse({ sites: [] }, 200));
+
+    expect(source.capabilities).toEqual({ fleetLookback: false, fleetActuals: false });
+  });
 });
 
 describe('HttpFleetDataSource fan-out pacing', () => {

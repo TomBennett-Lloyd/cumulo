@@ -108,6 +108,10 @@ class FlakyFleetSource implements FleetDataSource {
   readonly siteActuals = this.fleet.siteActuals;
   readonly fleetForecasts = this.fleet.fleetForecasts;
   readonly fleetActuals = this.fleet.fleetActuals;
+
+  // Delegated for the same reason as the reads above: those reads *are* the demo fleet's, so the
+  // capabilities describing them have to be the demo fleet's too rather than a second claim here.
+  readonly capabilities = this.fleet.capabilities;
 }
 
 /** A site the demo fleet is guaranteed to contain — same seed, same first entry. */

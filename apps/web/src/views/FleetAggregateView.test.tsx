@@ -11,7 +11,12 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
+import type {
+  FleetDataSource,
+  FleetSourceCapabilities,
+  FleetSourceResult,
+  RangeHours,
+} from '../data/fleet-data-source';
 import { FleetAggregateView, joinFleetSeries } from './FleetAggregateView';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
@@ -137,6 +142,11 @@ const FAILED_FLEET: StubFleet = {
  * `dataSource.listSites` and passes it straight to a hook.
  */
 class StubFleetSource implements FleetDataSource {
+  // Canned fleet forecasts and actuals are served for whatever range is asked, so this stub stands
+  // in for a source that genuinely has fleet history and fleet actuals — the demo source's side of
+  // the capability split, not the HTTP source's.
+  readonly capabilities: FleetSourceCapabilities = { fleetLookback: true, fleetActuals: true };
+
   readonly forecastRanges: RangeHours[] = [];
 
   constructor(private readonly canned: StubFleet) {}

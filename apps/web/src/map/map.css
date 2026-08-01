@@ -110,10 +110,11 @@
  * they read are still `--color-map-marker-*`, so the treatment's vocabulary is
  * where it matters.
  *
- * Focus keeps the platform outline (no `outline: none` here, ever): the
- * selected fill is the *extra* focus signal, not a replacement for the ring the
- * browser draws. A token-driven ring is issue #93; until it exists the user
- * agent's own is the honest default.
+ * Focus keeps the outline (no `outline: none` here, ever): the selected fill is
+ * the *extra* focus signal, not a replacement for the ring drawn around the
+ * marker. That ring is now the design system's own — the `:focus-visible` rule
+ * in `@cumulo/ui`'s styles.css paints `--color-focus-ring` app-wide (issue #93),
+ * so this button inherits it in place of the user agent's default.
  */
 
 .map-site-marker {

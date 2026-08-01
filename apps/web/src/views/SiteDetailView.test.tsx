@@ -9,7 +9,12 @@ import {
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
+import type {
+  FleetDataSource,
+  FleetSourceCapabilities,
+  FleetSourceResult,
+  RangeHours,
+} from '../data/fleet-data-source';
 import { joinSiteSeries, SiteDetailView } from './SiteDetailView';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
@@ -102,6 +107,10 @@ const seriesFailure = (message: string): FleetSourceResult<never> => ({
  * (structure.md rule 2).
  */
 class StubFleetSource implements FleetDataSource {
+  // Both false because the fleet-level members below answer with failures: this stub cannot serve
+  // fleet history or fleet actuals, and the site view never asks it to.
+  readonly capabilities: FleetSourceCapabilities = { fleetLookback: false, fleetActuals: false };
+
   readonly forecastRequests: SeriesRequest[] = [];
   readonly actualRequests: SeriesRequest[] = [];
   private readonly config: StubConfig;

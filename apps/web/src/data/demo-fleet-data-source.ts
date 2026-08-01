@@ -14,6 +14,7 @@ import type {
   FleetSourceResult,
   FleetDataError,
   FleetDataSource,
+  FleetSourceCapabilities,
   RangeHours,
 } from './fleet-data-source';
 
@@ -179,6 +180,16 @@ export class DemoFleetDataSource implements FleetDataSource {
     this.firstForecastDelayMs = options.firstForecastDelayMs ?? DEFAULT_FIRST_FORECAST_DELAY_MS;
     this.sites = [...generateFleet(canonicalFleetSeed)];
   }
+
+  /**
+   * Both true, and both earned below: `fleetForecasts` and `fleetActuals` build
+   * fixture series that span the requested window backwards, so the demo fleet
+   * genuinely has history and genuinely has measured output.
+   */
+  readonly capabilities: FleetSourceCapabilities = {
+    fleetLookback: true,
+    fleetActuals: true,
+  };
 
   readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> =>
     Promise.resolve({ kind: 'ok', value: [...this.sites] });

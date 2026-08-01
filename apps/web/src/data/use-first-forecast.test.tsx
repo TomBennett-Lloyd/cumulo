@@ -10,7 +10,11 @@ import {
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { FleetSourceResult, FleetDataSource } from './fleet-data-source';
+import type {
+  FleetSourceResult,
+  FleetDataSource,
+  FleetSourceCapabilities,
+} from './fleet-data-source';
 import { useFirstForecast } from './use-first-forecast';
 
 const SITE_ID = '3c3d3e3f-0000-4000-8000-000000000001';
@@ -121,6 +125,10 @@ const answerCall = (
  * shared state (`structure.md` rule 2).
  */
 class ScriptedFleetDataSource implements FleetDataSource {
+  // Both false, matching the fleet-level members below: this stub throws on every fleet-wide read,
+  // so claiming either capability would describe a source it refuses to be.
+  readonly capabilities: FleetSourceCapabilities = { fleetLookback: false, fleetActuals: false };
+
   /** Every call, in order: `listSites`, `createSite:<name>` or `getSiteForecast:<siteId>`. */
   readonly calls: string[] = [];
   private readonly answer: ForecastAnswer;

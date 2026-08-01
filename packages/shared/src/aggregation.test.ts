@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { aggregateFleetActuals, aggregateFleetForecast } from './aggregation';
+import { aggregateFleetActuals, aggregateFleetForecast, fleetCapacityKw } from './aggregation';
 import type { FleetActualsPoint, FleetForecastPoint } from './aggregation';
 import { forecastSchema } from './forecast';
 import type { Forecast } from './forecast';
 import { generationReadingSchema } from './generation-reading';
 import type { GenerationReading } from './generation-reading';
 import * as packageSurface from './index';
+import { siteSchema } from './site';
+import type { Site } from './site';
 import { uncertaintyBandSchema } from './index';
 import type { UncertaintyBand } from './index';
 
@@ -51,6 +53,21 @@ interface ReadingSpec {
 }
 
 const buildReading = (spec: ReadingSpec): GenerationReading => generationReadingSchema.parse(spec);
+
+/**
+ * Capacity is the only field the sum reads, so it is the only one that varies. Parsed rather than
+ * hand-built so a fixture can never carry a capacity `siteSchema` would refuse.
+ */
+const buildSite = (siteId: string, capacityKw: number): Site =>
+  siteSchema.parse({
+    id: siteId,
+    name: `Site ${siteId.slice(0, 4)}`,
+    latitude: 53.35,
+    longitude: -6.26,
+    tiltDegrees: 35,
+    azimuthDegrees: 180,
+    capacityKw,
+  });
 
 const validTimesOf = (
   points: readonly (FleetForecastPoint | FleetActualsPoint)[],
@@ -265,7 +282,33 @@ describe('aggregateFleetActuals', () => {
   });
 });
 
+describe('fleetCapacityKw', () => {
+  it('reports zero for an empty fleet rather than leaving the caller to invent a number', () => {
+    expect(fleetCapacityKw([])).toBe(0);
+  });
+
+  it('reports a single site as its own capacity', () => {
+    expect(fleetCapacityKw([buildSite(siteA, 4.5)])).toBe(4.5);
+  });
+
+  it('sums every site in a many-site fleet', () => {
+    expect(
+      fleetCapacityKw([buildSite(siteA, 4), buildSite(siteB, 6), buildSite(siteC, 10)]),
+    ).toBeCloseTo(20, 10);
+  });
+
+  it('sums fractional kW without dropping the fraction', () => {
+    expect(
+      fleetCapacityKw([buildSite(siteA, 3.3), buildSite(siteB, 2.7), buildSite(siteC, 0.1)]),
+    ).toBeCloseTo(6.1, 10);
+  });
+});
+
 describe('@cumulo/shared surface', () => {
+  it('exports the fleet capacity sum', () => {
+    expect(packageSurface.fleetCapacityKw).toBe(fleetCapacityKw);
+  });
+
   it('exports the uncertainty band schema, its type, and both aggregation functions', () => {
     const band: UncertaintyBand = uncertaintyBandSchema.parse({
       p10AcPowerKw: 1,
