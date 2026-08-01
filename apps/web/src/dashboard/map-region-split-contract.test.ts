@@ -11,9 +11,16 @@ import { describe, expect, it } from 'vitest';
  * browser only through `import('./MapRegion')`, so the entry chunk stays ~305 kB
  * instead of the 1,254 kB it was. No unit test can see that. Rendering
  * `Dashboard` in jsdom passes identically whether the map is lazy or statically
- * fused back in, and CI never runs `vite build`, so a single stray
- * `import { MapRegion } from './MapRegion'` added by someone reaching for a type
- * would undo the split with every other gate green.
+ * fused back in, so a single stray `import { MapRegion } from './MapRegion'`
+ * added by someone reaching for a type would undo the split with every gate in
+ * `verify` green.
+ *
+ * There is a dist-level ratchet behind this one now: CI's `web-build` job builds
+ * `apps/web` and runs `.claude/scripts/check-web-bundle.sh` on every push and PR
+ * (#142), whose entry-chunk byte budget is blown outright by the 949 kB map
+ * chunk being fused back in. This contract stays as the fast layer — it runs
+ * inside `verify` with no build, and it names the offending import statement
+ * rather than reporting a number that went up.
  *
  * The scan therefore covers the whole app source tree rather than the two files
  * this split touched. `LazyMapRegion.tsx` is both the file that most needs
