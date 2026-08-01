@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cumulo — design tokens (local harness)</title>
+  </head>
+  <body>
+    <!--
+      A local-only development surface: the design-token gallery, served by the
+      Vite dev server and by nothing else.
+
+      Vite's dev server serves any HTML file at the app root, but `vite build`
+      only builds the entries named in `build.rollupOptions.input`, which
+      defaults to `index.html` alone. This document is deliberately absent from
+      that input, so the gallery and everything it pulls in ship zero bytes to
+      `dist/` — the shipped app has no design-system page in it.
+
+      To open it: `pnpm --filter @cumulo/web dev`, then
+      http://localhost:5173/tokens.html
+    -->
+    <div id="root"></div>
+    <script type="module" src="/src/preview/main.tsx"></script>
+  </body>
+</html>
