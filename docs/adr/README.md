@@ -54,3 +54,4 @@ that is a supersession in disguise — write the new ADR.
 - [0003 — PV physics model runtime](0003-pv-model-runtime.md)
 - [0004 — Ingestion transport](0004-ingestion-transport.md)
 - [0005 — Fleet API compute and hosting](0005-fleet-api-hosting.md)
+- [0006 — Demo abuse and cost protection](0006-demo-abuse-protection.md)
