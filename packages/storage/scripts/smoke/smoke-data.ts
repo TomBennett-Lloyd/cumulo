@@ -17,11 +17,11 @@ import type {
 } from '@cumulo/shared';
 
 /**
- * The values a smoke run writes to the live tables, and where it writes them.
+ * The values a smoke run writes to the live tables.
+ *
+ * *Where* it writes them is `../storage-environment`'s `ENVIRONMENT`, which
+ * moved out of this module when the seed script became a second caller.
  */
-
-/** Which set of tables to talk to — `cumulo-<table>-<environment>`. */
-export const ENVIRONMENT = process.env.CUMULO_ENV ?? 'dev';
 
 /**
  * Null Island, and a day two decades before this project existed.

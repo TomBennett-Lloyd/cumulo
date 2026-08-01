@@ -3,9 +3,10 @@ import { deepStrictEqual, equal } from 'node:assert/strict';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 import { SeriesAdapter, storageTableName, type SeriesPoint } from '../../src/index';
+import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
-import { ENVIRONMENT, HOUR_0, HOUR_1, HOUR_2, smokeForecast, smokeGeneration } from './smoke-data';
+import { HOUR_0, HOUR_1, HOUR_2, smokeForecast, smokeGeneration } from './smoke-data';
 
 /** A `SeriesPoint` rendered as one comparable string, so order assertions read as data. */
 const describePoint = (point: SeriesPoint): string =>

@@ -5,9 +5,10 @@ import type { DynamoDBDocumentClient, NativeAttributeValue } from '@aws-sdk/lib-
 import { archiveDayMarkerSortKey, locationId, seriesSortKey, weatherSortKey } from '@cumulo/shared';
 
 import { SiteAdapter, storageTableName } from '../../src/index';
+import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
-import { ENVIRONMENT, HOUR_0, HOUR_1, SMOKE_DAY, SMOKE_LOCATION } from './smoke-data';
+import { HOUR_0, HOUR_1, SMOKE_DAY, SMOKE_LOCATION } from './smoke-data';
 
 /**
  * Counts every item in one partition, straight through the document client.

@@ -10,7 +10,8 @@
     "lint": "eslint --max-warnings 0 .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "seed:fleet": "tsx scripts/seed-fleet.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",

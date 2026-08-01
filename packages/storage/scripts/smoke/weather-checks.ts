@@ -3,10 +3,10 @@ import { deepStrictEqual, equal, ok } from 'node:assert/strict';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 import { WeatherAdapter, storageTableName } from '../../src/index';
+import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
 import {
-  ENVIRONMENT,
   HOUR_0,
   HOUR_1,
   HOUR_2,

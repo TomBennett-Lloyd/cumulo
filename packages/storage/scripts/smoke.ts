@@ -35,8 +35,8 @@ import { assertAwsSession } from './smoke/aws-session';
 import { CheckRunner, describeError } from './smoke/check-runner';
 import { runSeriesChecks } from './smoke/series-checks';
 import { runSiteChecks } from './smoke/site-checks';
-import { ENVIRONMENT } from './smoke/smoke-data';
 import { runTeardown } from './smoke/teardown';
+import { ENVIRONMENT } from './storage-environment';
 import { runWeatherChecks } from './smoke/weather-checks';
 
 const client = createStorageDocumentClient();
