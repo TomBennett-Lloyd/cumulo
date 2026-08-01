@@ -188,7 +188,10 @@ entry=${entries[0]}
 # satisfied after the real emitters had been renamed — green while the
 # containment scan below had rotted into a grep for strings nothing emits, which
 # is the one failure this section exists to prevent (found in review of #142).
-# Only source that can actually put a marker into dist/ may vouch for it.
+# Residual: a filename filter proves presence in non-test source, not an
+# emitting position — a stale `/* was .swatch-chip */` comment or a future
+# fixture/README under src/preview/ would still vouch for a marker nothing
+# emits. Accepted; renaming a marker means updating this script deliberately.
 #
 # `--exclude` is a GNU/BSD grep extension rather than POSIX — the one place this
 # script reaches past a plain grep. Both greps it can meet carry it: BSD grep

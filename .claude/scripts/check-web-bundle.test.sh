@@ -361,9 +361,11 @@ end
 # ==========================================================================================
 # 12. argument errors reach a verdict of "no verdict"
 # ==========================================================================================
-# A bad invocation must never read as a passing bundle. Each of these runs against a tree
-# the gate would otherwise pass (or, for the first, no tree at all), so 2 here is the parser
-# refusing rather than the assertions holding.
+# A bad invocation must never read as a passing bundle. The second-argument case runs
+# against a tree the gate would otherwise pass, so its 2 is the parser refusing; the
+# unknown-option case never resolves a root at all, so its discriminator is the
+# "unknown option" message assertion, not the tree; the nonexistent-root case is the
+# resolver itself refusing.
 begin "a nonexistent root exits 2, not 1"
 run_check "$TMP_ROOT/does-not-exist"
 expect_rc 2 "$rc"
