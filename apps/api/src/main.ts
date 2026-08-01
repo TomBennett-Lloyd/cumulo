@@ -18,11 +18,12 @@ import { docsAssetParamName } from './openapi/docs-assets';
 import { docsPageResponse, serveDocsAsset, type DocsAssetDeps } from './openapi/docs-page';
 import { openApiDocumentResponse } from './openapi/document';
 import { createSite, type CreateSiteDeps } from './sites/create-site';
-import { deleteSite } from './sites/delete-site';
+import { deleteSite, type DeleteSiteDeps } from './sites/delete-site';
 import { getSite } from './sites/get-site';
 import { listSites } from './sites/list-sites';
 import { siteIdParamName } from './sites/site-id-param';
 import { updateSite } from './sites/update-site';
+import { describeThrown } from './thrown-detail';
 
 /**
  * The composition root, and the module the bundled artifact's `handler` export
@@ -73,19 +74,6 @@ export const parseApiEnv = (source: Record<string, string | undefined>): ApiEnv 
 };
 
 /**
- * One rendering of an unknown thrown value, for the boundary's log line.
- *
- * `unknown` is the honest parameter type — JavaScript allows throwing anything,
- * and a thrown string is precisely the case where a naive `.message` would log
- * `undefined` and lose the incident. `apps/ingestion` carries the same rendering
- * in its own module: apps never import from apps (`architecture.md` rule 1), and
- * promoting a five-line log helper into a shared package is a decision worth
- * making on purpose rather than as a side effect of this chunk.
- */
-const describeThrown = (error: unknown): string =>
-  error instanceof Error ? `${error.name}: ${error.message}` : `non-Error thrown (${typeof error})`;
-
-/**
  * The production log sink: one JSON object per line, which is what makes
  * CloudWatch Logs Insights able to query these entries by field rather than by
  * substring. `console.log` is correct *here* and nowhere else — this module is
@@ -110,12 +98,14 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter, for the two read-only routes below.
+ * The `cumulo-series` adapter: `querySeriesRange` for the two read routes, and
+ * `deleteSiteSeries` for the cleanup that follows a deleted or evicted site.
  *
- * Both use `querySeriesRange` and nothing else, so the IAM policy this function
- * runs under grants `Query` on this table and no write action at all — the
- * `Pick<SeriesAdapter, 'querySeriesRange'>` in each handler's deps type is the
- * compile-time half of the same statement.
+ * Nothing here *writes* a series point — forecasts are #12's and actuals are
+ * #16's — so the IAM policy this function runs under grants Query, DeleteItem
+ * and BatchWriteItem on this table and neither PutItem nor UpdateItem
+ * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps type
+ * is the compile-time half of the same statement.
  */
 const series = new SeriesAdapter({
   client: documentClient,
@@ -135,7 +125,16 @@ const now = (): UtcIsoTimestamp =>
 
 const newSiteId = (): string => randomUUID();
 
-const createSiteDeps: CreateSiteDeps = { sites, now, newSiteId };
+/**
+ * The two handlers that change the fleet's size, and so the two that need the
+ * counter, the eviction index, the series cleanup and a log sink. Named
+ * constants rather than object literals in the route table below: both are
+ * built once per container, and a reader looking for what a write route can
+ * reach finds it here rather than inline among ten routes.
+ */
+const createSiteDeps: CreateSiteDeps = { sites, series, now, newSiteId, log: jsonLineLog };
+
+const deleteSiteDeps: DeleteSiteDeps = { sites, series, log: jsonLineLog };
 
 /**
  * Where the bundled Swagger UI assets are, decided here because it is a fact
@@ -159,11 +158,6 @@ const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', imp
  */
 export const routes: readonly Route[] = [
   { method: 'GET', segments: ['v1', 'sites'], handle: () => listSites({ sites }) },
-  // No site-cap check here, deliberately. The cap counter transaction, per-IP
-  // limiting, eviction and auto-block are #29's scope; #14's cost guard on this
-  // unauthenticated write is the API Gateway stage throttle (10 rps / burst 20)
-  // configured in `infra/api`. A cap enforced here without #29's counter would
-  // be a race, not a guard.
   {
     method: 'POST',
     segments: ['v1', 'sites'],
@@ -182,7 +176,7 @@ export const routes: readonly Route[] = [
   {
     method: 'DELETE',
     segments: ['v1', 'sites', { param: siteIdParamName }],
-    handle: (request) => deleteSite({ sites }, request),
+    handle: (request) => deleteSite(deleteSiteDeps, request),
   },
   // The two series reads. Four segments each, so neither can shadow — or be
   // shadowed by — `GET /v1/sites/{siteId}` above, which matches three.

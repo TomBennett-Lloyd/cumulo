@@ -1,4 +1,4 @@
-import type { ApiErrorCode } from '@cumulo/shared';
+import { MAX_USER_SITES, type ApiErrorCode } from '@cumulo/shared';
 
 import {
   DEFAULT_FORECAST_HORIZON_HOURS,
@@ -180,6 +180,10 @@ export const apiPaths: PathsObject = {
         'Unauthenticated on purpose — this is the demo\'s "add a site" flow. The server',
         'assigns `id`, sets `origin` to `user`, stamps `createdAt` and marks the site',
         'active; the 201 body is the only place the caller learns the new id.',
+        `At most ${String(MAX_USER_SITES)} user-created sites exist at once: a create`,
+        'against a full fleet still answers 201, having evicted the oldest user site —',
+        "and that site's stored series points — to make room. The seed fleet is exempt",
+        'and is never evicted.',
       ].join(' '),
       requestBody: createSiteBody,
       responses: {
@@ -221,8 +225,9 @@ export const apiPaths: PathsObject = {
       operationId: 'deleteSite',
       summary: 'Remove a site from the fleet',
       description: [
-        "Removes the site row. The site's stored series rows are left to expire under",
-        'their retention TTL; range-deleting them is #29.',
+        "Removes the site row and, best-effort, the site's stored forecast and actual",
+        'series rows. Anything the cleanup leaves behind is unreachable — every series',
+        'route resolves the site first — and expires under its retention TTL.',
       ].join(' '),
       parameters: [siteIdParameter],
       responses: {
