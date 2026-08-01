@@ -115,3 +115,10 @@ One entry per distinct feedback item; the slug names that item's subject and dis
 - **Feedback**: "where do i approve 134 … i did give the go ahead for that" — owner approval for the #134 decision: broaden CLAUDE.md's architecture-index trigger row with "restating an infrastructure value in code".
 - **Why**: `docs/standards/architecture.md` rule 8 (declare tf↔code mirrors in the mirror gate) gained its doc-level trigger in #132, but the CLAUDE.md index row still listed only the original three triggers — a reader who never opens the doc misses rule 8's case. The #132 implementer correctly refused to edit CLAUDE.md on agent authority and parked the one-line diff for the owner.
 - **How applied**: The one-line diff from PR #132's review comment applied verbatim; closes #134.
+
+## 2026-08-01 — adr-amendment-convention
+
+- **Category**: convention
+- **Feedback**: "my concern is that the numbers being wrong in that document could create an impression that could cause confusion even if the file isn't explicitly read and interpreted wrong … i wonder whether there are certain cases where updating an ADR (with a note as to what was updated and why at the bottom) might be better than keeping them as immutable?" — confirmed: "the change to the adr convention sounds good".
+- **Why**: Planners are instructed to read ADRs before code, so stale authoritative numbers propagate into plans silently (observed risk: #136's planner derived arithmetic from ADR 0004; #122's plan cited ADR 0002's consequences). Classic ADR immutability protects against retconning decisions, but its archival half is redundant with git history; what it costs is single-source-of-truth for current state — the property agents need most.
+- **How applied**: `docs/adr/README.md` gains the Amendments convention (decisions/rationale/status immutable, supersession for changed decisions; stated values the code legitimately moved are trued up inline + dated `## Amendments` footer entry naming old → new, driver, and the owning code location; guardrail — an amendment never touches reasoning). First worked example: ADR 0002's retry figures (4 → 2 attempts, #122). Closes #138.
