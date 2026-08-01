@@ -78,6 +78,24 @@ export type EvictAndCreateResult =
   | { readonly evicted: false; readonly reason: 'oldest_gone' | 'conflict' };
 
 /**
+ * Outcome of a counted delete (X1), and the two ways it can decline are opposite
+ * instructions to the caller. `already_gone` is final — the site was not there,
+ * so there is nothing left to do and nothing was decremented; re-issuing the
+ * transaction would only produce the same answer. `conflict` is the reverse:
+ * the site's fate is *unknown* because DynamoDB cancelled the transaction over a
+ * collision on one of these rows (see {@link conflictCancelled}), and the same
+ * delete issued a moment later may well succeed.
+ *
+ * Collapsing the pair into one falsy answer would make a lost race look exactly
+ * like a 404 — telling a caller its site is gone when the delete never ran, and
+ * leaving the counter's contention (#155) as unexplained as it was on the create
+ * path.
+ */
+export type DeleteUserSiteResult =
+  | { readonly deleted: true }
+  | { readonly deleted: false; readonly reason: 'already_gone' | 'conflict' };
+
+/**
  * DynamoDB's cancellation code for a transaction item whose `ConditionExpression`
  * evaluated false. Every other code — `TransactionConflict`,
  * `ProvisionedThroughputExceeded`, `ThrottlingError`, `ValidationError` — means
@@ -375,10 +393,16 @@ export class SiteAdapter extends StorageAdapterBase {
    * repeated delete would keep subtracting from `userSiteCount` and eventually
    * let the fleet grow past its cap. A transaction cancelled by that condition
    * means the site was already gone, so nothing was deleted *and* nothing was
-   * decremented — reported as `{ deleted: false }`, the same idempotent answer
-   * `deleteFleetSite` gives.
+   * decremented — reported as `already_gone`, the idempotent answer
+   * `deleteFleetSite` gives in its own vocabulary.
+   *
+   * A `conflict` is not that answer and must never be read as it: the delete
+   * shares the counter item with every capped create, so it loses the same races
+   * they do. This adapter does not retry it — ADR 0002 puts the retry on the
+   * route handler, which is the layer that knows what a second attempt costs the
+   * request — it only reports it in a form the handler can act on.
    */
-  async deleteUserSiteWithCount(siteId: string): Promise<{ deleted: boolean }> {
+  async deleteUserSiteWithCount(siteId: string): Promise<DeleteUserSiteResult> {
     const outcome = await this.transactUnless(
       'deleteUserSiteWithCount',
       { pk: FLEET_PARTITION, siteId },
@@ -402,12 +426,14 @@ export class SiteAdapter extends StorageAdapterBase {
       ],
     );
 
-    // INTERIM (#155 C1 → C3, same PR): this collapses `condition_failed` and
-    // `conflict` into one falsy answer, so a caller cannot yet tell "already
-    // gone" (a 404) from "lost a race" (worth retrying). C3 replaces this with
-    // a `DeleteUserSiteResult` union and teaches the delete route to retry.
-    // This mapping must not reach `main` on its own.
-    return { deleted: outcome === 'written' };
+    switch (outcome) {
+      case 'condition_failed':
+        return { deleted: false, reason: 'already_gone' };
+      case 'conflict':
+        return { deleted: false, reason: 'conflict' };
+      case 'written':
+        return { deleted: true };
+    }
   }
 
   /** Every site in the fleet, seed and user, active and inactive (A2, I1). */

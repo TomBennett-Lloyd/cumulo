@@ -16,8 +16,8 @@ import type { CreateSiteDeps } from './create-site';
  *
  * Its own module because `create-site.test.ts` is at the 300-line ceiling
  * (`docs/standards/structure.md` rule 4: when a file grows, the first cut is its
- * types and fixtures) — not because anything else uses it. C3's delete route
- * scripts its own fleet; the two share a shape but not an intent, and merging
+ * types and fixtures) — not because anything else uses it. The delete route's
+ * test scripts its own fleet; the two share a shape but not an intent, and merging
  * them would couple two routes' contention models (rule 7).
  */
 

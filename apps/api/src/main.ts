@@ -252,7 +252,13 @@ const createSiteDeps: CreateSiteDeps = {
   random: Math.random,
 };
 
-const deleteSiteDeps: DeleteSiteDeps = { sites, series, log: jsonLineLog };
+const deleteSiteDeps: DeleteSiteDeps = {
+  sites,
+  series,
+  log: jsonLineLog,
+  sleep,
+  random: Math.random,
+};
 
 /**
  * Where the bundled Swagger UI assets are, decided here because it is a fact

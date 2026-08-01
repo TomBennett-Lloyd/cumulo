@@ -319,11 +319,40 @@ describe('deleteUserSiteWithCount', () => {
   it('never decrements for a site that was already gone', async () => {
     ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(CONDITION_FAILED, NO_REASON));
 
-    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({ deleted: false });
+    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({
+      deleted: false,
+      reason: 'already_gone',
+    });
     // The decrement travelled *inside* the cancelled transaction, so it did not
     // happen either — and no compensating write was issued outside it.
     expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
     expect(ddbMock.calls()).toHaveLength(1);
+  });
+
+  it('reports a counter conflict as a lost race rather than a site already gone', async () => {
+    // The delete writes the same counter item every capped create writes, so it
+    // loses the same races. Answering 'already_gone' here would 404 a caller
+    // whose site is still very much there — and would do it precisely when the
+    // fleet is busiest.
+    ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(NO_REASON, TRANSACTION_CONFLICT));
+
+    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({
+      deleted: false,
+      reason: 'conflict',
+    });
+    // The retry belongs to the route handler (ADR 0002), so the adapter sends
+    // exactly once whatever the answer.
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('reports a standalone TransactionConflictException on the delete path too', async () => {
+    ddbMock.on(TransactWriteCommand).rejects(transactionConflict());
+
+    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({
+      deleted: false,
+      reason: 'conflict',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
   });
 });
 

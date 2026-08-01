@@ -92,6 +92,7 @@ export { type BatchingAdapterDeps, type StorageAdapterDeps } from './adapters/st
 export {
   SiteAdapter,
   type CreateUserSiteResult,
+  type DeleteUserSiteResult,
   type EvictAndCreateResult,
   type GetFleetSiteResult,
   type OldestUserSiteResult,
