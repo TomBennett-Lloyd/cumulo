@@ -15,8 +15,8 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
 /**
  * Total attempts per request, initial send included — so exactly one retry.
  *
- * **Which layer owns which failure.** A batch write is retried by two
- * independent layers, and each owns one job (#122):
+ * **Which layer owns which failure, on the batched paths.** A batch write is
+ * retried by two independent layers, and each owns one job (#122):
  *
  * - The **drain layer** (`drainBatches` under `defaultBatchPolicy`, `./batch`)
  *   owns *throttling*. DynamoDB does not reject a throttled `BatchWriteItem`;
@@ -32,6 +32,38 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  * sends = up to 12 round trips for one batch, both layers backing off over the
  * same throttling. At 2 the ceiling is 3 × 2 = 6 round trips, and a batch's
  * worst case is 21.6 s rather than 57.6 s.
+ *
+ * **The batched paths are not all the paths — and the trade there is accepted,
+ * not overlooked.** This constant governs *every* command the package issues,
+ * and only the batched ones have a drain layer above them (`BatchWriteItem` and
+ * `BatchGetItem`, in the series and weather adapters). Everywhere else the SDK
+ * layer is the only retry layer there is:
+ *
+ * - `SiteAdapter`'s `GetItem` and `PutItem`, and `MetricsAdapter`'s `PutItem`;
+ * - the weather adapter's `TransactWriteItems`;
+ * - every Query issued through `StorageAdapterBase.queryAllPages`
+ *   (`./adapters/storage-adapter-base.ts`) — used by the series, metrics, site
+ *   and weather adapters. It retries nothing itself, and because it paginates,
+ *   each page is an independent opportunity to be throttled.
+ *
+ * On those paths throttling never appears as `UnprocessedItems`: a throttled
+ * single request is rejected outright as
+ * `ProvisionedThroughputExceededException`, which ADR 0002 names as the
+ * expected failure mode of the provisioned `cumulo-series` and `cumulo-weather`
+ * tables. So this change does cost them something real, stated plainly: a
+ * sustained transport failure *or* a single-request throttle now exhausts the
+ * budget after one retry rather than three, and reaches the caller as a
+ * `StorageError` (`./errors`) — which on ADR 0002's one genuinely user-visible
+ * throttle path, the synchronous dashboard fan-out, is rendered by the API
+ * boundary as a generic 500.
+ *
+ * Accepted because retrying harder is the wrong instrument here. ADR 0002 puts
+ * a large burst reserve in front of that fan-out and a CloudWatch alarm behind
+ * it; a read still throttled after a full second of backoff is reporting
+ * sustained capacity pressure, which is an alarm to answer rather than a
+ * request to retry into. And every site in the fleet backs off against the same
+ * provisioned tables, so a longer per-request budget is the thundering-herd
+ * direction — the reason the curve underneath is full jitter (`./batch`).
  *
  * ADR 0002 Consequence 5's requirement is unchanged and is why the number lives
  * here at all: pinned explicitly, never inherited. The SDK's *default* is 3

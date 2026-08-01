@@ -200,15 +200,40 @@ describe('createStorageRetryStrategy', () => {
  */
 describe('createStorageDocumentClient request deadlines', () => {
   /**
-   * The worst case for one command, restated locally: two attempts at the
-   * pinned deadline plus the one pinned backoff between them (#122 — a single
-   * retry means a single delay, at the undoubled base). `@cumulo/ingestion`
-   * derives the same figure as `STORE_SEND_WORST_MS`; this package cannot
-   * import that without depending on its own consumer, so the assertion below
-   * is bounded by the arithmetic rather than by a copied literal.
+   * The most the pinned backoff curve can sleep across one whole command:
+   * one sleep per retry {@link STORAGE_MAX_ATTEMPTS} allows, each taken at the
+   * very top of its own jitter window.
+   *
+   * Derived by driving the *production* curve — `storageRetryDelayMs`, the same
+   * function the strategy runs on — with a random source pinned to its maximum,
+   * rather than by restating its arithmetic here. So the doubling, and the
+   * `MAX_BACKOFF_DELAY_MS` ceiling that eventually flattens it, are followed
+   * automatically instead of being copied and left to drift. `fullJitterDelayMs`
+   * floors its result, so a real sleep is always strictly below this figure.
+   *
+   * This term used to be a literal — `* (1 + 2 + 4)` when the attempt count was
+   * 4, then `* 1` when #122 made it 2 — and that is a trap rather than a
+   * simplification: raise the count to 3 and the timeout term below scales while
+   * a literal backoff term does not, so the bound understates the true worst
+   * case by a whole base delay and the test starts failing *intermittently*
+   * instead of loudly. Intermittent red on the slowest test in the package is
+   * exactly the failure this describe block exists to prevent.
+   */
+  const retryBackoffCeilingMs = Array.from({ length: STORAGE_MAX_ATTEMPTS - 1 }, (_, retryIndex) =>
+    storageRetryDelayMs(retryIndex + 1, () => 1),
+  ).reduce((total, sleepMs) => total + sleepMs, 0);
+
+  /**
+   * The worst case for one command, restated locally: every attempt
+   * {@link STORAGE_MAX_ATTEMPTS} allows, each hitting the pinned deadline, plus
+   * the backoff ceiling above. `@cumulo/ingestion` derives the same figure as
+   * `STORE_SEND_WORST_MS`; this package cannot import that without depending on
+   * its own consumer, so the assertion below is bounded by the arithmetic
+   * rather than by a copied literal — every term now genuinely follows from the
+   * constants.
    */
   const commandWorstCaseMs =
-    STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + STORAGE_RETRY_BASE_DELAY_MS * 1;
+    STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + retryBackoffCeilingMs;
 
   /**
    * Wall-clock time the model above does not price, allowed for once, by name.
