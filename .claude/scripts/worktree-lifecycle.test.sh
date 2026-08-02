@@ -1067,14 +1067,22 @@ end
 # ==========================================================================================
 # 35. the link must name THIS worktree's admin dir, not merely a well-formed one
 # ==========================================================================================
-# Cases 24, 33 and 34 delete the .git file, so all three are answered by the shape check alone
-# and none of them can see the identity comparison that follows it. Here the `gitdir:` line is
-# perfectly well formed and points at a SIBLING worktree's admin dir instead — what copying a
-# worktree directory leaves behind. Everything the shape check inspects is correct, so without
-# the comparison reap would probe, and then reap, a worktree while reading another branch's
-# admin dir: the min-age answer, the merge answer and the removal would all be about the wrong
-# worktree. The sibling lives outside the main checkout so that it cannot make it dirty and
-# give this case a second reason to refuse.
+# What this case uniquely pins is the guard's IDENTITY comparison, and the boundary between the
+# guard's two arms runs the opposite way from how it first reads. Cases 24, 33 and 34 delete the
+# .git file, and the shape arm does reject that first — but deleting the shape arm's refusal
+# does not make any of them fail: `link` stays empty, gets joined onto $wt, and the identity
+# comparison rejects it anyway (verified by mutation — the suite stays fully green with that
+# refusal removed). So the identity arm is what answers all four of these cases, and the shape
+# arm's only unique input is a .git file whose content is the recorded admin dir with the
+# `gitdir: ` prefix missing: the one shape that would clear identity but not form. No case here
+# supplies it, so the shape arm's refusal is currently unpinned.
+#
+# Here the `gitdir:` line is perfectly well formed and points at a SIBLING worktree's admin dir
+# instead — what copying a worktree directory leaves behind. Everything the shape arm inspects
+# is correct, so without the comparison reap would probe, and then reap, a worktree while
+# reading another branch's admin dir: the min-age answer, the merge answer and the removal would
+# all be about the wrong worktree. The sibling lives outside the main checkout so that it cannot
+# make it dirty and give this case a second reason to refuse.
 begin "reap keeps a worktree whose .git file names a different worktree's admin dir"
 nested_worktree_fixture adminnested_wronglink
 add_wt other other
@@ -1092,6 +1100,38 @@ expect_branch "$ROOT/main" feat
 # The sibling whose admin dir was borrowed is untouched too — reap refused, it did not redirect.
 expect_exists "$ROOT/other/file.txt"
 expect_branch "$ROOT/main" other
+end
+
+# ==========================================================================================
+# 36. a path containing spaces survives the porcelain scan, the admin lookup and the verdict
+# ==========================================================================================
+# The block scan, the admin-dir lookup and the sweep's candidate list all parse
+# `git worktree list --porcelain` in shell now, where a single unquoted expansion silently
+# truncates a path at its first space — and a truncated path does not error, it just matches
+# nothing. Every other fixture in this suite is space-free, so that entire class of regression
+# would land green without this case.
+#
+# The space goes in BOTH the enclosing tree and the worktree's own directory name, because two
+# different readers have to survive it: the block scan canonicalises a path taken from the
+# porcelain, the admin lookup one taken from git's `worktrees/<name>/gitdir` records.
+#
+# --dry-run rather than a real reap, and WOULD-REAP rather than merely rc 0, because reaching
+# that line means every stage already agreed on which worktree was named: a truncated path
+# fails the scan's identity test and comes back `not-a-worktree`, and a truncated admin lookup
+# comes back `no-admin-dir`. Both are refusals, so rc alone would not tell them apart from a
+# healthy keep.
+begin "reap names a worktree whose path contains spaces, through scan, admin lookup and verdict"
+fixture 'sp ace'
+add_wt feat 'work tree'
+# The branch is an unmoved cut of main, so ancestry settles the merge check on its own and a
+# failing gh stub keeps the case from passing by way of GitHub.
+gh_stub_broken "$ROOT/gh"
+run_reap "$ROOT/gh" 0 "$ROOT/work tree" --dry-run
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP $ROOT/work tree (feat)"
+expect_not_out "KEPT"
+expect_exists "$ROOT/work tree/file.txt"
+expect_branch "$ROOT/main" feat
 end
 
 # ==========================================================================================

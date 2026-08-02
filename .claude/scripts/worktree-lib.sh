@@ -37,6 +37,26 @@ command -v node >/dev/null 2>&1 || {
 # The walk-up is what buys that: resolve the deepest ancestor that does exist, then re-attach the
 # components that do not. Symlinked prefixes are therefore still resolved for a path whose leaf
 # is missing (/tmp/gone -> /private/tmp/gone), which plain string assembly would not do.
+#
+# Two divergences from the `os.path.realpath` this replaced, both measured rather than assumed:
+#
+#   - `..` following a symlink component resolves LEXICALLY, because path.resolve normalises the
+#     string before anything is followed. With /a/link -> /b, canon "/a/link/../x" answers /a/x
+#     where realpath answers /b/x.
+#   - A DANGLING symlink answers with the link's own path rather than its dead target:
+#     realpathSync throws, so the walk-up re-attaches that component verbatim. realpath follows
+#     it and answers the target.
+#
+# Neither is reachable from this family's call sites, and both fail safe if they ever were.
+# Every path handed to canon is one of: a path out of git's own records (`worktree list
+# --porcelain`, `worktrees/<name>/gitdir`), which git writes absolute and already real; $PWD,
+# likewise; or a relative `gitdir:` value joined onto a $wt that canon has ALREADY fully
+# resolved — the only place a `..` could enter, and by then no unresolved symlink is left ahead
+# of it for the lexical shortcut to skip past. The one genuinely free input is the path the
+# operator types on the command line, and mis-resolving that cannot widen anything: $wt would
+# match no porcelain block and reap answers `not-a-worktree`. That is the general shape — canon
+# feeds string comparisons whose every mismatch verdict is a refusal (`not-a-worktree`,
+# `broken-git-link`), so a divergence costs a keep, never a removal.
 canon() {
   node -e 'const fs=require("fs"),path=require("path");let p=path.resolve(process.argv[1]),tail="";for(;;){try{console.log(path.join(fs.realpathSync(p),tail));break}catch(e){tail=path.join(path.basename(p),tail);const parent=path.dirname(p);if(parent===p){console.log(path.join(p,tail));break}p=parent}}' "$1"
 }

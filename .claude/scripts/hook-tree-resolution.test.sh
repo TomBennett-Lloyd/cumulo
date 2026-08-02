@@ -325,7 +325,7 @@ end
 # Every case above runs the real interpreter, and that is precisely why none of them can
 # see any of this: a hook with a working node behaves identically whether its preflight is
 # present, absent, or misspelled. Green with the tool installed is not evidence that the
-# missing-tool path works — it is the same output either way. So these three take the tool
+# missing-tool path works — it is the same output either way. So these four take the tool
 # away, which is the negative control #102 asks for by name.
 #
 # Two different failures, deliberately kept apart, because the fix has to distinguish them
@@ -334,6 +334,15 @@ end
 # the exit status of hook_event_field). Before #102 both ended the same way — empty output,
 # exit 0 — which reads as "this event named nothing to act on" and is indistinguishable
 # from a clean edit.
+#
+# The four cases are that pair CROSSED WITH BOTH HOOKS, and the grid is filled in on
+# purpose rather than by symmetry-for-its-own-sake. The two hooks resolve a missing verdict
+# oppositely — post-edit-check exits 2, ensure-deps exits 0 — so each guard is a separate
+# piece of code with a separate exit status, and covering one proves nothing about the
+# other. Review cycle 1 caught exactly that hole: with only three cases, deleting
+# ensure-deps' rc-check on the field read left the suite fully green, so the loud/silent
+# boundary was pinned for one caller and unpinned for the other — the precise asymmetry
+# this issue exists to close.
 
 ABSENT_NODE="$TMP_ROOT/absent/node"
 if [ -e "$ABSENT_NODE" ]; then
@@ -385,6 +394,24 @@ expect_rc 2 "$rc"
 expect_stderr "could not read the hook event"
 expect_not_stderr "required tool not found"
 expect_not_out "eslint-shim"
+end
+
+# The twin of the case above, and the one with the nastier failure if it goes unwritten.
+# post-edit-check reading an unreadable event just stops; ensure-deps reading one gets an
+# empty `cwd`, and empty falls through to the $PWD fallback — so an ungarded field read does
+# not merely fail to prepare the worktree, it goes and prepares WHATEVER DIRECTORY THE HOOK
+# HAPPENS TO BE IN, having read nothing at all. A wrong tree confidently answered is the
+# original #74 shape, arrived at from a new direction.
+#
+# expect_rc 0 is the contract, not a weaker assertion than the twin's exit 2: ensure-deps
+# never blocks a session (see its header). Loud AND harmless is the whole target here — the
+# stderr assertion and the rc assertion are each half of it, and neither alone is the point.
+begin "ensure-deps reports an unreadable event without blocking, and prepares nothing"
+run_ensure_deps_as "$BAD_NODE" "$PREFLIGHT_WT" "$PREFLIGHT_MAIN"
+expect_rc 0 "$rc"
+expect_stderr "could not read the hook event"
+expect_not_stderr "required tool not found"
+expect_not_out "deps are ready"
 end
 
 # --- summary -------------------------------------------------------------------------

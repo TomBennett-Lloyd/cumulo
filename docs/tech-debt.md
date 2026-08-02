@@ -124,3 +124,15 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - Where: the `failed` arm of `SitePanel.tsx`'s forecast rendering, which mounts `PanelError` with `onRetry` unconditionally; the halt that reaches it is `decidePoll`'s `forbidden` arm in `apps/web/src/data/use-first-forecast.ts`
 - What: #162 made the halt immediate — a `forbidden` answer stops the poll at once instead of burning the 90 s deadline — but the state it lands in is the same `failed`/`'error'` rendering every other failure uses, so the panel offers "Try again" for the one failure whose own doc says a retry cannot work ("what is wrong is _who is asking_"). The timing half of the #150-review finding is closed; the button half is deliberately out of #162's scope and is exactly the seam two open issues own: #177's `ForecastViewState` union (a distinct halted status) and #104's copy ownership (what the halted card says instead). Whichever lands first should consume this entry. Unreachable today — no shipped source emits `forbidden` on the poll — so this is a stated gap, not a live defect.
 - Source: #162 review cycle 1
+
+## 2026-08-02 — The hooks' "stdin was unreadable" report is dead code behind a hang
+
+- Where: the `read_hook_event` failure arms in `.claude/hooks/post-edit-check.sh` and `.claude/hooks/ensure-deps.sh`; the hang itself is `read_hook_event`'s `cat` in `.claude/hooks/hook-context.sh`
+- What: both hooks now carry an honest "could not read the hook event" report on the `read_hook_event` failure path, but the scenario it names cannot reach it — with stdin closed or absent, `cat` blocks and the hook hangs (measured: 5 s timeout, identical on the pre-#102 copies, so pre-existing). The report is right about intent and wrong about reachability; the real fix is in `read_hook_event` itself (a `-t 0`/timeout guard around the read, or reading with a bounded mechanism), after which the failure arms become live. Until then the arms are aspiration, and only the `hook_event_field` interpreter-failure arms — which ARE pinned by harness cases — carry the loud-cannot-judge property.
+- Source: #102 review cycle 1
+
+## 2026-08-02 — canon spawns an interpreter per path, and the sweep multiplies it
+
+- Where: `canon` in `.claude/scripts/worktree-lib.sh`; its per-porcelain-line call sites in `reap-worktree.sh` and `sweep-worktrees.sh`
+- What: the python→node migration kept canon's one-path-per-process shape, so reap is O(worktrees) node spawns and a sweep is O(N²); the lifecycle harness measured 27 s → 42 s on the same cases. No correctness impact and fine at this repo's worktree counts — recorded so the cost has a name. Fix direction if it ever bites: a `canon_many` reading a NUL-separated list in one spawn, or batching the porcelain parse's canon calls. Related boundary note from the same review: reap's broken-git-link SHAPE arm is currently shadowed by the identity arm for every deleting fixture (its only unique input is a `.git` whose content equals the recorded admin dir minus the `gitdir: ` prefix) — the case-35 comment records the true boundary.
+- Source: #102 review cycle 1
