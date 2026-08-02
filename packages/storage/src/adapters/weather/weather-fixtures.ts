@@ -38,6 +38,21 @@ import { WeatherAdapter } from './weather-adapter';
  * attributes are present on every item.
  */
 
+/**
+ * The cancelled-transaction builder and DynamoDB's reason codes come from the
+ * adapters root and are re-exported here so this folder's tests keep one
+ * fixture import. Importing `site-fixtures.ts` directly is not an option: it
+ * installs its own `mockClient(DynamoDBDocumentClient)` at module scope, and
+ * two of those in one process fight over the same client.
+ */
+export {
+  NO_REASON,
+  THROTTLING,
+  THROUGHPUT_EXCEEDED,
+  TRANSACTION_CONFLICT,
+  transactionCancelled,
+} from '../transaction-fixtures';
+
 export const TABLE = 'cumulo-weather-test';
 
 /** Dublin, and the location id it rounds to (~1.1 km buckets). */

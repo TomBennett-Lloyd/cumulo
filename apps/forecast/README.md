@@ -74,12 +74,12 @@ here simply does not delete its message. The queue's visibility timeout (300 s, 
 
 The arithmetic, on the constants actually in the tree today:
 
-| Case                 | Mechanism                                                      | Time                            |
-| -------------------- | -------------------------------------------------------------- | ------------------------------- |
-| Healthy              | 1 GSI query + 240 physics evaluations + 10 write pages         | well under 1 s; 1–2 s cold      |
-| DynamoDB outage      | first send rejects; the drain does not retry a rejection       | ≈ 14 s → `failed`, logs intact  |
-| Throttling, mixed    | each send times out once, then a 200 declines all 25 items     | ≈ 223 s, against a 50 s timeout |
-| Throttling, pure 200 | each send returns 200 declining all 25 items, one attempt each | ≈ 96 s, against a 50 s timeout  |
+| Case                 | Mechanism                                                          | Time                            |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------- |
+| Healthy              | 1 GSI query + 240 physics evaluations + 10 write pages             | well under 1 s; 1–2 s cold      |
+| DynamoDB outage      | first send rejects; the drain does not retry a rejection           | ≈ 14 s → `failed`, logs intact  |
+| Throttling, mixed    | each send times out once, then a 200 declines all but one item     | ≈ 223 s, against a 50 s timeout |
+| Throttling, pure 200 | each send returns 200 declining all but one item, one attempt each | ≈ 96 s, against a 50 s timeout  |
 
 A canonical five-site location is `5 × 48 = 240` items, so `ceil(240 / 25)` = **10**
 `BatchWriteItem` pages. One send's worst case is `2 × 3 s + 1 s` = **7 s**
@@ -97,8 +97,11 @@ written well inside the timeout.
 
 The ≈ 216 s grind needs the opposite, and specifically a **mixed** regime rather than a purely
 declining one: each send's first attempt timing out, and its one SDK retry then answering HTTP 200
-with all 25 items unprocessed. That is what the 7 s per-send term prices — `2 × 3 s + 1 s` spends
-two attempts only when the first failed _retryably_, which a 200 never is. A **pure** 200-declining
+with all but one of its 25 items unprocessed. (All but one, not all: a _wholly_ declined batch does
+not answer 200 at all — DynamoDB rejects it with `ProvisionedThroughputExceededException`, which the
+drain cannot retry, so it takes the outage path above; `packages/storage/src/client.ts` states that
+boundary.) That is what the 7 s per-send term prices — `2 × 3 s + 1 s` spends two attempts only
+when the first failed _retryably_, which a 200 never is. A **pure** 200-declining
 regime is therefore cheaper per send, not dearer: one attempt bounded at 3 s, so `3 × 3 s + 0.6 s`
 ≈ 9.6 s per page and ≈ **96 s** over ten.
 

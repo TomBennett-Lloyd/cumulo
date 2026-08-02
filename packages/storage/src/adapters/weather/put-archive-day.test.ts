@@ -7,13 +7,19 @@ import type { WeatherAdapter } from './weather-adapter';
 import {
   CORK,
   DUBLIN_ID,
+  NO_REASON,
   TABLE,
+  THROTTLING,
+  THROUGHPUT_EXCEEDED,
+  TRANSACTION_CONFLICT,
   adapter,
   archiveReading,
   ddbMock,
   hourlyFrom,
+  instantPolicy,
   transactInputs,
   transactedItems,
+  transactionCancelled,
   writeInputs,
 } from './weather-fixtures';
 
@@ -22,6 +28,12 @@ import {
  * marker land in one transaction, so a partial fetch can never leave a marker
  * claiming coverage it does not have. Every assertion is on the command input
  * that would reach DynamoDB (`docs/standards/testing.md` rule 3).
+ *
+ * The capacity re-issue below is counted in *adapter* sends, and only those:
+ * `ddbMock` intercepts above the SDK's retry middleware, so nothing here can
+ * see how many times the SDK itself would have tried. That layer is pinned
+ * separately, at the wire, in `client.test.ts` — the two counts are different
+ * facts and neither substitutes for the other.
  */
 
 const DAY = '2026-02-10';
@@ -166,5 +178,90 @@ describe('putArchiveDay', () => {
       key: { locationId: DUBLIN_ID, sk: `ARCHIVE#DAY#${DAY}` },
     });
     expect(error.cause).toBe(failure);
+    // A rejection that is not a capacity cancellation is not re-issued: the
+    // wrap is immediate, on the first and only send.
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  /**
+   * 25 items ≈ 50 WCU against a table provisioned for 5: DynamoDB cancels the
+   * whole transaction and reports the cause per item, where neither the SDK's
+   * classifier nor `drainBatches` can see it. These pin the one layer that can.
+   */
+  describe('re-issues a transaction DynamoDB cancelled for capacity', () => {
+    const oneDay = [archiveReading(firstHour)];
+
+    for (const [name, code] of [
+      ['a provisioned table out of write capacity', THROUGHPUT_EXCEEDED],
+      ['an on-demand table still scaling up', THROTTLING],
+    ] as const) {
+      it(`re-sends the identical items after ${name}`, async () => {
+        ddbMock
+          .on(TransactWriteCommand)
+          .rejectsOnce(transactionCancelled(code, NO_REASON))
+          .resolves({});
+
+        await expect(adapter().putArchiveDay(DAY, oneDay)).resolves.toBeUndefined();
+
+        const inputs = transactInputs();
+        expect(inputs).toHaveLength(2);
+        const [first, second] = inputs;
+        // The same day, not a rebuilt or trimmed one: a cancelled transaction
+        // wrote nothing, so the second send must ask for everything again.
+        expect(second).toEqual(first);
+      });
+    }
+
+    it('gives up after the policy’s attempts and surfaces the last cancellation', async () => {
+      const cancellation = transactionCancelled(THROUGHPUT_EXCEEDED, NO_REASON);
+      ddbMock.on(TransactWriteCommand).rejects(cancellation);
+
+      const error = await captureStorageError(() => adapter().putArchiveDay(DAY, oneDay));
+
+      expect(error.context).toEqual({
+        operation: 'putArchiveDay',
+        table: TABLE,
+        key: { locationId: DUBLIN_ID, sk: `ARCHIVE#DAY#${DAY}` },
+      });
+      expect(error.cause).toBe(cancellation);
+      // Bounded by the injected policy — the loop cannot outlive it, and a
+      // sustained throttle becomes an outage the operator sees rather than a
+      // request that never ends.
+      expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(instantPolicy.maxAttempts);
+    });
+  });
+
+  /**
+   * The negative controls, and they are the only tests that can do this job:
+   * every case above would stay green if the classification *widened*, so only
+   * cancellations the adapter must refuse prove that either clause bites.
+   *
+   * - **No reason names capacity.** An all-`None` cancellation says the
+   *   transaction was cancelled and nothing more; re-sending on it is a guess
+   *   about a cause we were never told.
+   * - **A conflict travels with the capacity code.** A concurrent writer on
+   *   these rows has no retry owner on this path (#166) — two backfills of the
+   *   same location-day are an operator mistake, not a throttle — so the mix
+   *   stays an outage rather than becoming a blind re-send.
+   */
+  describe('re-issues nothing when capacity is not the whole story', () => {
+    const oneDay = [archiveReading(firstHour)];
+
+    for (const [name, codes] of [
+      ['no reason names capacity', [NO_REASON, NO_REASON]],
+      [
+        'a conflict travels with the capacity code',
+        [THROUGHPUT_EXCEEDED, TRANSACTION_CONFLICT, NO_REASON],
+      ],
+    ] as const) {
+      it(`surfaces a StorageError on one send when ${name}`, async () => {
+        ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(...codes));
+
+        const error = await captureStorageError(() => adapter().putArchiveDay(DAY, oneDay));
+
+        expect(error.context.operation).toBe('putArchiveDay');
+        expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+      });
+    }
   });
 });

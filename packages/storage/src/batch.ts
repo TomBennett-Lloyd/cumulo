@@ -115,7 +115,17 @@ export type BatchWriteOutcome =
   | { readonly status: 'complete' }
   | { readonly status: 'partial'; readonly unprocessedCount: number };
 
-const realSleep = (ms: number): Promise<void> =>
+/**
+ * The timer a {@link BatchPolicy} sleeps on when it injects none of its own.
+ *
+ * Exported to this package, not from it: `index.ts` does not carry it, because
+ * a caller outside `@cumulo/storage` has no business sleeping on our behalf.
+ * Inside, the weather adapter's capacity re-issue reads the same
+ * `policy.sleep ?? realSleep` fallback that {@link drainBatches} does, and one
+ * default is what keeps "tests inject an instant sleep, production waits" a
+ * single fact rather than two that could drift.
+ */
+export const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
