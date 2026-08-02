@@ -2,10 +2,21 @@ import { apiErrorSchema, type FleetSite } from '@cumulo/shared';
 import { StorageError, type SeriesCleanupOutcome } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
-import { fleetSite, jsonBodyOf, RANELAGH_ID, routeRequest } from '../api-fixtures';
+import {
+  countdownDeadline,
+  fleetSite,
+  jsonBodyOf,
+  RANELAGH_ID,
+  routeRequest,
+} from '../api-fixtures';
 import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
-import { deleteSite, deleteSiteConflictExhaustedEvent, type DeleteSiteDeps } from './delete-site';
+import {
+  deleteSite,
+  deleteSiteConflictExhaustedEvent,
+  deleteSiteDeadlineEvent,
+  type DeleteSiteDeps,
+} from './delete-site';
 import { seriesCleanupFailedEvent, seriesCleanupIncompleteEvent } from './series-cleanup';
 
 /** Which delete an origin should take, recorded so the choice is assertable. */
@@ -248,6 +259,50 @@ describe('DELETE /v1/sites/{siteId}', () => {
     // The row is still there, so its series points are not this request's to
     // delete — a cleanup here would strip a live site's history.
     expect(calls.cleaned).toEqual([]);
+  });
+
+  it('answers 500 when the deadline runs out between conflicted attempts', async () => {
+    // Two commands of budget against a fleet that never stops contending: the
+    // third delete is refused before it is issued, so the request answers in
+    // schema instead of being killed at the function timeout. Not a 404 — the
+    // site is still there, and nothing was deleted to report.
+    const { deps, calls } = scriptedSite({ stored: userSite, deletes: ['conflict'] });
+
+    const response = await deleteSite(
+      deps,
+      routeRequest({
+        method: 'DELETE',
+        params: { siteId: RANELAGH_ID },
+        deadline: countdownDeadline(2),
+      }),
+    );
+
+    expect(response.statusCode).toBe(500);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
+    expect(calls.counted).toHaveLength(2);
+    expect(calls.logged).toEqual([{ event: deleteSiteDeadlineEvent, siteId: RANELAGH_ID }]);
+    // The row is still there, so its points are not this request's to delete.
+    expect(calls.cleaned).toEqual([]);
+  });
+
+  it('does not issue even the first counted delete without the budget for it', async () => {
+    // The gate covers the first attempt, not only the retries — a request that
+    // arrives with nothing left starts no transaction at all.
+    const { deps, calls } = scriptedSite({ stored: userSite });
+
+    const response = await deleteSite(
+      deps,
+      routeRequest({
+        method: 'DELETE',
+        params: { siteId: RANELAGH_ID },
+        deadline: countdownDeadline(0),
+      }),
+    );
+
+    expect(response.statusCode).toBe(500);
+    expect(calls.counted).toEqual([]);
+    expect(calls.sleeps).toEqual([]);
+    expect(calls.logged).toEqual([{ event: deleteSiteDeadlineEvent, siteId: RANELAGH_ID }]);
   });
 
   it('never retries the seed delete, which has no transaction to conflict', async () => {

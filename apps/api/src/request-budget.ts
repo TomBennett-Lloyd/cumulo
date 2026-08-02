@@ -24,9 +24,16 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * (`http/request-deadline.ts`), and every *looping* term now asks it before
  * each command: series pagination, `POST`'s store-and-evict attempts,
  * `DELETE`'s counted deletes, and the series cleanup both write routes end
- * with. None of those can run an invocation into the timeout any more — they
+ * with. None of them can spin an invocation into the timeout any more — they
  * stop and answer in schema instead, which is the whole of what the deadline is
- * for.
+ * for. What admission cannot promise is that a command it admitted returns
+ * inside its own worst case: the check prices **the next command**, so the one
+ * multi-command unit left on the API — the cleanup pass, whose `deleteSiteSeries`
+ * issues a Query and then a `BatchWriteItem` behind a single call — can still
+ * cross if both of them go long. `sites/series-cleanup.ts` carries that
+ * arithmetic and why a two-command admission is not available to it at these
+ * constants; #167, which moves the pass off the request path, is what removes
+ * the residual rather than narrowing it.
  *
  * **Where it stops.** Each route keeps an ungated straight-line prefix: the
  * limiter's own commands (`IpLimiter.check` spends two on the allowed path,
@@ -43,8 +50,10 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page,
  *   ≈ 28 s.
  * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
- *   gated per command, including the up-to-36 commands of the store loop and
- *   the cleanup's two.
+ *   admitted per command, including the up-to-36 commands of the store loop;
+ *   the cleanup that follows an eviction is admitted as one command and then
+ *   spends up to two, which is the one place on this API where an admitted unit
+ *   can outrun what was priced for it (`sites/series-cleanup.ts` states why).
  * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
  *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
  *   no loop to gate and is the widest ungated prefix on the API.
@@ -63,9 +72,11 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * what crosses it, at 21,000 ms. It therefore takes **three independent
  * per-command worst cases coinciding in one request's ungated prefix** to kill
  * an invocation — which only the four-command routes above can even offer —
- * and each of those worst cases is itself two burnt 3,000 ms deadlines plus a
- * full backoff. That is a coincidence this module declines to size a slack
- * against, for the same reason `cycle-budget.ts` declines to size its
+ * **or two coinciding inside an admitted cleanup pass**, whose Query and batch
+ * are priced as one command between them. Each of those worst cases is itself
+ * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
+ * module declines to size a slack against, for the same reason
+ * `cycle-budget.ts` declines to size its
  * every-retry-at-once term: multiplying independent tail events together
  * produces a number nobody can act on. It is stated instead of implied, and
  * `docs/tech-debt.md` carries the residual — gating the prefix per command

@@ -316,7 +316,7 @@ export const routes: readonly Route[] = [
   {
     method: 'GET',
     segments: ['v1', 'sites', { param: siteIdParamName }, 'forecast'],
-    handle: (request) => getSiteForecast({ sites, series, now }, request),
+    handle: (request) => getSiteForecast({ sites, series, now, log: jsonLineLog }, request),
   },
   {
     method: 'GET',
@@ -325,7 +325,10 @@ export const routes: readonly Route[] = [
     // partition to read (up to `MAX_SERIES_SPAN_HOURS`), so its cost per
     // request is the caller's to pick. No origin check — reads are not writes,
     // and the web app must be able to plot a site from wherever it is served.
-    handle: (request) => rateLimited(request, () => getSiteSeries({ sites, series }, request)),
+    // Both reads take the log sink for the same one entry: the deadline stopped
+    // their pagination and the caller got a 500 instead of a truncated window.
+    handle: (request) =>
+      rateLimited(request, () => getSiteSeries({ sites, series, log: jsonLineLog }, request)),
   },
   // The self-documenting half of the API (ADR 0005): the document, the page
   // that renders it, and the page's assets, all from this function and this

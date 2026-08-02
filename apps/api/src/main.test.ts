@@ -11,7 +11,6 @@ import {
   jsonBodyOf,
   siteInput,
 } from './api-fixtures';
-import { lambdaContextDeadline } from './http/request-deadline';
 import type { ApiResponse } from './http/response';
 import type { Route } from './http/router';
 
@@ -192,62 +191,10 @@ describe('the top-level error boundary', () => {
 });
 
 /**
- * The invocation context, which this boundary used to drop on the floor (#165).
- *
- * Tested here rather than only in `http/request-deadline.test.ts` because the
- * unit test proves the deadline *reads* the context and this one proves the
- * number survives the trip — through `handleApiEvent`, through the router, and
- * onto the `RouteRequest` a handler is given. Those are two different ways to
- * be wrong, and the second is the one that was wrong before.
+ * The invocation deadline's own trip — context to handler to pagination bound —
+ * lives in `main-deadline.test.ts`, one story per file under the `max-lines`
+ * ceiling.
  */
-describe('the invocation deadline reaching a handler', () => {
-  /** Answers `remainingMs` with whatever the deadline it was given reports. */
-  const probeRoute = (seen: number[]): Route => ({
-    method: 'GET',
-    segments: ['v1', 'sites'],
-    handle: (request) => {
-      seen.push(request.deadline.remainingMs());
-      return Promise.resolve({ statusCode: 200, headers: {} });
-    },
-  });
-
-  beforeEach(() => {
-    vi.stubEnv('CUMULO_ENV', 'test');
-  });
-
-  it('hands the handler the context’s own remaining time', async () => {
-    const { handleApiEvent } = await import('./main');
-    const seen: number[] = [];
-    // 1,234 is a number nothing in this service could compute: it is the
-    // context's answer or it is nothing.
-    const context = { getRemainingTimeInMillis: () => 1_234 };
-
-    await handleApiEvent(
-      { routes: [probeRoute(seen)], log: () => undefined },
-      gatewayEvent(),
-      lambdaContextDeadline(context, 15_000),
-    );
-
-    expect(seen).toEqual([1_234]);
-  });
-
-  it('hands the handler a budget countdown when the invocation had no context', async () => {
-    const { handleApiEvent } = await import('./main');
-    const seen: number[] = [];
-    // A direct `aws lambda invoke` passes no context; the clock is injected so
-    // the case needs no timers.
-    const readings = [1_000, 3_000];
-    const now = (): number => readings.shift() ?? 3_000;
-
-    await handleApiEvent(
-      { routes: [probeRoute(seen)], log: () => undefined },
-      gatewayEvent(),
-      lambdaContextDeadline(undefined, 15_000, now),
-    );
-
-    expect(seen).toEqual([13_000]);
-  });
-});
 
 describe('parseWebOrigins', () => {
   beforeEach(() => {

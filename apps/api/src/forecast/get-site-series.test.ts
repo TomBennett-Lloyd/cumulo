@@ -1,39 +1,68 @@
 import { apiErrorSchema, openMeteoAttribution, siteSeriesResponseSchema } from '@cumulo/shared';
-import type { GetFleetSiteResult, SeriesPoint } from '@cumulo/storage';
+import type { GetFleetSiteResult, QueryPaginationBound, SeriesPoint } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import {
+  countdownDeadline,
   fleetSite,
   forecast,
   forecastPoint,
+  fullBudgetDeadline,
   generationPoint,
   generationReading,
   jsonBodyOf,
   RANELAGH_ID,
   routeRequest,
 } from '../api-fixtures';
+import type { RequestDeadline } from '../http/request-deadline';
 
-import { getSiteSeries, MAX_SERIES_SPAN_HOURS, type GetSiteSeriesDeps } from './get-site-series';
+import {
+  getSiteSeries,
+  MAX_SERIES_SPAN_HOURS,
+  seriesReadDeadlineEvent,
+  type GetSiteSeriesDeps,
+} from './get-site-series';
 
 interface Stub {
   readonly deps: GetSiteSeriesDeps;
   /** How many times the series table was read — zero is the assertion that matters. */
   readonly reads: string[];
+  readonly logged: Record<string, unknown>[];
+  /**
+   * The pagination bound each read was given, so a test can ask it the question
+   * the adapter would ask between pages.
+   */
+  readonly bounds: (QueryPaginationBound | undefined)[];
 }
 
-const stub = (siteResult: GetFleetSiteResult, points: readonly SeriesPoint[] = []): Stub => {
+/**
+ * `complete` is the adapter's own field, not a mode flag: it is how a bounded
+ * read reports that it stopped with the window unread, and the handler's
+ * behaviour on the two values is what these tests are about.
+ */
+const stub = (
+  siteResult: GetFleetSiteResult,
+  points: readonly SeriesPoint[] = [],
+  complete = true,
+): Stub => {
   const reads: string[] = [];
+  const logged: Record<string, unknown>[] = [];
+  const bounds: (QueryPaginationBound | undefined)[] = [];
 
   return {
     reads,
+    logged,
+    bounds,
     deps: {
       sites: { getFleetSite: () => Promise.resolve(siteResult) },
       series: {
-        querySeriesRange: (siteId, from, to) => {
+        querySeriesRange: (siteId, from, to, bound) => {
           reads.push(`${siteId} ${from} ${to}`);
-          return Promise.resolve({ points: [...points], complete: true });
+          bounds.push(bound);
+          return Promise.resolve({ points: [...points], complete });
         },
       },
+      log: (entry) => logged.push(entry),
     },
   };
 };
@@ -43,11 +72,15 @@ const existingSite: GetFleetSiteResult = { found: true, site: fleetSite() };
 const FROM = '2026-07-30T00:00:00Z';
 const TO = '2026-07-31T00:00:00Z';
 
-const seriesRequest = (query: Record<string, string>) =>
+const seriesRequest = (
+  query: Record<string, string>,
+  deadline: RequestDeadline = fullBudgetDeadline,
+) =>
   routeRequest({
     path: `/v1/sites/${RANELAGH_ID}/series`,
     params: { siteId: RANELAGH_ID },
     query,
+    deadline,
   });
 
 /** The first `details` entry's path, which is how a caller learns which bound was wrong. */
@@ -188,6 +221,51 @@ describe('GET /v1/sites/{siteId}/series', () => {
     expect(response.statusCode).toBe(400);
     expect(firstBadPath(jsonBodyOf(response))).toBe('siteId');
   });
+
+  it('answers 500 rather than a window that quietly stops short', async () => {
+    // The adapter reports `complete: false` when the bound stopped pagination
+    // with rows still to come. Those points are real, but a series missing its
+    // afternoon reads as a quiet afternoon in the accuracy views, so the
+    // handler refuses to serve them at all.
+    const { deps, logged } = stub(existingSite, [forecastPoint(), generationPoint()], false);
+
+    const response = await getSiteSeries(deps, seriesRequest({ from: FROM, to: TO }));
+
+    expect(response.statusCode).toBe(500);
+    const body = apiErrorSchema.parse(jsonBodyOf(response));
+    expect(body.code).toBe('internal');
+    expect(logged).toEqual([{ event: seriesReadDeadlineEvent, siteId: RANELAGH_ID }]);
+  });
+
+  it('serves the 200 unchanged and logs nothing when the window was read to its end', async () => {
+    const { deps, logged } = stub(existingSite, [forecastPoint(), generationPoint()]);
+
+    const response = await getSiteSeries(deps, seriesRequest({ from: FROM, to: TO }));
+
+    expect(response.statusCode).toBe(200);
+    const body = siteSeriesResponseSchema.parse(jsonBodyOf(response));
+    expect(body.forecasts).toHaveLength(1);
+    expect(body.actuals).toHaveLength(1);
+    expect(logged).toEqual([]);
+  });
+
+  it.each([
+    { name: 'a request with its whole budget left', deadline: fullBudgetDeadline, permitted: true },
+    { name: 'a request whose time is gone', deadline: countdownDeadline(0), permitted: false },
+  ])(
+    'hands the adapter a pagination bound that answers for $name',
+    async ({ deadline, permitted }) => {
+      // The bound is the handler's whole contribution to pagination: it is asked
+      // between pages, so what matters is that the answer it gives comes from
+      // this request's deadline and not from a constant.
+      const { deps, bounds } = stub(existingSite);
+
+      await getSiteSeries(deps, seriesRequest({ from: FROM, to: TO }, deadline));
+
+      expect(bounds).toHaveLength(1);
+      expect(bounds[0]?.hasBudgetForNextPage()).toBe(permitted);
+    },
+  );
 
   it('refuses to serve a stored actual that violates the response contract', async () => {
     // The negative control for `jsonResponse`'s parse, on this route's second
