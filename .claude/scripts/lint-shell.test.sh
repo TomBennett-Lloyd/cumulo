@@ -10,7 +10,9 @@
 #
 # Self-contained on the same terms as worktree-lifecycle.test.sh: no framework, no
 # network, one `mktemp -d` that a trap removes, and every fixture is a throwaway git
-# repo, so the harness can never lint or mutate the repository it ships in.
+# repo, so no case can mutate the repository the harness ships in. Case 1 is the one
+# that reads it: the gate is run, unmodified and unredirected, over this very
+# repository — analysis only, nothing written.
 #
 # Usage: bash .claude/scripts/lint-shell.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
@@ -136,8 +138,29 @@ run_gate() {
   rc=$?
 }
 
+run_gate_on_this_repo() { # the shipped configuration: real repository, no fixture
+  out=$(cd "$SCRIPTS" && bash "$GATE" 2>&1)
+  rc=$?
+}
+
 # ====================================================================================
-# 1. an unstaged deletion is not a broken gate
+# 1. the default target — the configuration that actually ships
+# ====================================================================================
+# testing.md rule 7: every other case reaches its target through a throwaway repo
+# holding a copy of the gate and two hand-written scripts. Without this case the suite
+# would prove the gate works everywhere except where it runs — a tree with real sourced
+# files, real extensionless shebang hooks, and `# shellcheck source=` directives that
+# resolve only because of the gate's -P SCRIPTDIR. The census substring is asserted
+# without a count on purpose: the number of scripts in this repository is expected to
+# change, and pinning it here would make an unrelated new script fail this case.
+begin "gate exits 0 over this repository's own shell scripts, with no fixture"
+run_gate_on_this_repo
+expect_rc 0 "$rc"
+expect_out "file(s)"
+end
+
+# ====================================================================================
+# 2. an unstaged deletion is not a broken gate
 # ====================================================================================
 # rc is the whole assertion: 2 is what the pre-fix gate returned here, and it is the
 # code reserved for "the gate could not run", so accepting anything non-zero would let
@@ -155,7 +178,7 @@ expect_not_out "doomed.sh"
 end
 
 # ====================================================================================
-# 2. positive control — the deletion path did not turn the gate off
+# 3. positive control — the deletion path did not turn the gate off
 # ====================================================================================
 begin "gate still exits 1 for a real violation while an unstaged deletion is present"
 fixture unstaged_delete_violation
@@ -165,6 +188,33 @@ run_gate
 expect_rc 1 "$rc"
 expect_out "SC2086"
 expect_out "keep.sh"
+end
+
+# ====================================================================================
+# 4. every discovered file reaches shellcheck, not just the first one
+# ====================================================================================
+# Discovery and analysis are two steps, and this is the case that pins the second: that
+# the whole list reaches shellcheck, not just its alphabetical head. Truncating the
+# expansion to `"$shell_files"` — element zero, the shape a quoting slip produces — is
+# the mutant, and case 3 does already fail under it, but only by accident of sorting:
+# its violation sits in keep.sh while the fixture's own gate copy under .claude/ sorts
+# ahead of it, so the head happens to be clean. That accident is one renamed fixture
+# away from evaporating, and what case 3 reports when it does bite is a bare "expected
+# 1, got 0" — the same message a dozen unrelated regressions produce.
+#
+# So this case says the thing out loud instead of relying on the accident. The
+# violation goes in the LATEST-sorting name by construction, and the census is asserted
+# next to the verdict: "over 4 file(s)" with z-broken.sh unmentioned is the signature of
+# a gate lying about its own scope, and it names the file that never got read.
+begin "gate reports a violation in the last-sorting script, not only the first"
+fixture all_files_linted
+must dirty_script "$ROOT/z-broken.sh"
+must gitc "$ROOT" add -A
+must gitc "$ROOT" commit --quiet -m broken
+run_gate
+expect_rc 1 "$rc"
+expect_out "over 4 file(s)"
+expect_out "z-broken"
 end
 
 # ====================================================================================
