@@ -10,10 +10,16 @@ import { createStorageDocumentClient } from './client';
  * what they measure is the environment the guard leaves behind rather than
  * anything the test itself arranges.
  *
- * The two mutants they exist to kill, each of which widens what a test may
- * reach: delete the guard's `AWS_ENDPOINT_URL` assignment and the second test
- * stops seeing a refused loopback socket; delete its credential sentinels and
- * the first test stops resolving an identity at all.
+ * The mutants they exist to kill, each of which widens what a test may reach:
+ * delete the guard's `AWS_ENDPOINT_URL` assignment and the second test stops
+ * seeing a refused loopback socket; delete its credential sentinels and the
+ * first test stops resolving an identity at all; drop the credential-decoration
+ * names from its delete list and the first test stops seeing a *bare* sentinel.
+ *
+ * This is the only one of the five per-package guard tests that asserts the
+ * guard's contents. The other four exist to prove their own package's vitest
+ * wiring still points here, and duplicating the content assertions into them
+ * would spread one fact across five files that must then agree.
  */
 describe('the AWS test guard', () => {
   /**
@@ -39,6 +45,20 @@ describe('the AWS test guard', () => {
       // drift apart this fails, where reading the value back from the same
       // source it was set from would pass no matter what that value became.
       expect(resolved.accessKeyId).toBe('cumulo-test-sentinel-access-key-id');
+
+      // The sentinel must be inert as well as fake. `fromEnv` *composes*
+      // `accountId`, `credentialScope` and `expiration` onto the identity it
+      // builds from the key pair rather than replacing it, so an inherited one
+      // rides along: a fabricated key pair that nonetheless claims a real
+      // account, or that the SDK believes it can refresh. Overwriting the key
+      // pair cannot reach any of that — only the guard's delete list can.
+      //
+      // These are idle on a machine whose environment carries none of the three,
+      // which is most of them; the mutant proving they bite is dropping those
+      // names from the delete list and re-running with the vars exported.
+      expect(resolved.accountId).toBeUndefined();
+      expect(resolved.credentialScope).toBeUndefined();
+      expect(resolved.expiration).toBeUndefined();
     } finally {
       client.destroy();
     }

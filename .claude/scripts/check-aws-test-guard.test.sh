@@ -116,9 +116,12 @@ write_pkg() { # write_pkg <dir under the fixture>; package.json body on stdin
   cat >"$FIXTURE/$1/package.json"
 }
 
-write_config() { # write_config <dir under the fixture>; vitest.config.ts body on stdin
+# The filename is a parameter because which config file the gate reads is itself
+# under test: vitest prefers vitest.config.ts and falls back to vite.config.ts,
+# and both halves of that need fixtures.
+write_config() { # write_config <dir under the fixture> [filename, default vitest.config.ts]; body on stdin
   mkdir -p "$FIXTURE/$1" || return 1
-  cat >"$FIXTURE/$1/vitest.config.ts"
+  cat >"$FIXTURE/$1/${2:-vitest.config.ts}"
 }
 
 # The conforming config: what a covered package looks like. The path is a
@@ -310,6 +313,103 @@ run_check "$FIXTURE"
 expect_rc 1 "$rc"
 expect_out "packages/store (@fixture/store) has a vitest.config.ts that never mentions 'aws-test-guard.setup'"
 expect_out "reaches the AWS SDK via @aws-sdk/client-dynamodb"
+end
+
+# ==========================================================================================
+# 7b. the config filename is a list, in vitest's own precedence order
+# ==========================================================================================
+# apps/web's shape: vitest configured in the `test:` block of a vite.config.ts, because the
+# suite needs the same `plugins: [react()]` the build uses and a separate vitest.config.ts
+# would drop it. Insisting on the vitest.config.ts filename would mean the day such a package
+# gains AWS reach, the only way to satisfy this gate is to break its component tests — so the
+# fallback is accepted. Drop 'vite.config.ts' from CONFIG_NAMES and this case is the one that
+# stops passing.
+begin "an AWS package whose only config is a guarded vite.config.ts passes"
+must fixture vite_config_guarded
+must write_pkg packages/store <<'EOF'
+{
+  "name": "@fixture/store",
+  "dependencies": { "@aws-sdk/client-dynamodb": "^3.700.0" }
+}
+EOF
+must write_config packages/store vite.config.ts <<'EOF'
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    setupFiles: ['../../packages/store/src/aws-test-guard.setup.ts'],
+  },
+});
+EOF
+run_check "$FIXTURE"
+expect_rc 0 "$rc"
+expect_out "check-aws-test-guard: OK"
+expect_out "packages/store (@fixture/store) — via @aws-sdk/client-dynamodb"
+expect_not_out "ERROR"
+end
+
+# The other half: accepting the filename must not mean accepting the package. A vite.config.ts
+# is coverage only when the token is in it, exactly as for a vitest.config.ts.
+begin "an AWS package whose only config is a vite.config.ts omitting the guard token fails, named"
+must fixture vite_config_token_missing
+must write_pkg packages/store <<'EOF'
+{
+  "name": "@fixture/store",
+  "dependencies": { "@aws-sdk/client-dynamodb": "^3.700.0" }
+}
+EOF
+must write_config packages/store vite.config.ts <<'EOF'
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'node',
+  },
+});
+EOF
+run_check "$FIXTURE"
+expect_rc 1 "$rc"
+expect_out "packages/store (@fixture/store) has a vite.config.ts that never mentions 'aws-test-guard.setup'"
+expect_out "reaches the AWS SDK via @aws-sdk/client-dynamodb"
+end
+
+# Why the list is ORDERED rather than an any-of. When a package has both files, vitest reads
+# vitest.config.ts and never looks at vite.config.ts's test block — so a token sitting in the
+# shadowed file is coverage on paper and nothing at runtime. An any-of check would pass this
+# fixture, which is the quietest way this widening could have gone wrong.
+begin "a token in a vite.config.ts shadowed by a token-less vitest.config.ts is not coverage"
+must fixture vite_config_shadowed
+must write_pkg packages/store <<'EOF'
+{
+  "name": "@fixture/store",
+  "dependencies": { "@aws-sdk/client-dynamodb": "^3.700.0" }
+}
+EOF
+must write_config packages/store <<'EOF'
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+  },
+});
+EOF
+must write_config packages/store vite.config.ts <<'EOF'
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    setupFiles: ['../../packages/store/src/aws-test-guard.setup.ts'],
+  },
+});
+EOF
+run_check "$FIXTURE"
+expect_rc 1 "$rc"
+expect_out "packages/store (@fixture/store) has a vitest.config.ts that never mentions 'aws-test-guard.setup'"
 end
 
 # ==========================================================================================

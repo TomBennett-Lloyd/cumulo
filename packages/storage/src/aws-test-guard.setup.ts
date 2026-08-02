@@ -38,6 +38,22 @@
  * inherited `AWS_ENDPOINT_URL_*` is deleted here — a leaked service-specific
  * endpoint would outrank the sentinel exactly the same way and punch a hole
  * through the guard.
+ *
+ * **What "every other route" below actually covers.** Three classes, none of
+ * which the two sentinel assignments reach on their own:
+ *
+ *   1. Alternative identities — session tokens, profiles, assumed roles, the
+ *      container credential URIs — deleted so the env pair stays the only
+ *      answer the provider chain can give.
+ *   2. Credential *decoration* — `AWS_CREDENTIAL_EXPIRATION`,
+ *      `AWS_CREDENTIAL_SCOPE`, `AWS_ACCOUNT_ID`. `fromEnv` composes these onto
+ *      the identity it builds from the access-key pair rather than replacing
+ *      it, so an inherited one rides along on the sentinel and widens what it
+ *      carries. Deleting them keeps the sentinel inert as well as fake.
+ *   3. Endpoint *suppression* — `AWS_IGNORE_CONFIGURED_ENDPOINT_URLS`, the one
+ *      variable that beats the loopback sentinel without outranking it: when
+ *      it reads truthy the SDK discards every configured endpoint URL and
+ *      resolves the real regional one instead.
  */
 
 // Recognisable fakes: env credentials win the SDK's default provider chain, so
@@ -47,17 +63,34 @@
 process.env.AWS_ACCESS_KEY_ID = 'cumulo-test-sentinel-access-key-id';
 process.env.AWS_SECRET_ACCESS_KEY = 'cumulo-test-sentinel-secret-access-key';
 
-// Every other route to an identity or an endpoint, removed. `Reflect.deleteProperty`
-// rather than `delete process.env[key]`: the endpoint keys are only knowable at
-// runtime, and a dynamic `delete` is banned outright (`@typescript-eslint/no-dynamic-delete`)
-// — reflection states the same intent without a suppression.
+// Every other route to an identity or an endpoint, removed — the three classes
+// the header names. `Reflect.deleteProperty` rather than `delete process.env[key]`:
+// the endpoint keys are only knowable at runtime, and a dynamic `delete` is banned
+// outright (`@typescript-eslint/no-dynamic-delete`) — reflection states the same
+// intent without a suppression.
 for (const key of [
+  // (1) alternative identities.
   'AWS_SESSION_TOKEN',
   'AWS_PROFILE',
   'AWS_ROLE_ARN',
   'AWS_WEB_IDENTITY_TOKEN_FILE',
   'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
   'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+  // (2) decoration `fromEnv` composes onto the sentinel identity rather than
+  // replacing it (@aws-sdk/credential-provider-env 3.972.64: `expiration`,
+  // `credentialScope` and `accountId` are spread onto the env credentials when
+  // present). An inherited account id makes the fake identity claim a real
+  // account; an inherited expiration makes the SDK treat it as refreshable.
+  'AWS_CREDENTIAL_EXPIRATION',
+  'AWS_CREDENTIAL_SCOPE',
+  'AWS_ACCOUNT_ID',
+  // (3) endpoint suppression. @smithy/core 3.31.1 reads this as a boolean and,
+  // when set, resolves endpoints as if no endpoint URL had been configured at
+  // all — which discards the loopback sentinel below wholesale rather than
+  // outranking it. Only the env spelling needs deleting: the config-file
+  // spelling (`ignore_configured_endpoint_urls`) is already unreachable through
+  // the `/dev/null` AWS_CONFIG_FILE set further down.
+  'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
   ...Object.keys(process.env).filter((name) => name.startsWith('AWS_ENDPOINT_URL_')),
 ]) {
   Reflect.deleteProperty(process.env, key);

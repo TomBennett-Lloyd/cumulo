@@ -30,7 +30,7 @@
 #
 # SCOPE LIMITS, stated because the OK line does not say them:
 #
-#   * This gate proves a package's vitest.config.ts REFERENCES the guard — the
+#   * This gate proves a package's vitest config REFERENCES the guard — the
 #     token `aws-test-guard.setup` appears in its text. It does not prove the
 #     reference resolves, that vitest loads it, or that the guard's contents
 #     still neutralise anything. That half is owned by the per-package guard
@@ -39,6 +39,16 @@
 #     connection. Two halves, deliberately: this one cannot be satisfied by a
 #     test that was never written, and that one cannot be satisfied by a package
 #     nobody remembered to wire up.
+#   * "Its vitest config" means the FIRST of `vitest.config.ts`, `vite.config.ts`
+#     that the package has — vitest's own precedence, restated below at
+#     CONFIG_NAMES with the reasoning. Two things follow. A package that
+#     configures vitest somewhere else again (a `vitest.workspace.ts`, a root
+#     `projects` entry, an inline `--config`) reads to this gate as having no
+#     config at all and is named as an offender; adding the spelling is one word
+#     in CONFIG_NAMES plus a harness case. And a token in a file that vitest
+#     would not read — a `vite.config.ts` shadowed by a `vitest.config.ts` — is
+#     correctly NOT accepted as coverage, which is the point of the ordering
+#     rather than a limitation of it.
 #   * Packages are enumerated as the directories under `apps/` and `packages/`
 #     holding a package.json — the globs pnpm-workspace.yaml declares, restated
 #     here because reading them would mean parsing YAML. Restated, not derived,
@@ -52,7 +62,11 @@
 #
 # Wired into the root `verify` composite (CLAUDE.md: gates join `verify`, never a
 # hand-picked subset), so `pnpm verify`, the CI `checks` job and any human
-# running the composite all enforce it.
+# running the composite all enforce it. It sits BEFORE `pnpm test` in that chain,
+# immediately after `typecheck`: this gate is preventive, not diagnostic, so it
+# has to refuse while an unguarded suite is still unrun rather than explain
+# afterwards why the run everybody just did was against ambient credentials.
+# (JSON takes no comments, which is why the ordering is reasoned about here.)
 #
 # Usage: bash .claude/scripts/check-aws-test-guard.sh [REPO_ROOT]
 #        (or `pnpm check:aws-test-guard`)
@@ -79,7 +93,22 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 # (`../../packages/storage/src/aws-test-guard.setup.ts`) match it, and a rename
 # of the setup file goes red here rather than passing on the old spelling.
 GUARD_TOKEN='aws-test-guard.setup'
-CONFIG_NAME='vitest.config.ts'
+
+# The config filenames a package's vitest setup may live in, in vitest's own
+# precedence order: a `vitest.config.ts` wins outright, and only in its absence
+# does vitest read the `test:` block of a `vite.config.ts`. The gate requires the
+# token in whichever of these exists FIRST, because that is the only file vitest
+# will read — a token sitting in a vite.config.ts shadowed by a vitest.config.ts
+# is coverage on paper and nothing at runtime.
+#
+# The second spelling is not hypothetical: apps/web configures vitest inside its
+# vite.config.ts, because the suite needs the same `plugins: [react()]` the build
+# uses and a separate vitest.config.ts would drop it. That app has no AWS reach
+# today, so it is not in this census — but insisting on a filename it cannot adopt
+# would mean the day it gains one, the only way to satisfy this gate is to break
+# its component tests.
+CONFIG_NAMES='vitest.config.ts vite.config.ts'
+CONFIG_PRIMARY=${CONFIG_NAMES%% *}
 
 if ! command -v node >/dev/null 2>&1; then
   printf 'check-aws-test-guard: node is not on PATH — refusing to report a pass\n' >&2
@@ -250,11 +279,22 @@ while IFS=$'\t' read -r kind dir name reach; do
   # how a gate teaches people to paste config they do not need.
   [ -n "$reach" ] || continue
 
-  config="$dir/$CONFIG_NAME"
-  if [ ! -f "$ROOT/$config" ]; then
-    offenders+=("$dir ($name) has no $config"$'\n'"        reaches the AWS SDK via $reach")
-  elif ! grep -qF -- "$GUARD_TOKEN" "$ROOT/$config"; then
-    offenders+=("$dir ($name) has a $CONFIG_NAME that never mentions '$GUARD_TOKEN'"$'\n'"        reaches the AWS SDK via $reach")
+  # The first candidate that exists is the one vitest would read, so it is the
+  # only one whose contents can count — a later candidate is dead config.
+  config=''
+  missing=''
+  for candidate in $CONFIG_NAMES; do
+    if [ -f "$ROOT/$dir/$candidate" ]; then
+      config="$candidate"
+      break
+    fi
+    missing="${missing:+$missing nor }$dir/$candidate"
+  done
+
+  if [ -z "$config" ]; then
+    offenders+=("$dir ($name) has no $missing"$'\n'"        reaches the AWS SDK via $reach")
+  elif ! grep -qF -- "$GUARD_TOKEN" "$ROOT/$dir/$config"; then
+    offenders+=("$dir ($name) has a $config that never mentions '$GUARD_TOKEN'"$'\n'"        reaches the AWS SDK via $reach")
   else
     covered+=("$dir ($name) — via $reach")
   fi
@@ -298,15 +338,18 @@ if [ ${#offenders[@]} -ne 0 ]; then
   done
   printf '\nA test in these packages can reach real AWS on whatever credentials the machine\n' >&2
   printf 'is carrying — the #124 failure, which cost a live PutItem and a live SendMessage.\n' >&2
-  printf 'Give each one a %s whose test.setupFiles names the guard:\n\n' "$CONFIG_NAME" >&2
+  printf 'Give each one a %s whose test.setupFiles names the guard:\n\n' "$CONFIG_PRIMARY" >&2
   printf "    setupFiles: ['../../packages/storage/src/%s.ts'],\n\n" "$GUARD_TOKEN" >&2
   printf 'adjusting the relative path, and add the package its own guard test — this gate\n' >&2
   printf 'checks that the config points at the guard, not that the guard still works.\n' >&2
+  printf '\nA package that configures vitest inside a vite.config.ts (because its suite needs\n' >&2
+  printf 'the build plugins) puts the same test.setupFiles there instead; this gate reads\n' >&2
+  printf 'whichever of %s exists first, matching vitest.\n' "$CONFIG_NAMES" >&2
   exit 1
 fi
 
-printf 'check-aws-test-guard: OK — %d of %d workspace package(s) reach the AWS SDK, each loading the guard from its own %s\n' \
-  "$aws_count" "$package_count" "$CONFIG_NAME"
+printf 'check-aws-test-guard: OK — %d of %d workspace package(s) reach the AWS SDK, each loading the guard from its own vitest config\n' \
+  "$aws_count" "$package_count"
 for entry in "${covered[@]}"; do
   printf '  %s\n' "$entry"
 done
