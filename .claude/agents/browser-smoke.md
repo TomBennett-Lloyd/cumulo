@@ -15,12 +15,13 @@ Spawn this agent with `run_in_background: false`. It is the one exception to the
 The dev server is yours from start to finish.
 
 - Before starting: if the port is already held, kill the holder — it is a stray from an earlier orphaned run, never a server you should reuse.
-- Start it with `preview_start`, not a backgrounded `Bash` command.
+- `preview_start` with a **named** config resolves `.claude/launch.json` against the MAIN checkout whatever your cwd is, so a named start verifies `main`'s tree rather than the branch you were sent to check — and the worktree has no `launch.json` of its own to find. Verifying a worktree branch therefore means starting that worktree's dev server yourself: `pnpm -C <worktree> dev` on a throwaway port via `Bash`, then attach with `preview_start({url})`. Starting it that way means owning it — a backgrounded server you walk away from is the failure this section exists to prevent.
 - Stop it before you return, on **every** exit path including failure, timeout, and INCONCLUSIVE. Never leave a server running; never restart one after it has been killed.
 
 ## What counts as verification
 
 - **Measure, don't infer.** An element existing in the DOM is not evidence it is visible, sized, or positioned. Read computed geometry, the console, and the network — the defects this pattern exists to catch (a chart label clipped off-canvas, a maplibre worker broken by Vite's dep optimizer) are all invisible to a passing test suite.
+- **Aim by ref, never by eye.** Browser-pane screenshots come back at 0.625× of the viewport — an 800×450 image of a 1280×720 page — so a coordinate read off one lands somewhere else entirely and the click reports success having hit nothing. Take refs from `read_page`/`find` and pass `ref`; screenshots are for looking, not for aiming.
 - **A prescribed fix is a hypothesis.** When your brief hands you a one-liner from review, apply it and then measure the same way. "Applied as specified, measured ineffective, here is the reading" is the valuable report; a green screenshot after an unmeasured fix ships a broken surface.
 - **Keyboard activation cannot be proven with this harness.** The CDP path cannot keyboard-activate any button — confirmed by a control test against a plain React button — and the jsdom helpers dispatch clicks manually after `keydown`. Report keyboard behaviour as `INCONCLUSIVE`, cite issue #107 (Playwright harness), and never claim keyboard a11y is verified.
 
