@@ -128,8 +128,7 @@ const rateLimited = (response: Response, message: string): FleetSourceResult<nev
  * payload does not match the domain schemas is `invalid-response` — the fleet
  * sent bytes this client cannot read. A 400 is the opposite direction and the
  * opposite arm, `invalid-request`: the fleet read what this client sent and
- * refused it. Both are pointless to repeat unchanged, but only one of them can
- * be fixed by changing the request.
+ * refused it.
  */
 export const parseFleetApiResponse = async <T>(
   operation: string,
