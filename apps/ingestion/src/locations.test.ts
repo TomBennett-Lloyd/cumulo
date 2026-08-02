@@ -135,28 +135,143 @@ const fourLocations: FetchLocation[] = [
 const idsOf = (locations: readonly FetchLocation[]): string[] =>
   locations.map((location) => location.locationId);
 
-describe('rotationOffset', () => {
-  it('advances by one location per hour and wraps', () => {
-    const midnight = Date.parse('2026-07-31T00:00:00Z');
-    const hour = (n: number): number => midnight + n * CYCLE_ROTATION_PERIOD_MS;
+const midnight = Date.parse('2026-07-31T00:00:00Z');
 
+/** The instant a cycle starting `hoursFromMidnight` after that midnight reads. */
+const hour = (hoursFromMidnight: number): number =>
+  midnight + hoursFromMidnight * CYCLE_ROTATION_PERIOD_MS;
+
+/** A fleet of `size` fetch locations, ids ascending in the order a cycle visits them. */
+const locationsOfSize = (size: number): FetchLocation[] =>
+  Array.from({ length: size }, (_, index) => ({
+    locationId: `loc-${String(index).padStart(3, '0')}`,
+    latitude: index,
+    longitude: index,
+  }));
+
+/**
+ * Fleet sizes and caps where the rotation actually has to work: the cap bites in
+ * every case, and no cap divides its fleet size — so the windows do not land on
+ * a period that would hide a stepping bug. Every cap is ≥ 2, which is what makes
+ * "one window per hour" distinguishable from "one location per hour".
+ */
+const rotationCases = [
+  { locationCount: 5, maxLocations: 2 },
+  { locationCount: 7, maxLocations: 3 },
+  { locationCount: 250, maxLocations: 100 },
+] as const;
+
+/** The ids the cycle starting at `hoursFromMidnight` would actually fetch. */
+const servedAtHour = (
+  locations: readonly FetchLocation[],
+  maxLocations: number,
+  hoursFromMidnight: number,
+): string[] =>
+  idsOf(
+    selectCycleLocations(locations, {
+      offset: rotationOffset(hour(hoursFromMidnight), locations.length, maxLocations),
+      maxLocations,
+    }).selected,
+  );
+
+/** Hour-by-hour, the set of ids each cycle over `horizonHours` serves. */
+const scheduleOver = (
+  locations: readonly FetchLocation[],
+  maxLocations: number,
+  horizonHours: number,
+): Set<string>[] =>
+  Array.from(
+    { length: horizonHours },
+    (_, hoursFromMidnight) => new Set(servedAtHour(locations, maxLocations, hoursFromMidnight)),
+  );
+
+/** How often one location was served over a schedule, and its longest gap between visits. */
+interface VisitPattern {
+  readonly visits: number;
+  /** Zero when a location was served fewer than twice — `visits` is asserted separately. */
+  readonly longestWait: number;
+}
+
+const visitPatternOf = (schedule: readonly ReadonlySet<string>[], id: string): VisitPattern => {
+  let visits = 0;
+  let longestWait = 0;
+  let previousVisit: number | undefined;
+
+  for (const [hoursFromMidnight, served] of schedule.entries()) {
+    if (!served.has(id)) continue;
+    visits += 1;
+    if (previousVisit !== undefined) {
+      longestWait = Math.max(longestWait, hoursFromMidnight - previousVisit);
+    }
+    previousVisit = hoursFromMidnight;
+  }
+
+  return { visits, longestWait };
+};
+
+describe('rotationOffset', () => {
+  it('advances by one window per hour and wraps', () => {
     // Midnight on this date is an exact multiple of four hours since the epoch,
     // which is why the sequence starts at 0 — asserted rather than assumed.
-    expect(rotationOffset(hour(0), 4)).toBe(0);
-    expect(rotationOffset(hour(1), 4)).toBe(1);
-    expect(rotationOffset(hour(3), 4)).toBe(3);
-    expect(rotationOffset(hour(4), 4)).toBe(0);
+    // Four locations two at a time: the second hour serves what the first
+    // deferred, and the third is back where it began — full coverage in
+    // ceil(4 / 2) = 2 cycles rather than the 4 a one-location step would take.
+    expect(rotationOffset(hour(0), 4, 2)).toBe(0);
+    expect(rotationOffset(hour(1), 4, 2)).toBe(2);
+    expect(rotationOffset(hour(2), 4, 2)).toBe(0);
   });
 
   it('holds steady within an hour, so two cycles in one hour agree', () => {
     const start = Date.parse('2026-07-31T05:00:00Z');
 
-    expect(rotationOffset(start, 7)).toBe(rotationOffset(start + 59 * 60_000, 7));
+    expect(rotationOffset(start, 7, 3)).toBe(rotationOffset(start + 59 * 60_000, 7, 3));
   });
 
   it('an empty fleet has nowhere to rotate to', () => {
-    expect(rotationOffset(Date.now(), 0)).toBe(0);
+    expect(rotationOffset(Date.now(), 0, 2)).toBe(0);
   });
+
+  it.each(rotationCases)(
+    'an over-cap fleet of $locationCount is fully covered within ceil(n / $maxLocations) consecutive cycles',
+    ({ locationCount, maxLocations }) => {
+      // The property the whole rotation exists for, asserted against the cap it
+      // pairs with rather than against the offset arithmetic alone: consecutive
+      // windows abut, so ceil(n / c) of them exhaust the list from *any* start.
+      const locations = locationsOfSize(locationCount);
+      const cyclesToCover = Math.ceil(locationCount / maxLocations);
+      const everyId = idsOf(locations).sort();
+
+      for (let startHour = 0; startHour <= 2 * cyclesToCover; startHour += 1) {
+        const covered = new Set<string>();
+        for (let offsetHour = 0; offsetHour < cyclesToCover; offsetHour += 1) {
+          for (const id of servedAtHour(locations, maxLocations, startHour + offsetHour)) {
+            covered.add(id);
+          }
+        }
+
+        expect([...covered].sort()).toEqual(everyId);
+      }
+    },
+  );
+
+  it.each(rotationCases)(
+    "a location's worst-case wait between visits is ceil($locationCount / $maxLocations) hours",
+    ({ locationCount, maxLocations }) => {
+      // Coverage within a window says nothing about the gap *between* windows,
+      // and the gap is what the 48 h stored horizon has to outlive (#163).
+      const locations = locationsOfSize(locationCount);
+      const cyclesToCover = Math.ceil(locationCount / maxLocations);
+      const schedule = scheduleOver(locations, maxLocations, 3 * locationCount);
+      const patterns = idsOf(locations).map((id) => visitPatternOf(schedule, id));
+
+      // Every location is served at least twice over the horizon, so each wait
+      // below is a measured gap rather than a vacuously absent one.
+      expect(Math.min(...patterns.map((pattern) => pattern.visits))).toBeGreaterThanOrEqual(2);
+      expect(Math.max(...patterns.map((pattern) => pattern.longestWait))).toBeLessThanOrEqual(
+        cyclesToCover,
+      );
+    },
+  );
 });
 
 describe('selectCycleLocations', () => {

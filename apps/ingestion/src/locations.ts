@@ -72,7 +72,8 @@ export const activeFetchLocations = (sites: readonly FleetSite[]): FetchLocation
 
 /**
  * The rotation period: one hour, matching the ingestion cadence, so consecutive
- * cycles advance the starting point by exactly one location.
+ * cycles advance the starting point by exactly one *window* — the `windowSize`
+ * locations one cycle may attempt, rather than a single location.
  */
 export const CYCLE_ROTATION_PERIOD_MS = 3_600_000;
 
@@ -85,13 +86,36 @@ export const CYCLE_ROTATION_PERIOD_MS = 3_600_000;
  * `locationId` sorts by latitude, that tail is a geographic band, and #17's
  * visitor sites land wherever visitors are.
  *
+ * The step is one whole window — `windowSize`, the cycle's location cap — not
+ * one location, so consecutive windows abut instead of overlapping by
+ * `windowSize - 1`. That is what buys the coverage property: any
+ * `ceil(length / windowSize)` consecutive cycles serve every location, so a
+ * location's worst-case wait between visits is `ceil(length / windowSize)`
+ * hours. Stepping by one instead leaves a location unvisited for
+ * `length - windowSize + 1` hours, which past ~148 locations (at a cap of 100)
+ * outlives the 48 h horizon each visit stores, and coverage develops permanent
+ * gaps nothing currently reports (#163).
+ *
+ * Not binding at today's fleet — 12 seed clusters plus at most 40 user sites
+ * stay under the cap, so no cycle defers anything and every hour is full
+ * coverage. This is insurance that the rotation is still correct on the day the
+ * cap does engage.
+ *
  * Derived from the clock rather than from stored state: ingestion has nowhere
  * to keep a cursor, and a cursor would make two cycles in the same hour
  * disagree about what they had covered. Deterministic for a given hour, which
  * is what lets a test assert the mapping instead of observing a shuffle.
+ *
+ * The product is exact in float64 and needs no widening: hours since the epoch
+ * is ~5×10⁵ and the cap ~10², so the product is ~5×10⁷ ≪ 2⁵³.
+ *
+ * `windowSize` needs no validation of its own — `runCycle` hands the same
+ * `maxLocations` to {@link selectCycleLocations}, which rejects a non-positive
+ * integer, and the result here lands in `[0, length)`, inside that function's
+ * offset guard.
  */
-export const rotationOffset = (nowMs: number, length: number): number =>
-  length === 0 ? 0 : Math.floor(nowMs / CYCLE_ROTATION_PERIOD_MS) % length;
+export const rotationOffset = (nowMs: number, length: number, windowSize: number): number =>
+  length === 0 ? 0 : (Math.floor(nowMs / CYCLE_ROTATION_PERIOD_MS) * windowSize) % length;
 
 /** How a cycle's locations split into the ones it will attempt and the ones the cap defers. */
 export interface CycleLocationSelection {

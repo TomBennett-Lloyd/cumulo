@@ -288,7 +288,7 @@ export const runCycle = async (deps: RunCycleDeps): Promise<CycleReport> => {
   const active = activeFetchLocations(sites);
 
   const { selected, deferred: deferredLocations } = selectCycleLocations(active, {
-    offset: rotationOffset(startedAt, active.length),
+    offset: rotationOffset(startedAt, active.length, deps.budget.maxLocations),
     maxLocations: deps.budget.maxLocations,
   });
 
