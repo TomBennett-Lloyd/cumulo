@@ -1,0 +1,218 @@
+name: Deploy Web
+
+# Ships `apps/web`'s production build to the already-provisioned S3 origin and
+# invalidates the CloudFront distribution in front of it. Content only.
+#
+# The Terraform/CI split is the one `deploy-api.yml` describes, drawn in the
+# same place. `infra/web/` owns the bucket, its public-access block and policy,
+# the origin access control, and every setting of the distribution — cache
+# behaviour, the SPA error rewrites, the price class, the certificate. The
+# deploy grant in `infra/web/deploy.tf` is three S3 actions plus
+# `cloudfront:CreateInvalidation`/`GetInvalidation` and no
+# `cloudfront:UpdateDistribution` at all, so no workflow — this one included —
+# can change what the distribution *is*. Every such change stays a reviewable
+# `.tf` diff. This file only replaces the bytes behind it.
+#
+# **The distribution serves the SPA and nothing else.** The browser calls the
+# API Gateway URL directly, baked in at build time below. That is load-bearing:
+# the API's per-IP limiter reads `requestContext.http.sourceIp` (ADR 0006), the
+# direct TCP peer, so routing the API through CloudFront would collapse every
+# visitor onto a handful of edge addresses and 30 requests/minute would
+# auto-block a whole edge POP for an hour. Adding an API origin here — or a
+# step that deploys one — needs the limiter's identity source moved to the
+# leftmost-untrusted `x-forwarded-for` hop first.
+#
+# Keyless throughout: `cumulo-github-actions` is assumed by OIDC, and there is
+# no AWS secret in this repository to store or rotate (CLAUDE.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # The bundle Vite emits is a function of the app *and* the workspace
+      # packages it inlines — `apps/web/package.json` depends on @cumulo/shared
+      # (the domain schemas every API response is parsed with) and @cumulo/ui
+      # (the design tokens and components the pages are built from), and both
+      # end up inside `dist/assets/`. The lockfile is here for the same reason
+      # one level down: a bumped dependency is bundled code too.
+      - apps/web/**
+      - packages/shared/**
+      - packages/ui/**
+      - pnpm-lock.yaml
+      - .github/workflows/deploy-web.yml
+
+  # Manual runs are supported, and the stack needs them twice over: the first
+  # deploy after the operator applies `infra/web` has no push to ride (the
+  # bucket exists and is empty, and the tree it should hold is already on main),
+  # and a repo-variable change — a new `VITE_API_BASE_URL` after the API is
+  # re-applied — changes no file, so nothing would redeploy the build that bakes
+  # it in. Safe to expose: the OIDC trust policy admits only
+  # `ref:refs/heads/main`, so a dispatch from any other ref gets no credentials
+  # — the exact path `oidc-smoke.yml` already exercises.
+  workflow_dispatch:
+
+# id-token: write is what lets the runner mint the OIDC token AWS trades for
+# credentials. contents: read is the checkout. Nothing here writes to the repo.
+permissions:
+  id-token: write
+  contents: read
+
+# Two pushes landing minutes apart race each other: both build, both sync, and
+# whichever upload finishes last wins regardless of which commit is newer — so
+# the distribution can end up serving older code than main thinks. Serialising
+# on the workflow makes the last *started* run the last to deploy. Not
+# `cancel-in-progress`: a cancelled run can leave the bucket half-synced —
+# new hashed assets uploaded, `index.html` still pointing at the old ones, or
+# worse the reverse — and the distribution is live while the deploy is in
+# flight. A slow queue is the cheaper failure.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # The provisioning marker. Before an operator applies `infra/web` this
+    # variable does not exist, so there is no bucket to sync to and no
+    # distribution to invalidate — a push should skip, not fail red on every
+    # commit until someone finds the credentials. Once it is set the job runs,
+    # and the preflight below stays loud on purpose: a *partially* configured
+    # repo (distribution published, API URL forgotten) is a mistake, not a
+    # not-yet, and it must fail rather than silently ship the wrong thing.
+    if: vars.WEB_DISTRIBUTION_ID != ''
+    steps:
+      # Setup mirrors ci.yml exactly — same actions, same versions, same
+      # .nvmrc-driven Node and pnpm store cache. What CI verified and what this
+      # workflow ships must be built by the same toolchain, or "green on main"
+      # stops being a statement about the artefact.
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Both variables are required, and an empty `VITE_API_BASE_URL` is the
+      # dangerous one: `apps/web/src/data/fleet-source-selection.ts` treats
+      # empty as "use the in-memory demo fleet", which is right for local dev
+      # and every test and catastrophic here — a hosted page that looks like it
+      # works while showing invented sites no deployment has, which is exactly
+      # the outcome that module's own comment names as the worst available. A
+      # *malformed* value throws at runtime by that module's design; an absent
+      # one cannot, so it is caught here instead.
+      - name: Preflight — repo variables present
+        run: |
+          missing=0
+          for var in VITE_API_BASE_URL WEB_BUCKET_NAME; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Repo variable $var is not set."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Run the web runbook in infra/README.md, which sets both" \
+              "variables from 'terraform output' after the first apply."
+            exit 1
+          fi
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          WEB_BUCKET_NAME: ${{ vars.WEB_BUCKET_NAME }}
+
+      # No `pnpm verify` step, deliberately. Every commit on main arrived
+      # through a PR whose CI ran the composite gate, so re-running it here
+      # would double the wall clock to re-prove a fact about the same tree. If
+      # main ever admits unverified commits, this is the line that has to change.
+      #
+      # The API's origin is a *build-time* value: Vite bakes `import.meta.env`
+      # into the bundle, so the deployed page talks to whatever this variable
+      # held when the bundle was built. That is why a variable change alone
+      # deploys nothing, and why `workflow_dispatch` exists above.
+      - name: Build web (production)
+        run: pnpm --filter @cumulo/web build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      # ci.yml's `web-build` job runs this same gate, but on a demo-mode build
+      # (no `VITE_API_BASE_URL` in a PR). This run measures the artefact
+      # actually being shipped. The two differ only by the baked origin string
+      # today — both data sources are statically imported by
+      # fleet-source-selection.ts, so neither is tree-shaken either way — but
+      # "today" is a measurement, not a guarantee, and this is the copy that
+      # gates the bytes a visitor downloads.
+      - name: Assert bundle properties
+        run: bash .claude/scripts/check-web-bundle.sh
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          # Repo *variables*, never secrets: a role ARN and a region are
+          # identifiers, and the point of OIDC is that there is no secret to
+          # pair them with. Both are published by the bootstrap runbook's B6.
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          # Names the session in CloudTrail, so a bucket write can be traced
+          # back to the run — and the commit — that made it.
+          role-session-name: deploy-web-${{ github.run_id }}
+
+      # The bucket name is `cumulo-web-<env>-<account-id>`, so it carries the
+      # AWS account digits, and this repository is public: infra/README.md
+      # convention 7 keeps those digits out of the repo, and a run log is just
+      # as public as a file. Registering the mask first means that even an
+      # unexpected echo — a shell trace, an error message quoting the argument —
+      # comes out as `***` for the rest of the job. The `--only-show-errors`
+      # flags below are the belt to this braces: they stop the sync printing a
+      # per-object line naming the bucket at all.
+      - name: Mask the bucket name
+        run: echo "::add-mask::$WEB_BUCKET"
+        env:
+          WEB_BUCKET: ${{ vars.WEB_BUCKET_NAME }}
+
+      # Assets first, entry last, and the order is the whole correctness
+      # argument: `index.html` names the hashed asset files, so uploading it
+      # before them opens a window where a visitor gets a document referencing
+      # objects that 404. The reverse order's window is harmless — new assets
+      # sitting unreferenced beside the old page.
+      #
+      # The cache-control split follows from Vite's output. Everything under
+      # `dist/assets/` is content-hashed, so a given URL's bytes never change
+      # and `immutable` for a year is simply true. `index.html` is the one
+      # mutable object in the bucket — same URL, new content every deploy — so
+      # it gets `no-cache`, which does not mean "do not cache" but "revalidate
+      # before use": deploys take effect at once instead of waiting out a TTL,
+      # while the invalidation below handles the edge copies already out there.
+      #
+      # `--delete` prunes assets from previous builds, which is safe *because*
+      # the entry is excluded from this call: the old page is never orphaned
+      # mid-sync, it is replaced a second later by the `cp`.
+      - name: Sync the build to S3
+        run: |
+          aws s3 sync apps/web/dist "s3://$WEB_BUCKET/" --delete --exclude index.html \
+            --cache-control 'public,max-age=31536000,immutable' --only-show-errors
+          aws s3 cp apps/web/dist/index.html "s3://$WEB_BUCKET/index.html" \
+            --cache-control 'no-cache' --only-show-errors
+        env:
+          WEB_BUCKET: ${{ vars.WEB_BUCKET_NAME }}
+
+      # The invalidation id is read from the response, never predicted — it is
+      # server-assigned, and constructing one would be inventing a value AWS
+      # owns. Then the waiter, for deploy-api.yml's reason one service over:
+      # `create-invalidation` returns as soon as the request is accepted, while
+      # the edges are still serving the previous build, so without this the job
+      # goes green on a deploy nobody can see yet — and if the invalidation
+      # fails, the first evidence would be a stale page. `GetInvalidation` is
+      # granted in `infra/web/deploy.tf` for exactly this poll.
+      #
+      # `/*` is one path against the free tier's 1,000 invalidation paths per
+      # month, not one per object — enumerating the changed keys instead would
+      # cost more paths and buy nothing, since `index.html` is the only cached
+      # URL whose content moves.
+      #
+      # A distribution id, unlike the bucket name, does not embed the account
+      # id, so it needs no mask.
+      - name: Invalidate the distribution and wait for it
+        run: |
+          INVALIDATION_ID=$(aws cloudfront create-invalidation --distribution-id "$DIST_ID" \
+            --paths '/*' --query 'Invalidation.Id' --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DIST_ID" --id "$INVALIDATION_ID"
+        env:
+          DIST_ID: ${{ vars.WEB_DISTRIBUTION_ID }}
