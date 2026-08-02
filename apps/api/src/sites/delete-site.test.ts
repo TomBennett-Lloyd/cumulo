@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { fleetSite, jsonBodyOf, RANELAGH_ID, routeRequest } from '../api-fixtures';
 import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
-import { deleteSite, type DeleteSiteDeps } from './delete-site';
+import { deleteSite, deleteSiteConflictExhaustedEvent, type DeleteSiteDeps } from './delete-site';
 import { seriesCleanupFailedEvent, seriesCleanupIncompleteEvent } from './series-cleanup';
 
 /** Which delete an origin should take, recorded so the choice is assertable. */
@@ -16,6 +16,8 @@ interface DeleteCalls {
   /** The item budget each pass was handed. */
   readonly budgets: number[];
   readonly logged: Record<string, unknown>[];
+  /** Every backoff the route slept, in order: the curve as it actually ran. */
+  readonly sleeps: number[];
 }
 
 /** What the table holds for the requested id: a site, or nothing at all. */
@@ -28,28 +30,70 @@ const CLEAN_SWEEP: SeriesCleanupOutcome = {
   budgetReached: false,
 };
 
+/** The site the counted delete is for; the fixture's default origin is seed. */
+const userSite = fleetSite({ origin: 'user' });
+
+/** One attempt's answer, in the adapter's own vocabulary. */
+type DeleteAnswer = 'deleted' | 'already_gone' | 'conflict';
+
 interface DeleteScript {
   readonly stored?: FleetSite | typeof NO_SUCH_SITE;
-  /** What the delete transaction reports — `false` is a lost race. */
-  readonly deleted?: boolean;
+  /**
+   * One answer per attempt, the last one holding once the script runs out — so
+   * a script states only what changes between attempts, and `['conflict']` is
+   * the fleet that never stops contending.
+   */
+  readonly deletes?: readonly DeleteAnswer[];
   readonly cleanup?: () => Promise<SeriesCleanupOutcome>;
+  /**
+   * Makes the counted delete *reject* rather than answer — the shape a storage
+   * failure that is nobody's expected outcome arrives in, as opposed to the
+   * three above.
+   */
+  readonly deleteFailure?: () => Promise<never>;
 }
 
+/**
+ * The script's answer for this attempt. Deliberately not shared with
+ * `create-site-fixtures.ts`'s look-alike (`docs/standards/structure.md` rule 7):
+ * the two routes model different contention — a create can lose an eviction
+ * race this route has no equivalent of — and are free to diverge.
+ */
+const answerFor = (answers: readonly DeleteAnswer[], attempt: number): DeleteAnswer =>
+  answers[Math.min(attempt, answers.length - 1)] ?? 'deleted';
+
 const scriptedSite = (script: DeleteScript = {}): { deps: DeleteSiteDeps; calls: DeleteCalls } => {
-  const { stored = fleetSite(), deleted = true } = script;
-  const calls: DeleteCalls = { counted: [], plain: [], cleaned: [], budgets: [], logged: [] };
+  const { stored = fleetSite(), deletes = ['deleted'] } = script;
+  const calls: DeleteCalls = {
+    counted: [],
+    plain: [],
+    cleaned: [],
+    budgets: [],
+    logged: [],
+    sleeps: [],
+  };
 
   const deps: DeleteSiteDeps = {
     sites: {
       getFleetSite: () =>
         Promise.resolve(stored === NO_SUCH_SITE ? { found: false } : { found: true, site: stored }),
       deleteUserSiteWithCount: (siteId) => {
+        const answer = answerFor(deletes, calls.counted.length);
         calls.counted.push(siteId);
-        return Promise.resolve({ deleted });
+        if (script.deleteFailure !== undefined) {
+          return script.deleteFailure();
+        }
+        return Promise.resolve(
+          answer === 'deleted' ? { deleted: true } : { deleted: false, reason: answer },
+        );
       },
       deleteFleetSite: (siteId) => {
+        // A plain DeleteItem has no transaction to cancel, so it cannot report a
+        // conflict: every answer that is not 'deleted' is the same idempotent
+        // "there was nothing there".
+        const answer = answerFor(deletes, calls.plain.length);
         calls.plain.push(siteId);
-        return Promise.resolve({ deleted });
+        return Promise.resolve({ deleted: answer === 'deleted' });
       },
     },
     series: {
@@ -60,6 +104,16 @@ const scriptedSite = (script: DeleteScript = {}): { deps: DeleteSiteDeps; calls:
       },
     },
     log: (entry) => calls.logged.push(entry),
+    // Recorded and resolved rather than actually waited: what a test can prove
+    // about a backoff is the sequence of delays, and sleeping them would price
+    // the exhaustion case at seconds.
+    sleep: (ms) => {
+      calls.sleeps.push(ms);
+      return Promise.resolve();
+    },
+    // Full jitter is `floor(random × cap)`, so a fixed 0.5 turns each recorded
+    // sleep into exactly half its ceiling — the curve, readable in the numbers.
+    random: () => 0.5,
   };
 
   return { deps, calls };
@@ -105,7 +159,7 @@ describe('DELETE /v1/sites/{siteId}', () => {
   });
 
   it('decrements the user counter when the departing site is user-created', async () => {
-    const { deps, calls } = scriptedSite({ stored: fleetSite({ origin: 'user' }) });
+    const { deps, calls } = scriptedSite({ stored: userSite });
 
     await deleteSite(deps, deleteRanelagh);
 
@@ -125,19 +179,117 @@ describe('DELETE /v1/sites/{siteId}', () => {
   });
 
   it('answers 404 when a concurrent delete won the race between read and write', async () => {
-    const { deps, calls } = scriptedSite({ stored: fleetSite({ origin: 'user' }), deleted: false });
+    const { deps, calls } = scriptedSite({ stored: userSite, deletes: ['already_gone'] });
 
     const response = await deleteSite(deps, deleteRanelagh);
 
     expect(response.statusCode).toBe(404);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
+    // Final, and so not retried: the condition that declined is the site's
+    // absence, which no amount of waiting will change.
+    expect(calls.counted).toHaveLength(1);
+    expect(calls.sleeps).toEqual([]);
     // No cleanup either: the site this request would have cleaned up after is
     // the other request's to finish.
     expect(calls.cleaned).toEqual([]);
   });
 
+  it('retries the counted delete after a conflict and still answers 204', async () => {
+    // The delete writes the same counter item every capped create writes (#155),
+    // so it loses the same races — and a 404 for one of them would tell a caller
+    // its site is gone while the site is still in the fleet.
+    const { deps, calls } = scriptedSite({ stored: userSite, deletes: ['conflict', 'deleted'] });
+
+    const response = await deleteSite(deps, deleteRanelagh);
+
+    expect(response.statusCode).toBe(204);
+    expect(calls.counted).toEqual([RANELAGH_ID, RANELAGH_ID]);
+    // Slept before re-issuing rather than hot-retrying into the same winner.
+    expect(calls.sleeps).toEqual([25]);
+    expect(calls.cleaned).toEqual([RANELAGH_ID]);
+  });
+
+  it('answers 404 when the site went away between conflicted attempts', async () => {
+    // The retry is for the conflict only. Once the transaction reports the row
+    // itself is gone, the answer is the ordinary 404 and the loop stops.
+    const { deps, calls } = scriptedSite({
+      stored: userSite,
+      deletes: ['conflict', 'already_gone'],
+    });
+
+    const response = await deleteSite(deps, deleteRanelagh);
+
+    expect(response.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
+    expect(calls.counted).toHaveLength(2);
+    expect(calls.sleeps).toEqual([25]);
+    expect(calls.cleaned).toEqual([]);
+  });
+
+  it('answers 500 naming the exhausted budget when every delete conflicts', async () => {
+    const { deps, calls } = scriptedSite({ stored: userSite, deletes: ['conflict'] });
+
+    const response = await deleteSite(deps, deleteRanelagh);
+
+    expect(response.statusCode).toBe(500);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
+    // One initial attempt plus the nine retries the budget allows.
+    expect(calls.counted).toHaveLength(10);
+    // The curve, at half of each ceiling: 50, 100, 200, then held at 400.
+    expect(calls.sleeps).toEqual([25, 50, 100, 200, 200, 200, 200, 200, 200]);
+    // The structured line an operator reads: which budget ran out, and on what.
+    expect(calls.logged).toEqual([
+      {
+        event: deleteSiteConflictExhaustedEvent,
+        siteId: RANELAGH_ID,
+        retries: 9,
+      },
+    ]);
+    // The row is still there, so its series points are not this request's to
+    // delete — a cleanup here would strip a live site's history.
+    expect(calls.cleaned).toEqual([]);
+  });
+
+  it('never retries the seed delete, which has no transaction to conflict', async () => {
+    // The negative control on the retry's reach. This is the script that makes
+    // the user branch answer 204 on its second attempt; the seed branch has no
+    // counter, no transaction and so no race to lose, and takes the first
+    // answer as final rather than sleeping over a `DeleteItem`.
+    const { deps, calls } = scriptedSite({
+      stored: fleetSite({ origin: 'seed' }),
+      deletes: ['conflict', 'deleted'],
+    });
+
+    const response = await deleteSite(deps, deleteRanelagh);
+
+    expect(response.statusCode).toBe(404);
+    expect(calls.plain).toEqual([RANELAGH_ID]);
+    expect(calls.counted).toEqual([]);
+    expect(calls.sleeps).toEqual([]);
+  });
+
+  it('does not retry a StorageError, leaving it for the request boundary', async () => {
+    // The other negative control on the loop's reach: an unexpected storage
+    // failure is not a lost race, so retrying it would spend ten attempts and up
+    // to 2.7 seconds on a call that cannot succeed. It propagates on the first.
+    const { deps, calls } = scriptedSite({
+      stored: userSite,
+      deleteFailure: () =>
+        Promise.reject(
+          new StorageError(
+            { operation: 'deleteUserSiteWithCount', table: 'cumulo-sites-dev' },
+            { cause: new Error('throughput exceeded') },
+          ),
+        ),
+    });
+
+    await expect(deleteSite(deps, deleteRanelagh)).rejects.toBeInstanceOf(StorageError);
+    expect(calls.counted).toHaveLength(1);
+    expect(calls.sleeps).toEqual([]);
+  });
+
   it("deletes the site's series points once the row is gone", async () => {
-    const { deps, calls } = scriptedSite({ stored: fleetSite({ origin: 'user' }) });
+    const { deps, calls } = scriptedSite({ stored: userSite });
 
     await deleteSite(deps, deleteRanelagh);
 

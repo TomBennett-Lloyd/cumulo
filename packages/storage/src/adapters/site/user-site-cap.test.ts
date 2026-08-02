@@ -9,11 +9,13 @@ import {
   RANELAGH_ID,
   RATHMINES_ID,
   TABLE_NAME,
+  TRANSACTION_CONFLICT,
   adapter,
   ddbMock,
   fleetSite,
   rathminesItem,
   transactionCancelled,
+  transactionConflict,
 } from './site-fixtures';
 import { toItem } from './site-item';
 
@@ -113,6 +115,100 @@ describe('createUserSiteWithCap', () => {
     expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
   });
 
+  it('reports a counter conflict as a lost race rather than a full fleet', async () => {
+    // #155: concurrent capped creates contend on the single counter item, which
+    // DynamoDB reports as a TransactionConflict cancellation. It says nothing
+    // about how full the fleet is, so answering 'cap' would tell a caller the
+    // demo is full when it merely lost a race — and leaving it unclassified is
+    // what 500'd 8 of the 66 concurrent creates in #29's E2-a run.
+    ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(NO_REASON, TRANSACTION_CONFLICT));
+
+    expect(await adapter().createUserSiteWithCap(userSite, CAP)).toEqual({
+      created: false,
+      reason: 'conflict',
+    });
+    // The adapter never retries: ADR 0002's layer-ownership rule puts the retry
+    // on the route handler, which is the layer that knows what "try again"
+    // means for the request.
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('reads a conflict from any item position, unlike the cap verdict', async () => {
+    // The cap answer is position-dependent on purpose (see above), but a
+    // conflict is not: whichever item collided, the whole transaction was
+    // cancelled and nothing was written.
+    ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(TRANSACTION_CONFLICT, NO_REASON));
+
+    expect(await adapter().createUserSiteWithCap(userSite, CAP)).toEqual({
+      created: false,
+      reason: 'conflict',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('reports a standalone TransactionConflictException as a lost race too', async () => {
+    // The other shape the service uses: the whole request rejected, with no
+    // per-item cancellation reasons at all.
+    ddbMock.on(TransactWriteCommand).rejects(transactionConflict());
+
+    expect(await adapter().createUserSiteWithCap(userSite, CAP)).toEqual({
+      created: false,
+      reason: 'conflict',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('does not call a conflict mixed with a failed condition a lost race', async () => {
+    // Negative control for the classification's upper edge. Item 0's condition
+    // guards against overwriting an existing id — a violated invariant. A
+    // response carrying both that and a conflict is not a bare race, and
+    // retrying it would re-run a write that must never succeed.
+    ddbMock
+      .on(TransactWriteCommand)
+      .rejects(transactionCancelled(CONDITION_FAILED, TRANSACTION_CONFLICT));
+
+    const error = await captureStorageError(() => adapter().createUserSiteWithCap(userSite, CAP));
+
+    expect(error.context.operation).toBe('createUserSiteWithCap');
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('lets the cap verdict beat a conflict on another item of the same transaction', async () => {
+    // The mirror of the test above, and the shape the fleet actually produces:
+    // the counter at index 1 is both the item the cap condition sits on and the
+    // item concurrent creates collide over, so a cancellation naming a conflict
+    // *and* the cap is reachable. The domain answer wins — the classification is
+    // ordered, not a race between two predicates — because the fleet really is
+    // full and re-issuing the create would only find it full again.
+    ddbMock
+      .on(TransactWriteCommand)
+      .rejects(transactionCancelled(TRANSACTION_CONFLICT, CONDITION_FAILED));
+
+    expect(await adapter().createUserSiteWithCap(userSite, CAP)).toEqual({
+      created: false,
+      reason: 'cap',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('does not read a cancellation that names no reason as a conflict', async () => {
+    // Negative control for the classification's lower edge, and the reason
+    // `conflictCancelled` asks whether *some* reason is a conflict before
+    // asking whether *every* reason is one. Both of these are cancellations
+    // that say nothing about why: with the `some` test gone, "every reason is
+    // a conflict or None" is vacuously true for them and the adapter would
+    // hand the route handler something to retry that it cannot explain.
+    for (const rejection of [transactionCancelled(), transactionCancelled(NO_REASON, NO_REASON)]) {
+      ddbMock.reset();
+      ddbMock.on(TransactWriteCommand).rejects(rejection);
+
+      const error = await captureStorageError(() => adapter().createUserSiteWithCap(userSite, CAP));
+
+      expect(error.context.operation).toBe('createUserSiteWithCap');
+      expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+    }
+  });
+
   it('wraps an ordinary transport rejection in a StorageError', async () => {
     ddbMock.on(TransactWriteCommand).rejects(new Error('connection reset'));
 
@@ -193,6 +289,19 @@ describe('evictAndCreateUserSite', () => {
     });
   });
 
+  it('reports a conflicted eviction separately from a lost eviction race', async () => {
+    // Both are lost races, but they call for different things: 'oldest_gone'
+    // means look up the new oldest, a conflict means nothing about the oldest
+    // site at all. Collapsing them would send the caller on a pointless query.
+    ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(TRANSACTION_CONFLICT, NO_REASON));
+
+    expect(await adapter().evictAndCreateUserSite(RATHMINES_ID, userSite)).toEqual({
+      evicted: false,
+      reason: 'conflict',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
   it('refuses to create a seed site through the eviction path', async () => {
     await expect(
       adapter().evictAndCreateUserSite(RATHMINES_ID, fleetSite({ origin: 'seed' })),
@@ -228,11 +337,40 @@ describe('deleteUserSiteWithCount', () => {
   it('never decrements for a site that was already gone', async () => {
     ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(CONDITION_FAILED, NO_REASON));
 
-    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({ deleted: false });
+    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({
+      deleted: false,
+      reason: 'already_gone',
+    });
     // The decrement travelled *inside* the cancelled transaction, so it did not
     // happen either — and no compensating write was issued outside it.
     expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
     expect(ddbMock.calls()).toHaveLength(1);
+  });
+
+  it('reports a counter conflict as a lost race rather than a site already gone', async () => {
+    // The delete writes the same counter item every capped create writes, so it
+    // loses the same races. Answering 'already_gone' here would 404 a caller
+    // whose site is still very much there — and would do it precisely when the
+    // fleet is busiest.
+    ddbMock.on(TransactWriteCommand).rejects(transactionCancelled(NO_REASON, TRANSACTION_CONFLICT));
+
+    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({
+      deleted: false,
+      reason: 'conflict',
+    });
+    // The retry belongs to the route handler (ADR 0002), so the adapter sends
+    // exactly once whatever the answer.
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
+  it('reports a standalone TransactionConflictException on the delete path too', async () => {
+    ddbMock.on(TransactWriteCommand).rejects(transactionConflict());
+
+    expect(await adapter().deleteUserSiteWithCount(RATHMINES_ID)).toEqual({
+      deleted: false,
+      reason: 'conflict',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
   });
 });
 

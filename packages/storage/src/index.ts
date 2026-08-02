@@ -13,10 +13,10 @@
  * So these categories are deliberately *absent*:
  *
  * - the machinery that *applies* the failure and retention policies:
- *   `drainBatches` and `DrainOutcome`, the backoff arithmetic
- *   (`fullJitterDelayMs`, `BackoffSpec`, `MAX_BACKOFF_DELAY_MS`,
- *   `storageRetryDelayMs`, `createStorageRetryStrategy`) and the TTL
- *   computation (`expiresAtEpochSeconds`). A caller reaching for these is
+ *   `drainBatches` and `DrainOutcome`, the rest of the backoff arithmetic
+ *   (`MAX_BACKOFF_DELAY_MS`, `storageRetryDelayMs`,
+ *   `createStorageRetryStrategy`) and the TTL computation
+ *   (`expiresAtEpochSeconds`). A caller reaching for these is
  *   either rebuilding an adapter or tuning one from the outside, and both
  *   belong in here instead. The *numbers* those functions apply do stay
  *   exported — `STORAGE_MAX_ATTEMPTS`, `STORAGE_RETRY_BASE_DELAY_MS`,
@@ -31,6 +31,18 @@
  *   storage cost. A consumer computing a time budget from remembered values
  *   instead of these is writing down a model of this package rather than
  *   reading this package, which is the mistake #115 was filed about.
+ *
+ *   `fullJitterDelayMs` and `BackoffSpec` moved *onto* the surface for that
+ *   same reason in #155. The site adapter now reports a conflict-cancelled
+ *   transaction as a domain outcome and deliberately does not retry it (ADR
+ *   0002's layer-ownership rule; see `transactUnless`), which makes the API
+ *   route handlers the retry owner. An owner outside this package still has to
+ *   back off, and the alternative to exporting the curve is each handler
+ *   restating `uniform(0, min(base * 2^n, max))` from memory — the #115
+ *   mistake again, one layer up. So the *arithmetic* is shared while the
+ *   *numbers* stay the retry owner's own: the handlers pass their own
+ *   `BackoffSpec` rather than inheriting this package's, because their budget
+ *   is a request's, not a background drain's.
  * - the `toItem`/`fromItem` pairs each adapter exports for its own tests. They
  *   are the wire format, not the contract; exporting them would invite a caller
  *   to build items by hand and bypass the key computation the adapters exist to
@@ -66,6 +78,8 @@ export {
 export {
   DYNAMODB_BATCH_WRITE_SIZE,
   defaultBatchPolicy,
+  fullJitterDelayMs,
+  type BackoffSpec,
   type BatchPolicy,
   type BatchWriteOutcome,
 } from './batch';
@@ -78,6 +92,7 @@ export { type BatchingAdapterDeps, type StorageAdapterDeps } from './adapters/st
 export {
   SiteAdapter,
   type CreateUserSiteResult,
+  type DeleteUserSiteResult,
   type EvictAndCreateResult,
   type GetFleetSiteResult,
   type OldestUserSiteResult,
