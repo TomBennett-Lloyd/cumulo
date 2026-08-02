@@ -3,12 +3,37 @@ import { z } from 'zod';
 import { utcIsoTimestampSchema } from './timestamp';
 
 /**
+ * The sanity ceiling for a residential rooftop installation, in kilowatts — the
+ * upper bound on both nameplate DC capacity ({@link siteSchema}) and AC power
+ * (`forecastSchema`, `generationReadingSchema`, `uncertaintyBandSchema`).
+ *
+ * One number covers both quantities because output clips at nameplate (ADR
+ * 0003): a site can never emit more AC power than the DC capacity it declared,
+ * so the widest legitimate AC value is the widest legitimate capacity. That
+ * makes the two bounds the same fact stated once, not two facts that happen to
+ * agree — a lower ceiling here narrows every schema in step, which is the point.
+ *
+ * The shared-schema tests deliberately pin `50`, `50.1` and `51` as *literals*
+ * rather than deriving them from this constant (`site.test.ts`,
+ * `forecast.test.ts`, `generation-reading.test.ts`). Probe values derived from
+ * the constant would move with it, so a typo'd `500` would leave every test
+ * green; the literals make any change to this value go red. The shared-schema
+ * pins are those three files, and the web pins follow — the rendered hint in
+ * `AddSiteForm.test.tsx` and the `50.1` refusals there and in
+ * `demo-fleet-data-source.test.ts` — so a value change reddens both layers by
+ * design. If you are changing it, that double-touch is the intended friction,
+ * not a failure — update the pins deliberately.
+ */
+export const MAX_PLAUSIBLE_RESIDENTIAL_KW = 50;
+
+/**
  * A single rooftop PV installation in the fleet.
  *
  * Conventions:
  * - tilt: degrees from horizontal — 0 = flat, 90 = vertical
  * - azimuth: degrees clockwise from true north — 180 = due south; 360 normalizes to 0
- * - capacity: nameplate DC kilowatts; upper bound is a sanity cap for residential rooftops
+ * - capacity: nameplate DC kilowatts; upper bound is
+ *   {@link MAX_PLAUSIBLE_RESIDENTIAL_KW}, the sanity cap for residential rooftops
  */
 export const siteSchema = z.object({
   id: z.uuid(),
@@ -17,7 +42,7 @@ export const siteSchema = z.object({
   longitude: z.number().gte(-180).lte(180),
   tiltDegrees: z.number().gte(0).lte(90),
   azimuthDegrees: z.number().gte(0).lt(360),
-  capacityKw: z.number().positive().lte(50),
+  capacityKw: z.number().positive().lte(MAX_PLAUSIBLE_RESIDENTIAL_KW),
 });
 
 export type Site = z.infer<typeof siteSchema>;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
 import { utcIsoTimestampSchema } from './timestamp';
 import { weatherSourceSchema } from './weather-source';
 
@@ -22,13 +23,14 @@ export type ForecastModel = z.infer<typeof forecastModelSchema>;
  * so `forecastSchema` stays a plain `ZodObject` and remains extensible via
  * `.extend()` / `.pick()` (a top-level `.refine()` would erase those).
  *
- * Both quantiles carry the same 0–50 kW bounds as `acPowerKw`: same quantity,
- * same unit, same site, so a runaway ML p90 is exactly what the cap is for.
+ * Both quantiles carry the same `0`–{@link MAX_PLAUSIBLE_RESIDENTIAL_KW} bounds
+ * as `acPowerKw`: same quantity, same unit, same site, so a runaway ML p90 is
+ * exactly what the cap is for.
  */
 export const uncertaintyBandSchema = z
   .object({
-    p10AcPowerKw: z.number().gte(0).lte(50),
-    p90AcPowerKw: z.number().gte(0).lte(50),
+    p10AcPowerKw: z.number().gte(0).lte(MAX_PLAUSIBLE_RESIDENTIAL_KW),
+    p90AcPowerKw: z.number().gte(0).lte(MAX_PLAUSIBLE_RESIDENTIAL_KW),
   })
   .refine((band) => band.p10AcPowerKw <= band.p90AcPowerKw, {
     message: 'p10AcPowerKw must not exceed p90AcPowerKw',
@@ -54,8 +56,9 @@ export type UncertaintyBand = z.infer<typeof uncertaintyBandSchema>;
  *   and `issuedAt` is what tells you which cycle you are looking at
  * - no ordering constraint holds between `issuedAt` and `validTime`: hindcast
  *   replays legitimately issue forecasts for instants already in the past
- * - `acPowerKw`'s 50 kW cap mirrors `siteSchema.capacityKw`'s residential sanity
- *   cap, because output is clipped at nameplate (ADR 0003)
+ * - `acPowerKw`'s cap *is* {@link MAX_PLAUSIBLE_RESIDENTIAL_KW}, the same
+ *   constant bounding `siteSchema.capacityKw`, because output is clipped at
+ *   nameplate (ADR 0003)
  * - `poaIrradianceWm2` is plane-of-array irradiance in W/m²; 2000 is a sanity
  *   ceiling well above terrestrial peak including edge-of-cloud enhancement.
  *   It is deliberately looser than the 1500 caps on the horizontal-component
@@ -74,7 +77,7 @@ export const forecastSchema = z.object({
   issuedAt: utcIsoTimestampSchema,
   weatherSource: weatherSourceSchema,
   poaIrradianceWm2: z.number().gte(0).lte(2000),
-  acPowerKw: z.number().gte(0).lte(50),
+  acPowerKw: z.number().gte(0).lte(MAX_PLAUSIBLE_RESIDENTIAL_KW),
   uncertainty: uncertaintyBandSchema.optional(),
 });
 

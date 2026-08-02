@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
 import { utcIsoTimestampSchema } from './timestamp';
 
 /**
@@ -9,8 +10,9 @@ import { utcIsoTimestampSchema } from './timestamp';
  *
  * Conventions:
  * - validTime: hour-ending — `14:00:00Z` labels the hour from 13:00 to 14:00
- * - acPowerKw: mean AC power over that preceding hour, in kilowatts; upper bound
- *   mirrors `siteSchema.capacityKw` as a sanity cap
+ * - acPowerKw: mean AC power over that preceding hour, in kilowatts; the upper
+ *   bound is {@link MAX_PLAUSIBLE_RESIDENTIAL_KW}, the same constant that caps
+ *   `siteSchema.capacityKw`
  *
  * Quantity, unit and time semantics are deliberately identical to
  * `forecastSchema.acPowerKw`, so a forecast and its actual interleave directly
@@ -23,7 +25,7 @@ import { utcIsoTimestampSchema } from './timestamp';
 export const generationReadingSchema = z.object({
   siteId: z.uuid(),
   validTime: utcIsoTimestampSchema,
-  acPowerKw: z.number().gte(0).lte(50),
+  acPowerKw: z.number().gte(0).lte(MAX_PLAUSIBLE_RESIDENTIAL_KW),
 });
 
 export type GenerationReading = z.infer<typeof generationReadingSchema>;
