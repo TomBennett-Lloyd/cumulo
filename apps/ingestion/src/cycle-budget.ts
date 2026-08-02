@@ -316,3 +316,24 @@ export const CYCLE_DEADLINE_MS =
  * not the same ones next hour.
  */
 export const MAX_LOCATIONS_PER_CYCLE = 100;
+
+/**
+ * How large the fleet may grow before rotation can no longer keep coverage
+ * continuous: a cap's worth of locations times the stored horizon, **4,800**.
+ *
+ * Rotation steps by a whole window each hour (`locations.ts`), so every location
+ * is visited within any `ceil(n / c)` consecutive cycles — that quotient *is* the
+ * worst wait between visits, in hours. A visit stores {@link forecastHours}
+ * hourly readings starting at the visit hour, so coverage is continuous exactly
+ * while `ceil(n / c) ≤ forecastHours`; past `forecastHours × c` a location's
+ * stored horizon expires before its next visit and the gap becomes permanent
+ * rather than transient.
+ *
+ * Past the bound nothing says so. Deferral is correctly not a failure (see
+ * {@link MAX_LOCATIONS_PER_CYCLE}), so a fleet over this size degrades
+ * **unobservably** — #164 owns the alarm shape for an absence like that. And the
+ * bound is a consequence of the rotation `locations.ts` implements, not a
+ * decision about how large the fleet should be: it has to be reconciled with
+ * whatever #51 concludes on fleet scale rather than standing in for that answer.
+ */
+export const CONTINUOUS_COVERAGE_MAX_LOCATIONS = MAX_LOCATIONS_PER_CYCLE * forecastHours;

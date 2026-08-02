@@ -158,9 +158,12 @@ describe('runCycle bounds', () => {
     ]);
   });
 
-  it('rotation moves the capped window on by one location each hour', async () => {
+  it('rotation advances the capped window by one window each hour', async () => {
     // Without this, an ascending-id cap starves the same tail forever — and
     // since locationId sorts by latitude, that tail is a geographic band.
+    // Stepping by a whole window rather than one location is what bounds the
+    // starvation: consecutive windows abut, so the four locations are covered
+    // in ceil(4 / 2) = 2 cycles instead of 4 (#163).
     const windowAtHour = async (hoursFromStart: number): Promise<string[]> => {
       const record = emptyRecord();
       const startedAt = cycleStartMs + hoursFromStart * CYCLE_ROTATION_PERIOD_MS;
@@ -180,11 +183,10 @@ describe('runCycle bounds', () => {
     };
 
     expect(await windowAtHour(0)).toEqual([bristolId, dublinId]);
-    expect(await windowAtHour(1)).toEqual([dublinId, manchesterId]);
-    expect(await windowAtHour(2)).toEqual([manchesterId, edinburghId]);
-    // Wraps, so the fourth hour serves the location the first hour skipped last.
-    expect(await windowAtHour(3)).toEqual([edinburghId, bristolId]);
-    expect(await windowAtHour(4)).toEqual([bristolId, dublinId]);
+    expect(await windowAtHour(1)).toEqual([manchesterId, edinburghId]);
+    // Wraps, having served every location in between: the third hour is back
+    // where the first began.
+    expect(await windowAtHour(2)).toEqual([bristolId, dublinId]);
   });
 
   it('the accounting invariant survives skips mixed with real failures', async () => {

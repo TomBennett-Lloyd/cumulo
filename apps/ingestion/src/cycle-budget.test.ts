@@ -2,6 +2,7 @@ import { canonicalFleetSeed, generateFleet, locationId, MAX_USER_SITES } from '@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CONTINUOUS_COVERAGE_MAX_LOCATIONS,
   CYCLE_DEADLINE_MS,
   FETCH_WORST_MS,
   INGESTION_LAMBDA_TIMEOUT_MS,
@@ -16,6 +17,7 @@ import {
   UNPRICED_TERMS_SLACK_MS,
 } from './cycle-budget';
 import { FETCH_MAX_ATTEMPTS } from './open-meteo/fetch-forecast';
+import { forecastHours } from './open-meteo/url';
 
 /**
  * The budget is computed from imported constants, so these tests pin it against
@@ -159,5 +161,20 @@ describe('the location cap', () => {
       .size;
 
     expect(seedLocations + MAX_USER_SITES).toBeLessThanOrEqual(MAX_LOCATIONS_PER_CYCLE);
+  });
+
+  it('states how large the fleet may grow before rotation can no longer keep coverage continuous', () => {
+    // Rotation visits every location within `ceil(n / c)` hourly cycles and each
+    // visit stores a `forecastHours` horizon from the visit hour, so coverage
+    // survives exactly while `ceil(n / c) ≤ forecastHours`. The literal is pinned
+    // alongside the relation because the relation alone cannot catch the bound
+    // drifting upward: #163 opened with `c × (h + 1)` = 4,900, which
+    // double-counts the visit hour and overclaims a safe fleet size by a hundred.
+    expect(CONTINUOUS_COVERAGE_MAX_LOCATIONS).toBe(MAX_LOCATIONS_PER_CYCLE * forecastHours);
+    expect(CONTINUOUS_COVERAGE_MAX_LOCATIONS).toBe(4_800);
+
+    // The cap sits far inside the bound, so nothing rotation defers today is
+    // deferred long enough to leave a hole in a location's stored horizon.
+    expect(MAX_LOCATIONS_PER_CYCLE).toBeLessThanOrEqual(CONTINUOUS_COVERAGE_MAX_LOCATIONS);
   });
 });
