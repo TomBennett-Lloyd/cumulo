@@ -1,209 +1,28 @@
 // @vitest-environment jsdom
 
-import {
-  utcIsoTimestampSchema,
-  type Forecast,
-  type GenerationReading,
-  type Site,
-  type UncertaintyBand,
-  type UtcIsoTimestamp,
-} from '@cumulo/shared';
+import type { Site } from '@cumulo/shared';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
-import type {
-  FleetDataSource,
-  FleetSourceCapabilities,
-  FleetSourceResult,
-  RangeHours,
-} from '../data/fleet-data-source';
-import { FleetPanel } from './FleetPanel';
-import { EMPTY_FLEET_MESSAGE, LOADING_FLEET_FORECAST_LABEL } from './state-copy';
+import {
+  CountingFleetSource,
+  FAILED_FLEET,
+  FORECASTLESS_FLEET,
+  FULL_FLEET,
+  HORIZON_ONLY_CAPABILITIES,
+  PARTIAL_FLEET,
+  panel,
+  renderSettled,
+  settle,
+  SITE_A,
+  type StubFleet,
+} from './fleet-panel-test-fixture';
+import { EMPTY_FLEET_MESSAGE } from './state-copy';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
 // itself — every render has to be torn down explicitly or later queries match two panels.
 afterEach(cleanup);
-
-const SITE_A_ID = '11111111-1111-4111-8111-111111111111';
-const SITE_B_ID = '22222222-2222-4222-8222-222222222222';
-
-const timestamp = (hour: number): UtcIsoTimestamp =>
-  utcIsoTimestampSchema.parse(`2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`);
-
-const ISSUED_AT = timestamp(5);
-
-const site = (id: string, name: string): Site => ({
-  id,
-  name,
-  latitude: 51.5,
-  longitude: -0.13,
-  tiltDegrees: 35,
-  azimuthDegrees: 180,
-  capacityKw: 4,
-});
-
-const SITE_A = site(SITE_A_ID, 'Ashford Row');
-const SITE_B = site(SITE_B_ID, 'Brambling Way');
-
-const SITES: readonly Site[] = [SITE_A, SITE_B];
-
-const band = (p10AcPowerKw: number, p90AcPowerKw: number): UncertaintyBand => ({
-  p10AcPowerKw,
-  p90AcPowerKw,
-});
-
-/**
- * One site-hour forecast. `uncertainty` is passed as `null` rather than omitted so the builder can
- * add the key conditionally: under `exactOptionalPropertyTypes` a present-but-undefined band and an
- * absent one are different values, and the absent one is what a point estimate means.
- */
-const forecastAt = (
-  siteId: string,
-  hour: number,
-  acPowerKw: number,
-  uncertainty: UncertaintyBand | null,
-): Forecast => {
-  const point: Omit<Forecast, 'uncertainty'> = {
-    siteId,
-    model: 'physics',
-    validTime: timestamp(hour),
-    issuedAt: ISSUED_AT,
-    weatherSource: 'open-meteo',
-    poaIrradianceWm2: 400,
-    acPowerKw,
-  };
-  return uncertainty === null ? point : { ...point, uncertainty };
-};
-
-const readingAt = (siteId: string, hour: number, acPowerKw: number): GenerationReading => ({
-  siteId,
-  validTime: timestamp(hour),
-  acPowerKw,
-});
-
-const FORECASTS: readonly Forecast[] = [
-  forecastAt(SITE_A_ID, 6, 2, band(1, 3)),
-  forecastAt(SITE_B_ID, 6, 4, band(3, 6)),
-  forecastAt(SITE_A_ID, 7, 3, band(2, 4)),
-  forecastAt(SITE_B_ID, 7, 5, band(4, 7)),
-];
-
-const ACTUALS: readonly GenerationReading[] = [
-  readingAt(SITE_A_ID, 6, 1.5),
-  readingAt(SITE_B_ID, 6, 3.5),
-];
-
-/** The canned answers to the two fleet-level calls the panel makes. */
-interface StubFleet {
-  readonly forecasts: FleetSourceResult<readonly Forecast[]>;
-  readonly actuals: FleetSourceResult<readonly GenerationReading[]>;
-}
-
-const ready = <T,>(value: T): FleetSourceResult<T> => ({ kind: 'ok', value });
-
-const FULL_FLEET: StubFleet = { forecasts: ready(FORECASTS), actuals: ready(ACTUALS) };
-
-/** 07:00 loses site B, so that hour aggregates one of the fleet's two sites and 06:00 keeps both. */
-const PARTIAL_FLEET: StubFleet = {
-  ...FULL_FLEET,
-  forecasts: ready(
-    FORECASTS.filter(
-      (forecast) => !(forecast.siteId === SITE_B_ID && forecast.validTime === timestamp(7)),
-    ),
-  ),
-};
-
-const FORECASTLESS_FLEET: StubFleet = { ...FULL_FLEET, forecasts: ready([]) };
-
-const FAILED_FLEET: StubFleet = {
-  ...FULL_FLEET,
-  forecasts: {
-    kind: 'error',
-    error: { code: 'network', message: 'fleetForecasts range=24: upstream timed out' },
-  },
-};
-
-const FULL_CAPABILITIES: FleetSourceCapabilities = { fleetLookback: true, fleetActuals: true };
-
-/** What the deployed HTTP source can answer: a forward horizon, and no measurements at all. */
-const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
-  fleetLookback: false,
-  fleetActuals: false,
-};
-
-/**
- * A `FleetDataSource` over canned results that counts what it was asked.
- *
- * A class rather than a `createStubSource(canned)` closure factory (`structure.md` rule 2): the
- * members genuinely share the canned data and the call log, and `this.` is what makes that sharing
- * visible. The members are arrow properties because the interface's are.
- *
- * The counting is the point of several tests below: "does toggling `hidden` refetch" and "does a
- * new `refreshToken` refetch" are questions about calls, not about pixels, and only a stub that
- * remembers can answer them.
- */
-class CountingFleetSource implements FleetDataSource {
-  readonly forecastRanges: RangeHours[] = [];
-
-  constructor(
-    private readonly canned: StubFleet,
-    readonly capabilities: FleetSourceCapabilities = FULL_CAPABILITIES,
-  ) {}
-
-  get forecastCallCount(): number {
-    return this.forecastRanges.length;
-  }
-
-  readonly fleetForecasts = (
-    range: RangeHours,
-  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    this.forecastRanges.push(range);
-    return Promise.resolve(this.canned.forecasts);
-  };
-
-  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
-    Promise.resolve(this.canned.actuals);
-
-  // The panel is fleet-level only; being asked for per-site data or for a write is a bug worth a
-  // loud crash rather than an error result the panel would render as an ordinary upstream problem.
-  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> => {
-    throw new Error('CountingFleetSource: the fleet panel takes its sites as a prop');
-  };
-
-  readonly siteForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    throw new Error('CountingFleetSource: the fleet panel must not call siteForecasts');
-  };
-
-  readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
-    throw new Error('CountingFleetSource: the fleet panel must not call siteActuals');
-  };
-
-  readonly getSiteForecast = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    throw new Error('CountingFleetSource: the fleet panel must not call getSiteForecast');
-  };
-
-  readonly createSite = (): Promise<FleetSourceResult<Site>> => {
-    throw new Error('CountingFleetSource: the fleet panel never writes to the fleet');
-  };
-}
-
-const settle = async (): Promise<void> => {
-  await waitFor(() => {
-    expect(screen.queryByText(LOADING_FLEET_FORECAST_LABEL)).toBeNull();
-  });
-};
-
-const renderSettled = async (
-  dataSource: FleetDataSource,
-  sites: readonly Site[] = SITES,
-): Promise<HTMLElement> => {
-  const { container } = render(
-    <FleetPanel dataSource={dataSource} sites={sites} hidden={false} refreshToken={0} />,
-  );
-  await settle();
-  return container;
-};
 
 /**
  * One rendered table row, in column order — the row header and its cells together.
@@ -378,40 +197,74 @@ describe('FleetPanel with nothing to show', () => {
 describe('FleetPanel as the column keeps it mounted', () => {
   it('re-sums the fleet when the dashboard bumps the refresh token', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
-    const { rerender } = render(
-      <FleetPanel dataSource={dataSource} sites={SITES} hidden={false} refreshToken={0} />,
-    );
+    const { rerender } = render(panel(dataSource, false));
     await settle();
 
     expect(dataSource.forecastCallCount).toBe(1);
 
-    rerender(<FleetPanel dataSource={dataSource} sites={SITES} hidden={false} refreshToken={1} />);
+    rerender(panel(dataSource, false, 1));
 
     await waitFor(() => {
       expect(dataSource.forecastCallCount).toBe(2);
     });
   });
 
-  it('hides without refetching, keeping the aggregate it already has', async () => {
+  it('empties itself while hidden, and comes back without refetching', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
-    const { container, rerender } = render(
-      <FleetPanel dataSource={dataSource} sites={SITES} hidden={false} refreshToken={0} />,
-    );
+    const { container, rerender } = render(panel(dataSource, false));
     await settle();
 
     expect(dataSource.forecastCallCount).toBe(1);
 
-    rerender(<FleetPanel dataSource={dataSource} sites={SITES} hidden refreshToken={0} />);
+    rerender(panel(dataSource, true));
 
-    const panel = container.querySelector('.fleet-panel');
-    expect(panel?.hasAttribute('hidden')).toBe(true);
-    // The chart is still in the tree behind the attribute: the panel kept its state, which is the
-    // whole reason the column hides it instead of unmounting it.
-    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('.fleet-panel')?.hasAttribute('hidden')).toBe(true);
+    // The children leave the tree with the reveal, not just the paint: an alert that mounts
+    // inside `display: none` never announces, and the reveal is an attribute change no screen
+    // reader reads as one (#161). The state that matters is in the hooks, not the markup.
+    expect(container.querySelector('svg')).toBeNull();
 
-    rerender(<FleetPanel dataSource={dataSource} sites={SITES} hidden={false} refreshToken={0} />);
+    rerender(panel(dataSource, false));
 
     expect(container.querySelector('.fleet-panel')?.hasAttribute('hidden')).toBe(false);
+    // Back on screen from the aggregate the hooks held throughout — the source was asked once.
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(dataSource.forecastCallCount).toBe(1);
+  });
+
+  it('drops a failure alert out of the DOM while hidden, rather than hiding it in place', async () => {
+    const dataSource = new CountingFleetSource(FAILED_FLEET);
+    const { rerender } = render(panel(dataSource, false));
+    await settle();
+
+    expect(screen.getByRole('alert').textContent).toContain('Could not load the fleet forecast');
+
+    rerender(panel(dataSource, true));
+
+    // `hidden: true` puts elements excluded from the accessibility tree back in scope for the
+    // query, so null here means *absent*, not merely inert. An alert left in the DOM through the
+    // hide is an alert the eventual reveal cannot announce.
+    expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
+  });
+
+  it('mounts the failure alert fresh on reveal, from the answer it got while hidden', async () => {
+    const dataSource = new CountingFleetSource(FAILED_FLEET);
+    const { rerender } = render(panel(dataSource, true));
+
+    // Hidden or not, the hooks run: the panel asks, and the failure lands in state with nothing
+    // rendering it.
+    await waitFor(() => {
+      expect(dataSource.forecastCallCount).toBe(1);
+    });
+    expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
+
+    rerender(panel(dataSource, false));
+
+    // A first mount into a tree that is already on screen — which is the one arrangement in which
+    // `role="alert"` actually announces.
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Could not load the fleet forecast: fleetForecasts range=24: upstream timed out',
+    );
     expect(dataSource.forecastCallCount).toBe(1);
   });
 

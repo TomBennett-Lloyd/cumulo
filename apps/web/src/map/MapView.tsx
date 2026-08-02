@@ -9,8 +9,8 @@ import type { Theme } from '../theme';
 import { basemapStyleUrl } from './basemap';
 import type { MapPosition } from './clustering';
 import { INITIAL_CENTER, INITIAL_ZOOM } from './framing';
-import { MapAttributionStrip } from './MapAttributionStrip';
 import { MapContext } from './MapContext';
+import { MapSurface } from './MapSurface';
 import { isMarkerClick } from './map-click';
 
 /*
@@ -176,10 +176,8 @@ export const MapView = ({ theme, onMapClick, children }: MapViewProps): ReactEle
   }, [map]);
 
   return (
-    <div className="map-view">
-      <div className="map-canvas" ref={containerRef} />
+    <MapSurface canvas={{ kind: 'map', containerRef }}>
       <MapContext value={map}>{children}</MapContext>
-      <MapAttributionStrip />
-    </div>
+    </MapSurface>
   );
 };

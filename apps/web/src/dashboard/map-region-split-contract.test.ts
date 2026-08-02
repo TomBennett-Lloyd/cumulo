@@ -92,17 +92,39 @@ describe('map region code split', () => {
     expect(readFileSync(LAZY_MAP_REGION, 'utf8')).toContain("import('./MapRegion')");
   });
 
-  it('credits Open-Meteo in every shell that stands in for the map', () => {
-    // `LazyMapRegion.test.tsx` proves the loading shell actually renders the
-    // credit; this counts, which is what catches a *second* shell being added
-    // without one. Two today: the loading placeholder and the load failure.
-    // The credit is a licence obligation wherever weather-derived data renders
-    // (CLAUDE.md), and a shell that quietly dropped it would be out of
-    // compliance for exactly as long as the map is missing.
-    const shells = readFileSync(LAZY_MAP_REGION, 'utf8').match(/className="map-view"/g) ?? [];
-    const credits = readFileSync(LAZY_MAP_REGION, 'utf8').match(/<MapAttributionStrip \/>/g) ?? [];
+  it('writes the map shell in exactly one shipped module', () => {
+    /*
+     * The credit obligation, made structural instead of counted.
+     *
+     * This used to count `className="map-view"` against `<MapAttributionStrip
+     * />` inside `LazyMapRegion.tsx` — an agreement between copies, which holds
+     * only while whoever adds the next copy remembers the arithmetic. Four
+     * copies of the shell existed by the time that was noticed, and one of them
+     * had no canvas in it at all.
+     *
+     * So the assertion is now that there is nothing to keep in agreement: the
+     * `.map-view` column is written once, in `MapSurface.tsx`, whose strip has
+     * no prop that could omit it. The Open-Meteo credit is a licence obligation
+     * wherever weather-derived data renders (CLAUDE.md), and every state of the
+     * map inherits it from that one place. `MapSurface.test.tsx` proves the
+     * markup renders; this proves nobody wrote a second shell beside it.
+     */
+    const shellFiles = appSourceFiles().filter((file) =>
+      readFileSync(file, 'utf8').includes('className="map-view"'),
+    );
 
-    expect(shells.length).toBeGreaterThan(0);
-    expect(credits.length).toBe(shells.length);
+    expect(shellFiles).toEqual([join(SOURCE_ROOT, 'map', 'MapSurface.tsx')]);
+  });
+
+  it('gives that one shell exactly one attribution strip, and composes it for each state', () => {
+    const shellSource = readFileSync(join(SOURCE_ROOT, 'map', 'MapSurface.tsx'), 'utf8');
+    const credits = shellSource.match(/<MapAttributionStrip \/>/g) ?? [];
+    // Two: the pending placeholder and the load failure. Both reach the credit
+    // through the shell rather than restating it, which is the property that
+    // replaced the old count.
+    const composedShells = readFileSync(LAZY_MAP_REGION, 'utf8').match(/<MapSurface/g) ?? [];
+
+    expect(credits.length).toBe(1);
+    expect(composedShells.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -192,9 +192,13 @@ describe('AddSiteForm', () => {
   it('explains the budget when the throttle refuses', () => {
     renderForm({ refusal: { retryAfterSeconds: 42 } });
 
-    expect(screen.getByRole('status').textContent).toMatch(
+    expect(screen.getByRole('alert').textContent).toMatch(
       /request budget, wait 42s before adding another site/,
     );
+    // The absence is the half worth pinning: a `role="status"` mounted with its
+    // text already in it looks accessible and announces nothing (`react.md`), so
+    // a regression back to one would otherwise still read as green above.
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   /*
@@ -235,6 +239,18 @@ describe('AddSiteForm', () => {
     expect(screen.getByRole('alert').textContent).toBe(
       'Fleet unreachable: check your connection and try again',
     );
+  });
+
+  /*
+   * The form is one of the three things that can occupy the column's context
+   * region, and it announces itself the same way the site panel does: by
+   * focusing its own heading on mount. Without it a visitor who clicks the map
+   * has their focus left wherever it was while the region changes silently.
+   */
+  it('takes the region by focusing its own heading', () => {
+    renderForm();
+
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Add a site' }));
   });
 
   it('lets the visitor back out', () => {

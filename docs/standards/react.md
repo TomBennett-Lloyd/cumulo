@@ -37,8 +37,14 @@ Every panel that waits on data says so the same way. The three states are implem
 - **Empty** is plain content, no live semantics, stating the next action where there is one. An empty fleet is a successful answer, not an event.
 - **At most one live region per panel.** Announcements compete; two regions in one column means the reader hears whichever won.
 - **Completion is not announced.** The arrival of data is the busy container being replaced by the content — that is the signal, and adding a "loaded" announcement on top of it says the same thing twice.
+- **A live region never renders inside a `hidden`/`display: none` subtree** — a hidden panel renders its states only once it is revealed, so a failure mounts as a change rather than as an attribute flip nothing announces (`FleetPanel`).
+- **A message mounted in response to something the reader did is `role="alert"`** — the add-site refusal arrives because a button was pressed, so it really is a change to a tree already on screen.
+- **First paint mounts zero live regions** — pending is `aria-busy` and alerts arrive only as changes, pinned by `Dashboard.test.tsx`'s "first paint mounts zero live regions".
+- **An unhandled promise rejection lands at `AppErrorBoundary`**, which gives the rejection nobody awaited the same labelled failure a render throw gets rather than a silent hang.
 
-The map shell (`LazyMapRegion`/`MapView`) still carries the older placeholder treatment; converting it is #161's remainder, not a licence to copy it.
+The map shell composes `MapSurface` (`apps/web/src/map/MapSurface.tsx`) — one column behind the live canvas, the loading placeholder and the load failure — and its placeholder is the same `aria-busy` pending treatment, not a fourth spelling of it.
+
+**Focus follows the context region.** An occupant taking the region focuses its own heading, made focusable with `tabIndex={-1}` and kept out of the tab order — on a marker click, on a creation, and on a deep-link arrival alike, because a region that changes above the reader's focus point is otherwise reachable only by tabbing to it. `Close` hands focus to the closing site's row in the list, rather than letting the button it unmounts drop focus on `body`. A draft cancelled with nothing selected behind it focuses the context region itself: nothing remounts on that path, so the region is the only honest target left. `Dashboard.focus.test.tsx` holds these.
 
 ## Why
 

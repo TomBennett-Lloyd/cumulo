@@ -24,6 +24,12 @@ export interface SiteListProps {
  * what makes the list keyboard-reachable, focusable in site order and
  * announced as actionable, with no key handling of our own to get wrong.
  *
+ * `data-site-id` is how the dashboard finds one row again: closing a site panel
+ * unmounts the Close button under the reader's focus, and the row that opened
+ * the panel is where that focus belongs. An attribute rather than a ref per row
+ * because the list is unbounded and the dashboard wants exactly one of them,
+ * once, in an event handler.
+ *
  * Presentational (`react.md` rule 4): it holds no selection state and fetches
  * nothing. The dashboard owns `selectedSiteId`, because the map markers read
  * the very same value.
@@ -39,6 +45,7 @@ export const SiteList = ({ sites, selectedSiteId, onSelectSite }: SiteListProps)
             type="button"
             className={selected ? 'site-row site-row-selected' : 'site-row'}
             aria-current={selected ? true : undefined}
+            data-site-id={site.id}
             onClick={() => {
               onSelectSite(site.id);
             }}

@@ -52,23 +52,17 @@ describe('MapRegionFallback', () => {
     );
   });
 
-  it('says the map is loading, in a region that can announce it', () => {
+  it('says the map is loading as busy content, not as a live region', () => {
+    // `react.md`'s async surface convention: a `role="status"` mounted with its
+    // text already inside it has no change to report, so it announces nothing
+    // and only looks accessible. The pending state is therefore an `aria-busy`
+    // container with a visible label — and the second assertion is the negative
+    // control, because the first one would pass just as happily with the old
+    // live region still wrapped around it.
     render(<MapRegionFallback />);
 
-    expect(screen.getByRole('status').textContent).toBe('Loading map…');
-  });
-
-  it('occupies the same shell the real map does, so its arrival shifts nothing', () => {
-    // The classes are the assertion because they *are* the mechanism: the
-    // placeholder is a `.map-canvas` inside a `.map-view`, exactly like the
-    // canvas that replaces it, inside `.dashboard-map`'s fixed 70vh box. A
-    // fallback styled any other way would reflow the page on swap.
-    const { container } = render(<MapRegionFallback />);
-    const placeholder = screen.getByRole('status');
-
-    expect(container.firstElementChild?.className).toBe('map-view');
-    expect(placeholder.className).toBe('map-canvas map-placeholder');
-    expect(placeholder.parentElement?.className).toBe('map-view');
+    expect(screen.getByText('Loading map…').getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByRole('status')).toBe(null);
   });
 });
 
