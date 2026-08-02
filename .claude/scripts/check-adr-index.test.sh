@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Test harness for check-adr-index.sh, its neighbour in this directory.
 #
-# Self-contained on purpose (same shape as worktree-lifecycle.test.sh next door): no
-# test framework, no network, no pnpm. Every fixture is a throwaway ADR directory under a
-# single `mktemp -d` that a trap deletes on exit, so the drift cases — an unindexed ADR, an
-# index row pointing at a deleted file — are exercised for real without ever mutating the
-# repo's own docs/adr.
+# No test framework, no network, no pnpm: the assertion vocabulary is harness-lib.sh next
+# door, sourced below and shared with every sibling harness. Every fixture is a throwaway
+# ADR directory under the temp tree `harness_init_tmp` makes and a trap deletes on exit, so
+# the drift cases — an unindexed ADR, an index row pointing at a deleted file — are
+# exercised for real without ever mutating the repo's own docs/adr.
 #
 # One case deliberately runs the gate with NO argument, against the repo's real docs/adr:
 # every other case pins ADR_DIR to a fixture, so without it the shipped default path could
@@ -18,74 +18,9 @@ set -uo pipefail
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 CHECK="$SCRIPTS/check-adr-index.sh"
 
-tmp_raw=$(mktemp -d) || exit 2
-trap 'rm -rf "$tmp_raw"' EXIT INT TERM
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
-
-passed=0
-failed=0
-case_name=""
-case_failed=0
-case_ctx=""
-out=""
-rc=0
-
-# The gate has to survive the oldest bash it can meet, and the interpreter is not a detail:
-# under `set -u`, bash 3.2 (which macOS ships as /bin/bash) aborts on an empty array's `[@]`
-# where 4.4+ shrugs. So cases that turn on that difference run under every distinct bash on
-# the box, not just whichever one happens to be first on PATH.
-BASHES="bash"
-if [ -x /bin/bash ] && [ "$(command -v bash)" != "/bin/bash" ]; then
-  BASHES="$BASHES /bin/bash"
-fi
-
-# --- harness plumbing --------------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
-}
-
-begin() {
-  case_name="$1"
-  case_failed=0
-  case_ctx=""
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-# case_ctx names the variant a failure came from, for cases that run the gate more than once.
-bad() {
-  printf '  ! %s%s\n' "$1" "${case_ctx:+ (under $case_ctx)}" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
-  esac
-}
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
+harness_init_tmp
 
 # --- fixtures ----------------------------------------------------------------------------
 
@@ -142,8 +77,7 @@ EOF
 run_check_with() { # run_check_with <bash> <args...>
   local interpreter="$1"
   shift
-  out=$("$interpreter" "$CHECK" "$@" 2>&1)
-  rc=$?
+  capture "$interpreter" "$CHECK" "$@"
 }
 
 run_check() { # run_check <args...>
@@ -154,9 +88,7 @@ run_check() { # run_check <args...>
 # 1. the gate parses
 # ==========================================================================================
 begin "check-adr-index.sh parses (bash -n)"
-if ! syntax=$(bash -n "$CHECK" 2>&1); then
-  bad "check-adr-index.sh failed bash -n: $syntax"
-fi
+expect_parses "$CHECK"
 end
 
 # ==========================================================================================
@@ -518,5 +450,4 @@ end
 
 # ==========================================================================================
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" = "0" ] || exit 1
+finish
