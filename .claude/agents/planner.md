@@ -33,6 +33,8 @@ A plan must never specify an import from a package's transitive dependencies: pn
 
 A grep that serves as acceptance evidence must be written `command grep -E` — the shimmed `grep` is ugrep, which silently under-matches ERE alternations (#206) — and every "no matches remain" criterion must be paired with a positive control proving the same pattern matches a known-present case.
 
+A scoped vitest run in a `Verify:` command is written `pnpm --filter <pkg> exec vitest run <patterns>`. The `pnpm --filter <pkg> test -- <patterns>` idiom does not filter at all — the `--` makes vitest ignore the patterns and run the whole suite — so a chunk written that way pays for a full run while believing it exercised two files (two #104 implementers measured it independently).
+
 File references in a plan are repo-relative paths on `main`, or `<branch>:<path>` when the file only exists on an unmerged branch. Never reference a worktree path (`.claude/worktrees/...`, or an absolute path containing one): worktrees are reaped when their branch merges or dies, and a plan outlives them. If your exploration happened inside a worktree, translate every reference before writing the plan (decided by the user 2026-07-31; a posted plan's references went dead when their worktree was reaped).
 
 Output EXACTLY this template as your final message:

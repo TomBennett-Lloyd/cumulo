@@ -46,3 +46,8 @@ Entry format:
 
 - Phase: review
 - Observed: reviewers dispatched with "verify rather than re-derive — re-run what you doubt" independently re-ran the mutants and rebuilt the censuses from code instead of trusting the implementer reports, and each caught real drift: the seven-sink log census on #167, the `closeDraft` guard on #161. Logged as a win rather than a problem — positive verification costs reviewer tokens and has no failure to point at when someone later trims the dispatch wording for economy, so the two catches are recorded here as the evidence that it pays for itself.
+
+## 2026-08-02 — PR #224
+
+- Phase: implementation
+- Observed: the token gate's hex-colour selector (`Literal[value=/#[0-9a-fA-F]{3,8}\b/]` in `eslint.config.mjs`) reads a bare issue reference inside a runtime string — `(#104)` — as a hex colour. Comments pass, so it only bites code that cites an issue in a user-visible message; the workaround taken was "issue 104". Logged rather than fixed: every way of narrowing the selector to spare issue refs also loosens what the colour gate catches, and a single occurrence doesn't justify that trade. Revisit on recurrence.
