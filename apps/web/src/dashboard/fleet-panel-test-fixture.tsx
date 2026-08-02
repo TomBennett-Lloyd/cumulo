@@ -155,6 +155,9 @@ export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
 export class CountingFleetSource implements FleetDataSource {
   readonly forecastRanges: RangeHours[] = [];
 
+  /** Counted separately from the forecasts: "neither call was spent" is two facts, not one. */
+  private actualsCalls = 0;
+
   constructor(
     private readonly canned: StubFleet,
     readonly capabilities: FleetSourceCapabilities = FULL_CAPABILITIES,
@@ -164,6 +167,10 @@ export class CountingFleetSource implements FleetDataSource {
     return this.forecastRanges.length;
   }
 
+  get actualsCallCount(): number {
+    return this.actualsCalls;
+  }
+
   readonly fleetForecasts = (
     range: RangeHours,
   ): Promise<FleetSourceResult<readonly Forecast[]>> => {
@@ -171,8 +178,10 @@ export class CountingFleetSource implements FleetDataSource {
     return Promise.resolve(this.canned.forecasts);
   };
 
-  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
-    Promise.resolve(this.canned.actuals);
+  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+    this.actualsCalls += 1;
+    return Promise.resolve(this.canned.actuals);
+  };
 
   // The panel is fleet-level only; being asked for per-site data or for a write is a bug worth a
   // loud crash rather than an error result the panel would render as an ordinary upstream problem.

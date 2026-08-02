@@ -247,25 +247,34 @@ describe('FleetPanel as the column keeps it mounted', () => {
     expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
   });
 
-  it('mounts the failure alert fresh on reveal, from the answer it got while hidden', async () => {
+  it('mounts the failure alert fresh on re-reveal, from the answer it got while hidden', async () => {
     const dataSource = new CountingFleetSource(FAILED_FLEET);
-    const { rerender } = render(panel(dataSource, true));
+    const { rerender } = render(panel(dataSource, false));
+    // Revealed once, so the fan-out is spent and the failure is on screen. A panel that has never
+    // been revealed asks nothing at all (#178) — `FleetPanel.reveal.test.tsx` holds that half.
+    await settle();
 
-    // Hidden or not, the hooks run: the panel asks, and the failure lands in state with nothing
-    // rendering it.
+    rerender(panel(dataSource, true));
+    rerender(panel(dataSource, true, 1));
+
+    // Once revealed, a refresh token still re-sums while hidden: the reveal is what buys the first
+    // request, not a condition on every later one.
     await waitFor(() => {
-      expect(dataSource.forecastCallCount).toBe(1);
+      expect(dataSource.forecastCallCount).toBe(2);
     });
     expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
 
-    rerender(panel(dataSource, false));
+    // The token stays at 1 through the reveal: the dashboard's token is a count of created sites,
+    // so it never goes backwards, and re-rendering with the default 0 here would be a key change —
+    // a third request that says nothing about revealing.
+    rerender(panel(dataSource, false, 1));
 
     // A first mount into a tree that is already on screen — which is the one arrangement in which
     // `role="alert"` actually announces.
     expect((await screen.findByRole('alert')).textContent).toContain(
       'Could not load the fleet forecast: fleetForecasts range=24: upstream timed out',
     );
-    expect(dataSource.forecastCallCount).toBe(1);
+    expect(dataSource.forecastCallCount).toBe(2);
   });
 
   it('credits Open-Meteo nowhere inside itself — the column footer owns that credit', async () => {
