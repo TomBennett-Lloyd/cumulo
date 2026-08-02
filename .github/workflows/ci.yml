@@ -16,6 +16,35 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # actionlint is the one tool the composite needs that the runner image
+      # does not ship (contrast the shellcheck note on the verify step below).
+      #
+      # (a) Why a direct download and not rhysd's official
+      #     `download-actionlint.bash`: that script is fetched from `main` — an
+      #     unpinned, mutable ref — and it verifies no checksum on what it
+      #     downloads. Read during planning, not assumed. Piping a moving script
+      #     into bash to install a linter that gates credentialed workflows is
+      #     the wrong trade for the ~5 lines it saves.
+      # (b) Why version AND SHA256 together: a tag can be moved. Pinning the
+      #     version alone means a re-tagged release swaps the binary silently;
+      #     the checksum is what makes that a loud failure instead.
+      # (c) Single owner. This step is the only pinned copy of the version in
+      #     the repo — local runs float on `brew install actionlint`, the same
+      #     accepted CI-pins/local-floats skew shellcheck already has, ledgered
+      #     on #108. Nothing else restates 1.7.12.
+      # (d) Bump procedure: pick the new version, fetch that release's
+      #     `actionlint_<version>_checksums.txt` from the same GitHub releases
+      #     path, and update both strings in this one step. Nowhere else.
+      #
+      # This step's own `run:` block is linted by the gate it installs.
+      - name: Install actionlint (pinned)
+        run: |
+          curl -fsSL -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar -xzf /tmp/actionlint.tar.gz -C "$RUNNER_TEMP/actionlint" actionlint
+          echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
       # One step, not one step per gate. Enumerating the gates here duplicates
       # the `verify` script's list, and the duplicate drifts: `pnpm test:scripts`
       # was added to `verify` and never reached CI, so the shell harness was
