@@ -192,6 +192,11 @@ expect_stdout() { # expect_stdout <substring>
   esac
 }
 
+# Negative substrings — expect_not_stdout, expect_not_stderr and expect_not_out alike — must
+# be collision-proof against text the subject merely echoes: a case that runs inside a mktemp
+# fixture sees that path — random suffix included — in any diagnostic either stream prints,
+# and a 10-char alnum suffix contains any given 2-char substring about once in 400 runs.
+# Assert a gate's full success prefix ("check-…: OK"), never bare "OK" (#219).
 expect_not_stdout() { # expect_not_stdout <substring>
   case "$out" in
     *"$1"*) bad "stdout should not contain '$1'; got: $out" ;;

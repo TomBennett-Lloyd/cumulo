@@ -263,7 +263,9 @@ for interpreter in $BASHES; do
   expect_rc 2 "$rc"
   expect_out "the MIRRORS list is empty"
   expect_out "green by absence, not green"
-  expect_not_out "OK"
+  # The gate's full success prefix, not bare "OK" — a temp path echoed into either stream can
+  # carry the substring in its random suffix (#219's flake, fixed here before it recurs).
+  expect_not_out "check-infra-mirrors: OK"
   expect_not_out "unbound variable"
 done
 case_ctx=""
