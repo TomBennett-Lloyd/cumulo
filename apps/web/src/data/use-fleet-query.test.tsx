@@ -4,7 +4,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { FleetSourceResult } from './fleet-data-source';
-import { useProviderQuery } from './use-provider-query';
+import { useFleetQuery } from './use-fleet-query';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
 // itself — every rendered hook has to be torn down explicitly.
@@ -45,9 +45,9 @@ interface QueryProps {
 }
 
 const renderQuery = (initialProps: QueryProps) =>
-  renderHook((props: QueryProps) => useProviderQuery(props.query, props.key), { initialProps });
+  renderHook((props: QueryProps) => useFleetQuery(props.query, props.key), { initialProps });
 
-describe('useProviderQuery', () => {
+describe('useFleetQuery', () => {
   it('reports loading until the source answers, then the data', async () => {
     const first = deferred();
     const { result } = renderQuery({ query: () => first.promise, key: ['sites'] });
@@ -82,7 +82,11 @@ describe('useProviderQuery', () => {
       expect(result.current.status).toBe('failed');
     });
     expect(result.current.status === 'failed' && result.current.error.code).toBe('rate-limited');
-    expect(result.current.status === 'failed' && result.current.error.retryAfterSeconds).toBe(30);
+    expect(
+      result.current.status === 'failed' &&
+        result.current.error.code === 'rate-limited' &&
+        result.current.error.retryAfterSeconds,
+    ).toBe(30);
   });
 
   it('refetches when the key changes', async () => {

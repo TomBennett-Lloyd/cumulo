@@ -1,199 +1,49 @@
 // @vitest-environment jsdom
 
-import {
-  forecastSchema,
-  type CreateSiteInput,
-  type Forecast,
-  type GenerationReading,
-  type Site,
-} from '@cumulo/shared';
+import { type Site } from '@cumulo/shared';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type {
-  FleetSourceResult,
-  FleetDataSource,
-  FleetSourceCapabilities,
-} from './fleet-data-source';
+import {
+  advanceBy,
+  alwaysAnswering,
+  answerCall,
+  deferredAnswer,
+  forecastAfterMs,
+  forecastReady,
+  networkDown,
+  notFound,
+  rateLimitedFirst,
+  ScriptedFleetDataSource,
+  settle,
+  SITE_ID,
+  type ForecastResolver,
+} from './first-forecast-test-fixture';
 import { useFirstForecast } from './use-first-forecast';
 
-const SITE_ID = '3c3d3e3f-0000-4000-8000-000000000001';
+/**
+ * A second site, for the one test about moving on from the first.
+ *
+ * It stays here rather than in the fixture because nothing in the fixture knows
+ * it: {@link ScriptedFleetDataSource} answers whatever site it is asked about,
+ * and only this suite ever needs two of them.
+ */
 const OTHER_SITE_ID = '3c3d3e3f-0000-4000-8000-000000000002';
 
 /** The instant every fake-timer test starts from, so elapsed time is readable. */
 const START_MS = Date.UTC(2026, 6, 31, 9, 0, 0);
 
-/** What the stub knows when it answers one poll. */
-interface PollContext {
-  /** Simulated milliseconds since the source was constructed. */
-  readonly elapsedMs: number;
-  /** 0 for the first forecast poll, 1 for the second, and so on. */
-  readonly callIndex: number;
-}
-
-type ForecastAnswer = (context: PollContext) => Promise<FleetSourceResult<readonly Forecast[]>>;
-
-type ForecastResolver = (result: FleetSourceResult<readonly Forecast[]>) => void;
-
-const oneForecast = (siteId: string): readonly Forecast[] => [
-  forecastSchema.parse({
-    siteId,
-    model: 'physics',
-    validTime: '2026-07-31T10:00:00Z',
-    issuedAt: '2026-07-31T09:00:00Z',
-    weatherSource: 'open-meteo',
-    poaIrradianceWm2: 620,
-    acPowerKw: 3.1,
-  }),
-];
-
-const forecastReady = (siteId: string): FleetSourceResult<readonly Forecast[]> => ({
-  kind: 'ok',
-  value: oneForecast(siteId),
-});
-
-const notFound = (siteId: string): FleetSourceResult<never> => ({
-  kind: 'error',
-  error: { code: 'not-found', message: `No forecast for site ${siteId} yet` },
-});
-
-const rateLimited = (retryAfterSeconds: number): FleetSourceResult<never> => ({
-  kind: 'error',
-  error: {
-    code: 'rate-limited',
-    message: 'The fleet is rate-limiting forecast reads',
-    retryAfterSeconds,
-  },
-});
-
-const networkDown = (): FleetSourceResult<never> => ({
-  kind: 'error',
-  error: { code: 'network', message: 'The fleet did not answer' },
-});
-
-/** The demo pipeline's shape: nothing until it finishes, then the series. */
-const forecastAfterMs =
-  (availableAfterMs: number, siteId: string): ForecastAnswer =>
-  (context) =>
-    Promise.resolve(
-      context.elapsedMs >= availableAfterMs ? forecastReady(siteId) : notFound(siteId),
-    );
-
-const alwaysAnswering =
-  (answer: FleetSourceResult<readonly Forecast[]>): ForecastAnswer =>
-  () =>
-    Promise.resolve(answer);
-
-/** Rate-limited once, then the ordinary wait — the backoff is what the test measures. */
-const rateLimitedFirst =
-  (retryAfterSeconds: number, siteId: string): ForecastAnswer =>
-  (context) =>
-    Promise.resolve(context.callIndex === 0 ? rateLimited(retryAfterSeconds) : notFound(siteId));
-
 /**
- * Answers nothing on its own: each call parks its resolver in the array the
- * test owns and passed in, so the test decides when — and whether — a poll that
- * is already in flight ever comes back.
- */
-const deferredAnswer =
-  (resolvers: ForecastResolver[]): ForecastAnswer =>
-  () =>
-    new Promise<FleetSourceResult<readonly Forecast[]>>((resolve) => {
-      resolvers.push(resolve);
-    });
-
-const answerCall = (
-  resolvers: readonly ForecastResolver[],
-  index: number,
-  result: FleetSourceResult<readonly Forecast[]>,
-): void => {
-  const resolve = resolvers[index];
-  if (resolve === undefined) {
-    throw new Error(`The hook has not made forecast call ${String(index)}`);
-  }
-  resolve(result);
-};
-
-/**
- * A `FleetDataSource` that records every call it receives and answers forecast
- * polls from an injected policy.
+ * A 403 as `fleet-api-result.ts` renders it, quoted rather than derived.
  *
- * The call log is the point: this chunk's headline constraint is *which*
- * partition the loop reads (ADR 0002's review), and a log of exact call
- * arguments is the only way to prove a fleet fan-out never happened. Hence a
- * class rather than three loose spies — the log and the answer policy are
- * shared state (`structure.md` rule 2).
+ * The recourse named in the text is the whole reason this code halts the loop,
+ * so the test asserts on the message a real refusal would carry.
  */
-class ScriptedFleetDataSource implements FleetDataSource {
-  // Both false, matching the fleet-level members below: this stub throws on every fleet-wide read,
-  // so claiming either capability would describe a source it refuses to be.
-  readonly capabilities: FleetSourceCapabilities = { fleetLookback: false, fleetActuals: false };
+const FORBIDDEN_MESSAGE =
+  "getSiteForecast: refused by the API's access policy — 403. This deployment's origin has to be in the API's CUMULO_WEB_ORIGINS; retrying cannot help.";
 
-  /** Every call, in order: `listSites`, `createSite:<name>` or `getSiteForecast:<siteId>`. */
-  readonly calls: string[] = [];
-  private readonly answer: ForecastAnswer;
-  private readonly startedAtMs = Date.now();
-  private forecastCalls = 0;
-
-  constructor(answer: ForecastAnswer) {
-    this.answer = answer;
-  }
-
-  readonly listSites = (): Promise<FleetSourceResult<readonly Site[]>> => {
-    this.calls.push('listSites');
-    return Promise.resolve({ kind: 'ok', value: [] });
-  };
-
-  readonly createSite = (input: CreateSiteInput): Promise<FleetSourceResult<Site>> => {
-    this.calls.push(`createSite:${input.name}`);
-    return Promise.resolve({ kind: 'ok', value: { id: SITE_ID, ...input } });
-  };
-
-  readonly getSiteForecast = (
-    siteId: Site['id'],
-  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    this.calls.push(`getSiteForecast:${siteId}`);
-    const callIndex = this.forecastCalls;
-    this.forecastCalls += 1;
-    return this.answer({ elapsedMs: Date.now() - this.startedAtMs, callIndex });
-  };
-
-  /*
-   * The window-scoped reads are the chart views' surface, not the poll's. They
-   * throw rather than answer: this suite exists to prove *which* reads the loop
-   * makes, and a stub that quietly served a fleet-wide window would let the one
-   * failure it guards against pass unnoticed.
-   */
-  readonly siteForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    throw new Error('ScriptedFleetDataSource: the forecast poll must not call siteForecasts');
-  };
-
-  readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
-    throw new Error('ScriptedFleetDataSource: the forecast poll must not call siteActuals');
-  };
-
-  readonly fleetForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    throw new Error('ScriptedFleetDataSource: the forecast poll must not fan out over the fleet');
-  };
-
-  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
-    throw new Error('ScriptedFleetDataSource: the forecast poll must not fan out over the fleet');
-  };
-}
-
-/** Move the simulated clock and let React commit whatever that produced. */
-const advanceBy = async (ms: number): Promise<void> => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
-
-/** Let already-resolved promises settle without moving the clock. */
-const settle = async (): Promise<void> => {
-  await act(async () => {
-    await Promise.resolve();
-  });
-};
+/** A 400 as the same module renders it: the request was wrong, not the client. */
+const INVALID_REQUEST_MESSAGE = 'getSiteForecast: the API rejected the request — bad site id';
 
 /** Simulated milliseconds since the watch began. */
 const simulatedElapsedMs = (): number => Date.now() - START_MS;
@@ -353,6 +203,77 @@ describe('useFirstForecast', () => {
 
     await advanceBy(1);
     expect(source.calls).toHaveLength(2);
+  });
+
+  /*
+   * The one refusal waiting cannot outlast. `forbidden` is about *who is
+   * asking*, and its recourse is a deployment change — so the ninety seconds
+   * the loop would otherwise spend are ninety seconds of telling the visitor
+   * nothing, ending in a panel offering a retry that cannot work.
+   */
+  it('stops the wait immediately when the fleet forbids this client', async () => {
+    const source = new ScriptedFleetDataSource(
+      alwaysAnswering({ kind: 'error', error: { code: 'forbidden', message: FORBIDDEN_MESSAGE } }),
+    );
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+
+    const failed = watch.result.current.state;
+    expect(failed.status).toBe('failed');
+    expect(failed.status === 'failed' && failed.reason).toBe('error');
+    expect(failed.status === 'failed' && failed.message).toBe(FORBIDDEN_MESSAGE);
+
+    // The deadline is torn down with the poll: nothing is still due to fire,
+    // and the whole ninety seconds passes without a second attempt.
+    await advanceBy(90_000);
+
+    expect(source.calls).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // The halt belongs to `forbidden` alone. `invalid-request` is about the bytes
+  // we sent, which a later poll can find already fixed upstream — so it keeps
+  // the ordinary cadence and only the deadline ends the wait.
+  it('keeps polling through an invalid-request fault and reports it at the deadline', async () => {
+    const source = new ScriptedFleetDataSource(
+      alwaysAnswering({
+        kind: 'error',
+        error: { code: 'invalid-request', message: INVALID_REQUEST_MESSAGE },
+      }),
+    );
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(90_000);
+
+    const failed = watch.result.current.state;
+    expect(failed.status).toBe('failed');
+    expect(failed.status === 'failed' && failed.reason).toBe('error');
+    expect(failed.status === 'failed' && failed.message).toBe(INVALID_REQUEST_MESSAGE);
+    expect(source.calls.length).toBeGreaterThan(1);
+  });
+
+  // The halt ends this run, not the hook: a visitor whose deployment was fixed
+  // between the two clicks gets a fresh wait, not a permanently dead panel.
+  it('retry restarts polling after a forbidden halt', async () => {
+    const source = new ScriptedFleetDataSource(
+      alwaysAnswering({ kind: 'error', error: { code: 'forbidden', message: FORBIDDEN_MESSAGE } }),
+    );
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    expect(watch.result.current.state.status).toBe('failed');
+
+    act(() => {
+      watch.result.current.retry();
+    });
+
+    expect(watch.result.current.state.status).toBe('pending');
+    expect(source.calls).toHaveLength(2);
+
+    // The fresh run reaches the same verdict, because the fleet still refuses.
+    await settle();
+    expect(watch.result.current.state.status).toBe('failed');
   });
 
   it('makes no call and leaves no timer after unmount, even when a poll answers late', async () => {

@@ -61,6 +61,10 @@ const WATCH_START_STATE: ForecastViewState = { status: 'pending', elapsedSeconds
  * while a message means the fleet actually answered with a fault. Only that
  * distinction decides whether hitting the deadline is reported as a timeout or
  * as an error, so it is carried per-poll rather than recovered afterwards.
+ *
+ * `halt` is the third answer, and the one that makes waiting pointless: the
+ * fleet has said something that the next ninety seconds cannot change, so the
+ * loop stops now and reports it now.
  */
 type PollDecision =
   | { readonly kind: 'ready'; readonly forecasts: readonly Forecast[] }
@@ -68,7 +72,8 @@ type PollDecision =
       readonly kind: 'keep-waiting';
       readonly delayMs: number;
       readonly fault: string | null;
-    };
+    }
+  | { readonly kind: 'halt'; readonly message: string };
 
 const rateLimitBackoffMs = (retryAfterSeconds: number | undefined): number =>
   Math.max(retryAfterSeconds ?? 0, MIN_RATE_LIMIT_BACKOFF_SECONDS) * MS_PER_SECOND;
@@ -99,13 +104,32 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
         delayMs: rateLimitBackoffMs(error.retryAfterSeconds),
         fault: error.message,
       };
-    default:
-      // `network` and `invalid-response`: both may clear on their own while the
-      // pipeline is still working, so the loop keeps its cadence and lets the
-      // deadline decide when to stop — but the message is remembered, so a
-      // deadline reached this way is reported as an error rather than a wait.
+    case 'network':
+    case 'invalid-response':
+    case 'invalid-request':
+      // A dropped connection comes back and a payload this client could not
+      // read can be a record the pipeline is still writing, so waiting is worth
+      // something for those two. `invalid-request` is grouped with them rather
+      // than halted deliberately: halting is reserved for the one arm whose
+      // recourse is unambiguous, and a fault the loop cannot classify that
+      // confidently is better given the full wait than cut short. All three
+      // therefore keep the cadence and let the deadline decide when to stop —
+      // and the message is remembered, so a deadline reached this way is
+      // reported as an error rather than as a wait.
       return { kind: 'keep-waiting', delayMs: POLL_INTERVAL_MS, fault: error.message };
+    case 'forbidden':
+      // The arm's own contract: what is wrong is *who is asking*, and its
+      // recourse is a deployment change (`CUMULO_WEB_ORIGINS`). Nothing the
+      // loop can do changes the answer, so waiting out ninety seconds before
+      // saying so buys the visitor nothing — and a view that then rendered it
+      // as "try again" would be telling them to do the one thing that cannot
+      // work (the anti-pattern #150's review named).
+      return { kind: 'halt', message: error.message };
   }
+  // Every code is enumerated and there is no catch-all arm, so the declared
+  // return type makes a seventh `FleetDataError` code a compile error here —
+  // rather than letting it fall silently into "keep waiting", which is how
+  // `invalid-request` and `forbidden` inherited a policy nobody chose for them.
 };
 
 const pendingSince = (startedAtMs: number, nowMs: number): ForecastViewState => ({
@@ -210,6 +234,15 @@ export const useFirstForecast = (
       if (decision.kind === 'ready') {
         stopWatching();
         setState({ status: 'ready', forecasts: decision.forecasts });
+        return;
+      }
+
+      // A halt ends the run exactly like an arrival does — the answer is final,
+      // so the deadline has nothing left to decide and the panel is told now
+      // rather than in ninety seconds.
+      if (decision.kind === 'halt') {
+        stopWatching();
+        setState({ status: 'failed', reason: 'error', message: decision.message });
         return;
       }
 

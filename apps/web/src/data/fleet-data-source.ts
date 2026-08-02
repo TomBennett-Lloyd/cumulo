@@ -7,33 +7,59 @@ import type { CreateSiteInput, Forecast, GenerationReading, Site } from '@cumulo
  * point of the union is that each arm implies a different recourse, and two
  * transports that imply the same recourse are the same arm here.
  *
+ * A discriminated union rather than one interface with an optional extra, so
+ * that `retryAfterSeconds` is representable only on the arm where it means
+ * anything (`typing.md` rule 4). Every arm carries a human-readable `message`
+ * naming the entity it is about (`error-handling.md` rule 4).
+ *
  * - `network` — the request never produced an answer (offline, DNS, timeout).
  *   Retryable as-is.
  * - `rate-limited` — the answer was "not now", with `retryAfterSeconds` when
- *   the server said how long. Back off; never hot-retry (`error-handling.md`
- *   rule 3, and the Open-Meteo budget in CLAUDE.md upstream of it).
+ *   this client could read a stated wait. Back off; never hot-retry
+ *   (`error-handling.md` rule 3, and the Open-Meteo budget in CLAUDE.md
+ *   upstream of it).
  * - `not-found` — the entity does not exist *yet*. For a forecast this is the
  *   ordinary state of a site created seconds ago, not a fault, which is why
  *   the first-forecast poll treats it as "keep waiting".
- * - `invalid-response` — the payload could not be reconciled with the domain
- *   schemas, or the server refused the payload we sent. Both mean "the data on
- *   the wire is wrong", and in both cases repeating the identical request is
- *   pointless — so they share an arm rather than splitting one that no caller
- *   would branch on differently.
+ * - `invalid-response` — server → client: the fleet sent a payload this client
+ *   cannot reconcile with the domain schemas. Changing the request cannot
+ *   help; *time* can — the same request may parse later (a record the
+ *   pipeline is still writing), which is why the first-forecast poll keeps
+ *   waiting on this arm instead of failing fast.
+ * - `invalid-request` — client → server: the fleet refused the payload or
+ *   parameters we sent; a *different answer* needs a changed request. A
+ *   consumer whose request is fixed (the first-forecast poll) can only wait
+ *   out its own deadline and report — deliberately pinned behaviour, not an
+ *   invitation to hot-retry.
  * - `forbidden` — the API refused this client on policy, not on content. The
  *   one failure a retry cannot fix: nothing the caller can add to the request
  *   makes it succeed, because what is wrong is *who is asking*. Its recourse is
- *   a deployment change (`CUMULO_WEB_ORIGINS`), which is why it is not folded
- *   into `invalid-response` — both are "do not repeat this", but only one of
- *   them is fixable from inside the app.
+ *   a deployment change (`CUMULO_WEB_ORIGINS`), which is why it is neither of
+ *   the two data arms above — those are about the bytes, this one is about the
+ *   identity behind them.
  */
-export interface FleetDataError {
-  readonly code: 'network' | 'rate-limited' | 'not-found' | 'invalid-response' | 'forbidden';
-  /** Human-readable, and carrying the entity it is about (`error-handling.md` rule 4). */
-  readonly message: string;
-  /** Present only when the server stated a wait; absent is not "zero seconds". */
-  readonly retryAfterSeconds?: number;
-}
+export type FleetDataError =
+  | { readonly code: 'network'; readonly message: string }
+  | {
+      readonly code: 'rate-limited';
+      readonly message: string;
+      /**
+       * The wait the server asked for, when this client could read one.
+       *
+       * Absent is neither zero nor "the server stated none". `Retry-After` is
+       * not a CORS-safelisted response header and `infra/api/gateway.tf`'s
+       * `cors_configuration` sets no `expose_headers`, so from a real
+       * cross-origin deployment the browser withholds this header from this
+       * code even when the wire carries it. Absent therefore means "no wait
+       * this client could read"; exposing the header is #21's
+       * (`expose_headers = ["retry-after"]`).
+       */
+      readonly retryAfterSeconds?: number;
+    }
+  | { readonly code: 'not-found'; readonly message: string }
+  | { readonly code: 'invalid-response'; readonly message: string }
+  | { readonly code: 'invalid-request'; readonly message: string }
+  | { readonly code: 'forbidden'; readonly message: string };
 
 /**
  * The outcome of one fleet request.
@@ -128,12 +154,22 @@ export interface FleetSourceCapabilities {
  *   whose first forecast does not exist yet; the poll treats both as "wait".
  * - **429** (a gateway throttle, or the API's own per-IP limiter) →
  *   `rate-limited`, with `retryAfterSeconds` taken from the `Retry-After` header
- *   when the response carries one and left absent when it does not — absent
- *   means "no stated wait", not zero. The limiter's 429s always carry it; the
- *   gateway's do not, which is exactly why the field is optional.
- * - **400** (`validation_failed`), or a 2xx body that fails its zod parse →
- *   `invalid-response`. Both mean the bytes on the wire cannot be believed, and
- *   neither is worth repeating unchanged.
+ *   when this client can read one. From a **cross-origin browser** it usually
+ *   cannot: `Retry-After` is not a CORS-safelisted response header and
+ *   `infra/api/gateway.tf`'s `cors_configuration` sets no `expose_headers`, so
+ *   from a real deployment the header reads as absent even on the limiter's
+ *   429s, which always put it on the wire. Absent therefore means "no wait this
+ *   client could read", not "the server stated none" — which is why the field
+ *   is optional and why the caller floors its own backoff instead of reading
+ *   the absence as permission to retry at once. Exposing the header is #21's
+ *   (`expose_headers = ["retry-after"]`).
+ * - **400** (`validation_failed`) → `invalid-request`. The fleet refused what
+ *   this client sent — a different answer needs a changed request, though a
+ *   fixed-request consumer may still wait out its own deadline (see the arm
+ *   doc above).
+ * - **A 2xx body that fails its zod parse** → `invalid-response`. The payload
+ *   cannot be reconciled with the domain schemas; changing the request cannot
+ *   help, but the same request may parse later (see the arm doc above).
  * - **403** (`forbidden`) → `forbidden`. The API refuses a write whose `Origin`
  *   it does not serve, and refuses any request from a caller it has blocked for
  *   abuse (#29). It is the one failure a retry cannot fix — the request is not

@@ -66,7 +66,7 @@ describe('HttpFleetDataSource reads', () => {
 
     const error = expectFailure(await source.siteForecasts(SITE_A, 24));
     expect(error.code).toBe('rate-limited');
-    expect(error.retryAfterSeconds).toBe(17);
+    expect(error.code === 'rate-limited' && error.retryAfterSeconds).toBe(17);
   });
 
   it('maps a 403 to forbidden', async () => {
@@ -123,6 +123,34 @@ describe('HttpFleetDataSource createSite', () => {
     expect(call?.init?.method).toBe('POST');
     expect(call?.init?.headers).toEqual({ 'Content-Type': 'application/json' });
     expect(sentJson(call?.init)).toMatchObject({ name: 'New Roof', capacityKw: 4.2 });
+  });
+
+  /**
+   * The other half of the split lives at "reports a 200 whose body fails the
+   * domain schema as invalid-response" above. Together they pin that the two
+   * arms are reachable from opposite directions through the real transport: a
+   * server that refused what we sent can never surface as "the server sent us
+   * something unreadable", which is exactly the conflation this arm was split
+   * out of.
+   */
+  it('maps a 400 validation_failed from the API to invalid-request', async () => {
+    const { source } = sourceAnswering(() =>
+      jsonResponse({ code: 'validation_failed', message: 'capacityKw must be positive' }, 400),
+    );
+
+    const error = expectFailure(
+      await source.createSite({
+        name: 'New Roof',
+        latitude: 51.5,
+        longitude: -0.12,
+        tiltDegrees: 35,
+        azimuthDegrees: 180,
+        capacityKw: 4.2,
+      }),
+    );
+
+    expect(error.code).toBe('invalid-request');
+    expect(error.message).toContain('capacityKw must be positive');
   });
 });
 

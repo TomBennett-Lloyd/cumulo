@@ -85,6 +85,12 @@ const RETRY_AFTER_SECONDS_PATTERN = /^\d+$/;
  * backing off on its own schedule is strictly safer than one backing off on a
  * skewed date. Absent is not zero, which is why this returns `undefined` and
  * the field is omitted rather than defaulted.
+ *
+ * Caveat, and it is the common case rather than the exception: from a
+ * cross-origin browser this reads `null` even when the server sent the header,
+ * because `Retry-After` is not CORS-safelisted and the API exposes no extra
+ * response headers (#21). "The server stated no wait" and "this client was not
+ * allowed to see the wait it stated" are indistinguishable here by design.
  */
 const statedRetryAfterSeconds = (response: Response): number | undefined => {
   const header = response.headers.get('Retry-After');
@@ -119,8 +125,10 @@ const rateLimited = (response: Response, message: string): FleetSourceResult<nev
  * carries (`error-handling.md` rule 4).
  *
  * Success is `schema.safeParse` of the body and nothing else: a 2xx whose
- * payload does not match the domain schemas is `invalid-response`, exactly like
- * a 400, because both mean the bytes on the wire cannot be believed.
+ * payload does not match the domain schemas is `invalid-response` — the fleet
+ * sent bytes this client cannot read. A 400 is the opposite direction and the
+ * opposite arm, `invalid-request`: the fleet read what this client sent and
+ * refused it.
  */
 export const parseFleetApiResponse = async <T>(
   operation: string,
@@ -149,7 +157,7 @@ export const parseFleetApiResponse = async <T>(
   switch (response.status) {
     case 400:
       return errorResult({
-        code: 'invalid-response',
+        code: 'invalid-request',
         message: `${operation}: the API rejected the request — ${detail}`,
       });
     case 403:

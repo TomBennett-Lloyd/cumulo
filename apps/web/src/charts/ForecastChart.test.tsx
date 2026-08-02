@@ -23,7 +23,7 @@ const vertexCount = (mark: Element): number =>
   (mark.getAttribute('points') ?? '').split(' ').length;
 
 const MS_PER_HOUR = 3_600_000;
-/** The fixture provider's 7-day window: 168 hours back, now, and 24 forward. */
+/** The fixture source's 7-day window: 168 hours back, now, and 24 forward. */
 const WEEK_RANGE_POINT_COUNT = 193;
 const WEEK_RANGE_LAST_MEASURED_INDEX = 168;
 
