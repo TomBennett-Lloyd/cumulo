@@ -12,6 +12,7 @@ import { angleLabel, capacityLabel, coordinatesLabel } from './site-format';
 import { joinSiteSeries, loadSiteSeries, type SiteSeries } from './site-series';
 import {
   firstForecastTimeoutMessage,
+  firstForecastUnansweredMessage,
   generatingFirstForecastLabel,
   loadingSiteSeriesLabel,
   NO_MEASUREMENTS_NOTICE,
@@ -55,17 +56,30 @@ type FailedForecast = Extract<ForecastViewState, { readonly status: 'failed' }>;
  * What the reader is told when the first forecast stopped being worth waiting
  * for.
  *
- * A timeout gets the column's own sentence, because the hook's is diagnostic
- * ("no forecast for site 2a9c…"): nothing went wrong, the pipeline is simply
- * behind, and the useful thing to say is that waiting longer may still work. A
- * fault gets the source's message verbatim — it is the only account of what
- * actually failed, and paraphrasing it would lose the detail
- * (`error-handling.md` rule 4).
+ * The two deadline reasons get the column's own sentences, because the hook's
+ * are diagnostic ("no forecast for site 2a9c…") — and they get *different*
+ * sentences, because the two runs learned different things. A `timeout` waited
+ * out a wait the fleet confirmed was a wait, so saying the pipeline may still
+ * be working is true and waiting longer is the recourse. An `unanswered` run
+ * never heard back at all, so the same sentence would assert a pipeline state
+ * nobody established; it says what it knows instead. A fault gets the source's
+ * message verbatim — it is the only account of what actually failed, and
+ * paraphrasing it would lose the detail (`error-handling.md` rule 4).
+ *
+ * Every arm keeps the retry (its caller supplies one for the whole `failed`
+ * state): re-asking is a real recourse for all three, and most obviously for
+ * the run whose only problem was that nothing came back.
  */
-const firstForecastFailureMessage = (failure: FailedForecast): string =>
-  failure.reason === 'timeout'
-    ? firstForecastTimeoutMessage(FIRST_FORECAST_DEADLINE_SECONDS)
-    : failure.message;
+const firstForecastFailureMessage = (failure: FailedForecast): string => {
+  switch (failure.reason) {
+    case 'timeout':
+      return firstForecastTimeoutMessage(FIRST_FORECAST_DEADLINE_SECONDS);
+    case 'unanswered':
+      return firstForecastUnansweredMessage(FIRST_FORECAST_DEADLINE_SECONDS);
+    case 'error':
+      return failure.message;
+  }
+};
 
 interface SiteSeriesBodyProps {
   readonly site: Site;

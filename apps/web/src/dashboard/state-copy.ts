@@ -121,6 +121,25 @@ export const aggregatedFromCaption = (siteCount: number): string =>
 export const firstForecastTimeoutMessage = (deadlineSeconds: number): string =>
   `No forecast arrived within ${String(deadlineSeconds)} seconds — the pipeline may still be working. Try again to keep waiting.`;
 
+/**
+ * The deadline passed without the fleet answering at all.
+ *
+ * Its sibling above claims the pipeline may still be working, which is only
+ * true of a wait the fleet confirmed was a wait. A run that never got an answer
+ * — every request still in flight at ninety seconds — knows nothing about
+ * whether a forecast exists, so this sentence claims nothing about the
+ * pipeline and says only what is certain: no answer, and the question is still
+ * open. It consumes the tech-debt entry "The timeout copy asserts pipeline
+ * generation from a run that never established existence" (#177 review cycle 1,
+ * resolved here in #104); `ForecastFailureReason`'s `unanswered` arm is the
+ * fact this renders.
+ *
+ * The deadline is a parameter for the same reason it is on the sibling: the
+ * number belongs to the polling hook that enforces it.
+ */
+export const firstForecastUnansweredMessage = (deadlineSeconds: number): string =>
+  `No answer from the fleet within ${String(deadlineSeconds)} seconds — whether a forecast exists yet is unknown. Try again to keep asking.`;
+
 /*
  * The failure sentences below all take the source's own message as `detail`
  * rather than paraphrasing it. The source names the operation that failed and is
