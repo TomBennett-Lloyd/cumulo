@@ -2,33 +2,25 @@
 
 import type { CreateSiteInput, Forecast, Site } from '@cumulo/shared';
 import { canonicalFleetSeed, generateFleet } from '@cumulo/shared';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_CREATION_WINDOW_MS } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import type { FleetSourceResult, FleetDataSource } from '../data/fleet-data-source';
-import { Dashboard } from './Dashboard';
-import type { MapRegionProps } from './MapRegion';
+import { advanceBy, fleetPanel, renderDashboard, settle, visit } from './dashboard-test-fixture';
 
 /*
- * The dashboard, proven without WebGL.
+ * The dashboard's composition, proven without WebGL.
  *
- * jsdom implements no WebGL, so the real `MapRegion` cannot mount here — which
- * is why `Dashboard` takes the map region as a prop and this file passes a plain
- * stand-in (see `MapRegion.tsx` for the seam's reasoning). The stand-in is not a
- * mock of maplibre and nothing below asserts that it was called: it is a second
- * way to reach the same two callbacks the real map calls, and every assertion is
- * about what the *dashboard* then does. That the real map fires those callbacks
- * at all is browser behaviour, and is checked in a browser.
+ * The mount, the map stand-in and the clock helpers are
+ * `dashboard-test-fixture.tsx`'s — read its header for why a stand-in map is not
+ * a mock. What this file asserts is what the *dashboard* does with the two
+ * callbacks that stand-in reaches.
  */
 
-/** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
-const CLICK_POSITION = { latitude: 53.5, longitude: -5.5 };
-
 /**
- * What `AddSiteForm` names a site dropped at {@link CLICK_POSITION}.
+ * What `AddSiteForm` names a site dropped at the fixture's `CLICK_POSITION`.
  *
  * Restated here rather than derived, because it is the *form's* naming rule
  * being relied on: a test that computed the name the same way the form does
@@ -47,37 +39,6 @@ const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
 /** Fine enough to date the forecast's arrival to the second it became visible. */
 const CLOCK_STEP_MS = 1_000;
-
-const StubMapRegion = ({
-  sites,
-  selectedSiteId,
-  onSelectSite,
-  onMapClick,
-}: MapRegionProps): ReactElement => (
-  <div>
-    <button
-      type="button"
-      onClick={() => {
-        onMapClick(CLICK_POSITION);
-      }}
-    >
-      Click the map
-    </button>
-
-    {sites.map((site) => (
-      <button
-        key={site.id}
-        type="button"
-        aria-current={site.id === selectedSiteId ? true : undefined}
-        onClick={() => {
-          onSelectSite(site.id);
-        }}
-      >
-        Marker: {site.name}
-      </button>
-    ))}
-  </div>
-);
 
 /**
  * A fleet that cannot be listed the first time and can thereafter.
@@ -134,23 +95,6 @@ const firstSeededSite = (): Site => {
   return site;
 };
 
-/** Moves the fake clock and lets React commit whatever that produced, as one step. */
-const advanceBy = async (ms: number): Promise<void> => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
-};
-
-/** Lets already-resolved promises (the listing, a creation) settle without moving the clock. */
-const settle = (): Promise<void> => advanceBy(0);
-
-const renderDashboard = (dataSource: FleetDataSource): HTMLElement => {
-  const { container } = render(
-    <Dashboard theme="light" dataSource={dataSource} mapRegion={StubMapRegion} />,
-  );
-  return container;
-};
-
 const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
 
 /**
@@ -163,9 +107,6 @@ const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sit
  */
 const siteChartTable = (siteName: string): HTMLElement | null =>
   screen.queryByRole('table', { name: `Table view — ${siteName}, kW` });
-
-/** The panel column's resting state, whether or not it is the visible context. */
-const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
 
 const attributionLinks = (): readonly HTMLElement[] =>
   screen.getAllByRole('link', { name: 'Open-Meteo.com' });
@@ -194,6 +135,10 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  // Selecting a site writes `?site=` into this environment's address bar, and
+  // the dashboard reads that at mount — so a test that left one there would
+  // hand the next test a selection it never made.
+  visit('/');
 });
 
 describe('Dashboard', () => {

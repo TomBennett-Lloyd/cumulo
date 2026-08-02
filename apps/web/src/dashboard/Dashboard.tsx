@@ -1,7 +1,7 @@
 import type { CreateSiteInput, Site } from '@cumulo/shared';
 import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddSiteForm } from '../add-site/AddSiteForm';
 import type { CreationRefusal } from '../add-site/creation-throttle';
@@ -15,6 +15,7 @@ import { FleetPanel } from './FleetPanel';
 import { LazyMapRegion } from './LazyMapRegion';
 import type { MapRegionComponent } from './MapRegion';
 import { PanelError, PanelPending } from './panel-states';
+import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
 import { SiteList } from './SiteList';
 import { SitePanel } from './SitePanel';
 import { LOADING_FLEET_LABEL } from './state-copy';
@@ -49,7 +50,7 @@ type CreationState =
   | { readonly status: 'failed'; readonly message: string };
 
 /**
- * The fleet the app runs against until the Fleet API exists (#14, wired in C8).
+ * The fleet the app runs against unless the build selects the HTTP source (#14, #150).
  *
  * One instance for the module rather than one per render: `useFirstForecast`
  * takes the source as an effect dependency, so a source rebuilt every render
@@ -141,7 +142,9 @@ export interface DashboardProps {
  * `selectedSiteId` is the clearest case — the markers, the list rows and the
  * context panel all render from that one value, which is what makes selecting a
  * site on the map and selecting it in the list the same act rather than two
- * views that agree by luck.
+ * views that agree by luck. That one value is also what `?site=` addresses:
+ * `selection-url.ts` is the whole of the deep link, and the dashboard reads it
+ * once at mount and writes it whenever the selection moves.
  *
  * The column is a context swap, not a set of stacked slots: one region shows the
  * fleet's story, one site's, or a draft, and which one is a function of state
@@ -165,7 +168,18 @@ export const Dashboard = ({
   /** Bumping this is how the retry button asks the listing effect to run again. */
   const [listAttempt, setListAttempt] = useState(0);
   const [createdSites, setCreatedSites] = useState<readonly Site[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState<Site['id'] | null>(null);
+  /**
+   * The selection, which the URL is allowed to open on.
+   *
+   * Read once, in the lazy initialiser, because the address bar is the initial
+   * value's *source* rather than something to keep re-reading: after mount the
+   * flow runs the other way, and the sync effect below is what keeps the two
+   * level. An id that names no site is not filtered here — nothing is loaded
+   * yet — it is cleared by the guard in the listing effect.
+   */
+  const [selectedSiteId, setSelectedSiteId] = useState<Site['id'] | null>(() =>
+    readSiteIdFromSearch(window.location.search),
+  );
   const [draft, setDraft] = useState<MapPosition | null>(null);
   const [creation, setCreation] = useState<CreationState>({ status: 'editing' });
   /**
@@ -174,6 +188,19 @@ export const Dashboard = ({
    * in state so no re-render can hand the visitor a fresh allowance.
    */
   const [throttle] = useState(() => new CreationThrottle());
+  /**
+   * The sites created this session, readable from the listing effect without
+   * being a dependency of it (`react.md` rule 2).
+   *
+   * A dependency would make a creation re-run the listing, which is the one
+   * fan-out this dashboard must never re-spend. But the stale-id guard below
+   * still has to count a created site as known: a reader whose listing failed
+   * can add a site, select it, and then retry the listing — and a guard that
+   * only knew the listing's sites would clear the selection of a site sitting
+   * right there in the list.
+   */
+  const createdSitesRef = useRef(createdSites);
+  createdSitesRef.current = createdSites;
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -191,10 +218,24 @@ export const Dashboard = ({
         return;
       }
 
-      setLoad(
-        result.kind === 'ok'
-          ? { status: 'ready', sites: result.value }
-          : { status: 'failed', message: result.error.message },
+      if (result.kind !== 'ok') {
+        setLoad({ status: 'failed', message: result.error.message });
+        return;
+      }
+
+      setLoad({ status: 'ready', sites: result.value });
+
+      // The stale-id guard, here rather than in an effect watching derived
+      // state: this is the moment the question "does that site exist?" gets its
+      // answer, so it is the moment a `?site=` naming nobody stops being a
+      // selection. Left standing, a dead deep link would have `useFirstForecast`
+      // polling a site that does not exist for its full ninety-second deadline,
+      // and the sync effect below cleans the parameter out of the URL as soon as
+      // the selection goes.
+      const known = [...result.value, ...createdSitesRef.current];
+
+      setSelectedSiteId((current) =>
+        current === null || known.some((site) => site.id === current) ? current : null,
       );
     });
 
@@ -202,6 +243,15 @@ export const Dashboard = ({
       cancelled = true;
     };
   }, [dataSource, listAttempt]);
+
+  // The address bar is an external system, and keeping it level with the
+  // selection is what an effect is for (`react.md` rule 1). It cannot be a line
+  // in the click handlers instead, because the selection also moves without a
+  // click: a creation selects the site it just made, and the guard above clears
+  // a selection nothing can show.
+  useEffect(() => {
+    writeSiteIdToUrl(selectedSiteId);
+  }, [selectedSiteId]);
 
   // Derived during render rather than mirrored into state. Memoised for
   // identity rather than speed: this array is what the map clusters, and a

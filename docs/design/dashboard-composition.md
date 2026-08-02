@@ -120,9 +120,20 @@ page. And `pushState` would be actively wrong here: selection is not navigation 
 Back button that replayed every marker click a reader tried is a worse Back button than one that
 leaves the page. `replaceState` keeps the URL shareable without making it a log.
 
-The mechanism itself lands with #148's C8 (`selection-url.ts`), including the stale-id guard that
-clears a selection naming a site the fleet does not have — without it, a dead deep link leaves the
-first-forecast poll waiting out its full ninety-second deadline on a site that does not exist.
+The mechanism is `selection-url.ts`: two functions, `readSiteIdFromSearch` and `writeSiteIdToUrl`,
+over `URLSearchParams`. The dashboard reads the URL once — in the lazy `useState` initialiser,
+because the address bar is where the _initial_ selection comes from and nothing after that — and an
+effect writes it back whenever the selection moves, the URL being the external system an effect is
+for (`react.md` rule 1). It has to be an effect rather than a line in each click handler, because
+the selection also moves without a click: a creation selects the site it just made, and the
+stale-id guard clears one nothing can show. That guard lives in the listing-resolution path, where
+the answer to "does that site exist?" actually arrives, rather than in a second effect chained on
+derived state — and it counts sites created this session as known, so retrying a failed listing
+cannot clear the selection of a site the reader just added. Without the guard a dead deep link
+leaves the first-forecast poll asking for a nonexistent site every five seconds for its full
+ninety-second deadline, with no panel on screen to show for it. The write preserves query
+parameters it does not own; the id it reads back is untrusted text until the listing vouches for
+it, which is why the module's types say `string` rather than `Site['id']`.
 
 ## What this composition does not own
 
