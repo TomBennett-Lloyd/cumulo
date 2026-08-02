@@ -164,11 +164,12 @@ export interface FleetSourceCapabilities {
  *   the absence as permission to retry at once. Exposing the header is #21's
  *   (`expose_headers = ["retry-after"]`).
  * - **400** (`validation_failed`) → `invalid-request`. The fleet refused what
- *   this client sent, so the request has to change before it is worth
- *   repeating.
+ *   this client sent — a different answer needs a changed request, though a
+ *   fixed-request consumer may still wait out its own deadline (see the arm
+ *   doc above).
  * - **A 2xx body that fails its zod parse** → `invalid-response`. The payload
- *   cannot be reconciled with the domain schemas; repeating the identical
- *   request would only fetch the same unreadable bytes.
+ *   cannot be reconciled with the domain schemas; changing the request cannot
+ *   help, but the same request may parse later (see the arm doc above).
  * - **403** (`forbidden`) → `forbidden`. The API refuses a write whose `Origin`
  *   it does not serve, and refuses any request from a caller it has blocked for
  *   abuse (#29). It is the one failure a retry cannot fix — the request is not
