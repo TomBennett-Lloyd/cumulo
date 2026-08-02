@@ -34,10 +34,13 @@ shipped_scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 #   chmod +x /tmp/pre/*.sh
 #   WORKTREE_SCRIPTS_DIR=/tmp/pre bash .claude/scripts/worktree-lifecycle.test.sh
 #
-# The chmod is not optional: sweep-worktrees.sh EXECUTES its sibling reap-worktree.sh rather
-# than running it through `bash`, and `git show` writes mode 644. Without it the four sweep
-# cases fail with "swept 0, kept 0, failed 3" — a bisect that looks like a real regression in
-# the revision under test and is not.
+# The chmod stays in the recipe even though the shipped sweep no longer needs it. Revisions
+# predating #204 EXECUTE their sibling reap-worktree.sh rather than running it through `bash`,
+# and `git show` writes mode 644, so an extraction of one of those still needs the bit or its
+# sweep cases fail with "swept 0, kept 0, failed N" — a bisect that looks like a real regression
+# in the revision under test and is not. For post-fix revisions the chmod is simply harmless,
+# which is why one recipe can serve both: case 32 is what pins the shipped behaviour, and it
+# builds its own mode-644 copy rather than relying on how the recipe was run.
 #
 # Those four files are the whole of what the directory needs to hold: harness-lib.sh is always
 # the shipped one, so an extracted revision from before it existed still runs.
@@ -133,6 +136,53 @@ advance_origin() {
   must gitc "$ROOT/upstream" push --quiet origin main
 }
 
+# merged_after_update_branch <fixture-name> -> a fixture whose worktree $ROOT/wt is on `feat`,
+# squash-merged, but where the PR branch was advanced by a real `gh pr update-branch` first.
+# Sets `tip` (the local branch tip) and `merge_oid` (the update-branch merge commit). Shared by
+# the reap and rebranch cases below: they assert different scripts, but if the shape of this
+# fixture were wrong both would be wrong in the same way, so it is built once.
+#
+# The merge is made in a throwaway clone and pushed, never here. That the local object store
+# has never seen the PR's head is the incident's defining feature, not incidental setup: a
+# fixture that left merge_oid in this repo would go green against an is_merged that ran a
+# non-fetching merge-base locally — an implementation that cannot answer in production, where
+# the object is absent (fetch-then-merge-base would answer, but is ruled out by the function's
+# repository-read-only contract, stated in worktree-lib.sh).
+#
+# -X ours because commit_in and advance_main both append to file.txt, so the merge conflicts on
+# content. gh refuses to update-branch a conflicting PR at all, so a clean resolution is the
+# only shape that reaches production; the fixture is about the commit graph, not the tree.
+merged_after_update_branch() {
+  fixture "$1"
+  add_wt feat wt
+  commit_in "$ROOT/wt" work
+  tip=$(git -C "$ROOT/main" rev-parse refs/heads/feat) || exit 2
+  must gitc "$ROOT/main" push --quiet origin feat
+  advance_main squash-of-feat
+
+  must git clone --quiet "$ROOT/origin.git" "$ROOT/pr"
+  must gitc "$ROOT/pr" switch --quiet feat
+  # Not `must`: a content merge announces "Auto-merging file.txt" on stderr even under
+  # --quiet, which would litter the harness's own report. Holding the output and printing it
+  # only on failure is strictly more informative than must would be here.
+  merge_log=$(gitc "$ROOT/pr" merge --no-ff -X ours -m update-branch origin/main 2>&1) || {
+    printf 'FATAL harness setup failed: update-branch merge: %s\n' "$merge_log" >&2
+    exit 2
+  }
+  merge_oid=$(git -C "$ROOT/pr" rev-parse HEAD) || exit 2
+  must gitc "$ROOT/pr" push --quiet origin feat
+  must rm -rf "$ROOT/pr"
+
+  if git -C "$ROOT/main" merge-base --is-ancestor "$tip" refs/remotes/origin/main; then
+    bad "fixture is wrong: tip is an ancestor of origin/main, so the gh path is untested"
+  fi
+  git -C "$ROOT/origin.git" merge-base --is-ancestor "$tip" "$merge_oid" ||
+    bad "fixture is wrong: the PR head does not descend from the tip, so nothing here is merged"
+  if git -C "$ROOT/main" cat-file -e "$merge_oid" 2>/dev/null; then
+    bad "fixture is wrong: the update-branch merge commit is in the local store, so a local merge-base would answer here and cannot in production"
+  fi
+}
+
 origin_head() { git -C "$ROOT/origin.git" rev-parse refs/heads/main; }
 tracking_ref() { git -C "$ROOT/main" rev-parse refs/remotes/origin/main; }
 
@@ -144,9 +194,24 @@ expect_stale_fixture() {
 }
 
 gh_stub_prs() { # <path> <sha> — gh reporting one merged PR whose head was <sha>
+  # No `commits` key, and that omission is load-bearing rather than laziness. Case 5 is the
+  # only case that pins is_merged's head-equality arm AND its tolerance of a missing or null
+  # commit list, independently of the containment arm gh_stub_pr_updated exercises. Hand this
+  # stub a `commits` key and deleting the head-equality comparison stops being a failure
+  # anything notices.
   cat >"$1" <<EOF
 #!/usr/bin/env bash
 printf '[{"headRefOid":"%s"}]\n' "$2"
+EOF
+  must chmod +x "$1"
+}
+
+gh_stub_pr_updated() { # <path> <head-oid> <tip-oid> — gh reporting one merged PR whose head is
+  # <head-oid> and whose commit list contains <tip-oid>: the shape `gh pr update-branch` leaves
+  # behind when it merges main into the PR branch before the squash.
+  cat >"$1" <<EOF
+#!/usr/bin/env bash
+printf '[{"headRefOid":"%s","commits":[{"oid":"%s"},{"oid":"%s"}]}]\n' "$2" "$3" "$2"
 EOF
   must chmod +x "$1"
 }
@@ -834,6 +899,101 @@ expect_out "WOULD-REAP"
 expect_eq "origin/main after a dry reap" "$(tracking_ref)" "$stale"
 expect_exists "$ROOT/wt/file.txt"
 expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 29. reap accepts a merged PR that CONTAINS the tip, not only one whose head equals it
+# ==========================================================================================
+# The whole of #204. `gh pr update-branch` before a squash replaces the PR's head with a merge
+# commit this repository has never held, so head-equality called genuinely merged branches
+# unmerged and every lifecycle script refused (PRs #203/#205/#207, plus stuck agent-*
+# worktrees). Containment reaches the same verdict from the commit list gh already returns,
+# without fetching a single object.
+begin "reap removes a worktree merged after a real update-branch (headRefOid descends from the tip)"
+merged_after_update_branch updatebranch
+gh_stub_pr_updated "$ROOT/gh" "$merge_oid" "$tip"
+run_reap "$ROOT/gh" 0 "$ROOT/wt"
+expect_rc 0 "$rc"
+expect_out "REAPED"
+expect_gone "$ROOT/wt"
+expect_no_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 30. rebranch, too — the issue's "no manual ref surgery" acceptance
+# ==========================================================================================
+# Same defect, the other entry point: rebranch ends in `git branch -D`, so it consults
+# is_merged on its own and refused the same worktrees. Reaping alone would leave the recycle
+# path broken.
+begin "rebranch recycles a worktree merged after a real update-branch"
+merged_after_update_branch updatebranch_rb
+gh_stub_pr_updated "$ROOT/gh" "$merge_oid" "$tip"
+pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next
+expect_rc 0 "$rc"
+expect_out "REBRANCHED feat -> next at"
+expect_eq "worktree HEAD" \
+  "$(git -C "$ROOT/wt" rev-parse HEAD)" \
+  "$(git -C "$ROOT/main" rev-parse refs/remotes/origin/main)"
+expect_no_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 31. containment is membership, not "there was a merged PR"
+# ==========================================================================================
+# The widening this fix could have shipped instead: accepting any merged PR that carries any
+# commits at all. The branch here holds one commit the merged PR contained and one it never
+# did, so reaping it would strand work — which is the exact harm is_merged exists to prevent,
+# and the only case in the suite that can see the difference.
+begin "reap keeps a branch holding a commit the merged PR never contained"
+fixture strandedpr
+add_wt feat wt
+commit_in "$ROOT/wt" work
+c1=$(git -C "$ROOT/wt" rev-parse HEAD) || exit 2
+commit_in "$ROOT/wt" stranded
+gh_stub_pr_updated "$ROOT/gh" "$c1" "$c1"
+run_reap "$ROOT/gh" 0 "$ROOT/wt"
+expect_rc 1 "$rc"
+expect_out "— unmerged"
+expect_exists "$ROOT/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 32. sweep runs its sibling through bash, so the exec bit is not load-bearing
+# ==========================================================================================
+# `git show <rev>:…` writes mode 644, which is how these scripts arrive whenever they are
+# extracted rather than checked out — this harness's own negative-control recipe, a bisect, a
+# review of an older revision. A sweep that EXECUTES its sibling turns that into "swept 0,
+# kept 0, failed N": every candidate reported as an unexpected failure, and nothing swept.
+# The fixture pins mode 644 explicitly rather than inheriting whatever cp handed it, and both
+# invocation sites are exercised, so reverting either `bash ` prefix alone reds this case.
+begin "sweep runs reap through bash, so 644 extracted copies still sweep"
+fixture sweep644
+add_wt feat wt
+must mkdir -p "$ROOT/scripts644"
+must cp "$SCRIPTS/sweep-worktrees.sh" "$SCRIPTS/reap-worktree.sh" "$SCRIPTS/worktree-lib.sh" \
+  "$ROOT/scripts644/"
+# cp preserves the source's 755, so the mode this case is about has to be set, not assumed.
+must chmod 644 "$ROOT/scripts644"/*.sh
+# The branch is an unmoved cut of main, so ancestry alone settles it and a failing gh keeps the
+# case from passing by way of GitHub.
+gh_stub_broken "$ROOT/gh"
+
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$ROOT/scripts644/sweep-worktrees.sh" --dry-run
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP"
+expect_not_out "ERROR"
+expect_exists "$ROOT/wt/file.txt"
+
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$ROOT/scripts644/sweep-worktrees.sh"
+expect_rc 0 "$rc"
+expect_out "REAPED $ROOT/wt (feat)"
+expect_out "swept 1, kept 0"
+expect_not_out "ERROR"
 end
 
 # ==========================================================================================

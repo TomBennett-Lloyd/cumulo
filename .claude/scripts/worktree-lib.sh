@@ -61,7 +61,22 @@ fetch_main() {
 #   merged-ancestor | merged-squash | unmerged | unverifiable
 # This repo squash-merges, so a merged branch's tip is NOT an ancestor of main. Ancestry is
 # only a fast path (it also catches never-committed branches); the authoritative check asks
-# GitHub whether a merged PR had exactly this tip as its head.
+# GitHub whether a merged PR CONTAINED this tip — either as its head, or anywhere in its
+# commit list.
+#
+# Containment rather than head-equality, because head-equality strands genuinely merged
+# branches (#204, PRs #203/#205/#207). `gh pr update-branch` before a squash merges main into
+# the PR branch, so headRefOid becomes a merge commit the local object store has never seen
+# and never can name; the local tip then equals nothing on the PR and every lifecycle script
+# refuses. A tip listed among the PR's commits is the property the callers actually need
+# before they `branch -D`: the tip is an ancestor of headRefOid, so everything reachable from
+# it went into the squash and no commit is stranded.
+#
+# Deliberately NOT fetch + `merge-base` against headRefOid, which would prove the same thing
+# from local objects: is_merged must never write to the repository. Keeping it read-only is
+# what lets --dry-run leave the tree byte-identical, makes a dry run and a real run reach the
+# same verdict, and spares the callers a new "do not touch the object store" knob. gh already
+# returns commits in the same `pr list` call, so containment costs no extra round trip.
 #
 # Reads whatever base ref is on disk and never refreshes it (see fetch_main). Staleness can
 # only turn a merge the fast path would have spotted into a question for the gh check, and the
@@ -81,7 +96,7 @@ is_merged() {
     return 0
   fi
 
-  if ! prs=$("$WORKTREE_GH_CMD" pr list --state merged --head "$branch" --json headRefOid --limit 10 2>/dev/null); then
+  if ! prs=$("$WORKTREE_GH_CMD" pr list --state merged --head "$branch" --json headRefOid,commits --limit 10 2>/dev/null); then
     printf 'unverifiable\n'
     return 0
   fi
@@ -94,7 +109,16 @@ try:
 except Exception:
     sys.exit(2)
 tip = sys.argv[1]
-sys.exit(0 if any(pr.get("headRefOid") == tip for pr in prs) else 1)
+
+
+def contains(pr):
+    """Did this merged PR carry the local tip? A missing or null commit list is tolerated."""
+    if pr.get("headRefOid") == tip:
+        return True
+    return any(commit.get("oid") == tip for commit in pr.get("commits") or [])
+
+
+sys.exit(0 if any(contains(pr) for pr in prs) else 1)
 ' "$tip"
   rc=$?
 
