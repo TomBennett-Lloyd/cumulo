@@ -101,6 +101,15 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #     should not be confused, and adding the second changed nothing about the
 #     first.
 #
+#     Still not expressible *here*, and since #165 no longer unenforced: the
+#     ceiling is restated in TypeScript as `API_GATEWAY_INTEGRATION_TIMEOUT_MS`
+#     and `apps/api/src/request-budget.ts`'s test asserts the mirrored constant
+#     is below it. That works precisely because this gate holds the constant
+#     equal to Terraform — the test bites on the deployed value rather than on a
+#     number somebody kept in step by hand. Nothing about this script changed;
+#     the inequality moved to a place that can hold one, which is why it is
+#     recorded here rather than added below.
+#
 # Neither fits, and the record reader refuses a seventh field rather than
 # silently ignoring it, so extending to them is a change to this script and not
 # an added line. That is deliberate for now — the shapes are guesses until the

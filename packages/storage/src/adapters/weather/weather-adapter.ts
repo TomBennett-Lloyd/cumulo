@@ -347,7 +347,7 @@ export class WeatherAdapter extends StorageAdapterBase {
     // Only the transport is wrapped. Parsing happens after it, so a stored item
     // that is not a weather reading — a violated invariant — cannot be dressed
     // up as a `StorageError`, which means an outage.
-    const items = await this.queryAllPages(
+    const { items } = await this.queryAllPages(
       'queryArchiveRange',
       { locationId: partitionKey },
       {

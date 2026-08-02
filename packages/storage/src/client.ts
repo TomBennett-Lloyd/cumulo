@@ -294,8 +294,9 @@ export const createStorageDocumentClient = (
         // `@cumulo/ingestion`'s cycle budget has to price. These are small
         // single-chunk JSON responses, so a mid-body stall is remote — but it
         // is a real gap rather than a covered case, and `docs/tech-debt.md`
-        // records it against the budget's zero-slack identity rather than
-        // leaving this comment to claim more than the flag delivers.
+        // records it as the one condition the ingestion cycle deadline is
+        // conditional on (no finite slack covers an unbounded term), rather
+        // than leaving this comment to claim more than the flag delivers.
         throwOnRequestTimeout: true,
       }),
     });

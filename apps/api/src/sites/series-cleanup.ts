@@ -1,6 +1,7 @@
 import type { SeriesAdapter, SeriesCleanupOutcome } from '@cumulo/storage';
 
-import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
+import type { RequestDeadline } from '../http/request-deadline';
+import { hasBudgetForStorageCommands, SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 import { describeThrown } from '../thrown-detail';
 
 /**
@@ -44,6 +45,57 @@ export const seriesCleanupFailedEvent = 'api.site.series-cleanup-failed';
  */
 export const seriesCleanupIncompleteEvent = 'api.site.series-cleanup-incomplete';
 
+/**
+ * Emitted when the pass was not started at all: the invocation did not have
+ * time left for one, so nothing was listed and nothing was deleted.
+ *
+ * Not an error, and deliberately its own event rather than an
+ * {@link seriesCleanupIncompleteEvent} with zero counts — "the pass ran and left
+ * rows" and "the pass never ran" are different operational facts, and only the
+ * second one says the request was near its timeout.
+ */
+export const seriesCleanupSkippedEvent = 'api.site.series-cleanup-skipped';
+
+/**
+ * What admission prices, in storage commands: **1** — the next command, not the
+ * whole pass.
+ *
+ * **The pass costs two.** A pass is the Query that lists the partition's rows
+ * and then the single `BatchWriteItem` that deletes them;
+ * `SERIES_CLEANUP_REQUEST_BUDGET` in `../request-budget.ts` sizes it at 2, and
+ * {@link SERIES_CLEANUP_MAX_ITEMS} is the other side of that same arithmetic (a
+ * batch's worth of items). That sizing is unchanged and is not what this
+ * constant is.
+ *
+ * **Why admission prices one command and not two.** Sizing asks what the work
+ * costs; admission asks whether the next command may start, and the two are not
+ * interchangeable here because a two-command admission is *unsatisfiable at
+ * every instant of every request*:
+ *
+ * ```
+ * 2 × STORAGE_COMMAND_WORST_MS (7,000) + API_RESPONSE_MARGIN_MS (1,000) = 15,000
+ *                                                = API_LAMBDA_TIMEOUT_MS
+ * ```
+ *
+ * `hasBudgetForStorageCommands` compares with a strict `>`, and `remainingMs()`
+ * never reaches the function timeout — it starts at it and only falls. So
+ * demanding the pass's full worst case before admitting it does not gate the
+ * cleanup, it deletes it: every pass on every request would be skipped, which
+ * is access pattern X3 removed by arithmetic rather than by decision. Whether
+ * the inline pass should exist at all is #167's call to make, not this gate's
+ * to make silently. Every other admission in this service prices the next
+ * command — the store loop's, the counted deletes', the pagination bound's —
+ * and this one now agrees with them.
+ *
+ * **The residual, stated.** An admitted pass whose Query hits the full 7,000 ms
+ * worst case *and* whose `BatchWriteItem` then overruns the slack that is left
+ * can still cross the timeout. That needs two independent tail events in the
+ * same pass, it is strictly narrower than the ungated pass this replaces, and
+ * moving the cleanup off the request path (#167) eliminates it wholesale rather
+ * than shrinking it further.
+ */
+const SERIES_CLEANUP_ADMISSION_COMMANDS = 1;
+
 export interface SeriesCleanupDeps {
   readonly series: Pick<SeriesAdapter, 'deleteSiteSeries'>;
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
@@ -53,7 +105,22 @@ export interface SeriesCleanupDeps {
 const leftRowsBehind = (outcome: SeriesCleanupOutcome): boolean =>
   outcome.declinedCount > 0 || outcome.budgetReached;
 
-export const cleanUpSiteSeries = async (deps: SeriesCleanupDeps, siteId: string): Promise<void> => {
+export const cleanUpSiteSeries = async (
+  deps: SeriesCleanupDeps,
+  siteId: string,
+  deadline: RequestDeadline,
+): Promise<void> => {
+  if (!hasBudgetForStorageCommands(deadline.remainingMs(), SERIES_CLEANUP_ADMISSION_COMMANDS)) {
+    // The whole pass is skipped rather than started and cut short: it runs
+    // *after* the caller's write has committed, so an invocation that dies in
+    // here turns a committed 201 or 204 into a gateway 504 — and on the create
+    // path that 201 body is the only place the caller ever learns the new
+    // site's id. Skipping costs only promptness; the rows expire on ADR 0002's
+    // 90-day series TTL either way, which is what makes this pass optional.
+    deps.log({ event: seriesCleanupSkippedEvent, siteId });
+    return;
+  }
+
   try {
     const outcome = await deps.series.deleteSiteSeries(siteId, SERIES_CLEANUP_MAX_ITEMS);
     if (leftRowsBehind(outcome)) {

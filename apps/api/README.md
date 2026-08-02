@@ -42,7 +42,9 @@ Three properties are contracts rather than style:
 - **Predictable failures are values; the boundary is the only `catch`.** An unknown id, an invalid
   body and an unmatched path are already responses by the time they reach `main.ts`. An exception
   there means something nobody predicted, and it becomes a **resolved** 500 — a rejected promise is
-  an unhandled Lambda error, which the gateway renders as a body no client can parse.
+  an unhandled Lambda error, which the gateway renders as a body no client can parse. The boundary
+  answers only while the invocation is alive: a request killed at the function timeout never reaches
+  it, which is the second gateway-bodied response under [Error contract](#error-contract).
 - **The caller gets a generic message; the operator gets the detail.** A `StorageError` names its
   table and operation, and neither is something an unauthenticated caller is entitled to. The
   boundary logs name and message only — never a stack or an SDK response object, both of which can
@@ -50,9 +52,10 @@ Three properties are contracts rather than style:
 
 ## Error contract
 
-Every failing route answers with a body validating against `apiErrorSchema` from `@cumulo/shared`.
-Each code is pinned to exactly one status, in `apiErrorStatus`, so a call site cannot mispair them —
-`errorResponse` takes the code and derives the status.
+Every failure this service **answers** carries a body validating against `apiErrorSchema` from
+`@cumulo/shared`. Each code is pinned to exactly one status, in `apiErrorStatus`, so a call site
+cannot mispair them — `errorResponse` takes the code and derives the status. Two failures are not
+answered here at all, and they are below the table.
 
 | Code                | Status | Meaning                                                                            |
 | ------------------- | ------ | ---------------------------------------------------------------------------------- |
@@ -62,11 +65,28 @@ Each code is pinned to exactly one status, in `apiErrorStatus`, so a call site c
 | `rate_limited`      | 429    | This service's per-IP limiter refused. Carries a `retry-after` header, in seconds. |
 | `internal`          | 500    | The boundary caught something unexpected. Detail goes to the log only.             |
 
-**429 has two producers and only one of them speaks this schema.** API Gateway's throttles — the
-stage limit and the per-route write limits — answer before this Lambda is invoked, in the gateway's
-own `{ "message": … }` body that no code here shapes. The per-IP limiter below answers with
-`rate_limited` in the table above. So a client cannot recognise throttling from the body and must
-not try: **map on the status**, and read `Retry-After` when it is present rather than requiring it.
+**Two responses carry the gateway's body instead of this schema**, because in both cases this
+Lambda is not the thing answering. Neither is shaped by any code here, and both are the gateway's
+own `{ "message": … }`:
+
+- **429 from a gateway throttle.** The stage limit and the per-route write limits answer _before_
+  this Lambda is invoked. The per-IP limiter is the other producer of 429 and does speak this
+  schema — it is the `rate_limited` row above.
+- **504 from a request killed at the function timeout.** The invocation dies before `main.ts`'s
+  error boundary can run, so there is nothing left to answer in schema — and on `POST /v1/sites`
+  that is worse than an error, because the 201 body is the only place the caller learns the new
+  site's id. The per-request deadline (`http/request-deadline.ts`) makes this unreachable through
+  every _looping_ path: series pagination, `POST`'s store-and-evict attempts, `DELETE`'s counted
+  deletes and the series cleanup all stop between commands and answer in schema instead. Two
+  residuals remain, both stated rather than silent — independent per-command worst cases coinciding
+  in one request's ungated straight-line prefix, which `request-budget.ts` counts per route and
+  `docs/tech-debt.md` owns; and two coinciding tail events inside an admitted series-cleanup pass,
+  which is admitted at one command and then spends up to two (`sites/series-cleanup.ts`), owned by
+  [#167](https://github.com/TomBennett-Lloyd/cumulo/issues/167), which moves the pass off the
+  request path.
+
+So a client cannot recognise either of these from the body and must not try: **map on the status**,
+and read `Retry-After` when it is present rather than requiring it.
 
 ## Routes
 

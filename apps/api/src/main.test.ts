@@ -6,6 +6,7 @@ import {
   OWN_ORIGIN,
   RANELAGH_ID,
   SOURCE_IP,
+  fullBudgetDeadline,
   gatewayEvent,
   jsonBodyOf,
   siteInput,
@@ -115,6 +116,7 @@ describe('the top-level error boundary', () => {
         log: (e) => logged.push(e),
       },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     // Resolved, not rejected: a rejected promise is an unhandled Lambda error,
@@ -133,6 +135,7 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [throwingRoute(new Error(secret))], log: (e) => logged.push(e) },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     expect(response.body).not.toContain(secret);
@@ -146,6 +149,7 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [throwingRoute('a string, thrown')], log: (e) => logged.push(e) },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(500);
@@ -159,6 +163,7 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [], log: (e) => logged.push(e) },
       { httpMethod: 'GET', path: '/v1/sites' },
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(500);
@@ -177,12 +182,19 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [route], log: (e) => logged.push(e) },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(200);
     expect(logged).toEqual([]);
   });
 });
+
+/**
+ * The invocation deadline's own trip — context to handler to pagination bound —
+ * lives in `main-deadline.test.ts`, one story per file under the `max-lines`
+ * ceiling.
+ */
 
 describe('parseWebOrigins', () => {
   beforeEach(() => {

@@ -2,12 +2,19 @@ import { apiErrorSchema, fleetSiteSchema } from '@cumulo/shared';
 import { StorageError } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
-import { jsonBodyOf, RANELAGH_ID, RATHMINES_ID, routeRequest, siteInput } from '../api-fixtures';
+import {
+  countdownDeadline,
+  jsonBodyOf,
+  RANELAGH_ID,
+  RATHMINES_ID,
+  routeRequest,
+  siteInput,
+} from '../api-fixtures';
 import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
 import { CREATED_AT, scriptedFleet } from './create-site-fixtures';
-import { createSite, createSiteStoreExhaustedEvent } from './create-site';
-import { seriesCleanupFailedEvent } from './series-cleanup';
+import { createSite, createSiteDeadlineEvent, createSiteStoreExhaustedEvent } from './create-site';
+import { seriesCleanupFailedEvent, seriesCleanupSkippedEvent } from './series-cleanup';
 
 /** A third id, for the tests where the index names a different site each look. */
 const RINGSEND_ID = '5b2c9d1e-3f4a-4b5c-8d6e-7f8a9b0c1d2e';
@@ -262,6 +269,51 @@ describe('POST /v1/sites', () => {
 
     expect(calls.oldestLookups).toHaveLength(12);
     expect(calls.createAttempts).toHaveLength(12);
+  });
+
+  it('stops attempting and answers 500 once the deadline refuses the next command', async () => {
+    // A fleet that never stops contending, against a request with two commands
+    // of budget left. The third attempt is refused before it is issued — which
+    // is the whole point: spending the rest of the invocation on a twelfth
+    // attempt is how a request dies at the function timeout, where the gateway
+    // answers with a body that is not an `apiErrorSchema` one.
+    const { deps, calls } = scriptedFleet({ creates: ['conflict'] });
+
+    const response = await createSite(
+      deps,
+      routeRequest({ method: 'POST', body: siteInput(), deadline: countdownDeadline(2) }),
+    );
+
+    expect(response.statusCode).toBe(500);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
+    expect(calls.createAttempts).toHaveLength(2);
+    expect(calls.written).toEqual([]);
+    // Two backoffs, not eleven: the sleep precedes each attempt (a budget read
+    // taken before a sleep would be stale by its length), so the second 50 ms
+    // backoff runs and its attempt is then refused — terminal, no third sleep.
+    expect(calls.sleeps).toEqual([25, 50]);
+    expect(calls.logged).toEqual([{ event: createSiteDeadlineEvent, siteId: RANELAGH_ID }]);
+  });
+
+  it('keeps the 201 and its id when the deadline refuses the eviction cleanup', async () => {
+    // The criterion this whole gate exists for. Three commands of budget is
+    // exactly the eviction path — create, look up the oldest, evict-and-create —
+    // and the cleanup that follows has none. The cleanup is skipped rather than
+    // started, so the committed create's 201 still carries the server-assigned
+    // id, which is the only place the caller can ever learn it. The evicted
+    // site's points are the TTL's job, as they always were.
+    const { deps, calls } = scriptedFleet({ creates: ['cap'] });
+
+    const response = await createSite(
+      deps,
+      routeRequest({ method: 'POST', body: siteInput(), deadline: countdownDeadline(3) }),
+    );
+
+    expect(response.statusCode).toBe(201);
+    expect(fleetSiteSchema.parse(jsonBodyOf(response)).id).toBe(RANELAGH_ID);
+    expect(calls.evicted).toEqual([RATHMINES_ID]);
+    expect(calls.cleaned).toEqual([]);
+    expect(calls.logged).toEqual([{ event: seriesCleanupSkippedEvent, siteId: RATHMINES_ID }]);
   });
 
   it('still answers 201 when the series cleanup fails, and says so in the log', async () => {

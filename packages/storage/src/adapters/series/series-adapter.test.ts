@@ -23,7 +23,7 @@ import {
   physicsItem15h,
   writeRequests,
 } from './series-fixtures';
-import { toForecastItem, toGenerationReadingItem } from './series-item';
+import { toForecastItem, toGenerationReadingItem, type SeriesPoint } from './series-item';
 
 /**
  * Contract tests in the sense `docs/standards/testing.md` rule 3 means: every
@@ -118,6 +118,15 @@ describe('putGenerationReadings', () => {
   });
 });
 
+/**
+ * One point as `<validTime> <kind>`, so an expectation reads as the window a
+ * caller would plot rather than as five object literals.
+ */
+const pointLabel = (point: SeriesPoint): string =>
+  point.type === 'forecast'
+    ? `${point.forecast.validTime} forecast/${point.forecast.model}`
+    : `${point.reading.validTime} generation`;
+
 describe('querySeriesRange', () => {
   it('pins the half-open window as a BETWEEN over bare time bounds', async () => {
     const { adapter, ddb } = mockedAdapter();
@@ -167,19 +176,13 @@ describe('querySeriesRange', () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(QueryCommand).resolves({ Items: interleavedPage });
 
-    const points = await adapter.querySeriesRange(
+    const { points } = await adapter.querySeriesRange(
       SITE_ID,
       at('2026-07-30T14:00:00Z'),
       at('2026-07-30T16:00:00Z'),
     );
 
-    expect(
-      points.map((point) =>
-        point.type === 'forecast'
-          ? `${point.forecast.validTime} forecast/${point.forecast.model}`
-          : `${point.reading.validTime} generation`,
-      ),
-    ).toEqual([
+    expect(points.map(pointLabel)).toEqual([
       '2026-07-30T14:00:00Z forecast/ml',
       '2026-07-30T14:00:00Z forecast/physics',
       '2026-07-30T14:00:00Z generation',
@@ -200,7 +203,7 @@ describe('querySeriesRange', () => {
       })
       .resolves({ Items: [mlItem15h, physicsItem15h] });
 
-    const points = await adapter.querySeriesRange(
+    const { points } = await adapter.querySeriesRange(
       SITE_ID,
       at('2026-07-30T14:00:00Z'),
       at('2026-07-30T16:00:00Z'),
@@ -227,6 +230,87 @@ describe('querySeriesRange', () => {
       key: { siteId: SITE_ID },
     });
     expect(error.cause).toBe(cause);
+  });
+});
+
+/**
+ * A window DynamoDB hands back in three pages: two that continue and a third
+ * that ends. Three rather than two on purpose — with two pages, "stopped at the
+ * bound" and "the table ran out" produce the same send count, so only a third
+ * page distinguishes a drain that was cut short from one that finished.
+ */
+const pagedWindow = () => {
+  const { adapter, ddb } = mockedAdapter();
+  ddb
+    .on(QueryCommand)
+    .resolvesOnce({
+      Items: [mlItem14h, physicsItem14h],
+      LastEvaluatedKey: { siteId: SITE_ID, sk: physicsItem14h.sk },
+    })
+    .resolvesOnce({
+      Items: [generationItem14h],
+      LastEvaluatedKey: { siteId: SITE_ID, sk: generationItem14h.sk },
+    })
+    .resolves({ Items: [mlItem15h, physicsItem15h] });
+
+  return { adapter, ddb };
+};
+
+const PAGED_FROM = at('2026-07-30T14:00:00Z');
+const PAGED_TO = at('2026-07-30T16:00:00Z');
+
+/** Every label the three pages hold, in server order. */
+const WHOLE_WINDOW = [
+  '2026-07-30T14:00:00Z forecast/ml',
+  '2026-07-30T14:00:00Z forecast/physics',
+  '2026-07-30T14:00:00Z generation',
+  '2026-07-30T15:00:00Z forecast/ml',
+  '2026-07-30T15:00:00Z forecast/physics',
+];
+
+describe('querySeriesRange under a pagination bound', () => {
+  it('drains every page and reports the window complete when no bound is passed', async () => {
+    const { adapter, ddb } = pagedWindow();
+
+    const { points, complete } = await adapter.querySeriesRange(SITE_ID, PAGED_FROM, PAGED_TO);
+
+    expect(ddb.commandCalls(QueryCommand)).toHaveLength(3);
+    expect(points.map(pointLabel)).toEqual(WHOLE_WINDOW);
+    expect(complete).toBe(true);
+  });
+
+  it('returns the first page alone, marked incomplete, when the bound refuses to continue', async () => {
+    const { adapter, ddb } = pagedWindow();
+
+    const { points, complete } = await adapter.querySeriesRange(SITE_ID, PAGED_FROM, PAGED_TO, {
+      hasBudgetForNextPage: () => false,
+    });
+
+    // The refusal lands *between* pages: the page already on the wire is still
+    // awaited and its items still returned, and `complete` is what says the two
+    // pages behind it were never read.
+    expect(ddb.commandCalls(QueryCommand)).toHaveLength(1);
+    expect(points.map(pointLabel)).toEqual(WHOLE_WINDOW.slice(0, 2));
+    expect(complete).toBe(false);
+  });
+
+  it('is indistinguishable from an unbounded read when the bound always permits', async () => {
+    const { adapter, ddb } = pagedWindow();
+    let asked = 0;
+
+    const { points, complete } = await adapter.querySeriesRange(SITE_ID, PAGED_FROM, PAGED_TO, {
+      hasBudgetForNextPage: () => {
+        asked += 1;
+        return true;
+      },
+    });
+
+    expect(ddb.commandCalls(QueryCommand)).toHaveLength(3);
+    expect(points.map(pointLabel)).toEqual(WHOLE_WINDOW);
+    expect(complete).toBe(true);
+    // Twice, not three times: the first page is never subject to the bound, and
+    // the last page ends the drain before anything is asked about a fourth.
+    expect(asked).toBe(2);
   });
 });
 

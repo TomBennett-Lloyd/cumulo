@@ -11,8 +11,10 @@ import {
 import type { SeriesPoint } from '@cumulo/storage';
 
 import type { ApiRequest } from './http/gateway-event';
+import type { RequestDeadline } from './http/request-deadline';
 import type { ApiResponse } from './http/response';
 import type { RouteRequest } from './http/router';
+import { API_LAMBDA_TIMEOUT_MS } from './request-budget';
 
 /**
  * Fixtures shared by this service's tests: the two request shapes its boundary
@@ -135,6 +137,54 @@ export const apiRequest = (overrides: Partial<ApiRequest> = {}): ApiRequest => (
   ...overrides,
 });
 
+/**
+ * The deadline of a request that has its whole budget left — the production
+ * shape, since a real invocation starts with the function timeout in hand.
+ *
+ * This is the default every fixture request carries, so a test that says
+ * nothing about time is testing the configuration that ships
+ * (`docs/standards/testing.md` rule 7) rather than one with the guard off.
+ */
+export const fullBudgetDeadline: RequestDeadline = { remainingMs: () => API_LAMBDA_TIMEOUT_MS };
+
+/**
+ * A deadline that permits a fixed number of storage commands and then refuses:
+ * the full budget for the first `permittedCommands` readings, and `0` for every
+ * reading after that.
+ *
+ * A class rather than a factory closing over a counter, because the count *is*
+ * state shared between calls and `this.` is what makes that visible
+ * (`docs/standards/structure.md` rule 2).
+ *
+ * Counting readings rather than tracking elapsed time is what makes a test
+ * about "the deadline runs out mid-loop" say how far the loop got, in the units
+ * the loop is written in, with no clock and no timers involved.
+ */
+class CountdownDeadline implements RequestDeadline {
+  private permitsLeft: number;
+
+  constructor(permittedCommands: number) {
+    this.permitsLeft = permittedCommands;
+  }
+
+  remainingMs = (): number => {
+    if (this.permitsLeft <= 0) {
+      return 0;
+    }
+    this.permitsLeft -= 1;
+    return API_LAMBDA_TIMEOUT_MS;
+  };
+}
+
+/**
+ * The shared way a test forces a handler's deadline to run out at a chosen
+ * point. One helper rather than one per test file: what "out of time" means to
+ * the budget predicate is a single fact, and a second spelling of it would drift
+ * from the first.
+ */
+export const countdownDeadline = (permittedCommands: number): RequestDeadline =>
+  new CountdownDeadline(permittedCommands);
+
 export const routeRequest = (overrides: Partial<RouteRequest> = {}): RouteRequest => ({
   method: 'GET',
   path: '/v1/sites',
@@ -144,6 +194,7 @@ export const routeRequest = (overrides: Partial<RouteRequest> = {}): RouteReques
   sourceIp: SOURCE_IP,
   originHeader: undefined,
   ownOrigin: OWN_ORIGIN,
+  deadline: fullBudgetDeadline,
   ...overrides,
 });
 

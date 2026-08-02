@@ -44,7 +44,7 @@ export const runSeriesChecks = async (
       // the boundary hour of every adjacent range.
       const window = await eventually(
         'series: both hour-0 forecasts are readable',
-        () => series.querySeriesRange(siteId, HOUR_0, HOUR_1),
+        async () => (await series.querySeriesRange(siteId, HOUR_0, HOUR_1)).points,
         (points) => points.length === 2,
       );
       deepStrictEqual(
@@ -60,7 +60,7 @@ export const runSeriesChecks = async (
     async () => {
       const window = await eventually(
         'series: all three points are readable',
-        () => series.querySeriesRange(siteId, HOUR_0, HOUR_2),
+        async () => (await series.querySeriesRange(siteId, HOUR_0, HOUR_2)).points,
         (points) => points.length === 3,
       );
       deepStrictEqual(

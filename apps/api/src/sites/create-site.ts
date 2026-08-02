@@ -7,8 +7,10 @@ import {
 } from '@cumulo/shared';
 import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 
+import type { RequestDeadline } from '../http/request-deadline';
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
+import { hasBudgetForStorageCommands } from '../request-budget';
 
 import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
 import { cleanUpSiteSeries } from './series-cleanup';
@@ -45,6 +47,16 @@ import { cleanUpSiteSeries } from './series-cleanup';
 
 /** Emitted when the attempts below ran out without the site being stored. */
 export const createSiteStoreExhaustedEvent = 'api.site.create-store-exhausted';
+
+/**
+ * Emitted when the invocation ran out of time before a command could be started.
+ *
+ * Distinct from {@link createSiteStoreExhaustedEvent} because the two call for
+ * opposite readings: exhaustion says the fleet lost more races than contention
+ * explains, and this says the request never got that far — nothing was
+ * contended, there was simply no budget left to start the next command in.
+ */
+export const createSiteDeadlineEvent = 'api.site.create-deadline-reached';
 
 /**
  * The attempts set aside for the one loss that is nobody's lost race: **2**.
@@ -130,18 +142,41 @@ type StoreSiteLoss = 'conflict' | 'oldest_gone' | 'counter_index_drift';
 type StoreSiteOutcome =
   | { readonly stored: 'created' }
   | { readonly stored: 'evicted'; readonly evictedSiteId: string }
-  | { readonly stored: 'exhausted'; readonly lastOutcome: StoreSiteLoss };
+  | { readonly stored: 'exhausted'; readonly lastOutcome: StoreSiteLoss }
+  | { readonly stored: 'out_of_time' };
 
 /** One pass at storing the site: a create, and the eviction it may need. */
 type StoreSiteAttempt =
   | { readonly stored: 'created' }
   | { readonly stored: 'evicted'; readonly evictedSiteId: string }
-  | { readonly stored: 'lost'; readonly loss: StoreSiteLoss };
+  | { readonly stored: 'lost'; readonly loss: StoreSiteLoss }
+  | { readonly stored: 'out_of_time' };
 
+/**
+ * One attempt at storing the site, refusing to *start* a storage command the
+ * invocation no longer has time for.
+ *
+ * **The gate sits only between commands, and that is the whole invariant.** It
+ * is asked before `createUserSiteWithCap`, before `oldestUserSite` and before
+ * `evictAndCreateUserSite` — never after one has been issued. So a create or an
+ * evict transaction that has been sent is always awaited, and its
+ * `created`/`evicted` answer always reaches {@link createSite}: the 201, and
+ * with it the server-assigned id that is the only place the caller can learn it,
+ * can never be lost to the deadline. What the gate can cost is an attempt that
+ * had not begun, which costs nobody anything.
+ *
+ * A refusal is `out_of_time`, and it is terminal rather than a loss: the losses
+ * are worth another attempt after a backoff, and time that has run out is worth
+ * neither the sleep nor the attempt.
+ */
 const attemptStore = async (
   sites: CreateSiteDeps['sites'],
   site: FleetSite,
+  deadline: RequestDeadline,
 ): Promise<StoreSiteAttempt> => {
+  if (!hasBudgetForStorageCommands(deadline.remainingMs(), 1)) {
+    return { stored: 'out_of_time' };
+  }
   const created = await sites.createUserSiteWithCap(site, MAX_USER_SITES);
   if (created.created) {
     return { stored: 'created' };
@@ -153,6 +188,9 @@ const attemptStore = async (
     return { stored: 'lost', loss: 'conflict' };
   }
 
+  if (!hasBudgetForStorageCommands(deadline.remainingMs(), 1)) {
+    return { stored: 'out_of_time' };
+  }
   const oldest = await sites.oldestUserSite();
   if (!oldest.found) {
     // The counter says full and the index offers nothing to evict, so the two
@@ -164,6 +202,9 @@ const attemptStore = async (
     return { stored: 'lost', loss: 'counter_index_drift' };
   }
 
+  if (!hasBudgetForStorageCommands(deadline.remainingMs(), 1)) {
+    return { stored: 'out_of_time' };
+  }
   const evicted = await sites.evictAndCreateUserSite(oldest.siteId, site);
   return evicted.evicted
     ? { stored: 'evicted', evictedSiteId: oldest.siteId }
@@ -178,13 +219,21 @@ const attemptStore = async (
  * transaction immediately contends with the same winner still committing, and
  * correlated retries from every loser are what turn contention into a herd
  * (`./conflict-retry.ts` carries the curve and the reasoning).
+ *
+ * Only a `lost` attempt continues the loop, which is what makes `out_of_time`
+ * terminal: a request with no budget left neither sleeps nor re-attempts, it
+ * answers.
  */
-const storeWithinCap = async (deps: CreateSiteDeps, site: FleetSite): Promise<StoreSiteOutcome> => {
-  let attempt = await attemptStore(deps.sites, site);
+const storeWithinCap = async (
+  deps: CreateSiteDeps,
+  site: FleetSite,
+  deadline: RequestDeadline,
+): Promise<StoreSiteOutcome> => {
+  let attempt = await attemptStore(deps.sites, site, deadline);
 
   for (let retry = 1; retry < MAX_STORE_ATTEMPTS && attempt.stored === 'lost'; retry += 1) {
     await deps.sleep(conflictRetryDelayMs(retry, deps.random));
-    attempt = await attemptStore(deps.sites, site);
+    attempt = await attemptStore(deps.sites, site, deadline);
   }
 
   return attempt.stored === 'lost' ? { stored: 'exhausted', lastOutcome: attempt.loss } : attempt;
@@ -211,7 +260,16 @@ export const createSite = async (
     active: true,
   };
 
-  const outcome = await storeWithinCap(deps, site);
+  const outcome = await storeWithinCap(deps, site, request.deadline);
+
+  if (outcome.stored === 'out_of_time') {
+    // Nothing was written — the gate only ever refuses a command that had not
+    // started — so this is a 500 for a create that did not happen, and the log
+    // line is what separates it from the exhaustion above: no race was lost
+    // here, the invocation simply ran out of time to start another command.
+    deps.log({ event: createSiteDeadlineEvent, siteId: site.id });
+    return errorResponse('internal', 'the site could not be added');
+  }
 
   if (outcome.stored === 'exhausted') {
     // A 500 rather than a 503: nothing here tells the caller when to come back,
@@ -230,7 +288,7 @@ export const createSite = async (
   }
 
   if (outcome.stored === 'evicted') {
-    await cleanUpSiteSeries(deps, outcome.evictedSiteId);
+    await cleanUpSiteSeries(deps, outcome.evictedSiteId, request.deadline);
   }
 
   return jsonResponse(201, fleetSiteSchema, site);

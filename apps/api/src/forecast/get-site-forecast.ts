@@ -3,11 +3,12 @@ import {
   siteForecastResponseSchema,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
+import type { QueryPaginationBound, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
+import { hasBudgetForStorageCommands } from '../request-budget';
 
 import { requireKnownSite } from './known-site';
 import { forecastsIn } from './series-split';
@@ -58,12 +59,22 @@ const forecastHoursSchema = z
   .default(DEFAULT_FORECAST_HORIZON_HOURS)
   .transform((hours) => Number.parseInt(hours, 10));
 
+/**
+ * Emitted when this route stopped paginating because the invocation was running
+ * out of time. Named for this route rather than shared with `…/series`: the two
+ * read different windows for different reasons, and an operator asking which of
+ * them is outgrowing the function timeout needs to be able to tell them apart.
+ */
+export const forecastReadDeadlineEvent = 'api.forecast.read-deadline-reached';
+
 export interface GetSiteForecastDeps {
   readonly sites: Pick<SiteAdapter, 'getFleetSite'>;
   /** Reads only: this route never writes a point (`typing.md` rule 6, ADR 0002 least privilege). */
   readonly series: Pick<SeriesAdapter, 'querySeriesRange'>;
   /** Injected, so the window a test asserts on is a window the test chose. */
   readonly now: () => UtcIsoTimestamp;
+  /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
+  readonly log: (entry: Record<string, unknown>) => void;
 }
 
 export const getSiteForecast = async (
@@ -92,11 +103,31 @@ export const getSiteForecast = async (
   // Forward-looking by definition: the window opens at the clock, so points
   // already in the past belong to `GET …/series` and its explicit bounds.
   const from = deps.now();
-  const points = await deps.series.querySeriesRange(
+  // Asked between pages, never mid-page: one more Query round trip is only
+  // started while its worst case still fits in what is left of the invocation
+  // (`request-budget.ts`). The 168-hour horizon is the one that can page.
+  const bound: QueryPaginationBound = {
+    hasBudgetForNextPage: () => hasBudgetForStorageCommands(request.deadline.remainingMs(), 1),
+  };
+
+  const { points, complete } = await deps.series.querySeriesRange(
     site.siteId,
     from,
     hoursAfter(from, hours.data),
+    bound,
   );
+
+  // A truncated horizon is a 500 rather than a short 200, for the reason
+  // `get-site-series.ts` states at length: a forecast quietly missing its
+  // afternoon is indistinguishable from a forecast of darkness, and #17's
+  // first-forecast poll reads `[]` as "keep waiting" — so a truncation served
+  // as a 200 would be misread twice over. The richer answer, a 200 labelled
+  // partial, is a wire-contract change deliberately not made here (#165 out of
+  // scope); until it exists, saying the request failed is the honest option.
+  if (!complete) {
+    deps.log({ event: forecastReadDeadlineEvent, siteId: site.siteId });
+    return errorResponse('internal', 'the request could not be completed in time');
+  }
 
   return jsonResponse(200, siteForecastResponseSchema, {
     forecasts: forecastsIn(points),

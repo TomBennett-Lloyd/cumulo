@@ -7,12 +7,13 @@ import {
   INGESTION_LAMBDA_TIMEOUT_MS,
   LOCATION_WORST_MS,
   MAX_LOCATIONS_PER_CYCLE,
+  PER_COMMAND_OVERHEAD_MS,
   PUBLISH_WORST_MS,
+  RETRY_AFTER_HINT_SLACK_MS,
   SHUTDOWN_MARGIN_MS,
   STORE_BATCHES_PER_LOCATION,
-  STORE_SEND_WORST_MS,
   STORE_WORST_MS,
-  backoffCeilingMs,
+  UNPRICED_TERMS_SLACK_MS,
 } from './cycle-budget';
 import { FETCH_MAX_ATTEMPTS } from './open-meteo/fetch-forecast';
 
@@ -27,26 +28,6 @@ import { FETCH_MAX_ATTEMPTS } from './open-meteo/fetch-forecast';
  * comment-only derivation never sent.
  */
 
-describe('backoffCeilingMs', () => {
-  it('sums the doubling caps of every retry a policy allows', () => {
-    // Four attempts is three retries: 1×, 2×, 4× the base.
-    expect(backoffCeilingMs(4, 1_000)).toBe(7_000);
-    expect(backoffCeilingMs(3, 200)).toBe(600);
-    expect(backoffCeilingMs(2, 1_000)).toBe(1_000);
-  });
-
-  it('a policy that never retries costs no backoff', () => {
-    expect(backoffCeilingMs(1, 5_000)).toBe(0);
-  });
-
-  it('rejects an attempt count that is not a positive integer', () => {
-    // A violated invariant, not a domain outcome (error-handling rule 1): a
-    // budget silently computed from a nonsense policy is worse than no budget.
-    expect(() => backoffCeilingMs(0, 100)).toThrow(/positive integer/);
-    expect(() => backoffCeilingMs(1.5, 100)).toThrow(/positive integer/);
-  });
-});
-
 describe('the per-location worst case', () => {
   it('prices a fetch at both attempts plus the full jitter window', () => {
     expect(FETCH_MAX_ATTEMPTS).toBe(2);
@@ -57,15 +38,11 @@ describe('the per-location worst case', () => {
     expect(STORE_BATCHES_PER_LOCATION).toBe(2);
   });
 
-  it('prices one batch write at two SDK attempts plus the pinned storage backoff', () => {
-    // 2 × 3 s + 1 s. The 6 s of request timeout is the term #115 added: before
-    // the storage client pinned one, this was unbounded. The attempt count is
-    // two rather than four because #122 left throttling to the drain layer.
-    expect(STORE_SEND_WORST_MS).toBe(7_000);
-  });
-
-  it('prices a store at the drain attempts over the collapsed send worst case, which is the dominant term', () => {
-    // 2 batches × (3 drain attempts × 7 s + 0.6 s of drain backoff).
+  it('prices a store at two batch pages of the worst case storage states, which is the dominant term', () => {
+    // 2 batches × 21.6 s, where the page figure (3 drain attempts × 7 s + 0.6 s
+    // of drain backoff) is `@cumulo/storage`'s own and is pinned by its tests.
+    // This assertion is what would catch storage revising that figure without
+    // anyone re-reading the cycle deadline it feeds.
     expect(STORE_WORST_MS).toBe(43_200);
     expect(STORE_WORST_MS).toBeGreaterThan(FETCH_WORST_MS + PUBLISH_WORST_MS);
   });
@@ -84,22 +61,45 @@ describe('the per-location worst case', () => {
   });
 });
 
+describe('the slack for the terms the worst case does not price', () => {
+  it('buys one full Retry-After hint plus per-attempt overhead on all seventeen attempts', () => {
+    // 5,000 + 100 × 17. The seventeen is every HTTP attempt one location can
+    // make — 2 fetch + (2 pages × 3 drain sends × 2 SDK attempts) + 3 publish —
+    // so a change to any retry count in the three effects moves this figure,
+    // which is the notification a comment-only slack would never have sent.
+    expect(UNPRICED_TERMS_SLACK_MS).toBe(6_700);
+    expect(UNPRICED_TERMS_SLACK_MS).toBe(RETRY_AFTER_HINT_SLACK_MS + PER_COMMAND_OVERHEAD_MS * 17);
+  });
+
+  it('prices only the two bounded terms, leaving the unbounded one out', () => {
+    // The design claim, asserted rather than left to the header: the slack is
+    // exactly terms 1 and 3. A mid-body stall (term 2) is unbounded, so if it
+    // were ever "covered" the slack would have to exceed every finite sum —
+    // this bound is what fails if someone later folds a guess for it in here.
+    expect(UNPRICED_TERMS_SLACK_MS).toBeLessThan(LOCATION_WORST_MS);
+    expect(RETRY_AFTER_HINT_SLACK_MS).toBe(5_000);
+    expect(PER_COMMAND_OVERHEAD_MS).toBe(100);
+  });
+});
+
 describe('the cycle deadline', () => {
   it('leaves the function timeout unreachable by construction', () => {
     // The load-bearing property of the whole design: the last location the
     // cycle can start finishes, and the summary flushes, before AWS kills the
     // invocation. If this identity ever fails, a cycle can be killed mid-loop
-    // and #115's original failure shape is back.
-    expect(CYCLE_DEADLINE_MS + LOCATION_WORST_MS + SHUTDOWN_MARGIN_MS).toBe(
-      INGESTION_LAMBDA_TIMEOUT_MS,
-    );
-    expect(CYCLE_DEADLINE_MS).toBe(220_300);
+    // and #115's original failure shape is back. Four terms since #165 — the
+    // slack is a term of the identity, not a comment beside it, so widening the
+    // deadline without paying for it fails here.
+    expect(
+      CYCLE_DEADLINE_MS + LOCATION_WORST_MS + UNPRICED_TERMS_SLACK_MS + SHUTDOWN_MARGIN_MS,
+    ).toBe(INGESTION_LAMBDA_TIMEOUT_MS);
+    expect(CYCLE_DEADLINE_MS).toBe(213_600);
   });
 
   it('is long enough to be worth having', () => {
     // A negative or trivial deadline would make every cycle skip everything
     // while still passing the identity above — the identity alone is not
-    // enough. At 220 s a healthy cycle (well under a second per location) has
+    // enough. At 214 s a healthy cycle (well under a second per location) has
     // room for far more locations than the cap allows.
     expect(CYCLE_DEADLINE_MS).toBeGreaterThan(0);
     expect(CYCLE_DEADLINE_MS).toBeGreaterThan(LOCATION_WORST_MS / 2);

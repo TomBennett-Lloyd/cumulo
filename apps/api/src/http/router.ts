@@ -1,4 +1,5 @@
 import type { ApiRequest } from './gateway-event';
+import type { RequestDeadline } from './request-deadline';
 import { errorResponse, type ApiResponse } from './response';
 
 /**
@@ -39,6 +40,15 @@ export type PathSegment = string | PathParameter;
  * the abuse protections are wrappers around individual handlers in `main.ts`,
  * not a middleware layer here — but the wrapper receives a `RouteRequest`, so
  * the three have to survive the trip.
+ *
+ * `deadline` is the one field that comes from the *invocation* rather than from
+ * the request: how much time is left before Lambda kills this call
+ * (`request-deadline.ts`). It rides here rather than being threaded through
+ * every handler's deps because it is a property of this request and not of the
+ * container — a deps object is built once per container, and a deadline built
+ * once per container would be the same wrong number for every invocation after
+ * the first. The router makes no decision with it either; the handlers that
+ * loop over storage commands do.
  */
 export interface RouteRequest {
   readonly method: string;
@@ -49,6 +59,7 @@ export interface RouteRequest {
   readonly sourceIp: string;
   readonly originHeader: string | undefined;
   readonly ownOrigin: string;
+  readonly deadline: RequestDeadline;
 }
 
 export type RouteHandler = (request: RouteRequest) => Promise<ApiResponse>;
@@ -197,10 +208,15 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *
  * Neither message quotes the request. Reflecting a caller-controlled path back
  * into a response body is free to do and free to regret.
+ *
+ * The `deadline` is a parameter rather than something derived here: this module
+ * is pure matching, and the only place that knows what an invocation's time
+ * budget *is* is the composition root that received the Lambda context.
  */
 export const routeRequest = async (
   routes: readonly Route[],
   request: ApiRequest,
+  deadline: RequestDeadline,
 ): Promise<ApiResponse> => {
   const match = matchRoute(routes, request);
   if (match === undefined) {
@@ -221,6 +237,7 @@ export const routeRequest = async (
     sourceIp: request.sourceIp,
     originHeader: request.originHeader,
     ownOrigin: request.ownOrigin,
+    deadline,
   });
 
   return response;

@@ -3,11 +3,12 @@ import {
   siteSeriesResponseSchema,
   utcIsoTimestampSchema,
 } from '@cumulo/shared';
-import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
+import type { QueryPaginationBound, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
+import { hasBudgetForStorageCommands } from '../request-budget';
 
 import { requireKnownSite } from './known-site';
 import { actualsIn, forecastsIn } from './series-split';
@@ -72,9 +73,20 @@ const seriesRangeSchema = z
     path: ['to'],
   });
 
+/**
+ * Emitted when this route stopped paginating because the invocation was running
+ * out of time. Its own event rather than a shared one: the operator question it
+ * answers — "is the fourteen-day window too wide for a 15 s function?" — is
+ * about this route, and a name shared with the forecast route could not
+ * distinguish them in a log query.
+ */
+export const seriesReadDeadlineEvent = 'api.series.read-deadline-reached';
+
 export interface GetSiteSeriesDeps {
   readonly sites: Pick<SiteAdapter, 'getFleetSite'>;
   readonly series: Pick<SeriesAdapter, 'querySeriesRange'>;
+  /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
+  readonly log: (entry: Record<string, unknown>) => void;
 }
 
 export const getSiteSeries = async (
@@ -101,7 +113,36 @@ export const getSiteSeries = async (
     return site.response;
   }
 
-  const points = await deps.series.querySeriesRange(site.siteId, range.data.from, range.data.to);
+  // One page of a fourteen-day window is a round trip this request has to be
+  // able to afford, so pagination asks before each *further* page whether one
+  // more command still fits in what is left of the invocation
+  // (`request-budget.ts`). The first page is always issued — the bound is asked
+  // between pages — which is why this route's ungated prefix counts it.
+  const bound: QueryPaginationBound = {
+    hasBudgetForNextPage: () => hasBudgetForStorageCommands(request.deadline.remainingMs(), 1),
+  };
+
+  const { points, complete } = await deps.series.querySeriesRange(
+    site.siteId,
+    range.data.from,
+    range.data.to,
+    bound,
+  );
+
+  // A truncated window is a 500, not a short 200. The points are real, but a
+  // series silently missing its afternoon is exactly the half-truth
+  // `SeriesRangeResult.complete` exists to prevent — and this route feeds the
+  // accuracy views, where a gap read as "the sun did not shine" corrupts the
+  // metric the product is about (`docs/standards/error-handling.md` rule 5).
+  // Labelling the partial in the body and serving a 200 is the honest richer
+  // answer, but it is a wire-contract change — a new field, the OpenAPI
+  // document, and the web app's handling of it — deliberately not made here
+  // (#165 out of scope). Until then the caller is told the request failed,
+  // which is true, rather than handed data that is not.
+  if (!complete) {
+    deps.log({ event: seriesReadDeadlineEvent, siteId: site.siteId });
+    return errorResponse('internal', 'the request could not be completed in time');
+  }
 
   return jsonResponse(200, siteSeriesResponseSchema, {
     forecasts: forecastsIn(points),

@@ -15,6 +15,7 @@ import { checkWriteOrigin } from './abuse/origin-check';
 import { getSiteForecast } from './forecast/get-site-forecast';
 import { getSiteSeries } from './forecast/get-site-series';
 import { parseGatewayEvent } from './http/gateway-event';
+import { lambdaContextDeadline, type RequestDeadline } from './http/request-deadline';
 import {
   describeZodIssues,
   errorResponse,
@@ -25,6 +26,7 @@ import { routeRequest, type Route, type RouteRequest } from './http/router';
 import { docsAssetParamName } from './openapi/docs-assets';
 import { docsPageResponse, serveDocsAsset, type DocsAssetDeps } from './openapi/docs-page';
 import { openApiDocumentResponse } from './openapi/document';
+import { API_LAMBDA_TIMEOUT_MS } from './request-budget';
 import { createSite, type CreateSiteDeps } from './sites/create-site';
 import { deleteSite, type DeleteSiteDeps } from './sites/delete-site';
 import { getSite } from './sites/get-site';
@@ -314,7 +316,7 @@ export const routes: readonly Route[] = [
   {
     method: 'GET',
     segments: ['v1', 'sites', { param: siteIdParamName }, 'forecast'],
-    handle: (request) => getSiteForecast({ sites, series, now }, request),
+    handle: (request) => getSiteForecast({ sites, series, now, log: jsonLineLog }, request),
   },
   {
     method: 'GET',
@@ -323,7 +325,10 @@ export const routes: readonly Route[] = [
     // partition to read (up to `MAX_SERIES_SPAN_HOURS`), so its cost per
     // request is the caller's to pick. No origin check — reads are not writes,
     // and the web app must be able to plot a site from wherever it is served.
-    handle: (request) => rateLimited(request, () => getSiteSeries({ sites, series }, request)),
+    // Both reads take the log sink for the same one entry: the deadline stopped
+    // their pagination and the caller got a 500 instead of a truncated window.
+    handle: (request) =>
+      rateLimited(request, () => getSiteSeries({ sites, series, log: jsonLineLog }, request)),
   },
   // The self-documenting half of the API (ADR 0005): the document, the page
   // that renders it, and the page's assets, all from this function and this
@@ -378,9 +383,10 @@ export interface ApiBoundaryDeps {
 export const handleApiEvent = async (
   deps: ApiBoundaryDeps,
   event: unknown,
+  deadline: RequestDeadline,
 ): Promise<ApiResponse> => {
   try {
-    return await routeRequest(deps.routes, parseGatewayEvent(event));
+    return await routeRequest(deps.routes, parseGatewayEvent(event), deadline);
   } catch (error: unknown) {
     deps.log({ event: apiRequestFailedEvent, detail: describeThrown(error) });
     return errorResponse('internal', 'the request could not be completed');
@@ -390,6 +396,24 @@ export const handleApiEvent = async (
 /**
  * The Lambda entry point. `dist/main.mjs` is the bundle and `main.handler` is
  * the handler string the API's Terraform configures.
+ *
+ * The second argument is Lambda's invocation context, and this function used to
+ * discard it — the signature named one parameter, so the runtime's second
+ * argument fell on the floor. It is the only source of the one fact a handler
+ * cannot work out for itself: how long is left before this invocation is killed
+ * mid-flight, taking `handleApiEvent`'s error boundary and any 201 body with it
+ * (`request-budget.ts` prices what that costs). It stays `unknown` here and is
+ * narrowed by a type guard in `http/request-deadline.ts` rather than typed
+ * against `@types/aws-lambda`: the boundary already treats its *event* as
+ * untrusted, and there is no reason its context is more trustworthy.
+ *
+ * Optional, because a direct invoke passes no context and because the fallback
+ * countdown is a correct answer for one — the budget it counts down from is
+ * this function's own configured timeout, mirrored from Terraform.
  */
-export const handler = (event: unknown): Promise<ApiResponse> =>
-  handleApiEvent({ routes, log: jsonLineLog }, event);
+export const handler = (event: unknown, context?: unknown): Promise<ApiResponse> =>
+  handleApiEvent(
+    { routes, log: jsonLineLog },
+    event,
+    lambdaContextDeadline(context, API_LAMBDA_TIMEOUT_MS),
+  );

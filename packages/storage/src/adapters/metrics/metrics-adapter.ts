@@ -52,7 +52,7 @@ export class MetricsAdapter extends StorageAdapterBase {
     // period, and what varies below it — model, then baseline — is not something
     // the caller is asking to bound. A prefix says exactly that, and says it in
     // the key condition rather than in a filter DynamoDB would charge for.
-    const items = await this.queryAllPages(
+    const { items } = await this.queryAllPages(
       'queryMetricsForPeriod',
       { siteId },
       {

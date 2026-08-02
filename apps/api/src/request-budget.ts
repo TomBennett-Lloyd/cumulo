@@ -1,51 +1,86 @@
-import {
-  DYNAMODB_BATCH_WRITE_SIZE,
-  STORAGE_MAX_ATTEMPTS,
-  STORAGE_REQUEST_TIMEOUT_MS,
-  STORAGE_RETRY_BASE_DELAY_MS,
-} from '@cumulo/storage';
+import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
 
 /**
- * How much work one API invocation may start, priced in DynamoDB requests.
+ * How much work one API invocation may start, priced in storage commands.
  *
  * The API's counterpart to `apps/ingestion/src/cycle-budget.ts`, and it exists
  * for the same reason: a handler that keeps starting storage work until it runs
  * out of things to do will eventually outlive the function timeout, and a
  * request killed at the timeout does not reach `main.ts`'s error boundary. The
- * caller then gets a gateway 502/504 whose body is not an `apiErrorSchema` one
- * — and on `POST /v1/sites` that is worse than an error, because the 201 body
- * is the only place the caller ever learns the new site's id. A create that
+ * caller then gets a gateway 504 whose body is not an `apiErrorSchema` one —
+ * and on `POST /v1/sites` that is worse than an error, because the 201 body is
+ * the only place the caller ever learns the new site's id. A create that
  * committed and then died in cleanup loses the id for good.
  *
- * **What this module does and does not buy.** It bounds the *cleanup*'s
- * contribution to an invocation. It does not make the timeout unreachable the
- * way `CYCLE_DEADLINE_MS` does for ingestion, and claiming otherwise would be
- * arithmetic theatre — on either write route:
+ * **The unit.** Every figure here is a multiple of
+ * {@link STORAGE_COMMAND_WORST_MS} — 7,000 ms, which `@cumulo/storage` states
+ * about itself and this module imports rather than re-derives (#165: the same
+ * number had three derivations and they were free to disagree). It is a
+ * **bound, not an expectation**: a healthy command costs tens of milliseconds,
+ * and nothing here predicts a duration. It answers one question —
+ * {@link hasBudgetForStorageCommands}, may this request start another command?
  *
- * - **`POST /v1/sites`.** Three storage round trips is the **best** case of an
- *   evicting create before any cleanup starts — the capped create, the
- *   oldest-site lookup, the evict-and-create — and `createSite` may retry that
- *   trio up to `MAX_STORE_ATTEMPTS` times when it loses a race, so 12 × 3 =
- *   **36** round trips is the worst case, ≈ 252 s at
- *   {@link DYNAMODB_REQUEST_WORST_MS}, plus the ≤ 3.55 s this route
- *   deliberately *sleeps* between those attempts (`sites/conflict-retry.ts`:
- *   eleven backoffs capped at 50, 100, 200, then 400 ms).
- * - **`DELETE /v1/sites/{siteId}`.** Cheaper and still over: the site lookup
- *   that decides which delete is correct, then up to
- *   `MAX_CONFLICT_RETRIES + 1` = **10** counted deletes when every one of them
- *   is cancelled by contention — 11 round trips, ≈ 77 s, of which the deletes
- *   alone are ≈ 70 s — plus the ≤ 2.75 s it sleeps between them (nine backoffs
- *   on that same curve), all before its own cleanup pass begins.
+ * **What the deadline buys.** Every request carries a `RequestDeadline`
+ * (`http/request-deadline.ts`), and every *looping* term now asks it before
+ * each command: series pagination, `POST`'s store-and-evict attempts,
+ * `DELETE`'s counted deletes, and the series cleanup both write routes end
+ * with. None of them can spin an invocation into the timeout any more — they
+ * stop and answer in schema instead, which is the whole of what the deadline is
+ * for. What admission cannot promise is that a command it admitted returns
+ * inside its own worst case: the check prices **the next command**, so the one
+ * multi-command unit left on the API — the cleanup pass, whose `deleteSiteSeries`
+ * issues a Query and then a `BatchWriteItem` behind a single call — can still
+ * cross if both of them go long. `sites/series-cleanup.ts` carries that
+ * arithmetic and why a two-command admission is not available to it at these
+ * constants; #167, which moves the pass off the request path, is what removes
+ * the residual rather than narrowing it.
  *
- * Even the best case of either exceeds {@link API_LAMBDA_TIMEOUT_MS} on its
- * own. That gap is older than this module and is recorded in
- * `docs/tech-debt.md` ("The API's 15 s timeout and the storage client's retry
- * budget are two unreconciled numbers"), which now names both loops as the
- * write-path half of it — #155 widened the create loop from 3 attempts to 12
- * and gave the delete route a retry loop it did not have, to absorb the
- * transaction conflicts #29 measured, so these numbers deepen that entry rather
- * than settling it, and #165 owns the reconciliation. What changed in this
- * module is only that the cleanup is no longer the *unbounded* term in the sum.
+ * **Where it stops.** Each route keeps an ungated straight-line prefix: the
+ * limiter's own commands (`IpLimiter.check` spends two on the allowed path,
+ * `getBlock` then `incrementRateWindow`), the lookups that decide what the
+ * handler does, and the **first** page of any Query — a pagination bound is
+ * checked *between* pages, so the first is always issued. Counted from the
+ * handlers, at {@link STORAGE_COMMAND_WORST_MS} each:
+ *
+ * - `GET /v1/sites` — **1** (`listFleetSites`; ADR 0002 holds the fleet in one
+ *   bounded partition, so one page), ≈ 7 s.
+ * - `GET /v1/sites/{siteId}` — **1** (`getFleetSite`), ≈ 7 s.
+ * - `GET …/forecast` — **2**: `getFleetSite`, then the first series page,
+ *   ≈ 14 s.
+ * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page,
+ *   ≈ 28 s.
+ * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
+ *   admitted per command, including the up-to-36 commands of the store loop;
+ *   the cleanup that follows an eviction is admitted as one command and then
+ *   spends up to two, which is the one place on this API where an admitted unit
+ *   can outrun what was priced for it (`sites/series-cleanup.ts` states why).
+ * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
+ *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
+ *   no loop to gate and is the widest ungated prefix on the API.
+ * - `DELETE /v1/sites/{siteId}` — **3** on a user site (limiter 2,
+ *   `getFleetSite`), ≈ 21 s, the counted deletes and the cleanup gated after
+ *   it; **4** on a seed site, whose single `deleteFleetSite` is a plain
+ *   `DeleteItem` with no retry loop of its own to gate, ≈ 28 s.
+ * - Any limited route *refusing* a caller — **3**: the two above plus
+ *   `putBlock`, and then the 429, ≈ 21 s.
+ *
+ * **So the timeout is reachable, and this is exactly when.** Not from any loop,
+ * and never from a single command: 7,000 ms is comfortably inside
+ * {@link API_LAMBDA_TIMEOUT_MS}. Two independent commands both hitting their
+ * worst case in the same request come to 14,000 ms and still land, with
+ * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
+ * what crosses it, at 21,000 ms. It therefore takes **three independent
+ * per-command worst cases coinciding in one request's ungated prefix** to kill
+ * an invocation — which the three- and four-command prefixes above can offer —
+ * **or two coinciding inside an admitted cleanup pass**, whose Query and batch
+ * are priced as one command between them. Each of those worst cases is itself
+ * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
+ * module declines to size a slack against, for the same reason
+ * `cycle-budget.ts` declines to size its
+ * every-retry-at-once term: multiplying independent tail events together
+ * produces a number nobody can act on. It is stated instead of implied, and
+ * `docs/tech-debt.md` carries the residual — gating the prefix per command
+ * would close it, at the cost of a deadline check in front of the limiter.
  */
 
 /**
@@ -57,42 +92,85 @@ import {
  * multiplies the Terraform `timeout` by 1000 and compares
  * (`docs/standards/architecture.md` rule 8 — a comment cannot fail a build, so
  * the pair is declared to the gate rather than merely described here).
+ *
+ * **It stays a plain integer literal on one line**, however tempting it is to
+ * write it as an expression of the constants below. The gate's TypeScript
+ * reader matches `export const <NAME> = <integer>;` and nothing else — it
+ * refuses anything it cannot parse rather than skipping it, so an expression
+ * here does not weaken the gate quietly, it stops the build with a non-verdict.
+ * The value's *relation* to the gateway ceiling is carried by
+ * `request-budget.test.ts` instead, where an inequality can be expressed.
  */
 export const API_LAMBDA_TIMEOUT_MS = 15_000;
 
 /**
- * The worst case of a **single** DynamoDB request, end to end: every attempt
- * burns its full pinned deadline and the one retry sleeps its full jitter
- * ceiling. 2 × 3,000 ms + 1,000 ms = 7,000 ms.
+ * API Gateway's hard integration timeout: 30 s, and not ours to move.
  *
- * Every term is imported rather than remembered. The `+ STORAGE_RETRY_BASE_DELAY_MS`
- * term is the ceiling of the backoff curve **at the pinned two-attempt budget**
- * and only there: one retry, whose full-jitter ceiling is exactly the base
- * delay. At three attempts the curve doubles and the true ceiling would be
- * 3,000 ms, so `request-budget.test.ts` pins `STORAGE_MAX_ATTEMPTS` to 2 — the
- * assertion fails the build if the budget is raised, which is the intended way
- * to be told this sum needs re-deriving.
+ * The ceiling {@link API_LAMBDA_TIMEOUT_MS} was *chosen* against rather than
+ * derived from (ADR 0005, cited by `infra/api/lambda.tf`'s own comment). The
+ * ownership chain, end to end: **AWS** owns this 30 s; **Terraform** owns the
+ * 15 s and sits it below, so that a hung request produces a Lambda timeout log
+ * line and an `Errors` data point rather than a gateway 504 with nothing behind
+ * it; the **mirror gate** holds the constant above equal to Terraform; and the
+ * **test** holds it under this ceiling.
  *
- * The general doubling sum already exists as `backoffCeilingMs` in
- * `apps/ingestion/src/cycle-budget.ts`, which `docs/tech-debt.md` records as
- * living in the wrong package (a package cannot import from an app). A third
- * copy here would deepen that entry rather than pay it off, so this module
- * prices the pinned case and guards it instead.
+ * That last link is the one that was missing. `check-infra-mirrors.sh` records
+ * this inequality as the half of the number it cannot express — its records are
+ * equalities between two files, and one side of this one is a value AWS owns
+ * and no file here declares. Restating it as a constant moves it somewhere a
+ * test can bite, which closes it without pretending the gate grew a feature.
  */
-export const DYNAMODB_REQUEST_WORST_MS =
-  STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + STORAGE_RETRY_BASE_DELAY_MS;
+export const API_GATEWAY_INTEGRATION_TIMEOUT_MS = 30_000;
 
 /**
- * How many DynamoDB requests one series-cleanup pass may make: 15,000 / 7,000 =
+ * Time held back from every budget for finishing the response: **1 s**.
+ *
+ * After the last storage command returns there is still work to do — serialise
+ * the body, write the boundary's log line, let the runtime send it — and a
+ * budget spent to the last millisecond on storage is a budget that dies during
+ * that. A chosen value, not a measured one: the work is microseconds, so a
+ * second is deliberately generous, and being generous costs only the odd
+ * command that would have fitted.
+ */
+export const API_RESPONSE_MARGIN_MS = 1_000;
+
+/**
+ * May this request still start `commandCount` storage commands?
+ *
+ * The API's shape of `CYCLE_DEADLINE_MS`: a command is started only when its
+ * own worst case, plus the margin, still fits in what is left of the
+ * invocation. Callers ask before each command (or each page, or each retry) —
+ * so a request that is running out stops between commands, where its handler
+ * can still answer, rather than mid-command where the platform answers for it.
+ *
+ * `remainingMs` may legitimately be negative: a deadline that has already
+ * passed refuses, which is the same answer as one that is merely too tight.
+ * `commandCount` may not — a budget for no commands, or for a fraction of one,
+ * describes nothing a caller could mean, so it is a violated invariant and
+ * throws (`docs/standards/error-handling.md` rule 1, in the shape
+ * `requireUsablePolicy` uses in `@cumulo/storage`).
+ */
+export const hasBudgetForStorageCommands = (remainingMs: number, commandCount: number): boolean => {
+  if (!Number.isInteger(commandCount) || commandCount < 1) {
+    throw new Error(
+      `hasBudgetForStorageCommands: commandCount must be a positive integer, got ${String(commandCount)}`,
+    );
+  }
+
+  return remainingMs > commandCount * STORAGE_COMMAND_WORST_MS + API_RESPONSE_MARGIN_MS;
+};
+
+/**
+ * How many storage commands one series-cleanup pass may make: 15,000 / 7,000 =
  * **2**, floored. Not "2 on average" — 2 is the count whose worst case fits
  * inside the function timeout at all.
  */
-const SERIES_CLEANUP_REQUEST_BUDGET = Math.floor(API_LAMBDA_TIMEOUT_MS / DYNAMODB_REQUEST_WORST_MS);
+const SERIES_CLEANUP_REQUEST_BUDGET = Math.floor(API_LAMBDA_TIMEOUT_MS / STORAGE_COMMAND_WORST_MS);
 
 /**
  * How many series rows one cleanup pass may delete: **25**.
  *
- * One of the two requests above is the listing Query, so what is left for
+ * One of the two commands above is the listing Query, so what is left for
  * deletes is a single `BatchWriteItem` — and a `BatchWriteItem` carries at most
  * {@link DYNAMODB_BATCH_WRITE_SIZE} items. Hence
  * `(2 − 1) × 25 = 25`, and a second batch would price the pass at 21,000 ms
@@ -111,7 +189,7 @@ const SERIES_CLEANUP_REQUEST_BUDGET = Math.floor(API_LAMBDA_TIMEOUT_MS / DYNAMOD
  * `docs/tech-debt.md` carries that as its own entry.
  *
  * The bound shrinks rather than breaks if the function timeout is lowered: at a
- * 7-second timeout the budget is one request, the pass lists and deletes
+ * 7-second timeout the budget is one command, the pass lists and deletes
  * nothing, and the TTL does all of it.
  */
 export const SERIES_CLEANUP_MAX_ITEMS =

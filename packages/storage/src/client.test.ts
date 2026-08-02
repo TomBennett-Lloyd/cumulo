@@ -18,6 +18,7 @@ import {
   createStorageRetryStrategy,
   storageRetryDelayMs,
 } from './client';
+import { STORAGE_COMMAND_WORST_MS } from './command-worst-case';
 import { RecordingHttpHandler, firstRequestBody } from './recording-http-handler';
 
 const putItemBodySchema = z.object({
@@ -193,60 +194,26 @@ describe('createStorageRetryStrategy', () => {
  * deadline to bite can.
  *
  * These are the slowest tests in the package, deliberately: they are the only
- * proof of the number the ingestion Lambda's whole time budget rests on. That
- * budget's figure bounds *SDK-controlled* time; the end-to-end test below
+ * proof of `STORAGE_COMMAND_WORST_MS`, the figure every consumer's time budget
+ * rests on. That figure bounds *SDK-controlled* time; the end-to-end test below
  * measures wall clock, so it allows a named overhead on top of it — see
  * {@link WALL_CLOCK_OVERHEAD_MS}.
  */
 describe('createStorageDocumentClient request deadlines', () => {
   /**
-   * The most the pinned backoff curve can sleep across one whole command:
-   * one sleep per retry {@link STORAGE_MAX_ATTEMPTS} allows, each taken at the
-   * very top of its own jitter window.
+   * Wall-clock time {@link STORAGE_COMMAND_WORST_MS} does not price, allowed
+   * for once, by name.
    *
-   * Derived by driving the *production* curve — `storageRetryDelayMs`, the same
-   * function the strategy runs on — with a random source pinned to its maximum,
-   * rather than by restating its arithmetic here. So the doubling, and the
-   * `MAX_BACKOFF_DELAY_MS` ceiling that eventually flattens it, are followed
-   * automatically instead of being copied and left to drift. `fullJitterDelayMs`
-   * floors its result, so a real sleep is always strictly below this figure.
-   *
-   * This term used to be a literal — `* (1 + 2 + 4)` when the attempt count was
-   * 4, then `* 1` when #122 made it 2 — and that is a trap rather than a
-   * simplification: raise the count to 3 and the timeout term below scales while
-   * a literal backoff term does not, so the bound understates the true worst
-   * case by a whole base delay and the test starts failing *intermittently*
-   * instead of loudly. Intermittent red on the slowest test in the package is
-   * exactly the failure this describe block exists to prevent.
-   */
-  const retryBackoffCeilingMs = Array.from({ length: STORAGE_MAX_ATTEMPTS - 1 }, (_, retryIndex) =>
-    storageRetryDelayMs(retryIndex + 1, () => 1),
-  ).reduce((total, sleepMs) => total + sleepMs, 0);
-
-  /**
-   * The worst case for one command, restated locally: every attempt
-   * {@link STORAGE_MAX_ATTEMPTS} allows, each hitting the pinned deadline, plus
-   * the backoff ceiling above. `@cumulo/ingestion` derives the same figure as
-   * `STORE_SEND_WORST_MS`; this package cannot import that without depending on
-   * its own consumer, so the assertion below is bounded by the arithmetic
-   * rather than by a copied literal — every term now genuinely follows from the
-   * constants.
-   */
-  const commandWorstCaseMs =
-    STORAGE_MAX_ATTEMPTS * STORAGE_REQUEST_TIMEOUT_MS + retryBackoffCeilingMs;
-
-  /**
-   * Wall-clock time the model above does not price, allowed for once, by name.
-   *
-   * `commandWorstCaseMs` prices only what the SDK controls: the per-attempt
-   * deadlines and the backoff between them. A real command also spends time
-   * connecting, signing, serialising and waiting on the event loop — the terms
-   * `@cumulo/ingestion`'s `cycle-budget.ts` knowingly prices at zero, and which
-   * `docs/tech-debt.md` records against that budget's zero-slack identity. This
-   * constant names that gap here rather than letting the assertion depend on it
-   * being invisible: before #122 three jitter draws had to land near their
-   * maxima together for the overhead to matter, so the exact bound passed by
-   * concentration; with one draw it overran roughly one run in twenty.
+   * That figure prices only what the SDK controls: the per-attempt deadlines
+   * and the backoff between them. A real command also spends time connecting,
+   * signing, serialising and waiting on the event loop — the terms
+   * `@cumulo/ingestion`'s `cycle-budget.ts` carries as `UNPRICED_TERMS_SLACK_MS`,
+   * which owns this overhead at the budget level for a whole cycle; this
+   * constant is only the same gap sized for a single measured command. It is
+   * named here rather than letting the assertion depend on it being invisible:
+   * before #122 three jitter draws had to land near their maxima together for
+   * the overhead to matter, so the exact bound passed by concentration; with one
+   * draw it overran roughly one run in twenty.
    *
    * Sized between two endpoints. Above: comfortably more than any CI scheduling
    * noise. Below: well under 2,000 ms, so an extra attempt — which would add a
@@ -382,9 +349,9 @@ describe('createStorageDocumentClient request deadlines', () => {
     });
   }, 20_000);
 
-  it('abandons a stalled command inside the worst case the ingestion budget prices', async () => {
-    // The claim `@cumulo/ingestion`'s STORE_SEND_WORST_MS makes, measured end to
-    // end through the real retry strategy rather than modelled.
+  it('abandons a stalled command inside the worst case this package states', async () => {
+    // The claim STORAGE_COMMAND_WORST_MS makes, measured end to end through the
+    // real retry strategy rather than modelled.
     await withUnresponsiveServer(async (port, connectionsSoFar) => {
       await withLocalEndpoint(port, async () => {
         const client = createStorageDocumentClient({ region: 'eu-west-1' });
@@ -406,7 +373,7 @@ describe('createStorageDocumentClient request deadlines', () => {
           );
           // ...and the whole thing still finished inside the budgeted bound,
           // plus the wall-clock time that bound does not model.
-          expect(elapsedMs).toBeLessThanOrEqual(commandWorstCaseMs + WALL_CLOCK_OVERHEAD_MS);
+          expect(elapsedMs).toBeLessThanOrEqual(STORAGE_COMMAND_WORST_MS + WALL_CLOCK_OVERHEAD_MS);
           // Proof the command reached the fixture rather than the internet:
           // without it, a real endpoint refusing us would look like a passing
           // timeout test — which is exactly how an earlier draft of this file
