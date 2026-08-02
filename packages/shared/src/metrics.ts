@@ -42,7 +42,7 @@ const PERSISTENCE_24H_OFFSET_HOURS = 24;
  * top level stays a plain `ZodObject` and keeps `.extend()` / `.pick()` — the same precedent
  * `uncertaintyBandSchema` sets in `forecast.ts`.
  *
- * The shape deliberately matches `metricsSortKey`'s `MetricsPeriod` parameter, so a parsed metrics
+ * The shape deliberately matches `metricsSortKey`'s `UtcWindow` parameter, so a parsed metrics
  * row composes into its own storage key: `metricsSortKey(m.period, m.model, m.baseline)`.
  */
 const metricsPeriodSchema = z

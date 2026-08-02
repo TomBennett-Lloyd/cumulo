@@ -2,7 +2,7 @@ import {
   errorMetricsSchema,
   metricsSortKey,
   type ErrorMetrics,
-  type MetricsPeriod,
+  type UtcWindow,
 } from '@cumulo/shared';
 
 /**
@@ -46,7 +46,7 @@ const KEY_ATTRIBUTES: ReadonlySet<string> = new Set(['sk']);
  * therefore part of the prefix, and `metrics-item.test.ts` pins that every real
  * sort key for a period begins with it while a neighbouring period's does not.
  */
-export const metricsPeriodPrefix = (period: MetricsPeriod): string =>
+export const metricsPeriodPrefix = (period: UtcWindow): string =>
   `${period.startInclusive}#${period.endExclusive}#`;
 
 /**

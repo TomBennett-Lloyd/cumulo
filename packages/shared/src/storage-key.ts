@@ -1,5 +1,5 @@
 import { forecastModelSchema, type ForecastModel } from './forecast';
-import { utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
+import { utcIsoTimestampSchema, type UtcIsoTimestamp, type UtcWindow } from './timestamp';
 
 /**
  * Storage sort keys for ADR 0002's single-store DynamoDB design.
@@ -132,17 +132,6 @@ export const archiveDayMarkerSortKey = (day: string): string => {
 };
 
 /**
- * The half-open evaluation window a metrics row covers. Named and exported
- * rather than inlined into `metricsSortKey`'s signature so #16's callers and
- * #20's comparison endpoint conform to one contract instead of re-declaring the
- * shape per call site (`docs/standards/typing.md` rule 6).
- */
-export interface MetricsPeriod {
-  readonly startInclusive: UtcIsoTimestamp;
-  readonly endExclusive: UtcIsoTimestamp;
-}
-
-/**
  * `cumulo-metrics` sort key: `<periodStart>#<periodEnd>#<model>#<baseline>`.
  *
  * Period leads so that both models' metrics for one period come back from a
@@ -151,17 +140,14 @@ export interface MetricsPeriod {
  * skill score carries its reference: two baselines over the same period are two
  * distinct results, not a collision.
  *
- * The period is an object with named half-open bounds so the two same-shaped
- * timestamps cannot be swapped at a call site. #16 settled the granularity
- * question this signature left open: a hindcast evaluates an arbitrary range,
- * routinely shorter than a day (a single cloudy afternoon), which a day-granular
- * key would make unrepresentable — so the timestamp pair stands unchanged, and
- * `errorMetricsSchema.period` (`metrics.ts`) carries exactly this shape so that
- * `metricsSortKey(metrics.period, metrics.model, metrics.baseline)` composes
- * straight from a parsed row.
+ * The period is a `UtcWindow` (`timestamp.ts`) — named half-open bounds, so the
+ * two same-shaped timestamps cannot be swapped at a call site. #16 settled the
+ * granularity question this signature left open: a hindcast evaluates an
+ * arbitrary range, routinely shorter than a day (a single cloudy afternoon),
+ * which a day-granular key would make unrepresentable — so the timestamp pair
+ * stands unchanged, and `errorMetricsSchema.period` (`metrics.ts`) carries
+ * exactly this shape so that `metricsSortKey(metrics.period, metrics.model,
+ * metrics.baseline)` composes straight from a parsed row.
  */
-export const metricsSortKey = (
-  period: MetricsPeriod,
-  model: ForecastModel,
-  baseline: string,
-): string => `${period.startInclusive}#${period.endExclusive}#${model}#${baseline}`;
+export const metricsSortKey = (period: UtcWindow, model: ForecastModel, baseline: string): string =>
+  `${period.startInclusive}#${period.endExclusive}#${model}#${baseline}`;

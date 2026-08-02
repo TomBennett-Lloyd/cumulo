@@ -1,4 +1,4 @@
-import type { MetricsPeriod } from '@cumulo/shared';
+import type { UtcWindow } from '@cumulo/shared';
 
 /**
  * UTC calendar-day arithmetic for hindcast backfill.
@@ -70,12 +70,12 @@ const dayIndexOfDay = (day: UtcDay): number => {
  * - an empty or inverted window covers nothing, so it yields no days at all —
  *   never the single day its bounds happen to sit in.
  *
- * The parameter is `MetricsPeriod` from `@cumulo/shared` rather than a local
+ * The parameter is `UtcWindow` from `@cumulo/shared` rather than a local
  * shape: the window a hindcast fetches weather for and the window its error
  * metrics are keyed by are the same window, and two declarations of it would be
  * a bug the day they disagreed (`docs/standards/architecture.md` rule 2).
  */
-export const utcDaysCovering = (period: MetricsPeriod): UtcDay[] => {
+export const utcDaysCovering = (period: UtcWindow): UtcDay[] => {
   const startMs = Date.parse(period.startInclusive);
   const endMs = Date.parse(period.endExclusive);
   if (endMs <= startMs) {

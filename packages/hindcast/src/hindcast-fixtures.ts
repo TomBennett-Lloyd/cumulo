@@ -4,8 +4,8 @@ import {
   utcIsoTimestampSchema,
   type ErrorMetrics,
   type GenerationReading,
-  type MetricsPeriod,
   type UtcIsoTimestamp,
+  type UtcWindow,
 } from '@cumulo/shared';
 
 import type { FetchArchiveRun } from './archive-cache';
@@ -50,7 +50,7 @@ export const SITE = siteSchema.parse({
 export const RUN_UP_DAY = '2026-05-31';
 export const PERIOD_DAYS: readonly UtcDay[] = ['2026-06-01', '2026-06-02'];
 
-export const PERIOD: MetricsPeriod = {
+export const PERIOD: UtcWindow = {
   startInclusive: stamp('2026-06-01T00:00:00Z'),
   endExclusive: stamp('2026-06-03T00:00:00Z'),
 };
