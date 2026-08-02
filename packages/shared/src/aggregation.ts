@@ -20,9 +20,9 @@ import type { UtcIsoTimestamp } from './timestamp';
  * Model selection belongs to the caller: nothing here filters by `model`, so passing physics and
  * ML forecasts in one call would sum two models' views of the same site-hour. Pass a single model.
  *
- * The fleet band reuses `UncertaintyBand` as a *type* only. `uncertaintyBandSchema`'s 0–50 kW
- * bounds are per-site and cannot hold for a 60-site sum, so there is deliberately no fleet-level
- * schema here — fleet response contracts are #14's problem.
+ * The fleet band reuses `UncertaintyBand` as a *type* only. `uncertaintyBandSchema`'s
+ * `0`–`MAX_PLAUSIBLE_RESIDENTIAL_KW` bounds are per-site and cannot hold for a 60-site sum, so
+ * there is deliberately no fleet-level schema here — fleet response contracts are #14's problem.
  */
 
 /** The two fields aggregation groups on: one entry per site per hour. */
