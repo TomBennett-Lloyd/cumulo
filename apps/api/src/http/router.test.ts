@@ -1,7 +1,7 @@
 import { apiErrorSchema } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
-import { apiRequest, jsonBodyOf } from '../api-fixtures';
+import { apiRequest, fullBudgetDeadline, jsonBodyOf } from '../api-fixtures';
 
 import type { ApiResponse } from './response';
 import { matchRoute, routeRequest, type Route, type RouteRequest } from './router';
@@ -96,6 +96,18 @@ describe('matchRoute', () => {
 });
 
 describe('routeRequest', () => {
+  it('hands the handler the invocation’s deadline, not one of its own making', async () => {
+    // The router is pure matching: the only thing that knows how long this
+    // invocation has left is the composition root that received the context.
+    const seen: RouteRequest[] = [];
+    const routes = [recordingRoute('GET', ['v1', 'sites'], seen)];
+    const deadline = { remainingMs: () => 4_321 };
+
+    await routeRequest(routes, apiRequest(), deadline);
+
+    expect(seen[0]?.deadline).toBe(deadline);
+  });
+
   it('hands the handler the query, the params and the parsed body', async () => {
     const seen: RouteRequest[] = [];
     const routes = [recordingRoute('PUT', siteIdSegments, seen)];
@@ -108,6 +120,7 @@ describe('routeRequest', () => {
         query: { hours: '48' },
         rawBody: '{"name":"Ranelagh"}',
       }),
+      fullBudgetDeadline,
     );
 
     expect(seen).toHaveLength(1);
@@ -120,13 +133,13 @@ describe('routeRequest', () => {
     const seen: RouteRequest[] = [];
     const routes = [recordingRoute('GET', ['v1', 'sites'], seen)];
 
-    await routeRequest(routes, apiRequest({ rawBody: '   ' }));
+    await routeRequest(routes, apiRequest({ rawBody: '   ' }), fullBudgetDeadline);
 
     expect(seen[0]?.body).toBeUndefined();
   });
 
   it('answers 404 not_found when nothing matches', async () => {
-    const response = await routeRequest([], apiRequest({ path: '/v2/sites' }));
+    const response = await routeRequest([], apiRequest({ path: '/v2/sites' }), fullBudgetDeadline);
 
     expect(response.statusCode).toBe(404);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
@@ -137,7 +150,11 @@ describe('routeRequest', () => {
     // caller which methods a path supports.
     const routes = [recordingRoute('GET', ['v1', 'sites'], [])];
 
-    const response = await routeRequest(routes, apiRequest({ method: 'PATCH' }));
+    const response = await routeRequest(
+      routes,
+      apiRequest({ method: 'PATCH' }),
+      fullBudgetDeadline,
+    );
 
     expect(response.statusCode).toBe(404);
   });
@@ -149,6 +166,7 @@ describe('routeRequest', () => {
     const response = await routeRequest(
       routes,
       apiRequest({ method: 'POST', rawBody: '{"name": ' }),
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(400);
@@ -167,6 +185,7 @@ describe('routeRequest', () => {
     const response = await routeRequest(
       routes,
       apiRequest({ method: 'POST', path: '/v1/sites/', rawBody: '{"name":"Ranelagh"}' }),
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(404);
@@ -177,7 +196,11 @@ describe('routeRequest', () => {
   it('does not report a malformed body on a request that matched nothing', async () => {
     // Order matters: an unmatched path is 404 even when its body is garbage,
     // because "there is no such route" is the more useful answer.
-    const response = await routeRequest([], apiRequest({ rawBody: 'not json' }));
+    const response = await routeRequest(
+      [],
+      apiRequest({ rawBody: 'not json' }),
+      fullBudgetDeadline,
+    );
 
     expect(response.statusCode).toBe(404);
   });

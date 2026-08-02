@@ -43,6 +43,14 @@
  *   *numbers* stay the retry owner's own: the handlers pass their own
  *   `BackoffSpec` rather than inheriting this package's, because their budget
  *   is a request's, not a background drain's.
+ *
+ *   `./command-worst-case` is on the surface for the end of that same
+ *   progression (#165): a consumer sizing a budget needs not only our numbers
+ *   but the figure they multiply out to, and three consumers deriving it
+ *   themselves produced three answers. `backoffCeilingMs` joins
+ *   `fullJitterDelayMs` as shared arithmetic for a retry owner outside this
+ *   package; `STORAGE_COMMAND_WORST_MS` and `STORAGE_BATCH_PAGE_WORST_MS` are
+ *   this package's own worst cases, stated here rather than modelled there.
  * - the `toItem`/`fromItem` pairs each adapter exports for its own tests. They
  *   are the wire format, not the contract; exporting them would invite a caller
  *   to build items by hand and bypass the key computation the adapters exist to
@@ -83,6 +91,11 @@ export {
   type BatchPolicy,
   type BatchWriteOutcome,
 } from './batch';
+export {
+  STORAGE_BATCH_PAGE_WORST_MS,
+  STORAGE_COMMAND_WORST_MS,
+  backoffCeilingMs,
+} from './command-worst-case';
 export { StorageError, type StorageErrorContext } from './errors';
 export { storageTableName, type StorageTable } from './table-name';
 export { SERIES_RETENTION_DAYS } from './ttl';

@@ -6,10 +6,12 @@ import {
   OWN_ORIGIN,
   RANELAGH_ID,
   SOURCE_IP,
+  fullBudgetDeadline,
   gatewayEvent,
   jsonBodyOf,
   siteInput,
 } from './api-fixtures';
+import { lambdaContextDeadline } from './http/request-deadline';
 import type { ApiResponse } from './http/response';
 import type { Route } from './http/router';
 
@@ -115,6 +117,7 @@ describe('the top-level error boundary', () => {
         log: (e) => logged.push(e),
       },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     // Resolved, not rejected: a rejected promise is an unhandled Lambda error,
@@ -133,6 +136,7 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [throwingRoute(new Error(secret))], log: (e) => logged.push(e) },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     expect(response.body).not.toContain(secret);
@@ -146,6 +150,7 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [throwingRoute('a string, thrown')], log: (e) => logged.push(e) },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(500);
@@ -159,6 +164,7 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [], log: (e) => logged.push(e) },
       { httpMethod: 'GET', path: '/v1/sites' },
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(500);
@@ -177,10 +183,69 @@ describe('the top-level error boundary', () => {
     const response = await handleApiEvent(
       { routes: [route], log: (e) => logged.push(e) },
       gatewayEvent(),
+      fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(200);
     expect(logged).toEqual([]);
+  });
+});
+
+/**
+ * The invocation context, which this boundary used to drop on the floor (#165).
+ *
+ * Tested here rather than only in `http/request-deadline.test.ts` because the
+ * unit test proves the deadline *reads* the context and this one proves the
+ * number survives the trip — through `handleApiEvent`, through the router, and
+ * onto the `RouteRequest` a handler is given. Those are two different ways to
+ * be wrong, and the second is the one that was wrong before.
+ */
+describe('the invocation deadline reaching a handler', () => {
+  /** Answers `remainingMs` with whatever the deadline it was given reports. */
+  const probeRoute = (seen: number[]): Route => ({
+    method: 'GET',
+    segments: ['v1', 'sites'],
+    handle: (request) => {
+      seen.push(request.deadline.remainingMs());
+      return Promise.resolve({ statusCode: 200, headers: {} });
+    },
+  });
+
+  beforeEach(() => {
+    vi.stubEnv('CUMULO_ENV', 'test');
+  });
+
+  it('hands the handler the context’s own remaining time', async () => {
+    const { handleApiEvent } = await import('./main');
+    const seen: number[] = [];
+    // 1,234 is a number nothing in this service could compute: it is the
+    // context's answer or it is nothing.
+    const context = { getRemainingTimeInMillis: () => 1_234 };
+
+    await handleApiEvent(
+      { routes: [probeRoute(seen)], log: () => undefined },
+      gatewayEvent(),
+      lambdaContextDeadline(context, 15_000),
+    );
+
+    expect(seen).toEqual([1_234]);
+  });
+
+  it('hands the handler a budget countdown when the invocation had no context', async () => {
+    const { handleApiEvent } = await import('./main');
+    const seen: number[] = [];
+    // A direct `aws lambda invoke` passes no context; the clock is injected so
+    // the case needs no timers.
+    const readings = [1_000, 3_000];
+    const now = (): number => readings.shift() ?? 3_000;
+
+    await handleApiEvent(
+      { routes: [probeRoute(seen)], log: () => undefined },
+      gatewayEvent(),
+      lambdaContextDeadline(undefined, 15_000, now),
+    );
+
+    expect(seen).toEqual([13_000]);
   });
 });
 
