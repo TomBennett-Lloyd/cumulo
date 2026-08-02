@@ -294,9 +294,9 @@ export const Dashboard = ({
    * The panel's forecast follows the selection rather than only the newly
    * created site. One loop serves both, because they are the same question
    * asked of different sites: an established site answers on the first poll and
-   * the loop stops, while a site created seconds ago answers `not-found` until
-   * its first forecast exists — which is the pending state the demo's headline
-   * minute is made of.
+   * the loop stops (its brief wait is the `checking` arm), while a site created
+   * seconds ago answers `not-found` until its first forecast exists — which is
+   * the `generating` state the demo's headline minute is made of.
    */
   const { state: forecast, retry: retryForecast } = useFirstForecast(dataSource, selectedSiteId);
 
