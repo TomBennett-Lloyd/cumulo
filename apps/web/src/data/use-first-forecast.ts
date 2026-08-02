@@ -45,13 +45,15 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
 /**
- * The state every watch starts in.
+ * The state every watch starts in, and stays in until the fleet answers.
  *
  * A module constant rather than a fresh object per run: re-entering it is then
  * a no-op for React (it bails out of re-rendering on an identical value), which
- * matters because every effect run begins by resetting to it.
+ * matters because every effect run begins by resetting to it — and because
+ * every fault-poll before absence is confirmed re-enters it too, so a fleet
+ * that is failing repeatedly re-renders the panel zero times.
  */
-const WATCH_START_STATE: ForecastViewState = { status: 'pending', elapsedSeconds: 0 };
+const WATCH_START_STATE: ForecastViewState = { status: 'checking' };
 
 /**
  * What one poll's answer means for the loop.
@@ -132,8 +134,8 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
   // `invalid-request` and `forbidden` inherited a policy nobody chose for them.
 };
 
-const pendingSince = (startedAtMs: number, nowMs: number): ForecastViewState => ({
-  status: 'pending',
+const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState => ({
+  status: 'generating',
   elapsedSeconds: Math.floor((nowMs - startedAtMs) / MS_PER_SECOND),
 });
 
@@ -166,7 +168,7 @@ export interface FirstForecastWatch {
  *
  * `siteId` is the site created moments ago whose forecast the visitor is
  * waiting for — `null` while nothing is being watched, which reports the
- * neutral pending state and starts no timers. The id must be the
+ * neutral `checking` state and starts no timers. The id must be the
  * server-assigned one returned by `createSite`: polling a locally predicted id
  * addresses a site that does not exist, and this loop would wait out its whole
  * deadline on it.
@@ -201,6 +203,19 @@ export const useFirstForecast = (
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     /** The last fault seen this run; decides timeout-vs-error at the deadline. */
     let lastFault: string | null = null;
+    /**
+     * Whether the fleet has told this run the forecast does not exist yet.
+     *
+     * `decidePoll` already encodes exactly that: a `keep-waiting` with
+     * `fault === null` is a `not-found`, or an `ok` carrying an empty series —
+     * both of which are the fleet answering "there is nothing here", which is
+     * the only evidence a client has that a first forecast is genuinely being
+     * generated. A `keep-waiting` *with* a fault is the fleet failing to
+     * answer, and says nothing about existence, so it must not promote the
+     * watch out of `checking` (#177). Latched rather than recomputed per poll:
+     * once absence is confirmed, a later network blip does not un-confirm it.
+     */
+    let absenceConfirmed = false;
 
     const stopPolling = (): void => {
       stopped = true;
@@ -239,15 +254,19 @@ export const useFirstForecast = (
 
       // A halt ends the run exactly like an arrival does — the answer is final,
       // so the deadline has nothing left to decide and the panel is told now
-      // rather than in ninety seconds.
+      // rather than in ninety seconds. It reports in its own arm rather than as
+      // a failure, so the panel can drop the retry no retry can change.
       if (decision.kind === 'halt') {
         stopWatching();
-        setState({ status: 'failed', reason: 'error', message: decision.message });
+        setState({ status: 'halted', message: decision.message });
         return;
       }
 
+      if (decision.fault === null) {
+        absenceConfirmed = true;
+      }
       lastFault = decision.fault ?? lastFault;
-      setState(pendingSince(startedAtMs, Date.now()));
+      setState(absenceConfirmed ? generatingSince(startedAtMs, Date.now()) : WATCH_START_STATE);
       pollTimer = setTimeout(() => {
         void poll();
       }, decision.delayMs);

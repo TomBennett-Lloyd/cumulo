@@ -19,7 +19,20 @@ export type ForecastFailureReason = 'timeout' | 'error';
  * `{ forecasts: [], error: undefined, pending: false }` has no meaning, and the
  * panel would have to invent one. Here every arm carries exactly the data its
  * rendering needs and nothing else — `elapsedSeconds` cannot be read on a ready
- * forecast, and `forecasts` cannot be read on a pending one.
+ * forecast, and `forecasts` cannot be read on a waiting one.
+ *
+ * The two waits are separate arms because they are separate sentences (#177):
+ *
+ * - `checking` — this run has no definitive answer yet. It covers a fetch still
+ *   in flight *and* every fault seen so far, because a fault says nothing about
+ *   whether the forecast exists. Claiming a first forecast is being generated
+ *   here would be a false sentence about an established site.
+ * - `generating` — the fleet confirmed the forecast is absent, so the
+ *   pipeline's first-forecast wait is genuinely what is happening, and
+ *   `elapsedSeconds` is worth counting out loud.
+ * - `halted` — the fleet's answer made waiting pointless and retrying is not a
+ *   recourse (today: `forbidden`, whose fix is a deployment change). Distinct
+ *   from `failed` so the panel can drop the retry that cannot work.
  *
  * `elapsedSeconds` lives in the state rather than being counted inside the
  * panel because the wait belongs to the polling hook (#17 C6), which owns the
@@ -30,10 +43,12 @@ export type ForecastFailureReason = 'timeout' | 'error';
  * renders it and the first-forecast hook produces it. Neither owns the other.
  */
 export type ForecastViewState =
-  | { readonly status: 'pending'; readonly elapsedSeconds: number }
+  | { readonly status: 'checking' }
+  | { readonly status: 'generating'; readonly elapsedSeconds: number }
   | { readonly status: 'ready'; readonly forecasts: readonly Forecast[] }
   | {
       readonly status: 'failed';
       readonly reason: ForecastFailureReason;
       readonly message: string;
-    };
+    }
+  | { readonly status: 'halted'; readonly message: string };

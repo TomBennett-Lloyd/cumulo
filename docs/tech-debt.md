@@ -119,12 +119,6 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - What: the effect focuses the panel's heading on mount, and on a deep-link arrival that mount is not page load — it is whenever the listing resolves, which can be seconds later. Anything the reader focused in the meantime loses focus with no action of theirs (WCAG 3.2.5 territory). The answer is not local to the effect: either the first run is skipped on the deep-link path, or focus moves only on reader-initiated selection — and the felt half of the decision needs the browser lane (#107) rather than jsdom. The convention in `docs/standards/react.md` records the deep-link focus as decided-for-now; this entry is the recorded doubt against it.
 - Source: #161 review cycle 1
 
-## 2026-08-02 — A forbidden halt still lands on a panel offering "Try again"
-
-- Where: the `failed` arm of `SitePanel.tsx`'s forecast rendering, which mounts `PanelError` with `onRetry` unconditionally; the halt that reaches it is `decidePoll`'s `forbidden` arm in `apps/web/src/data/use-first-forecast.ts`
-- What: #162 made the halt immediate — a `forbidden` answer stops the poll at once instead of burning the 90 s deadline — but the state it lands in is the same `failed`/`'error'` rendering every other failure uses, so the panel offers "Try again" for the one failure whose own doc says a retry cannot work ("what is wrong is _who is asking_"). The timing half of the #150-review finding is closed; the button half is deliberately out of #162's scope and is exactly the seam two open issues own: #177's `ForecastViewState` union (a distinct halted status) and #104's copy ownership (what the halted card says instead). Whichever lands first should consume this entry. Unreachable today — no shipped source emits `forbidden` on the poll — so this is a stated gap, not a live defect.
-- Source: #162 review cycle 1
-
 ## 2026-08-02 — The hooks' "stdin was unreadable" report is dead code behind a hang
 
 - Where: the `read_hook_event` failure arms in `.claude/hooks/post-edit-check.sh` and `.claude/hooks/ensure-deps.sh`; the hang itself is `read_hook_event`'s `cat` in `.claude/hooks/hook-context.sh`
@@ -142,3 +136,9 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - Where: the shape arm of the broken-git-link guard in `.claude/scripts/reap-worktree.sh`; the boundary is recorded in the case-35 comment of `.claude/scripts/worktree-lifecycle.test.sh`
 - What: every fixture that breaks the `.git` link by deleting the file is answered by the identity arm (an empty link joins onto `$wt` and fails the comparison), so the shape arm's `keep` survives mutation — proven twice, by the reviewer and by the override-seam reproduction. Its only unique input is a `.git` file holding the recorded admin dir with the `gitdir: ` prefix stripped: a shape no tool produces, which is why the reviewer sized closing it as defence-in-depth rather than behaviour and declined to spend a cycle. If a future reader wants the arm pinned, the case is six lines on `nested_worktree_fixture` writing that exact content and asserting `broken-git-link`.
 - Source: #102 review cycle 1
+
+## 2026-08-02 — The timeout copy asserts pipeline generation from a run that never established existence
+
+- Where: `firstForecastTimeoutMessage` in `apps/web/src/dashboard/state-copy.ts` ("the pipeline may still be working"); the `failed` arm of `SiteForecastRegion` in `apps/web/src/dashboard/SitePanel.tsx`, which chooses it over the source's message; the pin in `SitePanel.test.tsx`
+- What: #177 split the wait so the panel only claims a first forecast is being generated once the fleet confirms absence — but the 90-second deadline's copy still makes that claim unconditionally. A run that never leaves `checking` (a hung fetch — no `AbortSignal` exists anywhere in `apps/web`, per that standing entry) reaches `deadlineState` with `lastFault === null` and tells the visitor "the pipeline may still be working. Try again to keep waiting", asserting generation from a run whose own union arm says existence was never established. The fix is cross-cutting: either `deadlineState` carries the absence-confirmed bit and the copy forks (a checking-timeout says "the fleet never answered", a generating-timeout keeps the pipeline sentence), or #104 resolves it as part of owning the column's wording. Not #177's diff — the deadline path is deliberately untouched there.
+- Source: #177 review cycle 1

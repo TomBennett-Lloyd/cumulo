@@ -232,7 +232,7 @@ describe('Dashboard', () => {
 
     // The timed check, as a number rather than as "it shows up eventually" —
     // and bounded below too, so a demo source that answered instantly could not
-    // pass this by never exercising the pending state at all.
+    // pass this by never exercising the generating state at all.
     expect(Date.now() - submittedAtMs).toBeLessThanOrEqual(CREATION_TO_FORECAST_BUDGET_MS);
     expect(Date.now() - submittedAtMs).toBeGreaterThanOrEqual(DEMO_FIRST_FORECAST_DELAY_MS);
     expect(within(table).getAllByRole('row').length).toBeGreaterThan(1);

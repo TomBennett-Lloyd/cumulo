@@ -17,6 +17,7 @@ import {
   ScriptedFleetDataSource,
   settle,
   SITE_ID,
+  type ForecastAnswer,
   type ForecastResolver,
 } from './first-forecast-test-fixture';
 import { useFirstForecast } from './use-first-forecast';
@@ -48,6 +49,22 @@ const INVALID_REQUEST_MESSAGE = 'getSiteForecast: the API rejected the request �
 /** Simulated milliseconds since the watch began. */
 const simulatedElapsedMs = (): number => Date.now() - START_MS;
 
+/**
+ * The fleet confirms absence once, then stops answering.
+ *
+ * The one order that tells a latched confirmation from a recomputed one: the
+ * reverse sequence renders identically either way, so only "not-found, then a
+ * blip" can catch a watch that forgets what it was already told.
+ *
+ * It stays in this suite rather than joining the fixture's answer policies for
+ * the reason {@link OTHER_SITE_ID} does: one test needs it, and the fixture
+ * holds the machinery every test shares, not a script only this one runs.
+ */
+const notFoundThenFault =
+  (siteId: string): ForecastAnswer =>
+  (context) =>
+    Promise.resolve(context.callIndex === 0 ? notFound(siteId) : networkDown());
+
 interface WatchProps {
   readonly siteId: Site['id'] | null;
 }
@@ -70,13 +87,13 @@ describe('useFirstForecast', () => {
     const watch = renderHook(() => useFirstForecast(source, SITE_ID));
 
     await settle();
-    expect(watch.result.current.state.status).toBe('pending');
+    expect(watch.result.current.state.status).toBe('generating');
 
     await advanceBy(45_000);
     const waiting = watch.result.current.state;
-    expect(waiting.status === 'pending' && waiting.elapsedSeconds).toBe(45);
+    expect(waiting.status === 'generating' && waiting.elapsedSeconds).toBe(45);
 
-    while (watch.result.current.state.status === 'pending' && simulatedElapsedMs() < 60_000) {
+    while (watch.result.current.state.status === 'generating' && simulatedElapsedMs() < 60_000) {
       await advanceBy(1_000);
     }
 
@@ -84,6 +101,89 @@ describe('useFirstForecast', () => {
     expect(ready.status).toBe('ready');
     expect(ready.status === 'ready' && ready.forecasts[0]?.siteId).toBe(SITE_ID);
     expect(simulatedElapsedMs()).toBeLessThanOrEqual(53_000);
+  });
+
+  /*
+   * #177's headline: the watch must not narrate a first forecast it has no
+   * evidence of. Selecting an established site — or landing on a `?site=` deep
+   * link — opens on a round trip like any other, and only the fleet's own "there
+   * is nothing here" turns that into the pipeline's first-forecast wait.
+   */
+  it('reports checking, not a first-forecast count, until the fleet first answers', async () => {
+    const resolvers: ForecastResolver[] = [];
+    const source = new ScriptedFleetDataSource(deferredAnswer(resolvers));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    expect(watch.result.current.state).toEqual({ status: 'checking' });
+
+    await act(async () => {
+      answerCall(resolvers, 0, forecastReady(SITE_ID));
+      await Promise.resolve();
+    });
+
+    expect(watch.result.current.state.status).toBe('ready');
+  });
+
+  it('moves to generating only once the fleet confirms the forecast is absent', async () => {
+    const resolvers: ForecastResolver[] = [];
+    const source = new ScriptedFleetDataSource(deferredAnswer(resolvers));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    expect(watch.result.current.state.status).toBe('checking');
+
+    await act(async () => {
+      answerCall(resolvers, 0, notFound(SITE_ID));
+      await Promise.resolve();
+    });
+
+    const generating = watch.result.current.state;
+    expect(generating.status).toBe('generating');
+    expect(generating.status === 'generating' && generating.elapsedSeconds).toBeGreaterThanOrEqual(
+      0,
+    );
+  });
+
+  // The edge the `fault === null` guard exists for: a fleet that cannot answer
+  // has said nothing about whether the forecast exists, so counting seconds at
+  // the reader would be inventing a fact from a failure.
+  it('a fleet fault leaves the watch checking rather than claiming a first forecast', async () => {
+    const source = new ScriptedFleetDataSource(alwaysAnswering(networkDown()));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await advanceBy(20_000);
+
+    expect(watch.result.current.state.status).toBe('checking');
+  });
+
+  /*
+   * Confirmation is a latch, not a per-poll recomputation.
+   *
+   * Absence is something the fleet *told* this run, and a later blip is the
+   * fleet failing to speak — it withdraws nothing. A watch that recomputed the
+   * distinction from each answer alone would drop the reader back to a plain
+   * loading label mid-count and restart the sentence when the next poll
+   * succeeded, which reads as the pipeline having given up and begun again.
+   */
+  it('absence stays confirmed through a later fault', async () => {
+    const source = new ScriptedFleetDataSource(notFoundThenFault(SITE_ID));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    const confirmed = watch.result.current.state;
+    expect(confirmed.status).toBe('generating');
+    expect(confirmed.status === 'generating' && confirmed.elapsedSeconds).toBe(0);
+
+    // One cadence on: the fleet stops answering, and the count carries on from
+    // where it was rather than falling back or restarting at zero.
+    await advanceBy(5_000);
+
+    const afterBlip = watch.result.current.state;
+    expect(afterBlip.status).toBe('generating');
+    expect(afterBlip.status === 'generating' && afterBlip.elapsedSeconds).toBe(5);
+    // Without this the test could pass on a second poll that never happened.
+    expect(source.calls).toHaveLength(2);
   });
 
   // ADR 0002's review of this ticket: a per-site read is ~0.5 read units, the
@@ -125,7 +225,7 @@ describe('useFirstForecast', () => {
 
     await advanceBy(10_000);
 
-    expect(watch.result.current.state.status).toBe('pending');
+    expect(watch.result.current.state.status).toBe('generating');
     expect(source.calls.length).toBeGreaterThan(1);
   });
 
@@ -134,7 +234,7 @@ describe('useFirstForecast', () => {
     const watch = renderHook(() => useFirstForecast(source, SITE_ID));
 
     await advanceBy(89_000);
-    expect(watch.result.current.state.status).toBe('pending');
+    expect(watch.result.current.state.status).toBe('generating');
 
     await advanceBy(1_000);
 
@@ -158,7 +258,7 @@ describe('useFirstForecast', () => {
     });
     await settle();
 
-    expect(watch.result.current.state.status).toBe('pending');
+    expect(watch.result.current.state.status).toBe('generating');
     expect(source.calls.length).toBeGreaterThan(callsAtDeadline);
   });
 
@@ -219,10 +319,11 @@ describe('useFirstForecast', () => {
 
     await settle();
 
-    const failed = watch.result.current.state;
-    expect(failed.status).toBe('failed');
-    expect(failed.status === 'failed' && failed.reason).toBe('error');
-    expect(failed.status === 'failed' && failed.message).toBe(FORBIDDEN_MESSAGE);
+    // `halted`, not `failed`: the panel drops its retry on this arm, because
+    // the recourse is a deployment change and no click can supply one.
+    const halted = watch.result.current.state;
+    expect(halted.status).toBe('halted');
+    expect(halted.status === 'halted' && halted.message).toBe(FORBIDDEN_MESSAGE);
 
     // The deadline is torn down with the poll: nothing is still due to fire,
     // and the whole ninety seconds passes without a second attempt.
@@ -262,18 +363,20 @@ describe('useFirstForecast', () => {
     const watch = renderHook(() => useFirstForecast(source, SITE_ID));
 
     await settle();
-    expect(watch.result.current.state.status).toBe('failed');
+    expect(watch.result.current.state.status).toBe('halted');
 
     act(() => {
       watch.result.current.retry();
     });
 
-    expect(watch.result.current.state.status).toBe('pending');
+    // No answer has landed for the fresh run, so it claims nothing about
+    // whether a forecast exists: it is checking, not generating.
+    expect(watch.result.current.state.status).toBe('checking');
     expect(source.calls).toHaveLength(2);
 
     // The fresh run reaches the same verdict, because the fleet still refuses.
     await settle();
-    expect(watch.result.current.state.status).toBe('failed');
+    expect(watch.result.current.state.status).toBe('halted');
   });
 
   it('makes no call and leaves no timer after unmount, even when a poll answers late', async () => {
@@ -320,7 +423,7 @@ describe('useFirstForecast', () => {
       await Promise.resolve();
     });
 
-    expect(watch.result.current.state.status).toBe('pending');
+    expect(watch.result.current.state.status).toBe('checking');
   });
 
   it('starts no polling at all while no site is being watched', async () => {
@@ -332,7 +435,7 @@ describe('useFirstForecast', () => {
     await advanceBy(90_000);
 
     expect(source.calls).toEqual([]);
-    expect(watch.result.current.state).toEqual({ status: 'pending', elapsedSeconds: 0 });
+    expect(watch.result.current.state).toEqual({ status: 'checking' });
   });
 
   /*
