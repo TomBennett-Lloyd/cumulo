@@ -51,8 +51,8 @@ resource "aws_lambda_function" "api" {
   # 15 s, chosen against the gateway rather than against the work. API Gateway's
   # integration timeout is a hard 30 s ceiling (ADR 0005). Sitting the
   # function's timeout *below* it is what makes a hung request diagnosable:
-  # Lambda times out first, so the evidence is a Lambda timeout log line and an
-  # `Errors` data point rather than a gateway 504 with nothing behind it.
+  # Lambda times out first, so the gateway 504 the caller sees has a Lambda
+  # timeout log line and an `Errors` data point behind it, instead of nothing.
   #
   # It was never chosen against the work, and #165 stopped the code claiming
   # otherwise: a route is not one DynamoDB call — the limited ones spend two on
@@ -63,6 +63,17 @@ resource "aws_lambda_function" "api" {
   # (`apps/api/src/http/request-deadline.ts`), and every loop stops on it rather
   # than at the timeout. The per-route arithmetic, including what stays ungated,
   # is in `apps/api/src/request-budget.ts`'s header.
+  #
+  # What that does not make the timeout is unreachable, and the honest statement
+  # is the one apps/api/README.md's error contract makes: a request killed here
+  # never reaches the API's error boundary, so the caller gets a gateway 504
+  # rather than an `apiErrorSchema` body, and two residuals still lead there.
+  # Both are stated rather than silent — independent per-command worst cases
+  # coinciding in a route's ungated straight-line prefix, counted per route in
+  # `request-budget.ts` and carried in docs/tech-debt.md; and two coinciding tail
+  # events inside an admitted series-cleanup pass, which is admitted at one
+  # command and then spends up to two (`apps/api/src/sites/series-cleanup.ts`),
+  # owned by #167, which moves the pass off the request path entirely.
   #
   # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS` in that same module,
   # which sizes the series-cleanup budget and the deadline against it — #29

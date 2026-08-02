@@ -111,7 +111,22 @@ const throttledResponse: ResponsesObject = {
   },
 };
 
-/** The two failures every operation shares, whatever it does. */
+/**
+ * The two failures every operation shares, whatever it does.
+ *
+ * **Two, not three.** A request killed at the function timeout answers a gateway
+ * 504, and that one is not documentable here at all: the invocation dies before
+ * `main.ts`'s error boundary runs, so no code in this repository shapes the body
+ * and this document would be describing something it does not produce. It is
+ * unreachable through every *looping* path — the per-request deadline
+ * (`http/request-deadline.ts`) stops those between commands — and the two
+ * residuals that remain are stated rather than silent, in `apps/api/README.md`'s
+ * error contract: independent per-command worst cases coinciding in a route's
+ * ungated straight-line prefix, counted per route in `../request-budget.ts` and
+ * carried in `docs/tech-debt.md`; and two coinciding tail events inside an
+ * admitted series-cleanup pass, which is admitted at one command and then spends
+ * up to two (`../sites/series-cleanup.ts`), which #167 removes wholesale.
+ */
 export const commonFailures: ResponsesObject = {
   ...throttledResponse,
   ...errorResponses('internal'),
