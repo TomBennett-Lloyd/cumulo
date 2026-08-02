@@ -139,6 +139,10 @@ export interface LocationScript {
  * 495,960 hours since the epoch, divisible by all of them — which keeps the
  * rotation invisible to the tests that are about something else, and makes it
  * the explicit subject of the ones that are about it.
+ *
+ * That holds for any window size, not just the one-location step this instant
+ * was first chosen for: the offset is `hours × windowSize mod length`, and
+ * `hours ≡ 0 (mod length)` implies `hours × windowSize ≡ 0 (mod length)`.
  */
 export const cycleStartMs = Date.parse('2026-07-31T00:00:00Z');
 
