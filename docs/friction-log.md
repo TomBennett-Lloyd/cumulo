@@ -41,3 +41,8 @@ Entry format:
 
 - Phase: process
 - Observed: running tallies embedded in prose drift from what they count. `implementer.md`'s absolute-paths rule says "Four incidents so far" and then names two; `planner.md`'s consultant-dispatch tally (#115, #122) duplicates this log's "Two for two" record and will desync the moment a third dispatch lands. Two candidate fixes with no obvious winner — drop the embedded counters and keep only the named incidents, or name one owner per tally — so no change made this batch.
+
+## 2026-08-02 — PRs #167, #161 (pattern to keep)
+
+- Phase: review
+- Observed: reviewers dispatched with "verify rather than re-derive — re-run what you doubt" independently re-ran the mutants and rebuilt the censuses from code instead of trusting the implementer reports, and each caught real drift: the seven-sink log census on #167, the `closeDraft` guard on #161. Logged as a win rather than a problem — positive verification costs reviewer tokens and has no failure to point at when someone later trims the dispatch wording for economy, so the two catches are recorded here as the evidence that it pays for itself.
