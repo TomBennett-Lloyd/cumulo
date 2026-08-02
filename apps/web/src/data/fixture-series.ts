@@ -1,4 +1,5 @@
 import {
+  MAX_PLAUSIBLE_RESIDENTIAL_KW,
   utcIsoTimestampSchema,
   type Forecast,
   type GenerationReading,
@@ -43,9 +44,6 @@ const FORECAST_HORIZON_HOURS = 24;
 
 /** Power values are recorded to watt precision; the underlying model claims nothing finer. */
 const POWER_DECIMALS = 3;
-
-/** Mirrors `forecastSchema`'s residential sanity cap, so a wide band cannot forge an invalid p90. */
-const SITE_POWER_CAP_KW = 50;
 
 /**
  * A seeded draw in `[0, 1)` — mulberry32's step arithmetic applied once, keyed by `seed`.
@@ -151,7 +149,7 @@ const forecastAt = (siteHour: SiteHour): Forecast => {
     uncertainty: {
       p10AcPowerKw: roundTo(medianKw * (1 - halfWidth), POWER_DECIMALS),
       p90AcPowerKw: roundTo(
-        Math.min(SITE_POWER_CAP_KW, medianKw * (1 + halfWidth)),
+        Math.min(MAX_PLAUSIBLE_RESIDENTIAL_KW, medianKw * (1 + halfWidth)),
         POWER_DECIMALS,
       ),
     },
@@ -177,7 +175,7 @@ const actualAt = (siteHour: SiteHour): GenerationReading => {
     siteId: site.id,
     validTime: toTimestamp(epochMs),
     acPowerKw: roundTo(
-      Math.min(SITE_POWER_CAP_KW, Math.max(0, medianKwAt(siteHour) * noise)),
+      Math.min(MAX_PLAUSIBLE_RESIDENTIAL_KW, Math.max(0, medianKwAt(siteHour) * noise)),
       POWER_DECIMALS,
     ),
   };

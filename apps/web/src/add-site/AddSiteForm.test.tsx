@@ -63,6 +63,23 @@ const fieldMessage = (label: string): string => {
 };
 
 /**
+ * The standing hint under one field — the copy that is there before anything
+ * goes wrong. Found through the input's own `aria-describedby`, for the same
+ * reason {@link fieldMessage} is: a hint that rendered but was never associated
+ * is not describing the input to anyone.
+ */
+const fieldHint = (label: string): string => {
+  const input = screen.getByLabelText(label);
+  const describedBy = input.getAttribute('aria-describedby') ?? '';
+  const hintIds = describedBy.split(' ').filter((id) => id.endsWith('-hint'));
+
+  return hintIds
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ')
+    .trim();
+};
+
+/**
  * Each row is a value the shared schema refuses, one per bound the form is
  * responsible for surfacing. A bound dropped from `createSiteInputSchema`
  * makes exactly one of these rows submit.
@@ -86,6 +103,20 @@ describe('AddSiteForm', () => {
     expect(screen.getByLabelText('Tilt')).toHaveProperty('value', '35');
     expect(screen.getByLabelText('Azimuth')).toHaveProperty('value', '180');
     expect(screen.getByLabelText('Capacity')).toHaveProperty('value', '4');
+  });
+
+  /*
+   * The literal is the point. The hint interpolates the shared ceiling, so
+   * asserting it against that same constant would prove only that a value
+   * equals itself — and would stay green if the interpolation rendered
+   * `undefined`. Spelling the whole sentence out means a ceiling change lands
+   * here as a deliberate second touch, and any deviation in the rendered copy
+   * is a failure.
+   */
+  it('states the capacity ceiling in the hint, in the copy a visitor reads', () => {
+    renderForm();
+
+    expect(fieldHint('Capacity')).toBe('Nameplate DC kilowatts, up to 50.');
   });
 
   it('submits what the visitor accepted, at the precision the map clicked', () => {
