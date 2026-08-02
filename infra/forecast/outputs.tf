@@ -7,29 +7,48 @@
 # convention-7 hazard for no consumer.
 #
 # ---------------------------------------------------------------------------
-# IDLE COST: $0/month. This stack has no resource that bills for existing.
+# IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
+# a price. Two lines here bill for merely existing: the log group's stored
+# bytes (~$0.0003/month at current volume) and the alarm ($0.10/alarm-month at
+# list). Both are absorbed by always-free pools rather than being free.
 # ---------------------------------------------------------------------------
+#   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
+#     ("no resource that bills for existing") was retired. Retained bytes bill
+#     ~$0.03/GB-month whether or not anybody reads them, so a forgotten stack
+#     keeps accruing this. What stops it accruing *without bound* is
+#     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
+#     archive — and a group Lambda auto-creates instead would never expire (see
+#     the comment on the function's `depends_on`). Size: one line per message,
+#     ~8,760 messages/month, so under ~9 MB/month retained — ~$0.0003/month at
+#     list, and $0.00 as billed because it sits inside the always-free 5 GB of
+#     stored logs. That ~9 MB is a **bound, not a measurement**: it takes ADR
+#     0005's own ~6.5 GB/month at 25.92 M requests, which implies ~250 bytes per
+#     logged record, and rounds that up to 1 KB per line.
+#   * CloudWatch alarms — one alarm, the tenth and last of the always-free ten.
+#     An alarm is priced at $0.10/month for existing, fired or not; the ten are
+#     a pool the platform has fully spent, not a discount, and infra/README.md's
+#     alarm budget owns the count. Lambda metrics are free.
 #   * Lambda — invoked only when ingestion publishes: ~12 messages an hour,
 #     ~8,760 invocations/month against the always-free 1,000,000 requests. At
 #     256 MB, even a full 50-second invocation is 12.8 GB-seconds, so the whole
 #     month is ~112,000 GB-seconds worst case against the always-free 400,000 —
-#     and a real invocation is a small fraction of its timeout.
+#     and a real invocation is a small fraction of its timeout. The stored
+#     deployment package is not a third at-rest line: Lambda code storage
+#     carries no charge inside its 75 GB per-Region quota.
 #   * SQS — this stack creates no queue, and its event source mapping's polling
 #     receives are the ~657,000/month ADR 0004 already counted in the platform's
 #     ~675,000 against the always-free 1,000,000. No new cost line, only the
-#     resource that realises the one already budgeted.
-#   * CloudWatch — one alarm, the tenth and last of the free 10; Lambda metrics
-#     are free;
-#     ~12 log lines an hour at 30-day retention is pennies at most against the
-#     free 5 GB of ingestion.
+#     resource that realises the one already budgeted. A queue holding messages
+#     has no storage charge either — SQS bills requests, not bytes at rest.
 #   * IAM — the execution role, its inline policy, and the deploy grant are all
-#     free.
+#     free. So is the event source mapping resource itself.
 #
 # `terraform destroy` takes all of it to $0 with no ordered dependencies: the
 # event source mapping is deleted before the function it targets, and the queue
 # it reads survives because another stack owns it. A forgotten forecast stack
-# costs nothing — but, unlike the api stack, it is not inert: it keeps draining
-# ingestion's queue, which is usually the behaviour you want.
+# costs a fraction of a cent — bounded, because retention is — but, unlike the
+# api stack, it is not inert: it keeps draining ingestion's queue, which is
+# usually the behaviour you want.
 
 output "function_name" {
   description = "Name of the forecast function, for `aws lambda invoke` and for `aws logs tail /aws/lambda/<name>`. Echoes the cumulo-forecast-<environment> convention so an operator reads the value Terraform actually applied instead of retyping it — the deploy workflow hardcodes the same name."

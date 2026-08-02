@@ -218,8 +218,11 @@ resource "aws_apigatewayv2_stage" "default" {
   # No `access_log_settings`. Access logs with route keys are one of the things
   # ADR 0005 notes the gateway makes available to #29; #29 chose the application
   # limiter instead, and turning these on would bill CloudWatch ingestion for a
-  # log nothing reads, on the stack whose whole argument is that nothing bills
-  # for existing.
+  # log nothing reads — and then bill storage on the retained bytes for as long
+  # as the destination group keeps them, on the stack whose whole argument is
+  # that its standing cost is negligible and bounded. It would be the second
+  # at-rest line in this directory; see the cost banner in outputs.tf for what
+  # the first one already costs.
 
   # The stage references only the API, so nothing in the configuration above
   # tells Terraform the routes must exist first — yet `route_settings` is keyed
