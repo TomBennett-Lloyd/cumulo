@@ -1,6 +1,6 @@
 import type { Site } from '@cumulo/shared';
 import type { ReactElement } from 'react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
@@ -206,11 +206,36 @@ export const SitePanel = ({
   onClose,
 }: SitePanelProps): ReactElement => {
   const titleId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  /*
+   * Taking the context region means taking the focus with it.
+   *
+   * The column swaps one occupant for another above the reader's focus point,
+   * and a swap nobody is told about is one a keyboard or screen-reader user
+   * only discovers by tabbing into it. The occupant announces itself by
+   * focusing its own heading — the panel's name is the answer to "what is this
+   * region now?" — and the heading is `tabIndex={-1}` so it is a focus target
+   * without joining the tab order.
+   *
+   * The document's focus is state no render owns and no re-render restores, so
+   * this is the external system an effect is for (`react.md` rule 1). It fires
+   * on mount, on a change of site, and on the remount that a cancelled draft
+   * produces — three ways of arriving at the same fact, which is why the panel
+   * does it rather than each of the dashboard's call sites.
+   *
+   * A `?site=` deep link lands here too, at page load, and that is deliberate:
+   * the panel is the content the address named, so it is where the reader is
+   * meant to start.
+   */
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [site.id]);
 
   return (
     <section className="site-panel" aria-labelledby={titleId}>
       <header className="site-panel-header">
-        <h2 className="site-panel-title" id={titleId}>
+        <h2 className="site-panel-title" id={titleId} ref={headingRef} tabIndex={-1}>
           {site.name}
         </h2>
         <button type="button" className="site-panel-close" onClick={onClose}>

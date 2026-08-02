@@ -3,7 +3,7 @@ import {
   MAX_PLAUSIBLE_RESIDENTIAL_KW,
   type CreateSiteInput,
 } from '@cumulo/shared';
-import { useId, useState, type ReactElement, type SubmitEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ReactElement, type SubmitEvent } from 'react';
 
 import type { CreationRefusal } from './creation-throttle';
 
@@ -251,6 +251,24 @@ export const AddSiteForm = ({
   const fieldPrefix = useId();
   const [draft, setDraft] = useState<SiteDraft>(() => initialDraft(latitude, longitude));
   const [issues, setIssues] = useState<DraftIssues>(EMPTY_ISSUES);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  /*
+   * The same rule the site panel follows: whatever takes the column's context
+   * region focuses its own heading, so a reader whose focus is somewhere else
+   * on the page is told the region changed rather than left to find out.
+   *
+   * Mount *is* the whole of "taking the region" here, hence the empty
+   * dependencies: a second map click gives this form a new `key` and remounts
+   * it (see the note above on why the coordinates are read once), so there is
+   * no later moment at which a live form becomes a different draft.
+   *
+   * Focus is document state, an external system no render owns — the case an
+   * effect is for (`react.md` rule 1).
+   */
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   const updateField = (field: SiteFieldName, value: string): void => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -274,7 +292,7 @@ export const AddSiteForm = ({
 
   return (
     <form className="add-site-form" aria-labelledby={titleId} noValidate onSubmit={handleSubmit}>
-      <h2 className="add-site-title" id={titleId}>
+      <h2 className="add-site-title" id={titleId} ref={headingRef} tabIndex={-1}>
         Add a site
       </h2>
 
@@ -318,8 +336,17 @@ export const AddSiteForm = ({
         </p>
       )}
 
+      {/*
+        `role="alert"`, not `status`: a live region mounted with its text already
+        inside it has no change to report and announces nothing (`react.md`,
+        async surface convention). This answers a submit press the visitor just
+        made, into a form already on screen — so it is a real change, and it
+        announces the same way as the form's other two submit answers above and
+        below. The dashboard's `CreationState` union makes refusal and failure
+        mutually exclusive, so those two never announce over each other.
+      */}
       {refusal !== null && (
-        <p className="add-site-notice" role="status">
+        <p className="add-site-notice" role="alert">
           To stay inside the weather API&rsquo;s request budget, wait {refusal.retryAfterSeconds}s
           before adding another site.
         </p>

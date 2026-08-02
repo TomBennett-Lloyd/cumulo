@@ -13,6 +13,15 @@ import { Component } from 'react';
  * tech-debt entry "No error boundary above the dashboard's async work",
  * answered for the app as a whole.
  *
+ * Two kinds of event land here, because they are the same kind of event. React
+ * throws a render error *to* this boundary; the event loop reports an unhandled
+ * rejection *past* it, and a boundary that only caught the first would leave a
+ * form stuck on "Adding site…" forever while the page looked fine. Under
+ * `error-handling.md` rule 1 the data layer returns its expected failures as
+ * values, so a rejection that escapes all the way to `window` is by
+ * construction a bug — the same class of thing as a throw during render, and
+ * owed the same labelled failure rather than a silent hang.
+ *
  * `MapRegionBoundary` in `dashboard/LazyMapRegion.tsx` is deliberately *kept*
  * rather than folded into this one. They contain different blast radii: a
  * failed map chunk is a known, routine production event (an `index.html` cached
@@ -62,7 +71,8 @@ interface AppErrorBoundaryState {
  * `componentDidCatch` logs rather than swallows (`error-handling.md` rule 2c):
  * this is where the error stops, so it has to stop *visibly* — a render bug
  * reaching every visitor should be findable in a console rather than inferred
- * from a screenshot of a mostly-empty page.
+ * from a screenshot of a mostly-empty page. `handleRejection` is the same
+ * contract for the asynchronous half.
  */
 export class AppErrorBoundary extends Component<
   { readonly children: ReactNode },
@@ -72,6 +82,37 @@ export class AppErrorBoundary extends Component<
 
   static getDerivedStateFromError(): AppErrorBoundaryState {
     return { failed: true };
+  }
+
+  /**
+   * The rejection nothing awaited, given the same answer as a render throw.
+   *
+   * Typed against `Event` and narrowed with `in` rather than
+   * `instanceof PromiseRejectionEvent`: the reason is the only thing wanted
+   * from the event, `in` reads it without depending on the constructor being
+   * defined in whatever realm the listener happens to run in, and an
+   * `instanceof` against another realm's class answers `false` while the
+   * property is right there. `reason` stays `unknown` — a rejection can carry
+   * any value, and the log is a boundary log, not a parse.
+   *
+   * No `preventDefault()`: the browser's own "Uncaught (in promise)" report is
+   * the only stack trace anyone gets for this, and suppressing it to keep the
+   * console tidy would be swallowing by another name (`error-handling.md`
+   * rule 2). This adds a visible failure; it takes nothing away.
+   */
+  private readonly handleRejection = (event: Event): void => {
+    const reason: unknown = 'reason' in event ? event.reason : undefined;
+
+    console.error('Unhandled promise rejection reached the app boundary', { reason });
+    this.setState({ failed: true });
+  };
+
+  override componentDidMount(): void {
+    window.addEventListener('unhandledrejection', this.handleRejection);
+  }
+
+  override componentWillUnmount(): void {
+    window.removeEventListener('unhandledrejection', this.handleRejection);
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {

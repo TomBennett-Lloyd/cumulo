@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { MapRegionComponent } from './dashboard/MapRegion';
-import { MapAttributionStrip } from './map/MapAttributionStrip';
+import { MapSurface } from './map/MapSurface';
 import { THEME_STORAGE_KEY } from './theme';
 
 /*
@@ -33,18 +33,17 @@ import { THEME_STORAGE_KEY } from './theme';
 /**
  * The map's stand-in: no WebGL, and the one obligation the real region carries.
  *
- * It renders `MapAttributionStrip` because the real `MapRegion` sits inside a
- * shell that does — the credit is a licence obligation wherever weather-derived
- * data is displayed. A stand-in without it would let the attribution assertions
- * below pass against a page that never had to show one, which would make them
- * theatre. Nothing else about it is interactive: selection and click-to-add are
- * the dashboard's tests to run (`dashboard/Dashboard.test.tsx`), not the
- * shell's.
+ * It is the real `MapSurface` with a placeholder in the canvas slot rather than
+ * a hand-written shell, so it credits Open-Meteo for the same reason the shipping
+ * map does instead of by a copy that happens to agree. The credit is a licence
+ * obligation wherever weather-derived data is displayed, and a stand-in without
+ * it would let the attribution assertions below pass against a page that never
+ * had to show one — theatre. Nothing else about it is interactive: selection and
+ * click-to-add are the dashboard's tests to run
+ * (`dashboard/Dashboard.test.tsx`), not the shell's.
  */
 const StandInMapRegion: MapRegionComponent = (): ReactElement => (
-  <div className="map-view">
-    <MapAttributionStrip />
-  </div>
+  <MapSurface canvas={{ kind: 'placeholder', label: 'Map stand-in' }} />
 );
 
 /**

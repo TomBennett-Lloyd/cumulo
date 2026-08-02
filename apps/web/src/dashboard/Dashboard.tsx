@@ -203,6 +203,8 @@ export const Dashboard = ({
   createdSitesRef.current = createdSites;
   /** The context region itself — the thing a swap has to bring back into view. */
   const contextRegionRef = useRef<HTMLDivElement>(null);
+  /** The fleet column's box, searched for the row a closing panel hands focus back to. */
+  const siteListRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -298,9 +300,48 @@ export const Dashboard = ({
    */
   const { state: forecast, retry: retryForecast } = useFirstForecast(dataSource, selectedSiteId);
 
+  /**
+   * Puts focus back on one site's row in the fleet list.
+   *
+   * The other half of the rule the occupants of the context region follow. An
+   * occupant taking the region focuses its own heading; a panel *leaving* it has
+   * to hand focus somewhere too, because the button the reader pressed to close
+   * it is about to be unmounted and focus would otherwise fall to `body` — no
+   * position, nothing announced, and a keyboard user starting the page again.
+   * The row that names the site they were reading is where they were, so it is
+   * where they go back to.
+   *
+   * Matched on `dataset.siteId` rather than by interpolating the id into a
+   * selector: an id is data, and data does not belong in a query language. If no
+   * row matches — a listing that failed, a site scrolled out of a future
+   * virtualised list — this does nothing, and focus stays on the Close button
+   * until React unmounts it. That is the same place the browser would have left
+   * it anyway, so the fallback costs nothing that was not already lost.
+   */
+  const focusSiteRow = (siteId: Site['id']): void => {
+    const rows = siteListRegionRef.current?.querySelectorAll<HTMLElement>('[data-site-id]') ?? [];
+
+    for (const row of rows) {
+      if (row.dataset.siteId === siteId) {
+        row.focus();
+        return;
+      }
+    }
+  };
+
   const closeDraft = (): void => {
     setDraft(null);
     setCreation({ status: 'editing' });
+
+    // A cancelled draft hands the region to whatever takes it back, and that
+    // occupant focuses its own heading — a re-mounting `SitePanel` when a site
+    // is still selected. Nothing is remounting when there is no selection: the
+    // fleet panel was there all along, merely hidden, so the region itself is
+    // the only honest focus target and it takes it here rather than growing
+    // focus logic inside `FleetPanel` that would race the row focus on close.
+    if (selectedSiteId === null) {
+      contextRegionRef.current?.focus();
+    }
   };
 
   const createSite = async (input: CreateSiteInput): Promise<void> => {
@@ -368,7 +409,12 @@ export const Dashboard = ({
          * region" has to be addressable to be scrolled to, and because exactly
          * one of them is ever visible — the box is the region, not a stack.
          */}
-        <div className="dashboard-context" ref={contextRegionRef}>
+        {/*
+         * `tabIndex={-1}` makes the region a focus target without putting it in
+         * the tab order: it is where focus lands when a draft is cancelled and
+         * no panel is remounting to claim it.
+         */}
+        <div className="dashboard-context" ref={contextRegionRef} tabIndex={-1}>
           {draft !== null && (
             <AddSiteForm
               key={draftKey(draft)}
@@ -389,6 +435,10 @@ export const Dashboard = ({
               firstForecast={forecast}
               onRetryFirstForecast={retryForecast}
               onClose={() => {
+                // Focus first, state second: this reads the row while it is
+                // still the selected one, and moving focus off the Close button
+                // before React unmounts it is the whole point.
+                focusSiteRow(selectedSite.id);
                 setSelectedSiteId(null);
               }}
             />
@@ -416,7 +466,7 @@ export const Dashboard = ({
           <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
             Sites
           </h2>
-          <div className="dashboard-fleet">
+          <div className="dashboard-fleet" ref={siteListRegionRef}>
             <FleetSection
               load={load}
               sites={sites}

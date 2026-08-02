@@ -43,6 +43,21 @@ import {
  * second value, and the caption states the horizon the reader is actually
  * looking at.
  *
+ * ## Hidden means empty, not merely invisible
+ *
+ * The column hides this panel rather than unmounting it so the queries and the
+ * chosen range survive a context swap — so the hooks below run in every state,
+ * hidden included. The *children* are a different question. A `role="alert"`
+ * that mounts inside `display: none` has nothing to announce: it was never on
+ * screen, and the later reveal is an attribute change rather than a DOM change,
+ * so assistive technology reports nothing at either moment (#161). Rendering the
+ * children only while visible means any failure mounts fresh into a visible tree
+ * on reveal, which is a change and is announced.
+ *
+ * The state that matters is held by the hooks, not by the markup, so dropping
+ * the subtree costs nothing: no refetch on reveal, and the range the reader
+ * picked is still the range.
+ *
  * ## Attribution
  *
  * There is deliberately no Open-Meteo credit inside this panel. The column
@@ -244,33 +259,37 @@ export const FleetPanel = ({
 
   return (
     <section className="fleet-panel" hidden={hidden} aria-labelledby={headingId}>
-      <header className="fleet-panel-header">
-        <h2 className="fleet-panel-title" id={headingId}>
-          Fleet
-        </h2>
-        <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
-        <p className="fleet-panel-subtitle">
-          {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
-        </p>
-      </header>
-      {sites.length === 0 ? (
-        // The empty fleet is the demo's invitation, so it gets the panel to
-        // itself: no picker over nothing, and no failed query reported for a
-        // sum the reader never asked for.
-        <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
-      ) : (
+      {hidden ? null : (
         <>
-          <p className="fleet-panel-hint">{ADD_SITE_HINT}</p>
-          {fleetLookback ? (
-            <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
+          <header className="fleet-panel-header">
+            <h2 className="fleet-panel-title" id={headingId}>
+              Fleet
+            </h2>
+            <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
+            <p className="fleet-panel-subtitle">
+              {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
+            </p>
+          </header>
+          {sites.length === 0 ? (
+            // The empty fleet is the demo's invitation, so it gets the panel to
+            // itself: no picker over nothing, and no failed query reported for a
+            // sum the reader never asked for.
+            <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
           ) : (
-            <p className="panel-caption">{HORIZON_CAPTION}</p>
-          )}
-          {fleetBody(
-            combineFleetQueries(forecasts, actuals),
-            sites.length,
-            chartCopy(windowLabel(range, fleetLookback), fleetActuals),
-            retry,
+            <>
+              <p className="fleet-panel-hint">{ADD_SITE_HINT}</p>
+              {fleetLookback ? (
+                <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
+              ) : (
+                <p className="panel-caption">{HORIZON_CAPTION}</p>
+              )}
+              {fleetBody(
+                combineFleetQueries(forecasts, actuals),
+                sites.length,
+                chartCopy(windowLabel(range, fleetLookback), fleetActuals),
+                retry,
+              )}
+            </>
           )}
         </>
       )}
