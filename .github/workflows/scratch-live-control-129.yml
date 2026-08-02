@@ -1,0 +1,10 @@
+# TEMPORARY live negative control for #129 — deleted in the next commit.
+on: workflow_dispatch
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    steps:
+      - name: broken on purpose
+        run: |
+          if [ "$x" = y ]
+          echo "no then"
