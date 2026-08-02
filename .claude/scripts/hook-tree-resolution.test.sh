@@ -17,6 +17,13 @@
 # checkout's path is a PREFIX of the nested worktree's, and a substring assertion
 # on the bare paths would be satisfied by the wrong tree.
 #
+# WHICH STREAM is the second contract these hooks carry, and it is asserted here
+# rather than merged away (#157): post-edit-check reports on stderr and exits 2,
+# ensure-deps announces a successful install on stdout and a failed one on stderr.
+# Merging both streams into one capture made "the report reached stderr" a claim no
+# case could make — a hook whose report silently moved to stdout would vanish from
+# the agent's view and every case here would have stayed green.
+#
 # Negative control (testing.md rule 4 — a regression test earns its lines only
 # once it has been seen to fail on the pre-fix code):
 #
@@ -34,17 +41,21 @@
 # revision, extract the hooks AND the library into one directory together and
 # point both variables inside it.
 #
-# Self-contained on the same terms as the other harnesses here: no framework, no
-# network, one `mktemp -d` that a trap removes, and every fixture is a throwaway
-# git repo, so the harness can never touch the repository it ships in.
+# Self-contained on the same terms as the other harnesses here: no framework beyond
+# the shared vocabulary in harness-lib.sh next door, no network, one `mktemp -d`
+# that a trap removes, and every fixture is a throwaway git repo, so the harness can
+# never touch the repository it ships in.
 #
 # Usage: bash .claude/scripts/hook-tree-resolution.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
-set -u
+set -uo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 HOOKS=$(cd "$SCRIPTS/../hooks" && pwd) || exit 2
+
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
 
 POST_EDIT_HOOK=${POST_EDIT_HOOK:-$HOOKS/post-edit-check.sh}
 ENSURE_DEPS_HOOK=${ENSURE_DEPS_HOOK:-$HOOKS/ensure-deps.sh}
@@ -57,69 +68,7 @@ if ! command -v pnpm >/dev/null 2>&1; then
   exit 2
 fi
 
-tmp_raw=$(mktemp -d) || exit 2
-cleanup() { rm -rf "$tmp_raw"; }
-trap cleanup EXIT INT TERM
-# Canonical from the start: macOS hides temp dirs behind /var -> /private/var, and
-# git reports a realpath'd toplevel, so a raw mktemp path never matches.
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
-
-passed=0
-failed=0
-case_name=""
-case_failed=0
-out=""
-rc=0
-
-# --- harness plumbing --------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
-}
-
-begin() {
-  case_name="$1"
-  case_failed=0
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-bad() {
-  printf '  ! %s\n' "$1" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
-  esac
-}
-
-expect_silent() {
-  [ -z "$out" ] || bad "expected no output; got: $out"
-}
+harness_init_tmp
 
 # --- fixtures ----------------------------------------------------------------------
 
@@ -177,18 +126,48 @@ add_installable() {
   must_write "$1/pnpm-lock.yaml" "lockfileVersion: '9.0'"
 }
 
+# add_installed_ok <tree> -> the other half of that pair: a manifest/lockfile combination
+# `pnpm install --frozen-lockfile` ACCEPTS, which is the only way to reach ensure-deps'
+# success branch at all.
+#
+# The lockfile text is derived, never guessed — it is pnpm's own output for exactly this
+# manifest under the pinned pnpm (11.18.0, package.json's `packageManager`), and it is
+# dep-free so the install needs nothing from the network: `rm -rf node_modules &&
+# pnpm install --frozen-lockfile --offline` exits 0 on it, which is what keeps the
+# harness's no-network promise honest. Regenerate BOTH halves together the day pnpm's
+# lockfile format moves — a stale lockfile turns the success case red rather than quiet,
+# because the hook would take the failure branch and stdout would carry nothing.
+add_installed_ok() { # add_installed_ok <tree>
+  must_write "$1/package.json" '{"name":"fixture","version":"0.0.0","private":true}'
+  must cat >"$1/pnpm-lock.yaml" <<'LOCK'
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+LOCK
+}
+
 # --- hook invocation ---------------------------------------------------------------
 
+# Both hooks read their event from stdin, and stdin is the one thing `capture` inherits
+# rather than owns. So the event JSON goes to a file and is REDIRECTED INTO the capture
+# call; it is never piped into it. A pipe would run capture in a subshell, and its
+# out/err/rc assignments would die with that subshell while the caller read the previous
+# run's values — see harness-lib.sh's capture header.
+
 run_post_edit() { # run_post_edit <edited-file> <claude-project-dir>
-  out=$(printf '{"tool_input":{"file_path":"%s"},"cwd":"%s"}' "$1" "$2" |
-    CLAUDE_PROJECT_DIR="$2" bash "$POST_EDIT_HOOK" 2>&1)
-  rc=$?
+  must printf '{"tool_input":{"file_path":"%s"},"cwd":"%s"}' "$1" "$2" >"$TMP_ROOT/event.json"
+  capture env CLAUDE_PROJECT_DIR="$2" bash "$POST_EDIT_HOOK" <"$TMP_ROOT/event.json"
 }
 
 run_ensure_deps() { # run_ensure_deps <event-cwd> <claude-project-dir>
-  out=$(printf '{"cwd":"%s"}' "$1" |
-    CLAUDE_PROJECT_DIR="$2" bash "$ENSURE_DEPS_HOOK" 2>&1)
-  rc=$?
+  must printf '{"cwd":"%s"}' "$1" >"$TMP_ROOT/event.json"
+  capture env CLAUDE_PROJECT_DIR="$2" bash "$ENSURE_DEPS_HOOK" <"$TMP_ROOT/event.json"
 }
 
 # --- post-edit-check: which tree lints the edited file -------------------------------
@@ -201,18 +180,23 @@ add_deps "$BOTH_WT" 1
 must mkdir -p "$BOTH_WT/pkg" "$BOTH_MAIN/pkg"
 must touch "$BOTH_WT/pkg/mod.ts" "$BOTH_MAIN/pkg/mod.ts" "$BOTH_WT/notes.md"
 
+# stderr, not "some stream": post-edit-check.sh wraps its whole report in `{ … } >&2`
+# before exiting 2, and the eslint shim's cwd line is captured into that block, so it
+# arrives on stderr too. A report that drifted onto stdout would still be output, and a
+# merged capture would still be green — while the agent whose feedback loop this is
+# would see nothing.
 begin "post-edit-check lints a worktree file from that worktree, not from CLAUDE_PROJECT_DIR"
 run_post_edit "$BOTH_WT/pkg/mod.ts" "$BOTH_MAIN"
 expect_rc 2 "$rc"
-expect_out "cwd=[$BOTH_WT]"
-expect_not_out "cwd=[$BOTH_MAIN]"
-expect_out "ESLint failed for $BOTH_WT/pkg/mod.ts"
+expect_stderr "cwd=[$BOTH_WT]"
+expect_not_stderr "cwd=[$BOTH_MAIN]"
+expect_stderr "ESLint failed for $BOTH_WT/pkg/mod.ts"
 end
 
 begin "post-edit-check still lints a main-checkout file from the main checkout"
 run_post_edit "$BOTH_MAIN/pkg/mod.ts" "$BOTH_MAIN"
 expect_rc 2 "$rc"
-expect_out "cwd=[$BOTH_MAIN]"
+expect_stderr "cwd=[$BOTH_MAIN]"
 end
 
 begin "post-edit-check ignores a non-TypeScript edit"
@@ -276,13 +260,14 @@ must mkdir -p "$SESSION_MAIN/node_modules"
 begin "ensure-deps prepares the worktree the session is in, not the checkout it started from"
 run_ensure_deps "$SESSION_WT" "$SESSION_MAIN"
 expect_rc 0 "$rc"
-expect_out "$SESSION_WT"
-expect_out "node_modules"
+expect_stderr "$SESSION_WT"
+expect_stderr "node_modules"
+expect_not_stdout "pnpm install --frozen-lockfile failed"
 end
 
 begin "ensure-deps falls back to its own working directory when the event carries no cwd"
-out=$(printf '{}' | (cd "$SESSION_WT" && CLAUDE_PROJECT_DIR="$SESSION_MAIN" bash "$ENSURE_DEPS_HOOK" 2>&1))
-rc=$?
+must printf '{}' >"$TMP_ROOT/event.json"
+capture -C "$SESSION_WT" env CLAUDE_PROJECT_DIR="$SESSION_MAIN" bash "$ENSURE_DEPS_HOOK" <"$TMP_ROOT/event.json"
 expect_rc 0 "$rc"
 expect_out "$SESSION_WT"
 end
@@ -299,7 +284,24 @@ expect_rc 0 "$rc"
 expect_silent
 end
 
+# The success branch, which every case above leaves untested: a failed install and a
+# successful one both end in text naming the tree, and the merged capture could not tell
+# them apart. Separate streams are what make "installed cleanly" a distinct observation
+# from "install failed" — and this is the only case that would notice the success line
+# moving to stderr, where the session would never surface it.
+make_fixture ready
+READY_MAIN="$TMP_ROOT/ready/main"
+READY_WT="$READY_MAIN/.claude/worktrees/task"
+add_installed_ok "$READY_WT"
+
+begin "ensure-deps reports a successful install on stdout, naming the tree it prepared"
+run_ensure_deps "$READY_WT" "$READY_MAIN"
+expect_rc 0
+expect_stdout "deps are ready"
+expect_stdout "$READY_WT"
+expect_not_stderr "pnpm install --frozen-lockfile failed"
+end
+
 # --- summary -------------------------------------------------------------------------
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" -eq 0 ] || exit 1
+finish
