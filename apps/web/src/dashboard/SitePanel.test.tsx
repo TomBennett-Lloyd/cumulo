@@ -213,7 +213,7 @@ describe('SitePanel', () => {
 /** The wait the dashboard's poll owns — before any series is worth asking for. */
 describe('SitePanel first forecast', () => {
   it('counts the wait out loud, and asks the source for nothing yet', () => {
-    const { dataSource } = renderPanel({ status: 'pending', elapsedSeconds: 18 });
+    const { dataSource } = renderPanel({ status: 'generating', elapsedSeconds: 18 });
 
     const waiting = screen.getByText('Generating first forecast… 18s');
 

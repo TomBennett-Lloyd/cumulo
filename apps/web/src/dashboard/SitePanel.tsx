@@ -150,10 +150,20 @@ interface SiteForecastRegionProps {
 /**
  * One arm of {@link ForecastViewState}, rendered.
  *
- * The pending arm counts out loud. The demo's headline promise is a forecast
- * about a minute after a site is added, and a visitor watching that minute is
- * owed the elapsed seconds — a bare spinner cannot distinguish a pipeline that
- * is working from one that has stalled.
+ * The two waits get two sentences, because they are two different facts. While
+ * the fleet has not answered — an established site's ordinary round trip, or a
+ * fault that says nothing about whether a forecast exists — this is a plain
+ * load, worded exactly as the series below it words its own (#177). Only once
+ * the fleet has confirmed the forecast is absent does the panel count out loud:
+ * the demo's headline promise is a forecast about a minute after a site is
+ * added, and a visitor watching that minute is owed the elapsed seconds — a
+ * bare spinner cannot distinguish a pipeline that is working from one that has
+ * stalled.
+ *
+ * A halt gets the source's message and **no retry**: `forbidden`'s recourse is
+ * a deployment change, so a button re-running the identical refused request
+ * would be telling the reader to do the one thing that cannot work
+ * (`react.md`'s async-surface convention).
  */
 const SiteForecastRegion = ({
   dataSource,
@@ -162,7 +172,9 @@ const SiteForecastRegion = ({
   onRetryFirstForecast,
 }: SiteForecastRegionProps): ReactElement => {
   switch (firstForecast.status) {
-    case 'pending':
+    case 'checking':
+      return <PanelPending label={loadingSiteSeriesLabel(site.name)} />;
+    case 'generating':
       return (
         <PanelPending
           label={`Generating first forecast… ${String(firstForecast.elapsedSeconds)}s`}
@@ -175,6 +187,8 @@ const SiteForecastRegion = ({
           onRetry={onRetryFirstForecast}
         />
       );
+    case 'halted':
+      return <PanelError message={firstForecast.message} />;
     case 'ready':
       return <SiteSeriesSection dataSource={dataSource} site={site} />;
   }
