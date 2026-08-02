@@ -288,8 +288,9 @@ describe('POST /v1/sites', () => {
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
     expect(calls.createAttempts).toHaveLength(2);
     expect(calls.written).toEqual([]);
-    // Two backoffs, not three: the refusal is terminal, so nothing sleeps a
-    // delay it has no time to attempt anything after.
+    // Two backoffs, not eleven: the sleep precedes each attempt (a budget read
+    // taken before a sleep would be stale by its length), so the second 50 ms
+    // backoff runs and its attempt is then refused — terminal, no third sleep.
     expect(calls.sleeps).toEqual([25, 50]);
     expect(calls.logged).toEqual([{ event: createSiteDeadlineEvent, siteId: RANELAGH_ID }]);
   });

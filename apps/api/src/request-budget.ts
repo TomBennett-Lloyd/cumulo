@@ -71,7 +71,7 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
  * what crosses it, at 21,000 ms. It therefore takes **three independent
  * per-command worst cases coinciding in one request's ungated prefix** to kill
- * an invocation — which only the four-command routes above can even offer —
+ * an invocation — which the three- and four-command prefixes above can offer —
  * **or two coinciding inside an admitted cleanup pass**, whose Query and batch
  * are priced as one command between them. Each of those worst cases is itself
  * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
