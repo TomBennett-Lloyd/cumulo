@@ -8,7 +8,7 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 | ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                                                                                                               |
 | `alerting`  | `infra/alerting/`  | The platform alerts SNS topic every other stack's alarms notify, and its email subscription.                                                                                                                                                |
-| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md), and their four throttle alarms.                                                                                                                                  |
+| `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md) plus the per-IP limiter table of [ADR 0006](../docs/adr/0006-demo-abuse-protection.md) — five in all — and the four throttle alarms on the two provisioned ones.  |
 | `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), three alarms, and the CI deploy grant for its own function.                                        |
 | `api`       | `infra/api/`       | The fleet API Lambda and the API Gateway HTTP API of [ADR 0005](../docs/adr/0005-fleet-api-hosting.md), including the stage throttle that bounds its bill, two alarms, and the CI deploy grant for it.                                      |
 | `forecast`  | `infra/forecast/`  | The forecast Lambda of [ADR 0003](../docs/adr/0003-pv-model-runtime.md) and the event source mapping that wires it to ingestion's queue per [ADR 0004](../docs/adr/0004-ingestion-transport.md), one alarm, and the CI deploy grant for it. |
@@ -557,7 +557,7 @@ Destroying this stack does not break any other stack's apply — the alarms keep
 
 ## Runbook: the storage stack
 
-Four DynamoDB tables and four CloudWatch alarms, per [ADR 0002](../docs/adr/0002-storage-split.md). Every command runs from `infra/storage/`:
+Five DynamoDB tables and four CloudWatch alarms. Four of the tables are [ADR 0002](../docs/adr/0002-storage-split.md)'s domain tables; the fifth, `abuse`, is [issue #29](https://github.com/TomBennett-Lloyd/cumulo/issues/29)'s per-IP limiter state per [ADR 0006](../docs/adr/0006-demo-abuse-protection.md), which lives in this stack because it is the same store, the same naming convention, and the same cost ceiling. The alarms are on the two provisioned tables only. Every command runs from `infra/storage/`:
 
 ```bash
 cd infra/storage
@@ -604,7 +604,20 @@ terraform init -backend-config=backend.hcl
 terraform plan -no-color | tee ~/cumulo-storage-plan.txt
 ```
 
-Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — four tables (`sites`, `series`, `weather`, `metrics`) and four throttle alarms (read and write, on `series` and `weather`). Any other count means the configuration is not what this document describes; stop and find out why. In particular, **9 or more would mean an auto-scaling resource has appeared**, which is the one thing `tables.tf` exists to prevent.
+Expect **`Plan: 9 to add, 0 to change, 0 to destroy.`** — five tables (`sites`, `series`, `weather`, `metrics`, `abuse`) and four throttle alarms (read and write, on `series` and `weather`). The one data source, `aws_caller_identity` in `alarms.tf`, is read rather than created and adds nothing to the count.
+
+That 9 is arithmetic, not memory, and it is worth re-deriving rather than trusting a sentence written before the last table was added:
+
+```bash
+grep -c '^resource "aws_dynamodb_table"' tables.tf           # 5 — one per table
+grep -c '^resource "aws_cloudwatch_metric_alarm"' alarms.tf  # 2 — each a for_each over
+                                                             # local.provisioned_tables, so 4 alarms
+grep -c '^data ' alarms.tf                                   # 1 — read, not created
+```
+
+Tables + alarm _instances_ is the expected plan count; blocks expanded by `for_each` count once per instance, not once per block.
+
+**The invariant, which outlives the number:** this stack plans exactly the tables `tables.tf` declares plus their throttle alarms, and nothing else. Any other count means the configuration is not what this document describes; stop and find out why — and a count **above** the arithmetic above is the one to stop on hardest, because the surplus resource is an `aws_appautoscaling_target` or `aws_appautoscaling_policy`, which is the single thing `tables.tf` exists to prevent. A table added by a later ticket moves the number and leaves the invariant untouched; re-run the greps before concluding that a plan is wrong.
 
 **A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, table-name shape, capacity numbers — and label it `awaiting-review`.
 
@@ -619,7 +632,7 @@ terraform apply
 **B2. Confirm what exists.**
 
 ```bash
-terraform state list   # expect exactly 8 lines — this stack has no data sources
+terraform state list   # expect 10 lines — the 9 resources plus the 1 data source
 ```
 
 **B3. Confirm the capacity that the whole cost argument rests on.** Read it back from AWS, not from Terraform's opinion of AWS:
@@ -1495,8 +1508,8 @@ The figures and the workload they are computed from are [ADR 0002](../docs/adr/0
 | Resource group                                                       | Billing basis                                                                                                             | Estimate     |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | **Provisioned capacity** (`series` 14 WCU / 21 RCU, `weather` 5 / 3) | 19 WCU / 24 RCU against the always-free **25 WCU / 25 RCU per Region**, which does not expire after twelve months         | **$0.00/mo** |
-| **On-demand tables** (`sites` + both GSIs, `metrics`)                | $0.625/M write request units, $0.125/M read request units — thousands of requests/month, and $0 while idle                | **$0.00/mo** |
-| **Storage** (all four tables)                                        | ~3.5 GB inside the always-free **25 GB**                                                                                  | **$0.00/mo** |
+| **On-demand tables** (`sites` + both GSIs, `metrics`, `abuse`)       | $0.625/M write request units, $0.125/M read request units — thousands of requests/month, and $0 while idle                | **$0.00/mo** |
+| **Storage** (all five tables)                                        | ~3.5 GB inside the always-free **25 GB**                                                                                  | **$0.00/mo** |
 | **Throttle alarms** (4 × `aws_cloudwatch_metric_alarm`)              | 4 of the platform's 10, inside the always-free **10 CloudWatch alarms**; DynamoDB's own metrics are free                  | **$0.00/mo** |
 | **Backups / recovery**                                               | PITR off ($0.20/GB-month avoided), no on-demand backups, no exports, AWS-owned encryption key rather than a ~$1/month CMK | **$0.00/mo** |
 | **Total**                                                            |                                                                                                                           | **$0.00/mo** |
@@ -1506,7 +1519,8 @@ Genuinely zero, not a rounding error — and unlike the bootstrap stack, this on
 Notes on what would change that:
 
 - **The free capacity allowance is a hard edge, not a discount.** Crossing 25 WCU or 25 RCU in the Region bills the excess at $0.00065/WCU-hour and $0.00013/RCU-hour. This is why `tables.tf` has no auto-scaling and says so at length: an `aws_appautoscaling_target` is the one change that crosses that edge without appearing in anyone's plan review.
-- **The pool is Region-wide and shared.** 19/24 of 25/25 leaves 6 WCU / 1 RCU. That slack is not a growth reserve — the standing rule (a new table defaults to on-demand unless its load is batch-shaped) is what stops it being needed.
+- **The pool is Region-wide and shared.** 19/24 of 25/25 leaves 6 WCU / 1 RCU. That slack is not a growth reserve — the standing rule (a new table defaults to on-demand unless its load is batch-shaped) is what stops it being needed. `abuse` is that rule working: it is on-demand, so it neither draws on the 25/25 nor changes a number in this table.
+- **`abuse` adds no measurable storage.** Every row carries `expiresAt` and the table is TTL-swept, so its retained size is "addresses seen in the last few minutes" — kilobytes, which is why the ~3.5 GB figure ADR 0002 computed for the four domain tables still stands for all five.
 - **The honest inversion.** At list price this same allocation would cost ≈ $11.30/month against all-on-demand's ≈ $2.88, because a 7% duty cycle is exactly what on-demand pricing exists to serve. Provisioned wins here only because the tier is free, and ADR 0002 says so rather than pretending it is the better engineering answer.
 - **Nothing here has an hourly rate**, which is the property to preserve. Per-request DynamoDB costs at this volume are noise; a VPC, a NAT gateway, or a database instance would be the whole budget — the comparison ADR 0002 turned on.
 
