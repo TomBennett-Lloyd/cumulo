@@ -136,6 +136,33 @@ esac
 # repo's admin dir. The probe would then be reading the main checkout's activity while
 # reporting on this worktree.
 [ "$admin_dir" = "-" ] && keep "no-admin-dir"
+
+# --- broken-git-link: the worktree still points back at the admin dir recorded for it ----
+# Ordered ahead of every probe below, the min-age one included, and that ordering is the
+# point. A nested worktree that has lost its .git file answers every walk-up query with the
+# MAIN checkout — `is_clean` included, since it runs `git -C "$wt" status` — so until the link
+# is proven, "clean" or "quiet" may be a fact about the enclosing repository rather than about
+# this worktree. Refusing here means no probe ever runs on a worktree that cannot answer for
+# itself, and the operator gets a name for the breakage instead of git's remove failure.
+#
+# Shape: a linked worktree's .git is a regular file holding `gitdir: <admin dir>`. git 2.50.1
+# writes an absolute path; a relative one is resolved against the worktree before comparing,
+# since git accepts either. Missing, unreadable, wrong prefix, or pointing somewhere other
+# than the admin dir the main repo records — all one verdict: this link cannot be trusted.
+link=""
+[ -f "$wt/.git" ] && IFS= read -r link <"$wt/.git"
+case "$link" in
+  "gitdir: "?*) link=${link#gitdir: } ;;
+  *) keep "broken-git-link" ;;
+esac
+case "$link" in
+  /*) ;;
+  *) link="$wt/$link" ;;
+esac
+link_dir=$(canon "$link") || exit 2
+recorded_dir=$(canon "$admin_dir") || exit 2
+[ "$link_dir" = "$recorded_dir" ] || keep "broken-git-link"
+
 if [ "$WORKTREE_MIN_AGE_MINUTES" != "0" ]; then
   # A find that errors tells us nothing about activity, so it refuses rather than guesses.
   recent=$(find "$admin_dir" -mmin -"$WORKTREE_MIN_AGE_MINUTES" -print -quit 2>/dev/null) || keep "recently-active"

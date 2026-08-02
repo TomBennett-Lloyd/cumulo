@@ -40,6 +40,10 @@ main_checkout_dir() {
 # locking status call makes every worktree look "active" the instant we inspect it — the guard
 # would then never let anything through. The guard is also ordered ahead of this call, so
 # neither mechanism alone is what keeps it working.
+#
+# `git -C` walks up to the enclosing repository when the worktree's own .git file is missing,
+# so this answers for the MAIN checkout on a broken-linked worktree; reap-worktree.sh verifies
+# that link before it ever calls here.
 is_clean() {
   local status
   status=$(git -C "$1" --no-optional-locks status --porcelain 2>/dev/null) || return 1

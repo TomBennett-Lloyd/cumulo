@@ -170,6 +170,24 @@ run_ensure_deps() { # run_ensure_deps <event-cwd> <claude-project-dir>
   capture env CLAUDE_PROJECT_DIR="$2" bash "$ENSURE_DEPS_HOOK" <"$TMP_ROOT/event.json"
 }
 
+# The interpreter-swapping variants of the two runners above, for the tool-preflight
+# cases at the bottom of this file. They exist ALONGSIDE their counterparts rather than
+# replacing them, and that is testing.md rule 7 rather than an accident: HOOK_NODE_CMD is
+# a knob, the preflight cases can only reach their target by turning it, and if every
+# runner turned it the shipped default (`node`, set in hook-context.sh) would be the one
+# configuration this suite never ran. So the ten cases above leave it unset — the two
+# lines of near-duplication below are what buys that.
+
+run_post_edit_as() { # run_post_edit_as <node-cmd> <edited-file> <claude-project-dir>
+  must printf '{"tool_input":{"file_path":"%s"},"cwd":"%s"}' "$2" "$3" >"$TMP_ROOT/event.json"
+  capture env CLAUDE_PROJECT_DIR="$3" HOOK_NODE_CMD="$1" bash "$POST_EDIT_HOOK" <"$TMP_ROOT/event.json"
+}
+
+run_ensure_deps_as() { # run_ensure_deps_as <node-cmd> <event-cwd> <claude-project-dir>
+  must printf '{"cwd":"%s"}' "$2" >"$TMP_ROOT/event.json"
+  capture env CLAUDE_PROJECT_DIR="$3" HOOK_NODE_CMD="$1" bash "$ENSURE_DEPS_HOOK" <"$TMP_ROOT/event.json"
+}
+
 # --- post-edit-check: which tree lints the edited file -------------------------------
 
 make_fixture both
@@ -300,6 +318,73 @@ expect_rc 0 "$rc"
 expect_stdout "deps are ready"
 expect_stdout "$READY_WT"
 expect_not_stderr "pnpm install --frozen-lockfile failed"
+end
+
+# --- the tool preflight: "cannot judge" is loud, and says which tool ------------------
+#
+# Every case above runs the real interpreter, and that is precisely why none of them can
+# see any of this: a hook with a working node behaves identically whether its preflight is
+# present, absent, or misspelled. Green with the tool installed is not evidence that the
+# missing-tool path works — it is the same output either way. So these three take the tool
+# away, which is the negative control #102 asks for by name.
+#
+# Two different failures, deliberately kept apart, because the fix has to distinguish them
+# too: an interpreter that is NOT THERE (caught by the preflight, reported with the tool's
+# name) and one that IS there but CANNOT RUN (passes `command -v`, fails at use, caught by
+# the exit status of hook_event_field). Before #102 both ended the same way — empty output,
+# exit 0 — which reads as "this event named nothing to act on" and is indistinguishable
+# from a clean edit.
+
+ABSENT_NODE="$TMP_ROOT/absent/node"
+if [ -e "$ABSENT_NODE" ]; then
+  printf 'FATAL harness setup failed: %s was supposed to be absent\n' "$ABSENT_NODE" >&2
+  exit 2
+fi
+
+# Present and executable, so it clears `command -v` and the preflight lets it through —
+# then exits non-zero without reading a byte. This is the shape a shadowed, broken or
+# wrong-architecture interpreter takes, and the preflight alone cannot catch it.
+BAD_NODE="$TMP_ROOT/badnode"
+must_write "$BAD_NODE" '#!/bin/sh
+exit 3'
+must chmod +x "$BAD_NODE"
+
+# A .ts file in a worktree that HAS deps: an event that would have produced a real verdict,
+# so "no eslint-shim in the output" is the positive tell that the hook stopped rather than
+# proceeded to judge with a tool it could not read the event with.
+begin "post-edit-check refuses loudly, naming the tool, when the event interpreter is missing"
+run_post_edit_as "$ABSENT_NODE" "$BOTH_WT/pkg/mod.ts" "$BOTH_MAIN"
+expect_rc 2 "$rc"
+expect_stderr "required tool not found: $ABSENT_NODE"
+expect_not_out "eslint-shim"
+end
+
+# The same missing tool, the other contract: ensure-deps must say so and must still not
+# block the session. The fixture has a lockfile and no node_modules, so an ensure-deps that
+# got past the preflight would attempt the install and name it in its report — which is
+# what the absence assertion pins.
+make_fixture preflight
+PREFLIGHT_MAIN="$TMP_ROOT/preflight/main"
+PREFLIGHT_WT="$PREFLIGHT_MAIN/.claude/worktrees/task"
+add_installable "$PREFLIGHT_WT"
+
+begin "ensure-deps reports a missing tool on stderr without blocking the session"
+run_ensure_deps_as "$ABSENT_NODE" "$PREFLIGHT_WT" "$PREFLIGHT_MAIN"
+expect_rc 0 "$rc"
+expect_stderr "required tool not found"
+expect_not_out "pnpm install --frozen-lockfile"
+end
+
+# expect_not_stderr on the preflight message is load-bearing, not tidiness: it is what says
+# this case reached the SECOND guard. A stub that failed `command -v` would satisfy the rc
+# and the "could not read" assertion by the preflight's route and leave the exit-status
+# check on hook_event_field completely unexercised.
+begin "post-edit-check refuses when the interpreter runs but cannot read the event"
+run_post_edit_as "$BAD_NODE" "$BOTH_WT/pkg/mod.ts" "$BOTH_MAIN"
+expect_rc 2 "$rc"
+expect_stderr "could not read the hook event"
+expect_not_stderr "required tool not found"
+expect_not_out "eslint-shim"
 end
 
 # --- summary -------------------------------------------------------------------------

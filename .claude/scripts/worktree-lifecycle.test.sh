@@ -183,6 +183,25 @@ merged_after_update_branch() {
   fi
 }
 
+# nested_worktree_fixture <name> -> a fixture in the real Cumulo layout: the worktree sits
+# INSIDE the main checkout, at $ROOT/main/wt on branch `feat`, and the main checkout's
+# .gitignore carries `wt/` so the nested tree is invisible to its status (as
+# .claude/worktrees/ is in this repo).
+#
+# The nesting is the whole reason the link guard exists, so it is fixture rather than
+# decoration: a worktree here that has lost its .git file is still inside a repository, so
+# every walk-up query answers for the MAIN checkout instead of failing. Shared by the three
+# cases below, which break the link the same way and differ only in what they then prove
+# nobody consulted — the min-age probe, is_clean, or rebranch's own toplevel lookup.
+nested_worktree_fixture() {
+  fixture "$1"
+  must printf 'wt/\n' >>"$ROOT/main/.gitignore"
+  must gitc "$ROOT/main" add -A
+  must gitc "$ROOT/main" commit --quiet -m ignore-nested-worktrees
+  must gitc "$ROOT/main" push --quiet origin main
+  add_wt feat main/wt
+}
+
 origin_head() { git -C "$ROOT/origin.git" rev-parse refs/heads/main; }
 tracking_ref() { git -C "$ROOT/main" rev-parse refs/remotes/origin/main; }
 
@@ -762,35 +781,31 @@ expect_out "swept 0, kept 3"
 end
 
 # ==========================================================================================
-# 24. the min-age probe measures the target's admin dir, not the enclosing repo's
+# 24. a worktree that has lost its .git file is refused before any probe can be fooled
 # ==========================================================================================
 # Cumulo nests worktrees inside the main checkout, so a worktree that has lost its .git file
-# answers every "which repo are you?" question with the MAIN checkout — and reap used to ask
-# exactly that question, via `rev-parse --absolute-git-dir` run inside the target. The fixture
-# makes the two answers disagree: the worktree's own admin dir has been idle for years while
-# the main checkout was touched a moment ago.
-begin "reap's min-age probe reads the worktree's own admin dir, not the enclosing repo's"
-fixture adminnested
-# Mirrors the real layout: .gitignore carries .claude/worktrees/ so nested worktrees are
-# invisible to the main checkout's status.
-must printf 'wt/\n' >>"$ROOT/main/.gitignore"
-must gitc "$ROOT/main" add -A
-must gitc "$ROOT/main" commit --quiet -m ignore-nested-worktrees
-must gitc "$ROOT/main" push --quiet origin main
-add_wt feat main/wt
+# answers every "which repo are you?" question with the MAIN checkout rather than failing.
+# reap therefore proves the link before it probes anything: the fixture makes the two answers
+# disagree — the worktree's own admin dir has been idle for years while the main checkout was
+# touched a moment ago — and the assertion is that no probe got to speak at all. Cases 33 and
+# 34 are the other two halves: is_clean, and rebranch's own toplevel lookup.
+begin "reap keeps a worktree whose .git file is missing, naming the broken link"
+nested_worktree_fixture adminnested
 commit_in "$ROOT/main/wt" work
 backdate_git_dir "$ROOT/main/wt"
 must rm "$ROOT/main/wt/.git"
 must touch "$ROOT/main/.git/index" "$ROOT/main/.git"
 gh_stub_none "$ROOT/gh"
-# Guard ON: this case is about which directory the guard looks at, so pinning it to 0 would
-# test nothing.
+# Guard ON: with the min-age guard pinned to 0 the freshly-touched main checkout could not be
+# mistaken for activity in the first place, so the recently-active assertion would test nothing.
 run_reap "$ROOT/gh" 60 "$ROOT/main/wt"
 expect_rc 1 "$rc"
-# The refusal must come from the merge state — the truthful answer for this branch — and not
-# from a min-age probe that measured the main checkout and mistook it for this worktree.
-expect_out "— unmerged"
+expect_out "— broken-git-link"
+# The two verdicts that would mean a probe answered for the enclosing repository instead: a
+# min-age probe that measured the freshly touched main checkout, or an is_clean that reported
+# on it. Both are about the wrong directory, so both are wrong even when they sound plausible.
 expect_not_out "recently-active"
+expect_not_out "— dirty"
 expect_exists "$ROOT/main/wt/file.txt"
 expect_branch "$ROOT/main" feat
 end
@@ -994,6 +1009,89 @@ expect_rc 0 "$rc"
 expect_out "REAPED $ROOT/wt (feat)"
 expect_out "swept 1, kept 0"
 expect_not_out "ERROR"
+end
+
+# ==========================================================================================
+# 33. the link guard runs ahead of is_clean, so the MAIN checkout's dirt cannot answer for it
+# ==========================================================================================
+# The sharp half of case 24, and the case that makes deleting the guard visible rather than
+# merely quieter. Same broken link, but here the branch is an unmoved cut of main — merged, so
+# every later check would pass — and the MAIN checkout is the dirty one. Without the guard,
+# is_clean's `git -C "$wt" status` walks up to that dirty main checkout and reap reports
+# "— dirty": a refusal, so the worktree survives, but for a reason that is a fact about a
+# different directory. The next agent to clean the main checkout would then get this worktree
+# reaped on a clean bill of health it never earned.
+begin "reap keeps a broken-linked worktree without letting the main checkout's dirt answer for it"
+nested_worktree_fixture adminnested_dirtymain
+backdate_git_dir "$ROOT/main/wt"
+must rm "$ROOT/main/wt/.git"
+# Untracked, in the MAIN checkout: `wt/` is gitignored there, so this is the only thing its
+# status has to report, and the worktree itself is spotless.
+must printf 'scratch\n' >"$ROOT/main/notes.txt"
+gh_stub_none "$ROOT/gh"
+run_reap "$ROOT/gh" 60 "$ROOT/main/wt"
+expect_rc 1 "$rc"
+expect_out "KEPT $ROOT/main/wt — broken-git-link"
+expect_not_out "— dirty"
+expect_not_out "recently-active"
+expect_exists "$ROOT/main/wt/file.txt"
+expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 34. rebranch's own walk-up already fails safe on the same broken link
+# ==========================================================================================
+# The other entry point, pinned rather than changed. rebranch asks `rev-parse --show-toplevel`
+# from inside the worktree, which on a broken link answers with the enclosing main checkout —
+# and its existing main-checkout refusal catches exactly that, before the `branch -D` at the
+# end of the script can be reached. So rebranch needs no guard of its own; this case is what
+# says so, and what would notice if that refusal were ever relaxed.
+begin "rebranch refuses a worktree whose .git file is missing, rather than acting on the main checkout"
+nested_worktree_fixture adminnested_rebranch
+must rm "$ROOT/main/wt/.git"
+# Both stubs fail loudly if reached: neither the merge check nor the install lies downstream of
+# a refusal this early, so a case that touched either would be passing on the wrong path.
+gh_stub_broken "$ROOT/gh"
+pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
+capture -C "$ROOT/main/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next
+expect_rc 1 "$rc"
+expect_out "REFUSED"
+expect_out "main checkout"
+expect_exists "$ROOT/main/wt/file.txt"
+expect_branch "$ROOT/main" feat
+expect_no_branch "$ROOT/main" next
+expect_gone "$ROOT/pnpm.log"
+end
+
+# ==========================================================================================
+# 35. the link must name THIS worktree's admin dir, not merely a well-formed one
+# ==========================================================================================
+# Cases 24, 33 and 34 delete the .git file, so all three are answered by the shape check alone
+# and none of them can see the identity comparison that follows it. Here the `gitdir:` line is
+# perfectly well formed and points at a SIBLING worktree's admin dir instead — what copying a
+# worktree directory leaves behind. Everything the shape check inspects is correct, so without
+# the comparison reap would probe, and then reap, a worktree while reading another branch's
+# admin dir: the min-age answer, the merge answer and the removal would all be about the wrong
+# worktree. The sibling lives outside the main checkout so that it cannot make it dirty and
+# give this case a second reason to refuse.
+begin "reap keeps a worktree whose .git file names a different worktree's admin dir"
+nested_worktree_fixture adminnested_wronglink
+add_wt other other
+# Before the rewrite: backdate_git_dir asks the worktree which admin dir is its own, which is
+# the very question the broken link would answer wrongly.
+backdate_git_dir "$ROOT/main/wt"
+must printf 'gitdir: %s\n' "$ROOT/main/.git/worktrees/other" >"$ROOT/main/wt/.git"
+gh_stub_none "$ROOT/gh"
+run_reap "$ROOT/gh" 60 "$ROOT/main/wt"
+expect_rc 1 "$rc"
+expect_out "KEPT $ROOT/main/wt — broken-git-link"
+expect_not_out "recently-active"
+expect_exists "$ROOT/main/wt/file.txt"
+expect_branch "$ROOT/main" feat
+# The sibling whose admin dir was borrowed is untouched too — reap refused, it did not redirect.
+expect_exists "$ROOT/other/file.txt"
+expect_branch "$ROOT/main" other
 end
 
 # ==========================================================================================
