@@ -1,5 +1,6 @@
 import type { Forecast, UncertaintyBand } from './forecast';
 import type { GenerationReading } from './generation-reading';
+import type { Site } from './site';
 import type { UtcIsoTimestamp } from './timestamp';
 
 /**
@@ -167,3 +168,21 @@ export const aggregateFleetActuals = (
   readings: readonly GenerationReading[],
 ): readonly FleetActualsPoint[] =>
   groupOnePerSitePerHour(readings, readingSupersedes).map(sumActualsGroup);
+
+/**
+ * The fleet's installed DC capacity: the sum of every site's `capacityKw`, `0` for an empty fleet.
+ *
+ * Here rather than in the view because it is fleet arithmetic (architecture.md rule 3), and because
+ * an empty fleet's answer is a decision — `0 kW installed` is what a fleet with no sites has, not a
+ * missing value the caller has to invent.
+ *
+ * Takes sites, not forecasts: capacity is a property of the hardware, so it is knowable for a site
+ * whose first forecast has not arrived and it does not move with the hour.
+ */
+export const fleetCapacityKw = (sites: readonly Site[]): number => {
+  let capacityKw = 0;
+  for (const site of sites) {
+    capacityKw += site.capacityKw;
+  }
+  return capacityKw;
+};

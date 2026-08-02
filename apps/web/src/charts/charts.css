@@ -172,7 +172,8 @@
 /* A hairline is a hairline, not a quarter of a spacing step: `--space-1 / 4`
  * borrowed a token that means "gap between things" to express a border width,
  * and would change thickness if the spacing scale were ever retuned. The
- * idiom is `views.css`'s — longhands with a plain `1px` width. `preview.css`
+ * idiom is `range-picker.css`'s ancestor `views.css`, now deleted — longhands
+ * with a plain `1px` width. `preview.css`
  * splits the difference (longhands, but the calc value) in `.swatch-chip`,
  * `.map-marker` and its own table rule; see docs/tech-debt.md on why the gate
  * cannot see the difference. */

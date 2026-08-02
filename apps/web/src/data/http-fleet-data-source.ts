@@ -16,6 +16,7 @@ import { parseFleetApiResponse, thrownToNetworkFailure } from './fleet-api-resul
 import type {
   FleetDataError,
   FleetDataSource,
+  FleetSourceCapabilities,
   FleetSourceResult,
   RangeHours,
 } from './fleet-data-source';
@@ -270,6 +271,19 @@ export class HttpFleetDataSource implements FleetDataSource {
     });
     this.seriesInFlight.set(key, request);
     return request;
+  };
+
+  /**
+   * Both false, and neither is a shortcut this source could choose to undo:
+   * `fleetForecasts` below spends the range as a forward horizon because the
+   * only unmetered fleet-wide route serves future hours (see the comment there),
+   * and `fleetActuals` is structurally empty because nothing in the deployed
+   * pipeline writes readings (see the comment there). Closing either needs a
+   * fleet-aggregate endpoint or an actuals producer, not a change here.
+   */
+  readonly capabilities: FleetSourceCapabilities = {
+    fleetLookback: false,
+    fleetActuals: false,
   };
 
   readonly listSites = async (): Promise<FleetSourceResult<readonly Site[]>> =>

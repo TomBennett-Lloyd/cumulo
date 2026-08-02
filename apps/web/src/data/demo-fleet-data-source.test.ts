@@ -251,4 +251,15 @@ describe('DemoFleetDataSource window-scoped reads', () => {
 
     expect(forecasts.some((forecast) => forecast.siteId === createdId)).toBe(true);
   });
+
+  /**
+   * Pinned as a whole object rather than field by field: a source that grows a
+   * third capability, or quietly drops one, fails here rather than silently
+   * handing the views a default nobody chose.
+   */
+  it('claims both fleet-level capabilities, and the fleet reads above are what earns them', () => {
+    const source = new DemoFleetDataSource();
+
+    expect(source.capabilities).toEqual({ fleetLookback: true, fleetActuals: true });
+  });
 });

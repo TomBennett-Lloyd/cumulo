@@ -28,6 +28,18 @@
 
 5. **Design tokens only — lint-enforced, not a convention.** `no-restricted-syntax` in `eslint.config.mjs` and `stylelint.config.mjs` are the rule; read them for the exact scope rather than trusting a paraphrase here. Both run under `pnpm lint`, `packages/ui/src/tokens/tokens.css` is the one exempt file, and disable comments are themselves errors in both linters. So: if a token is missing, the lint error _is_ the design signal — raise it as a design-system issue rather than reaching for a literal.
 
+## Async surface convention (apps/web)
+
+Every panel that waits on data says so the same way. The three states are implemented once in `apps/web/src/dashboard/panel-states.tsx` (`PanelPending`, `PanelEmpty`, `PanelError`) and their wording lives in `apps/web/src/dashboard/state-copy.ts` — reach for those rather than writing a fourth spelling of "loading…".
+
+- **Pending** is a visible label inside an `aria-busy="true"` container — never a live region mounted with its text already in it. A `role="status"` that exists only while it is full has no change to report, so it announces nothing and merely looks accessible (#161).
+- **Failed** is `role="alert"` with a message in the panel's own words, plus a retry **only when retrying can work**. These components mount into a tree that is already on screen, so the alert really is a change and really is announced. A retry that re-runs an identical metered request is not a recourse — omit it and let the reader's own controls be the retry.
+- **Empty** is plain content, no live semantics, stating the next action where there is one. An empty fleet is a successful answer, not an event.
+- **At most one live region per panel.** Announcements compete; two regions in one column means the reader hears whichever won.
+- **Completion is not announced.** The arrival of data is the busy container being replaced by the content — that is the signal, and adding a "loaded" announcement on top of it says the same thing twice.
+
+The map shell (`LazyMapRegion`/`MapView`) still carries the older placeholder treatment; converting it is #161's remainder, not a licence to copy it.
+
 ## Why
 
 The effect-dependency hack is the canonical example of suppressing a symptom instead of fixing a cause: the lint rule is reporting a data-flow problem, and deleting the dependency converts a visible loop into a subtle stale-closure bug. The same root-cause principle applies to the whole component layer.

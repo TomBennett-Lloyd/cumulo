@@ -76,6 +76,24 @@ export type FleetSourceResult<T> =
 export type RangeHours = 24 | 48 | 168;
 
 /**
+ * What a source can actually answer at the fleet level, as data rather than as
+ * prose a view has to know by heart.
+ *
+ * The two flags exist because {@link RangeHours} already documents that
+ * fleet-level reads may reinterpret the window and that an implementation is
+ * free to serve the look-back but not required to — which leaves a view unable
+ * to tell which kind of source it holds. Copy and controls that promise history
+ * or measured output are only honest against a source that says so here, so
+ * they read these instead of assuming.
+ */
+export interface FleetSourceCapabilities {
+  /** Fleet-level reads honour {@link RangeHours} as a look-back. False ⇒ forward horizon only. */
+  readonly fleetLookback: boolean;
+  /** Fleet-level actuals can ever be non-empty. */
+  readonly fleetActuals: boolean;
+}
+
+/**
  * Everything `apps/web` needs from the fleet, with no commitment to where the
  * fleet lives.
  *
@@ -141,6 +159,16 @@ export type RangeHours = 24 | 48 | 168;
  * rather than a detail of the transport.
  */
 export interface FleetDataSource {
+  /**
+   * What this source can answer at the fleet level — see
+   * {@link FleetSourceCapabilities}, and {@link RangeHours} for the range
+   * semantics the first flag is about.
+   *
+   * A required member rather than an optional one so that a source added later
+   * cannot omit it and inherit whichever default happened to flatter it.
+   */
+  readonly capabilities: FleetSourceCapabilities;
+
   /**
    * The whole fleet, once. Callers load this on mount and never poll it: a
    * repeated fan-out across every site's partition is the read-capacity

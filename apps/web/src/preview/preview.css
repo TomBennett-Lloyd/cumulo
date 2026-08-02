@@ -12,6 +12,21 @@
  * and the token it demonstrates cannot drift apart.
  */
 
+/* The gallery borrows the shipped shell's `.app` frame (app.css) so the chrome
+ * around it is the product's chrome. #148 turned that frame into a fixed-height
+ * flex column, because the dashboard's map needs a parent whose height is a
+ * resolved value — which is the one part of the frame this page cannot use: a
+ * token gallery is a long document, and a `100dvh` box left it spilling past its
+ * own edges with no gutter at all. So it takes the frame and gives the height
+ * back. Safe to state here because `preview.css` is loaded only by
+ * `tokens.html`, which the production build never reads
+ * (`tokens-harness-contract.test.ts`), so nothing in this file can reach the
+ * shipped app. */
+.app {
+  height: auto;
+  padding: var(--space-6);
+}
+
 .preview {
   display: grid;
   gap: var(--space-8);
