@@ -10,10 +10,10 @@ import {
   type ErrorMetrics,
   type GenerationReading,
   type GeoCoordinates,
-  type MetricsPeriod,
   type Site,
   type TimedPowerPoint,
   type UtcIsoTimestamp,
+  type UtcWindow,
   type WeatherReading,
 } from '@cumulo/shared';
 
@@ -121,7 +121,7 @@ export interface HindcastDeps extends ArchiveCoverageDeps {
 export interface HindcastInput {
   readonly site: Site;
   /** The half-open window the metrics are keyed by *and* fetched for. */
-  readonly period: MetricsPeriod;
+  readonly period: UtcWindow;
   /**
    * The site's observed generation. Deliberately **not** restricted to `period`:
    * the persistence baseline for the window's first day is built from the day
@@ -172,7 +172,7 @@ export type HindcastOutcome =
   | { readonly status: 'no-observations' }
   | { readonly status: 'archive-incomplete'; readonly detail: IncompleteArchiveCoverage };
 
-const withinPeriod = (period: MetricsPeriod, validTime: UtcIsoTimestamp): boolean =>
+const withinPeriod = (period: UtcWindow, validTime: UtcIsoTimestamp): boolean =>
   validTime >= period.startInclusive && validTime < period.endExclusive;
 
 /**

@@ -1,5 +1,5 @@
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
-import type { ErrorMetrics, MetricsPeriod } from '@cumulo/shared';
+import type { ErrorMetrics, UtcWindow } from '@cumulo/shared';
 
 import { StorageAdapterBase } from '../storage-adapter-base';
 
@@ -41,7 +41,7 @@ export class MetricsAdapter extends StorageAdapterBase {
   }
 
   /** Every model's score for one site over one evaluation window (H5/A6). */
-  async queryMetricsForPeriod(siteId: string, period: MetricsPeriod): Promise<ErrorMetrics[]> {
+  async queryMetricsForPeriod(siteId: string, period: UtcWindow): Promise<ErrorMetrics[]> {
     if (period.endExclusive <= period.startInclusive) {
       throw new Error(
         `queryMetricsForPeriod: period ends at ${period.endExclusive}, at or before its start ${period.startInclusive}`,

@@ -4,8 +4,8 @@ import {
   errorMetricsSchema,
   utcIsoTimestampSchema,
   type ErrorMetrics,
-  type MetricsPeriod,
   type UtcIsoTimestamp,
+  type UtcWindow,
 } from '@cumulo/shared';
 import { mockClient } from 'aws-sdk-client-mock';
 
@@ -35,13 +35,13 @@ export const SITE_ID = '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
 const at = (iso: string): UtcIsoTimestamp => utcIsoTimestampSchema.parse(iso);
 
 /** The evaluation window every fixture below scores: one UTC day. */
-export const JULY_30: MetricsPeriod = {
+export const JULY_30: UtcWindow = {
   startInclusive: at('2026-07-30T00:00:00Z'),
   endExclusive: at('2026-07-31T00:00:00Z'),
 };
 
 /** The next day — the neighbour a period prefix has to exclude. */
-export const JULY_31: MetricsPeriod = {
+export const JULY_31: UtcWindow = {
   startInclusive: at('2026-07-31T00:00:00Z'),
   endExclusive: at('2026-08-01T00:00:00Z'),
 };

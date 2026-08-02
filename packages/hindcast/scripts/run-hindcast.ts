@@ -40,8 +40,8 @@ import {
   generationReadingSchema,
   siteSchema,
   utcIsoTimestampSchema,
-  type MetricsPeriod,
   type UtcIsoTimestamp,
+  type UtcWindow,
 } from '@cumulo/shared';
 import {
   MetricsAdapter,
@@ -158,7 +158,7 @@ try {
   const observations = observationsSchema.parse(
     await readJsonFile(requireOption('observations', values.observations)),
   );
-  const period: MetricsPeriod = {
+  const period: UtcWindow = {
     startInclusive: utcIsoTimestampSchema.parse(requireOption('from', values.from)),
     endExclusive: utcIsoTimestampSchema.parse(requireOption('to', values.to)),
   };
