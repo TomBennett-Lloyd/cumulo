@@ -144,8 +144,10 @@ advance_origin() {
 #
 # The merge is made in a throwaway clone and pushed, never here. That the local object store
 # has never seen the PR's head is the incident's defining feature, not incidental setup: a
-# fixture that left merge_oid in this repo would go green against an is_merged that fetched and
-# ran merge-base locally — the implementation production has already shown does not work.
+# fixture that left merge_oid in this repo would go green against an is_merged that ran a
+# non-fetching merge-base locally — an implementation that cannot answer in production, where
+# the object is absent (fetch-then-merge-base would answer, but is ruled out by the function's
+# repository-read-only contract, stated in worktree-lib.sh).
 #
 # -X ours because commit_in and advance_main both append to file.txt, so the merge conflicts on
 # content. gh refuses to update-branch a conflicting PR at all, so a clean resolution is the
