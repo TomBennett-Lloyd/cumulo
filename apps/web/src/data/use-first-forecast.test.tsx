@@ -17,6 +17,7 @@ import {
   ScriptedFleetDataSource,
   settle,
   SITE_ID,
+  type ForecastAnswer,
   type ForecastResolver,
 } from './first-forecast-test-fixture';
 import { useFirstForecast } from './use-first-forecast';
@@ -47,6 +48,22 @@ const INVALID_REQUEST_MESSAGE = 'getSiteForecast: the API rejected the request â
 
 /** Simulated milliseconds since the watch began. */
 const simulatedElapsedMs = (): number => Date.now() - START_MS;
+
+/**
+ * The fleet confirms absence once, then stops answering.
+ *
+ * The one order that tells a latched confirmation from a recomputed one: the
+ * reverse sequence renders identically either way, so only "not-found, then a
+ * blip" can catch a watch that forgets what it was already told.
+ *
+ * It stays in this suite rather than joining the fixture's answer policies for
+ * the reason {@link OTHER_SITE_ID} does: one test needs it, and the fixture
+ * holds the machinery every test shares, not a script only this one runs.
+ */
+const notFoundThenFault =
+  (siteId: string): ForecastAnswer =>
+  (context) =>
+    Promise.resolve(context.callIndex === 0 ? notFound(siteId) : networkDown());
 
 interface WatchProps {
   readonly siteId: Site['id'] | null;
@@ -138,6 +155,35 @@ describe('useFirstForecast', () => {
     await advanceBy(20_000);
 
     expect(watch.result.current.state.status).toBe('checking');
+  });
+
+  /*
+   * Confirmation is a latch, not a per-poll recomputation.
+   *
+   * Absence is something the fleet *told* this run, and a later blip is the
+   * fleet failing to speak â€” it withdraws nothing. A watch that recomputed the
+   * distinction from each answer alone would drop the reader back to a plain
+   * loading label mid-count and restart the sentence when the next poll
+   * succeeded, which reads as the pipeline having given up and begun again.
+   */
+  it('absence stays confirmed through a later fault', async () => {
+    const source = new ScriptedFleetDataSource(notFoundThenFault(SITE_ID));
+    const watch = renderHook(() => useFirstForecast(source, SITE_ID));
+
+    await settle();
+    const confirmed = watch.result.current.state;
+    expect(confirmed.status).toBe('generating');
+    expect(confirmed.status === 'generating' && confirmed.elapsedSeconds).toBe(0);
+
+    // One cadence on: the fleet stops answering, and the count carries on from
+    // where it was rather than falling back or restarting at zero.
+    await advanceBy(5_000);
+
+    const afterBlip = watch.result.current.state;
+    expect(afterBlip.status).toBe('generating');
+    expect(afterBlip.status === 'generating' && afterBlip.elapsedSeconds).toBe(5);
+    // Without this the test could pass on a second poll that never happened.
+    expect(source.calls).toHaveLength(2);
   });
 
   // ADR 0002's review of this ticket: a per-site read is ~0.5 read units, the
