@@ -4,7 +4,17 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
-import { firstListedSite, renderDashboard, settle, visit } from './dashboard-test-fixture';
+import type { FleetDataSource } from '../data/fleet-data-source';
+import {
+  addSite,
+  clickMap,
+  CREATED_SITE_NAME,
+  firstListedSite,
+  fleetList,
+  renderDashboard,
+  settle,
+  visit,
+} from './dashboard-test-fixture';
 
 /*
  * Where focus goes when the column swaps one context for another.
@@ -25,19 +35,31 @@ import { firstListedSite, renderDashboard, settle, visit } from './dashboard-tes
  * this landing is visible remains a browser criterion, checked in a browser.
  */
 
+/** A well-formed id no fleet contains: a link to a site deleted, or mistyped. */
+const UNRESOLVED_SITE_ID = '11111111-2222-4333-8444-555555555555';
+
 /**
- * What `AddSiteForm` names a site dropped at the fixture's `CLICK_POSITION`.
+ * A fleet whose listing never arrives, wrapping the demo fleet for everything else.
  *
- * Restated rather than derived, for the reason `Dashboard.test.tsx` restates it:
- * it is the *form's* naming rule being relied on, and a test that computed the
- * name the same way the form does would still pass if both were wrong together.
+ * The state it buys is the one the guard in `closeDraft` turns on, and it is
+ * only reachable this way: a *successful* listing runs the dashboard's stale-id
+ * guard, which clears a selection naming nobody, so a selection can only outlive
+ * its site when the listing failed. Distinct from `Dashboard.test.tsx`'s
+ * `FlakyFleetSource`, which is about a listing that recovers on retry — this one
+ * never does, because the test never asks it to.
  */
-const CREATED_SITE_NAME = 'Site at 53.5000, -5.5000';
+const fleetWithFailedListing = (): FleetDataSource => {
+  const dataSource = new DemoFleetDataSource();
 
-const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
+  // Only the listing is replaced. Everything else stays the real demo fleet, so
+  // the first-forecast poll still runs against the selected id exactly as it
+  // does in production — which is half of the state under test.
+  vi.spyOn(dataSource, 'listSites').mockResolvedValue({
+    kind: 'error',
+    error: { code: 'network', message: 'Fleet API unreachable' },
+  });
 
-const clickMap = (): void => {
-  fireEvent.click(screen.getByRole('button', { name: 'Click the map' }));
+  return dataSource;
 };
 
 beforeEach(() => {
@@ -119,13 +141,39 @@ describe('Dashboard focus', () => {
     expect(document.activeElement).toBe(container.querySelector('.dashboard-context'));
   });
 
+  /*
+   * The case where the selection and the selectable site disagree.
+   *
+   * A `?site=` link whose listing failed leaves `selectedSiteId` set and
+   * `selectedSite` null: the id is real to the URL and to the forecast poll, but
+   * no site answers to it, so no `SitePanel` is mounted. Cancelling a draft here
+   * is the one path where guarding the region focus on the *id* would skip it
+   * while nothing remounted to claim it — focus to body, the exact defect this
+   * mechanism removes. The guard therefore asks `selectedSite`, which is what
+   * the panel's own render condition asks.
+   */
+  it('lands on the context region when a cancelled draft’s selection names no site', async () => {
+    visit(`/?site=${UNRESOLVED_SITE_ID}`);
+    const container = renderDashboard(fleetWithFailedListing());
+    await settle();
+
+    // The precondition, pinned so this cannot quietly decay into the test above:
+    // the selection survived the failed listing — the URL still carries it — and
+    // no panel is on screen to take the focus.
+    expect(window.location.search).toBe(`?site=${UNRESOLVED_SITE_ID}`);
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+
+    clickMap();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(document.activeElement).toBe(container.querySelector('.dashboard-context'));
+  });
+
   it('focuses the new site’s panel heading when a creation succeeds', async () => {
     renderDashboard(new DemoFleetDataSource());
     await settle();
 
-    clickMap();
-    fireEvent.click(screen.getByRole('button', { name: 'Add site' }));
-    await settle();
+    await addSite();
 
     // A creation takes the region without anybody clicking into it, which is
     // exactly the case a focus move written into a click handler would miss.

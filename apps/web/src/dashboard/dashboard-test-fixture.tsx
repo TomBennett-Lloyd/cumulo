@@ -1,5 +1,5 @@
 import type { Site } from '@cumulo/shared';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 
@@ -12,10 +12,12 @@ import type { MapRegionProps } from './MapRegion';
  *
  * The dashboard's suites are split by subject — the composition and its
  * contexts in `Dashboard.test.tsx`, the `?site=` deep link in
- * `Dashboard.deep-link.test.tsx` (`structure.md` rule 4) — but they mount the
- * same dashboard through the same seams. Those seams live here rather than in
- * two copies that would have to change together to keep meaning the same thing
- * (`structure.md` rule 7). Helpers only one suite needs stay in that suite.
+ * `Dashboard.deep-link.test.tsx`, managed focus in `Dashboard.focus.test.tsx`
+ * (`structure.md` rule 4) — but they mount the same dashboard through the same
+ * seams. Those seams live here rather than in copies that would have to change
+ * together to keep meaning the same thing (`structure.md` rule 7). Helpers only
+ * one suite needs stay in that suite; a helper a second suite reaches for moves
+ * in here, which is how the three below arrived.
  *
  * Nothing here is a mock of maplibre. jsdom implements no WebGL, so the real
  * `MapRegion` cannot mount — which is why `Dashboard` takes the map region as a
@@ -28,6 +30,16 @@ import type { MapRegionProps } from './MapRegion';
 
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
 export const CLICK_POSITION = { latitude: 53.5, longitude: -5.5 };
+
+/**
+ * What `AddSiteForm` names a site dropped at {@link CLICK_POSITION}.
+ *
+ * Restated rather than derived, because it is the *form's* naming rule being
+ * relied on: a test that computed the name the same way the form does would
+ * still pass if both were wrong together. It belongs beside the position it
+ * describes — the two are one fact about where the stand-in's click lands.
+ */
+export const CREATED_SITE_NAME = 'Site at 53.5000, -5.5000';
 
 export const StubMapRegion = ({
   sites,
@@ -109,6 +121,26 @@ export const visit = (url: string): void => {
 
 /** The panel column's resting state, whether or not it is the visible context. */
 export const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
+
+/** The fleet as rows — the map's table view, and where a closing panel returns focus. */
+export const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
+
+/** Drops a draft at {@link CLICK_POSITION}, the way a click on the real map would. */
+export const clickMap = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: 'Click the map' }));
+};
+
+/** Presses the draft form's submit, which the throttle may still refuse. */
+export const submitDraft = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: 'Add site' }));
+};
+
+/** Clicks the map, submits the pre-filled draft, and lets the creation settle. */
+export const addSite = async (): Promise<void> => {
+  clickMap();
+  submitDraft();
+  await settle();
+};
 
 /**
  * A site as the *source itself* lists it — the id a deep link would carry.

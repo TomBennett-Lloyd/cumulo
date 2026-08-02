@@ -9,11 +9,16 @@ import { DEFAULT_CREATION_WINDOW_MS } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import type { FleetSourceResult, FleetDataSource } from '../data/fleet-data-source';
 import {
+  addSite,
   advanceBy,
+  clickMap,
+  CREATED_SITE_NAME,
+  fleetList,
   fleetPanel,
   renderDashboard,
   scrolledIntoView,
   settle,
+  submitDraft,
   visit,
 } from './dashboard-test-fixture';
 
@@ -25,15 +30,6 @@ import {
  * a mock. What this file asserts is what the *dashboard* does with the two
  * callbacks that stand-in reaches.
  */
-
-/**
- * What `AddSiteForm` names a site dropped at the fixture's `CLICK_POSITION`.
- *
- * Restated here rather than derived, because it is the *form's* naming rule
- * being relied on: a test that computed the name the same way the form does
- * would still pass if both were wrong together.
- */
-const CREATED_SITE_NAME = 'Site at 53.5000, -5.5000';
 
 /** The demo pipeline's own first-forecast latency, which this suite does not override. */
 const DEMO_FIRST_FORECAST_DELAY_MS = 45_000;
@@ -102,8 +98,6 @@ const firstSeededSite = (): Site => {
   return site;
 };
 
-const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
-
 /**
  * The site panel's chart, once one is drawn — the panel's own ready state.
  *
@@ -117,21 +111,6 @@ const siteChartTable = (siteName: string): HTMLElement | null =>
 
 const attributionLinks = (): readonly HTMLElement[] =>
   screen.getAllByRole('link', { name: 'Open-Meteo.com' });
-
-const clickMap = (): void => {
-  fireEvent.click(screen.getByRole('button', { name: 'Click the map' }));
-};
-
-const submitDraft = (): void => {
-  fireEvent.click(screen.getByRole('button', { name: 'Add site' }));
-};
-
-/** Clicks the map, submits the pre-filled draft, and lets the creation settle. */
-const addSite = async (): Promise<void> => {
-  clickMap();
-  submitDraft();
-  await settle();
-};
 
 beforeEach(() => {
   // Every wait in this suite — the pipeline's 45 seconds, the poll cadence, the

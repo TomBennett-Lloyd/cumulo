@@ -334,12 +334,23 @@ export const Dashboard = ({
     setCreation({ status: 'editing' });
 
     // A cancelled draft hands the region to whatever takes it back, and that
-    // occupant focuses its own heading — a re-mounting `SitePanel` when a site
-    // is still selected. Nothing is remounting when there is no selection: the
-    // fleet panel was there all along, merely hidden, so the region itself is
-    // the only honest focus target and it takes it here rather than growing
-    // focus logic inside `FleetPanel` that would race the row focus on close.
-    if (selectedSiteId === null) {
+    // occupant focuses its own heading — a re-mounting `SitePanel`. So the
+    // question here is precisely "is a panel about to remount?", and the value
+    // that answers it is `selectedSite`, because that is what the panel's own
+    // render condition below tests.
+    //
+    // Not `selectedSiteId`: the two come apart exactly when a selection names a
+    // site nothing can show — a `?site=` deep link whose listing failed, or has
+    // not landed yet — and there the id is set while the site is null. Guarding
+    // on the id would skip this focus *and* mount no panel to claim it, so
+    // focus would fall to body as the Cancel button unmounts, which is the one
+    // defect this whole mechanism exists to remove.
+    //
+    // When it is null nothing is remounting: the fleet panel was there all
+    // along, merely hidden, so the region itself is the only honest target and
+    // it takes focus here rather than growing focus logic inside `FleetPanel`
+    // that would race the row focus on close.
+    if (selectedSite === null) {
       contextRegionRef.current?.focus();
     }
   };
