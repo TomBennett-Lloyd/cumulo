@@ -149,6 +149,26 @@ afterEach(() => {
 });
 
 describe('Dashboard', () => {
+  it('first paint mounts zero live regions', async () => {
+    // `react.md`'s async surface convention as a property of the whole
+    // composition rather than of one panel: a wait is `aria-busy`, and an alert
+    // reaches a reader only by arriving as a change to a tree already on screen.
+    // Asserted *before* `settle()`, because first paint is the one moment at
+    // which nothing has resolved and every panel is still waiting.
+    //
+    // The known limit: the stub map region stands in for the real placeholder,
+    // whose own zero-live-region property is `MapSurface.test.tsx`'s. The
+    // shipping composition — real map shell included — is #107's browser harness.
+    const container = renderDashboard(new DemoFleetDataSource());
+
+    expect(container.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).toHaveLength(
+      0,
+    );
+
+    // Settled here so the listing this mount started resolves inside the test.
+    await settle();
+  });
+
   it('lists the whole fleet on mount and never lists it again', async () => {
     const dataSource = new DemoFleetDataSource();
     const listSites = vi.spyOn(dataSource, 'listSites');
