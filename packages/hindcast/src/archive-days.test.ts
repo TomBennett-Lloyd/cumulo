@@ -1,4 +1,4 @@
-import { utcIsoTimestampSchema, type MetricsPeriod } from '@cumulo/shared';
+import { utcIsoTimestampSchema, type UtcWindow } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import { contiguousDayRuns, utcDaysCovering } from './archive-days';
@@ -10,7 +10,7 @@ import { contiguousDayRuns, utcDaysCovering } from './archive-days';
  * month/year/leap-day rollovers, which is where naive `+1 day` string arithmetic
  * breaks.
  */
-const period = (startInclusive: string, endExclusive: string): MetricsPeriod => ({
+const period = (startInclusive: string, endExclusive: string): UtcWindow => ({
   startInclusive: utcIsoTimestampSchema.parse(startInclusive),
   endExclusive: utcIsoTimestampSchema.parse(endExclusive),
 });
