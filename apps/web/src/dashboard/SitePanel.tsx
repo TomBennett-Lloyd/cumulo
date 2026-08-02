@@ -12,9 +12,11 @@ import { angleLabel, capacityLabel, coordinatesLabel } from './site-format';
 import { joinSiteSeries, loadSiteSeries, type SiteSeries } from './site-series';
 import {
   firstForecastTimeoutMessage,
+  generatingFirstForecastLabel,
   loadingSiteSeriesLabel,
   NO_MEASUREMENTS_NOTICE,
   NO_SITE_FORECAST_MESSAGE,
+  siteSeriesFailureMessage,
 } from './state-copy';
 
 /*
@@ -85,11 +87,7 @@ const SiteSeriesBody = ({ site, state }: SiteSeriesBodyProps): ReactElement => {
     return <PanelPending label={loadingSiteSeriesLabel(site.name)} />;
   }
   if (state.status === 'failed') {
-    return (
-      <PanelError
-        message={`Could not load the forecast for ${site.name}: ${state.error.message}`}
-      />
-    );
+    return <PanelError message={siteSeriesFailureMessage(site.name, state.error.message)} />;
   }
 
   const points = joinSiteSeries(state.data.forecasts, state.data.actuals);
@@ -175,11 +173,7 @@ const SiteForecastRegion = ({
     case 'checking':
       return <PanelPending label={loadingSiteSeriesLabel(site.name)} />;
     case 'generating':
-      return (
-        <PanelPending
-          label={`Generating first forecast… ${String(firstForecast.elapsedSeconds)}s`}
-        />
-      );
+      return <PanelPending label={generatingFirstForecastLabel(firstForecast.elapsedSeconds)} />;
     case 'failed':
       return (
         <PanelError

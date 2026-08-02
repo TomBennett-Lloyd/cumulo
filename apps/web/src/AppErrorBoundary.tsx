@@ -2,6 +2,8 @@ import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ErrorInfo, ReactElement, ReactNode } from 'react';
 import { Component } from 'react';
 
+import { APP_FAILURE_ADVICE, APP_FAILURE_HEADING } from './dashboard/state-copy';
+
 /*
  * The last line before a blank page.
  *
@@ -49,8 +51,8 @@ import { Component } from 'react';
  */
 const AppFailure = (): ReactElement => (
   <div className="app-failure" role="alert">
-    <h2 className="app-failure-heading">The dashboard hit an unexpected error</h2>
-    <p className="app-failure-message">Reload the page to try again.</p>
+    <h2 className="app-failure-heading">{APP_FAILURE_HEADING}</h2>
+    <p className="app-failure-message">{APP_FAILURE_ADVICE}</p>
     <OpenMeteoAttribution />
   </div>
 );

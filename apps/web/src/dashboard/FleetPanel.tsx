@@ -17,9 +17,12 @@ import { RangePicker, rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 import {
   ADD_SITE_HINT,
+  aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
+  fleetForecastFailureMessage,
   LOADING_FLEET_FORECAST_LABEL,
   NO_FLEET_FORECAST_MESSAGE,
+  partialAggregateNotice,
 } from './state-copy';
 
 /*
@@ -170,11 +173,9 @@ const combineFleetQueries = (
  */
 const completenessNote = (minContributing: number, siteCount: number): ReactElement =>
   minContributing < siteCount ? (
-    <p className="panel-notice">
-      Partial aggregate: some hours include only {minContributing} of {siteCount} sites.
-    </p>
+    <p className="panel-notice">{partialAggregateNotice(minContributing, siteCount)}</p>
   ) : (
-    <p className="panel-caption">Aggregated from {siteCount} sites</p>
+    <p className="panel-caption">{aggregatedFromCaption(siteCount)}</p>
   );
 
 const readyBody = (data: FleetSeries, siteCount: number, chart: ChartCopy): ReactElement => {
@@ -205,15 +206,11 @@ const fleetBody = (
     return <PanelPending label={LOADING_FLEET_FORECAST_LABEL} />;
   }
   if (state.status === 'failed') {
-    // The source's message already names the operation it failed
-    // (`error-handling.md` rule 4); this sentence supplies the surface the
-    // reader is looking at. A retry is offered because the fan-out is the one
-    // request a transient failure genuinely can outlive.
+    // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
+    // which is offered because the fan-out is the one request a transient
+    // failure genuinely can outlive.
     return (
-      <PanelError
-        message={`Could not load the fleet forecast: ${state.error.message}`}
-        onRetry={onRetry}
-      />
+      <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
     );
   }
   return readyBody(state.data, siteCount, chart);

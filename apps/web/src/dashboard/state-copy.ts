@@ -1,5 +1,11 @@
 /*
- * What the panel column says when it has nothing, is waiting, or has failed.
+ * What apps/web says when it is waiting, has nothing to show, or has failed.
+ *
+ * The panel column is where most of this copy renders, but it is not the only
+ * place the same three states reach the reader: the map region waits and fails
+ * on its own, the app-wide boundary is the last of these sentences before a
+ * blank page, and the add-site form has a pending label of its own. They are
+ * one vocabulary because they are one reader.
  *
  * One module rather than a string beside each component, for the same reason
  * `site-format.ts` is one module: two panels telling the same reader about the
@@ -17,9 +23,12 @@
  * for it across `apps/web/src`, and a comment explaining the removal would be
  * the one thing keeping that grep from going quiet.
  *
- * Scope: this covers the panel column's state copy. The chart-clock wording
- * #104 also names ("as of", the hour labels' zone) stays with the chart, and
- * that remainder of #104 should land here when it is settled.
+ * Scope: async-state and failure copy. Chart *chrome* wording — the words a
+ * chart says about itself, the clock included — is owned by
+ * `apps/web/src/charts/chart-copy.ts`. That sibling is deliberate rather than an
+ * oversight: the two modules serve different surfaces and different consumers,
+ * and one module holding both would be a module about "text", which is not a
+ * subject anybody can review.
  */
 
 /** The empty fleet is the demo's invitation, so it names the next action. */
@@ -51,6 +60,29 @@ export const LOADING_FLEET_FORECAST_LABEL = 'Summing the fleet’s forecasts…'
 export const loadingSiteSeriesLabel = (siteName: string): string =>
   `Loading the forecast for ${siteName}…`;
 
+/**
+ * A new site's forecast is being generated, and the wait is counted out loud.
+ *
+ * The seconds are a parameter because the clock belongs to the polling hook that
+ * runs it. This label is reached only once the fleet has confirmed no forecast
+ * exists yet — the demo promises one about a minute after a site is added, and a
+ * visitor watching that minute is owed the count rather than a bare spinner.
+ */
+export const generatingFirstForecastLabel = (elapsedSeconds: number): string =>
+  `Generating first forecast… ${String(elapsedSeconds)}s`;
+
+/** The map engine's chunk is in flight, said in the shell that stands in for it. */
+export const LOADING_MAP_LABEL = 'Loading map…';
+
+/**
+ * A site creation is in flight, on the submit button that started it.
+ *
+ * The button's idle name — "Add site" — deliberately stays in the form: it names
+ * a control, and control names are the form's own. Only the pending state is
+ * this module's, because it is the same wait every other surface here describes.
+ */
+export const ADDING_SITE_LABEL = 'Adding site…';
+
 /** The fan-out succeeded and summed to nothing — an answer, not a failure. */
 export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
 
@@ -67,6 +99,19 @@ export const NO_SITE_FORECAST_MESSAGE = 'No forecast available for this site yet
 export const NO_MEASUREMENTS_NOTICE = 'No measurements recorded in this range';
 
 /**
+ * The aggregate is short of sites for some hours, stated in both directions.
+ *
+ * Both numbers are rendered because "partial" on its own is a shrug: the reader
+ * needs to know whether one site is missing or fifty.
+ */
+export const partialAggregateNotice = (contributing: number, total: number): string =>
+  `Partial aggregate: some hours include only ${String(contributing)} of ${String(total)} sites.`;
+
+/** The complementary answer: every displayed hour holds the whole fleet. */
+export const aggregatedFromCaption = (siteCount: number): string =>
+  `Aggregated from ${String(siteCount)} sites`;
+
+/**
  * The first-forecast poll gave up before the pipeline answered.
  *
  * The deadline is a parameter rather than baked into the sentence: the number
@@ -75,3 +120,53 @@ export const NO_MEASUREMENTS_NOTICE = 'No measurements recorded in this range';
  */
 export const firstForecastTimeoutMessage = (deadlineSeconds: number): string =>
   `No forecast arrived within ${String(deadlineSeconds)} seconds — the pipeline may still be working. Try again to keep waiting.`;
+
+/*
+ * The failure sentences below all take the source's own message as `detail`
+ * rather than paraphrasing it. The source names the operation that failed and is
+ * the only account of what actually went wrong (`error-handling.md` rule 4);
+ * what these add is the surface the reader is looking at, which the transport
+ * knows nothing about.
+ */
+
+/** One site's window failed to load; the site is named because the panel can swap. */
+export const siteSeriesFailureMessage = (siteName: string, detail: string): string =>
+  `Could not load the forecast for ${siteName}: ${detail}`;
+
+/** The fleet fan-out failed — one sentence for both of the panel's two queries. */
+export const fleetForecastFailureMessage = (detail: string): string =>
+  `Could not load the fleet forecast: ${detail}`;
+
+/**
+ * The site listing itself failed.
+ *
+ * Terser than its siblings on purpose: this one stands where the list would be,
+ * so the reader has no other content to place it against and the subject has to
+ * come first.
+ */
+export const fleetListFailureMessage = (detail: string): string => `Fleet unavailable: ${detail}`;
+
+/**
+ * The map engine's chunk is never going to arrive.
+ *
+ * It offers a reload rather than a retry because `lazy` caches the rejected
+ * promise — an in-page retry would be a control that cannot work. The second
+ * clause is the part worth keeping: everything beside the map still works, and a
+ * reader who is not told that will assume the page is broken.
+ */
+export const MAP_LOAD_FAILURE_MESSAGE =
+  'The map could not be loaded. Reload the page to try again — the fleet list and forecasts beside it are unaffected.';
+
+/** The whole tree threw: the boundary's heading, with {@link APP_FAILURE_ADVICE} under it. */
+export const APP_FAILURE_HEADING = 'The dashboard hit an unexpected error';
+
+/**
+ * The only recourse the app boundary can honestly offer.
+ *
+ * It caught something it has no model of, so it says nothing about whether
+ * trying again will work — only what there is to try.
+ */
+export const APP_FAILURE_ADVICE = 'Reload the page to try again.';
+
+/** The recourse itself, on every failure that has one — one name, so it is one control. */
+export const RETRY_ACTION_LABEL = 'Try again';

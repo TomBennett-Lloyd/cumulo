@@ -155,6 +155,14 @@ in words somewhere in its chrome — an axis title, a caption, or the table twin
 per-site local axis stays open as a product decision, gated on carrying a timezone per site; it is
 not a rendering tweak.
 
+**Settled: every chart states the clock.** The plot prints `Times in UTC` in its chrome, top right,
+mirroring the `kW` axis title at the other end of the same band; the table twin heads its time
+column `Time (UTC)`. Both strings live in `apps/web/src/charts/chart-copy.ts`, and a new chart or
+table twin consumes them rather than inventing its own wording — the obligation above is only
+inheritable if the words are. This closes the chrome half of
+[#104](https://github.com/TomBennett-Lloyd/cumulo/issues/104). The per-site local axis stays open,
+still gated on carrying a timezone per site.
+
 ## Categorical series order
 
 Multi-series charts — per-site comparison, per-cluster aggregation — take

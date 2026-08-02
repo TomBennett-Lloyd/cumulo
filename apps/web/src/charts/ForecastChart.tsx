@@ -5,6 +5,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react';
+import { CHART_CLOCK_LABEL } from './chart-copy';
 import {
   axisTicks,
   horizonLabelAnchor,
@@ -309,6 +310,16 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {xLabelElements(points, scale, spanHours)}
         <text className="forecast-chart-axis-title" x={0} y={AXIS_TITLE_BASELINE}>
           kW
+        </text>
+        {/* The clock the treatment's UTC axis owes its readers, mirroring the
+            kW title across the chrome band above the plot. */}
+        <text
+          className="forecast-chart-axis-title"
+          x={CHART_VIEW_BOX_WIDTH}
+          y={AXIS_TITLE_BASELINE}
+          textAnchor="end"
+        >
+          {CHART_CLOCK_LABEL}
         </text>
         <ForecastChartHoverLayer
           points={points}
