@@ -46,38 +46,32 @@ const submitForm = (): void => {
 };
 
 /**
- * The message the form is showing under one field, empty while it has nothing
- * to say. Found through the input's own `aria-describedby`, so a message that
- * rendered but was never associated reads as absent here — which is what it
- * would be to a screen-reader user.
+ * The text of every element one field's input points at through its own
+ * `aria-describedby`, narrowed to the ids ending in `idSuffix` and joined.
+ *
+ * Going through the attribute rather than querying the DOM at large is the
+ * whole point: copy that rendered but was never associated with the input is
+ * absent to a screen-reader user, so it reads as absent here too. The suffix is
+ * which *kind* of description is wanted — the form gives each one a stable id
+ * ending — and the two readers below name the kinds.
  */
-const fieldMessage = (label: string): string => {
+const describedByText = (label: string, idSuffix: string): string => {
   const input = screen.getByLabelText(label);
   const describedBy = input.getAttribute('aria-describedby') ?? '';
-  const messageIds = describedBy.split(' ').filter((id) => id.endsWith('-message'));
 
-  return messageIds
+  return describedBy
+    .split(' ')
+    .filter((id) => id.endsWith(idSuffix))
     .map((id) => document.getElementById(id)?.textContent ?? '')
     .join(' ')
     .trim();
 };
 
-/**
- * The standing hint under one field — the copy that is there before anything
- * goes wrong. Found through the input's own `aria-describedby`, for the same
- * reason {@link fieldMessage} is: a hint that rendered but was never associated
- * is not describing the input to anyone.
- */
-const fieldHint = (label: string): string => {
-  const input = screen.getByLabelText(label);
-  const describedBy = input.getAttribute('aria-describedby') ?? '';
-  const hintIds = describedBy.split(' ').filter((id) => id.endsWith('-hint'));
+/** The message the form is showing under one field, empty while it has nothing to say. */
+const fieldMessage = (label: string): string => describedByText(label, '-message');
 
-  return hintIds
-    .map((id) => document.getElementById(id)?.textContent ?? '')
-    .join(' ')
-    .trim();
-};
+/** The standing hint under one field — the copy that is there before anything goes wrong. */
+const fieldHint = (label: string): string => describedByText(label, '-hint');
 
 /**
  * Each row is a value the shared schema refuses, one per bound the form is
