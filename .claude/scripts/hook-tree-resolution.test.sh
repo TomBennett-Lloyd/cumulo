@@ -296,7 +296,7 @@ add_installed_ok "$READY_WT"
 
 begin "ensure-deps reports a successful install on stdout, naming the tree it prepared"
 run_ensure_deps "$READY_WT" "$READY_MAIN"
-expect_rc 0
+expect_rc 0 "$rc"
 expect_stdout "deps are ready"
 expect_stdout "$READY_WT"
 expect_not_stderr "pnpm install --frozen-lockfile failed"

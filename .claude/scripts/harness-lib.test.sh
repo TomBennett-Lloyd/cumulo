@@ -108,6 +108,29 @@ expect_consumer_caught expect_rc
 expect_stderr "exit code: expected 3, got 0"
 end
 
+# The one-argument form reads $rc itself, and that default is a separate branch from the
+# two-argument form every harness writes today: with `expect_rc 1 "$rc"` at every call site,
+# a default that ignored $rc entirely (say `${2-0}`) would go unnoticed. So the consumer
+# below passes ONE argument against a deliberately NON-ZERO rc — a default hard-wired to 0
+# reds good-one-arg-expect_rc and greens bad-one-arg-expect_rc, inverting both lines.
+begin "expect_rc with one argument reads the rc capture set, not a hard-wired default"
+must consumer expect_rc_one_arg <<'BODY'
+harness_init_tmp
+begin "good-one-arg-expect_rc"
+capture bash -c 'exit 3'
+expect_rc 3
+end
+begin "bad-one-arg-expect_rc"
+capture bash -c 'exit 3'
+expect_rc 0
+end
+finish
+BODY
+run_consumer
+expect_consumer_caught one-arg-expect_rc
+expect_stderr "exit code: expected 0, got 3"
+end
+
 begin "expect_out catches a missing substring"
 must consumer expect_out <<'BODY'
 harness_init_tmp
@@ -235,6 +258,32 @@ expect_stderr "expected no stdout; got: noise"
 expect_stderr "expected no stderr; got: more noise"
 end
 
+# expect_parses is an assertion like any other and needs its violated case for the same
+# reason: it is now the ONLY parse check in the migrated harnesses (check-adr-index.test.sh
+# routes its `bash -n` case through it), so a body that quietly accepted everything would
+# take the family's syntax coverage with it and no case would say so. The unparseable
+# fixture is an `if` with no `fi` — a genuine parse error under every bash, not a runtime one.
+begin "expect_parses catches a script that does not parse"
+must consumer expect_parses <<'BODY'
+harness_init_tmp
+printf '#!/usr/bin/env bash\nprintf "fine\\n"\n' >"$TMP_ROOT/parses.sh" || exit 2
+printf '#!/usr/bin/env bash\nif [ 1 = 1 ]; then\n' >"$TMP_ROOT/unparseable.sh" || exit 2
+begin "good-expect_parses"
+expect_parses "$TMP_ROOT/parses.sh"
+end
+begin "bad-expect_parses"
+expect_parses "$TMP_ROOT/unparseable.sh"
+end
+finish
+BODY
+run_consumer
+expect_consumer_caught expect_parses
+expect_stderr "failed bash -n:"
+# case_ctx's only assertion anywhere: expect_parses sets it per interpreter, so a failure
+# under one bash and not another names which one.
+expect_stderr "(under bash"
+end
+
 # ==========================================================================================
 # 4. ACCEPTANCE: the streams are separate, which is the whole point of the library
 # ==========================================================================================
@@ -299,6 +348,25 @@ run_consumer
 expect_stdout "PASS good-capture-C-cds"
 expect_stdout "PASS good-capture-without-C-stays-put"
 expect_stdout "2 passed, 0 failed"
+end
+
+# An unset variable expands to the empty string, so `capture -C "$WT" …` with a typo'd or
+# never-assigned WT is a live mistake, not a hypothetical. Refused outright: the alternative
+# is the subject running in the harness's own working directory and the case passing for a
+# reason nobody chose.
+begin "capture -C with an empty directory is FATAL, not a silent run in the harness's cwd"
+must consumer capture_empty_dir <<'BODY'
+harness_init_tmp
+begin "empty-C"
+capture -C "" pwd
+end
+finish
+BODY
+run_consumer
+[ "$rc" = "2" ] || bad "consumer exit: expected 2, got $rc"
+expect_stderr "FATAL capture -C was given an empty directory"
+expect_not_stdout "PASS empty-C"
+expect_not_stdout "passed,"
 end
 
 begin "capture before harness_init_tmp is FATAL, not a silent empty capture"

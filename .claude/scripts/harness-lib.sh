@@ -28,6 +28,13 @@
 # Its own harness is harness-lib.test.sh next door: consumers generated under a temp tree,
 # run, and asserted on — including a deliberately violated case per assertion, so a widened
 # assertion is a red case rather than a quieter suite.
+#
+# STATED GAP: harness_extra_cleanup, the override hook below, has no meta-case. Covering it
+# means proving a redefinition ran during trap unwinding, and the honest way to observe that
+# is a real consumer with something to tear down. worktree-lifecycle.test.sh is exactly that
+# consumer and it migrates in C6 (#157), which is where the override gets its coverage —
+# recorded here rather than left to be noticed, because the paragraph above claims a violated
+# case per assertion and this is the one exception to it.
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 
@@ -124,9 +131,20 @@ bad() {
 #     values from the previous run. Redirect from a file instead — that is what the first
 #     rule is for.
 capture() {
-  local dir="" outf errf
+  local dir="" have_dir=0 outf errf
   if [ "${1:-}" = "-C" ]; then
-    dir="$2"
+    # Presence is tracked in its own flag, never inferred from the value being non-empty: an
+    # unset variable expands to the empty string, so `-C "$WT"` with an unset WT would
+    # otherwise dispatch to the no-directory branch and run the subject in the harness's own
+    # working directory — the wrong tree, silently, which is the exact class of bug the hook
+    # harness exists to catch. An empty -C is refused outright instead, like the TMP_ROOT
+    # guard below: a directory nobody can name is a broken case, not a case with a default.
+    have_dir=1
+    dir="${2-}"
+    if [ -z "$dir" ]; then
+      printf 'FATAL capture -C was given an empty directory — the variable naming it is unset or empty\n' >&2
+      exit 2
+    fi
     shift 2
   fi
   if [ -z "${TMP_ROOT:-}" ]; then
@@ -135,7 +153,7 @@ capture() {
   fi
   outf="$TMP_ROOT/.capture.out"
   errf="$TMP_ROOT/.capture.err"
-  if [ -n "$dir" ]; then
+  if [ "$have_dir" = "1" ]; then
     (cd "$dir" && "$@") >"$outf" 2>"$errf"
   else
     "$@" >"$outf" 2>"$errf"
