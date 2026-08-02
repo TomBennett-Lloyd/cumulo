@@ -68,6 +68,7 @@ export { describeThrown } from './thrown-detail';
 export { utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
 export { weatherMessageSchema, type WeatherMessage } from './weather-message';
 export {
+  MAX_PLAUSIBLE_IRRADIANCE_WM2,
   weatherReadingSchema,
   type WeatherReading,
   forecastWeatherReadingSchema,

@@ -61,10 +61,11 @@ export type UncertaintyBand = z.infer<typeof uncertaintyBandSchema>;
  *   nameplate (ADR 0003)
  * - `poaIrradianceWm2` is plane-of-array irradiance in W/m²; 2000 is a sanity
  *   ceiling well above terrestrial peak including edge-of-cloud enhancement.
- *   It is deliberately looser than the 1500 caps on the horizontal-component
- *   irradiances it is computed from (`weatherReadingSchema`): projecting onto a
- *   tilted plane concentrates beam irradiance by geometry, and cloud-edge
- *   enhancement stacks on top, so a legitimate POA value can exceed its inputs.
+ *   It is deliberately looser than the `MAX_PLAUSIBLE_IRRADIANCE_WM2` caps on
+ *   the horizontal-component irradiances it is computed from
+ *   (`weatherReadingSchema`): projecting onto a tilted plane concentrates beam
+ *   irradiance by geometry, and cloud-edge enhancement stacks on top, so a
+ *   legitimate POA value can exceed its inputs.
  * - `weatherSource` propagates provenance from the weather input so the UI can
  *   render the mandatory Open-Meteo credit on forecast displays too
  * - `uncertainty` is optional because physics v1 (#12) emits point estimates.
