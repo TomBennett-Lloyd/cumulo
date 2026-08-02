@@ -1377,7 +1377,8 @@ curl -sI "$CF_URL/index.html" | grep -i '^cache-control'
 # expect: no-cache — the one mutable object, so a deploy takes effect without waiting out a TTL
 
 curl -sI "$CF_URL/assets/<a-hashed-file-from-the-index-body>" | grep -i '^cache-control'
-# expect: public, max-age=31536000, immutable — content-hashed, so this is true rather than optimistic
+# expect: public,max-age=31536000,immutable — content-hashed, so this is true rather than optimistic.
+# Byte-for-byte, spaces and all: S3 echoes the header the deploy stored, and the deploy stores it space-free.
 ```
 
 The last one is the one not to skip. The rewrite in the second check means a **broken** origin — a bad bucket policy, a missing OAC signature — also answers 200 with the SPA shell, so `/` alone cannot distinguish a working distribution from a distribution serving nothing but its own error page. An asset that returns its own headers is what proves the origin is actually being read.
@@ -1399,7 +1400,7 @@ A `2` here does **not** have the deploy-path causes the Lambda stacks' do: CI wr
 
 `.github/workflows/deploy-web.yml` builds `apps/web` and replaces the **content** of the bucket on every push to `main` that touches `apps/web/**`, `packages/shared/**`, `packages/ui/**` or the lockfile, plus on `workflow_dispatch`. It does nothing else, and it cannot: `deploy.tf` grants `s3:ListBucket` on the bucket, `s3:PutObject` and `s3:DeleteObject` on its contents, and `cloudfront:CreateInvalidation`/`GetInvalidation` on the distribution. There is no `s3:GetObject` (a sync diffs on the listing, so CI can write the origin without being able to read it back), nothing that can change the bucket itself, and **no `cloudfront:UpdateDistribution`** — so the origin, the cache behaviour, the error rewrites and the price class are reachable only through a reviewed diff in this directory.
 
-Two properties of the sync are worth knowing before reading a run log. Assets go first and `index.html` last, so the entry document never references an asset that is not there yet; and `index.html` is uploaded with `no-cache` while everything under `dist/assets/` gets `max-age=31536000, immutable`, which is true rather than hopeful because Vite content-hashes those filenames. The invalidation is a single `/*`, one path against the free 1,000 a month.
+Three properties of the sync are worth knowing before reading a run log. Assets go first and `index.html` last, so the entry document never references an asset that is not there yet. The cache headers follow **hashing, not location**: `dist/assets/` is the only content-hashed output Vite produces, so it alone is uploaded `public,max-age=31536000,immutable` — true rather than hopeful — while `index.html` gets `no-cache`, and a third sync covers whatever else sits at the root of `dist` with `no-cache` too. That third call uploads nothing today, because `apps/web/public/` does not exist; it is there so that the first unhashed file someone drops in (a favicon, `robots.txt`, an OG image) is shipped revalidate-before-use instead of being pinned immutable for a year at a URL nobody can then update. Each sync's `--delete` is bounded by its own filters — the AWS CLI applies `--exclude` to the destination listing as well as the source — so the `assets/` call prunes only superseded hashed files, and the root call, excluding `assets/*` and `index.html`, can neither delete those assets nor orphan the live entry document. The invalidation is a single `/*`, one path against the free 1,000 a month.
 
 Authentication is OIDC and there is no AWS secret in the repository. The role is assumed with a session named `deploy-web-<run-id>`, so CloudTrail traces a `PutObject` back to the run — and therefore the commit — that made it.
 

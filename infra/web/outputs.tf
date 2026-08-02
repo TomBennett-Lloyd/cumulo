@@ -20,7 +20,9 @@
 # nothing.
 #
 # ---------------------------------------------------------------------------
-# IDLE COST: $0/month. No resource in this stack bills for existing.
+# IDLE COST: ≈$0/month — the one line that bills for existing is the stored
+# build (~1.7 MB of S3, ~$0.00004/month). Nothing else here has a price for
+# merely existing.
 # ---------------------------------------------------------------------------
 #   * S3 storage — the whole production build is ~1.7 MB, which at $0.023/GB-mo
 #     is about $0.00004/month. It rounds to zero and would still round to zero

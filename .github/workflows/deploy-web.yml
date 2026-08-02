@@ -173,21 +173,39 @@ jobs:
       # objects that 404. The reverse order's window is harmless — new assets
       # sitting unreferenced beside the old page.
       #
-      # The cache-control split follows from Vite's output. Everything under
-      # `dist/assets/` is content-hashed, so a given URL's bytes never change
-      # and `immutable` for a year is simply true. `index.html` is the one
-      # mutable object in the bucket — same URL, new content every deploy — so
-      # it gets `no-cache`, which does not mean "do not cache" but "revalidate
-      # before use": deploys take effect at once instead of waiting out a TTL,
-      # while the invalidation below handles the edge copies already out there.
+      # Three calls, because the cache-control split has to follow *hashing*
+      # rather than convenience. Only `dist/assets/` is content-hashed by Vite,
+      # so only it earns a year of `immutable` — a given URL's bytes there never
+      # change, which makes the header simply true. Syncing all of `dist` with
+      # that header would be true today only because `apps/web/public/` does not
+      # exist yet; the day someone adds a favicon, a `robots.txt` or an OG image
+      # there, an unhashed file at a fixed URL would be pinned in every cache
+      # for a year with no way to update it. The second sync forecloses that
+      # trap by construction: anything appearing at the root of `dist` ships
+      # `no-cache`, the safe default for bytes that can change under a stable
+      # name. Today it uploads nothing, which is the point — it is the guard,
+      # not a step with work to do. `index.html`, the one mutable object that
+      # certainly exists, is last and also `no-cache`, which does not mean "do
+      # not cache" but "revalidate before use": deploys take effect at once
+      # instead of waiting out a TTL, while the invalidation below handles the
+      # edge copies already out there.
       #
-      # `--delete` prunes assets from previous builds, which is safe *because*
-      # the entry is excluded from this call: the old page is never orphaned
-      # mid-sync, it is replaced a second later by the `cp`.
+      # `--delete` is scoped, not global, in both syncs, because the AWS CLI
+      # applies `--exclude`/`--include` to the destination listing as well as
+      # the source — so each call's delete generator only ever sees its own
+      # scope. The first is rooted at `assets/`, so it prunes hashed files from
+      # previous builds and cannot reach a key outside that prefix. The second
+      # is rooted at the bucket root but excludes `assets/*` and `index.html`
+      # from both sides, so it can neither delete the assets the call above just
+      # uploaded nor orphan the live entry document — which is also why the
+      # entry stays excluded here and is replaced a second later by the `cp`.
       - name: Sync the build to S3
         run: |
-          aws s3 sync apps/web/dist "s3://$WEB_BUCKET/" --delete --exclude index.html \
+          aws s3 sync apps/web/dist/assets "s3://$WEB_BUCKET/assets/" --delete \
             --cache-control 'public,max-age=31536000,immutable' --only-show-errors
+          aws s3 sync apps/web/dist "s3://$WEB_BUCKET/" --delete \
+            --exclude 'assets/*' --exclude 'index.html' \
+            --cache-control 'no-cache' --only-show-errors
           aws s3 cp apps/web/dist/index.html "s3://$WEB_BUCKET/index.html" \
             --cache-control 'no-cache' --only-show-errors
         env:
