@@ -332,6 +332,29 @@ expect_out "x.yaml"
 end
 
 # ====================================================================================
+# 11. every discovered file reaches actionlint, not just the first one
+# ====================================================================================
+# Discovery and analysis are two steps, and until this case only the first was pinned:
+# every case above hands the linter exactly one file, so a gate that expanded its list
+# as `"$workflow_files"` — element zero, the shape a quoting slip produces — passed all
+# ten while checking one file in six and still printing the full census count. The
+# finding is deliberately in the LATER-sorting name: git lists paths sorted, so a
+# truncation keeps the alphabetical head, and putting the clean file first is what makes
+# the count and the verdict disagree. Asserting the census alongside rc is the point —
+# "over 2 file(s)" with rc 0 is the exact signature of a gate lying about its own scope.
+begin "gate reports a finding in the second of two workflows, not only the first"
+fixture all_files_linted
+must clean_workflow "$ROOT/.github/workflows/a-clean.yml"
+must broken_shell_workflow "$ROOT/.github/workflows/z-broken.yml"
+must gitc "$ROOT" add -A
+must gitc "$ROOT" commit --quiet -m base
+run_gate
+expect_rc 1 "$rc"
+expect_out "over 2 file(s)"
+expect_out "z-broken"
+end
+
+# ====================================================================================
 
 printf '\n%d passed, %d failed\n' "$passed" "$failed"
 [ "$failed" = "0" ] || exit 1
