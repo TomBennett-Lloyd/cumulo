@@ -34,10 +34,13 @@ shipped_scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 #   chmod +x /tmp/pre/*.sh
 #   WORKTREE_SCRIPTS_DIR=/tmp/pre bash .claude/scripts/worktree-lifecycle.test.sh
 #
-# The chmod is not optional: sweep-worktrees.sh EXECUTES its sibling reap-worktree.sh rather
-# than running it through `bash`, and `git show` writes mode 644. Without it the four sweep
-# cases fail with "swept 0, kept 0, failed 3" — a bisect that looks like a real regression in
-# the revision under test and is not.
+# The chmod stays in the recipe even though the shipped sweep no longer needs it. Revisions
+# predating #204 EXECUTE their sibling reap-worktree.sh rather than running it through `bash`,
+# and `git show` writes mode 644, so an extraction of one of those still needs the bit or its
+# sweep cases fail with "swept 0, kept 0, failed N" — a bisect that looks like a real regression
+# in the revision under test and is not. For post-fix revisions the chmod is simply harmless,
+# which is why one recipe can serve both: case 32 is what pins the shipped behaviour, and it
+# builds its own mode-644 copy rather than relying on how the recipe was run.
 #
 # Those four files are the whole of what the directory needs to hold: harness-lib.sh is always
 # the shipped one, so an extracted revision from before it existed still runs.
@@ -953,6 +956,42 @@ expect_rc 1 "$rc"
 expect_out "— unmerged"
 expect_exists "$ROOT/wt/file.txt"
 expect_branch "$ROOT/main" feat
+end
+
+# ==========================================================================================
+# 32. sweep runs its sibling through bash, so the exec bit is not load-bearing
+# ==========================================================================================
+# `git show <rev>:…` writes mode 644, which is how these scripts arrive whenever they are
+# extracted rather than checked out — this harness's own negative-control recipe, a bisect, a
+# review of an older revision. A sweep that EXECUTES its sibling turns that into "swept 0,
+# kept 0, failed N": every candidate reported as an unexpected failure, and nothing swept.
+# The fixture pins mode 644 explicitly rather than inheriting whatever cp handed it, and both
+# invocation sites are exercised, so reverting either `bash ` prefix alone reds this case.
+begin "sweep runs reap through bash, so 644 extracted copies still sweep"
+fixture sweep644
+add_wt feat wt
+must mkdir -p "$ROOT/scripts644"
+must cp "$SCRIPTS/sweep-worktrees.sh" "$SCRIPTS/reap-worktree.sh" "$SCRIPTS/worktree-lib.sh" \
+  "$ROOT/scripts644/"
+# cp preserves the source's 755, so the mode this case is about has to be set, not assumed.
+must chmod 644 "$ROOT/scripts644"/*.sh
+# The branch is an unmoved cut of main, so ancestry alone settles it and a failing gh keeps the
+# case from passing by way of GitHub.
+gh_stub_broken "$ROOT/gh"
+
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$ROOT/scripts644/sweep-worktrees.sh" --dry-run
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP"
+expect_not_out "ERROR"
+expect_exists "$ROOT/wt/file.txt"
+
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$ROOT/scripts644/sweep-worktrees.sh"
+expect_rc 0 "$rc"
+expect_out "REAPED $ROOT/wt (feat)"
+expect_out "swept 1, kept 0"
+expect_not_out "ERROR"
 end
 
 # ==========================================================================================

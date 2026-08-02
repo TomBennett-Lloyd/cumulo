@@ -90,11 +90,14 @@ while IFS= read -r wt; do
   # The worktrees it swallowed would then be skipped in silence — a backstop reporting
   # "kept 1" over a repo holding five worktrees looks exactly like a backstop with nothing to
   # do, which is the one failure mode a backstop must not have.
+  #
+  # Through `bash`, not directly: the exec bit is not assumed, because `git show` writes mode 644
+  # and an extracted copy of these scripts must still sweep (#204).
   if [ "$dry_run" = "1" ]; then
-    "$script_dir/reap-worktree.sh" "$wt" --dry-run </dev/null
+    bash "$script_dir/reap-worktree.sh" "$wt" --dry-run </dev/null
     rc=$?
   else
-    "$script_dir/reap-worktree.sh" "$wt" </dev/null
+    bash "$script_dir/reap-worktree.sh" "$wt" </dev/null
     rc=$?
   fi
 
