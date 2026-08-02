@@ -7,10 +7,11 @@
   },
   "scripts": {
     "verify:root": "echo \"verify root: $(git rev-parse --show-toplevel) [$(git rev-parse --abbrev-ref HEAD)]\"",
-    "lint": "pnpm lint:js && pnpm lint:css && pnpm lint:sh",
+    "lint": "pnpm lint:js && pnpm lint:css && pnpm lint:sh && pnpm lint:workflows",
     "lint:js": "eslint --max-warnings 0 .",
     "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
     "lint:sh": "bash .claude/scripts/lint-shell.sh",
+    "lint:workflows": "bash .claude/scripts/lint-workflows.sh",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "test:scripts": "bash .claude/scripts/run-script-tests.sh",
