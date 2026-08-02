@@ -222,6 +222,10 @@ expect_out() { # expect_out <substring>
   esac
 }
 
+# Negative substrings must be collision-proof against text the subject merely echoes: a case
+# that runs inside a mktemp fixture sees that path — random suffix included — in any diagnostic
+# either stream prints, and an 11-char alnum suffix contains any given 2-char substring about
+# once in 400 runs. Assert a gate's full success prefix ("check-…: OK"), never bare "OK" (#219).
 expect_not_out() { # expect_not_out <substring>
   local both="$out"$'\n'"$err"
   case "$both" in
