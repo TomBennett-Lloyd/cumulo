@@ -8,18 +8,21 @@
 # open — so an ordinary uncommitted delete used to red `pnpm verify` with "the gate is
 # broken", which is both wrong and unactionable. These cases pin the fix.
 #
-# Self-contained on the same terms as worktree-lifecycle.test.sh: no framework, no
-# network, one `mktemp -d` that a trap removes, and every fixture is a throwaway git
-# repo, so no case can mutate the repository the harness ships in. Case 1 is the one
-# that reads it: the gate is run, unmodified and unredirected, over this very
-# repository — analysis only, nothing written.
+# Self-contained on the same terms as worktree-lifecycle.test.sh: no framework beyond
+# the shared vocabulary in harness-lib.sh next door, no network, one `mktemp -d` that a
+# trap removes, and every fixture is a throwaway git repo, so no case can mutate the
+# repository the harness ships in. Case 1 is the one that reads it: the gate is run,
+# unmodified and unredirected, over this very repository — analysis only, nothing written.
 #
 # Usage: bash .claude/scripts/lint-shell.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
-set -u
+set -uo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
+
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
 
 # The gate under test, overridable so the same cases can be run against an older
 # revision of the gate as a negative control (testing.md rule 4: a regression test is
@@ -31,65 +34,7 @@ SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # Unset — how `pnpm test:scripts` runs it — is the shipped gate.
 GATE=${LINT_SHELL_GATE:-$SCRIPTS/lint-shell.sh}
 
-tmp_raw=$(mktemp -d) || exit 2
-cleanup() { rm -rf "$tmp_raw"; }
-trap cleanup EXIT INT TERM
-# Canonical from the start: macOS hides temp dirs behind /var -> /private/var, and the
-# gate reports paths relative to a realpath'd toplevel.
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
-
-passed=0
-failed=0
-case_name=""
-case_failed=0
-out=""
-rc=0
-
-# --- harness plumbing --------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
-}
-
-begin() {
-  case_name="$1"
-  case_failed=0
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-bad() {
-  printf '  ! %s\n' "$1" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
-  esac
-}
+harness_init_tmp
 
 # --- fixtures ----------------------------------------------------------------------
 
@@ -133,14 +78,15 @@ fixture() {
   must gitc "$ROOT" commit --quiet -m base
 }
 
+# The fixture's OWN copy of the gate is what runs, at its real in-repo path — that is the
+# whole point of copying it in (see `fixture`), and it is why this invocation is relative
+# while run_gate_on_this_repo's is not.
 run_gate() {
-  out=$(cd "$ROOT" && bash .claude/scripts/lint-shell.sh 2>&1)
-  rc=$?
+  capture -C "$ROOT" bash .claude/scripts/lint-shell.sh
 }
 
 run_gate_on_this_repo() { # the shipped configuration: real repository, no fixture
-  out=$(cd "$SCRIPTS" && bash "$GATE" 2>&1)
-  rc=$?
+  capture -C "$SCRIPTS" bash "$GATE"
 }
 
 # ====================================================================================
@@ -158,7 +104,7 @@ run_gate_on_this_repo() { # the shipped configuration: real repository, no fixtu
 # change, and pinning it here would make an unrelated new script fail this case.
 begin "gate exits 0 over this repository's own shell scripts, with no fixture"
 run_gate_on_this_repo
-[ "$rc" = 0 ] || bad "gate over this repository exited $rc; output: $out"
+[ "$rc" = 0 ] || bad "gate over this repository exited $rc; output: $out$err"
 expect_out "file(s)"
 end
 
@@ -222,5 +168,4 @@ end
 
 # ====================================================================================
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" = "0" ] || exit 1
+finish

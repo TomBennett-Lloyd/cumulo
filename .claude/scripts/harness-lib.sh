@@ -29,12 +29,12 @@
 # run, and asserted on — including a deliberately violated case per assertion, so a widened
 # assertion is a red case rather than a quieter suite.
 #
-# STATED GAP: harness_extra_cleanup, the override hook below, has no meta-case. Covering it
-# means proving a redefinition ran during trap unwinding, and the honest way to observe that
-# is a real consumer with something to tear down. worktree-lifecycle.test.sh is exactly that
-# consumer and it migrates in C6 (#157), which is where the override gets its coverage —
-# recorded here rather than left to be noticed, because the paragraph above claims a violated
-# case per assertion and this is the one exception to it.
+# That claim now holds without exception. harness_extra_cleanup, the override hook below, was
+# the one gap — covering it means proving a redefinition ran during trap unwinding, which needs
+# a consumer with something real to tear down. worktree-lifecycle.test.sh became that consumer
+# in C6 (#157), and the hook's meta-case landed alongside it: a consumer that records the tmp
+# tree's existence from inside its own override, so the case can assert the hook ran on EXIT
+# and ran BEFORE the `rm -rf`, not merely that it ran.
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 
@@ -143,6 +143,16 @@ capture() {
     dir="${2-}"
     if [ -z "$dir" ]; then
       printf 'FATAL capture -C was given an empty directory — the variable naming it is unset or empty\n' >&2
+      exit 2
+    fi
+    # A named but NONEXISTENT directory is refused on the same terms, and for a sharper reason
+    # than tidiness. `(cd "$dir" && "$@")` fails at the cd, so rc is 1 and the subject never
+    # ran — which is indistinguishable from the subject running and exiting 1. Every red-fixture
+    # case in this family is written `capture -C "$ROOT" …; expect_rc 1`, so a stale or
+    # misspelled $ROOT turns the whole case green for a reason nobody chose, with the gate under
+    # test never invoked at all.
+    if [ ! -d "$dir" ]; then
+      printf 'FATAL capture -C was given a directory that does not exist: %s\n' "$dir" >&2
       exit 2
     fi
     shift 2
