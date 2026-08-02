@@ -21,6 +21,7 @@ import {
   drainBatches,
   fullJitterDelayMs,
   realSleep,
+  requireUsablePolicy,
   type BatchPolicy,
   type BatchWriteOutcome,
 } from '../../batch';
@@ -210,6 +211,16 @@ export class WeatherAdapter extends StorageAdapterBase {
     // reporting failure", and a capacity cancellation is the same table running
     // out of the same capacity as an undrained batch, down to the injected
     // sleep the tests already use.
+    // The loop below is bounded by `maxAttempts`, so a policy below 1 would
+    // run no iterations at all and resolve — a day reported written that was
+    // never sent. `drainBatches` refuses the same policy on the other two
+    // methods here, and this path must refuse it identically or the same bad
+    // deps would fail loudly on a batch write and silently on an archive day.
+    // Outside `sending` deliberately: a policy this broken is a programming
+    // error, not a storage outage, and dressing it as a `StorageError` would
+    // tell an operator DynamoDB was down (error-handling rule 1).
+    requireUsablePolicy('putArchiveDay', this.batchPolicy);
+
     const sleep = this.batchPolicy.sleep ?? realSleep;
 
     // One `sending` around the whole loop, so the `StorageError` is still

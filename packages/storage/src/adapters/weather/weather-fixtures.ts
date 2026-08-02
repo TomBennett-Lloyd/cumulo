@@ -76,8 +76,14 @@ export const instantPolicy: BatchPolicy = {
   sleep: () => Promise.resolve(),
 };
 
-export const adapter = (): WeatherAdapter =>
-  new WeatherAdapter({ client, tableName: TABLE, batchPolicy: instantPolicy });
+/**
+ * The adapter under a policy of the test's choosing — for the cases that are
+ * *about* the policy rather than merely paying for one.
+ */
+export const adapterWithPolicy = (batchPolicy: BatchPolicy): WeatherAdapter =>
+  new WeatherAdapter({ client, tableName: TABLE, batchPolicy });
+
+export const adapter = (): WeatherAdapter => adapterWithPolicy(instantPolicy);
 
 /** The adapter exactly as production builds it — no injected batch policy. */
 export const shippedAdapter = (): WeatherAdapter =>

@@ -130,6 +130,37 @@ export const realSleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
+/**
+ * Refuses a {@link BatchPolicy} that cannot express a retry curve at all.
+ *
+ * `maxAttempts` counts the initial send, so anything below 1 — or a `NaN` from
+ * a parsed env var — describes a policy that sends *nothing*. Every loop in
+ * this package is bounded by it, and a loop bounded at zero does not fail: it
+ * runs no iterations and falls straight out, which is a silent success
+ * reported for work that never happened. That is the swallowed failure
+ * `docs/standards/error-handling.md` rule 2 forbids, so a policy this broken is
+ * a violated invariant and throws (rule 1) rather than being quietly clamped to
+ * something sane.
+ *
+ * Shared rather than restated because both callers validate for the same
+ * reason: if the rule changed here, an unguarded copy would be wrong until it
+ * changed the same way (`docs/standards/structure.md` rule 7). `operation`
+ * names the caller so the message points at the loop that refused, not at this
+ * helper.
+ */
+export const requireUsablePolicy = (operation: string, policy: BatchPolicy): void => {
+  if (!Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
+    throw new Error(
+      `${operation}: policy.maxAttempts must be a positive integer, got ${String(policy.maxAttempts)}`,
+    );
+  }
+  if (!Number.isFinite(policy.baseDelayMs) || policy.baseDelayMs < 0) {
+    throw new Error(
+      `${operation}: policy.baseDelayMs must be a non-negative number, got ${String(policy.baseDelayMs)}`,
+    );
+  }
+};
+
 const chunk = <TReq>(requests: readonly TReq[], batchSize: number): TReq[][] => {
   const chunks: TReq[][] = [];
   for (let index = 0; index < requests.length; index += batchSize) {
@@ -162,16 +193,7 @@ export const drainBatches = async <TReq>(
   if (!Number.isInteger(batchSize) || batchSize < 1) {
     throw new Error(`drainBatches: batchSize must be a positive integer, got ${String(batchSize)}`);
   }
-  if (!Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
-    throw new Error(
-      `drainBatches: policy.maxAttempts must be a positive integer, got ${String(policy.maxAttempts)}`,
-    );
-  }
-  if (!Number.isFinite(policy.baseDelayMs) || policy.baseDelayMs < 0) {
-    throw new Error(
-      `drainBatches: policy.baseDelayMs must be a non-negative number, got ${String(policy.baseDelayMs)}`,
-    );
-  }
+  requireUsablePolicy('drainBatches', policy);
 
   const sleep = policy.sleep ?? realSleep;
   const unprocessed: TReq[] = [];

@@ -101,10 +101,11 @@ describe('createUserSiteWithCap', () => {
   });
 
   it('does not mistake a capacity cancellation for a full fleet', async () => {
-    // The SDK does not retry TransactionCanceledException at all
-    // (docs/tech-debt.md), so a throughput cancellation arrives here on its
-    // first and only attempt. Answering 'cap' would tell a caller the demo is
-    // full when the table is merely throttled.
+    // The SDK does not retry TransactionCanceledException at all — pinned
+    // empirically at the wire in `client-retry-classification.test.ts` — and
+    // this adapter deliberately does not retry it either, so a throughput
+    // cancellation arrives here on its first and only attempt. Answering 'cap'
+    // would tell a caller the demo is full when the table is merely throttled.
     ddbMock
       .on(TransactWriteCommand)
       .rejects(transactionCancelled(NO_REASON, 'ProvisionedThroughputExceeded'));

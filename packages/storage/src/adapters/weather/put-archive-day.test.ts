@@ -13,10 +13,12 @@ import {
   THROUGHPUT_EXCEEDED,
   TRANSACTION_CONFLICT,
   adapter,
+  adapterWithPolicy,
   archiveReading,
   ddbMock,
   hourlyFrom,
   instantPolicy,
+  shippedAdapter,
   transactInputs,
   transactedItems,
   transactionCancelled,
@@ -32,8 +34,8 @@ import {
  * The capacity re-issue below is counted in *adapter* sends, and only those:
  * `ddbMock` intercepts above the SDK's retry middleware, so nothing here can
  * see how many times the SDK itself would have tried. That layer is pinned
- * separately, at the wire, in `client-retry-classification.test.ts` — the two counts are different
- * facts and neither substitutes for the other.
+ * separately, at the wire, in `client-retry-classification.test.ts` — the two
+ * counts are different facts and neither substitutes for the other.
  */
 
 const DAY = '2026-02-10';
@@ -229,6 +231,43 @@ describe('putArchiveDay', () => {
       // request that never ends.
       expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(instantPolicy.maxAttempts);
     });
+
+    it('honours the shipped batch policy when none is injected', async () => {
+      // No `batchPolicy` in the deps, and so the only test on this path that
+      // lets `realSleep` actually run: every case above injects an instant
+      // sleep, which would leave the shipped curve — the one production spends
+      // — proven by nothing (`docs/standards/testing.md` rule 7).
+      ddbMock
+        .on(TransactWriteCommand)
+        .rejects(transactionCancelled(THROUGHPUT_EXCEEDED, NO_REASON));
+
+      const started = Date.now();
+      const error = await captureStorageError(() => shippedAdapter().putArchiveDay(DAY, oneDay));
+
+      expect(error.context.operation).toBe('putArchiveDay');
+      expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(3);
+      // Two full-jitter sleeps at the shipped 200 ms base cap at 200 + 400 ms,
+      // so the whole refusal fits inside a second of wall clock — the bound is
+      // loose because jitter is random, and tight enough that a policy that
+      // stopped injecting would blow it.
+      expect(Date.now() - started).toBeLessThan(2000);
+    });
+  });
+
+  it('refuses a policy that could never send, instead of reporting a silent success', async () => {
+    // A `maxAttempts` below 1 makes the re-issue loop run zero iterations, and
+    // a loop that runs zero iterations does not fail — it falls out and the
+    // day is reported written without a single byte leaving the process. That
+    // is the shape the guard exists to make loud; `drainBatches` refuses the
+    // identical policy, so the two paths in this adapter answer alike.
+    ddbMock.on(TransactWriteCommand).resolves({});
+
+    await expect(
+      adapterWithPolicy({ ...instantPolicy, maxAttempts: 0 }).putArchiveDay(DAY, [
+        archiveReading(firstHour),
+      ]),
+    ).rejects.toThrow(/maxAttempts must be a positive integer/);
+    expect(ddbMock.calls()).toHaveLength(0);
   });
 
   /**
