@@ -38,6 +38,21 @@ import { WeatherAdapter } from './weather-adapter';
  * attributes are present on every item.
  */
 
+/**
+ * The cancelled-transaction builder and DynamoDB's reason codes come from the
+ * adapters root and are re-exported here so this folder's tests keep one
+ * fixture import. Importing `site-fixtures.ts` directly is not an option: it
+ * installs its own `mockClient(DynamoDBDocumentClient)` at module scope, and
+ * two of those in one process fight over the same client.
+ */
+export {
+  NO_REASON,
+  THROTTLING,
+  THROUGHPUT_EXCEEDED,
+  TRANSACTION_CONFLICT,
+  transactionCancelled,
+} from '../transaction-fixtures';
+
 export const TABLE = 'cumulo-weather-test';
 
 /** Dublin, and the location id it rounds to (~1.1 km buckets). */
@@ -61,8 +76,14 @@ export const instantPolicy: BatchPolicy = {
   sleep: () => Promise.resolve(),
 };
 
-export const adapter = (): WeatherAdapter =>
-  new WeatherAdapter({ client, tableName: TABLE, batchPolicy: instantPolicy });
+/**
+ * The adapter under a policy of the test's choosing — for the cases that are
+ * *about* the policy rather than merely paying for one.
+ */
+export const adapterWithPolicy = (batchPolicy: BatchPolicy): WeatherAdapter =>
+  new WeatherAdapter({ client, tableName: TABLE, batchPolicy });
+
+export const adapter = (): WeatherAdapter => adapterWithPolicy(instantPolicy);
 
 /** The adapter exactly as production builds it — no injected batch policy. */
 export const shippedAdapter = (): WeatherAdapter =>

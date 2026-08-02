@@ -13,6 +13,11 @@ import {
 import type { FleetSite, SitePhysics } from '@cumulo/shared';
 
 import { StorageAdapterBase } from '../storage-adapter-base';
+import {
+  CONDITIONAL_CHECK_FAILED,
+  NO_CANCELLATION_REASON,
+  TRANSACTION_CONFLICT,
+} from '../transaction-cancellation';
 
 import {
   BY_LOCATION_INDEX,
@@ -96,24 +101,6 @@ export type DeleteUserSiteResult =
   | { readonly deleted: false; readonly reason: 'already_gone' | 'conflict' };
 
 /**
- * DynamoDB's cancellation code for a transaction item whose `ConditionExpression`
- * evaluated false. Every other code — `TransactionConflict`,
- * `ProvisionedThroughputExceeded`, `ThrottlingError`, `ValidationError` — means
- * the write did not happen for a reason that is *not* a domain outcome.
- */
-const CONDITIONAL_CHECK_FAILED = 'ConditionalCheckFailed';
-
-/**
- * DynamoDB's cancellation code for a transaction item that collided with
- * another in-flight transaction on the same row — the counter item, in
- * practice, which every capped create and counted delete writes.
- */
-const TRANSACTION_CONFLICT = 'TransactionConflict';
-
-/** The code DynamoDB reports for an item that was itself fine. */
-const NO_CANCELLATION_REASON = 'None';
-
-/**
  * Was this rejection nothing but a lost race between concurrent transactions?
  *
  * Two shapes carry that answer. A standalone `TransactionConflictException` is
@@ -141,9 +128,11 @@ const NO_CANCELLATION_REASON = 'None';
  *
  * A conflict mixed with a capacity code (`ProvisionedThroughputExceeded`,
  * `ThrottlingError`) is not a bare race either, and has no domain reading at
- * all: retrying it against a throttled table is the thundering herd, and
- * capacity classification is #166's decision to make, not this predicate's. It
- * stays a `StorageError`.
+ * all: retrying it against a throttled table is the thundering herd. Capacity
+ * cancellations are classified by `capacityCancelled` in
+ * `../transaction-cancellation` and deliberately go unretried on *this*
+ * adapter (#166), so they stay a `StorageError` here, mixed with a conflict or
+ * not.
  */
 const conflictCancelled = (cause: unknown): boolean => {
   if (cause instanceof TransactionConflictException) {
@@ -178,10 +167,12 @@ const conflictCancelled = (cause: unknown): boolean => {
  * (a uuid that already exists), and that must not be reported as the domain
  * answer. A cancellation with no failed condition at all is likewise not *this*
  * answer: a pure conflict is {@link conflictCancelled}'s to classify, and a
- * capacity cancellation is nobody's — note that the SDK does **not** retry
- * `TransactionCanceledException` at all (`docs/tech-debt.md`), so a
- * capacity-cancelled transaction arrives here on its first and only attempt and
- * must surface as a `StorageError`, not as a full fleet.
+ * capacity cancellation is `capacityCancelled`'s — note that the SDK does
+ * **not** retry `TransactionCanceledException` at all, and nothing on this
+ * adapter retries it either (`STORAGE_MAX_ATTEMPTS`'s doc block in `client.ts`
+ * holds the per-shape record), so a capacity-cancelled transaction arrives here
+ * on its first and only attempt and must surface as a `StorageError`, not as a
+ * full fleet.
  */
 const cancelledOnlyBy = (cause: unknown, itemIndex: number): boolean => {
   if (!(cause instanceof TransactionCanceledException)) {

@@ -26,10 +26,12 @@ export interface StorageAdapterDeps {
  * The dependencies of an adapter that writes in batches.
  *
  * `batchPolicy` means the same thing to the series and the weather adapter —
- * how hard to push an unprocessed batch before reporting `partial` — and both
- * fall back to `defaultBatchPolicy` when it is absent, so it is one type rather
- * than two. Tests inject a policy that costs no wall-clock time; production
- * leaves it unset.
+ * how hard to push this table before reporting failure — and both fall back to
+ * `defaultBatchPolicy` when it is absent, so it is one type rather than two. It
+ * governs two pushes, not one: draining an unprocessed batch before reporting
+ * `partial`, and (on the weather adapter) re-issuing a `putArchiveDay`
+ * transaction that DynamoDB cancelled for capacity. Tests inject a policy that
+ * costs no wall-clock time; production leaves it unset.
  */
 export interface BatchingAdapterDeps extends StorageAdapterDeps {
   readonly batchPolicy?: BatchPolicy;

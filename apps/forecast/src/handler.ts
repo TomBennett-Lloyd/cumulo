@@ -65,9 +65,13 @@ import { sqsEventSchema, type SqsBatchResponse } from './sqs-event';
  *
  * The ≈ 216 s grind needs the opposite of an outage, and specifically a **mixed**
  * regime rather than a purely declining one: each send's first attempt timing out,
- * and its one SDK retry then answering HTTP 200 with all 25 items unprocessed.
- * That is what the 7 s per-send term actually prices — `2 × 3 s + 1 s` spends two
- * attempts only when the first failed *retryably*, which a 200 never is.
+ * and its one SDK retry then answering HTTP 200 with all but one of its 25 items
+ * unprocessed. (All but one, not all: a *wholly* declined batch does not answer
+ * 200 at all — DynamoDB rejects it with `ProvisionedThroughputExceededException`,
+ * which the drain cannot retry, so it takes the outage path priced above;
+ * `packages/storage/src/client.ts` states that boundary.) That is what the 7 s
+ * per-send term actually prices — `2 × 3 s + 1 s` spends two attempts only when
+ * the first failed *retryably*, which a 200 never is.
  *
  * A **pure** 200-declining regime is therefore cheaper per send, not dearer: one
  * HTTP attempt bounded at 3 s to headers, so ≈ 9.6 s per page (`3 × 3 s + 0.6 s`)

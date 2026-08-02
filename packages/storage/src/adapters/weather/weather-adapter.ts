@@ -16,12 +16,17 @@ import {
 
 import {
   DYNAMODB_BATCH_WRITE_SIZE,
+  MAX_BACKOFF_DELAY_MS,
   defaultBatchPolicy,
   drainBatches,
+  fullJitterDelayMs,
+  realSleep,
+  requireUsablePolicy,
   type BatchPolicy,
   type BatchWriteOutcome,
 } from '../../batch';
 import { StorageAdapterBase, type BatchingAdapterDeps } from '../storage-adapter-base';
+import { capacityCancelled } from '../transaction-cancellation';
 
 import {
   fromItem,
@@ -129,7 +134,25 @@ export class WeatherAdapter extends StorageAdapterBase {
       : { status: 'partial', unprocessedCount: outcome.unprocessed.length };
   }
 
-  /** Writes one location-day of archive weather and its marker (H3). */
+  /**
+   * Writes one location-day of archive weather and its marker (H3).
+   *
+   * This is the package's only `TransactWriteItems` against a *provisioned*
+   * table, and it is a big one: 25 items ≈ 50 WCU against the 5 WCU this table
+   * is provisioned for (ADR 0002), so DynamoDB cancelling it for capacity is a
+   * genuinely reachable shape rather than a theoretical one. Nobody else
+   * retries that shape — the cause lives inside `CancellationReasons[].Code`,
+   * where the SDK's retry classifier never looks — so the re-issue loop below
+   * is its only owner (`capacityCancelled`, `../transaction-cancellation`).
+   *
+   * Worst case, on `defaultBatchPolicy`: 3 sends of ≈ 7 s plus ≤ 0.6 s of
+   * jittered sleeps ≈ **21.6 s** before the `StorageError` surfaces. That is
+   * affordable only because of who calls this — `@cumulo/hindcast`'s
+   * `archive-cache.ts`, an offline operator path with no request deadline, and
+   * no Lambda time budget prices this term. Its contract is unchanged: a
+   * `StorageError` from here still means the backfill failed; it now simply
+   * arrives after a bounded push rather than after one refusal.
+   */
   async putArchiveDay(day: string, readings: readonly ArchiveWeatherReading[]): Promise<void> {
     // Preconditions first, and all of them before anything is sent. These are
     // violated invariants, not domain outcomes (error-handling rule 1), and
@@ -180,8 +203,50 @@ export class WeatherAdapter extends StorageAdapterBase {
       { Put: { TableName: this.tableName, Item: { locationId: partitionKey, sk: markerSortKey } } },
     ];
 
-    await this.sending('putArchiveDay', { locationId: partitionKey, sk: markerSortKey }, () =>
-      this.client.send(new TransactWriteCommand({ TransactItems: transactItems })),
+    // Re-issuing the *same* items is safe: a cancelled transaction is atomic in
+    // failure, so nothing was written, and every item here is a plain Put with
+    // no condition — a second send either lands the whole day or is cancelled
+    // again. The budget is `batchPolicy`, deliberately not a second knob: it is
+    // this adapter's one answer to "how hard do I push this table before
+    // reporting failure", and a capacity cancellation is the same table running
+    // out of the same capacity as an undrained batch, down to the injected
+    // sleep the tests already use.
+    // The loop below is bounded by `maxAttempts`, so a policy below 1 would
+    // run no iterations at all and resolve — a day reported written that was
+    // never sent. `drainBatches` refuses the same policy on the other two
+    // methods here, and this path must refuse it identically or the same bad
+    // deps would fail loudly on a batch write and silently on an archive day.
+    // Outside `sending` deliberately: a policy this broken is a programming
+    // error, not a storage outage, and dressing it as a `StorageError` would
+    // tell an operator DynamoDB was down (error-handling rule 1).
+    requireUsablePolicy('putArchiveDay', this.batchPolicy);
+
+    const sleep = this.batchPolicy.sleep ?? realSleep;
+
+    // One `sending` around the whole loop, so the `StorageError` is still
+    // constructed in exactly one place with one context (base-class rule): what
+    // surfaces is the *last* cancellation, not the first.
+    await this.sending(
+      'putArchiveDay',
+      { locationId: partitionKey, sk: markerSortKey },
+      async () => {
+        for (let attempt = 1; attempt <= this.batchPolicy.maxAttempts; attempt += 1) {
+          try {
+            await this.client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+            return;
+          } catch (cause) {
+            if (!capacityCancelled(cause) || attempt === this.batchPolicy.maxAttempts) {
+              throw cause;
+            }
+            await sleep(
+              fullJitterDelayMs(attempt, {
+                baseDelayMs: this.batchPolicy.baseDelayMs,
+                maxDelayMs: MAX_BACKOFF_DELAY_MS,
+              }),
+            );
+          }
+        }
+      },
     );
   }
 
