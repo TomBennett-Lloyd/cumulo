@@ -1,4 +1,8 @@
-import { DynamoDBClient, TransactionCanceledException } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  TransactionCanceledException,
+  TransactionConflictException,
+} from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { fleetSiteSchema, type FleetSite } from '@cumulo/shared';
 import { mockClient } from 'aws-sdk-client-mock';
@@ -124,8 +128,26 @@ export const transactionCancelled = (...codes: readonly string[]): TransactionCa
     CancellationReasons: codes.map((Code) => ({ Code })),
   });
 
+/**
+ * A whole-request conflict as DynamoDB sends one when a `TransactWriteItems`
+ * collides with another in-flight transaction on the same row — the standalone
+ * exception rather than a per-item cancellation reason.
+ *
+ * Built from the SDK's own class for the same reason `transactionCancelled` is:
+ * `SiteAdapter` classifies it with `instanceof`, so a hand-made object with a
+ * matching `name` would pin the stand-in instead of the assumption.
+ */
+export const transactionConflict = (): TransactionConflictException =>
+  new TransactionConflictException({
+    message: 'Transaction is ongoing for the item.',
+    $metadata: {},
+  });
+
 /** The code DynamoDB reports for an item whose `ConditionExpression` was false. */
 export const CONDITION_FAILED = 'ConditionalCheckFailed';
+
+/** The code DynamoDB reports for an item cancelled by a concurrent transaction. */
+export const TRANSACTION_CONFLICT = 'TransactionConflict';
 
 /** The code DynamoDB reports for an item that was itself fine. */
 export const NO_REASON = 'None';

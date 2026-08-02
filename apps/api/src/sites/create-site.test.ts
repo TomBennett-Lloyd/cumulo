@@ -1,131 +1,16 @@
-import {
-  apiErrorSchema,
-  fleetSiteSchema,
-  MAX_USER_SITES,
-  utcIsoTimestampSchema,
-  type FleetSite,
-} from '@cumulo/shared';
-import {
-  StorageError,
-  type SeriesCleanupOutcome,
-  type OldestUserSiteResult,
-} from '@cumulo/storage';
+import { apiErrorSchema, fleetSiteSchema } from '@cumulo/shared';
+import { StorageError } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import { jsonBodyOf, RANELAGH_ID, RATHMINES_ID, routeRequest, siteInput } from '../api-fixtures';
 import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
-import { createSite, createSiteEvictionExhaustedEvent, type CreateSiteDeps } from './create-site';
+import { CREATED_AT, scriptedFleet } from './create-site-fixtures';
+import { createSite, createSiteStoreExhaustedEvent } from './create-site';
 import { seriesCleanupFailedEvent } from './series-cleanup';
-
-const CREATED_AT = utcIsoTimestampSchema.parse('2026-07-31T09:00:00Z');
 
 /** A third id, for the tests where the index names a different site each look. */
 const RINGSEND_ID = '5b2c9d1e-3f4a-4b5c-8d6e-7f8a9b0c1d2e';
-
-/** A cleanup pass that emptied the partition and hit neither of its limits. */
-const CLEAN_SWEEP: SeriesCleanupOutcome = {
-  deletedCount: 3,
-  declinedCount: 0,
-  budgetReached: false,
-};
-
-/**
- * A fleet the tests drive through its storage answers rather than through a
- * fake table: what matters on this route is the *order* of the three calls and
- * which branch each answer takes, so each scripted answer is one line here.
- */
-interface FleetScript {
-  /** One answer per attempt: `true` stores the site, `false` reports the cap. */
-  readonly creates?: readonly boolean[];
-  /**
-   * One answer per attempt, as the adapter's own result type: a found id, or
-   * `{ found: false }` for an index with nothing in it — the drift case where
-   * the counter says full and the index disagrees.
-   */
-  readonly oldest?: readonly OldestUserSiteResult[];
-  /** One answer per attempt: `true` evicted, `false` lost the race. */
-  readonly evictions?: readonly boolean[];
-  readonly cleanup?: () => Promise<SeriesCleanupOutcome>;
-}
-
-interface FleetCalls {
-  readonly written: FleetSite[];
-  readonly evicted: string[];
-  readonly cleaned: string[];
-  /** The item budget each pass was handed. */
-  readonly budgets: number[];
-  readonly logged: Record<string, unknown>[];
-  readonly oldestLookups: number[];
-}
-
-/**
- * The script's answer for this attempt, holding the last one once the script
- * runs out, so a script states only what changes between attempts.
- */
-const answerFor = <T>(answers: readonly T[] | undefined, attempt: number, fallback: T): T =>
-  answers?.[Math.min(attempt, answers.length - 1)] ?? fallback;
-
-const scriptedFleet = (
-  script: FleetScript = {},
-  newSiteId: () => string = () => RANELAGH_ID,
-): { deps: CreateSiteDeps; calls: FleetCalls } => {
-  const calls: FleetCalls = {
-    written: [],
-    evicted: [],
-    cleaned: [],
-    budgets: [],
-    logged: [],
-    oldestLookups: [],
-  };
-  let createAttempt = 0;
-  let evictAttempt = 0;
-
-  const deps: CreateSiteDeps = {
-    sites: {
-      createUserSiteWithCap: (site, cap) => {
-        const created = answerFor(script.creates, createAttempt, true);
-        createAttempt += 1;
-        if (created) {
-          calls.written.push(site);
-          return Promise.resolve({ created: true });
-        }
-        expect(cap).toBe(MAX_USER_SITES);
-        return Promise.resolve({ created: false, reason: 'cap' });
-      },
-      oldestUserSite: () => {
-        const answer = answerFor(script.oldest, calls.oldestLookups.length, {
-          found: true,
-          siteId: RATHMINES_ID,
-        });
-        calls.oldestLookups.push(calls.oldestLookups.length);
-        return Promise.resolve(answer);
-      },
-      evictAndCreateUserSite: (evictSiteId, site) => {
-        const evicted = answerFor(script.evictions, evictAttempt, true);
-        evictAttempt += 1;
-        if (!evicted) {
-          return Promise.resolve({ evicted: false, reason: 'oldest_gone' });
-        }
-        calls.evicted.push(evictSiteId);
-        calls.written.push(site);
-        return Promise.resolve({ evicted: true });
-      },
-    },
-    series: {
-      deleteSiteSeries: (siteId, maxItems) => {
-        calls.cleaned.push(siteId);
-        calls.budgets.push(maxItems);
-        return script.cleanup?.() ?? Promise.resolve(CLEAN_SWEEP);
-      },
-    },
-    now: () => CREATED_AT,
-    newSiteId,
-    log: (entry) => calls.logged.push(entry),
-  };
-
-  return { deps, calls };
-};
 
 const postSite = routeRequest({ method: 'POST', body: siteInput() });
 
@@ -198,7 +83,7 @@ describe('POST /v1/sites', () => {
   });
 
   it('does not look for anything to evict while the fleet is under its cap', async () => {
-    const { deps, calls } = scriptedFleet({ creates: [true] });
+    const { deps, calls } = scriptedFleet({ creates: ['created'] });
 
     await createSite(deps, postSite);
 
@@ -208,7 +93,7 @@ describe('POST /v1/sites', () => {
   });
 
   it('evicts the oldest user site and still answers 201 when the fleet is at its cap', async () => {
-    const { deps, calls } = scriptedFleet({ creates: [false] });
+    const { deps, calls } = scriptedFleet({ creates: ['cap'] });
 
     const response = await createSite(deps, postSite);
 
@@ -221,7 +106,7 @@ describe('POST /v1/sites', () => {
   });
 
   it("deletes the evicted site's series points, so the cap bounds rows and not just sites", async () => {
-    const { deps, calls } = scriptedFleet({ creates: [false] });
+    const { deps, calls } = scriptedFleet({ creates: ['cap'] });
 
     await createSite(deps, postSite);
 
@@ -236,7 +121,7 @@ describe('POST /v1/sites', () => {
     // Counter/index drift: a bare decrement from here would be the corruption,
     // so the route re-attempts the create instead and never reaches eviction.
     const { deps, calls } = scriptedFleet({
-      creates: [false, true],
+      creates: ['cap', 'created'],
       oldest: [{ found: false }],
     });
 
@@ -249,12 +134,12 @@ describe('POST /v1/sites', () => {
 
   it('looks up the oldest site again after losing an eviction race', async () => {
     const { deps, calls } = scriptedFleet({
-      creates: [false],
+      creates: ['cap'],
       oldest: [
         { found: true, siteId: RATHMINES_ID },
         { found: true, siteId: RINGSEND_ID },
       ],
-      evictions: [false, true],
+      evictions: ['oldest_gone', 'evicted'],
     });
 
     const response = await createSite(deps, postSite);
@@ -265,8 +150,79 @@ describe('POST /v1/sites', () => {
     expect(calls.evicted).toEqual([RINGSEND_ID]);
   });
 
-  it('answers 500 and logs when three consecutive attempts all lose the race', async () => {
-    const { deps, calls } = scriptedFleet({ creates: [false], evictions: [false] });
+  it('retries the create after a counter conflict instead of answering 500', async () => {
+    // The regression #29's E2-a measured: a transaction DynamoDB cancelled for
+    // contention used to reach the caller as an untyped 500.
+    const { deps, calls } = scriptedFleet({ creates: ['conflict', 'created'] });
+
+    const response = await createSite(deps, postSite);
+
+    expect(response.statusCode).toBe(201);
+    expect(calls.written.map((site) => site.id)).toEqual([RANELAGH_ID]);
+    // A conflict says nothing about the cap, so nothing was looked up to evict.
+    expect(calls.oldestLookups).toEqual([]);
+    expect(calls.evicted).toEqual([]);
+    // Slept before re-issuing rather than hot-retrying into the same winner.
+    expect(calls.sleeps).toEqual([25]);
+  });
+
+  it('retries the eviction after a conflict and still answers 201', async () => {
+    const { deps, calls } = scriptedFleet({
+      creates: ['cap'],
+      evictions: ['conflict', 'evicted'],
+    });
+
+    const response = await createSite(deps, postSite);
+
+    expect(response.statusCode).toBe(201);
+    expect(calls.evicted).toEqual([RATHMINES_ID]);
+    expect(calls.sleeps).toEqual([25]);
+  });
+
+  it('answers 500 naming the exhausted budget when every attempt conflicts', async () => {
+    const { deps, calls } = scriptedFleet({ creates: ['conflict'] });
+
+    const response = await createSite(deps, postSite);
+
+    expect(response.statusCode).toBe(500);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
+    expect(calls.written).toEqual([]);
+    expect(calls.createAttempts).toHaveLength(12);
+    // The curve, at half of each ceiling: 50, 100, 200, then held at 400.
+    expect(calls.sleeps).toEqual([25, 50, 100, 200, 200, 200, 200, 200, 200, 200, 200]);
+    // The structured line an operator reads: which budget ran out, and on what.
+    expect(calls.logged).toEqual([
+      {
+        event: createSiteStoreExhaustedEvent,
+        siteId: RANELAGH_ID,
+        attempts: 12,
+        lastOutcome: 'conflict',
+      },
+    ]);
+  });
+
+  it('does not retry a StorageError, leaving it for the request boundary', async () => {
+    // The negative control on the loop's reach: an unexpected storage failure is
+    // not a lost race, so retrying it would spend twelve attempts and 3.5
+    // seconds on a call that cannot succeed. It propagates on the first one.
+    const { deps, calls } = scriptedFleet({
+      createFailure: () =>
+        Promise.reject(
+          new StorageError(
+            { operation: 'createUserSiteWithCap', table: 'cumulo-sites-dev' },
+            { cause: new Error('throughput exceeded') },
+          ),
+        ),
+    });
+
+    await expect(createSite(deps, postSite)).rejects.toThrow(StorageError);
+    expect(calls.createAttempts).toHaveLength(1);
+    expect(calls.sleeps).toEqual([]);
+    expect(calls.logged).toEqual([]);
+  });
+
+  it('answers 500 and logs when every attempt loses the eviction race', async () => {
+    const { deps, calls } = scriptedFleet({ creates: ['cap'], evictions: ['oldest_gone'] });
 
     const response = await createSite(deps, postSite);
 
@@ -274,23 +230,45 @@ describe('POST /v1/sites', () => {
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
     expect(calls.written).toEqual([]);
     expect(calls.logged).toEqual([
-      { event: createSiteEvictionExhaustedEvent, siteId: RANELAGH_ID, attempts: 3 },
+      {
+        event: createSiteStoreExhaustedEvent,
+        siteId: RANELAGH_ID,
+        attempts: 12,
+        lastOutcome: 'oldest_gone',
+      },
+    ]);
+  });
+
+  it('reports counter/index drift as the loss when the index stays empty', async () => {
+    const { deps, calls } = scriptedFleet({ creates: ['cap'], oldest: [{ found: false }] });
+
+    const response = await createSite(deps, postSite);
+
+    expect(response.statusCode).toBe(500);
+    expect(calls.logged).toEqual([
+      {
+        event: createSiteStoreExhaustedEvent,
+        siteId: RANELAGH_ID,
+        attempts: 12,
+        lastOutcome: 'counter_index_drift',
+      },
     ]);
   });
 
   it('gives up after a bounded number of attempts rather than spinning', async () => {
-    const { deps, calls } = scriptedFleet({ creates: [false], evictions: [false] });
+    const { deps, calls } = scriptedFleet({ creates: ['cap'], evictions: ['oldest_gone'] });
 
     await createSite(deps, postSite);
 
-    expect(calls.oldestLookups).toHaveLength(3);
+    expect(calls.oldestLookups).toHaveLength(12);
+    expect(calls.createAttempts).toHaveLength(12);
   });
 
   it('still answers 201 when the series cleanup fails, and says so in the log', async () => {
     // The site exists; its predecessor's orphaned points expire on the 90-day
     // TTL. Answering 500 here would deny a create that demonstrably happened.
     const { deps, calls } = scriptedFleet({
-      creates: [false],
+      creates: ['cap'],
       cleanup: () =>
         Promise.reject(
           new StorageError(
