@@ -463,7 +463,10 @@ export const Dashboard = ({
            * once and kept, not re-spent every time a reader closes a site. The
            * fleet's sum changes on exactly one event — a site being added — and
            * `refreshToken` is that event, counted. Deselection is not an event:
-           * hiding the panel keeps its state, and unhiding it costs nothing.
+           * hiding the panel keeps its state, and unhiding it costs nothing. The
+           * panel defers its *first* fan-out to its first reveal for the same
+           * frugality reason, so a `?site=` deep link that never shows the fleet
+           * never spends one (#178).
            */}
           <FleetPanel
             dataSource={dataSource}

@@ -68,6 +68,33 @@ describe('Dashboard deep links', () => {
     expect(window.location.search).toBe('');
   });
 
+  it('never spends the fleet fan-out on a deep link, and spends it once on first reveal', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
+    const site = await firstListedSite(dataSource);
+
+    visit(`/?site=${site.id}`);
+    renderDashboard(dataSource);
+    await settle();
+
+    // The whole of #178, at the level a reader actually arrives on. In live mode
+    // this call is a `GET /v1/sites` plus a paced per-site `/forecast` fan-out —
+    // spent, before this, on every deep link whose reader never looks at the
+    // fleet. `FleetPanel.reveal.test.tsx` pins the panel's own predicate; what
+    // this adds is the composition, which is where the timing lives: the panel
+    // is briefly un-hidden while the listing is still in flight, and it is only
+    // because the listing's resolve and the URL selection's hide land in the
+    // same commit that the loading window never latches as a reveal.
+    expect(fleetForecasts).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await settle();
+
+    // Closing back to the fleet is the first reveal, and it is paid for once —
+    // #161's spent-once-and-kept property, now simply starting later.
+    expect(fleetForecasts).toHaveBeenCalledTimes(1);
+  });
+
   it('drops a link to a site the fleet does not have, and stops asking about it', async () => {
     const dataSource = new DemoFleetDataSource();
     const getSiteForecast = vi.spyOn(dataSource, 'getSiteForecast');
