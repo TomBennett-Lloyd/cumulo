@@ -2,7 +2,7 @@
 
 All AWS infrastructure lives here as Terraform. Nothing is created by hand in the console — if it exists in the account, it exists in a `.tf` file, because the alternative is infrastructure that cannot be torn down and a cost ceiling that cannot be trusted.
 
-A **stack** is one directory under `infra/`, applied independently, with its own state. There are six today:
+A **stack** is one directory under `infra/`, applied independently, with its own state. There are seven today:
 
 | Stack       | Directory          | Owns                                                                                                                                                                                                                                        |
 | ----------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -12,6 +12,7 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 | `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), three alarms, and the CI deploy grant for its own function.                                        |
 | `api`       | `infra/api/`       | The fleet API Lambda and the API Gateway HTTP API of [ADR 0005](../docs/adr/0005-fleet-api-hosting.md), including the stage throttle that bounds its bill, two alarms, and the CI deploy grant for it.                                      |
 | `forecast`  | `infra/forecast/`  | The forecast Lambda of [ADR 0003](../docs/adr/0003-pv-model-runtime.md) and the event source mapping that wires it to ingestion's queue per [ADR 0004](../docs/adr/0004-ingestion-transport.md), one alarm, and the CI deploy grant for it. |
+| `web`       | `infra/web/`       | The demo SPA's private S3 origin bucket, the CloudFront distribution and origin access control in front of it, and the CI deploy grant for content sync and cache invalidation. No alarms.                                                  |
 
 `storage` depends on `bootstrap` in one direction only: it keeps its state in the bucket `bootstrap` creates, so `bootstrap` is applied first and torn down last. Nothing else couples them — no resource in either stack references the other, and `storage` can be destroyed and re-applied on its own.
 
@@ -23,7 +24,11 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 
 There is a second coupling between those two stacks that no dependency graph shows: `infra/forecast/lambda.tf`'s `timeout = 50` and `infra/ingestion/transport.tf`'s `visibility_timeout_seconds = 300` are the two halves of ADR 0004's 6× floor, and raising the first without the second is a correctness bug that nothing mechanical will catch. Both files carry the obligation in a comment; `docs/tech-debt.md` records why the `check:infra-mirrors` gate cannot express it.
 
-`alerting` is the newest, and it is the one stack every other stack points at. It holds the SNS topic that `storage`, `ingestion`, `api`, and `forecast` send their alarm state changes to — and it holds it **without a single cross-stack reference in either direction**. The alarm stacks assemble `arn:aws:sns:<region>:<account-id>:cumulo-alerts-<environment>` from the naming convention, exactly as they assemble table ARNs, so the topic is an interface rather than an output: `alerting` can be applied before or after them, and a plan of any stack succeeds while another is mid-apply. The obligation is the familiar one, with one new failure mode worth stating plainly — same region, same `environment`, because an SNS ARN carries both, and a mismatch is **not** an apply error. CloudWatch accepts an alarm action pointing at a topic that does not exist and reports it only by never delivering, which is why the alerting runbook proves delivery from AWS rather than from a green apply.
+`alerting` is the one stack every other stack points at. It holds the SNS topic that `storage`, `ingestion`, `api`, and `forecast` send their alarm state changes to — and it holds it **without a single cross-stack reference in either direction**. The alarm stacks assemble `arn:aws:sns:<region>:<account-id>:cumulo-alerts-<environment>` from the naming convention, exactly as they assemble table ARNs, so the topic is an interface rather than an output: `alerting` can be applied before or after them, and a plan of any stack succeeds while another is mid-apply. The obligation is the familiar one, with one new failure mode worth stating plainly — same region, same `environment`, because an SNS ARN carries both, and a mismatch is **not** an apply error. CloudWatch accepts an alarm action pointing at a topic that does not exist and reports it only by never delivering, which is why the alerting runbook proves delivery from AWS rather than from a green apply.
+
+`web` is the newest, and it is the first stack that serves a human directly: a private S3 bucket holding `apps/web`'s production build, a CloudFront distribution reaching it through an origin access control, and the deploy grant CI uses to sync content and invalidate the cache. Its state lives in `bootstrap`'s bucket and its grant attaches to `bootstrap`'s role from `infra/web/deploy.tf` (convention 8), which is the whole of its coupling to anything — **there is no cross-stack reference to `infra/api` in either direction**, and the two strings that make the demo work travel between them through the operator rather than through Terraform. The API's URL reaches the SPA at _build_ time, as the `VITE_API_BASE_URL` repo variable published from `infra/api`'s `api_endpoint` output; the distribution's domain reaches the API as `web_origins` in `infra/api`'s gitignored tfvars, so its origin check admits the demo's writes. Two operator-published strings, not a wire: either stack plans and applies while the other is mid-apply, or absent, and neither destroy breaks the other's plan.
+
+What that arrangement is protecting is worth stating where a reader meets the stack rather than only in the `.tf` file. **The distribution serves the SPA and nothing else.** The browser calls the API Gateway URL directly, cross-origin, because the API's per-IP limiter reads `requestContext.http.sourceIp` ([ADR 0006](../docs/adr/0006-demo-abuse-protection.md)) — the direct TCP peer. Put the API behind this distribution and that becomes the edge location's address: every visitor served by one POP shares a single identity, and 30 requests a minute across all of them auto-blocks the whole POP for an hour. Adding an API origin or behaviour here is therefore not a configuration change, it is a change to `apps/api` and ADR 0006 first. The same paragraph is in `infra/web/cloudfront.tf`, at the point of temptation.
 
 Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables. So is `alerting`, and more sharply: every stack that has an alarm would notice its absence, and a per-stack topic would multiply the one genuinely manual step in this repo — confirming an email subscription by hand — by the number of stacks, for no gain in routing to a single recipient.
 
@@ -714,7 +719,7 @@ ls -l ../../apps/ingestion/dist/handler.zip
 
 `apps/ingestion/dist/handler.zip` is a fixed contract between that build script and `lambda.tf`, not something Terraform discovers or produces — a `null_resource` shelling out to pnpm during a plan is the kind of infrastructure that works on exactly one machine. Terraform reads the file to compute `source_code_hash`, which is what makes a rebuilt artefact actually deploy instead of comparing equal on filename alone.
 
-Skip this step and `terraform plan` stops with `No Lambda artefact at apps/ingestion/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all six stacks on every push and builds nothing.
+Skip this step and `terraform plan` stops with `No Lambda artefact at apps/ingestion/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all seven stacks on every push and builds nothing.
 
 **A2. Create the two gitignored local files from their committed examples.**
 
@@ -1096,7 +1101,7 @@ ls -l ../../apps/forecast/dist/handler.zip
 
 `apps/forecast/dist/handler.zip` is a fixed contract between that build script and `lambda.tf`, not something Terraform discovers or produces. Terraform reads the file to compute `source_code_hash`, which is what makes a rebuilt artefact actually deploy instead of comparing equal on filename alone.
 
-Skip this step and `terraform plan` stops with `No Lambda artefact at apps/forecast/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all six stacks on every push and builds nothing.
+Skip this step and `terraform plan` stops with `No Lambda artefact at apps/forecast/dist/handler.zip` and the command to run — a resource precondition, chosen over letting the apply fail later with the provider's `no such file or directory`. Note the asymmetry that makes CI work: `terraform validate` deliberately does **not** need the artefact, because whether the configuration is well-formed is not a question about whether somebody ran a build. CI validates all seven stacks on every push and builds nothing.
 
 **A2. Create the two gitignored local files from their committed examples.**
 
@@ -1255,6 +1260,191 @@ Keep `backend.hcl` and `forecast.auto.tfvars` — both are still correct for the
 
 ---
 
+## Runbook: the web stack
+
+One private S3 bucket, its public-access block and its origin-access-control policy, one CloudFront origin access control, one distribution, and one deploy grant on the shared GitHub Actions role — six resources, no alarms, and [issue #144](https://github.com/TomBennett-Lloyd/cumulo/issues/144)'s hosting slice in full. Every command runs from `infra/web/`:
+
+```bash
+cd infra/web
+```
+
+**This is the second stack reachable from the public internet, and the only one with no throttle in front of it.** The API's bill is bounded by a stage throttle; CloudFront has no analogue, so the bound here is the bootstrap stack's budget alarm and the free tier's size (see [Web stack](#web-stack) in the Cost section). It is also, deliberately, a stack that serves static files and nothing else — the SPA-only constraint in the overview above and in `cloudfront.tf` is a correctness property of ADR 0006's limiter, not a preference.
+
+**Prerequisites:**
+
+1. **The bootstrap stack applied** — this stack's state lives in the bucket bootstrap creates, and it attaches an inline policy to the role bootstrap owns, so `data.aws_iam_role.github_actions` fails at plan time if bootstrap has not run.
+2. **An operator credential session** — see [Operator prerequisites](#operator-prerequisites).
+3. **The api stack applied**, if the demo is to show real data. Not a Terraform prerequisite in either direction — this stack plans and applies with no API in the account — but B2 publishes `VITE_API_BASE_URL` from `infra/api`'s output, and a build without it ships the in-memory demo fleet instead of the deployed one.
+
+**No artefact build here**, unlike the three Lambda stacks. Terraform creates an empty bucket; the content arrives from `.github/workflows/deploy-web.yml` in B3. **There is no override dance** either (convention 6): the state bucket already exists, so this stack inits straight against S3.
+
+### Phase A — configure and plan the distribution
+
+**A1. Create the two gitignored local files from their committed examples.**
+
+```bash
+cp web.auto.tfvars.example web.auto.tfvars
+cp backend.hcl.example backend.hcl
+```
+
+Set `aws_region` in `web.auto.tfvars`, and both `region` and `bucket` in `backend.hcl`. Less of this stack is regional than of any other — CloudFront is a global service and the distribution, the OAC and the managed cache policy are account-global — so the region here places the origin bucket and nothing else. Keep it the same as every other stack anyway; `variables.tf` says why at length. The bucket name is `cumulo-tfstate-` followed by the account id:
+
+```bash
+aws sts get-caller-identity --query Account --output text
+```
+
+`environment` needs no entry; it defaults to `dev`. Nothing here has to agree with another stack's value — this stack holds no grant on and no reference to any resource another stack owns — but matching it is the convention, and is what lets a teardown reason about one environment at a time.
+
+**A2. Confirm none of that is visible to git.**
+
+```bash
+git status --short   # expect no output for infra/web/
+```
+
+**A3. Initialise against the real backend.**
+
+```bash
+terraform init -backend-config=backend.hcl
+```
+
+**A4. Plan.** The tee target is outside the repo on purpose, so a plan output file cannot be committed:
+
+```bash
+terraform plan -no-color | tee ~/cumulo-web-plan.txt
+```
+
+Expect **`Plan: 6 to add, 0 to change, 0 to destroy.`** — the bucket, its public access block, its bucket policy, the origin access control, the distribution, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the `Managed-CachingOptimized` cache policy, the existing `cumulo-github-actions` role, and the two IAM policy documents (the bucket's origin grant and the deploy grant) — are read rather than created and add nothing to the count.
+
+**If the plan fails with `no matching cache policy found`**, the managed policy's name is not `Managed-CachingOptimized`. That is the one assumption in this stack that no CI check can reach — `terraform validate` never reads a data source — and it is recorded as such in `cloudfront.tf`. Read the real name from `aws cloudfront list-cache-policies --type managed`, fix the string there, and re-plan; nothing else changes.
+
+**Read two things in the plan before approving it.** There must be exactly one `origin` block and one `default_cache_behavior`, both pointing at the bucket — an API origin is the change this stack must never acquire. And `viewer_certificate` must be `cloudfront_default_certificate = true` with no `aliases`: the custom domain is #21's, and its arrival is additive.
+
+**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — the resource count, the bucket name's _shape_ rather than its digits (convention 7), and the absence of an API origin.
+
+### Phase B — apply, publish, and prove the edge
+
+**B1. Apply.**
+
+```bash
+terraform apply
+```
+
+**Expect this one to take several minutes.** A CloudFront distribution is deployed to every edge location in the price class before the API reports it created, and Terraform waits for that; every other stack in this document applies in seconds and this one does not. Then confirm what exists, and that the grant landed on a role another stack owns:
+
+```bash
+terraform state list   # expect 11 lines — the 6 resources plus the 5 data sources
+
+aws iam list-role-policies --role-name cumulo-github-actions
+# expect: cumulo-web-deploy-<env>, alongside the ingestion, api and forecast entries
+```
+
+**B2. Publish the three repo variables — from the outputs, never retyped.** The distribution id and domain are **server-assigned**, so a value assembled from a template points at nothing; and the bucket name embeds the account id, which convention 7 keeps out of the repo, PR bodies and issue comments. Both problems have the same answer — pipe the output into `gh variable set` and never let the value appear in a shell you are pasting from:
+
+```bash
+gh variable set WEB_BUCKET_NAME --repo TomBennett-Lloyd/cumulo \
+  --body "$(terraform output -raw bucket_name)"
+gh variable set WEB_DISTRIBUTION_ID --repo TomBennett-Lloyd/cumulo \
+  --body "$(terraform output -raw distribution_id)"
+gh variable set VITE_API_BASE_URL --repo TomBennett-Lloyd/cumulo \
+  --body "$(terraform -chdir=../api output -raw api_endpoint)"
+```
+
+`WEB_BUCKET_NAME` is the convention-7 one: quote its shape (`cumulo-web-dev-<account-id>`) if it has to be described anywhere, and let the command above move the digits. The other two carry no account id. The workflow masks the bucket name in its log and passes `--only-show-errors` to every AWS CLI call for the same reason.
+
+`WEB_DISTRIBUTION_ID` doubles as the provisioning marker: `deploy-web.yml` has a job-level `if: vars.WEB_DISTRIBUTION_ID != ''`, so before this step pushes to `main` skip the deploy instead of failing red. After it, the workflow's own guards are loud — a repo with the distribution id set but `VITE_API_BASE_URL` or `WEB_BUCKET_NAME` empty fails the run rather than shipping a demo-mode build.
+
+**B3. Ship the first build.** The bucket is empty and the tree that belongs in it is already on `main`, so there is no push to ride — which is exactly why the workflow carries `workflow_dispatch`:
+
+```bash
+gh workflow run deploy-web.yml --repo TomBennett-Lloyd/cumulo
+gh run list --workflow deploy-web.yml --limit 1
+```
+
+Wait for green. The run does not go green until `aws cloudfront wait invalidation-completed` returns, so a green run means the edge is serving the build that run produced, not merely that S3 accepted it.
+
+**B4. Prove the edge from outside.** Four checks, each for a distinct thing that can be broken while the other three pass:
+
+```bash
+CF_URL="$(terraform output -raw cloudfront_url)"
+
+curl -s -o /dev/null -w '%{http_code}\n' "$CF_URL/"
+# expect: 200 — the OAC signature, the bucket policy and default_root_object all work
+
+curl -s "$CF_URL/no-such-path?site=whatever" | grep -c 'id="root"'
+# expect: 1 — the 403/404 -> /index.html rewrite, with the query string left on the browser's URL
+
+curl -sI "$CF_URL/index.html" | grep -i '^cache-control'
+# expect: no-cache — the one mutable object, so a deploy takes effect without waiting out a TTL
+
+curl -sI "$CF_URL/assets/<a-hashed-file-from-the-index-body>" | grep -i '^cache-control'
+# expect: public,max-age=31536000,immutable — content-hashed, so this is true rather than optimistic.
+# Byte-for-byte, spaces and all: S3 echoes the header the deploy stored, and the deploy stores it space-free.
+```
+
+The last one is the one not to skip. The rewrite in the second check means a **broken** origin — a bad bucket policy, a missing OAC signature — also answers 200 with the SPA shell, so `/` alone cannot distinguish a working distribution from a distribution serving nothing but its own error page. An asset that returns its own headers is what proves the origin is actually being read.
+
+Two more that cost nothing: `curl -s -o /dev/null -w '%{http_code}\n' "http://<distribution-domain>/"` returns `301` (`redirect-to-https`), and the deployed page must still carry the Open-Meteo attribution link — a hard constraint in CLAUDE.md, verified on the deployed URL rather than in a test run.
+
+The URL itself embeds no account id and is safe to quote in a PR body or an issue comment.
+
+**B5. Confirm no drift.**
+
+```bash
+terraform plan -detailed-exitcode
+echo $?   # expect 0
+```
+
+A `2` here does **not** have the deploy-path causes the Lambda stacks' do: CI writes objects into the bucket and invalidates the cache, and Terraform tracks neither. A non-zero exit means somebody changed the distribution, the bucket or the policy outside this directory — which the deploy grant cannot do, so it means the console.
+
+### The deploy path: what CI ships for the web app
+
+`.github/workflows/deploy-web.yml` builds `apps/web` and replaces the **content** of the bucket on every push to `main` that touches `apps/web/**`, `packages/shared/**`, `packages/ui/**` or the lockfile, plus on `workflow_dispatch`. It does nothing else, and it cannot: `deploy.tf` grants `s3:ListBucket` on the bucket, `s3:PutObject` and `s3:DeleteObject` on its contents, and `cloudfront:CreateInvalidation`/`GetInvalidation` on the distribution. There is no `s3:GetObject` (a sync diffs on the listing, so CI can write the origin without being able to read it back), nothing that can change the bucket itself, and **no `cloudfront:UpdateDistribution`** — so the origin, the cache behaviour, the error rewrites and the price class are reachable only through a reviewed diff in this directory.
+
+Three properties of the sync are worth knowing before reading a run log. Assets go first and `index.html` last, so the entry document never references an asset that is not there yet. The cache headers follow **hashing, not location**: `dist/assets/` is the only content-hashed output Vite produces, so it alone is uploaded `public,max-age=31536000,immutable` — true rather than hopeful — while `index.html` gets `no-cache`, and a third sync covers whatever else sits at the root of `dist` with `no-cache` too. That third call uploads nothing today, because `apps/web/public/` does not exist; it is there so that the first unhashed file someone drops in (a favicon, `robots.txt`, an OG image) is shipped revalidate-before-use instead of being pinned immutable for a year at a URL nobody can then update. Each sync's `--delete` is bounded by its own filters — the AWS CLI applies `--exclude` to the destination listing as well as the source — so the `assets/` call prunes only superseded hashed files, and the root call, excluding `assets/*` and `index.html`, can neither delete those assets nor orphan the live entry document. The invalidation is a single `/*`, one path against the free 1,000 a month.
+
+Authentication is OIDC and there is no AWS secret in the repository. The role is assumed with a session named `deploy-web-<run-id>`, so CloudTrail traces a `PutObject` back to the run — and therefore the commit — that made it.
+
+### Teardown of the web stack
+
+No ordering trap: nothing else depends on this stack, and every resource in it is free whether it is destroyed or forgotten.
+
+```bash
+terraform destroy
+```
+
+Expect `6 to destroy`. It completes on a **non-empty** bucket — `force_destroy = true` in `s3.tf`, which is deliberate here and would be wrong on bootstrap's state bucket: every object in this one is a build artefact a `pnpm --filter @cumulo/web build` reproduces. Budget **5–15 minutes**: CloudFront disables the distribution, waits for that to propagate to every edge, and only then deletes it.
+
+Verify from AWS rather than from Terraform:
+
+```bash
+aws s3api head-bucket --bucket "cumulo-web-dev-$(aws sts get-caller-identity --query Account --output text)"
+# expect: An error occurred (404) ... Not Found
+
+aws cloudfront list-distributions \
+  --query "DistributionList.Items[?contains(Comment, 'cumulo-web')].Id"
+# expect: [] — or None, which is what the query prints when the account has no distributions at all
+
+aws iam list-role-policies --role-name cumulo-github-actions
+# expect: no cumulo-web-deploy-<env> entry — the role survives, its web grant does not
+```
+
+**Then deal with the repo variables, because this is where this stack differs from every other teardown in this document.** Bootstrap's T6 records that a re-applied state bucket comes back with the same name, so `backend.hcl` survives a full cycle. Only half of that is true here:
+
+- `WEB_BUCKET_NAME` is deterministic (convention 3) and **does** survive — the same account and `environment` rebuild the same name.
+- `WEB_DISTRIBUTION_ID` and the URL do **not**. Both are server-assigned, so a re-applied distribution has a new id and a new domain. Any destroy/re-apply must re-run [B2](#phase-b--apply-publish-and-prove-the-edge) and revisit `web_origins` in `infra/api`'s tfvars, or the demo's writes are rejected by an origin check still naming a distribution that no longer exists.
+
+If the stack is being torn down for good rather than cycled, clear the marker so pushes go back to skipping instead of failing against a distribution that is gone:
+
+```bash
+gh variable delete WEB_DISTRIBUTION_ID --repo TomBennett-Lloyd/cumulo
+```
+
+Keep `backend.hcl` and `web.auto.tfvars` — both are still correct for the next spin-up. To spin back up, run [Phase A](#phase-a--configure-and-plan-the-distribution) then [Phase B](#phase-b--apply-publish-and-prove-the-edge) back to back.
+
+**Whether to leave it up.** Standing cost is a fraction of a cent and it is the demo's public face, so the default is yes. Unlike ingestion it does nothing while nobody is looking — no schedule, no queue, no Open-Meteo quota — and unlike the api stack it exposes no write endpoint of its own. The one honest reason to think about it is the one the cost table states plainly: this is the only public surface in the platform with no throttle, so a hot-linked or hammered distribution is bounded by the free terabyte and the budget alarm rather than by arithmetic.
+
+---
+
 ## Cost
 
 `eu-west-1`, and the amounts are not rounded down for effect — the stacks really are this cheap, which is the reason a remote backend is affordable at all under the ~$100/month ceiling.
@@ -1341,7 +1531,7 @@ Notes on what would change that:
 - **The SQS request allowance is the number to watch, not the send count.** Sends are ~8,760/month and immaterial; the ~657,000 polling receives are two-thirds of the free million, and they belong to #136's event source mapping rather than to anything in this stack. A **second** ESM-driven queue crosses the million (ADR 0004 revisit trigger 5). The cost of crossing is cents — $0.40/million beyond the free tier, so even doubling the polling floor is ~$0.27/month — but "$0" would stop being literally true.
 - **The Lambda timeout is a cost ceiling as well as a correctness one.** 300 s at 256 MB is the worst case the free GB-second allowance is measured against; raising either without raising the other is fine, raising both is the change to think about.
 - **A forgotten stack is free but not inert.** Unlike every other resource in the platform, this one _does things_ while nobody is looking: an enabled schedule spends ~288 Open-Meteo calls/day against the 10,000/day free tier and grows an unconsumed queue. That is a quota and hygiene concern, not a billing one — see the teardown section above.
-- **Nothing here has an hourly rate**, the property all six stacks preserve. The one change that would break it is a VPC configuration on the function: a Lambda in a VPC needing outbound internet access needs a NAT Gateway at ~$32/month, which is a third of the ceiling for a function that only talks to public AWS endpoints and Open-Meteo.
+- **Nothing here has an hourly rate**, the property all seven stacks preserve. The one change that would break it is a VPC configuration on the function: a Lambda in a VPC needing outbound internet access needs a NAT Gateway at ~$32/month, which is a third of the ceiling for a function that only talks to public AWS endpoints and Open-Meteo.
 
 ### API stack
 
@@ -1377,7 +1567,7 @@ Notes on what would change that:
 - **Swagger UI is the request-hungry page.** A `/docs` view is roughly four or five billed gateway requests plus as many invocations (HTML, CSS, the bundle, `/openapi.json`), which is where the per-request premium lands hardest. It is cents at demo volume; if it ever became a material share of traffic, ADR 0005 revisit trigger 4 says to put the assets on a CDN.
 - **Crossing ~16M requests/month is the revisit point for compute**, not for requests: that is where Lambda's 400,000 free GB-seconds runs out at 256 MB, and the marginal cost per million starts rising with function duration instead of staying flat.
 - **The alarm allowance is now the binding one.** All ten are used, and it is a platform-wide allowance rather than this stack's — see [CloudWatch alarm budget](#cloudwatch-alarm-budget) below, which owns the count and the obligations on the eleventh.
-- **Nothing here has an hourly rate**, the property all six stacks preserve.
+- **Nothing here has an hourly rate**, the property all seven stacks preserve.
 
 ### Forecast stack
 
@@ -1400,11 +1590,37 @@ Notes on what would change that:
 - **This is the stack that consumes the free GB-second allowance fastest.** ~28% at the worst case, against ingestion's ~13%, because invocation count is driven by fleet locations rather than by a clock. Doubling the fleet's distinct locations doubles this line; the timeout is the multiplier, so the 6× coupling with the queue's visibility timeout is a cost decision as well as a correctness one.
 - **`maximum_concurrency` is a throttle guard, not a cost guard.** Raising it does not cost more — the same messages are processed either way — but it drives more simultaneous write units at a 14 WCU table, and the bill for crossing that allowance is $0.00065/WCU-hour. The cap keeps the platform inside the free capacity rather than inside a budget.
 - **The alarm allowance is now spent.** This alarm is the tenth of ten, and #29's notification wiring — which arrived with the alerting stack — is what every one of them now notifies. The eleventh bills $0.10/month; see [CloudWatch alarm budget](#cloudwatch-alarm-budget).
-- **Nothing here has an hourly rate**, the property all six stacks preserve. The change that would break it is the same one as ingestion's: a VPC configuration on the function, which for outbound internet needs a NAT Gateway at ~$32/month — and this function does not talk to the internet at all, only to DynamoDB and SQS.
+- **Nothing here has an hourly rate**, the property all seven stacks preserve. The change that would break it is the same one as ingestion's: a VPC configuration on the function, which for outbound internet needs a NAT Gateway at ~$32/month — and this function does not talk to the internet at all, only to DynamoDB and SQS.
+
+### Web stack
+
+The first stack whose volume is a property of _who visits_, and the first with no throttle in front of that volume. Sized at the demo regime — a portfolio link, order thousands of page views a month against a build that is ~1.7 MB in total and mostly cached at the edge after the first request.
+
+| Resource group                                                              | Billing basis                                                                                                                                                                 | Estimate                      |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| **Origin storage** (`aws_s3_bucket.web`)                                    | S3 Standard, ~$0.023/GB-month. The whole build is ~1.7 MB, and `sync --delete` with no versioning means it does not accumulate — a hundred deploys from now it is the same    | < $0.01/mo                    |
+| **S3 requests** (deploy PUTs, origin GETs on a cache miss)                  | ~$0.005/1,000 PUT, ~$0.0004/1,000 GET — a few dozen PUTs per deploy, and a GET only when the edge does not already hold the object                                            | < $0.01/mo                    |
+| **Bucket configuration** (public access block, bucket policy)               | No charge for the configuration                                                                                                                                               | $0.00/mo                      |
+| **CloudFront serving** (`aws_cloudfront_distribution.web`)                  | Inside the **always-free 1 TB of data transfer out and 10,000,000 requests per month** — a permanent tier, not a 12-month one                                                 | $0.00/mo                      |
+| **Invalidations**                                                           | One `/*` per deploy counts as **one path** against the free **1,000 paths/month**; a deploy every working day uses ~2% of it                                                  | $0.00/mo                      |
+| **Distribution and OAC existence** (`aws_cloudfront_origin_access_control`) | No hourly rate, no per-distribution fee, no charge for an origin access control                                                                                               | $0.00/mo                      |
+| **Alarms**                                                                  | **0.** The always-free ten are fully allocated (see [CloudWatch alarm budget](#cloudwatch-alarm-budget)) and this stack deliberately adds none; CloudFront's metrics are free | $0.00/mo                      |
+| **IAM** (the deploy grant's inline policy)                                  | Roles and policies are free                                                                                                                                                   | $0.00/mo                      |
+| **Standing total**                                                          |                                                                                                                                                                               | **≈ $0.01/mo — rounds to $0** |
+
+**Standing cost is a fraction of a cent**, and the honest version of that is worth a sentence rather than a rounding. Unlike the ingestion, api and forecast stacks, this one does have a line that bills for existing — S3 charges for stored bytes whether or not anybody asks for them. It is charging for 1.7 MB. Everything else here is free while idle, and `terraform destroy` takes even the fraction to zero.
+
+Notes on what would change that:
+
+- **The always-free CloudFront tier is permanent, and the flat-rate "Free plan" is a trap worth naming.** The figures above are pay-as-you-go — 1 TB out, 10 M requests, 1,000 invalidation paths a month, which do not expire. CloudFront's pricing page now leads with opt-in **flat-rate plans** whose $0/month tier allows only **100 GB and 1 M requests per distribution** and requires a WAF web ACL: a tenth of the allowance, with a new standing charge attached. A distribution created by this Terraform stays on pay-as-you-go, and "upgrading" it to the Free plan would lower the allowance rather than raise it. `infra/web/outputs.tf` carries the same warning at the point of temptation, with the date the pricing was checked.
+- **This is the only public surface in the platform with no throttle, and that is stated rather than hidden.** The api stack's worst case is arithmetic — the stage throttle times thirty days. There is no CloudFront analogue: past the free terabyte, transfer bills roughly **$0.085/GB** in Europe and North America, and the backstop is the bootstrap stack's budget alarm at 50% of the ~$100/month ceiling, not a limit in `infra/web/`. The scale is worth knowing before deciding that is frightening: a terabyte is on the order of 600,000 cold loads of the entire build, and the ceiling is not reached until roughly a further terabyte of abuse on top.
+- **S3's 12-month free tier is deliberately not counted**, for the same reason the api stack does not count API Gateway's: a cost claim resting on an expiring allowance expires with it. Every S3 figure above is quoted at list price. The CloudFront and CloudWatch allowances _are_ counted; they do not expire.
+- **The absent resources are the cost decisions.** `logging_config` would bill S3 storage forever to observe traffic CloudFront's free metrics already summarise, `web_acl_id` adds a standing monthly charge per web ACL, and a second `ordered_cache_behavior` would mean a second origin — which the SPA-only constraint forbids for reasons that are not about money at all.
+- **Nothing here has an hourly rate**, the property all seven stacks preserve. The change that would break it is a WAF web ACL on the distribution — which is also the one the flat-rate Free plan would force, so the two traps are the same trap.
 
 ### CloudWatch alarm budget
 
-CloudWatch's always-free tier is **10 alarms per account**, and it is now exactly spent. It is also the only allowance no single stack can see: alarms are created in five directories, the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
+CloudWatch's always-free tier is **10 alarms per account**, and it is now exactly spent. It is also the only allowance no single stack can see: alarms are created in four directories (storage, ingestion, api, forecast — the census below), the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
 
 **Counted at the time of writing, from the `.tf` files rather than from a previous edition of this document:**
 
@@ -1415,6 +1631,7 @@ CloudWatch's always-free tier is **10 alarms per account**, and it is now exactl
 | `api`       |      2 | `cumulo-api-<env>-5xx`, `cumulo-api-<env>-request-flood`                                                                     |
 | `forecast`  |      1 | `cumulo-forecast-<env>-errors`                                                                                               |
 | `alerting`  |      0 | It is the destination, not a source                                                                                          |
+| `web`       |      0 | Static content behind a CDN — CloudFront's own metrics are free, and there was no slot left to spend on one anyway           |
 | **Total**   | **10** | **The always-free ten, fully allocated**                                                                                     |
 
 Verify it against the account rather than trusting the table:

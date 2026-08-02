@@ -1,0 +1,15 @@
+# Copy to web.auto.tfvars (gitignored). Terraform loads *.auto.tfvars
+# automatically for every command run in this directory, so there is no
+# -var-file flag to remember or forget.
+#
+# Must be the same region as every other stack — see the note in variables.tf
+# about how little of this stack is actually regional. It is the region the
+# origin bucket lives in, and it must match `region` in backend.hcl, which is
+# where this stack's state lives.
+
+aws_region = "eu-west-1"
+
+# Optional. Defaults to "dev", and appears in the bucket name, the origin
+# access control name and the deploy policy name. Match it to the other stacks'
+# `environment` by convention; nothing here reads another stack's value.
+# environment = "dev"

@@ -20,5 +20,22 @@ aws_region = "eu-west-1"
 # deployment — see apps/web/.env.example for the other half of that pairing.
 # This is friction, not authentication: it stops a drive-by script and a
 # cross-site page, and nothing that sets its own Origin header (ADR 0006 records
-# that as a stated non-goal). #144 adds the hosted SPA's origin alongside it.
+# that as a stated non-goal).
+#
+# Once #144's web stack is applied, the hosted SPA's origin joins the dev one —
+# the deployed demo is served from CloudFront and calls this API cross-origin,
+# so its origin has to be admitted here too:
+#
+# web_origins = "http://localhost:5173,https://<distribution-domain>.cloudfront.net"
+#
+# The domain is server-assigned by CloudFront, so read it rather than predicting
+# it (from the repo root):
+#
+#   terraform -chdir=infra/web output -raw cloudfront_url
+#
+# That output is already a bare origin — scheme and host, no path — so it goes
+# in as printed. Add nothing after it: the validation in variables.tf rejects a
+# trailing slash, a path, and any whitespace around the comma, because the
+# function splits this exact string and compares it to a browser's Origin
+# header, which carries none of them.
 # web_origins = "http://localhost:5173"

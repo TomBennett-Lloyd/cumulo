@@ -153,3 +153,13 @@ jobs:
         run: terraform -chdir=infra/forecast init -backend=false -lockfile=readonly
       - name: terraform validate (forecast)
         run: terraform -chdir=infra/forecast validate
+      # The web stack has no Lambda artefact, but it has the same class of
+      # asymmetry the api note above describes, in a different place: `validate`
+      # never reads a data source, so the `Managed-CachingOptimized` cache
+      # policy this stack looks up by name is unchecked here. A wrong name
+      # passes CI and fails at the first `terraform plan`, which is where the
+      # comment in infra/web/cloudfront.tf points the reader.
+      - name: terraform init (web)
+        run: terraform -chdir=infra/web init -backend=false -lockfile=readonly
+      - name: terraform validate (web)
+        run: terraform -chdir=infra/web validate
