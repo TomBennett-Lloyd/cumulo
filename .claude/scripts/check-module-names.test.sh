@@ -265,7 +265,10 @@ else
   run_check "$DIR"
   expect_rc 2 "$rc"
   expect_out "find failed while scanning"
-  expect_not_out "OK"
+  # The gate's full success prefix, not bare "OK": the refusal message echoes the fixture's
+  # temp path, and mktemp's random suffix can itself contain the substring "OK" (observed
+  # live: tmp.OKeCaP2ZLZ flaked this case while the gate behaved perfectly — #219).
+  expect_not_out "check-module-names: OK"
 fi
 # Restored unconditionally: the trap's `rm -rf` cannot remove a directory it cannot enter.
 must chmod 755 "$DIR/apps/locked"
