@@ -1619,7 +1619,7 @@ Notes on what would change that:
 
 ### CloudWatch alarm budget
 
-CloudWatch's always-free tier is **10 alarms per account**, and it is now exactly spent. It is also the only allowance no single stack can see: alarms are created in five directories, the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
+CloudWatch's always-free tier is **10 alarms per account**, and it is now exactly spent. It is also the only allowance no single stack can see: alarms are created in four directories (storage, ingestion, api, forecast — the census below), the tier is billed in one account, and every "$0.00/mo" above depends on the total. This subsection is the platform-level owner of that number, and it settles [issue #126](https://github.com/TomBennett-Lloyd/cumulo/issues/126), which asked for exactly that.
 
 **Counted at the time of writing, from the `.tf` files rather than from a previous edition of this document:**
 
