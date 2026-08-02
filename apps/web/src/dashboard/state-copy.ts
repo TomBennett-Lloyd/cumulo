@@ -15,13 +15,14 @@
  * top to bottom here, which is not true when each phrase lives inside the JSX
  * that happens to render it.
  *
- * The word "active" is deliberately gone. The old fleet view's empty line called
- * them active sites, which asserted a distinction the data model does not make —
- * there is no inactive site to contrast with — and a sentence that implies a
- * state the system cannot be in teaches the reader something false (#104's
- * finding). The phrase is not quoted here on purpose: C7's acceptance is a grep
- * for it across `apps/web/src`, and a comment explaining the removal would be
- * the one thing keeping that grep from going quiet.
+ * One adjective is deliberately gone from the empty-fleet line. The old fleet
+ * view qualified its sites with a word asserting a distinction the data model
+ * does not make — there is no opposite kind of site to contrast with — and a
+ * sentence that implies a state the system cannot be in teaches the reader
+ * something false (#104's finding). The word is not written here on purpose:
+ * the copy-contract test's acceptance is a grep for it across `apps/web/src`,
+ * comments included, and quoting it in the explanation would be the one thing
+ * keeping that grep from going quiet.
  *
  * Scope: async-state and failure copy. Chart *chrome* wording — the words a
  * chart says about itself, the clock included — is owned by
