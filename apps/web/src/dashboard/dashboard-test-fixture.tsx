@@ -17,7 +17,7 @@ import type { MapRegionProps } from './MapRegion';
  * seams. Those seams live here rather than in copies that would have to change
  * together to keep meaning the same thing (`structure.md` rule 7). Helpers only
  * one suite needs stay in that suite; a helper a second suite reaches for moves
- * in here, which is how the three below arrived.
+ * in here, which is how the shared helpers here arrived.
  *
  * Nothing here is a mock of maplibre. jsdom implements no WebGL, so the real
  * `MapRegion` cannot mount — which is why `Dashboard` takes the map region as a
