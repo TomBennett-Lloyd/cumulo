@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex } from './chart-geometry';
 import type { ForecastChartPoint } from './chart-series';
@@ -11,6 +11,7 @@ import {
   marks,
   renderChart,
   requireMark,
+  requireSvg,
   SERIES,
   tableCells,
 } from './forecast-chart-test-fixture';
@@ -214,6 +215,25 @@ describe('ForecastChart', () => {
       'Sunnyside Farm: forecast and actuals',
     );
     expect(container.querySelector('caption')?.textContent).toBe('Table view — Sunnyside Farm, kW');
+  });
+
+  /*
+   * The axis is UTC and never the reader's local zone, which chart-treatment.md
+   * accepts only on condition that the chart says so in its chrome. Both strings
+   * are written out here rather than imported from `chart-copy.ts`: a test that
+   * imports the constant it checks asserts nothing about the wording, and would
+   * follow a silent rename straight past the reader who needs the words.
+   */
+  it('states its clock in the plot chrome', () => {
+    const container = renderChart(SERIES);
+
+    expect(requireSvg(container).textContent).toContain('Times in UTC');
+  });
+
+  it('heads the table twin’s time column with the clock', () => {
+    renderChart(SERIES);
+
+    expect(screen.getByRole('columnheader', { name: 'Time (UTC)' })).toBeDefined();
   });
 
   it('renders a single-sample series without throwing', () => {

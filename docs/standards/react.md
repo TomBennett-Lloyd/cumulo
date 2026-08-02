@@ -30,7 +30,7 @@
 
 ## Async surface convention (apps/web)
 
-Every panel that waits on data says so the same way. The three states are implemented once in `apps/web/src/dashboard/panel-states.tsx` (`PanelPending`, `PanelEmpty`, `PanelError`) and their wording lives in `apps/web/src/dashboard/state-copy.ts` — reach for those rather than writing a fourth spelling of "loading…".
+Every surface that waits on data says so the same way — panels, the map region, the app boundary and the add-site form alike. The three states are implemented once in `apps/web/src/dashboard/panel-states.tsx` (`PanelPending`, `PanelEmpty`, `PanelError`), and the app's async-state and failure wording lives in `apps/web/src/dashboard/state-copy.ts` — reach for those rather than writing a fourth spelling of "loading…". Chart _chrome_ wording (the words a chart says about itself, like its clock) has its own owner, `apps/web/src/charts/chart-copy.ts`, a deliberate sibling. `apps/web/src/dashboard/state-copy-contract.test.ts` sweeps the app for phrase classes that drift back inline, so an inlined pending label or failure sentence fails a gate, not just a review.
 
 - **Pending** is a visible label inside an `aria-busy="true"` container — never a live region mounted with its text already in it. A `role="status"` that exists only while it is full has no change to report, so it announces nothing and merely looks accessible (#161).
 - **Failed** is `role="alert"` with a message in the panel's own words, plus a retry **only when retrying can work**. These components mount into a tree that is already on screen, so the alert really is a change and really is announced. A retry that re-runs an identical metered request is not a recourse — omit it and let the reader's own controls be the retry.

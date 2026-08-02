@@ -45,6 +45,15 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
 /**
+ * The deadline as the diagnostic messages spell it.
+ *
+ * Derived once rather than in each sentence: both deadline messages are about
+ * the same timer, so a second derivation would be a place for them to disagree
+ * about the number the visitor actually waited out.
+ */
+const DEADLINE_SECONDS_TEXT = String(FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND);
+
+/**
  * The state every watch starts in, and stays in until the fleet answers.
  *
  * A module constant rather than a fresh object per run: re-entering it is then
@@ -142,19 +151,44 @@ const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState 
 /**
  * What the panel is told when the deadline passes.
  *
- * The message carries the site the wait was about (`error-handling.md` rule 4)
+ * Three outcomes, because the run can reach ninety seconds having learned three
+ * different things — and the panel has a different sentence for each:
+ *
+ * - a fault was seen, so the deadline is an `error` carrying the fleet's own
+ *   account of it;
+ * - absence was confirmed, so the wait really was the pipeline's first-forecast
+ *   wait and running out of it is a `timeout`;
+ * - neither, so no poll ever came back at all: the run spent the whole deadline
+ *   in `checking` and `unanswered` is the only honest reason. Claiming a
+ *   timeout here would assert the pipeline is behind on a site whose forecast
+ *   may well already exist (#177's review; the tech-debt entry this consumes).
+ *
+ * `absenceConfirmed` is a parameter rather than something read from the
+ * enclosing run, so this stays legible on its own (`structure.md` rule 1).
+ * Both messages carry the site the wait was about (`error-handling.md` rule 4)
  * so a screenshot of a failed panel is diagnosable on its own.
  */
-const deadlineState = (siteId: Site['id'], lastFault: string | null): ForecastViewState =>
-  lastFault === null
-    ? {
-        status: 'failed',
-        reason: 'timeout',
-        message: `No forecast for site ${siteId} after ${String(
-          FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND,
-        )} seconds`,
-      }
-    : { status: 'failed', reason: 'error', message: lastFault };
+const deadlineState = (
+  siteId: Site['id'],
+  lastFault: string | null,
+  absenceConfirmed: boolean,
+): ForecastViewState => {
+  if (lastFault !== null) {
+    return { status: 'failed', reason: 'error', message: lastFault };
+  }
+  if (absenceConfirmed) {
+    return {
+      status: 'failed',
+      reason: 'timeout',
+      message: `No forecast for site ${siteId} after ${DEADLINE_SECONDS_TEXT} seconds`,
+    };
+  }
+  return {
+    status: 'failed',
+    reason: 'unanswered',
+    message: `No answer for site ${siteId} within ${DEADLINE_SECONDS_TEXT} seconds`,
+  };
+};
 
 export interface FirstForecastWatch {
   /** What the site detail panel should render right now. */
@@ -201,7 +235,7 @@ export const useFirstForecast = (
     const startedAtMs = Date.now();
     let stopped = false;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    /** The last fault seen this run; decides timeout-vs-error at the deadline. */
+    /** The last fault seen this run; picks the `error` arm at the deadline. */
     let lastFault: string | null = null;
     /**
      * Whether the fleet has told this run the forecast does not exist yet.
@@ -214,6 +248,10 @@ export const useFirstForecast = (
      * answer, and says nothing about existence, so it must not promote the
      * watch out of `checking` (#177). Latched rather than recomputed per poll:
      * once absence is confirmed, a later network blip does not un-confirm it.
+     *
+     * The deadline asks the same question at the end: ninety seconds reached
+     * without this ever being set means no poll established anything, which is
+     * `unanswered` rather than a pipeline timeout.
      */
     let absenceConfirmed = false;
 
@@ -225,9 +263,12 @@ export const useFirstForecast = (
       }
     };
 
+    // Both bindings are read when the timer fires, not when it is registered:
+    // they are this run's own `let`s, so the deadline is decided on everything
+    // the run had learned by the ninetieth second.
     const deadlineTimer = setTimeout(() => {
       stopPolling();
-      setState(deadlineState(siteId, lastFault));
+      setState(deadlineState(siteId, lastFault, absenceConfirmed));
     }, FIRST_FORECAST_DEADLINE_MS);
 
     const stopWatching = (): void => {

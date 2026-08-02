@@ -5,6 +5,7 @@ import {
 } from '@cumulo/shared';
 import { useEffect, useId, useRef, useState, type ReactElement, type SubmitEvent } from 'react';
 
+import { ADDING_SITE_LABEL } from '../dashboard/state-copy';
 import type { CreationRefusal } from './creation-throttle';
 
 /** The fields the visitor fills in. Coordinates come from the map, not from here. */
@@ -371,7 +372,7 @@ export const AddSiteForm = ({
           press either creates the site or restates the wait as it now stands.
         */}
         <button type="submit" className="add-site-submit" disabled={submitting}>
-          {submitting ? 'Adding site…' : 'Add site'}
+          {submitting ? ADDING_SITE_LABEL : 'Add site'}
         </button>
       </div>
     </form>

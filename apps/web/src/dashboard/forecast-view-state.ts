@@ -5,12 +5,18 @@ import type { Forecast } from '@cumulo/shared';
  *
  * - `timeout` — nothing ever went wrong, the forecast simply never appeared
  *   inside the deadline. The site exists; the pipeline is behind.
+ * - `unanswered` — the deadline passed while the run was still `checking`: no
+ *   poll ever established whether a forecast exists (every request still in
+ *   flight), so neither the pipeline sentence nor a fault is honest.
  * - `error` — the fleet answered, and the answer was a fault.
  *
  * Split because the recourse differs: a timeout is worth waiting out again,
  * a fault usually is not, and the panel says something different for each.
+ * `unanswered` is the third because it is a third fact, not a shading of the
+ * first: `timeout` is the fleet confirming absence and the pipeline being
+ * behind, and a run that was never answered has no standing to claim either.
  */
-export type ForecastFailureReason = 'timeout' | 'error';
+export type ForecastFailureReason = 'timeout' | 'unanswered' | 'error';
 
 /**
  * What the site detail panel knows about a site's forecast, right now.

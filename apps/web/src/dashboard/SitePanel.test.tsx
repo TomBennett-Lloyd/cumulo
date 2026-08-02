@@ -245,6 +245,26 @@ describe('SitePanel first forecast', () => {
     expect(screen.queryByText(new RegExp(SITE.id))).toBeNull();
   });
 
+  /*
+   * The distinction the reason exists for: this run never heard back, so the
+   * sentence beside it — "the pipeline may still be working" — would be an
+   * assertion about a pipeline nobody asked successfully. The negative on
+   * `pipeline` is what pins that; its positive control is the timeout test
+   * directly above, whose copy contains the word.
+   */
+  it('an unanswered deadline claims nothing about the pipeline, and still offers a retry', () => {
+    renderPanel({
+      status: 'failed',
+      reason: 'unanswered',
+      message: `No answer for site ${SITE.id} within 90 seconds`,
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('No answer from the fleet within 90 seconds');
+    expect(alert.textContent).not.toContain('pipeline');
+    expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
+  });
+
   it('repeats the source’s own account when the fleet answered with a fault', () => {
     renderPanel({ status: 'failed', reason: 'error', message: 'Forecast service unreachable' });
 

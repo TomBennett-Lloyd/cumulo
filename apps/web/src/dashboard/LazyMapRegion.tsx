@@ -3,6 +3,7 @@ import { Component, lazy, Suspense } from 'react';
 
 import { MapSurface } from '../map/MapSurface';
 import type { MapRegionProps } from './MapRegion';
+import { LOADING_MAP_LABEL, MAP_LOAD_FAILURE_MESSAGE } from './state-copy';
 
 /*
  * The line the map engine starts at.
@@ -48,7 +49,7 @@ const MapRegionImpl = lazy(async () => ({ default: (await import('./MapRegion'))
  * contract can prove this markup is written, never that it renders.
  */
 export const MapRegionFallback = (): ReactElement => (
-  <MapSurface canvas={{ kind: 'placeholder', label: 'Loading map…' }} />
+  <MapSurface canvas={{ kind: 'placeholder', label: LOADING_MAP_LABEL }} />
 );
 
 /**
@@ -61,13 +62,7 @@ export const MapRegionFallback = (): ReactElement => (
  * same error, so a retry button would be a control that cannot work.
  */
 const MapRegionFailure = (): ReactElement => (
-  <MapSurface
-    canvas={{
-      kind: 'failure',
-      message:
-        'The map could not be loaded. Reload the page to try again — the fleet list and forecasts beside it are unaffected.',
-    }}
-  />
+  <MapSurface canvas={{ kind: 'failure', message: MAP_LOAD_FAILURE_MESSAGE }} />
 );
 
 /** What the boundary knows: whether the region below it has already thrown. */

@@ -114,7 +114,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
      * missing.
      */
     expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
-      ['Time', 'P10', 'Median', 'P90', 'Actual'],
+      ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual'],
       ['06:00', '4.0', '6.0', '9.0', '5.0'],
       ['07:00', '6.0', '8.0', '11.0', '—'],
     ]);

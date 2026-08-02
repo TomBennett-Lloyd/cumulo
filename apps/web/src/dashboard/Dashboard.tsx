@@ -18,7 +18,7 @@ import { PanelError, PanelPending } from './panel-states';
 import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
 import { SiteList } from './SiteList';
 import { SitePanel } from './SitePanel';
-import { LOADING_FLEET_LABEL } from './state-copy';
+import { fleetListFailureMessage, LOADING_FLEET_LABEL } from './state-copy';
 
 /**
  * How the one-off fleet listing went.
@@ -111,7 +111,7 @@ const FleetSection = ({
   return (
     <>
       {load.status === 'failed' && (
-        <PanelError message={`Fleet unavailable: ${load.message}`} onRetry={onRetryLoad} />
+        <PanelError message={fleetListFailureMessage(load.message)} onRetry={onRetryLoad} />
       )}
 
       {sites.length > 0 && (

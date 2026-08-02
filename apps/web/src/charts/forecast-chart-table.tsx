@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { TIME_COLUMN_HEADER } from './chart-copy';
 import { tickLabelFor } from './chart-geometry';
 import { formatKw, type ForecastChartPoint } from './chart-series';
 
@@ -25,7 +26,7 @@ export const forecastChartTable = ({
     <caption>{caption}</caption>
     <thead>
       <tr>
-        <th scope="col">Time</th>
+        <th scope="col">{TIME_COLUMN_HEADER}</th>
         <th scope="col">P10</th>
         <th scope="col">Median</th>
         <th scope="col">P90</th>
