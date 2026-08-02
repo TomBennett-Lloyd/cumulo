@@ -22,12 +22,12 @@ Entry format:
 - Phase: implementation
 - Observed: `pnpm add` inserts its `allowBuilds` placeholder into `pnpm-workspace.yaml` alphabetically, which can slide the new entry between an existing entry and the justification comment above it — silently re-parenting that comment onto a package it does not describe. The supply-chain gate then fails on a line nobody edited. The gate behaved correctly; the surprise is pnpm's insertion point. Practice until this bites again: after any `pnpm add`, re-read the whole comment↔entry pairing, not just the line that appeared.
 
-## 2026-08-01 — PR #91
-
-- Phase: implementation
-- Observed: `preview_start` resolves `.claude/launch.json` from the MAIN checkout only, never from the worktree the branch lives in — so browser verification of a worktree branch needs either the config present in the main checkout or a temporary copy the agent then removes. The #118 browser-smoke convention (synchronous, Sonnet, agent owns the server lifecycle and cleans up its temp launch.json) worked first time and absorbed the workaround, so no rule is forced yet; recorded in case the copy-and-delete dance recurs.
-
 ## 2026-08-01 — PR #122
 
 - Phase: process
 - Observed: second real STRUGGLING→consultant dispatch (first: #115), and again the consultant beat both implementer options by reframing rather than choosing — here that the exact bound was never sound and that wall-clock and SDK time were being compared as if commensurable. Two for two on "the loop earns its cost when the implementer's options share a wrong premise". No change made; logging the running record so the loop's value stays measurable.
+
+## 2026-08-02 — session-wide (PRs #168–#184)
+
+- Phase: process
+- Observed: a system-reminder claiming the GitHub API rate limit (5,000/hr) was exceeded appended itself to tool results at least three times across two sessions — orchestrator once, sub-agents twice — while `gh api rate_limit` reported ~4,999 remaining on every occasion. The reminder is spurious, and an agent that takes it at face value stalls against a ceiling it is nowhere near. Practice until this earns a rule: run `gh api rate_limit` and believe the number, not the reminder.
