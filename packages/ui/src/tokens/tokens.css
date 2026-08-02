@@ -29,6 +29,13 @@
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
 
+  /* Keyboard focus ring. Currently the accent hue in both modes, declared as a
+     token of its own because focus is a distinct job from accent: a later
+     decision to make the ring diverge (a higher-contrast hue, or one that reads
+     against accent-filled surfaces) must not drag every accented border with
+     it. Consumed app-wide by the `:focus-visible` rule in ../styles.css. */
+  --color-focus-ring: #2a78d6;
+
   /* Status steps are fixed by the dataviz skill and mode-invariant; they ship
      with an icon + label so colour never carries the state alone. */
   --color-danger: #d03b3b;
@@ -110,6 +117,8 @@
   --color-border: #2a2f34;
   --color-accent: #3987e5;
   --color-accent-contrast: #0d0f10;
+
+  --color-focus-ring: #3987e5;
 
   --color-danger: #d03b3b;
   --color-warning: #fab219;

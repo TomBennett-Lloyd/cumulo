@@ -1,6 +1,7 @@
 import type { CreateSiteInput, Site } from '@cumulo/shared';
+import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddSiteForm } from '../add-site/AddSiteForm';
 import type { CreationRefusal } from '../add-site/creation-throttle';
@@ -10,10 +11,14 @@ import type { FleetDataSource } from '../data/fleet-data-source';
 import { useFirstForecast } from '../data/use-first-forecast';
 import type { MapPosition } from '../map/MapView';
 import type { Theme } from '../theme';
+import { FleetPanel } from './FleetPanel';
 import { LazyMapRegion } from './LazyMapRegion';
 import type { MapRegionComponent } from './MapRegion';
-import { SiteDetailPanel } from './SiteDetailPanel';
+import { PanelError, PanelPending } from './panel-states';
+import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
 import { SiteList } from './SiteList';
+import { SitePanel } from './SitePanel';
+import { LOADING_FLEET_LABEL } from './state-copy';
 
 /**
  * How the one-off fleet listing went.
@@ -45,7 +50,7 @@ type CreationState =
   | { readonly status: 'failed'; readonly message: string };
 
 /**
- * The fleet the app runs against until the Fleet API exists (#14, wired in C8).
+ * The fleet the app runs against unless the build selects the HTTP source (#14, #150).
  *
  * One instance for the module rather than one per render: `useFirstForecast`
  * takes the source as an effect dependency, so a source rebuilt every render
@@ -83,6 +88,14 @@ interface FleetSectionProps {
  * A failed listing shows the reason and a retry rather than an empty list
  * (`error-handling.md` rule 5) — and still lists any site created since, because
  * that site exists, and hiding it would be the dishonest half of the same rule.
+ *
+ * Both off-happy-path arms are the column's shared primitives rather than markup
+ * of their own (`react.md`, "Async surface convention"). The waiting arm in
+ * particular used to be a `role="status"` mounted with its text already inside
+ * it, which announces nothing — it has no change to report — and only looked
+ * accessible; `PanelPending` is a plain `aria-busy` container instead, and the
+ * one live region left in this column is the failure's `role="alert"`, which
+ * really does arrive as a change.
  */
 const FleetSection = ({
   load,
@@ -92,22 +105,13 @@ const FleetSection = ({
   onRetryLoad,
 }: FleetSectionProps): ReactElement => {
   if (load.status === 'loading') {
-    return (
-      <p className="dashboard-slot-note" role="status">
-        Loading the fleet…
-      </p>
-    );
+    return <PanelPending label={LOADING_FLEET_LABEL} />;
   }
 
   return (
     <>
       {load.status === 'failed' && (
-        <div className="dashboard-failure" role="alert">
-          <p className="dashboard-failure-message">Fleet unavailable: {load.message}</p>
-          <button type="button" className="dashboard-retry" onClick={onRetryLoad}>
-            Try again
-          </button>
-        </div>
+        <PanelError message={`Fleet unavailable: ${load.message}`} onRetry={onRetryLoad} />
       )}
 
       {sites.length > 0 && (
@@ -131,14 +135,21 @@ export interface DashboardProps {
 }
 
 /**
- * The fleet dashboard: the map, the fleet as text beside it, and the flow that
- * turns a click on the map into a site with a forecast.
+ * The fleet dashboard: the map as the canvas, the panel column beside it, and
+ * the flow that turns a click on the map into a site with a forecast.
  *
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the list rows and the
- * detail panel all render from that one value, which is what makes selecting a
+ * context panel all render from that one value, which is what makes selecting a
  * site on the map and selecting it in the list the same act rather than two
- * views that agree by luck.
+ * views that agree by luck. That one value is also what `?site=` addresses:
+ * `selection-url.ts` is the whole of the deep link, and the dashboard reads it
+ * once at mount and writes it whenever the selection moves.
+ *
+ * The column is a context swap, not a set of stacked slots: one region shows the
+ * fleet's story, one site's, or a draft, and which one is a function of state
+ * rather than of a page the reader navigated to. `docs/design/dashboard-composition.md`
+ * records the rule and what it is buying.
  *
  * Two things it deliberately never does. It never re-lists the fleet: the
  * listing is a mount-time request, and a dashboard that polled it would fan out
@@ -157,7 +168,18 @@ export const Dashboard = ({
   /** Bumping this is how the retry button asks the listing effect to run again. */
   const [listAttempt, setListAttempt] = useState(0);
   const [createdSites, setCreatedSites] = useState<readonly Site[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState<Site['id'] | null>(null);
+  /**
+   * The selection, which the URL is allowed to open on.
+   *
+   * Read once, in the lazy initialiser, because the address bar is the initial
+   * value's *source* rather than something to keep re-reading: after mount the
+   * flow runs the other way, and the sync effect below is what keeps the two
+   * level. An id that names no site is not filtered here — nothing is loaded
+   * yet — it is cleared by the guard in the listing effect.
+   */
+  const [selectedSiteId, setSelectedSiteId] = useState<Site['id'] | null>(() =>
+    readSiteIdFromSearch(window.location.search),
+  );
   const [draft, setDraft] = useState<MapPosition | null>(null);
   const [creation, setCreation] = useState<CreationState>({ status: 'editing' });
   /**
@@ -166,6 +188,21 @@ export const Dashboard = ({
    * in state so no re-render can hand the visitor a fresh allowance.
    */
   const [throttle] = useState(() => new CreationThrottle());
+  /**
+   * The sites created this session, readable from the listing effect without
+   * being a dependency of it (`react.md` rule 2).
+   *
+   * A dependency would make a creation re-run the listing, which is the one
+   * fan-out this dashboard must never re-spend. But the stale-id guard below
+   * still has to count a created site as known: a reader whose listing failed
+   * can add a site, select it, and then retry the listing — and a guard that
+   * only knew the listing's sites would clear the selection of a site sitting
+   * right there in the list.
+   */
+  const createdSitesRef = useRef(createdSites);
+  createdSitesRef.current = createdSites;
+  /** The context region itself — the thing a swap has to bring back into view. */
+  const contextRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -183,10 +220,24 @@ export const Dashboard = ({
         return;
       }
 
-      setLoad(
-        result.kind === 'ok'
-          ? { status: 'ready', sites: result.value }
-          : { status: 'failed', message: result.error.message },
+      if (result.kind !== 'ok') {
+        setLoad({ status: 'failed', message: result.error.message });
+        return;
+      }
+
+      setLoad({ status: 'ready', sites: result.value });
+
+      // The stale-id guard, here rather than in an effect watching derived
+      // state: this is the moment the question "does that site exist?" gets its
+      // answer, so it is the moment a `?site=` naming nobody stops being a
+      // selection. Left standing, a dead deep link would have `useFirstForecast`
+      // polling a site that does not exist for its full ninety-second deadline,
+      // and the sync effect below cleans the parameter out of the URL as soon as
+      // the selection goes.
+      const known = [...result.value, ...createdSitesRef.current];
+
+      setSelectedSiteId((current) =>
+        current === null || known.some((site) => site.id === current) ? current : null,
       );
     });
 
@@ -194,6 +245,42 @@ export const Dashboard = ({
       cancelled = true;
     };
   }, [dataSource, listAttempt]);
+
+  // The address bar is an external system, and keeping it level with the
+  // selection is what an effect is for (`react.md` rule 1). It cannot be a line
+  // in the click handlers instead, because the selection also moves without a
+  // click: a creation selects the site it just made, and the guard above clears
+  // a selection nothing can show.
+  useEffect(() => {
+    writeSiteIdToUrl(selectedSiteId);
+  }, [selectedSiteId]);
+
+  // A scroll position is an external system in the same sense the address bar
+  // is — a property of the document that no render owns and no re-render
+  // restores — so keeping it level with the context is an effect's job
+  // (`react.md` rule 1). The column is one scroller over an unbounded site
+  // list, so a reader who has scrolled to row forty and clicks a marker gets
+  // their answer written into a region that is now off the top of the screen:
+  // the swap happens, and the feedback is invisible. This puts the region back
+  // where it can be read.
+  //
+  // It cannot be a line in the click handlers, for the reason the URL effect
+  // cannot either: a context also arrives without a click — a creation selects
+  // the site it just made, and a `?site=` link opens on one.
+  //
+  // Only *into* a context, never out of one. Closing a panel hands the same
+  // region back to the fleet, and a column that jumped on the way out would
+  // move ground the reader did not ask to move. `block: 'start'` and the
+  // default (instant) behaviour rather than smooth scrolling: this is feedback
+  // for an action already taken, not an animation, and it must not fight a
+  // reader who scrolls immediately after clicking.
+  useEffect(() => {
+    if (selectedSiteId === null && draft === null) {
+      return;
+    }
+
+    contextRegionRef.current?.scrollIntoView({ block: 'start' });
+  }, [selectedSiteId, draft]);
 
   // Derived during render rather than mirrored into state. Memoised for
   // identity rather than speed: this array is what the map clusters, and a
@@ -267,18 +354,63 @@ export const Dashboard = ({
       </div>
 
       <aside className="dashboard-aside">
-        {draft !== null && (
-          <AddSiteForm
-            key={draftKey(draft)}
-            latitude={draft.latitude}
-            longitude={draft.longitude}
-            submitting={creation.status === 'submitting'}
-            refusal={creation.status === 'refused' ? creation.refusal : null}
-            error={creation.status === 'failed' ? creation.message : null}
-            onSubmit={handleSubmit}
-            onCancel={closeDraft}
+        {/*
+         * The context region: one of three things, in a fixed place.
+         *
+         * A draft outranks a selection but deliberately does not clear it. The
+         * two are different questions — "where shall the new site go" and
+         * "which site am I reading" — and cancelling a draft should hand the
+         * reader back the site they had open rather than the fleet they had
+         * left. That is why the site panel's condition tests `draft` rather
+         * than the dashboard clearing `selectedSiteId` when a draft opens.
+         *
+         * The three occupants share one wrapping element because "the context
+         * region" has to be addressable to be scrolled to, and because exactly
+         * one of them is ever visible — the box is the region, not a stack.
+         */}
+        <div className="dashboard-context" ref={contextRegionRef}>
+          {draft !== null && (
+            <AddSiteForm
+              key={draftKey(draft)}
+              latitude={draft.latitude}
+              longitude={draft.longitude}
+              submitting={creation.status === 'submitting'}
+              refusal={creation.status === 'refused' ? creation.refusal : null}
+              error={creation.status === 'failed' ? creation.message : null}
+              onSubmit={handleSubmit}
+              onCancel={closeDraft}
+            />
+          )}
+
+          {draft === null && selectedSite !== null && (
+            <SitePanel
+              dataSource={dataSource}
+              site={selectedSite}
+              firstForecast={forecast}
+              onRetryFirstForecast={retryForecast}
+              onClose={() => {
+                setSelectedSiteId(null);
+              }}
+            />
+          )}
+
+          {/*
+           * Mounted always, hidden when something else holds the region — which
+           * inverts, on purpose, the unmount-on-leave rule the old view nav
+           * followed. A fleet re-sum in live mode is a paced fan-out of one
+           * request per site (~8 s over 60 sites), so it is a thing to be spent
+           * once and kept, not re-spent every time a reader closes a site. The
+           * fleet's sum changes on exactly one event — a site being added — and
+           * `refreshToken` is that event, counted. Deselection is not an event:
+           * hiding the panel keeps its state, and unhiding it costs nothing.
+           */}
+          <FleetPanel
+            dataSource={dataSource}
+            sites={sites}
+            hidden={draft !== null || selectedSite !== null}
+            refreshToken={createdSites.length}
           />
-        )}
+        </div>
 
         <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
           <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
@@ -299,26 +431,17 @@ export const Dashboard = ({
           </div>
         </section>
 
-        {selectedSite === null ? (
-          <section className="dashboard-slot" aria-labelledby="dashboard-detail-heading">
-            <h2 className="dashboard-slot-heading" id="dashboard-detail-heading">
-              Site detail
-            </h2>
-            <p className="dashboard-slot-note">
-              Selecting a site — on the map or in the list — opens its forecast here. Clicking the
-              map anywhere else adds a site at that spot.
-            </p>
-          </section>
-        ) : (
-          <SiteDetailPanel
-            site={selectedSite}
-            forecast={forecast}
-            onClose={() => {
-              setSelectedSiteId(null);
-            }}
-            onRetry={retryForecast}
-          />
-        )}
+        {/*
+         * The column's one weather credit, at its foot rather than inside a
+         * panel. Every panel above it shows Open-Meteo-derived numbers, and a
+         * credit that lived in one of them would come and go with a selection
+         * — eventually absent exactly when it mattered. The map carries its own
+         * in its strip; two credits on one screen is the design, not an
+         * oversight (CC BY 4.0, CLAUDE.md hard constraints).
+         */}
+        <footer className="dashboard-aside-footer">
+          <OpenMeteoAttribution />
+        </footer>
       </aside>
     </div>
   );

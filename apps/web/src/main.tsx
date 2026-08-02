@@ -15,8 +15,10 @@ import './dashboard/dashboard.css';
 import './map/map.css';
 import './add-site/add-site.css';
 import './dashboard/site-panels.css';
+import './dashboard/panel-states.css';
+import './dashboard/fleet-panel.css';
+import './dashboard/range-picker.css';
 import './charts/charts.css';
-import './views/views.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

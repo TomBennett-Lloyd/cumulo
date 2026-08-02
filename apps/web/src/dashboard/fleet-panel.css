@@ -1,0 +1,88 @@
+/*
+ * The fleet panel: the context region's resting state, as a card.
+ *
+ * Chrome borrowed from `.dashboard-slot` deliberately — surface, `--radius-md`,
+ * `--space-4` of padding — because this panel is one of the column's cards and
+ * should not announce itself as a different kind of thing from the site list
+ * beside it. What is its own is the internal rhythm: a tight heading block, then
+ * the hint, the control and the chart at the column's normal gap.
+ *
+ * These `.fleet-panel*` classes are this panel's and nothing else's. The async
+ * states it renders wear `panel-states.css`'s `.panel-*` classes, which are the
+ * column's shared vocabulary and are not extended here (react.md, "Async surface
+ * convention").
+ *
+ * Every value is a token — the gate in stylelint.config.mjs, not a style choice
+ * (react.md rule 5).
+ */
+
+.fleet-panel {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* The panel stays mounted while another context occupies the region, so the
+   `hidden` attribute has to beat the `display: grid` above — the UA stylesheet's
+   `[hidden] { display: none }` loses to any class rule that sets `display`, and
+   a panel that keeps its query state but not its invisibility is worse than one
+   that unmounted. */
+.fleet-panel[hidden] {
+  display: none;
+}
+
+/* Title, size and promise read as one block, so they sit closer together than
+   the panel's own rhythm. */
+.fleet-panel-header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.fleet-panel-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* Tabular figures so the count and the capacity do not shuffle sideways when a
+   site is added and the numbers change width. */
+.fleet-panel-stats {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-panel-subtitle {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* The add-a-site invitation, wearing `.site-row`'s left-bar idiom: in this
+   column an accent bar down the left edge already means "this is about a site",
+   and the hint is the one that has no site yet. Not shared with `.site-row` —
+   that one reserves its border width on every row so selection cannot nudge the
+   text, which is a list concern this chip does not have. */
+.fleet-panel-hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-style: solid;
+  border-width: 0 0 0 var(--space-1);
+  border-color: var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* The completeness line and the chart are one statement — how complete the
+   aggregate is, and the aggregate — so they sit tighter than the panel's gap. */
+.fleet-panel-body {
+  display: grid;
+  gap: var(--space-3);
+}

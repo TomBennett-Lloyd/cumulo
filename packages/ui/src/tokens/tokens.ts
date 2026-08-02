@@ -16,6 +16,7 @@ export const tokens = {
     border: 'var(--color-border)',
     accent: 'var(--color-accent)',
     accentContrast: 'var(--color-accent-contrast)',
+    focusRing: 'var(--color-focus-ring)',
     danger: 'var(--color-danger)',
     warning: 'var(--color-warning)',
     success: 'var(--color-success)',

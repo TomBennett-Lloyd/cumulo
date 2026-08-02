@@ -1,0 +1,75 @@
+/*
+ * The panel column's async states, wearing one set of clothes.
+ *
+ * These seven classes are the whole vocabulary: a panel that needs a "loading"
+ * or "this failed" or "there is nothing here" line reaches for one of them
+ * rather than inventing a sibling, which is what kept `.view-status`,
+ * `.forecast-status` and `.dashboard-failure` saying the same thing three ways.
+ * The shapes are inherited from those rules deliberately — this is the same
+ * design, given one name.
+ *
+ * Colour carries meaning where a token pair carries meaning, as the deleted
+ * views.css did: `--color-danger` says a request failed, `--color-warning` says the
+ * answer arrived but is incomplete, and muted text says neither happened. Every
+ * value is a token — the gate in stylelint.config.mjs, not a style choice
+ * (react.md rule 5).
+ */
+
+/* Waiting and nothing-to-show read alike on purpose: both are ordinary,
+   neither is a failure, and a reader should not have to decode a colour to
+   learn that nothing has gone wrong. */
+.panel-pending,
+.panel-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* The bordered card is what separates a failure from the surrounding prose at a
+   glance — the treatment `.dashboard-failure` established, kept. */
+.panel-error {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+
+.panel-error-message {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.panel-retry {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+/* Partial results are labelled partial (error-handling.md rule 5), and a label
+   nobody notices is not a label — hence a colour of its own, distinct from both
+   the muted states above and the danger card. */
+.panel-notice {
+  margin: 0;
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+}
+
+/* The quiet footnote under a chart: what window is shown, how complete it is.
+   Smaller than a state line because it accompanies content rather than
+   standing in for it. */
+.panel-caption {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
