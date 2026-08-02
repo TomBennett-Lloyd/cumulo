@@ -56,7 +56,9 @@ import {
  *
  * The state that matters is held by the hooks, not by the markup, so dropping
  * the subtree costs nothing: no refetch on reveal, and the range the reader
- * picked is still the range.
+ * picked is still the range. What a reveal does cost is the *first* fan-out,
+ * and that is deferred until one happens — so a `?site=` deep link that never
+ * shows the fleet never spends it (#178).
  *
  * ## Attribution
  *
@@ -240,16 +242,43 @@ export const FleetPanel = ({
   // else, and a counter is the smallest honest way to say "ask again".
   const [attempt, setAttempt] = useState(0);
 
-  // Both hooks run unconditionally, including for an empty fleet and for a
-  // source that can never return actuals: hooks are not a place for `if`, and
-  // the wasted call is a resolved empty array in exactly the case it is wasted.
+  /*
+   * Both hooks below run unconditionally — hooks are not a place for `if` — but
+   * the *requests* they make are value-gated until the panel has been looked at
+   * once. In live mode a fleet read is a paced per-site fan-out, so a `?site=`
+   * deep link that never shows the fleet must never spend one (#178).
+   *
+   * `revealed` needs the `sites.length > 0` conjunct because of that same deep
+   * link: the panel is briefly un-hidden while the listing is still in flight,
+   * so there is a window with `hidden` false over an empty `sites`. That window
+   * is a loading state, not a reveal, and requiring a fleet to show is what
+   * stops it counting as one. (A live fleet that really is empty then never
+   * spends the fan-out either — there is nothing to sum.)
+   *
+   * The latch is monotonic, so `enabled` never returns to false once set: hide
+   * and re-reveal keep #161's spent-once-and-kept property, where a raw
+   * `revealed` would make every re-reveal a false→true flip that refetches.
+   */
+  const [everRevealed, setEverRevealed] = useState(false);
+  const revealed = !hidden && sites.length > 0;
+  if (revealed && !everRevealed) {
+    // Adjusting state during render — react.dev's own pattern for state derived
+    // from the props of this very render, and guarded so it sets at most once
+    // ever, which is what makes it terminate. An effect would be the wrong tool:
+    // there is no external system to synchronize with (`react.md` rule 1).
+    setEverRevealed(true);
+  }
+  const enabled = revealed || everRevealed;
+
   const forecasts = useFleetQuery(
     () => dataSource.fleetForecasts(range),
     ['fleet-forecasts', range, refreshToken, attempt],
+    { enabled },
   );
   const actuals = useFleetQuery(
     () => dataSource.fleetActuals(range),
     ['fleet-actuals', range, refreshToken, attempt],
+    { enabled },
   );
 
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
