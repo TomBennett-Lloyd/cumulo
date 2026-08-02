@@ -28,6 +28,19 @@ export type QueryState<T> =
  */
 const LOADING: QueryState<never> = { status: 'loading' };
 
+/** Caller-facing knobs for {@link useFleetQuery}. Optional as a whole — omitting it fetches. */
+export interface FleetQueryOptions {
+  /**
+   * Whether this query is allowed to spend a request. Defaults to `true`.
+   *
+   * A caller sets it to `false` while the answer is not worth paying for yet — a panel whose data
+   * nobody has asked to see (#178). It gates the *request*, never the hook: `useFleetQuery` is
+   * still called unconditionally on every render (`docs/standards/react.md` — `enabled` is a
+   * value, not a conditional hook).
+   */
+  readonly enabled?: boolean;
+}
+
 /**
  * Run `query` whenever `key` changes, and report the outcome as a {@link QueryState}.
  *
@@ -45,10 +58,17 @@ const LOADING: QueryState<never> = { status: 'loading' };
  * `error` results, so a rejection is a bug in the source and propagates to the boundary
  * (`docs/standards/error-handling.md` rule 1) rather than being caught and disguised as a
  * user-facing error.
+ *
+ * While `enabled` is false, no request starts and the state is not touched. So: a query never
+ * enabled reports its initial `loading`; key changes while disabled start nothing; flipping
+ * false→true fires the query for the key current at that moment; and flipping true→false after a
+ * result has landed starts nothing and **keeps** that result, because the disabled run returns
+ * before the `loading` reset rather than after it.
  */
 export const useFleetQuery = <T>(
   query: () => Promise<FleetSourceResult<T>>,
   key: readonly unknown[],
+  { enabled = true }: FleetQueryOptions = {},
 ): QueryState<T> => {
   const [state, setState] = useState<QueryState<T>>(LOADING);
 
@@ -59,6 +79,12 @@ export const useFleetQuery = <T>(
   const keyToken = JSON.stringify(key);
 
   useEffect(() => {
+    // Before the `loading` reset, deliberately: a caller that disables a settled query keeps its
+    // answer, rather than watching it revert to a `loading` that nothing will ever resolve.
+    if (!enabled) {
+      return;
+    }
+
     let superseded = false;
     setState(LOADING);
 
@@ -78,7 +104,7 @@ export const useFleetQuery = <T>(
     return () => {
       superseded = true;
     };
-  }, [keyToken]);
+  }, [keyToken, enabled]);
 
   return state;
 };
