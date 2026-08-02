@@ -66,7 +66,9 @@
 #     one of them contains a link or a column-1 heading. Column-1-only is the
 #     deliberate choice rather than an oversight: recognising indented fences
 #     would make a link inside one silently unchecked, and scanning one as prose
-#     can only ever over-report.
+#     over-reports links — with one qualifier: a column-1 heading inside such a
+#     block would also become a phantom anchor a link could resolve against.
+#     None of the five blocks contains one; the census above is the evidence.
 #   * angle-bracket destinations — `](<path>)`, the spelling CommonMark provides
 #     for targets containing spaces — keep their brackets, so the target is
 #     `<path>` and no listed file is spelled that way.
@@ -181,8 +183,12 @@ ALL="$NL$all_files$NL"
 # Only a marker in column 1 is considered at all; see the header's residual list.
 # The one place this still parts company with CommonMark is a closing run that
 # carries an info string (` ```sh ` closing a ` ``` ` fence), which the spec calls
-# content and this rule calls a close — that direction ends a fence early and can
-# only ever over-report, never skip.
+# content and this rule calls a close — ending a fence early over-reports for
+# LINKS, but for HEADINGS it can mint a phantom anchor (a column-1 `# ` line in
+# the prematurely-ended fence body becomes a slug a link resolves against where
+# GitHub would 404). No corpus fence nests a marker today; the trade-off is
+# accepted because the alternative (treating info-string closes as content)
+# would leave real links inside mis-closed fences silently unchecked.
 #
 # In: <line> and the current pair. Out: 0 when <line> is a marker that changes
 # state, with the new pair in fence_next_char/fence_next_len (the `norm_result`

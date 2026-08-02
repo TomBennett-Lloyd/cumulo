@@ -600,6 +600,16 @@ run_check "$ROOT"
 expect_rc 0 "$rc"
 expect_out "1 link(s) checked"
 expect_not_out "inner-missing.md"
+# And the >= boundary: a LONGER run of the same character is a legal close (CommonMark),
+# so the broken link after it must be seen. Pins -ge rather than -eq at the length
+# comparison — an -eq mutant leaves the fence open and this variant is the only one
+# that notices (the silent-skip direction).
+case_ctx="longer same-character run closes the fence"
+fixture fence_longer_run_close
+must append "$ROOT/README.md" '```text' '````' '' 'Gone: [missing](docs/missing.md).'
+run_check "$ROOT"
+expect_rc 1 "$rc"
+expect_out "docs/missing.md"
 case_ctx=""
 end
 
