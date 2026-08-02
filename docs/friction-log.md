@@ -31,3 +31,13 @@ Entry format:
 
 - Phase: process
 - Observed: a system-reminder claiming the GitHub API rate limit (5,000/hr) was exceeded appended itself to tool results at least three times across two sessions — orchestrator once, sub-agents twice — while `gh api rate_limit` reported ~4,999 remaining on every occasion. The reminder is spurious, and an agent that takes it at face value stalls against a ceiling it is nowhere near. Practice until this earns a rule: run `gh api rate_limit` and believe the number, not the reminder.
+
+## 2026-08-02 — session-wide (PRs #169–#207)
+
+- Phase: process
+- Observed: twenty-two PRs merged across this unsupervised run (#169 through #207) under the gates graduated on 2026-08-01, every one of them auto-merged — no PR in the span carried the `awaiting-review` label — with zero revert PRs repo-wide, so the tightening condition recorded in `merge.note` has never fired. Banked as evidence for the user's future gate decisions; no change proposed, since what remains gated is the `humanAlways` paths and `adr` plan approval, which should stay in place while the user is away. The absence of new `docs/review-feedback.md` entries in the span is not part of this evidence — the last entry (ADR 0006) predates the run, and zero human-gated merges makes the category unexercised rather than quiet.
+
+## 2026-08-02 — retro batch 3 (prune finding, report-only)
+
+- Phase: process
+- Observed: running tallies embedded in prose drift from what they count. `implementer.md`'s absolute-paths rule says "Four incidents so far" and then names two; `planner.md`'s consultant-dispatch tally (#115, #122) duplicates this log's "Two for two" record and will desync the moment a third dispatch lands. Two candidate fixes with no obvious winner — drop the embedded counters and keep only the named incidents, or name one owner per tally — so no change made this batch.

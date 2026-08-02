@@ -9,7 +9,7 @@ Per cycle:
 
 1. Spawn the `reviewer` agent on the branch diff.
 2. Partition its findings:
-   - **FIX-NOW** → dispatch fixes to an `implementer` (batch related findings into one dispatch; trivial one-liners you may fix inline).
+   - **FIX-NOW** → dispatch fixes to an `implementer` (batch related findings into one dispatch; trivial one-liners you may fix inline — with absolute paths, after confirming `pwd`, since a backgrounded command's `cd` does not persist and this shell has twice been found back in the main checkout, where even the locator greps read the wrong tree).
    - **SYSTEMIC** → append to `docs/tech-debt.md` in its entry format, with file refs and this PR as source. Do NOT attempt to fix them in this task.
 3. Re-run checks (`pnpm verify`), next cycle.
 
