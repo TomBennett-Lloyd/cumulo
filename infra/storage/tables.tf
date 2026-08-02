@@ -42,7 +42,7 @@
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
 #
-#   * point_in_time_recovery off — $0.20/GB-month to protect data the owner has
+#   * point_in_time_recovery off — $0.22/GB-month to protect data the owner has
 #     decided is disposable. Every stored fact is refetchable from Open-Meteo or
 #     recomputable by a pure model function.
 #   * deletion_protection_enabled = false — clean `terraform destroy` is a
