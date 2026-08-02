@@ -146,16 +146,19 @@ run_gate_on_this_repo() { # the shipped configuration: real repository, no fixtu
 # ====================================================================================
 # 1. the default target — the configuration that actually ships
 # ====================================================================================
-# testing.md rule 7: every other case reaches its target through a throwaway repo
-# holding a copy of the gate and two hand-written scripts. Without this case the suite
-# would prove the gate works everywhere except where it runs — a tree with real sourced
-# files, real extensionless shebang hooks, and `# shellcheck source=` directives that
-# resolve only because of the gate's -P SCRIPTDIR. The census substring is asserted
+# testing.md rule 7, but for a reason `pnpm lint:sh` cannot supply: verify already
+# runs this exact command over the real tree, so a shellcheck finding here is caught
+# either way. What only this case can catch is green-by-absence at the gate level —
+# a discovery regression that finds nothing and exits 0 would pass lint:sh silently,
+# and `expect_out "file(s)"` is the assertion that refuses it. (run-script-tests'
+# harness reaches the opposite verdict for its own default path — "not simulable,
+# cannot be green by absence" — which is true there because that gate's output IS
+# the discovery; this gate's clean exit is not.) The census substring is asserted
 # without a count on purpose: the number of scripts in this repository is expected to
 # change, and pinning it here would make an unrelated new script fail this case.
 begin "gate exits 0 over this repository's own shell scripts, with no fixture"
 run_gate_on_this_repo
-expect_rc 0 "$rc"
+[ "$rc" = 0 ] || bad "gate over this repository exited $rc; output: $out"
 expect_out "file(s)"
 end
 
