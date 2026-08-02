@@ -1,5 +1,5 @@
 import { apiErrorSchema, type FleetSite } from '@cumulo/shared';
-import { StorageError, type SeriesCleanupOutcome } from '@cumulo/storage';
+import { StorageError } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,7 +9,6 @@ import {
   RANELAGH_ID,
   routeRequest,
 } from '../api-fixtures';
-import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
 import {
   deleteSite,
@@ -17,15 +16,11 @@ import {
   deleteSiteDeadlineEvent,
   type DeleteSiteDeps,
 } from './delete-site';
-import { seriesCleanupFailedEvent, seriesCleanupIncompleteEvent } from './series-cleanup';
 
 /** Which delete an origin should take, recorded so the choice is assertable. */
 interface DeleteCalls {
   readonly counted: string[];
   readonly plain: string[];
-  readonly cleaned: string[];
-  /** The item budget each pass was handed. */
-  readonly budgets: number[];
   readonly logged: Record<string, unknown>[];
   /** Every backoff the route slept, in order: the curve as it actually ran. */
   readonly sleeps: number[];
@@ -33,13 +28,6 @@ interface DeleteCalls {
 
 /** What the table holds for the requested id: a site, or nothing at all. */
 const NO_SUCH_SITE = 'no-such-site';
-
-/** A cleanup pass that emptied the partition and hit neither of its limits. */
-const CLEAN_SWEEP: SeriesCleanupOutcome = {
-  deletedCount: 3,
-  declinedCount: 0,
-  budgetReached: false,
-};
 
 /** The site the counted delete is for; the fixture's default origin is seed. */
 const userSite = fleetSite({ origin: 'user' });
@@ -55,7 +43,6 @@ interface DeleteScript {
    * the fleet that never stops contending.
    */
   readonly deletes?: readonly DeleteAnswer[];
-  readonly cleanup?: () => Promise<SeriesCleanupOutcome>;
   /**
    * Makes the counted delete *reject* rather than answer — the shape a storage
    * failure that is nobody's expected outcome arrives in, as opposed to the
@@ -78,8 +65,6 @@ const scriptedSite = (script: DeleteScript = {}): { deps: DeleteSiteDeps; calls:
   const calls: DeleteCalls = {
     counted: [],
     plain: [],
-    cleaned: [],
-    budgets: [],
     logged: [],
     sleeps: [],
   };
@@ -105,13 +90,6 @@ const scriptedSite = (script: DeleteScript = {}): { deps: DeleteSiteDeps; calls:
         const answer = answerFor(deletes, calls.plain.length);
         calls.plain.push(siteId);
         return Promise.resolve({ deleted: answer === 'deleted' });
-      },
-    },
-    series: {
-      deleteSiteSeries: (siteId, maxItems) => {
-        calls.cleaned.push(siteId);
-        calls.budgets.push(maxItems);
-        return script.cleanup?.() ?? Promise.resolve(CLEAN_SWEEP);
       },
     },
     log: (entry) => calls.logged.push(entry),
@@ -152,7 +130,6 @@ describe('DELETE /v1/sites/{siteId}', () => {
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
     expect(calls.counted).toEqual([]);
     expect(calls.plain).toEqual([]);
-    expect(calls.cleaned).toEqual([]);
   });
 
   it('answers 400 for a path id that is not a uuid, without touching the table', async () => {
@@ -200,9 +177,6 @@ describe('DELETE /v1/sites/{siteId}', () => {
     // absence, which no amount of waiting will change.
     expect(calls.counted).toHaveLength(1);
     expect(calls.sleeps).toEqual([]);
-    // No cleanup either: the site this request would have cleaned up after is
-    // the other request's to finish.
-    expect(calls.cleaned).toEqual([]);
   });
 
   it('retries the counted delete after a conflict and still answers 204', async () => {
@@ -217,7 +191,6 @@ describe('DELETE /v1/sites/{siteId}', () => {
     expect(calls.counted).toEqual([RANELAGH_ID, RANELAGH_ID]);
     // Slept before re-issuing rather than hot-retrying into the same winner.
     expect(calls.sleeps).toEqual([25]);
-    expect(calls.cleaned).toEqual([RANELAGH_ID]);
   });
 
   it('answers 404 when the site went away between conflicted attempts', async () => {
@@ -234,7 +207,6 @@ describe('DELETE /v1/sites/{siteId}', () => {
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
     expect(calls.counted).toHaveLength(2);
     expect(calls.sleeps).toEqual([25]);
-    expect(calls.cleaned).toEqual([]);
   });
 
   it('answers 500 naming the exhausted budget when every delete conflicts', async () => {
@@ -256,9 +228,6 @@ describe('DELETE /v1/sites/{siteId}', () => {
         retries: 9,
       },
     ]);
-    // The row is still there, so its series points are not this request's to
-    // delete — a cleanup here would strip a live site's history.
-    expect(calls.cleaned).toEqual([]);
   });
 
   it('answers 500 when the deadline runs out between conflicted attempts', async () => {
@@ -281,8 +250,6 @@ describe('DELETE /v1/sites/{siteId}', () => {
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
     expect(calls.counted).toHaveLength(2);
     expect(calls.logged).toEqual([{ event: deleteSiteDeadlineEvent, siteId: RANELAGH_ID }]);
-    // The row is still there, so its points are not this request's to delete.
-    expect(calls.cleaned).toEqual([]);
   });
 
   it('does not issue even the first counted delete without the budget for it', async () => {
@@ -343,89 +310,11 @@ describe('DELETE /v1/sites/{siteId}', () => {
     expect(calls.sleeps).toEqual([]);
   });
 
-  it("deletes the site's series points once the row is gone", async () => {
-    const { deps, calls } = scriptedSite({ stored: userSite });
-
-    await deleteSite(deps, deleteRanelagh);
-
-    expect(calls.cleaned).toEqual([RANELAGH_ID]);
-  });
-
-  it('hands the cleanup the budget derived from the function timeout', async () => {
-    // The handler must not invent its own ceiling: an unbounded pass here is
-    // what turns a committed delete into a function timeout.
-    const { deps, calls } = scriptedSite();
-
-    await deleteSite(deps, deleteRanelagh);
-
-    expect(calls.budgets).toEqual([SERIES_CLEANUP_MAX_ITEMS]);
-  });
-
-  it('still answers 204 when the series cleanup fails, and says so in the log', async () => {
-    const { deps, calls } = scriptedSite({
-      cleanup: () =>
-        Promise.reject(
-          new StorageError(
-            { operation: 'deleteSiteSeries', table: 'cumulo-series-dev' },
-            { cause: new Error('throughput exceeded') },
-          ),
-        ),
-    });
-
-    const response = await deleteSite(deps, deleteRanelagh);
-
-    expect(response.statusCode).toBe(204);
-    expect(calls.logged).toEqual([
-      {
-        event: seriesCleanupFailedEvent,
-        siteId: RANELAGH_ID,
-        detail:
-          "StorageError: storage operation 'deleteSiteSeries' failed on table 'cumulo-series-dev'",
-      },
-    ]);
-  });
-
-  it('reports deletes the table declined rather than treating them as done', async () => {
-    const { deps, calls } = scriptedSite({
-      cleanup: () => Promise.resolve({ deletedCount: 18, declinedCount: 7, budgetReached: false }),
-    });
-
-    const response = await deleteSite(deps, deleteRanelagh);
-
-    expect(response.statusCode).toBe(204);
-    expect(calls.logged).toEqual([
-      {
-        event: seriesCleanupIncompleteEvent,
-        siteId: RANELAGH_ID,
-        deletedCount: 18,
-        declinedCount: 7,
-        budgetReached: false,
-      },
-    ]);
-  });
-
-  it('reports a pass that stopped at its item budget with rows still to go', async () => {
-    // The common case for an old site: the budget buys one batch, and the rest
-    // of the partition is the TTL's job. Silence here would read as "clean".
-    const { deps, calls } = scriptedSite({
-      cleanup: () => Promise.resolve({ deletedCount: 25, declinedCount: 0, budgetReached: true }),
-    });
-
-    const response = await deleteSite(deps, deleteRanelagh);
-
-    expect(response.statusCode).toBe(204);
-    expect(calls.logged).toEqual([
-      {
-        event: seriesCleanupIncompleteEvent,
-        siteId: RANELAGH_ID,
-        deletedCount: 25,
-        declinedCount: 0,
-        budgetReached: true,
-      },
-    ]);
-  });
-
-  it('logs nothing when the pass emptied the partition', async () => {
+  it('logs nothing when the delete simply succeeded', async () => {
+    // The negative control on this route's log sink: every entry it writes names
+    // a failure (contention exhausted, or the deadline), so a plain 204 must be
+    // silent. Nothing runs after the row is gone — the departed site's series
+    // rows are the TTL's job (ADR 0007), not a pass with an outcome to report.
     const { deps, calls } = scriptedSite();
 
     await deleteSite(deps, deleteRanelagh);

@@ -5,7 +5,7 @@ import {
   type FleetSite,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
+import type { SiteAdapter } from '@cumulo/storage';
 
 import type { RequestDeadline } from '../http/request-deadline';
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
@@ -13,7 +13,6 @@ import type { RouteRequest } from '../http/router';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
 import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
-import { cleanUpSiteSeries } from './series-cleanup';
 
 /**
  * `POST /v1/sites` — add a site to the fleet.
@@ -112,8 +111,6 @@ export interface CreateSiteDeps {
     SiteAdapter,
     'createUserSiteWithCap' | 'oldestUserSite' | 'evictAndCreateUserSite'
   >;
-  /** Only for cleaning up after an eviction; the API writes no series point. */
-  readonly series: Pick<SeriesAdapter, 'deleteSiteSeries'>;
   /** Fixed-width UTC to the second — `utcIsoTimestampSchema`'s only accepted form. */
   readonly now: () => UtcIsoTimestamp;
   readonly newSiteId: () => string;
@@ -133,22 +130,27 @@ export interface CreateSiteDeps {
 type StoreSiteLoss = 'conflict' | 'oldest_gone' | 'counter_index_drift';
 
 /**
- * How the site came to be stored — which is not a detail: an eviction leaves an
- * ex-site's series points behind, and only this outcome knows whose. Exhaustion
- * carries the last loss because it is the one thing that distinguishes "the
- * fleet is busy" from "the counter and the index have genuinely diverged", and
- * the log line is where an operator reads it.
+ * How the site came to be stored — which is not a detail: `created` and
+ * `evicted` record *which* adapter call committed the row, and so which of the
+ * two ways past the cap this request took. Exhaustion carries the last loss
+ * because it is the one thing that distinguishes "the fleet is busy" from "the
+ * counter and the index have genuinely diverged", and the log line is where an
+ * operator reads it.
+ *
+ * Neither storing outcome names the evicted site: nothing after the committed
+ * write reads it. The departed site's series rows are left to ADR 0002's 90-day
+ * TTL, which is the whole of X3's series half (ADR 0007).
  */
 type StoreSiteOutcome =
   | { readonly stored: 'created' }
-  | { readonly stored: 'evicted'; readonly evictedSiteId: string }
+  | { readonly stored: 'evicted' }
   | { readonly stored: 'exhausted'; readonly lastOutcome: StoreSiteLoss }
   | { readonly stored: 'out_of_time' };
 
 /** One pass at storing the site: a create, and the eviction it may need. */
 type StoreSiteAttempt =
   | { readonly stored: 'created' }
-  | { readonly stored: 'evicted'; readonly evictedSiteId: string }
+  | { readonly stored: 'evicted' }
   | { readonly stored: 'lost'; readonly loss: StoreSiteLoss }
   | { readonly stored: 'out_of_time' };
 
@@ -206,9 +208,7 @@ const attemptStore = async (
     return { stored: 'out_of_time' };
   }
   const evicted = await sites.evictAndCreateUserSite(oldest.siteId, site);
-  return evicted.evicted
-    ? { stored: 'evicted', evictedSiteId: oldest.siteId }
-    : { stored: 'lost', loss: evicted.reason };
+  return evicted.evicted ? { stored: 'evicted' } : { stored: 'lost', loss: evicted.reason };
 };
 
 /**
@@ -285,10 +285,6 @@ export const createSite = async (
       lastOutcome: outcome.lastOutcome,
     });
     return errorResponse('internal', 'the site could not be added');
-  }
-
-  if (outcome.stored === 'evicted') {
-    await cleanUpSiteSeries(deps, outcome.evictedSiteId, request.deadline);
   }
 
   return jsonResponse(201, fleetSiteSchema, site);
