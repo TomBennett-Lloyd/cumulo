@@ -1,4 +1,8 @@
-import { createSiteInputSchema, type CreateSiteInput } from '@cumulo/shared';
+import {
+  createSiteInputSchema,
+  MAX_PLAUSIBLE_RESIDENTIAL_KW,
+  type CreateSiteInput,
+} from '@cumulo/shared';
 import { useId, useState, type ReactElement, type SubmitEvent } from 'react';
 
 import type { CreationRefusal } from './creation-throttle';
@@ -72,7 +76,7 @@ const NUMERIC_FIELDS: readonly NumericFieldSpec[] = [
   {
     field: 'capacityKw',
     label: 'Capacity',
-    hint: 'Nameplate DC kilowatts, up to 50.',
+    hint: `Nameplate DC kilowatts, up to ${String(MAX_PLAUSIBLE_RESIDENTIAL_KW)}.`,
   },
 ];
 
