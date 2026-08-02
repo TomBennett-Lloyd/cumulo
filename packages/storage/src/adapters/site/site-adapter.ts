@@ -122,13 +122,28 @@ const NO_CANCELLATION_REASON = 'None';
  * `None` for the items that were fine) is the same collision reported per item.
  *
  * The `every` clause is load-bearing, in the same way {@link cancelledOnlyBy}'s
- * "and by nothing else" is. A cancellation mixing `TransactionConflict` with a
- * `ConditionalCheckFailed` is not a bare race — a condition this adapter cares
- * about also failed, and the domain verdict has to win. A cancellation mixing
- * it with a capacity code (`ProvisionedThroughputExceeded`, `ThrottlingError`)
- * is not a bare race either: retrying that against a throttled table is the
- * thundering herd, and capacity classification is #166's decision to make, not
- * this predicate's. Both stay a `StorageError`.
+ * "and by nothing else" is: nothing mixed with `TransactionConflict` is a bare
+ * race, so this predicate refuses every such cancellation. What each mix then
+ * *becomes* is decided by {@link transactUnless}, which asks
+ * {@link cancelledOnlyBy} first, and the two mixes go opposite ways:
+ *
+ * - **A `ConditionalCheckFailed` on the item whose condition is a domain
+ *   answer** wins outright, conflict or no conflict. On a capped create the
+ *   domain item is the counter at index 1, so `[TransactionConflict,
+ *   ConditionalCheckFailed]` is answered `condition_failed` — a full fleet —
+ *   before this predicate is ever asked, and the `every` clause would decline
+ *   it in any case. The domain verdict beats a conflict elsewhere in the same
+ *   transaction on both counts, and the caller is told the cap, not to retry.
+ * - **A `ConditionalCheckFailed` anywhere else** is neither verdict, and stays
+ *   a `StorageError`: `[ConditionalCheckFailed, TransactionConflict]` on that
+ *   same create is the site put's `attribute_not_exists(siteId)` failing — a
+ *   violated invariant no retry may re-run — and it is not the cap either.
+ *
+ * A conflict mixed with a capacity code (`ProvisionedThroughputExceeded`,
+ * `ThrottlingError`) is not a bare race either, and has no domain reading at
+ * all: retrying it against a throttled table is the thundering herd, and
+ * capacity classification is #166's decision to make, not this predicate's. It
+ * stays a `StorageError`.
  */
 const conflictCancelled = (cause: unknown): boolean => {
   if (cause instanceof TransactionConflictException) {
@@ -470,9 +485,11 @@ export class SiteAdapter extends StorageAdapterBase {
    * intent, so the mechanism is shared rather than copied three times
    * (`docs/standards/structure.md` rule 7). What is *not* parameterised is what
    * counts as a domain answer: that stays two rules, in
-   * {@link cancelledOnlyBy} and {@link conflictCancelled}. The condition is
-   * checked **first**, so when a cancellation carries both verdicts the domain
-   * answer wins.
+   * {@link cancelledOnlyBy} and {@link conflictCancelled}. The two
+   * classifications are disjoint by construction — `cancelledOnlyBy` requires
+   * exactly one `ConditionalCheckFailed`, `conflictCancelled` requires none —
+   * so no cancellation can satisfy both and their evaluation order is not
+   * load-bearing; the domain check simply runs first.
    *
    * **This adapter never retries a conflict**, and that is a decision rather
    * than an omission. ADR 0002's layer-ownership rule (Amendments, #122) gives

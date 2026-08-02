@@ -10,7 +10,7 @@ import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
-import { conflictRetryDelayMs } from './conflict-retry';
+import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
 import { cleanUpSiteSeries } from './series-cleanup';
 
 /**
@@ -47,7 +47,17 @@ import { cleanUpSiteSeries } from './series-cleanup';
 export const createSiteStoreExhaustedEvent = 'api.site.create-store-exhausted';
 
 /**
- * How many times this route may try to store the site before giving up: **12**.
+ * The attempts set aside for the one loss that is nobody's lost race: **2**.
+ *
+ * The `user-sites-by-age` index is eventually consistent, so it can re-serve a
+ * site an earlier attempt has already evicted — the eviction is then cancelled
+ * by `attribute_exists(siteId)` and an attempt is spent without any request
+ * having contended with another.
+ */
+const INDEX_DRIFT_SLACK = 2;
+
+/**
+ * How many times this route may try to store the site before giving up.
  *
  * An attempt is consumed by any *loss*, and there are three kinds, each losable
  * in a way another attempt can win:
@@ -63,32 +73,27 @@ export const createSiteStoreExhaustedEvent = 'api.site.create-store-exhausted';
  * - **`counter_index_drift`** — the counter says full and the `user-sites-by-age`
  *   index offers nothing to evict.
  *
- * **Where 12 comes from.** It is a derivation, not an assertion, and it shares
- * its one premise with `./conflict-retry.ts`: at most 10 transactions can be
- * writing the fleet counter at once — the two counter-writing route keys admit
- * 4 + 2 each per second under `infra/api/gateway.tf`'s `route_settings`
- * (`throttling_rate_limit = 2`, `throttling_burst_limit = 4`), and the account's
- * Lambda concurrency limit of 10 (measured in #29) binds below that combined 12,
- * because requests past it are refused at Lambda before they reach DynamoDB.
- * Each round of contention has a winner, so a request loses at most 9 rounds
- * before its turn: 9 losses + the attempt that wins = 10. The remaining **2** is
- * slack for the one loss that is not adversarial — the `user-sites-by-age` index
- * is eventually consistent and can re-serve a site an earlier attempt already
- * evicted, which costs an attempt without anyone having lost a race.
+ * **Where the number comes from.** The expression below is the derivation, and
+ * its adversarial term is `./conflict-retry.ts`'s rather than a second copy:
+ * {@link MAX_CONFLICT_RETRIES} is how many rounds of contention a request can
+ * lose before its turn comes, and the premise it rests on — how many
+ * transactions may be writing the fleet counter at once — is stated there, once.
+ * `+ 1` is the attempt that then wins, and {@link INDEX_DRIFT_SLACK} covers the
+ * losses that are nobody's race.
  *
  * **Why this is not still 3.** #29's E2 attempt-2 fired 11 rounds of 6 parallel
  * creates and got 8 × 500 back, one of them `"the site could not be added"` —
  * the old 3-attempt budget exhausting under exactly the contention it claimed
  * was implausible. That 500 is the regression this number exists to prevent,
- * and the reason the derivation above counts contenders instead of asserting
- * that the throttle makes contention rare.
+ * and the reason it is derived from a count of contenders instead of from an
+ * assertion that the throttle makes contention rare.
  *
  * Bounded rather than unbounded all the same, and for the reason it always was:
  * a public, unauthenticated write path that can spin holds one of ten Lambda
- * slots until the 15-second timeout. Exhausting 12 attempts is a 500 with a log
+ * slots until the 15-second timeout. Exhausting the budget is a 500 with a log
  * line — an incident to look at — because contention no longer explains it.
  */
-const MAX_STORE_ATTEMPTS = 12;
+const MAX_STORE_ATTEMPTS = MAX_CONFLICT_RETRIES + 1 + INDEX_DRIFT_SLACK;
 
 export interface CreateSiteDeps {
   readonly sites: Pick<

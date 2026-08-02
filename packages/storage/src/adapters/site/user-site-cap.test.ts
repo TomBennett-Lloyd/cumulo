@@ -173,6 +173,24 @@ describe('createUserSiteWithCap', () => {
     expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
   });
 
+  it('lets the cap verdict beat a conflict on another item of the same transaction', async () => {
+    // The mirror of the test above, and the shape the fleet actually produces:
+    // the counter at index 1 is both the item the cap condition sits on and the
+    // item concurrent creates collide over, so a cancellation naming a conflict
+    // *and* the cap is reachable. The domain answer wins — the classification is
+    // ordered, not a race between two predicates — because the fleet really is
+    // full and re-issuing the create would only find it full again.
+    ddbMock
+      .on(TransactWriteCommand)
+      .rejects(transactionCancelled(TRANSACTION_CONFLICT, CONDITION_FAILED));
+
+    expect(await adapter().createUserSiteWithCap(userSite, CAP)).toEqual({
+      created: false,
+      reason: 'cap',
+    });
+    expect(ddbMock.commandCalls(TransactWriteCommand)).toHaveLength(1);
+  });
+
   it('does not read a cancellation that names no reason as a conflict', async () => {
     // Negative control for the classification's lower edge, and the reason
     // `conflictCancelled` asks whether *some* reason is a conflict before
