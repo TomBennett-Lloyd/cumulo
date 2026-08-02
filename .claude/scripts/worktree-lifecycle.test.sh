@@ -47,8 +47,9 @@ SCRIPTS=${WORKTREE_SCRIPTS_DIR:-$shipped_scripts}
 
 harness_init_tmp
 
-# The background `sleep` case 8 parks inside a fixture worktree outlives the case if it fails
-# early, and the temp tree cannot be removed cleanly with a process still holding a cwd in it.
+# The background `sleep` that case 8 parks inside a fixture worktree outlives the case if it
+# fails early, and the temp tree cannot be removed cleanly with a process still holding a cwd
+# in it.
 # So the kill loop runs from the library's EXIT trap, ahead of its `rm -rf`.
 bg_pids=""
 harness_extra_cleanup() {

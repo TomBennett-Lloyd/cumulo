@@ -104,7 +104,7 @@ run_gate_on_this_repo() { # the shipped configuration: real repository, no fixtu
 # change, and pinning it here would make an unrelated new script fail this case.
 begin "gate exits 0 over this repository's own shell scripts, with no fixture"
 run_gate_on_this_repo
-[ "$rc" = 0 ] || bad "gate over this repository exited $rc; output: $out"
+[ "$rc" = 0 ] || bad "gate over this repository exited $rc; output: $out$err"
 expect_out "file(s)"
 end
 
