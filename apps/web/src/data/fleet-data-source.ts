@@ -22,11 +22,15 @@ import type { CreateSiteInput, Forecast, GenerationReading, Site } from '@cumulo
  *   ordinary state of a site created seconds ago, not a fault, which is why
  *   the first-forecast poll treats it as "keep waiting".
  * - `invalid-response` — server → client: the fleet sent a payload this client
- *   cannot reconcile with the domain schemas; repeating the identical request
- *   is pointless.
+ *   cannot reconcile with the domain schemas. Changing the request cannot
+ *   help; *time* can — the same request may parse later (a record the
+ *   pipeline is still writing), which is why the first-forecast poll keeps
+ *   waiting on this arm instead of failing fast.
  * - `invalid-request` — client → server: the fleet refused the payload or
- *   parameters we sent; repeating the identical request is pointless — the
- *   request has to change.
+ *   parameters we sent; a *different answer* needs a changed request. A
+ *   consumer whose request is fixed (the first-forecast poll) can only wait
+ *   out its own deadline and report — deliberately pinned behaviour, not an
+ *   invitation to hot-retry.
  * - `forbidden` — the API refused this client on policy, not on content. The
  *   one failure a retry cannot fix: nothing the caller can add to the request
  *   makes it succeed, because what is wrong is *who is asking*. Its recourse is
