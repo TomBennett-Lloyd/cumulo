@@ -1519,7 +1519,7 @@ The figures and the workload they are computed from are [ADR 0002](../docs/adr/0
 | **Backups / recovery**                                               | PITR off ($0.20/GB-month avoided), no on-demand backups, no exports, AWS-owned encryption key rather than a ~$1/month CMK | **$0.00/mo** |
 | **Total**                                                            |                                                                                                                           | **$0.00/mo** |
 
-Genuinely zero, not a rounding error: every row above is $0 as billed rather than a sub-cent amount rounded down, which is what separates this table from the bootstrap stack's. What it is **not** is a stack with nothing that bills for existing — DynamoDB charges for stored bytes whether or not anything ever reads them, and this stack's **~3.5 GB** is exactly such a line. What makes it $0.00 is that the always-free **25 GB** absorbs it with ~86% of the pool still spare, and that allowance does not expire.
+Genuinely zero on the at-rest rows — the provisioned capacity, alarms, and stored bytes all sit inside allowances and bill $0 rather than rounding down to it. The one exception is the on-demand tables' activity row: request units have no perpetual free allowance, so its $0.00 is a sub-cent amount at demo volume displayed as zero, the same shape as the bootstrap stack's. What it is **not** is a stack with nothing that bills for existing — DynamoDB charges for stored bytes whether or not anything ever reads them, and this stack's **~3.5 GB** is exactly such a line. What makes it $0.00 is that the always-free **25 GB** absorbs it with ~86% of the pool still spare, and that allowance does not expire.
 
 Notes on what would change that:
 
