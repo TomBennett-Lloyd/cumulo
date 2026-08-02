@@ -136,3 +136,21 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - Where: the shape arm of the broken-git-link guard in `.claude/scripts/reap-worktree.sh`; the boundary is recorded in the case-35 comment of `.claude/scripts/worktree-lifecycle.test.sh`
 - What: every fixture that breaks the `.git` link by deleting the file is answered by the identity arm (an empty link joins onto `$wt` and fails the comparison), so the shape arm's `keep` survives mutation — proven twice, by the reviewer and by the override-seam reproduction. Its only unique input is a `.git` file holding the recorded admin dir with the `gitdir: ` prefix stripped: a shape no tool produces, which is why the reviewer sized closing it as defence-in-depth rather than behaviour and declined to spend a cycle. If a future reader wants the arm pinned, the case is six lines on `nested_worktree_fixture` writing that exact content and asserting `broken-git-link`.
 - Source: #102 review cycle 1
+
+## 2026-08-02 — The token preview hand-rolls a chart the chrome convention cannot reach
+
+- Where: `apps/web/src/preview/TokensPreviewChart.tsx`; the convention it diverges from is `apps/web/src/charts/chart-copy.ts` and `docs/design/chart-treatment.md`'s "every chart states the clock" paragraph
+- What: the preview's swatch builds its own plot and table twin, so its time column still reads `Time` while every shipped twin reads `Time (UTC)`, and its plot prints no clock — invisible to every gate (`preview/` is excluded from the copy contract, and `chart-copy.ts` cannot reach a hand-rolled twin). Not a one-line fix: the swatch's hours are invented strings, not UTC instants, so stamping a clock on them would assert a zone about fabricated data, and the file's own header disclaims being a chart component. Either converge the preview onto `forecastChartTable`/`chart-copy.ts`, or declare the swatch exempt in `chart-treatment.md` so "every chart states the clock" reads as the spec it is rather than a census the repo contradicts.
+- Source: #104 review cycle 1
+
+## 2026-08-02 — A dashboard test pins the chart's chrome wording by whole-table toEqual
+
+- Where: the aggregation-completeness test's row assertion in `apps/web/src/dashboard/FleetPanel.test.tsx`; the chrome it restates is `TIME_COLUMN_HEADER` in `apps/web/src/charts/chart-copy.ts`
+- What: the whole-table `toEqual` embeds the header row, so any future chrome-wording change breaks a test that is about aggregation, in another directory, by a mechanism its comment never mentions — #104 paid that cost once at a wave boundary. Pattern-level fix is a testing-convention decision: the row assertion drops the header row (a `ForecastChart` test owns the header), or the test imports `TIME_COLUMN_HEADER`. Either ends the recurrence; choosing is the decision.
+- Source: #104 review cycle 1
+
+## 2026-08-02 — Five of the twelve consolidated strings sit outside every phrase-class sweep
+
+- Where: `partialAggregateNotice`, `aggregatedFromCaption`, `APP_FAILURE_HEADING`, `APP_FAILURE_ADVICE` and `RETRY_ACTION_LABEL` in `apps/web/src/dashboard/state-copy.ts`; the sweeps are `state-copy-contract.test.ts`'s four assertions
+- What: the contract's phrase classes (pending ellipses, failure prefixes, the banned adjective, the empty-fleet sentence) guard seven of the twelve moved strings; the other five are headings, captions and control names — precisely the class the contract's own header says no mechanical rule can separate from legitimate JSX text. They are pinned by rendered-wording component tests, which catch drift but not re-inlining: a second `Try again` button authored beside its JSX passes every gate. A stated residual, not a defect — the fix (per-string allowlist or a stronger rule) is what the header rejected on rot grounds; recorded so the boundary is a decision on file rather than an accident.
+- Source: #104 review cycle 1
