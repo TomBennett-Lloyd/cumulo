@@ -201,6 +201,8 @@ export const Dashboard = ({
    */
   const createdSitesRef = useRef(createdSites);
   createdSitesRef.current = createdSites;
+  /** The context region itself — the thing a swap has to bring back into view. */
+  const contextRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -252,6 +254,33 @@ export const Dashboard = ({
   useEffect(() => {
     writeSiteIdToUrl(selectedSiteId);
   }, [selectedSiteId]);
+
+  // A scroll position is an external system in the same sense the address bar
+  // is — a property of the document that no render owns and no re-render
+  // restores — so keeping it level with the context is an effect's job
+  // (`react.md` rule 1). The column is one scroller over an unbounded site
+  // list, so a reader who has scrolled to row forty and clicks a marker gets
+  // their answer written into a region that is now off the top of the screen:
+  // the swap happens, and the feedback is invisible. This puts the region back
+  // where it can be read.
+  //
+  // It cannot be a line in the click handlers, for the reason the URL effect
+  // cannot either: a context also arrives without a click — a creation selects
+  // the site it just made, and a `?site=` link opens on one.
+  //
+  // Only *into* a context, never out of one. Closing a panel hands the same
+  // region back to the fleet, and a column that jumped on the way out would
+  // move ground the reader did not ask to move. `block: 'start'` and the
+  // default (instant) behaviour rather than smooth scrolling: this is feedback
+  // for an action already taken, not an animation, and it must not fight a
+  // reader who scrolls immediately after clicking.
+  useEffect(() => {
+    if (selectedSiteId === null && draft === null) {
+      return;
+    }
+
+    contextRegionRef.current?.scrollIntoView({ block: 'start' });
+  }, [selectedSiteId, draft]);
 
   // Derived during render rather than mirrored into state. Memoised for
   // identity rather than speed: this array is what the map clusters, and a
@@ -334,48 +363,54 @@ export const Dashboard = ({
          * reader back the site they had open rather than the fleet they had
          * left. That is why the site panel's condition tests `draft` rather
          * than the dashboard clearing `selectedSiteId` when a draft opens.
+         *
+         * The three occupants share one wrapping element because "the context
+         * region" has to be addressable to be scrolled to, and because exactly
+         * one of them is ever visible — the box is the region, not a stack.
          */}
-        {draft !== null && (
-          <AddSiteForm
-            key={draftKey(draft)}
-            latitude={draft.latitude}
-            longitude={draft.longitude}
-            submitting={creation.status === 'submitting'}
-            refusal={creation.status === 'refused' ? creation.refusal : null}
-            error={creation.status === 'failed' ? creation.message : null}
-            onSubmit={handleSubmit}
-            onCancel={closeDraft}
-          />
-        )}
+        <div className="dashboard-context" ref={contextRegionRef}>
+          {draft !== null && (
+            <AddSiteForm
+              key={draftKey(draft)}
+              latitude={draft.latitude}
+              longitude={draft.longitude}
+              submitting={creation.status === 'submitting'}
+              refusal={creation.status === 'refused' ? creation.refusal : null}
+              error={creation.status === 'failed' ? creation.message : null}
+              onSubmit={handleSubmit}
+              onCancel={closeDraft}
+            />
+          )}
 
-        {draft === null && selectedSite !== null && (
-          <SitePanel
+          {draft === null && selectedSite !== null && (
+            <SitePanel
+              dataSource={dataSource}
+              site={selectedSite}
+              firstForecast={forecast}
+              onRetryFirstForecast={retryForecast}
+              onClose={() => {
+                setSelectedSiteId(null);
+              }}
+            />
+          )}
+
+          {/*
+           * Mounted always, hidden when something else holds the region — which
+           * inverts, on purpose, the unmount-on-leave rule the old view nav
+           * followed. A fleet re-sum in live mode is a paced fan-out of one
+           * request per site (~8 s over 60 sites), so it is a thing to be spent
+           * once and kept, not re-spent every time a reader closes a site. The
+           * fleet's sum changes on exactly one event — a site being added — and
+           * `refreshToken` is that event, counted. Deselection is not an event:
+           * hiding the panel keeps its state, and unhiding it costs nothing.
+           */}
+          <FleetPanel
             dataSource={dataSource}
-            site={selectedSite}
-            firstForecast={forecast}
-            onRetryFirstForecast={retryForecast}
-            onClose={() => {
-              setSelectedSiteId(null);
-            }}
+            sites={sites}
+            hidden={draft !== null || selectedSite !== null}
+            refreshToken={createdSites.length}
           />
-        )}
-
-        {/*
-         * Mounted always, hidden when something else holds the region — which
-         * inverts, on purpose, the unmount-on-leave rule the old view nav
-         * followed. A fleet re-sum in live mode is a paced fan-out of one
-         * request per site (~8 s over 60 sites), so it is a thing to be spent
-         * once and kept, not re-spent every time a reader closes a site. The
-         * fleet's sum changes on exactly one event — a site being added — and
-         * `refreshToken` is that event, counted. Deselection is not an event:
-         * hiding the panel keeps its state, and unhiding it costs nothing.
-         */}
-        <FleetPanel
-          dataSource={dataSource}
-          sites={sites}
-          hidden={draft !== null || selectedSite !== null}
-          refreshToken={createdSites.length}
-        />
+        </div>
 
         <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
           <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">

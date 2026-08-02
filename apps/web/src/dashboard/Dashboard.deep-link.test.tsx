@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe('Dashboard deep links', () => {
-  it('opens on the site its URL names', async () => {
+  it('opens on the site its URL names, and closes back to a fleet and a bare URL', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
 
@@ -53,6 +53,19 @@ describe('Dashboard deep links', () => {
     // the heading having been rendered somewhere harmless.
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
     expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await settle();
+
+    // The way out of a link, which is a different path from the way out of a
+    // click: this selection was never written to the address bar by the sync
+    // effect — it arrived already there, in the lazy initialiser. A dashboard
+    // whose close only undid its own writes would leave a reader who arrived
+    // cold on `?site=` still advertising a site they have shut, and would hand
+    // that stale link back to anyone copying the URL afterwards.
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
+    expect(window.location.search).toBe('');
   });
 
   it('drops a link to a site the fleet does not have, and stops asking about it', async () => {

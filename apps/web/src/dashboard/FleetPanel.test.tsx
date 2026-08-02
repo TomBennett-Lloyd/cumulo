@@ -8,7 +8,7 @@ import {
   type UncertaintyBand,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
@@ -205,6 +205,15 @@ const renderSettled = async (
   return container;
 };
 
+/**
+ * One rendered table row, in column order — the row header and its cells together.
+ *
+ * `th, td` rather than the `cell` role, because the time column is a `rowheader` and a row read as
+ * four values would drop the hour each of them belongs to.
+ */
+const rowCells = (row: HTMLElement): readonly string[] =>
+  Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent);
+
 const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site[]> => {
   const listed = await dataSource.listSites();
   if (listed.kind === 'error') {
@@ -264,6 +273,32 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
       'Partial aggregate: some hours include only 1 of 2 sites.',
     );
     expect(container.querySelector('svg')).not.toBeNull();
+  });
+
+  it('sums the fleet into the chart, hour by hour: median, band bounds and measurement', async () => {
+    await renderSettled(new CountingFleetSource(FULL_FLEET));
+
+    const table = screen.getByRole('table', {
+      name: 'Table view — fleet forecast and measured output, 24 h range, kW',
+    });
+
+    /*
+     * The table twin is where the plotted numbers are readable as text, so it is where the
+     * aggregate can be pinned; the SVG carries the same values as coordinates nobody can assert
+     * on without re-deriving the geometry.
+     *
+     * Every figure below is the fixture's own arithmetic, stated rather than computed: at 06:00
+     * the two sites forecast 2 and 4 kW (median 6), their bands are 1–3 and 3–6 (P10 4, P90 9 —
+     * comonotonic addition, `@cumulo/shared`'s rule, not this panel's), and they measured 1.5 and
+     * 3.5 (5). 07:00 has no readings at all, so its measurement cell is the em dash a gap reads
+     * as — which is what stops a suite from passing on an actuals series that silently went
+     * missing.
+     */
+    expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
+      ['Time', 'P10', 'Median', 'P90', 'Actual'],
+      ['06:00', '4.0', '6.0', '9.0', '5.0'],
+      ['07:00', '6.0', '8.0', '11.0', '—'],
+    ]);
   });
 
   it('states the fleet size when every displayed hour has the whole fleet in it', async () => {

@@ -8,7 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CREATION_WINDOW_MS } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import type { FleetSourceResult, FleetDataSource } from '../data/fleet-data-source';
-import { advanceBy, fleetPanel, renderDashboard, settle, visit } from './dashboard-test-fixture';
+import {
+  advanceBy,
+  fleetPanel,
+  renderDashboard,
+  scrolledIntoView,
+  settle,
+  visit,
+} from './dashboard-test-fixture';
 
 /*
  * The dashboard's composition, proven without WebGL.
@@ -413,6 +420,41 @@ describe('Dashboard context region', () => {
     // opened would land on the fleet panel here.
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
     expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('scrolls the column to the region a context takes, and leaves it alone on close', async () => {
+    const site = firstSeededSite();
+    const container = renderDashboard(new DemoFleetDataSource());
+    await settle();
+
+    const contextRegion = container.querySelector('.dashboard-context');
+
+    /*
+     * What this pins is the dashboard's half of the mechanism: that a context arriving is what
+     * triggers the scroll, that the element scrolled is the context region rather than the column
+     * or the list, and that closing triggers nothing. jsdom has no layout, so the scroll itself is
+     * a stand-in (`dashboard-test-fixture.tsx`) and the pixels are a browser criterion — a reader
+     * who has scrolled the column down to the site list and clicks a marker can see the site panel
+     * without scrolling back up.
+     *
+     * The fleet at rest is not a swap: the region is already showing it, so nothing moves.
+     */
+    expect(scrolledIntoView()).toEqual([]);
+
+    fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+
+    expect(scrolledIntoView()).toEqual([contextRegion]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    // Closing hands the same region back to the fleet. A column that jumped on the way out would
+    // move ground the reader did not ask to move, so the count stands still here.
+    expect(scrolledIntoView()).toEqual([contextRegion]);
+
+    clickMap();
+
+    // A draft is the other way into the region, and it arrives the same way for the reader.
+    expect(scrolledIntoView()).toEqual([contextRegion, contextRegion]);
   });
 
   it('re-sums the fleet when a site is added to it', async () => {

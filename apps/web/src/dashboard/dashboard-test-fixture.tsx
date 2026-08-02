@@ -60,7 +60,32 @@ export const StubMapRegion = ({
   </div>
 );
 
+/**
+ * Stands in for the scroll the column performs when a context takes the region.
+ *
+ * jsdom implements no layout and therefore no `scrollIntoView` at all — the method is simply
+ * absent from its elements, so the dashboard's context-scroll effect would throw here rather than
+ * harmlessly doing nothing. Standing one in is what lets these suites mount a dashboard at all,
+ * and it lets a test read back *which* element was asked, on *which* transition — the two halves
+ * of the mechanism that are the dashboard's own doing.
+ *
+ * What it cannot show is the movement. Nothing in jsdom has a scroll position, so "the swapped-in
+ * context is actually on screen in a column the reader had scrolled halfway down" is a browser
+ * criterion, checked in a browser and named in `docs/design/dashboard-composition.md`. Nothing
+ * read back from here is evidence of that, and `Dashboard.test.tsx` says so where it asserts.
+ */
+const scrollIntoViewStub = vi.fn<(options?: boolean | ScrollIntoViewOptions) => void>();
+
+HTMLElement.prototype.scrollIntoView = scrollIntoViewStub;
+
+/** The elements the dashboard has asked to bring into view since it was mounted, in call order. */
+export const scrolledIntoView = (): readonly unknown[] => scrollIntoViewStub.mock.contexts;
+
 export const renderDashboard = (dataSource: FleetDataSource): HTMLElement => {
+  // The record belongs to this mount. The stub lives on a prototype shared by every test in the
+  // file, so without this a suite would read the scrolls of whatever ran before it.
+  scrollIntoViewStub.mockClear();
+
   const { container } = render(
     <Dashboard theme="light" dataSource={dataSource} mapRegion={StubMapRegion} />,
   );

@@ -52,6 +52,46 @@ selection is never destroyed, only outranked.
 swap over a stack: the column's height does not lurch when a selection arrives, and the map — the
 thing the reader is pointing at — keeps its geometry through every context change.
 
+**A swap scrolls the column back to the region, because being first is not the same as being in
+view.** The original argument for an unbounded site list was that the context region sits at the
+top of the column, so a selection always lands where the reader is looking. That holds at
+`scrollTop: 0` and nowhere else. Sixty rows are taller than the map beside them; a reader who has
+scrolled down to row forty and clicks a marker gets their answer written into a region that is now
+off the top of the screen, and the only feedback they receive is a row highlight. Review cycle 1
+of #148 caught it.
+
+Two shapes were available. Bounding the list's height puts the region permanently in view at the
+cost of a scroller nested inside the column's own — the arrangement the redesign had just removed,
+and the one that makes a reader scroll two things to reach one. Scrolling the column to the region
+on a swap keeps the single scroller and treats the swap as the event it is. The second was chosen:
+`Dashboard.tsx` holds a ref on `.dashboard-context` (the one wrapping box the three occupants
+share, which is why that box exists at all) and an effect brings it into view whenever
+`selectedSiteId` or `draft` becomes non-null. A scroll position is an external system in exactly
+the sense the address bar is, which is what makes this an effect rather than a line in the click
+handlers (`react.md` rule 1) — and it has to be, because a context also arrives without a click:
+a creation selects the site it just made, and a `?site=` link opens on one.
+
+It scrolls _into_ a context and never out of one. Closing hands the same region back to the fleet,
+and a column that jumped on the way out would move ground the reader did not ask to move. The
+scroll is instant rather than smooth: this is feedback for an action already taken, and a smooth
+scroll would fight a reader who starts scrolling immediately after clicking.
+
+**Recorded debt: this is a scroll, not focus management.** A keyboard or screen-reader user gets
+the region scrolled into view but keeps their focus where it was, so reaching the swapped-in
+context still costs them a tab sequence through whatever lies between. Doing it properly means
+deciding where focus lands on each of the three swaps, whether the region is programmatically
+focusable, and what a `Close` returns focus to — a design question for the whole column rather
+than a line in this effect, and larger than the finding that prompted the scroll. Logged in
+`docs/tech-debt.md`.
+
+jsdom cannot check any of this: it implements no layout, so it has no `scrollIntoView` and no
+scroll position to move. `Dashboard.test.tsx` pins the half that is the dashboard's own doing —
+that a context arriving is what triggers the scroll, that the element scrolled is the context
+region, and that closing triggers nothing — against a stand-in installed in
+`dashboard-test-fixture.tsx`. The other half is a browser criterion: **with the column scrolled
+down to the site list, clicking a marker leaves the site panel visible without the reader
+scrolling back up.**
+
 ## The fleet panel stays mounted
 
 `FleetPanel` is rendered always and carries a `hidden` attribute when something else holds the

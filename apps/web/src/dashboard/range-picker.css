@@ -19,12 +19,20 @@
 
 /* Same shape as `.theme-toggle`, deliberately its own class: a range is a
  * choice among three, and borrowing the toggle's selector would tie a data
- * control to a chrome control that is free to change. */
+ * control to a chrome control that is free to change.
+ *
+ * The unpressed fill is `--color-bg`, not `--color-surface`: the picker sits
+ * inside a `--color-surface` card (`.fleet-panel`), so a surface-on-surface chip
+ * has no edge at all and the two windows the reader has *not* chosen read as
+ * plain text rather than as controls. `--color-bg` against a card is the same
+ * pairing `.fleet-panel-hint` uses two rules away in fleet-panel.css, which is
+ * why it is that token rather than a border invented here. The toggle this shape
+ * came from sits on the page background, where the inversion never arises. */
 .range-picker-button {
   padding: var(--space-2) var(--space-4);
   border: none;
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
