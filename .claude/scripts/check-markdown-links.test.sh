@@ -7,12 +7,14 @@
 # target, a link that walks out of the repository — are exercised for real without ever
 # mutating this repo's own markdown.
 #
-# Fixtures `git init` but never commit: the gate discovers with
+# Fixtures `git init` but, with one exception, never commit: the gate discovers with
 # `git ls-files --cached --others --exclude-standard`, so an untracked-unignored file is
 # already in the population. That is deliberate, not a shortcut — it means the fixtures
 # exercise the `--others` half of the discovery rule, which is the half that governs a doc
 # you have just written (precedent: lint-shell.test.sh's fixtures, which do commit because
-# that gate's regression is about the index disagreeing with the working tree).
+# that gate's regression is about the index disagreeing with the working tree). The exception
+# is case 20, whose whole subject is the index and the working tree disagreeing: a target can
+# only be `--cached` and absent from disk if it was committed first.
 #
 # One case deliberately runs the gate with NO argument, against the real repo: every other
 # case pins ROOT to a fixture, so without it the shipped default path could rot green
@@ -21,6 +23,12 @@
 # Case numbering below matches the #127 plan's C2 case list 1-16 one-for-one, so a reviewer
 # can read them side by side. Case 0 is the parse check the sibling harnesses open with, and
 # case 17 pins two shipped behaviours C1 recorded as deviations from the plan's wording.
+# Cases 18-20 come from review cycle 1. 18 and 19 are the two shapes that exposed a real
+# fence-parity bug: against the gate as first shipped, each one's broken-link-after-the-fence
+# fixture exited 0 announcing "1 link(s) checked" (the link was never looked at), while 19's
+# second fixture reported a link that was sitting inside a fence — the same parity error seen
+# from the other side. 20 covers the tracked-but-absent target, the one branch pair nothing
+# else reached.
 #
 # What a green run of THIS harness does not say: it measures the gate, not GitHub. Every
 # anchor expectation here is the gate's slug algorithm agreeing with itself. The claim that
@@ -132,6 +140,14 @@ append() { # append <path> <line...>
   for line in "$@"; do
     printf '%s\n' "$line" >>"$path" || return 1
   done
+}
+
+# Identity is passed per-command: the harness must not depend on (or write) any git config.
+# Only case 20 commits.
+gitc() {
+  local dir="$1"
+  shift
+  git -C "$dir" -c user.email=test@test -c user.name=test -c commit.gpgsign=false "$@"
 }
 
 # work_tree <name> -> sets ROOT to a fresh, empty git work tree.
@@ -369,9 +385,13 @@ end
 # ==========================================================================================
 # 9. a link that walks out of the repository
 # ==========================================================================================
-# Existence is not the test. The target below is a real file on this disk, and it is still
-# broken: nothing above the repository root exists on GitHub, so the link 404s for everyone
-# who is not the author. This is why resolution is lexical rather than `-e`.
+# Existence is not the test. The target below is a real file on this disk, and the gate still
+# rejects it — not because such a link necessarily 404s (it need not: github.com's blob view
+# resolves `../..` above the repo root against the org path, which is how README.md's old
+# `[issues](../../issues)` worked), but because a target outside the work tree is unresolvable
+# from the only thing this gate can see, and is not portable across the hosts and contexts the
+# same file is read in. Refusing it is a rule, not a diagnosis, and lexical resolution rather
+# than `-e` is what makes the rule hold regardless of what happens to be on the disk.
 begin "a link escaping the repository root fails even though the target exists on disk"
 fixture containment
 must write "$TMP_ROOT/escapee.md" '# Escapee'
@@ -524,6 +544,91 @@ expect_rc 1 "$rc"
 expect_out "README.md:3"
 expect_out "has a '](' that is never closed on the same line"
 expect_not_out "extracted no links at all"
+end
+
+# ==========================================================================================
+# 18. a fence marker of the other kind does not close the fence
+# ==========================================================================================
+# The regression that motivated the close rule, in the reviewer's own shape. Fenced state used
+# to be a boolean toggled by ANY marker, so the ``` line below closed the ~~~ fence and the
+# ~~~ line then re-opened it — leaving the rest of the file "inside a fence" and every link in
+# it silently unchecked. Against that gate this fixture exited 0 and announced
+# "1 link(s) checked", which is the exact failure class the gate exists to prevent: a green
+# run that means "I stopped looking". The `~~~text` / ``` pairing is not exotic, it is how you
+# document a fence inside a fence, which this repo's docs about markdown gates now do.
+begin "a backtick marker inside a tilde fence is content, and later links are still checked"
+fixture fence_other_marker
+must append "$ROOT/README.md" '~~~text' '```' '~~~' '' 'Gone: [missing](docs/missing.md).'
+# Under every bash on the box, like cases 1 and 8: measuring the marker's run length peels it
+# one character at a time with `${rest#"$ch"}`, and quote removal inside a pattern is one of
+# the places 3.2 and 4.4+ have differed.
+for interpreter in $BASHES; do
+  case_ctx="$interpreter"
+  run_check_with "$interpreter" "$ROOT"
+  expect_rc 1 "$rc"
+  # Line 8, not line 4: the broken link is the one in prose AFTER the fence closed.
+  expect_out "README.md:8"
+  expect_out "docs/missing.md"
+  expect_out "is not a file or directory git lists"
+  expect_out "1 broken link(s)"
+done
+case_ctx=""
+end
+
+# ==========================================================================================
+# 19. a shorter run of the same character does not close the fence either
+# ==========================================================================================
+# The length half of CommonMark's close rule, which the character half alone does not give
+# you: a four-backtick fence is the standard way to show three-backtick markdown, and a close
+# rule that ignored run length would end the fence on the line being quoted.
+begin "a three-backtick line inside a four-backtick fence is content: a close needs the run length"
+case_ctx="broken link after the fence"
+fixture fence_shorter_run
+must append "$ROOT/README.md" '````text' '```' '````' '' 'Gone: [missing](docs/missing.md).'
+run_check "$ROOT"
+expect_rc 1 "$rc"
+expect_out "README.md:8"
+expect_out "docs/missing.md"
+expect_out "1 broken link(s)"
+# The other direction, and the sharper assertion of the two: the fence has to still be OPEN on
+# the line after the short run, so a link there is content and goes unchecked. Exit code alone
+# could not tell "the fence stayed open" from "parity happened to land right".
+case_ctx="link inside the fence, after the short run"
+fixture fence_shorter_run_inner
+must append "$ROOT/README.md" '````text' '```' '[inner](docs/inner-missing.md)' '````'
+run_check "$ROOT"
+expect_rc 0 "$rc"
+expect_out "1 link(s) checked"
+expect_not_out "inner-missing.md"
+case_ctx=""
+end
+
+# ==========================================================================================
+# 20. a target git lists but the working tree does not have
+# ==========================================================================================
+# The gate deliberately treats a `--cached` path as a valid link target even when it is not on
+# disk (an unstaged `rm` must not make the gate cry "broken" — the header says so, and
+# lint-shell.sh takes the same line). But its HEADINGS cannot be read from a file that is not
+# there, and an anchor link therefore has to reach a verdict the gate owns, with the path in
+# it, rather than a bare `tr: No such file or directory` from the redirect that would open it.
+# The same fixture covers the source-side half of that rule: docs/guide.md is still in the
+# index, so discovery still lists it, and the census counting one markdown file is what proves
+# the scan skipped it rather than dying on it.
+begin "an anchor into a tracked-but-deleted file reports the gate's own verdict, not a redirect error"
+work_tree tracked_absent
+must mkdir -p "$ROOT/docs"
+must write "$ROOT/docs/guide.md" '# Guide' '' '## Usage' '' 'Prose.'
+must write "$ROOT/README.md" '# Readme' '' 'See the [guide](docs/guide.md#usage).'
+must gitc "$ROOT" add -A
+must gitc "$ROOT" commit --quiet -m base
+must rm "$ROOT/docs/guide.md"
+run_check "$ROOT"
+expect_rc 1 "$rc"
+expect_out "README.md:3"
+expect_out "docs/guide.md is not present in the working tree to read headings from"
+expect_not_out "No such file or directory"
+expect_not_out "could not read headings"
+expect_out "across 1 markdown file(s)"
 end
 
 # ==========================================================================================

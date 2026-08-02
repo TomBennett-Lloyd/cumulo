@@ -46,7 +46,12 @@
 #   * reference-style links `[text][ref]` — the `](…)` scan never sees them, so
 #     the link goes unchecked; the definition line `[ref]: path` is likewise not
 #     resolved. This is the one shape that fails QUIET, and it is called out here
-#     because that makes it the shape to notice in review.
+#     because that makes it the shape to notice in review. That "one" is a claim
+#     the fence rule below is load-bearing for, and it was briefly false: the
+#     first cut toggled fenced state on any marker, so a `~~~` fence containing a
+#     ` ``` ` line flipped parity and skipped every link after it, silently. The
+#     close rule fixed that (#127 review cycle 1, pinned by harness cases 18-19),
+#     which makes the claim true again.
 #   * setext headings (`Title` underlined with `===`) contribute no anchor, so
 #     links to them are reported.
 #   * link titles — `](path "title")` — the title becomes part of the target,
@@ -62,6 +67,13 @@
 #     deliberate choice rather than an oversight: recognising indented fences
 #     would make a link inside one silently unchecked, and scanning one as prose
 #     can only ever over-report.
+#   * angle-bracket destinations — `](<path>)`, the spelling CommonMark provides
+#     for targets containing spaces — keep their brackets, so the target is
+#     `<path>` and no listed file is spelled that way.
+#   * percent-encoded paths — `](a%20b.md)` — are never decoded, so a link to a
+#     file whose name really does contain a space is reported. (No file in this
+#     repo has a space in its name, and the gate reporting one is a fair prompt to
+#     keep it that way.)
 #   * `#L12` line anchors and `?plain=1` query strings are GitHub-web-only
 #     spellings with no on-disk meaning; a fragment on a non-markdown target is
 #     reported as unverifiable rather than guessed at. None exist today.
@@ -156,10 +168,58 @@ ALL="$NL$all_files$NL"
 # The fence rule, defined once because both passes below have to agree on it: if
 # the link scan and the heading scan disagreed about which lines are code, a
 # heading could exist for one and not the other.
-is_fence_marker() { # is_fence_marker <line>
-  case "$1" in
-    '```'* | '~~~'*) return 0 ;;
+#
+# Fenced state is a PAIR — the opening marker's character and its run length —
+# rather than a boolean, and CommonMark's close rule is why: a fence ends only on
+# a run of the SAME character at least as long as the one that opened it. A
+# ` ``` ` line inside a `~~~` fence, or a three-backtick line inside a
+# four-backtick one, is fence CONTENT. A boolean toggling on any marker flips
+# parity there and then silently skips every link in the rest of the file —
+# exactly the silent-green class this gate exists to catch (harness cases 18-19
+# are the two shapes).
+#
+# Only a marker in column 1 is considered at all; see the header's residual list.
+# The one place this still parts company with CommonMark is a closing run that
+# carries an info string (` ```sh ` closing a ` ``` ` fence), which the spec calls
+# content and this rule calls a close — that direction ends a fence early and can
+# only ever over-report, never skip.
+#
+# In: <line> and the current pair. Out: 0 when <line> is a marker that changes
+# state, with the new pair in fence_next_char/fence_next_len (the `norm_result`
+# convention above — bash 3.2 has no other way to return two values without a
+# subshell per line); 1 when the line is not a state change, i.e. prose or the
+# fence content the close rule just protected.
+fence_next_char=""
+fence_next_len=0
+fence_transition() { # fence_transition <line> <cur-char> <cur-len>
+  local line="$1" cur_char="$2" cur_len="$3" ch rest len
+  case "$line" in
+    '```'*) ch='`' ;;
+    '~~~'*) ch='~' ;;
+    *) return 1 ;;
   esac
+
+  # The run length, peeled one character at a time. The pattern-based spelling
+  # (`${line%%[!x]*}`, as the heading parser uses for `#`) would need the marker
+  # character interpolated into a pattern, and a backtick reaching a pattern that
+  # way is a trap not worth setting to save three lines.
+  len=0
+  rest="$line"
+  while [ "${rest#"$ch"}" != "$rest" ]; do
+    rest=${rest#"$ch"}
+    len=$((len + 1))
+  done
+
+  if [ -z "$cur_char" ]; then
+    fence_next_char="$ch"
+    fence_next_len="$len"
+    return 0
+  fi
+  if [ "$ch" = "$cur_char" ] && [ "$len" -ge "$cur_len" ]; then
+    fence_next_char=""
+    fence_next_len=0
+    return 0
+  fi
   return 1
 }
 
@@ -173,7 +233,9 @@ is_fence_marker() { # is_fence_marker <line>
 # punctuation between words leaves however many spaces surrounded it.
 write_slugs() { # write_slugs <abs-md-file> <out-file>
   local src="$1" out="$2" line hashes rest text slug cand n seen=""
-  local in_fence=0
+  # Declared local so a nested call from inside the link scan cannot disturb the
+  # scan's own fence state (bash scoping is dynamic).
+  local fence_char="" fence_len=0
 
   # One `tr` per file rather than one per heading: the whole file is lowercased
   # up front and the loop then does pure parameter expansion. Fences and `#` are
@@ -181,11 +243,12 @@ write_slugs() { # write_slugs <abs-md-file> <out-file>
   tr '[:upper:]' '[:lower:]' <"$src" >"$TMP/lowercased" || return 1
 
   while IFS= read -r line || [ -n "$line" ]; do
-    if is_fence_marker "$line"; then
-      in_fence=$((1 - in_fence))
+    if fence_transition "$line" "$fence_char" "$fence_len"; then
+      fence_char="$fence_next_char"
+      fence_len="$fence_next_len"
       continue
     fi
-    [ "$in_fence" = 0 ] || continue
+    [ -z "$fence_char" ] || continue
     case "$line" in
       '#'*) ;;
       *) continue ;;
@@ -243,6 +306,13 @@ slug_cache_for() { # slug_cache_for <rel-md-path>
 # root) purely lexically — no filesystem, so a `..` that would be swallowed by a
 # symlink is still counted as leaving the repo, and a nonexistent target still
 # normalizes. Sets `norm_result`; returns 1 when the path escapes the root.
+#
+# Escaping is refused as a rule, not diagnosed as a 404: github.com's blob view
+# does resolve `../..` above the repo root against the org path (README.md's old
+# `[issues](../../issues)` worked). The rule stands because such a target is
+# unresolvable from the on-disk tree this gate can see, and because the same
+# markdown is read in contexts — a local editor, a mirror, a docs site — where it
+# resolves to something else or to nothing.
 norm_result=""
 normalize_path() { # normalize_path <dir-rel> <path>
   local dir="$1" path="$2" combined rest seg out=""
@@ -321,15 +391,13 @@ check_link() { # check_link <src-rel> <where> <target>
       ;;
   esac
 
+  # `path` is necessarily non-empty here: an empty one means a leading `#`, which
+  # the same-file-anchor arm above has already returned on.
   path=${target%%#*}
   case "$target" in
     *'#'*) frag=${target#*\#} ;;
     *) frag="" ;;
   esac
-  if [ -z "$path" ]; then
-    fail "$where links to '$target', which has a fragment but no path"
-    return 0
-  fi
 
   # `${src%/*}` alone would hand back the filename for a root-level source such
   # as README.md, silently resolving every one of its links one level too deep.
@@ -405,15 +473,17 @@ while IFS= read -r rel; do
   [ -f "$ROOT/$rel" ] || continue
   files=$((files + 1))
 
-  in_fence=0
+  fence_char=""
+  fence_len=0
   lineno=0
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
-    if is_fence_marker "$line"; then
-      in_fence=$((1 - in_fence))
+    if fence_transition "$line" "$fence_char" "$fence_len"; then
+      fence_char="$fence_next_char"
+      fence_len="$fence_next_len"
       continue
     fi
-    [ "$in_fence" = 0 ] || continue
+    [ -z "$fence_char" ] || continue
 
     # Strip inline code spans before scanning, shortest match, repeatedly: a
     # backtick span is prose about a link, not a link. docs/adr/README.md:9
