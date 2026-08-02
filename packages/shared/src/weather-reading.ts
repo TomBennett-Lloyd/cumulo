@@ -4,6 +4,34 @@ import { utcIsoTimestampSchema } from './timestamp';
 import { weatherSourceSchema } from './weather-source';
 
 /**
+ * The sanity ceiling for a single irradiance reading, in watts per square metre —
+ * the upper bound on all four irradiance fields of {@link weatherReadingSchema}
+ * (`shortwaveRadiationWm2`, `directRadiationWm2`, `diffuseRadiationWm2`,
+ * `directNormalIrradianceWm2`).
+ *
+ * The value sits deliberately above the ~1361 W/m² solar constant: cloud
+ * enhancement produces genuine readings above the clear-sky maximum, and those
+ * must pass. What the cap catches is an order-of-magnitude unit error, which
+ * lands nowhere near it. One number covers all four fields because they are the
+ * same physical quantity resolved onto different geometries — a single
+ * implausibility threshold governs them all, and lowering it narrows all four
+ * bounds in step, which is the point.
+ *
+ * The tests deliberately pin `1500` and `1501` as *literals* rather than deriving
+ * them from this constant. Probe values derived from the constant would move with
+ * it, so a typo'd `15000` would leave every test green; the literals make any
+ * change to this value go red. The pins are `weather-reading.test.ts` — four
+ * `1501` rejection rows in `outOfRangeCases` and four `1500` boundary-acceptance
+ * rows in `boundaryCases` — and, across the package boundary,
+ * `apps/forecast/src/consume-message.test.ts`, whose at-cap fixture in the
+ * "converts a physics invariant violation into a failed outcome" test needs
+ * readings that are schema-valid at exactly the cap. If you are changing this
+ * value, that double-touch is the intended friction, not a failure — update the
+ * pins deliberately.
+ */
+export const MAX_PLAUSIBLE_IRRADIANCE_WM2 = 1500;
+
+/**
  * One hour of weather for one location — the input the PV physics model runs on.
  *
  * Field names are the Open-Meteo hourly variable names, camel-cased and suffixed
@@ -41,13 +69,11 @@ export const weatherReadingSchema = z.object({
    */
   kind: z.enum(['forecast', 'archive']),
   source: weatherSourceSchema,
-  // Irradiance, W/m². The 1500 cap sits above the ~1361 W/m² solar constant so
-  // that cloud-enhancement spikes — genuine readings above clear-sky maximum —
-  // pass, while an order-of-magnitude unit error does not.
-  shortwaveRadiationWm2: z.number().gte(0).lte(1500),
-  directRadiationWm2: z.number().gte(0).lte(1500),
-  diffuseRadiationWm2: z.number().gte(0).lte(1500),
-  directNormalIrradianceWm2: z.number().gte(0).lte(1500),
+  // Irradiance, W/m²; ceiling owned by {@link MAX_PLAUSIBLE_IRRADIANCE_WM2}.
+  shortwaveRadiationWm2: z.number().gte(0).lte(MAX_PLAUSIBLE_IRRADIANCE_WM2),
+  directRadiationWm2: z.number().gte(0).lte(MAX_PLAUSIBLE_IRRADIANCE_WM2),
+  diffuseRadiationWm2: z.number().gte(0).lte(MAX_PLAUSIBLE_IRRADIANCE_WM2),
+  directNormalIrradianceWm2: z.number().gte(0).lte(MAX_PLAUSIBLE_IRRADIANCE_WM2),
   // Degrees Celsius; the bounds bracket recorded terrestrial extremes
   // (~-89 °C Vostok, ~57 °C Furnace Creek) with a little headroom.
   temperature2mC: z.number().gte(-90).lte(60),
