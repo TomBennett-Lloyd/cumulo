@@ -10,25 +10,72 @@
 # here.
 #
 # ---------------------------------------------------------------------------
-# IDLE COST: $0/month. This stack has no resource that bills for existing.
+# IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
+# a price. Two lines here bill for merely existing: the log group's stored
+# bytes (~$0.0001/month at demo volume) and the two alarms ($0.10 per
+# alarm-month at list). Both are absorbed by always-free pools, not free.
 # ---------------------------------------------------------------------------
+#   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
+#     ("no resource that bills for existing") was retired. Retained bytes bill
+#     ~$0.03/GB-month whether or not anybody reads them, so a forgotten stack
+#     keeps accruing this. What stops it accruing *without bound* is
+#     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
+#     archive — and a group Lambda auto-creates instead would never expire (see
+#     the comment on the function's `depends_on`). Unlike ingestion's and
+#     forecast's, this volume is not a constant — it tracks traffic, and the
+#     traffic is unauthenticated. The census is the smallest in the platform, and
+#     it is worth stating because the count is what these estimates get wrong.
+#     **A read logs no application line**; a write logs at most a line or two.
+#     There are four application sinks under sites/ — two exhaustion events
+#     (`api.site.create-store-exhausted`, `api.site.delete-conflict-exhausted`,
+#     both contention-only) and two cleanup events, of which
+#     `api.site.series-cleanup-incomplete` is emitted on a **successful** delete
+#     whose pass left rows behind (#167 records that as a normal outcome, not an
+#     error) — plus `api.request.failed` at the boundary in main.ts. So the unit
+#     CloudWatch bills is Lambda's own START, END and REPORT, **three lines per
+#     invocation** (a cold start adds an INIT_START), and the write-path lines
+#     ride on top of it. That is sound at demo volume rather than merely
+#     convenient: the traffic is dominated by reads and Swagger UI assets, so the
+#     handful of write-path lines is a rounding error against 10,000 requests.
+#     Those three platform lines are exactly what ADR 0005's ~250 bytes per
+#     *invocation* measures; it was never a per-application-record figure. At
+#     demo volume (order 10,000 requests/month)
+#     **10,000 × ~250 B ≈ 2.5 MB/month** retained, ~$0.00008/month at list and
+#     $0.00 as billed inside the account's always-free 5 GB of stored logs.
+#     This stack is quoted at that measured size rather than at the 1 KB-per-line
+#     ceiling ingestion and forecast use, and infra/README.md's cost preamble
+#     states the rule: with no application line on the dominant path there is
+#     nothing to cushion against, and the same figure feeds the ≈ $36 bound, which
+#     a 4× cushion would overstate rather than bound. At the bound itself the same line
+#     is ~1.5 GB past the free 5 GB of storage — ~$0.05/month, immaterial beside
+#     the ≈ $36 the bound is made of, and bounded only because retention is
+#     30 days.
+#   * CloudWatch alarms — two, joining storage's four, ingestion's three and
+#     forecast's one: the always-free ten, fully spent. An alarm is priced at
+#     $0.10/month for existing, fired or not, so the ten are a pool rather than
+#     a discount and the eleventh anywhere in the platform is real money.
+#     infra/README.md's alarm budget owns the count. API Gateway and Lambda
+#     metrics are free.
 #   * API Gateway HTTP API — $1.00 per million requests, no per-hour charge, no
-#     minimum, no per-stage fee. An idle API costs nothing, and so does one
-#     somebody forgets to destroy. This is the property ADR 0005 chose it for,
-#     against an ALB's ≈ $16.43/month of standing charge.
+#     minimum, no per-stage fee. An idle API costs nothing, and one somebody
+#     forgets to destroy costs only its log group's fraction of a cent. This is
+#     the property ADR 0005 chose it for, against an ALB's ≈ $16.43/month of
+#     standing charge. There are no access logs on the stage to add a second
+#     log group — gateway.tf says why at the point of temptation.
 #   * Lambda — request-driven, so an idle stack invokes nothing at all. At demo
 #     volume (order 10,000 requests/month) both the always-free 1,000,000
 #     requests and the 400,000 GB-seconds are untouched; at 256 MB and ~100 ms
-#     the compute allowance covers 16 million requests/month.
-#   * CloudWatch — two alarms joining storage's four and ingestion's two, inside
-#     the always-free ten; API Gateway and Lambda metrics are free; logs at
-#     30-day retention are kilobytes a month at demo volume against the free
-#     5 GB of ingestion.
+#     the compute allowance covers 16 million requests/month. The stored
+#     deployment package is not a third at-rest line: Lambda code storage
+#     carries no charge inside its 75 GB per-Region quota.
+#   * IAM — the execution role, its inline policy, the Lambda permission and the
+#     deploy grant are all free.
 #
 # The worst case is bounded rather than free, which is the honest version:
 # ≈ $36/month with the stage throttle pegged continuously for a month (ADR
 # 0005's arithmetic). `terraform destroy` takes all of it to $0 with no ordered
-# dependencies and nothing left behind.
+# dependencies and nothing left behind — including the log group, which is
+# Terraform's here precisely so that teardown is complete.
 
 output "api_endpoint" {
   description = "Base URL of the deployed fleet API — https://<api-id>.execute-api.<region>.amazonaws.com, with no stage segment because the stage is `$default` (gateway.tf). Server-assigned: the api id is assigned at create time, so capture this after an apply rather than predicting it (ADR 0005). Append /openapi.json, /docs or /v1/sites to reach the routes."
