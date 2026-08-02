@@ -89,4 +89,7 @@ resource "aws_s3_bucket_policy" "web" {
 #     be worth stating; a public web build is not.
 #   * No `aws_s3_bucket_logging`. Access logs to a second bucket bill for
 #     storage forever to observe traffic that CloudFront's free metrics already
-#     summarise. Nothing in this stack may bill for existing.
+#     summarise. The rule is not that nothing here bills for existing — the
+#     build in this bucket does, ~1.7 MB priced at ~$0.00004/month in
+#     `outputs.tf` — it is that this stack adds no *further* at-rest line, and
+#     least of all one that grows with traffic when the build does not.
