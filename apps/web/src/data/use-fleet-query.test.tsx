@@ -46,10 +46,20 @@ interface QueryProps {
   readonly enabled?: boolean;
 }
 
+/**
+ * Omitting `enabled` calls the hook with two arguments — the form `SitePanel` uses — so the
+ * parameter defaults are genuinely exercised rather than papered over by the helper. Passing
+ * `{ enabled: props.enabled ?? true }` unconditionally would mean no test ever reached them, and
+ * a signature default flipped to `false` would survive the whole file.
+ *
+ * Both arms call the one hook exactly once, so the hook order is identical either way.
+ */
 const renderQuery = (initialProps: QueryProps) =>
   renderHook(
     (props: QueryProps) =>
-      useFleetQuery(props.query, props.key, { enabled: props.enabled ?? true }),
+      props.enabled === undefined
+        ? useFleetQuery(props.query, props.key)
+        : useFleetQuery(props.query, props.key, { enabled: props.enabled }),
     { initialProps },
   );
 

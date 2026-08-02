@@ -64,6 +64,11 @@ export interface FleetQueryOptions {
  * false→true fires the query for the key current at that moment; and flipping true→false after a
  * result has landed starts nothing and **keeps** that result, because the disabled run returns
  * before the `loading` reset rather than after it.
+ *
+ * Disabling while a request is still in flight is the one lossy case: the response is discarded
+ * as superseded and the state stays `loading` until the key or `enabled` changes again. No shipped
+ * caller can reach it — the `FleetPanel` latch only ever goes false→true — but a caller that ties
+ * `enabled` to a live condition owns that spinner, and should key off the condition instead.
  */
 export const useFleetQuery = <T>(
   query: () => Promise<FleetSourceResult<T>>,
