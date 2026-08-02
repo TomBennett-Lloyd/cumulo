@@ -24,21 +24,29 @@
 #     the comment on the function's `depends_on`). Unlike ingestion's and
 #     forecast's, this volume is not a constant — it tracks traffic, and the
 #     traffic is unauthenticated. The census is the smallest in the platform, and
-#     it is worth stating because the count is what these estimates get wrong: a
-#     healthy request logs **no application line at all**. This service logs only
-#     failures — `api.request.failed` at the boundary in main.ts and the three
-#     exhaustion events under sites/ — so what CloudWatch bills on a normal
-#     request is Lambda's own START, END and REPORT, **three lines per
-#     invocation** (a cold start adds an INIT_START). Those three lines are
-#     exactly what ADR 0005's ~250 bytes per *invocation* measures; it was never a
-#     per-application-record figure. At demo volume (order 10,000 requests/month)
+#     it is worth stating because the count is what these estimates get wrong.
+#     **A read logs no application line**; a write logs at most a line or two.
+#     There are four application sinks under sites/ — two exhaustion events
+#     (`api.site.create-store-exhausted`, `api.site.delete-conflict-exhausted`,
+#     both contention-only) and two cleanup events, of which
+#     `api.site.series-cleanup-incomplete` is emitted on a **successful** delete
+#     whose pass left rows behind (#167 records that as a normal outcome, not an
+#     error) — plus `api.request.failed` at the boundary in main.ts. So the unit
+#     CloudWatch bills is Lambda's own START, END and REPORT, **three lines per
+#     invocation** (a cold start adds an INIT_START), and the write-path lines
+#     ride on top of it. That is sound at demo volume rather than merely
+#     convenient: the traffic is dominated by reads and Swagger UI assets, so the
+#     handful of write-path lines is a rounding error against 10,000 requests.
+#     Those three platform lines are exactly what ADR 0005's ~250 bytes per
+#     *invocation* measures; it was never a per-application-record figure. At
+#     demo volume (order 10,000 requests/month)
 #     **10,000 × ~250 B ≈ 2.5 MB/month** retained, ~$0.00008/month at list and
 #     $0.00 as billed inside the account's always-free 5 GB of stored logs.
 #     This stack is quoted at that measured size rather than at the 1 KB-per-line
 #     ceiling ingestion and forecast use, and infra/README.md's cost preamble
-#     states the rule: with no application line in the census there is nothing to
-#     cushion against, and the same figure feeds the ≈ $36 bound, which a 4×
-#     cushion would overstate rather than bound. At the bound itself the same line
+#     states the rule: with no application line on the dominant path there is
+#     nothing to cushion against, and the same figure feeds the ≈ $36 bound, which
+#     a 4× cushion would overstate rather than bound. At the bound itself the same line
 #     is ~1.5 GB past the free 5 GB of storage — ~$0.05/month, immaterial beside
 #     the ≈ $36 the bound is made of, and bounded only because retention is
 #     30 days.

@@ -36,8 +36,9 @@
 #     alarm budget owns the count. Lambda metrics are free.
 #   * Lambda — invoked only when ingestion publishes: ~12 messages an hour,
 #     ~8,760 invocations/month against the always-free 1,000,000 requests. At
-#     256 MB, even a full 50-second invocation is 12.8 GB-seconds, so the whole
-#     month is ~112,000 GB-seconds worst case against the always-free 400,000 —
+#     256 MB (0.25 GiB, the unit AWS bills), even a full 50-second invocation is
+#     12.5 GB-seconds, so the whole month is ~110,000 GB-seconds worst case
+#     against the always-free 400,000 —
 #     and a real invocation is a small fraction of its timeout. The stored
 #     deployment package is not a third at-rest line: Lambda code storage
 #     carries no charge inside its 75 GB per-Region quota.

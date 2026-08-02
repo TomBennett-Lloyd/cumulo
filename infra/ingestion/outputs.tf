@@ -39,7 +39,8 @@
 #     free.
 #   * Lambda — ~730 invocations/month (one an hour) against the always-free
 #     1,000,000 requests and 400,000 GB-seconds. At 256 MB and even a full
-#     300-second cycle that is ~56,000 GB-seconds, ~14% of the free allowance,
+#     300-second cycle that is 730 × 300 s × 0.25 GB = 54,750 — ~55,000
+#     GB-seconds, ~14% of the free allowance,
 #     and a real cycle is a fraction of it. The stored deployment package is not
 #     a third at-rest line: Lambda code storage carries no charge inside its
 #     75 GB per-Region quota.
