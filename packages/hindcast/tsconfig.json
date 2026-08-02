@@ -16,5 +16,8 @@
   // from `pnpm test` because it needs an AWS session and spends Open-Meteo
   // quota — cannot rot silently against the adapters it wires together. Same
   // reasoning, and the same include line, as `packages/storage/tsconfig.json`.
-  "include": ["src", "fixtures", "scripts"]
+  // `vitest.config.ts` joins them for a different reason: the root eslint
+  // `projectService` type-checks every file it lints, and a config left outside
+  // the program is a parse error rather than a lint pass.
+  "include": ["src", "fixtures", "scripts", "vitest.config.ts"]
 }
