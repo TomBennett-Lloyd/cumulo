@@ -24,6 +24,7 @@ Fresh clone:
 pnpm install            # installs dependencies and points git at .githooks
 brew install gitleaks   # required: the pre-commit hook hard-fails without it
 brew install shellcheck # required: pnpm verify's lint:sh gate hard-fails without it
+brew install actionlint # required: pnpm verify's lint:workflows gate hard-fails without it
 ```
 
 `pnpm install` runs the root `prepare` script, which sets `core.hooksPath=.githooks` — the hook is committed and version-controlled, so there is nothing to copy into `.git/hooks` by hand.
