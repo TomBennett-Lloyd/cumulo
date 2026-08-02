@@ -8,5 +8,9 @@
     // keeps browser globals out of a service that has no DOM.
     "types": ["node"]
   },
-  "include": ["src"]
+  // `vitest.config.ts` joins the compiled surface for the same reason
+  // `packages/storage/tsconfig.json` includes its own: the root eslint
+  // `projectService` type-checks every file it lints, and a config left outside
+  // the program is a parse error rather than a lint pass.
+  "include": ["src", "vitest.config.ts"]
 }
