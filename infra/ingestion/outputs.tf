@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 # IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
 # a price. Two lines here bill for merely existing: the log group's stored
-# bytes (~$0.0003/month at current volume) and the three alarms ($0.10 per
+# bytes (~$0.0004/month at current volume) and the three alarms ($0.10 per
 # alarm-month at list). Both are absorbed by always-free pools, not free.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
@@ -18,22 +18,28 @@
 #     keeps accruing this. What stops it accruing *without bound* is
 #     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
 #     archive — and a group Lambda auto-creates instead would never expire (see
-#     the comment on the function's `depends_on`). Size: one JSON line per
-#     location plus a cycle summary, ~13 an hour, so ~9,400 lines and under
-#     ~10 MB/month retained — ~$0.0003/month at list, and $0.00 as billed
-#     because it sits inside the always-free 5 GB of stored logs (a separate
-#     5 GB covers ingestion of them). That ~10 MB is a **bound, not a
-#     measurement**: it takes ADR 0005's own ~6.5 GB/month at 25.92 M requests,
-#     which implies ~250 bytes per logged record, and rounds up to 1 KB a line.
+#     the comment on the function's `depends_on`). Size, counted rather than
+#     assumed: **seventeen billed lines per cycle** — `ingestion.cycle.started`
+#     from cycle.ts, one `ingestion.location.outcome` per location (12 in the
+#     canonical fleet), `ingestion.cycle.summary` from handler.ts, plus Lambda's
+#     own START, END and REPORT. At ~730 cycles/month (a 730-hour month, the
+#     convention infra/README.md's cost preamble fixes) that is ~12,400 lines, so
+#     **17 × 730 × 1 KB ≈ 12 MB/month** retained — ~$0.0004/month at
+#     ~$0.03/GB-month, and $0.00 as billed because it sits inside the account's
+#     always-free 5 GB of stored logs (a separate 5 GB covers ingestion of them).
+#     That ~12 MB is a **bound, not a measurement**, and generously so: ADR
+#     0005's own ~6.5 GB/month at 25.92 M requests works out at ~250 bytes per
+#     *invocation*, and this prices 1 KB per *line* and then charges all
+#     seventeen. The honest claim is a ceiling, not a meter reading.
 #   * CloudWatch alarms — three, alongside storage's four, the api's two and
 #     forecast's one: the always-free ten, fully spent. An alarm is priced at
 #     $0.10/month for existing, fired or not, so the ten are a pool rather than
 #     a discount and the eleventh anywhere in the platform is real money.
 #     infra/README.md's alarm budget owns the count. Lambda and SQS metrics are
 #     free.
-#   * Lambda — ~720 invocations/month (one an hour) against the always-free
+#   * Lambda — ~730 invocations/month (one an hour) against the always-free
 #     1,000,000 requests and 400,000 GB-seconds. At 256 MB and even a full
-#     300-second cycle that is ~54,000 GB-seconds, ~13% of the free allowance,
+#     300-second cycle that is ~56,000 GB-seconds, ~14% of the free allowance,
 #     and a real cycle is a fraction of it. The stored deployment package is not
 #     a third at-rest line: Lambda code storage carries no charge inside its
 #     75 GB per-Region quota.

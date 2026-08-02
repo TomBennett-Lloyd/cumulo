@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 # IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
 # a price. Two lines here bill for merely existing: the log group's stored
-# bytes (~$0.0003/month at current volume) and the alarm ($0.10/alarm-month at
+# bytes (~$0.0013/month at current volume) and the alarm ($0.10/alarm-month at
 # list). Both are absorbed by always-free pools rather than being free.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
@@ -18,12 +18,18 @@
 #     keeps accruing this. What stops it accruing *without bound* is
 #     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
 #     archive — and a group Lambda auto-creates instead would never expire (see
-#     the comment on the function's `depends_on`). Size: one line per message,
-#     ~8,760 messages/month, so under ~9 MB/month retained — ~$0.0003/month at
-#     list, and $0.00 as billed because it sits inside the always-free 5 GB of
-#     stored logs. That ~9 MB is a **bound, not a measurement**: it takes ADR
-#     0005's own ~6.5 GB/month at 25.92 M requests, which implies ~250 bytes per
-#     logged record, and rounds that up to 1 KB per line.
+#     the comment on the function's `depends_on`). Size, counted rather than
+#     assumed: **five billed lines per invocation** — `forecast.message.outcome`
+#     and `forecast.batch.summary` from handler.ts, one of each because
+#     `batch_size = 1` (event-source.tf) makes a batch a single record, plus
+#     Lambda's own START, END and REPORT. At ~8,760 invocations/month that is
+#     ~43,800 lines, so **5 × 8,760 × 1 KB ≈ 44 MB/month** retained —
+#     ~$0.0013/month at ~$0.03/GB-month, and $0.00 as billed because it sits
+#     inside the account's always-free 5 GB of stored logs. That ~44 MB is a
+#     **bound, not a measurement**, and generously so: ADR 0005's own
+#     ~6.5 GB/month at 25.92 M requests works out at ~250 bytes per *invocation*,
+#     and this prices 1 KB per *line* and then charges all five of them. The
+#     honest claim is a ceiling, not a meter reading.
 #   * CloudWatch alarms — one alarm, the tenth and last of the always-free ten.
 #     An alarm is priced at $0.10/month for existing, fired or not; the ten are
 #     a pool the platform has fully spent, not a discount, and infra/README.md's

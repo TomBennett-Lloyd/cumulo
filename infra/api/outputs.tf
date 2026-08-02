@@ -23,14 +23,25 @@
 #     archive — and a group Lambda auto-creates instead would never expire (see
 #     the comment on the function's `depends_on`). Unlike ingestion's and
 #     forecast's, this volume is not a constant — it tracks traffic, and the
-#     traffic is unauthenticated. At demo volume (order 10,000 requests/month)
-#     it is ~2.5 MB/month retained, ~$0.00008/month at list and $0.00 as billed
-#     inside the always-free 5 GB of stored logs. That figure is **derived, not
-#     measured**: ADR 0005's ~6.5 GB/month at the 25.92 M-request bound implies
-#     ~250 bytes per logged record, and 10,000 records is 2.5 MB of it. At the
-#     bound itself the same line is ~1.5 GB past the free 5 GB of storage —
-#     ~$0.05/month, immaterial beside the ≈ $36 the bound is made of, and
-#     bounded only because retention is 30 days.
+#     traffic is unauthenticated. The census is the smallest in the platform, and
+#     it is worth stating because the count is what these estimates get wrong: a
+#     healthy request logs **no application line at all**. This service logs only
+#     failures — `api.request.failed` at the boundary in main.ts and the three
+#     exhaustion events under sites/ — so what CloudWatch bills on a normal
+#     request is Lambda's own START, END and REPORT, **three lines per
+#     invocation** (a cold start adds an INIT_START). Those three lines are
+#     exactly what ADR 0005's ~250 bytes per *invocation* measures; it was never a
+#     per-application-record figure. At demo volume (order 10,000 requests/month)
+#     **10,000 × ~250 B ≈ 2.5 MB/month** retained, ~$0.00008/month at list and
+#     $0.00 as billed inside the account's always-free 5 GB of stored logs.
+#     This stack is quoted at that measured size rather than at the 1 KB-per-line
+#     ceiling ingestion and forecast use, and infra/README.md's cost preamble
+#     states the rule: with no application line in the census there is nothing to
+#     cushion against, and the same figure feeds the ≈ $36 bound, which a 4×
+#     cushion would overstate rather than bound. At the bound itself the same line
+#     is ~1.5 GB past the free 5 GB of storage — ~$0.05/month, immaterial beside
+#     the ≈ $36 the bound is made of, and bounded only because retention is
+#     30 days.
 #   * CloudWatch alarms — two, joining storage's four, ingestion's three and
 #     forecast's one: the always-free ten, fully spent. An alarm is priced at
 #     $0.10/month for existing, fired or not, so the ten are a pool rather than
