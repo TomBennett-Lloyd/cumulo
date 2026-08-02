@@ -75,7 +75,7 @@ const capacityCode = (code: string | undefined): boolean =>
  * `@aws-sdk/client-dynamodb` 3.1098.0, that exception carries no `$retryable`
  * trait and does not appear in `@smithy/core` 3.31.1's `THROTTLING_ERROR_CODES`
  * — so the SDK layer spends zero retries on it and this predicate is what gives
- * the shape an owner at all (`client.test.ts` pins that at the wire).
+ * the shape an owner at all (`client-retry-classification.test.ts` pins that at the wire).
  *
  * Both clauses are load-bearing, in the same way `conflictCancelled`'s `every`
  * is:

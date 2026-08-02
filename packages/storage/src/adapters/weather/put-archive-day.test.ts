@@ -32,7 +32,7 @@ import {
  * The capacity re-issue below is counted in *adapter* sends, and only those:
  * `ddbMock` intercepts above the SDK's retry middleware, so nothing here can
  * see how many times the SDK itself would have tried. That layer is pinned
- * separately, at the wire, in `client.test.ts` — the two counts are different
+ * separately, at the wire, in `client-retry-classification.test.ts` — the two counts are different
  * facts and neither substitutes for the other.
  */
 
