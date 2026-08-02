@@ -92,7 +92,7 @@ export const getSiteForecast = async (
   // Forward-looking by definition: the window opens at the clock, so points
   // already in the past belong to `GET …/series` and its explicit bounds.
   const from = deps.now();
-  const points = await deps.series.querySeriesRange(
+  const { points } = await deps.series.querySeriesRange(
     site.siteId,
     from,
     hoursAfter(from, hours.data),

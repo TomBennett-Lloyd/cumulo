@@ -101,7 +101,11 @@ export const getSiteSeries = async (
     return site.response;
   }
 
-  const points = await deps.series.querySeriesRange(site.siteId, range.data.from, range.data.to);
+  const { points } = await deps.series.querySeriesRange(
+    site.siteId,
+    range.data.from,
+    range.data.to,
+  );
 
   return jsonResponse(200, siteSeriesResponseSchema, {
     forecasts: forecastsIn(points),

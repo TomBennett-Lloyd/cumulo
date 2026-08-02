@@ -14,7 +14,11 @@ import {
   type BatchPolicy,
   type BatchWriteOutcome,
 } from '../../batch';
-import { StorageAdapterBase, type BatchingAdapterDeps } from '../storage-adapter-base';
+import {
+  StorageAdapterBase,
+  type BatchingAdapterDeps,
+  type QueryPaginationBound,
+} from '../storage-adapter-base';
 
 import {
   TIME_BOUND_PREFIX,
@@ -100,6 +104,27 @@ export interface SeriesCleanupOutcome {
 }
 
 /**
+ * A window of series points, and whether the window was read to its end.
+ *
+ * The two facts travel together because separating them is precisely the bug:
+ * `points` alone cannot say whether a short list is a quiet Saturday or a drain
+ * that stopped at a caller's page budget with rows still to come. Only a caller
+ * that passed a {@link QueryPaginationBound} can ever see `complete: false`, so
+ * an unbounded read reads exactly as it always did — with one field it may
+ * ignore, rather than one it may not.
+ *
+ * A flat record rather than a discriminated union (`docs/standards/typing.md`
+ * rule 4): a truncated read is not a different *mode* of answer, it is the same
+ * answer carrying an honest caveat, and the points of a truncated window are
+ * real points the caller may legitimately log, count or discard.
+ */
+export interface SeriesRangeResult {
+  readonly points: SeriesPoint[];
+  /** False when a bound stopped pagination with more of the window unread. */
+  readonly complete: boolean;
+}
+
+/**
  * The failure policy for cleanup deletes: send once, report what bounced, never
  * re-send (`docs/standards/error-handling.md` rule 3, stated at the one place
  * that uses it).
@@ -136,12 +161,20 @@ export class SeriesAdapter extends StorageAdapterBase {
   /**
    * Every point in the half-open window `[fromInclusive, toExclusive)`, in
    * chronological server order, forecasts and actuals interleaved (A4/A5).
+   *
+   * The optional `bound` prices the drain in round trips for a caller that has
+   * a deadline — the API's read routes, whose invocation is capped well below
+   * the worst case of an unbounded page walk. A caller that passes one must act
+   * on {@link SeriesRangeResult.complete}: a truncated series returned as if it
+   * were whole is the "quietly missing its afternoon" half-truth
+   * `queryAllPages` exists to prevent.
    */
   async querySeriesRange(
     siteId: string,
     fromInclusive: UtcIsoTimestamp,
     toExclusive: UtcIsoTimestamp,
-  ): Promise<SeriesPoint[]> {
+    bound?: QueryPaginationBound,
+  ): Promise<SeriesRangeResult> {
     // The half-open window `[from, to)`, expressed as a BETWEEN.
     //
     // DynamoDB permits exactly one comparator on the sort key, so the natural
@@ -157,7 +190,7 @@ export class SeriesAdapter extends StorageAdapterBase {
     // This holds only because timestamps are fixed-width (`timestamp.ts`);
     // `storage-key.test.ts` pins the two order properties as plain string
     // comparisons, and this query is their consumer.
-    const items = await this.queryAllPages(
+    const { items, complete } = await this.queryAllPages(
       'querySeriesRange',
       { siteId },
       {
@@ -173,9 +206,10 @@ export class SeriesAdapter extends StorageAdapterBase {
         // models and the actual interleaved.
         ScanIndexForward: true,
       },
+      bound,
     );
 
-    return items.map(fromItem);
+    return { points: items.map(fromItem), complete };
   }
 
   /** The next `limit` points at or after `fromInclusive`, ascending (A3). */

@@ -7,9 +7,9 @@
  * `apps/ingestion/src/cycle-budget.ts` (which multiplied the exponential term
  * out without the `MAX_BACKOFF_DELAY_MS` ceiling, so it overstated any curve
  * long enough to flatten), a second copy of the same sum in `client.test.ts`,
- * and `DYNAMODB_REQUEST_WORST_MS` in
- * `apps/api/src/request-budget.ts`. Three derivations of one number, free to
- * disagree — and they did.
+ * and a third name for the same 7,000 ms in
+ * `apps/api/src/request-budget.ts` (since retired in favour of this export).
+ * Three derivations of one number, free to disagree — and they did.
  *
  * They cannot be one implementation *there*: `packages/*` may not import from
  * `apps/*` (architecture rule 1), and two apps may not import from each other,

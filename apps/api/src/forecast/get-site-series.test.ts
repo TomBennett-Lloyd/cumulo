@@ -31,7 +31,7 @@ const stub = (siteResult: GetFleetSiteResult, points: readonly SeriesPoint[] = [
       series: {
         querySeriesRange: (siteId, from, to) => {
           reads.push(`${siteId} ${from} ${to}`);
-          return Promise.resolve([...points]);
+          return Promise.resolve({ points: [...points], complete: true });
         },
       },
     },

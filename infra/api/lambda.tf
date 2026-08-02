@@ -49,20 +49,31 @@ resource "aws_lambda_function" "api" {
   source_code_hash = fileexists(local.artifact_path) ? filebase64sha256(local.artifact_path) : null
 
   # 15 s, chosen against the gateway rather than against the work. API Gateway's
-  # integration timeout is a hard 30 s ceiling (ADR 0005), and every route here
-  # is a single DynamoDB call or a static asset read — the widest one, a
-  # 336-hour `GET /v1/sites/{siteId}/series`, is one Query of order a thousand
-  # small items. Sitting the function's timeout *below* the gateway's ceiling is
-  # what makes a hung request diagnosable: Lambda times out first, so the
-  # evidence is a Lambda timeout log line and an `Errors` data point rather than
-  # a gateway 504 with nothing behind it.
+  # integration timeout is a hard 30 s ceiling (ADR 0005). Sitting the
+  # function's timeout *below* it is what makes a hung request diagnosable:
+  # Lambda times out first, so the evidence is a Lambda timeout log line and an
+  # `Errors` data point rather than a gateway 504 with nothing behind it.
   #
-  # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS`
-  # (`apps/api/src/request-budget.ts`), which sizes the series-cleanup budget
-  # against it — #29 needed a handler to know how long it may keep starting
-  # DynamoDB requests. This file still owns the deployed value; the two are held
-  # equal by `pnpm check:infra-mirrors` in the `verify` composite, so lowering
-  # this number shrinks that budget in the same commit or fails the build.
+  # It was never chosen against the work, and #165 stopped the code claiming
+  # otherwise: a route is not one DynamoDB call — the limited ones spend two on
+  # the per-IP limiter before the handler starts, the write routes retry
+  # contended transactions, and a series read paginates. What makes 15 s honest
+  # is not the size of the work but that the work now asks how much time is
+  # left: every request carries a deadline derived from this number
+  # (`apps/api/src/http/request-deadline.ts`), and every loop stops on it rather
+  # than at the timeout. The per-route arithmetic, including what stays ungated,
+  # is in `apps/api/src/request-budget.ts`'s header.
+  #
+  # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS` in that same module,
+  # which sizes the series-cleanup budget and the deadline against it — #29
+  # needed a handler to know how long it may keep starting DynamoDB requests.
+  # This file still owns the deployed value; the two are held equal by
+  # `pnpm check:infra-mirrors` in the `verify` composite, so lowering this
+  # number shrinks that budget in the same commit or fails the build. The
+  # gateway's 30 s is restated there as `API_GATEWAY_INTEGRATION_TIMEOUT_MS` and
+  # `request-budget.test.ts` holds this value under it — the inequality the
+  # mirror gate cannot express, so raising this past 30 s fails a test instead
+  # of failing in production.
   timeout = 15
 
   # 256 MB, and this number is load-bearing beyond performance: it is the figure

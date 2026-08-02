@@ -51,6 +51,14 @@
  *   `fullJitterDelayMs` as shared arithmetic for a retry owner outside this
  *   package; `STORAGE_COMMAND_WORST_MS` and `STORAGE_BATCH_PAGE_WORST_MS` are
  *   this package's own worst cases, stated here rather than modelled there.
+ *
+ *   `QueryPaginationBound` and `SeriesRangeResult` are the other half of that
+ *   same #165 exchange, pointing inward: having told a consumer what a page
+ *   costs, this package has to let it say "no more pages" and has to answer
+ *   honestly when that stops a read short. Both types are contract, not
+ *   machinery — one is what a caller constructs, the other is what it must
+ *   read — which is why they earn a line here while `queryAllPages` itself
+ *   stays `protected`.
  * - the `toItem`/`fromItem` pairs each adapter exports for its own tests. They
  *   are the wire format, not the contract; exporting them would invite a caller
  *   to build items by hand and bypass the key computation the adapters exist to
@@ -100,7 +108,11 @@ export { StorageError, type StorageErrorContext } from './errors';
 export { storageTableName, type StorageTable } from './table-name';
 export { SERIES_RETENTION_DAYS } from './ttl';
 
-export { type BatchingAdapterDeps, type StorageAdapterDeps } from './adapters/storage-adapter-base';
+export {
+  type BatchingAdapterDeps,
+  type QueryPaginationBound,
+  type StorageAdapterDeps,
+} from './adapters/storage-adapter-base';
 
 export {
   SiteAdapter,
@@ -115,7 +127,11 @@ export {
   type AbuseAdapterDeps,
   type BlockStatus,
 } from './adapters/abuse/abuse-adapter';
-export { SeriesAdapter, type SeriesCleanupOutcome } from './adapters/series/series-adapter';
+export {
+  SeriesAdapter,
+  type SeriesCleanupOutcome,
+  type SeriesRangeResult,
+} from './adapters/series/series-adapter';
 export { type SeriesPoint } from './adapters/series/series-item';
 export { MetricsAdapter } from './adapters/metrics/metrics-adapter';
 export { WeatherAdapter, type ArchiveDayCoverage } from './adapters/weather/weather-adapter';

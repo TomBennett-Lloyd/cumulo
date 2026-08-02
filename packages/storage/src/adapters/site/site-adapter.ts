@@ -444,7 +444,7 @@ export class SiteAdapter extends StorageAdapterBase {
 
   /** Every site in the fleet, seed and user, active and inactive (A2, I1). */
   async listFleetSites(): Promise<FleetSite[]> {
-    const items = await this.queryAllPages('listFleetSites', undefined, {
+    const { items } = await this.queryAllPages('listFleetSites', undefined, {
       TableName: this.tableName,
       KeyConditionExpression: 'pk = :fleet AND siteId >= :minSiteId',
       ExpressionAttributeValues: { ':fleet': FLEET_PARTITION, ':minSiteId': MIN_SITE_ID },
@@ -455,7 +455,7 @@ export class SiteAdapter extends StorageAdapterBase {
 
   /** The physics parameters of every **active** site at a location (F1). */
   async listActiveSitePhysicsAtLocation(locationId: string): Promise<SitePhysics[]> {
-    const items = await this.queryAllPages('listActiveSitePhysicsAtLocation', undefined, {
+    const { items } = await this.queryAllPages('listActiveSitePhysicsAtLocation', undefined, {
       TableName: this.tableName,
       IndexName: BY_LOCATION_INDEX,
       KeyConditionExpression: 'gsiLocation = :location',
