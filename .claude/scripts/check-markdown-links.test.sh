@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Test harness for check-markdown-links.sh, its neighbour in this directory.
 #
-# Self-contained on the same terms as check-adr-index.test.sh and lint-shell.test.sh: no
-# framework, no network, no pnpm. Every fixture is a throwaway git work tree under a single
-# `mktemp -d` that a trap deletes on exit, so the drift cases — a renamed heading, an ignored
-# target, a link that walks out of the repository — are exercised for real without ever
-# mutating this repo's own markdown.
+# No framework, no network, no pnpm: the assertion vocabulary is harness-lib.sh next door,
+# sourced below and shared with every sibling harness. Every fixture is a throwaway git work
+# tree under the temp tree `harness_init_tmp` makes and a trap deletes on exit, so the drift
+# cases — a renamed heading, an ignored target, a link that walks out of the repository — are
+# exercised for real without ever mutating this repo's own markdown.
 #
 # Fixtures `git init` but, with one exception, never commit: the gate discovers with
 # `git ls-files --cached --others --exclude-standard`, so an untracked-unignored file is
@@ -42,11 +42,9 @@ set -uo pipefail
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 CHECK="$SCRIPTS/check-markdown-links.sh"
 
-tmp_raw=$(mktemp -d) || exit 2
-trap 'rm -rf "$tmp_raw"' EXIT INT TERM
-# Canonical from the start: macOS hides temp dirs behind /var -> /private/var, and the gate
-# compares its ROOT against a `pwd -P`'d work-tree toplevel.
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
+harness_init_tmp
 
 # Case 14 asserts that a directory outside any git work tree gets no verdict. If TMPDIR
 # happened to sit inside a repository, that case would silently be testing something else, so
@@ -56,72 +54,6 @@ if git -C "$TMP_ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
     "$TMP_ROOT" >&2
   exit 2
 fi
-
-passed=0
-failed=0
-case_name=""
-case_failed=0
-case_ctx=""
-out=""
-rc=0
-
-# The gate has to survive the oldest bash it can meet: macOS ships /bin/bash 3.2, where
-# pattern substitution, `[[ =~ ]]` with an unquoted pattern variable and byte-wise matching
-# under LC_ALL=C all behave subtly differently from 4.4+. The two cases that lean hardest on
-# those — the omnibus pass case and the duplicate-heading dedupe — run under every distinct
-# bash on the box rather than whichever one PATH happens to hand over.
-BASHES="bash"
-if [ -x /bin/bash ] && [ "$(command -v bash)" != "/bin/bash" ]; then
-  BASHES="$BASHES /bin/bash"
-fi
-
-# --- harness plumbing --------------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
-}
-
-begin() {
-  case_name="$1"
-  case_failed=0
-  case_ctx=""
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-# case_ctx names the variant a failure came from, for cases that run the gate more than once.
-bad() {
-  printf '  ! %s%s\n' "$1" "${case_ctx:+ (under $case_ctx)}" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
-  esac
-}
 
 # --- fixtures ----------------------------------------------------------------------------
 
@@ -172,8 +104,7 @@ fixture() {
 run_check_with() { # run_check_with <bash> <args...>
   local interpreter="$1"
   shift
-  out=$("$interpreter" "$CHECK" "$@" 2>&1)
-  rc=$?
+  capture "$interpreter" "$CHECK" "$@"
 }
 
 run_check() { # run_check <args...>
@@ -184,9 +115,7 @@ run_check() { # run_check <args...>
 # 0. the gate parses
 # ==========================================================================================
 begin "check-markdown-links.sh parses (bash -n)"
-if ! syntax=$(bash -n "$CHECK" 2>&1); then
-  bad "check-markdown-links.sh failed bash -n: $syntax"
-fi
+expect_parses "$CHECK"
 end
 
 # ==========================================================================================
@@ -643,5 +572,4 @@ end
 
 # ==========================================================================================
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" = "0" ] || exit 1
+finish

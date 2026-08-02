@@ -2,12 +2,12 @@
 # Test harness for run-script-tests.sh, its neighbour in this directory — the
 # runner behind `pnpm test:scripts`.
 #
-# Self-contained on the same terms as check-module-names.test.sh next door: no
-# framework, no network, no pnpm, one `mktemp -d` that a trap removes. Every
-# case that actually *runs* the runner points it at a throwaway fixture
-# directory holding throwaway harnesses, so this file can exercise the red paths
-# (a harness that exits 1, a harness that exits 2) without a red harness ever
-# existing in this repo.
+# No framework, no network, no pnpm: the assertion vocabulary is harness-lib.sh next
+# door, sourced below and shared with every sibling harness, over the temp tree
+# `harness_init_tmp` makes and a trap removes. Every case that actually *runs* the
+# runner points it at a throwaway fixture directory holding throwaway harnesses, so
+# this file can exercise the red paths (a harness that exits 1, a harness that exits 2)
+# without a red harness ever existing in this repo.
 #
 # On self-reference: this file matches the runner's own `*.test.sh` discovery
 # pattern and is run by it, unskipped — a skip list would be exactly the
@@ -39,85 +39,29 @@ SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # Unset — how `pnpm test:scripts` runs it — is the shipped runner.
 RUNNER=${SCRIPT_TEST_RUNNER:-$SCRIPTS/run-script-tests.sh}
 
-tmp_raw=$(mktemp -d) || exit 2
-trap 'rm -rf "$tmp_raw"' EXIT INT TERM
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
+harness_init_tmp
 
-passed=0
-failed=0
-case_name=""
-case_failed=0
-case_ctx=""
-out=""
-rc=0
 DIR=""
 
-# The runner has to survive the oldest bash it can meet: macOS ships bash 3.2 as
-# /bin/bash, where an empty array expanded under `set -u` aborts outright while
-# 4.4+ shrugs. The runner builds exactly that kind of array, so the cases that
-# exercise it run under every distinct bash on the box.
-BASHES="bash"
-if [ -x /bin/bash ] && [ "$(command -v bash)" != "/bin/bash" ]; then
-  BASHES="$BASHES /bin/bash"
-fi
-
-# --- harness plumbing --------------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
-}
-
-begin() {
-  case_name="$1"
-  case_failed=0
-  case_ctx=""
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-# case_ctx names the variant a failure came from, for cases that run the runner more than once.
-bad() {
-  printf '  ! %s%s\n' "$1" "${case_ctx:+ (under $case_ctx)}" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'" ;;
-  esac
-}
-
 # The ordering assertion is the whole point of case 4: `&&`-chaining could satisfy every
-# other assertion about a failing harness, but never this one.
+# other assertion about a failing harness, but never this one. One consumer, so it stays
+# here rather than moving into the shared library (structure.md rule 7).
+#
+# It orders over $out alone, never out+err. An ordering claim is only meaningful within a
+# single stream — nothing sequences two separate pipes against each other — and every
+# substring this is asked to order is written to stdout by a plain `printf`: the runner's
+# own `--- name ---` banners and summary lines, and the fixture harnesses' announcements,
+# which the runner streams rather than captures so they land on its stdout too. The
+# runner's diagnostics all go to stderr and are nobody's business here.
 expect_order() { # expect_order <earlier substring> <later substring>
-  expect_out "$1"
-  expect_out "$2"
+  expect_stdout "$1"
+  expect_stdout "$2"
   local before=${out%%"$2"*}
   case "$before" in
     *"$1"*) ;;
-    *) bad "expected '$1' to appear before '$2'" ;;
+    *) bad "expected '$1' to appear before '$2' on stdout; got: $out" ;;
   esac
 }
 
@@ -147,8 +91,7 @@ EOF
 run_runner_with() { # run_runner_with <bash> <args...>
   local interpreter="$1"
   shift
-  out=$("$interpreter" "$RUNNER" "$@" 2>&1)
-  rc=$?
+  capture "$interpreter" "$RUNNER" "$@"
 }
 
 run_runner() { # run_runner <args...>
@@ -159,13 +102,7 @@ run_runner() { # run_runner <args...>
 # 1. the runner parses
 # ==========================================================================================
 begin "run-script-tests.sh parses (bash -n)"
-for interpreter in $BASHES; do
-  case_ctx="$interpreter"
-  if ! syntax=$("$interpreter" -n "$RUNNER" 2>&1); then
-    bad "run-script-tests.sh failed -n: $syntax"
-  fi
-done
-case_ctx=""
+expect_parses "$RUNNER"
 end
 
 # ==========================================================================================
@@ -428,5 +365,4 @@ end
 
 # ==========================================================================================
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" = "0" ] || exit 1
+finish

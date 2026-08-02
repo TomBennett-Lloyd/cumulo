@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Test harness for check-infra-mirrors.sh, its neighbour in this directory.
 #
-# Self-contained on purpose (same shape as check-module-names.test.sh next door):
-# no test framework, no network, no pnpm, no terraform. Every fixture is a
-# throwaway tree under a single `mktemp -d` that a trap deletes on exit, laid out
-# at the exact repo-relative paths the gate's MIRRORS list names — which is what
-# lets the shipped record be exercised against doctored values without ever
-# putting a drifted value in this repo.
+# No test framework, no network, no pnpm, no terraform: the assertion vocabulary
+# is harness-lib.sh next door, sourced below and shared with every sibling
+# harness. Every fixture is a throwaway tree under the temp tree
+# `harness_init_tmp` makes and a trap deletes on exit, laid out at the exact
+# repo-relative paths the gate's MIRRORS list names — which is what lets the
+# shipped record be exercised against doctored values without ever putting a
+# drifted value in this repo.
 #
 # The two red cases below ARE the point of the gate, committed rather than run
 # once by hand (testing.md rule 4): a Terraform-only change and a
@@ -20,15 +21,14 @@
 # default path — and the shipped MIRRORS record's own paths — could be broken
 # and the suite would still be green (testing.md rule 7).
 #
-# DEPENDENCY, named because it is not one the sibling harnesses take: the cases
-# that need a fixture variant differing in one line edit it with `perl` rather
-# than writing the whole file out again, which is what check-adr-index.test.sh
-# and check-module-names.test.sh do. It buys a diff a reader can see at a glance
-# — "this fixture is the good one, minus its top-level timeout" — at the cost of
-# a tool the other harnesses do not require. `perl` is on macOS and on GitHub's
-# ubuntu runner images, so this does not narrow where the suite runs. Every such
-# edit is followed by a fixture_has/fixture_lacks assertion, because `perl -pi`
-# reports success for a substitution that matched nothing.
+# DEPENDENCY: the cases that need a fixture variant differing in one line edit it
+# with `perl` rather than writing the whole file out again. It buys a diff a
+# reader can see at a glance — "this fixture is the good one, minus its top-level
+# timeout". The idiom started here and is now the ratified family convention,
+# stated in harness-lib.sh's header along with the fixture_has/fixture_lacks
+# assertion every such edit is followed by, because `perl -pi` reports success for
+# a substitution that matched nothing. `perl` is on macOS and on GitHub's ubuntu
+# runner images, so leaning on it does not narrow where the suite runs.
 #
 # Usage: bash .claude/scripts/check-infra-mirrors.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
@@ -37,75 +37,9 @@ set -uo pipefail
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 CHECK="$SCRIPTS/check-infra-mirrors.sh"
 
-tmp_raw=$(mktemp -d) || exit 2
-trap 'rm -rf "$tmp_raw"' EXIT INT TERM
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
-
-passed=0
-failed=0
-case_name=""
-case_failed=0
-case_ctx=""
-out=""
-rc=0
-
-# The gate has to survive the oldest bash it can meet, and the interpreter is not
-# a detail: under `set -u`, bash 3.2 (which macOS ships as /bin/bash) aborts where
-# 4.4+ shrugs. This gate builds arrays and uses `[[ =~ ]]` with interpolated
-# patterns, both of which differ across those versions, so the cases that exercise
-# them run under every distinct bash on the box.
-BASHES="bash"
-if [ -x /bin/bash ] && [ "$(command -v bash)" != "/bin/bash" ]; then
-  BASHES="$BASHES /bin/bash"
-fi
-
-# --- harness plumbing --------------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
-}
-
-begin() {
-  case_name="$1"
-  case_failed=0
-  case_ctx=""
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-# case_ctx names the variant a failure came from, for cases that run the gate more than once.
-bad() {
-  printf '  ! %s%s\n' "$1" "${case_ctx:+ (under $case_ctx)}" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
-  esac
-}
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
+harness_init_tmp
 
 # --- fixtures ----------------------------------------------------------------------------
 
@@ -174,30 +108,10 @@ export const SHUTDOWN_MARGIN_MS = 5_000;
 EOF
 }
 
-# `perl -pi` exits 0 whether or not it substituted anything, so every fixture
-# edit below is followed by an assertion that it landed. A setup that silently
-# no-opped would leave the case running against the unedited fixture and passing
-# for the wrong reason — the harness's own version of the green-by-absence the
-# gate refuses.
-fixture_has() { # fixture_has <file> <fixed-string>
-  grep -qF -- "$2" "$1" || {
-    printf 'FATAL fixture edit did not land: %s is not in %s\n' "$2" "$1" >&2
-    exit 2
-  }
-}
-
-fixture_lacks() { # fixture_lacks <file> <fixed-string>
-  if grep -qF -- "$2" "$1"; then
-    printf 'FATAL fixture edit did not land: %s is still in %s\n' "$2" "$1" >&2
-    exit 2
-  fi
-}
-
 run_script_with() { # run_script_with <bash> <script> <args...>
   local interpreter="$1" script="$2"
   shift 2
-  out=$("$interpreter" "$script" "$@" 2>&1)
-  rc=$?
+  capture "$interpreter" "$script" "$@"
 }
 
 run_check_with() { # run_check_with <bash> <args...>
@@ -214,13 +128,7 @@ run_check() { # run_check <args...>
 # 1. the gate parses
 # ==========================================================================================
 begin "check-infra-mirrors.sh parses (bash -n)"
-for interpreter in $BASHES; do
-  case_ctx="$interpreter"
-  if ! syntax=$("$interpreter" -n "$CHECK" 2>&1); then
-    bad "check-infra-mirrors.sh failed -n: $syntax"
-  fi
-done
-case_ctx=""
+expect_parses "$CHECK"
 end
 
 # ==========================================================================================
@@ -479,5 +387,4 @@ end
 
 # ==========================================================================================
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" = "0" ] || exit 1
+finish

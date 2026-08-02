@@ -369,6 +369,32 @@ expect_not_stdout "PASS empty-C"
 expect_not_stdout "passed,"
 end
 
+# The empty-directory guard's sibling, and the one with teeth. `(cd "$dir" && "$@")` against a
+# directory that is not there fails at the cd: rc is 1 and the subject never runs — the exact
+# observation a red-fixture case makes when the subject runs and legitimately exits 1. Every
+# gate harness in this family is written `capture -C "$ROOT" …; expect_rc 1`, so a stale $ROOT
+# would green the case with the gate never invoked. The sentinel is what proves "never ran"
+# rather than "ran and said nothing": it lives in THIS harness's temp tree, so the consumer's
+# own teardown cannot be what removed it.
+begin "capture -C with a directory that does not exist is FATAL, and the subject never runs"
+must consumer capture_missing_dir <<'BODY'
+harness_init_tmp
+begin "missing-C"
+capture -C "$TMP_ROOT/never-created" bash -c 'printf ran >"$CAPTURE_SENTINEL"; exit 7'
+end
+finish
+BODY
+missing_dir_sentinel="$TMP_ROOT/missing-dir-sentinel"
+capture env CAPTURE_SENTINEL="$missing_dir_sentinel" bash "$CONSUMER"
+[ "$rc" = "2" ] || bad "consumer exit: expected 2, got $rc"
+expect_stderr "FATAL capture -C was given a directory that does not exist"
+expect_stderr "never-created"
+expect_not_stdout "PASS missing-C"
+expect_not_stdout "passed,"
+[ ! -e "$missing_dir_sentinel" ] ||
+  bad "the subject ran even though -C named a directory that does not exist"
+end
+
 begin "capture before harness_init_tmp is FATAL, not a silent empty capture"
 must consumer capture_no_tmp <<'BODY'
 begin "no-temp-tree"
@@ -492,6 +518,64 @@ run_consumer
 expect_stderr "FATAL harness setup failed: false"
 expect_not_stdout "PASS setup"
 expect_not_stdout "FAIL setup"
+end
+
+# ==========================================================================================
+# 9. harness_extra_cleanup — that the override runs, and that it runs in time to be useful
+# ==========================================================================================
+# The hook exists for teardown the library cannot know about: worktree-lifecycle.test.sh parks
+# background processes inside fixture worktrees and redefines the hook to kill them. "It ran"
+# is only half the contract — a hook firing AFTER the `rm -rf` would find its fixtures already
+# gone — so the consumer's override reports whether TMP_ROOT was still there when it fired.
+#
+# It reports rather than asserts: the hook runs during trap unwinding, after `finish` has
+# printed and with no case open, where a `bad` would have nothing to red. The sentinel and the
+# pid file therefore live under THIS harness's temp tree, which outlives the consumer's own —
+# the consumer's teardown cannot be what erased the evidence.
+begin "harness_extra_cleanup runs on EXIT, before the temp tree is removed"
+must consumer extra_cleanup <<'BODY'
+harness_init_tmp
+harness_extra_cleanup() {
+  if [ -d "$TMP_ROOT" ]; then
+    printf 'tmp-still-present\n' >"$EXTRA_SENTINEL"
+  else
+    printf 'tmp-already-gone\n' >"$EXTRA_SENTINEL"
+  fi
+  kill "$holder" 2>/dev/null
+  wait "$holder" 2>/dev/null
+}
+(cd "$TMP_ROOT" && exec sleep 30) &
+holder=$!
+printf '%s\n' "$holder" >"$EXTRA_PIDFILE"
+begin "one-ordinary-case"
+capture true
+expect_rc 0 "$rc"
+end
+finish
+BODY
+extra_sentinel="$TMP_ROOT/extra-cleanup-sentinel"
+extra_pidfile="$TMP_ROOT/extra-cleanup-pid"
+capture env EXTRA_SENTINEL="$extra_sentinel" EXTRA_PIDFILE="$extra_pidfile" bash "$CONSUMER"
+[ "$rc" = "0" ] || bad "consumer exit: expected 0, got $rc"
+expect_stdout "1 passed, 0 failed"
+if [ -f "$extra_sentinel" ]; then
+  extra_saw=$(cat "$extra_sentinel")
+  [ "$extra_saw" = "tmp-still-present" ] ||
+    bad "hook fired too late: it reported '$extra_saw'"
+else
+  bad "harness_extra_cleanup never ran: no sentinel under $TMP_ROOT"
+fi
+# The other half of what worktree-lifecycle.test.sh asks of the hook: the process it parked
+# really is gone. Reaped by the consumer's own `wait`, so this is not a race on the kill.
+if [ -f "$extra_pidfile" ]; then
+  extra_holder=$(cat "$extra_pidfile")
+  if kill -0 "$extra_holder" 2>/dev/null; then
+    bad "the background process the hook should have killed is still alive"
+    kill "$extra_holder" 2>/dev/null
+  fi
+else
+  bad "consumer never recorded the pid it backgrounded"
+fi
 end
 
 # ==========================================================================================

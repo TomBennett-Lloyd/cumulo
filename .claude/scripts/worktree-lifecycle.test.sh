@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 # Test harness for the worktree lifecycle scripts (reap / rebranch / sweep).
 #
-# Self-contained on purpose: no test framework, no network, no gh, no pnpm. Every fixture is
-# a throwaway repo under a single `mktemp -d` that a trap deletes on exit, so the harness can
-# exercise the destructive paths (real `worktree remove`, real `branch -D`) without ever
-# being able to touch the repository it ships in.
+# Self-contained on purpose: no test framework beyond the shared vocabulary in harness-lib.sh
+# next door, no network, no gh, no pnpm. Every fixture is a throwaway repo under a single
+# `mktemp -d` that a trap deletes on exit, so the harness can exercise the destructive paths
+# (real `worktree remove`, real `branch -D`) without ever being able to touch the repository
+# it ships in.
 #
 # Usage: bash .claude/scripts/worktree-lifecycle.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
-set -u
+set -uo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 
 shipped_scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
+
+# The assertion vocabulary is sourced from $shipped_scripts, NOT from $SCRIPTS, and the
+# distinction is the negative control below: WORKTREE_SCRIPTS_DIR points at an older revision
+# of the four lifecycle scripts, which predates harness-lib.sh and holds no copy of it. The
+# harness's own tooling is never part of what the override swaps — only the subject is.
+# shellcheck source=./harness-lib.sh
+. "$shipped_scripts/harness-lib.sh"
+
 # The scripts under test, overridable so the same cases can be run against an older revision as
 # a negative control (testing.md rule 4: a regression case is only worth its line count once it
 # has been seen to fail on the pre-fix code). Same convention as lint-shell.test.sh's
@@ -22,77 +31,34 @@ shipped_scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 #   for s in worktree-lib reap-worktree rebranch-worktree sweep-worktrees; do
 #     git show <rev>:.claude/scripts/$s.sh >/tmp/pre/$s.sh
 #   done
+#   chmod +x /tmp/pre/*.sh
 #   WORKTREE_SCRIPTS_DIR=/tmp/pre bash .claude/scripts/worktree-lifecycle.test.sh
+#
+# The chmod is not optional: sweep-worktrees.sh EXECUTES its sibling reap-worktree.sh rather
+# than running it through `bash`, and `git show` writes mode 644. Without it the four sweep
+# cases fail with "swept 0, kept 0, failed 3" — a bisect that looks like a real regression in
+# the revision under test and is not.
+#
+# Those four files are the whole of what the directory needs to hold: harness-lib.sh is always
+# the shipped one, so an extracted revision from before it existed still runs.
 #
 # Unset — how `pnpm test:scripts` runs it — is the shipped set.
 SCRIPTS=${WORKTREE_SCRIPTS_DIR:-$shipped_scripts}
 
-tmp_raw=$(mktemp -d) || exit 2
+harness_init_tmp
+
+# The background `sleep` case 8 parks inside a fixture worktree outlives the case if it fails
+# early, and the temp tree cannot be removed cleanly with a process still holding a cwd in it.
+# So the kill loop runs from the library's EXIT trap, ahead of its `rm -rf`.
 bg_pids=""
-cleanup() {
+harness_extra_cleanup() {
   for pid in $bg_pids; do
     kill "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
   done
-  rm -rf "$tmp_raw"
-}
-trap cleanup EXIT INT TERM
-# Canonical from the start: macOS hides temp dirs behind /var -> /private/var, and the
-# scripts under test report realpaths, so fixtures must be built from realpaths too.
-TMP_ROOT=$(cd "$tmp_raw" && pwd -P) || exit 2
-
-passed=0
-failed=0
-case_name=""
-case_failed=0
-out=""
-rc=0
-
-# --- harness plumbing --------------------------------------------------------------------
-
-must() {
-  "$@" || {
-    printf 'FATAL harness setup failed: %s\n' "$*" >&2
-    exit 2
-  }
 }
 
-begin() {
-  case_name="$1"
-  case_failed=0
-}
-
-end() {
-  if [ "$case_failed" = "0" ]; then
-    printf 'PASS %s\n' "$case_name"
-    passed=$((passed + 1))
-  else
-    printf 'FAIL %s\n' "$case_name"
-    failed=$((failed + 1))
-  fi
-}
-
-bad() {
-  printf '  ! %s\n' "$1" >&2
-  case_failed=1
-}
-
-expect_rc() { # expect_rc <expected> <actual>
-  [ "$1" = "$2" ] || bad "exit code: expected $1, got $2"
-}
-
-expect_out() { # expect_out <substring>
-  case "$out" in
-    *"$1"*) ;;
-    *) bad "output missing '$1'; got: $out" ;;
-  esac
-}
-
-expect_not_out() { # expect_not_out <substring>
-  case "$out" in
-    *"$1"*) bad "output should not contain '$1'; got: $out" ;;
-  esac
-}
+# --- harness plumbing, the part with only this consumer ------------------------------------
 
 expect_exists() { [ -e "$1" ] || bad "expected to still exist: $1"; }
 expect_gone() { [ ! -e "$1" ] || bad "expected to be gone: $1"; }
@@ -222,9 +188,8 @@ EOF
 run_reap() { # run_reap <gh-cmd> <min-age-minutes> <args...>
   local gh="$1" min_age="$2"
   shift 2
-  out=$(env WORKTREE_GH_CMD="$gh" WORKTREE_MIN_AGE_MINUTES="$min_age" \
-    bash "$SCRIPTS/reap-worktree.sh" "$@" 2>&1)
-  rc=$?
+  capture env WORKTREE_GH_CMD="$gh" WORKTREE_MIN_AGE_MINUTES="$min_age" \
+    bash "$SCRIPTS/reap-worktree.sh" "$@"
 }
 
 # run_reap_default_age <gh-cmd> <args...> — reap with the min-age guard at its shipped default.
@@ -233,9 +198,8 @@ run_reap() { # run_reap <gh-cmd> <min-age-minutes> <args...>
 run_reap_default_age() {
   local gh="$1"
   shift
-  out=$(env -u WORKTREE_MIN_AGE_MINUTES WORKTREE_GH_CMD="$gh" \
-    bash "$SCRIPTS/reap-worktree.sh" "$@" 2>&1)
-  rc=$?
+  capture env -u WORKTREE_MIN_AGE_MINUTES WORKTREE_GH_CMD="$gh" \
+    bash "$SCRIPTS/reap-worktree.sh" "$@"
 }
 
 # backdate_git_dir <worktree> — make the worktree's admin dir look untouched for years, i.e.
@@ -257,9 +221,7 @@ backdate_git_dir() {
 # ==========================================================================================
 begin "all four lifecycle scripts parse (bash -n)"
 for script in worktree-lib.sh reap-worktree.sh rebranch-worktree.sh sweep-worktrees.sh; do
-  if ! syntax=$(bash -n "$SCRIPTS/$script" 2>&1); then
-    bad "$script failed bash -n: $syntax"
-  fi
+  expect_parses "$SCRIPTS/$script"
 done
 end
 
@@ -471,9 +433,8 @@ begin "reap keeps the worktree its own cwd sits in"
 fixture owncwd
 add_wt feat wt
 gh_stub_broken "$ROOT/gh"
-out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
-  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt" 2>&1)
-rc=$?
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt"
 expect_rc 1 "$rc"
 # The reason is the assertion, not the refusal: with the own-cwd guard gone the live-session
 # check usually catches this anyway, so expecting only rc 1 would pass on a broken guard.
@@ -506,9 +467,8 @@ add_wt feat wt
 advance_main later-work
 gh_stub_broken "$ROOT/gh"
 pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
-out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
-  bash "$SCRIPTS/rebranch-worktree.sh" next 2>&1)
-rc=$?
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next
 expect_rc 0 "$rc"
 expect_out "REBRANCHED feat -> next at"
 expect_eq "worktree HEAD" \
@@ -521,7 +481,10 @@ if git -C "$ROOT/wt" rev-parse --abbrev-ref --symbolic-full-name "next@{upstream
   bad "new branch should have no upstream (--no-track)"
 fi
 if [ -f "$ROOT/pnpm.log" ]; then
-  out=$(cat "$ROOT/pnpm.log")
+  # Through capture rather than `out=$(cat …)`: expect_out reads BOTH slots, so assigning out
+  # by hand would leave $err holding the rebranch run's stderr and let this assertion pass on
+  # text the package manager never wrote.
+  capture cat "$ROOT/pnpm.log"
   expect_out "install --frozen-lockfile"
   expect_out "$ROOT/wt"
 else
@@ -539,17 +502,15 @@ gh_stub_broken "$ROOT/gh"
 pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
 must git -C "$ROOT/main" branch taken main
 
-out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
-  bash "$SCRIPTS/rebranch-worktree.sh" taken 2>&1)
-rc=$?
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" taken
 expect_rc 1 "$rc"
 expect_out "REFUSED"
 expect_out "already exists"
 
 must printf 'scratch\n' >"$ROOT/wt/notes.txt"
-out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
-  bash "$SCRIPTS/rebranch-worktree.sh" fresh 2>&1)
-rc=$?
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" fresh
 expect_rc 1 "$rc"
 expect_out "REFUSED"
 expect_out "uncommitted or untracked"
@@ -573,9 +534,8 @@ commit_in "$ROOT/wt" work
 gh_stub_none "$ROOT/gh"
 pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
 tip=$(git -C "$ROOT/wt" rev-parse HEAD) || exit 2
-out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
-  bash "$SCRIPTS/rebranch-worktree.sh" next 2>&1)
-rc=$?
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next
 expect_rc 1 "$rc"
 expect_out "REFUSED"
 expect_out "feat is not merged"
@@ -595,9 +555,8 @@ commit_in "$ROOT/wt" work
 gh_stub_broken "$ROOT/gh"
 pnpm_stub "$ROOT/pnpm" "$ROOT/pnpm.log"
 tip=$(git -C "$ROOT/wt" rev-parse HEAD) || exit 2
-out=$(cd "$ROOT/wt" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
-  bash "$SCRIPTS/rebranch-worktree.sh" next 2>&1)
-rc=$?
+capture -C "$ROOT/wt" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_PNPM_CMD="$ROOT/pnpm" \
+  bash "$SCRIPTS/rebranch-worktree.sh" next
 expect_rc 1 "$rc"
 expect_out "REFUSED"
 expect_out "could not verify whether feat is merged"
@@ -623,9 +582,8 @@ commit_in "$ROOT/wt-unmerged" work
 # The main checkout is meant to sit parked on main; sweep must say so and sweep it anyway.
 must git -C "$ROOT/main" switch --quiet -c parked
 gh_stub_none "$ROOT/gh"
-out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
-  bash "$SCRIPTS/sweep-worktrees.sh" 2>&1)
-rc=$?
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh"
 expect_rc 0 "$rc"
 expect_out "WARN main checkout is on 'parked'"
 expect_out "REAPED $ROOT/wt-done (done)"
@@ -655,9 +613,8 @@ must printf 'scratch\n' >"$ROOT/wt-dirty/notes.txt"
 # prunes it destroys the one thing that makes the directory restorable.
 must mv "$ROOT/wt-gone" "$ROOT/wt-gone-stashed"
 gh_stub_broken "$ROOT/gh"
-out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
-  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run 2>&1)
-rc=$?
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run
 expect_rc 0 "$rc"
 expect_out "WOULD-REAP $ROOT/wt-done (done)"
 expect_out "KEPT $ROOT/wt-dirty — dirty"
@@ -704,8 +661,7 @@ case "$1" in
 esac
 EOF
 must chmod +x "$ROOT/scripts/reap-worktree.sh"
-out=$(cd "$ROOT/main" && bash "$ROOT/scripts/sweep-worktrees.sh" 2>&1)
-rc=$?
+capture -C "$ROOT/main" bash "$ROOT/scripts/sweep-worktrees.sh"
 expect_rc 2 "$rc"
 expect_out "ERROR reap-worktree.sh exited 2 for $ROOT/wt-c"
 expect_out "swept 1, kept 1, failed 1"
@@ -730,9 +686,8 @@ commit_in "$ROOT/wt-a" work-a
 commit_in "$ROOT/wt-b" work-b
 commit_in "$ROOT/wt-c" work-c
 gh_stub_stdin_eater "$ROOT/gh"
-out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
-  bash "$SCRIPTS/sweep-worktrees.sh" 2>&1)
-rc=$?
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh"
 expect_rc 0 "$rc"
 expect_out "KEPT $ROOT/wt-a — unmerged"
 expect_out "KEPT $ROOT/wt-b — unmerged"
@@ -787,9 +742,8 @@ advance_origin upstream-work
 expect_stale_fixture
 stale=$(tracking_ref) || exit 2
 gh_stub_none "$ROOT/gh"
-out=$(cd "$ROOT/main" && env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
-  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run 2>&1)
-rc=$?
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run
 expect_rc 0 "$rc"
 expect_out "WOULD-REAP"
 expect_eq "origin/main after a dry sweep" "$(tracking_ref)" "$stale"
@@ -817,8 +771,7 @@ printf 'KEPT %s — stub (fetch-knob=%s)\n' "$1" "${WORKTREE_FETCH_MAIN-unset}"
 exit 1
 EOF
 must chmod +x "$ROOT/scripts/reap-worktree.sh"
-out=$(cd "$ROOT/main" && bash "$ROOT/scripts/sweep-worktrees.sh" 2>&1)
-rc=$?
+capture -C "$ROOT/main" bash "$ROOT/scripts/sweep-worktrees.sh"
 expect_rc 0 "$rc"
 expect_out "fetch-knob=0"
 expect_not_out "fetch-knob=unset"
@@ -843,9 +796,8 @@ ahead=$(origin_head) || exit 2
 # pass by accidentally consulting GitHub.
 gh_stub_broken "$ROOT/gh"
 
-out=$(env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 WORKTREE_FETCH_MAIN=0 \
-  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt-a" 2>&1)
-rc=$?
+capture env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 WORKTREE_FETCH_MAIN=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt-a"
 expect_rc 0 "$rc"
 expect_out "REAPED"
 expect_eq "origin/main with WORKTREE_FETCH_MAIN=0" "$(tracking_ref)" "$stale"
@@ -874,9 +826,8 @@ stale=$(tracking_ref) || exit 2
 gh_stub_broken "$ROOT/gh"
 # -u, not merely "we did not set it": an inherited WORKTREE_FETCH_MAIN=0 would make this case
 # pass by testing case 27's half of the guard all over again.
-out=$(env -u WORKTREE_FETCH_MAIN WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
-  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt" --dry-run 2>&1)
-rc=$?
+capture env -u WORKTREE_FETCH_MAIN WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/reap-worktree.sh" "$ROOT/wt" --dry-run
 expect_rc 0 "$rc"
 expect_out "WOULD-REAP"
 expect_eq "origin/main after a dry reap" "$(tracking_ref)" "$stale"
@@ -886,5 +837,4 @@ end
 
 # ==========================================================================================
 
-printf '\n%d passed, %d failed\n' "$passed" "$failed"
-[ "$failed" = "0" ] || exit 1
+finish
