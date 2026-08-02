@@ -398,7 +398,7 @@ end
 
 # The twin of the case above, and the one with the nastier failure if it goes unwritten.
 # post-edit-check reading an unreadable event just stops; ensure-deps reading one gets an
-# empty `cwd`, and empty falls through to the $PWD fallback — so an ungarded field read does
+# empty `cwd`, and empty falls through to the $PWD fallback — so an unguarded field read does
 # not merely fail to prepare the worktree, it goes and prepares WHATEVER DIRECTORY THE HOOK
 # HAPPENS TO BE IN, having read nothing at all. A wrong tree confidently answered is the
 # original #74 shape, arrived at from a new direction.

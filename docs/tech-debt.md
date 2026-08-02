@@ -134,5 +134,11 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 ## 2026-08-02 — canon spawns an interpreter per path, and the sweep multiplies it
 
 - Where: `canon` in `.claude/scripts/worktree-lib.sh`; its per-porcelain-line call sites in `reap-worktree.sh` and `sweep-worktrees.sh`
-- What: the python→node migration kept canon's one-path-per-process shape, so reap is O(worktrees) node spawns and a sweep is O(N²); the lifecycle harness measured 27 s → 42 s on the same cases. No correctness impact and fine at this repo's worktree counts — recorded so the cost has a name. Fix direction if it ever bites: a `canon_many` reading a NUL-separated list in one spawn, or batching the porcelain parse's canon calls. Related boundary note from the same review: reap's broken-git-link SHAPE arm is currently shadowed by the identity arm for every deleting fixture (its only unique input is a `.git` whose content equals the recorded admin dir minus the `gitdir: ` prefix) — the case-35 comment records the true boundary.
+- What: the python→node migration kept canon's one-path-per-process shape, so reap is O(worktrees) node spawns and a sweep is O(N²); the lifecycle harness measured 27 s → 42 s on the same cases. No correctness impact and fine at this repo's worktree counts — recorded so the cost has a name. Fix direction if it ever bites: a `canon_many` reading a NUL-separated list in one spawn, or batching the porcelain parse's canon calls.
+- Source: #102 review cycle 1
+
+## 2026-08-02 — reap's broken-git-link shape arm is shadowed by the identity arm
+
+- Where: the shape arm of the broken-git-link guard in `.claude/scripts/reap-worktree.sh`; the boundary is recorded in the case-35 comment of `.claude/scripts/worktree-lifecycle.test.sh`
+- What: every fixture that breaks the `.git` link by deleting the file is answered by the identity arm (an empty link joins onto `$wt` and fails the comparison), so the shape arm's `keep` survives mutation — proven twice, by the reviewer and by the override-seam reproduction. Its only unique input is a `.git` file holding the recorded admin dir with the `gitdir: ` prefix stripped: a shape no tool produces, which is why the reviewer sized closing it as defence-in-depth rather than behaviour and declined to spend a cycle. If a future reader wants the arm pinned, the case is six lines on `nested_worktree_fixture` writing that exact content and asserting `broken-git-link`.
 - Source: #102 review cycle 1

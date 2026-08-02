@@ -53,10 +53,14 @@ command -v node >/dev/null 2>&1 || {
 # likewise; or a relative `gitdir:` value joined onto a $wt that canon has ALREADY fully
 # resolved — the only place a `..` could enter, and by then no unresolved symlink is left ahead
 # of it for the lexical shortcut to skip past. The one genuinely free input is the path the
-# operator types on the command line, and mis-resolving that cannot widen anything: $wt would
-# match no porcelain block and reap answers `not-a-worktree`. That is the general shape — canon
-# feeds string comparisons whose every mismatch verdict is a refusal (`not-a-worktree`,
-# `broken-git-link`), so a divergence costs a keep, never a removal.
+# operator types on the command line. Mis-resolving that usually costs a keep ($wt matches no
+# porcelain block, reap answers `not-a-worktree`) — but not always: a lexically collapsed path
+# can itself name a REGISTERED worktree (`/a/link/../x` -> `/a/x` when `/a/x` exists), and then
+# every check runs consistently against that worktree rather than the one the kernel would
+# resolve the operator's string to. What holds as an invariant is narrower: no divergence can
+# make an UNSAFE removal, because all safety probes and the removal target are the same
+# consistently-resolved path; the residual is acting on a validly-reapable neighbour the
+# operator reached through a hand-typed `..` across a symlink.
 canon() {
   node -e 'const fs=require("fs"),path=require("path");let p=path.resolve(process.argv[1]),tail="";for(;;){try{console.log(path.join(fs.realpathSync(p),tail));break}catch(e){tail=path.join(path.basename(p),tail);const parent=path.dirname(p);if(parent===p){console.log(path.join(p,tail));break}p=parent}}' "$1"
 }

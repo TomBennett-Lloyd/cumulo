@@ -1132,6 +1132,13 @@ expect_out "WOULD-REAP $ROOT/work tree (feat)"
 expect_not_out "KEPT"
 expect_exists "$ROOT/work tree/file.txt"
 expect_branch "$ROOT/main" feat
+# The sweep's candidate list is the THIRD parser the header names, and reap alone never feeds
+# it: a truncated candidate would be offered to reap, come back `not-a-worktree`, and be
+# counted `kept` — a backstop reporting nothing to do over a worktree it could not name.
+capture -C "$ROOT/main" env WORKTREE_GH_CMD="$ROOT/gh" WORKTREE_MIN_AGE_MINUTES=0 \
+  bash "$SCRIPTS/sweep-worktrees.sh" --dry-run
+expect_rc 0 "$rc"
+expect_out "WOULD-REAP $ROOT/work tree"
 end
 
 # ==========================================================================================
