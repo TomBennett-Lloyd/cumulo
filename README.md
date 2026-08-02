@@ -8,7 +8,7 @@ The name: cumulus clouds are the antagonist — the thing between the sun and th
 
 ## Status
 
-🚧 Bootstrap phase — tooling, standards, and the agentic build workflow are in place; the platform itself is being built issue by issue. Watch the [issues](../../issues) and PR history to see the process.
+🚧 Bootstrap phase — tooling, standards, and the agentic build workflow are in place; the platform itself is being built issue by issue. Watch the [issues](https://github.com/TomBennett-Lloyd/cumulo/issues) and PR history to see the process.
 
 ## Data sources
 
