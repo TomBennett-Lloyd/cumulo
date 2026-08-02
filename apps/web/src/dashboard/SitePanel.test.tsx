@@ -212,6 +212,16 @@ describe('SitePanel', () => {
 
 /** The wait the dashboard's poll owns — before any series is worth asking for. */
 describe('SitePanel first forecast', () => {
+  it('shows a plain loading label, not the first-forecast count, while checking', () => {
+    const { dataSource } = renderPanel({ status: 'checking' });
+
+    const waiting = screen.getByText('Loading the forecast for Rathmines rooftop…');
+
+    expect(waiting.getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByText(/Generating first forecast/u)).toBeNull();
+    expect(dataSource.forecastRequests).toEqual([]);
+  });
+
   it('counts the wait out loud, and asks the source for nothing yet', () => {
     const { dataSource } = renderPanel({ status: 'generating', elapsedSeconds: 18 });
 
@@ -251,6 +261,18 @@ describe('SitePanel first forecast', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(onRetryFirstForecast).toHaveBeenCalledTimes(1);
+  });
+
+  it('a halted watch explains itself and offers no Try again', () => {
+    const message = 'refused by the API — set CUMULO_WEB_ORIGINS; retrying cannot help.';
+    renderPanel({ status: 'halted', message });
+
+    expect(screen.getByRole('alert').textContent).toContain(message);
+    // The paired positive control for this negative: `offers a retry that
+    // restarts the wait`, directly above, finds the button with the same query
+    // on the `failed` arm — so a null here is an absent button, not a query
+    // that never matches anything.
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 });
 
