@@ -25,14 +25,16 @@
 #     forecast's, this volume is not a constant — it tracks traffic, and the
 #     traffic is unauthenticated. The census is the smallest in the platform, and
 #     it is worth stating because the count is what these estimates get wrong.
-#     **A read logs no application line**; a write logs at most a line or two.
-#     There are four application sinks under sites/, all on the write path and
-#     none of them on a request that goes well — two exhaustion events
-#     (`api.site.create-store-exhausted`, `api.site.delete-conflict-exhausted`,
-#     both contention-only) and two deadline events
-#     (`api.site.create-deadline-reached`, `api.site.delete-deadline-reached`,
-#     each emitted only when a retry loop runs out of the request's remaining
-#     time) — plus `api.request.failed` at the boundary in main.ts. So the unit
+#     **No application line rides on a request that goes well**, read or write.
+#     Seven application sinks exist and every one is a failure path: under
+#     sites/, two exhaustion events (`api.site.create-store-exhausted`,
+#     `api.site.delete-conflict-exhausted`, both contention-only) and two
+#     deadline events (`api.site.create-deadline-reached`,
+#     `api.site.delete-deadline-reached`); on the read routes, two more
+#     deadline events (`api.series.read-deadline-reached`,
+#     `api.forecast.read-deadline-reached`, emitted only when a read is
+#     truncated at the request deadline and answered 500); plus
+#     `api.request.failed` at the boundary in main.ts. So the unit
 #     CloudWatch bills is Lambda's own START, END and REPORT, **three lines per
 #     invocation** (a cold start adds an INIT_START), and the write-path lines
 #     ride on top of it. That is sound at demo volume rather than merely
