@@ -82,7 +82,11 @@ describe('useProviderQuery', () => {
       expect(result.current.status).toBe('failed');
     });
     expect(result.current.status === 'failed' && result.current.error.code).toBe('rate-limited');
-    expect(result.current.status === 'failed' && result.current.error.retryAfterSeconds).toBe(30);
+    expect(
+      result.current.status === 'failed' &&
+        result.current.error.code === 'rate-limited' &&
+        result.current.error.retryAfterSeconds,
+    ).toBe(30);
   });
 
   it('refetches when the key changes', async () => {

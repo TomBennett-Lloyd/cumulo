@@ -206,7 +206,7 @@ export class DemoFleetDataSource implements FleetDataSource {
         .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
         .join('; ');
       return Promise.resolve(
-        failure({ code: 'invalid-response', message: `Invalid site: ${detail}` }),
+        failure({ code: 'invalid-request', message: `Invalid site: ${detail}` }),
       );
     }
 

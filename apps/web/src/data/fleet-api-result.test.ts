@@ -60,13 +60,13 @@ describe('parseFleetApiResponse', () => {
     expect(error.message).toContain(OPERATION);
   });
 
-  it('maps 400 to invalid-response, carrying the message the API sent', async () => {
+  it('maps 400 to invalid-request, carrying the message the API sent', async () => {
     const response = jsonResponse(apiErrorBody('validation_failed', 'hours must be one of 24'), {
       status: 400,
     });
 
     const error = expectFailure(await parse(response));
-    expect(error.code).toBe('invalid-response');
+    expect(error.code).toBe('invalid-request');
     expect(error.message).toContain('hours must be one of 24');
   });
 
@@ -94,7 +94,7 @@ describe('parseFleetApiResponse', () => {
 
     const error = expectFailure(await parse(response));
     expect(error.code).toBe('rate-limited');
-    expect(error.retryAfterSeconds).toBe(17);
+    expect(error.code === 'rate-limited' && error.retryAfterSeconds).toBe(17);
   });
 
   it('omits retryAfterSeconds entirely when a 429 carries no Retry-After header', async () => {
