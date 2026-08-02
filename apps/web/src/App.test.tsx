@@ -23,10 +23,10 @@ import { THEME_STORAGE_KEY } from './theme';
  * in the real shell — which only a browser harness closes (#107). Its two
  * off-happy-path states are covered directly in `dashboard/LazyMapRegion.test.tsx`.
  *
- * The dashboard runs against the real fixture provider rather than a stub,
+ * The dashboard runs against the real fixture source rather than a stub,
  * because what these tests are for is the wiring: that the shell mounts the
  * dashboard and that the dashboard finds a data source at all. A stub here
- * would pass with the provider unplugged, which is the one failure this file
+ * would pass with the source unplugged, which is the one failure this file
  * exists to rule out.
  */
 

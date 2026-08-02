@@ -46,7 +46,7 @@ const LOADING: QueryState<never> = { status: 'loading' };
  * (`docs/standards/error-handling.md` rule 1) rather than being caught and disguised as a
  * user-facing error.
  */
-export const useProviderQuery = <T>(
+export const useFleetQuery = <T>(
   query: () => Promise<FleetSourceResult<T>>,
   key: readonly unknown[],
 ): QueryState<T> => {

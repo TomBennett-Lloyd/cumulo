@@ -10,7 +10,7 @@ import { useId, useState, type ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
-import { useProviderQuery, type QueryState } from '../data/use-provider-query';
+import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { joinFleetSeries, minimumContributingSites } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker, rangeLabel } from './range-picker';
@@ -131,7 +131,7 @@ const chartCopy = (windowText: string, hasActuals: boolean): ChartCopy =>
         tableCaption: `Table view — fleet forecast, ${windowText}, kW`,
       };
 
-/** The two provider calls this panel makes, once both have answered. */
+/** The two source calls this panel makes, once both have answered. */
 interface FleetSeries {
   readonly forecasts: readonly Forecast[];
   readonly actuals: readonly GenerationReading[];
@@ -236,18 +236,18 @@ export const FleetPanel = ({
   const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
   // Retrying is a new question, so it is a new query key rather than an
-  // imperative refetch: `useProviderQuery` re-runs on key change and nothing
+  // imperative refetch: `useFleetQuery` re-runs on key change and nothing
   // else, and a counter is the smallest honest way to say "ask again".
   const [attempt, setAttempt] = useState(0);
 
   // Both hooks run unconditionally, including for an empty fleet and for a
   // source that can never return actuals: hooks are not a place for `if`, and
   // the wasted call is a resolved empty array in exactly the case it is wasted.
-  const forecasts = useProviderQuery(
+  const forecasts = useFleetQuery(
     () => dataSource.fleetForecasts(range),
     ['fleet-forecasts', range, refreshToken, attempt],
   );
-  const actuals = useProviderQuery(
+  const actuals = useFleetQuery(
     () => dataSource.fleetActuals(range),
     ['fleet-actuals', range, refreshToken, attempt],
   );

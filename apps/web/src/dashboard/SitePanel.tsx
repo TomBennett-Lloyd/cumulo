@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
-import { useProviderQuery, type QueryState } from '../data/use-provider-query';
+import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import type { ForecastViewState } from './forecast-view-state';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker } from './range-picker';
@@ -122,12 +122,12 @@ interface SiteSeriesSectionProps {
  * The window is state here rather than in {@link SitePanel} because nothing
  * above this component reads it, and this component only exists once a forecast
  * does (`react.md` rule 3). The query key names every input the query reads,
- * which is `useProviderQuery`'s contract: a superseded window's answer is
+ * which is `useFleetQuery`'s contract: a superseded window's answer is
  * dropped rather than allowed to overwrite the chart the reader is looking at.
  */
 const SiteSeriesSection = ({ dataSource, site }: SiteSeriesSectionProps): ReactElement => {
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
-  const state = useProviderQuery(
+  const state = useFleetQuery(
     () => loadSiteSeries(dataSource, site.id, range),
     ['site-series', site.id, range],
   );
