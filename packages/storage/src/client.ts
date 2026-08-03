@@ -262,8 +262,9 @@ export interface StorageClientOptions {
  *    too, exactly as it supplies its own retry configuration.
  *
  * 3. `ConsistentRead` is set nowhere in this package. ADR 0002 sized the
- *    `series` table's 21 RCU against Query's default eventually-consistent
- *    reads; a single `ConsistentRead: true` doubles the cost of that read and
+ *    `series` table's provisioned read capacity (`infra/storage/tables.tf`)
+ *    against Query's default eventually-consistent reads; a single
+ *    `ConsistentRead: true` doubles the cost of that read and
  *    can push the table into throttling. Any future need for one has to be
  *    justified at its own call site — and the adapter tests assert that no
  *    command input carries the flag.

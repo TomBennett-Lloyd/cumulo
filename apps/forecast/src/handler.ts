@@ -76,9 +76,10 @@ import { sqsEventSchema, type SqsBatchResponse } from './sqs-event';
  * A **pure** 200-declining regime is therefore cheaper per send, not dearer: one
  * HTTP attempt bounded at 3 s to headers, so ≈ 9.6 s per page (`3 × 3 s + 0.6 s`)
  * and ≈ 96 s over ten. Both regimes are sustained throttling — `cumulo-series` is
- * provisioned at 14 WCU (ADR 0002), and a hot enough write burst is how a table
- * both slows down and declines items — and both blow the 50 s timeout, so nothing
- * below depends on which of the two you actually get. The mapping's
+ * a provisioned table (ADR 0002; `infra/storage/tables.tf` owns the figure), and a
+ * hot enough write burst is how a table both slows down and declines items — and
+ * both blow the 50 s timeout, so nothing below depends on which of the two you
+ * actually get. The mapping's
  * `maximum_concurrency = 2` exists to keep the fleet's writes out of either.
  *
  * Only in *those* cases can an invocation reach the 50 s timeout, and only there is
@@ -135,8 +136,8 @@ const failsTheRecord = (outcome: MessageOutcome): boolean =>
  * Records are processed **sequentially**. At `batch_size = 1`
  * (`infra/forecast/event-source.tf`) there is nothing to parallelise today, and at
  * a larger size a serial loop is still the right shape: the writes all land on
- * `cumulo-series`' provisioned 14 WCU, so concurrency inside an invocation would
- * fight the very throttling the mapping's `maximum_concurrency = 2` exists to
+ * `cumulo-series`' provisioned write capacity, so concurrency inside an invocation
+ * would fight the very throttling the mapping's `maximum_concurrency = 2` exists to
  * avoid.
  *
  * Every outcome is logged before the summary, and the summary is emitted even for

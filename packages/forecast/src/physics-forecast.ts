@@ -226,12 +226,14 @@ export const runPhysicsChain = (
  * cos(zenith) in the projection ratio at 0.01745 (`irradiance.ts`, pvlib GH 432), so `Rb`
  * tops out near 57; a near-grazing sun on a vertical array aimed straight at it therefore
  * multiplies DHI by Rb (capped at ~57.3) times the anisotropy index — 62.4x at this
- * operating point, since A = 1500/1377.7 exceeds 1 — rather than diverging. Feed that geometry every irradiance field
- * at its 1500 W/m² `weatherReadingSchema` cap and the chain returns POA ≈ 95 200 W/m², a
- * cell at ≈ 3870 °C and — once the PVWatts temperature factor goes negative — DC and AC
- * power around −5300 kW. Measured with a `siteSchema`-valid Dublin site (tilt 90, azimuth
- * 89.47) and a `weatherReadingSchema`-valid reading at 2026-03-20T07:00:00Z, whose
- * evaluation midpoint sits at apparent zenith 89.9335°.
+ * operating point, since A — DNI over the hour's 1377.7 W/m² extraterrestrial normal
+ * irradiance — exceeds 1 with DNI at its cap — rather than diverging. Feed that geometry
+ * every irradiance field at its `weatherReadingSchema` cap (`MAX_PLAUSIBLE_IRRADIANCE_WM2`)
+ * and the chain returns POA ≈ 95 200 W/m², a cell at ≈ 3870 °C and — once the PVWatts
+ * temperature factor goes negative — DC and AC power around −5300 kW. Measured with a
+ * `siteSchema`-valid Dublin site (tilt 90, azimuth 89.47) and a
+ * `weatherReadingSchema`-valid reading at 2026-03-20T07:00:00Z, whose evaluation midpoint
+ * sits at apparent zenith 89.9335°.
  *
  * So a throw here means "physically implausible input" as well as "bug in this package".
  * Both still warrant failing fast at this layer, and on the live path the caller's half of

@@ -43,9 +43,10 @@ import {
  * provide.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
- * comment on `createStorageDocumentClient`. The `series` table's 21 RCU were
- * sized against eventually-consistent Query reads, and the dashboard fan-out is
- * the one user-visible path on that capacity.
+ * comment on `createStorageDocumentClient`. The `series` table's provisioned
+ * read capacity (`infra/storage/tables.tf`) was sized against
+ * eventually-consistent Query reads, and the dashboard fan-out is the one
+ * user-visible path on that capacity.
  */
 
 /**
@@ -261,9 +262,9 @@ export class SeriesAdapter extends StorageAdapterBase {
    * `maxItems` keys.
    *
    * Capacity says the same thing as latency here. Those deletes draw on the
-   * `series` table's provisioned 14 WCU, shared with the hourly ingestion
-   * cycle, so 2,160 deletes is ~154 seconds of the table's entire write budget
-   * spent on a site nobody is reading. The 90-day TTL removes the remainder for
+   * `series` table's provisioned write capacity (`infra/storage/tables.tf`),
+   * shared with the hourly cycle's forecast writes, so a full drain spends
+   * minutes of the table's entire write budget on a site nobody is reading. The 90-day TTL removes the remainder for
    * free and asynchronously, which is what makes a small bound the right answer
    * rather than a regrettable one.
    *
