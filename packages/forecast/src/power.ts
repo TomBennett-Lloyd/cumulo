@@ -22,11 +22,12 @@
  * a cell there — but a schema-valid one can, so this is not an unreachable branch. A
  * near-grazing sun on a vertical array aimed at it drives the Hay-Davies circumsolar term
  * to Rb (~57.3, capped) times the anisotropy index — 62.4x DHI at the measured worst case
- * (`irradiance.ts`) — and with the irradiance fields at their 1500 W/m² caps
- * the resulting POA reaches ~95 200 W/m², putting the cell near 3870 °C and both DC and AC
- * below zero. Clamping here would hide that input rather than reject it, and would also
- * diverge from the fixtures; `createPhysicsForecast`'s final `forecastSchema.parse` is the
- * layer that refuses to store such a number, and its doc comment carries the detail.
+ * (`irradiance.ts`) — and with the irradiance fields at their `weatherReadingSchema` caps
+ * (`MAX_PLAUSIBLE_IRRADIANCE_WM2`) the resulting POA reaches ~95 200 W/m², putting the cell
+ * near 3870 °C and both DC and AC below zero. Clamping here would hide that input rather
+ * than reject it, and would also diverge from the fixtures;
+ * `createPhysicsForecast`'s final `forecastSchema.parse` is the layer that refuses to store
+ * such a number, and its doc comment carries the detail.
  */
 
 /** Operating point of the array for a single DC-power evaluation. */

@@ -368,9 +368,10 @@ describe('querySeriesFrom', () => {
 
 describe('read consistency', () => {
   it('never sets ConsistentRead on any command it sends', async () => {
-    // ADR 0002 Consequence 3: the 21 RCU on `series` were sized against Query's
-    // default eventually-consistent reads, and a strongly-consistent read costs
-    // double. This asserts across every operation, not just the query ones.
+    // ADR 0002 Consequence 3: `series`' provisioned read capacity was sized
+    // against Query's default eventually-consistent reads, and a
+    // strongly-consistent read costs double. This asserts across every
+    // operation, not just the query ones.
     const { adapter, ddb } = mockedAdapter();
     ddb.on(BatchWriteCommand).resolves({});
     ddb.on(QueryCommand).resolves({ Items: [physicsItem14h] });

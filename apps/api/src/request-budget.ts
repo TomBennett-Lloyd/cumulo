@@ -184,9 +184,11 @@ const SERIES_CLEANUP_REQUEST_BUDGET = Math.floor(API_LAMBDA_TIMEOUT_MS / STORAGE
  * the site's series"; it is the prompt half of a job whose slow half is the TTL,
  * and for the demo's real lifecycle — a site added and evicted within a session
  * — it is often the whole job. Deleting the rest inline is not available at any
- * budget: 2,160 deletes is 2,160 write units against a table provisioned at 14,
- * so the honest fix is to stop doing this on the request path at all.
- * `docs/tech-debt.md` carries that as its own entry.
+ * budget: 2,160 deletes is 2,160 write units against the `series` table's
+ * provisioned write capacity (`infra/storage/tables.tf` owns the figure) —
+ * minutes of the table's whole write budget — so the honest fix is to stop
+ * doing this on the request path at all. `docs/tech-debt.md` carries that as
+ * its own entry.
  *
  * The bound shrinks rather than breaks if the function timeout is lowered: at a
  * 7-second timeout the budget is one command, the pass lists and deletes
