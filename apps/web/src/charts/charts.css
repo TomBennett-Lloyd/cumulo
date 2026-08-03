@@ -41,12 +41,31 @@
   stroke-width: 1;
 }
 
+/* A lone banded hour has no run to sweep a polygon across, so its P90–P10
+ * interval is the band (chart-treatment.md). Full data-line weight, not the
+ * bounds' hairline: a 1px stroke at 35% alpha in a single column is invisible,
+ * which is the disappearance this mark exists to prevent. */
+.forecast-chart-band-interval {
+  fill: none;
+  stroke: var(--color-chart-band-stroke);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 .forecast-chart-median {
   fill: none;
   stroke: var(--color-chart-1);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* A single-sample series draws its median as the marker vocabulary's dot, in the
+ * forecast's own hue, with the same surface ring every marker carries. */
+.forecast-chart-median-marker {
+  fill: var(--color-chart-1);
+  stroke: var(--color-surface);
+  stroke-width: 2;
 }
 
 .forecast-chart-actuals {

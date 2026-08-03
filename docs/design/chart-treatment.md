@@ -82,6 +82,20 @@ Composition rules that keep both legible where they overlap:
   confidence of the values on either side of it — partial data is labelled partial, in the chart as
   much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
+- **A run that would be a degenerate path is drawn in the marker vocabulary instead.** Breaking a
+  series at every gap can leave a run holding a single sample, and a path with one vertex paints
+  nothing at all — so an isolated hour between two gaps would vanish and the chart would silently
+  understate how much was measured or modelled. It is the same defect as bridging the gap, arrived
+  at from the other side. Three cases, each reusing a mark the treatment already defines rather
+  than inventing a fourth:
+  - An **isolated measured hour** is a ≥ 8px dot ringed in `--color-surface` — the end-dot
+    vocabulary above, at an ordinary sample instead of at the horizon.
+  - A **lone banded hour** draws its P90→P10 interval as a vertical **2px round-capped stroke** in
+    `--color-chart-band-stroke`, and omits the wash: a 1px hairline at 35% alpha over a single
+    column is invisible, which would defeat the fix, and 2px is the chart's existing data-line
+    weight rather than a new one. The median line still passes through the hour, so the interval
+    reads as that hour's uncertainty. An interval whose bounds coincide collapses to its round cap.
+  - A **single-sample series** draws its median as a ringed dot in `--color-chart-1`.
 
 ## Legend
 

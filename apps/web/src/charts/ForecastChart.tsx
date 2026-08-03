@@ -17,23 +17,21 @@ import {
   type PlotRect,
 } from './chart-geometry';
 import {
-  actualAt,
-  allIndices,
   axisTickText,
-  bandPolygonPoints,
   contiguousRuns,
   highestValueKw,
-  medianAt,
-  p10At,
-  p90At,
-  polylinePoints,
   seriesSpanHours,
-  type ChartRun,
   type ChartScale,
   type ForecastChartPoint,
 } from './chart-series';
 import { ForecastChartHoverLayer, hoverKeyAction, pointerIndex } from './forecast-chart-hover';
 import { FORECAST_CHART_LEGEND } from './forecast-chart-legend';
+import {
+  actualsElements,
+  bandElements,
+  boundElements,
+  medianElements,
+} from './forecast-chart-marks';
 import { forecastChartTable } from './forecast-chart-table';
 
 /**
@@ -53,7 +51,9 @@ import { forecastChartTable } from './forecast-chart-table';
  * measurement inside the series is a partial result and reads as one: band and
  * actuals are drawn once per contiguous run, so a straight segment is never
  * painted across a gap to imply a value that was never modelled or measured
- * (`error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31).
+ * (`error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31). A run left
+ * with a single sample has no path to stroke and becomes a marker instead of
+ * disappearing — `forecast-chart-marks.tsx` holds that rule and its reasoning.
  *
  * **The readout has one source of truth.** Pointer and keyboard both do exactly
  * one thing — set `activeIndex` — and `forecast-chart-hover.tsx` draws whatever
@@ -61,10 +61,11 @@ import { forecastChartTable } from './forecast-chart-table';
  * the hover one, which is what the treatment's "keyboard focus shows exactly
  * what hover shows" costs when it is designed in rather than retrofitted.
  *
- * This file is composition plus the plot's marks. The hover layer and the
- * figure's chrome sit beside it — `forecast-chart-hover.tsx`,
- * `-legend.tsx`, `-table.tsx` — each a piece of the treatment named after the
- * piece it draws, and each well inside `structure.md` rule 4's ceiling.
+ * This file is composition plus the plot's chrome — grid, horizon, axes. The
+ * data marks, the hover layer and the figure's furniture sit beside it —
+ * `forecast-chart-marks.tsx`, `-hover.tsx`, `-legend.tsx`, `-table.tsx` — each
+ * a piece of the treatment named after the piece it draws, and each well inside
+ * `structure.md` rule 4's ceiling.
  */
 
 export type { ForecastChartBand, ForecastChartPoint } from './chart-series';
@@ -100,8 +101,6 @@ const HORIZON_LABEL_BASELINE = 8;
  */
 export const HORIZON_LABEL_WIDTH = 84;
 const AXIS_TITLE_BASELINE = 10;
-/** ≥ 8px across, per the treatment's countable-markers rule. */
-const MARKER_RADIUS = 4;
 
 const gridElements = (scale: ChartScale): readonly ReactElement[] =>
   axisTicks(scale.axisMaxKw).map((kilowatts) => {
@@ -127,50 +126,6 @@ const gridElements = (scale: ChartScale): readonly ReactElement[] =>
       </g>
     );
   });
-
-const bandElements = (
-  points: readonly ForecastChartPoint[],
-  runs: readonly ChartRun[],
-  scale: ChartScale,
-): readonly ReactElement[] =>
-  runs.map((run) => (
-    <polygon
-      key={run.startIndex}
-      className="forecast-chart-band"
-      points={bandPolygonPoints(points, run, scale)}
-    />
-  ));
-
-const boundElements = (
-  points: readonly ForecastChartPoint[],
-  runs: readonly ChartRun[],
-  scale: ChartScale,
-): readonly ReactElement[] =>
-  runs.flatMap((run) => [
-    <polyline
-      key={`p90-${String(run.startIndex)}`}
-      className="forecast-chart-band-bound"
-      points={polylinePoints(run.indices, (index) => p90At(points, index), scale)}
-    />,
-    <polyline
-      key={`p10-${String(run.startIndex)}`}
-      className="forecast-chart-band-bound"
-      points={polylinePoints(run.indices, (index) => p10At(points, index), scale)}
-    />,
-  ]);
-
-const actualsElements = (
-  points: readonly ForecastChartPoint[],
-  runs: readonly ChartRun[],
-  scale: ChartScale,
-): readonly ReactElement[] =>
-  runs.map((run) => (
-    <polyline
-      key={run.startIndex}
-      className="forecast-chart-actuals"
-      points={polylinePoints(run.indices, (index) => actualAt(points, index), scale)}
-    />
-  ));
 
 /**
  * Marked once, in chrome — never by dashing the forecast line.
@@ -294,19 +249,8 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {bandElements(points, bandRuns, scale)}
         {boundElements(points, bandRuns, scale)}
         {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}
-        <polyline
-          className="forecast-chart-median"
-          points={polylinePoints(allIndices(points.length), (i) => medianAt(points, i), scale)}
-        />
-        {actualsElements(points, actualRuns, scale)}
-        {lastMeasuredIndex === undefined ? null : (
-          <circle
-            className="forecast-chart-actuals-marker"
-            cx={xForIndex(lastMeasuredIndex, scale.pointCount, scale.plot)}
-            cy={yForKw(actualAt(points, lastMeasuredIndex), scale.axisMaxKw, scale.plot)}
-            r={MARKER_RADIUS}
-          />
-        )}
+        {medianElements(points, scale)}
+        {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
         {xLabelElements(points, scale, spanHours)}
         <text className="forecast-chart-axis-title" x={0} y={AXIS_TITLE_BASELINE}>
           kW
