@@ -7,6 +7,7 @@ import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
 import { HOUR_0, HOUR_1, HOUR_2, smokeForecast, smokeGeneration } from './smoke-data';
+import { assertTtlStatus } from './ttl-status';
 
 /** A `SeriesPoint` rendered as one comparable string, so order assertions read as data. */
 const describePoint = (point: SeriesPoint): string =>
@@ -20,10 +21,8 @@ export const runSeriesChecks = async (
   client: DynamoDBDocumentClient,
   siteId: string,
 ): Promise<void> => {
-  const series = new SeriesAdapter({
-    client,
-    tableName: storageTableName('series', ENVIRONMENT),
-  });
+  const seriesTable = storageTableName('series', ENVIRONMENT);
+  const series = new SeriesAdapter({ client, tableName: seriesTable });
   const physicsAtHour0 = smokeForecast(siteId, HOUR_0, 'physics');
   const mlAtHour0 = smokeForecast(siteId, HOUR_0, 'ml');
   const generationAtHour1 = smokeGeneration(siteId, HOUR_1);
@@ -86,4 +85,13 @@ export const runSeriesChecks = async (
       );
     },
   );
+
+  await runner.check('series: TTL is ENABLED on the expiresAt attribute', async () => {
+    // Configuration, not deletion. The adapter writes `expiresAt = validTime +
+    // 90 days` and ADR 0002's retention consequence rests on DynamoDB acting on
+    // it; a reap is asynchronous over days, so what a smoke run can prove is
+    // that the deployed table is actually set up to reap — read back from AWS
+    // rather than from `infra/storage/tables.tf`.
+    await assertTtlStatus(client, seriesTable, 'ENABLED');
+  });
 };
