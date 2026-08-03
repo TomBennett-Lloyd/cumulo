@@ -93,9 +93,12 @@ interface FleetSectionProps {
  * of their own (`react.md`, "Async surface convention"). The waiting arm in
  * particular used to be a `role="status"` mounted with its text already inside
  * it, which announces nothing — it has no change to report — and only looked
- * accessible; `PanelPending` is a plain `aria-busy` container instead, and the
- * one live region left in this column is the failure's `role="alert"`, which
- * really does arrive as a change.
+ * accessible; `PanelPending` is a plain `aria-busy` container instead. The
+ * column's live regions are now two, which is the pair `react.md`'s amended
+ * live-region bullet registers: this failure's `role="alert"`, which really does
+ * arrive as a change, and the chart readout a panel above brings with it
+ * (`.forecast-chart-readout`, mounted empty with the chart and filled only when
+ * a reader moves its selection).
  */
 const FleetSection = ({
   load,

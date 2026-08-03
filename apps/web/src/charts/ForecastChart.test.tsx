@@ -292,4 +292,15 @@ describe('ForecastChart', () => {
     expect(marks(container, '.forecast-chart-actuals-marker')).toHaveLength(1);
     expect(container.querySelectorAll('.forecast-chart-table tbody tr')).toHaveLength(1);
   });
+
+  it('renders an empty series as bare chrome rather than a median mark', () => {
+    // The guard in `medianElements`: with no samples there is no line to stroke
+    // and no first sample to fall back to as a marker, so the series draws
+    // nothing at all instead of indexing a point that is not there.
+    const container = renderChart([]);
+
+    expect(requireSvg(container)).toBeDefined();
+    expect(marks(container, '.forecast-chart-median')).toHaveLength(0);
+    expect(marks(container, '.forecast-chart-median-marker')).toHaveLength(0);
+  });
 });

@@ -40,6 +40,13 @@ interface TooltipRow {
   readonly seriesClassName: string;
   readonly value: string;
   readonly name: string;
+  /**
+   * False where this series has nothing at this sample and `value` is therefore
+   * `formatKw`'s em dash. Marked on the row rather than re-derived downstream,
+   * so the one producer of the rows is also the one place that knows which of
+   * them are real.
+   */
+  readonly present: boolean;
 }
 
 /**
@@ -48,17 +55,19 @@ interface TooltipRow {
  * absent row says "not modelled", an em-dashed one would imply a range of
  * nothing.
  */
-export const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
+const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
   const { band } = point;
   const measured: TooltipRow = {
     seriesClassName: 'forecast-chart-actuals',
     value: formatKw(point.actualKw),
     name: 'Actual',
+    present: point.actualKw !== null,
   };
   const median: TooltipRow = {
     seriesClassName: 'forecast-chart-median',
     value: formatKw(point.medianKw),
     name: 'Median',
+    present: true,
   };
   return band === undefined
     ? [measured, median]
@@ -69,6 +78,7 @@ export const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] =>
           seriesClassName: 'forecast-chart-band-bound',
           value: `${formatKw(band.p10Kw)}–${formatKw(band.p90Kw)}`,
           name: 'P10–P90',
+          present: true,
         },
       ];
 };
@@ -80,9 +90,18 @@ export const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] =>
  * moves the selection — and it comes from `tooltipRows`, so the announcement
  * and the tooltip cannot say different things about one sample. Every word here
  * names data, which `chart-copy.ts` leaves to the component that owns it.
+ *
+ * An absent row is dropped rather than spoken, for the reason the band row is
+ * omitted rather than dashed out: screen readers at default punctuation
+ * verbosity say nothing for an em dash, so an unmeasured hour would announce
+ * `Actual` as a labelled series with no value at all. The en dashes inside
+ * `0.0–2.0` and `P10–P90` stay — both ends of those are present, so a dropped
+ * dash still reads ("0.0 2.0 P10 P90"), and respelling a range for speech alone
+ * would fork this string from the tooltip it is deliberately one producer with.
  */
 export const readoutText = (point: ForecastChartPoint, spanHours: number): string =>
   `${tickLabelFor(point.validTimeIso, spanHours)} — ${tooltipRows(point)
+    .filter((row) => row.present)
     .map((row) => `${row.value} ${row.name}`)
     .join(', ')}`;
 

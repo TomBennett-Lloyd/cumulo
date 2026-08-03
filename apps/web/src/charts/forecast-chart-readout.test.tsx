@@ -79,4 +79,21 @@ describe('ForecastChart readout', () => {
     // An absent row says "not modelled", spoken as well as drawn.
     expect(readout(container).textContent).toBe('06:00 — 0.9 Actual, 1.0 Median');
   });
+
+  it('an unmeasured hour announces without a measured row, not as bare punctuation', () => {
+    // SERIES[4] is past the horizon: forecast, no measurement. Spoken with the
+    // row in it, the em dash `formatKw` renders is silent at default
+    // punctuation verbosity, and the reader hears "Actual" with no number.
+    const container = renderChart(SERIES);
+    const svg = requireSvg(container);
+
+    fireEvent.focus(svg);
+    fireEvent.keyDown(svg, { key: 'End' });
+
+    const announced = readout(container).textContent;
+
+    expect(announced).toBe('18:00 — 2.0 Median, 1.0–3.0 P10–P90');
+    expect(announced).not.toContain('— —');
+    expect(announced).not.toContain('Actual');
+  });
 });
