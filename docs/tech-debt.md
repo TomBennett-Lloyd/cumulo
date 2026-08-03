@@ -161,6 +161,24 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 - What: #117 named the type and moved it home, but three of the five surviving declarations are positional same-shaped timestamp pairs — exactly the swap hazard the named bounds exist to prevent — and the zod schema restates the shape without `z.infer` tying it. Architecture rule 2's "two definitions of one concept" standard sits against all five. Unification is cross-cutting (storage adapter signatures, an API request shape, a schema derivation) and each piece can move independently; captured as one entry so the follow-up sees the whole set instead of discovering it serially.
 - Source: #117 review cycle 1
 
+## 2026-08-03 — "Kinesis" survives as the stated ingestion transport after ADR 0004 moved to SQS
+
+- Where: known survivor `infra/storage/tables.tf:58` (the `stream_enabled` omission note, scoped to superseded ADR 0001); the corrected instance was `infra/storage/tables.tf:258`; the transport of record is `infra/ingestion/transport.tf:4` and [ADR 0004](adr/0004-ingestion-transport.md)
+- What: ADR 0004 replaced ADRs 0001/0002's Kinesis stream with an SQS queue, but comments written against the older ADRs still name Kinesis as the transport, and #156 found one that had drifted from historical framing into a present-tense claim about how #12 receives weather. The line-58 survivor is legitimate as written (it is explicitly reasoning about ADR 0001's design), which is exactly why a blanket text sweep is the wrong tool: the fix is claim-level, separating "ADR 0001 assumed Kinesis" from "the transport is Kinesis". A repo-wide pass over every `Kinesis` occurrence, classifying each as historical or stale, is owed — same one-claim-many-locations class as #167/#162.
+- Source: #156 review cycle 1
+
+## 2026-08-03 — The free-pool capacity figures are prose in ~nine places with no gate over any of them
+
+- Where: `infra/storage/tables.tf:23`/`:186`/`:349`, `infra/storage/variables.tf:9-10`, `infra/README.md:650`/`:1525`/`:1544`/`:1546`, `infra/forecast/event-source.tf:60`/`:66`, `infra/forecast/iam.tf:84`, `packages/storage/src/client.ts:265`, `packages/storage/src/adapters/series/series-adapter.ts:46`/`:264`, `packages/storage/src/adapters/series/series-adapter.test.ts:371`, `apps/forecast/README.md:108`, `apps/forecast/src/handler.ts:79`/`:138`
+- What: the always-free 25/25 pool split (and which tables draw on it) is restated as prose across infra, storage and forecast with no mechanical gate — `check-infra-mirrors.sh` compares declared numeric constant pairs only, and none of these are constants, so architecture rule 8 leaves the whole set uncovered. This is why #156's single-table billing flip needed review cycles to find its restatements serially rather than a plan-time enumeration. Fix direction: either promote the pool arithmetic to one declared source the mirror gate can pair, or fold these into the claim-level sweep the Kinesis entry above already owes — same one-claim-many-locations class as #167/#162.
+- Source: #156 review cycle 2
+
+## 2026-08-03 — Per-stack cost tables have no convention for a stack that drives another stack's charge
+
+- Where: `infra/README.md` cost tables (ingestion ~1556–1566, storage ~1525–1550, forecast ~1620); first instance fixed inline in #156 (ingestion gained a "drives ≈ $0.30/mo under storage" row)
+- What: cost tables attribute a charge to the stack that owns the resource, with no cross-reference from the stack that drives it. Invisible while every DynamoDB row was $0; #156 made ingestion's schedule the sole driver of the platform's only recurring charge while ingestion's own total reads $0.00 and the money appears under storage. The durable fix is a convention — a "drives cost in another stack" row wherever one stack's activity meters another's resource (the forecast table's "adds load, not a line" row is the same relationship stated without the pointer) — not the one-off sentence #156 shipped. Same one-claim-many-locations class as the pool-figure entry above.
+- Source: #156 review cycle 3 (SYSTEMIC at cap)
+
 ## 2026-08-03 — The spoken chart readout carries neither the unit nor the clock
 
 - Where: `readoutText` in `apps/web/src/charts/forecast-chart-hover.tsx`, spoken through `.forecast-chart-readout` in `apps/web/src/charts/ForecastChart.tsx`; the chrome it cannot reach is the `kW` axis title in the same file and `CHART_CLOCK_LABEL` in `apps/web/src/charts/chart-copy.ts`

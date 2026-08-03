@@ -137,13 +137,20 @@ export class WeatherAdapter extends StorageAdapterBase {
   /**
    * Writes one location-day of archive weather and its marker (H3).
    *
-   * This is the package's only `TransactWriteItems` against a *provisioned*
-   * table, and it is a big one: 25 items ≈ 50 WCU against the 5 WCU this table
-   * is provisioned for (ADR 0002), so DynamoDB cancelling it for capacity is a
-   * genuinely reachable shape rather than a theoretical one. Nobody else
-   * retries that shape — the cause lives inside `CancellationReasons[].Code`,
-   * where the SDK's retry classifier never looks — so the re-issue loop below
-   * is its only owner (`capacityCancelled`, `../transaction-cancellation`).
+   * This is the package's largest single write: 25 items ≈ 50 WCU in one
+   * instant. Until #156 it was also the package's only `TransactWriteItems`
+   * against a *provisioned* table, and 50 WCU against a 5 WCU ceiling made a
+   * capacity cancellation the expected shape rather than a theoretical one.
+   * `cumulo-weather` is on-demand now, so that arithmetic is gone — but the
+   * shape is not: on-demand still enforces per-partition instantaneous limits,
+   * and every item in this transaction shares one `locationId` partition by
+   * construction, so a burst of location-days can still be cancelled for
+   * capacity. It moves from expected to edge case, which is a reason to keep
+   * the re-issue loop below cheap, not a reason to drop it. And nobody else
+   * would take it over: the cause lives inside `CancellationReasons[].Code`,
+   * where the SDK's retry classifier never looks — on-demand or not — so this
+   * loop remains its only owner (`capacityCancelled`,
+   * `../transaction-cancellation`).
    *
    * Worst case, on `defaultBatchPolicy`: 3 sends of ≈ 7 s plus ≤ 0.6 s of
    * jittered sleeps ≈ **21.6 s** before the `StorageError` surfaces. That is
@@ -339,8 +346,10 @@ export class WeatherAdapter extends StorageAdapterBase {
     //   nothing left to sort past. Trimming a character off the bound would
     //   work byte-wise but would hard-code the key format outside
     //   `@cumulo/shared`, so the endpoint is dropped after the read instead —
-    //   at most one extra item, against a table sized at 3 RCU for offline
-    //   readers.
+    //   at most one extra item, whose cost is trivial whichever way the table
+    //   is billed: every reader of this range is offline, and `cumulo-weather`
+    //   has been on-demand since #156, so that item is paid for per request
+    //   rather than out of a standing read allocation.
     const lowerBound = weatherSortKey('archive', fromInclusive);
     const upperBound = weatherSortKey('archive', toExclusive);
 

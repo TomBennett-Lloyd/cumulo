@@ -19,24 +19,29 @@
 # check nobody can read; a real resource block always carries the prefix, so
 # the grep stays a detector rather than a false positive generator.
 #
-# `series` (14 WCU / 21 RCU) and `weather` (5 / 3) total 19 WCU / 24 RCU, which
-# fits inside DynamoDB's *permanently free* 25 WCU / 25 RCU per Region. That
-# allowance is a hard edge, not a discount: an auto-scaling policy would raise
-# capacity above 25 units the first time real load arrived and start billing
-# without anyone deciding to — no alarm, no plan diff, no review.
+# `series` (14 WCU / 21 RCU) is the only table left drawing on the pool, and it
+# sits inside DynamoDB's *permanently free* 25 WCU / 25 RCU per Region with 11
+# WCU / 4 RCU unclaimed. That allowance is a hard edge, not a discount: an
+# auto-scaling policy would raise capacity above 25 units the first time real
+# load arrived and start billing without anyone deciding to — no alarm, no plan
+# diff, no review.
 #
-# The escape hatch for sustained load is a `billing_mode` flip to
-# PAY_PER_REQUEST — one attribute, no migration, no downtime, allowed up to 4
-# times per 24-hour rolling window, and a table's first switch instantly
+# The escape hatch for load an allocation cannot absorb is a `billing_mode`
+# flip to PAY_PER_REQUEST — one attribute, no migration, no downtime, allowed up
+# to 4 times per 24-hour rolling window, and a table's first switch instantly
 # sustains at least 4,000 WCU / 12,000 RCU. That, not auto-scaling, is the
-# answer if the throttle alarms in alarms.tf ever fire (ADR 0002 revisit
-# trigger 8).
+# answer when the throttle alarms in alarms.tf fire (ADR 0002 revisit trigger
+# 8) — and `weather` has already taken it (#156, 2026-08-03), which is why the
+# arithmetic above is one table's rather than two.
 #
 # The standing rule that keeps the shared regional pool from being renegotiated
 # per ticket: **a new table defaults to on-demand unless its load is
 # batch-shaped** — driven by a clock, with a volume the ADR can compute. Only a
 # ticket adding another clock-driven batch table touches the 25/25 pool, and it
-# arrives with an arithmetic argument rather than an estimate.
+# arrives with an arithmetic argument rather than an estimate — an argument
+# about burst as well as rate, since what unseated `weather` was the size of one
+# `BatchWriteItem` page against the retry patience behind it, not the units per
+# cycle (see 3 below).
 # ---------------------------------------------------------------------------
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
@@ -231,18 +236,39 @@ resource "aws_dynamodb_table" "series" {
 #    plus one `ARCHIVE#DAY#<date>` marker per fetched day — the exact cache-hit
 #    test that keeps Open-Meteo quota from being spent twice (H2).
 #
-#    PROVISIONED at 5 WCU / 3 RCU. Batch-shaped: 1,440 write units per cycle,
-#    draining in ~288 s. 3 RCU because every read path is offline — #16's
-#    hindcast reads a date range, and #12 receives weather on the Kinesis stream
-#    rather than reading it back. Nothing on this table's read path sits in
-#    front of a user.
+#    ON-DEMAND since #156 (ADR 0002, Amendments 2026-08-03); provisioned at
+#    5 WCU / 3 RCU before that. The load is still batch-shaped and the ADR's
+#    sustained arithmetic still holds — 1,440 write units per cycle, draining in
+#    ~288 s of 3,600 — but what moved this table is burst shape, not rate.
+#    Ingestion writes each location's 48-hour horizon as two `BatchWriteItem`
+#    pages of ≤25 items; one page needs 5 s of accumulation at 5 WCU/s, while
+#    the bounded retry budget behind it (`drainBatches` 3 sends, SDK 2 attempts)
+#    spends itself in under ~2 s. Once the burst credit is gone the page cannot
+#    be funded before patience runs out, and no WCU number the free pool could
+#    have afforded closes that gap — it only moves the location count at which
+#    the cliff appears. Confirmed live twice: 296 WriteThrottleEvents with 6 of
+#    12 locations losing their weather on the seeded demo fleet (2026-08-03,
+#    #156), after 1,350 throttles at the 40-location worst case (E7-a).
+#
+#    Cost is activity-shaped rather than standing: ~0.42 M write units/month at
+#    the canonical 12-location hourly fleet ≈ $0.30/month, ≈ $1.28 at the
+#    52-location worst case, and $0 while the schedule is idle. Reads stay
+#    negligible for the reason the 3 RCU was chosen — every read path is
+#    offline: #16's hindcast reads a date range, and #12 receives weather on the
+#    SQS queue rather than reading it back. Nothing on this table's read
+#    path sits in front of a user.
+#
+#    There is deliberately no `on_demand_throughput` block. Its
+#    `max_write_request_units` ceiling is a per-second cap, so a 25-item page
+#    can outrun it exactly as it outran 5 WCU/s — the ceiling would reintroduce
+#    the throttle class this flip exists to remove, on a table whose whole month
+#    costs cents. The backstop against runaway spend is the account-wide budget
+#    alarm in infra/bootstrap/budget.tf, which watches money rather than
+#    throughput and therefore cannot drop a write.
 resource "aws_dynamodb_table" "weather" {
   name         = "cumulo-weather-${var.environment}"
-  billing_mode = "PROVISIONED"
+  billing_mode = "PAY_PER_REQUEST"
   table_class  = "STANDARD"
-
-  write_capacity = 5
-  read_capacity  = 3
 
   hash_key  = "locationId"
   range_key = "sk"
@@ -320,8 +346,9 @@ resource "aws_dynamodb_table" "metrics" {
 #    ON-DEMAND, by the standing rule at the top of this file: its load is
 #    request-shaped — one write per limited request from whoever is knocking —
 #    so there is no volume to size a provisioned number against, and none of it
-#    may come out of the shared free 25/25 pool that the two batch-shaped tables
-#    depend on. Under abuse the request rate is bounded by the gateway throttles
+#    may come out of the shared free 25/25 pool that `series` — the one
+#    batch-shaped table still drawing on it (#156) — depends on. Under abuse
+#    the request rate is bounded by the gateway throttles
 #    in `infra/api/gateway.tf` rather than by anything here.
 #
 #    Every row carries `expiresAt`, so stored size stays at roughly "addresses
