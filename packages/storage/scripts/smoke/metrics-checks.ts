@@ -50,12 +50,13 @@ export const runMetricsChecks = async (
     // `begins_with` selectivity against the service rather than against a mock.
     // This window shares its *start* bound with the one that was written and
     // differs only in its end, which is the near-miss that carries information:
-    // the failure `metricsPeriodPrefix`'s trailing `#` is written against
-    // (`metrics-item.ts`) is a prefix that stops after the start bound and drops
-    // the end, and such a prefix — `HOUR_0#` — still matches the sort key this
-    // run wrote (`HOUR_0#HOUR_2#…`), so that bug fails here. A window differing
-    // in its *start* would be rejected by the broken prefix too, and so would
-    // pass either way.
+    // a hypothetical prefix bug that stops after the start bound and drops the
+    // end — emitting `HOUR_0#` — still matches the sort key this run wrote
+    // (`HOUR_0#HOUR_2#…`), so that bug fails here. (`metricsPeriodPrefix`'s
+    // trailing `#` guards a different failure, matching into a longer end
+    // bound — `metrics-item.ts` states it; this check simply also discriminates
+    // the dropped-end shape.) A window differing in its *start* would be
+    // rejected by the broken prefix too, and so would pass either way.
     const found = await metrics.queryMetricsForPeriod(siteId, {
       startInclusive: HOUR_0,
       endExclusive: HOUR_1,
