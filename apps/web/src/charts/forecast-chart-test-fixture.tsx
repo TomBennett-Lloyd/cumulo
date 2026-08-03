@@ -74,6 +74,14 @@ export const requireSvg = (container: HTMLElement): SVGSVGElement => {
   return svg;
 };
 
+/**
+ * The numbers the tooltip is showing, in document order. `textContent` is
+ * `string | null` and the type says so: a cell that rendered empty is a real
+ * failure to assert against, not something to paper over with a cast.
+ */
+export const tooltipValues = (container: HTMLElement): readonly (string | null)[] =>
+  [...container.querySelectorAll('.forecast-chart-tooltip-value')].map((cell) => cell.textContent);
+
 export const tableCells = (
   container: HTMLElement,
   rowIndex: number,

@@ -10,9 +10,11 @@ import {
   DYNAMODB_BATCH_WRITE_SIZE,
   defaultBatchPolicy,
   drainBatches,
+  requireUsablePolicy,
   type BatchPolicy,
   type BatchWriteOutcome,
 } from '../../batch';
+import { requireUniqueKeys } from '../../write-preconditions';
 import {
   StorageAdapterBase,
   type BatchingAdapterDeps,
@@ -42,9 +44,10 @@ import {
  * provide.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
- * comment on `createStorageDocumentClient`. The `series` table's 21 RCU were
- * sized against eventually-consistent Query reads, and the dashboard fan-out is
- * the one user-visible path on that capacity.
+ * comment on `createStorageDocumentClient`. The `series` table's provisioned
+ * read capacity (`infra/storage/tables.tf`) was sized against
+ * eventually-consistent Query reads, and the dashboard fan-out is the one
+ * user-visible path on that capacity.
  */
 
 /**
@@ -194,6 +197,22 @@ export class SeriesAdapter extends StorageAdapterBase {
     operation: string,
     items: readonly (ForecastItem | GenerationReadingItem)[],
   ): Promise<BatchWriteOutcome> {
+    // The key each item will be stored under, as one comparable string:
+    // partition plus sort key, which for this table is site plus
+    // `T#<validTime>#<kind>`. Two forecasts from one model for one site-hour
+    // collide; the same hour from `physics` and `ml` does not, because the
+    // model is in the sort key (`series-adapter.test.ts` writes exactly that
+    // pair and must stay green).
+    //
+    // Duplicates are refused rather than de-duplicated last-wins — see
+    // `requireUniqueKeys` for why, and note the refusal happens here, ahead of
+    // the `sending` wrap inside `drainWriteRequests`, so a caller bug never
+    // arrives dressed as a table outage.
+    requireUniqueKeys(
+      operation,
+      items.map((item) => `${item.siteId}|${item.sk}`),
+    );
+
     return this.drainWriteRequests(
       operation,
       items.map((item) => ({ PutRequest: { Item: item } })),
@@ -217,6 +236,15 @@ export class SeriesAdapter extends StorageAdapterBase {
     requests: readonly SeriesWriteRequest[],
     policy: BatchPolicy,
   ): Promise<BatchWriteOutcome> {
+    // Ahead of `sending`, and named for the public operation. `drainBatches`
+    // checks the identical policy — but it runs *inside* the wrap below, where
+    // a policy that can never send would surface as a `StorageError` claiming
+    // DynamoDB failed on the table, sending an operator after an outage that
+    // is really a composition-root bug (#166). `putArchiveDay` on the weather
+    // adapter hoists the same check for the same reason, so the same bad deps
+    // now get the same verdict from every batch entry point.
+    requireUsablePolicy(operation, policy);
+
     const outcome = await this.sending(operation, undefined, () =>
       drainBatches(
         async (batch) => {

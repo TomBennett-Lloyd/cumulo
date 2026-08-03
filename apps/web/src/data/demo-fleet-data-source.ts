@@ -163,7 +163,7 @@ export interface DemoFleetDataSourceOptions {
  * arrive there with no `this` and no site list.
  *
  * The delay is the point. A site whose forecast appeared instantly would let
- * the dashboard ship without ever rendering its pending state, and the pending
+ * the dashboard ship without ever rendering its generating state, and that
  * state is most of what the visitor sees during the demo's headline minute.
  */
 export class DemoFleetDataSource implements FleetDataSource {
@@ -206,7 +206,7 @@ export class DemoFleetDataSource implements FleetDataSource {
         .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
         .join('; ');
       return Promise.resolve(
-        failure({ code: 'invalid-response', message: `Invalid site: ${detail}` }),
+        failure({ code: 'invalid-request', message: `Invalid site: ${detail}` }),
       );
     }
 

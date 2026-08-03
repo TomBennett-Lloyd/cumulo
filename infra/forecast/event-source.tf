@@ -57,19 +57,19 @@ resource "aws_lambda_event_source_mapping" "weather_readings" {
 
   # At most two invocations of this function at a time. This is a write-side
   # bound, not a compute one, and the number it protects is `cumulo-series`'
-  # provisioned **14 WCU** (ADR 0002, and the free-tier arithmetic in
-  # infra/README.md's cost section).
+  # provisioned write capacity (owned by `infra/storage/tables.tf`, whose header
+  # carries the free-pool arithmetic ADR 0002 sized it by).
   #
   # An hourly ingestion cycle publishes its ~12 location messages within a few
   # seconds of each other, and each one produces on the order of 240 series
   # items. Unbounded, Lambda would take all twelve at once and drive ~2,880
-  # write units at a 14 WCU table simultaneously — throttling, retries, and the
-  # storage stack's own throttle alarm firing on what is really a concurrency
-  # decision made three stacks away. At 2, the same work arrives as a short
-  # queue-paced stream instead of a burst, and SQS's redelivery absorbs whatever
-  # still throttles: the messages are not lost, they are simply processed a
-  # moment later, which for an hourly pipeline is indistinguishable from
-  # immediately.
+  # write units simultaneously at a table provisioned for a small fraction of
+  # that — throttling, retries, and the storage stack's own throttle alarm
+  # firing on what is really a concurrency decision made three stacks away. At
+  # 2, the same work arrives as a short queue-paced stream instead of a burst,
+  # and SQS's redelivery absorbs whatever still throttles: the messages are not
+  # lost, they are simply processed a moment later, which for an hourly pipeline
+  # is indistinguishable from immediately.
   #
   # 2 rather than 1 because one invocation would make the whole fleet's
   # forecasts strictly serial behind the slowest location, and rather than 4+

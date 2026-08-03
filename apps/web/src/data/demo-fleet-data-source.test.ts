@@ -70,7 +70,7 @@ describe('DemoFleetDataSource', () => {
       const result = await source.createSite({ ...validInput, ...overrides });
 
       expect(result.kind).toBe('error');
-      expect(result.kind === 'error' && result.error.code).toBe('invalid-response');
+      expect(result.kind === 'error' && result.error.code).toBe('invalid-request');
       expect(result.kind === 'error' && result.error.message).toContain('Invalid site');
     },
   );

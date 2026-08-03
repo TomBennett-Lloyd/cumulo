@@ -24,3 +24,26 @@ import { z } from 'zod';
 export const utcIsoTimestampSchema = z.iso.datetime({ precision: 0 }).brand<'UtcIsoTimestamp'>();
 
 export type UtcIsoTimestamp = z.infer<typeof utcIsoTimestampSchema>;
+
+/**
+ * A half-open UTC window `[startInclusive, endExclusive)`.
+ *
+ * The bounds are named rather than positional so two same-shaped timestamps
+ * cannot be swapped at a call site, and the interface is exported rather than
+ * inlined into any one signature so every consumer conforms to one contract
+ * instead of re-declaring the shape (`docs/standards/typing.md` rule 6).
+ *
+ * It is the shared window contract for both metrics keying — `metricsSortKey`
+ * (`storage-key.ts`), whose `errorMetricsSchema.period` (`metrics.ts`) carries
+ * exactly this shape — and hindcast day math (`utcDaysCovering` in
+ * `@cumulo/hindcast`): the window a hindcast fetches weather for and the window
+ * its error metrics are keyed by are the same window.
+ *
+ * Formerly `MetricsPeriod` in `storage-key.ts`; renamed and moved here by #117
+ * once the hindcast consumer made both the `Metrics` prefix and the storage-key
+ * home misleading.
+ */
+export interface UtcWindow {
+  readonly startInclusive: UtcIsoTimestamp;
+  readonly endExclusive: UtcIsoTimestamp;
+}

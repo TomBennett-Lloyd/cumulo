@@ -21,6 +21,15 @@ set -euo pipefail
 # directory does not exist.
 export PATH="/opt/homebrew/bin:$PATH"
 
+# The seam the harness needs: discovery has a failure mode (a partial listing)
+# that cannot be provoked with a real git, so the command is injectable and the
+# harness substitutes a stub that lists some files and then exits non-zero.
+# Precedent: WORKTREE_GH_CMD in worktree-lib.sh, LINT_SHELL_GATE in the harness.
+# It covers the `ls-files` discovery call ONLY — the repo-identity `rev-parse`
+# below stays plain git, because a gate that can be pointed at another repo by
+# an environment variable is a different hazard from the one this seam buys.
+: "${LINT_SHELL_GIT_CMD:=git}"
+
 repo_root=$(git rev-parse --show-toplevel) || exit 2
 cd "$repo_root" || exit 2
 
@@ -57,6 +66,26 @@ fi
 # linted — and --exclude-standard is what keeps node_modules out of the sweep.
 shebang_re='^#!.*[[:space:]/](ba|da|k|z|a)?sh([[:space:]]|$)'
 
+# Discovery is written to a spool file and its exit status checked, rather than
+# read straight out of a process substitution — the idiom run-script-tests.sh
+# lines ~100-108 use for its `find`, adopted here for the same reason. A
+# `git ls-files` that fails partway (an unreadable directory, a broken index)
+# still prints everything it did reach, and a process substitution's status is
+# invisible to the parent shell, so that partial listing would be linted and
+# reported as the whole repository: "over 12 file(s)", clean, with the file that
+# was never read nowhere in the census. A subset announced as the whole is the
+# one outcome worse than no answer, so it is refused outright.
+#
+# `if !` rather than a bare command: this script runs `set -e`, under which a
+# failing producer would abort before the explanation could be printed.
+spool=$(mktemp "${TMPDIR:-/tmp}/lint-shell.XXXXXX") || exit 2
+trap 'rm -f "$spool"' EXIT INT TERM
+
+if ! "$LINT_SHELL_GIT_CMD" ls-files --cached --others --exclude-standard -z >"$spool"; then
+  printf '%s\n' 'lint:sh: file discovery failed — git ls-files exited non-zero, and a partial listing would lint a subset and report it as the whole. No verdict.' >&2
+  exit 2
+fi
+
 shell_files=()
 while IFS= read -r -d '' file; do
   # First, before either population: a path in the index need not exist in the
@@ -80,7 +109,7 @@ while IFS= read -r -d '' file; do
   if [[ $first_line =~ $shebang_re ]]; then
     shell_files+=("$file")
   fi
-done < <(git ls-files --cached --others --exclude-standard -z)
+done <"$spool"
 
 if [ ${#shell_files[@]} -eq 0 ]; then
   echo "lint:sh: found no shell scripts to check — the discovery filter is broken, not the repo" >&2
@@ -95,4 +124,8 @@ printf 'lint:sh: shellcheck (%s) over %d file(s)\n' \
 # the existing `# shellcheck source=./worktree-lib.sh` directives resolve: without
 # it a relative source path is looked up from the caller's working directory, and
 # this gate runs from the repo root, not from .claude/scripts.
+#
+# `exec` replaces this shell, which discards the EXIT trap along with it, so the
+# spool is removed here rather than left to a trap that will never fire.
+rm -f "$spool"
 exec shellcheck --external-sources --source-path=SCRIPTDIR -- "${shell_files[@]}"

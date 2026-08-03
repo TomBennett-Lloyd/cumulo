@@ -97,8 +97,9 @@ the IE/UK residential population actually clusters: the historic domestic connec
 long-standing MCS/G98 single-phase inverter limit both landed around 3.68–4 kW, and a decade of
 installations were sized to fit under it. The 2.0 kWp floor is a small starter array on a
 constrained roof. The 10.0 kWp ceiling is the tail — a large modern install with a bigger roof
-and no legacy cap — and it stays well inside `siteSchema`'s 50 kW sanity bound, which exists to
-reject data-entry errors rather than to describe residential norms.
+and no legacy cap — and it stays well inside `siteSchema`'s sanity bound
+(`MAX_PLAUSIBLE_RESIDENTIAL_KW`, `packages/shared/src/site.ts`), which exists to reject
+data-entry errors rather than to describe residential norms.
 
 The long right tail means the mode is not the centre of mass: 75% of a triangular distribution's
 area sits above a mode this close to the floor, and the canonical fleet lands at a mean of

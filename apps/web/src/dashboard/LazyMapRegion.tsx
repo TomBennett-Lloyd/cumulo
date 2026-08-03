@@ -1,8 +1,9 @@
 import type { ErrorInfo, ReactElement, ReactNode } from 'react';
 import { Component, lazy, Suspense } from 'react';
 
-import { MapAttributionStrip } from '../map/MapAttributionStrip';
+import { MapSurface } from '../map/MapSurface';
 import type { MapRegionProps } from './MapRegion';
+import { LOADING_MAP_LABEL, MAP_LOAD_FAILURE_MESSAGE } from './state-copy';
 
 /*
  * The line the map engine starts at.
@@ -34,25 +35,21 @@ const MapRegionImpl = lazy(async () => ({ default: (await import('./MapRegion'))
 /**
  * What stands in the map's place while its chunk is in flight.
  *
- * Two things it must do, both structural rather than decorative. It reuses
- * `.map-view` and `.map-canvas`, so it occupies the identical flex column
- * inside `.dashboard-map`'s fixed 70vh box and the swap to the real map shifts
- * nothing on the page. And it carries `MapAttributionStrip`: the Open-Meteo
- * credit is a licence obligation wherever weather-derived data renders, and a
- * fallback that dropped it would put the app out of compliance for exactly as
- * long as the network is slow. The strip depends only on `@cumulo/ui`, so
- * rendering it here costs the entry chunk nothing.
+ * `MapSurface` is the shell rather than a hand-written copy of it, which settles
+ * both of the things this state has to get right. It occupies the identical flex
+ * column inside `.dashboard-map`'s fixed 70vh box, so the swap to the real map
+ * shifts nothing on the page — the two are the same markup, not two spellings
+ * agreeing today. And it carries `MapAttributionStrip` unconditionally: the
+ * Open-Meteo credit is a licence obligation wherever weather-derived data
+ * renders, and a fallback that dropped it would put the app out of compliance
+ * for exactly as long as the network is slow. The shell depends only on
+ * `@cumulo/ui`, so rendering it here costs the entry chunk nothing.
  *
  * Exported so it can be rendered on its own (`react.md` rule 4) — a source
  * contract can prove this markup is written, never that it renders.
  */
 export const MapRegionFallback = (): ReactElement => (
-  <div className="map-view">
-    <div className="map-canvas map-placeholder" role="status">
-      Loading map…
-    </div>
-    <MapAttributionStrip />
-  </div>
+  <MapSurface canvas={{ kind: 'placeholder', label: LOADING_MAP_LABEL }} />
 );
 
 /**
@@ -65,13 +62,7 @@ export const MapRegionFallback = (): ReactElement => (
  * same error, so a retry button would be a control that cannot work.
  */
 const MapRegionFailure = (): ReactElement => (
-  <div className="map-view">
-    <div className="map-canvas map-failure" role="alert">
-      The map could not be loaded. Reload the page to try again — the fleet list and forecasts
-      beside it are unaffected.
-    </div>
-    <MapAttributionStrip />
-  </div>
+  <MapSurface canvas={{ kind: 'failure', message: MAP_LOAD_FAILURE_MESSAGE }} />
 );
 
 /** What the boundary knows: whether the region below it has already thrown. */

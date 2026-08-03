@@ -15,10 +15,54 @@ fi
 : "${WORKTREE_PNPM_CMD:=pnpm}"      # package manager used to reinstall deps after a rebranch
 : "${WORKTREE_FETCH_MAIN:=1}"       # 0 means a caller has already refreshed origin/main this run
 
+# node is the repo's declared runtime (package.json engines.node >= 22) and the only interpreter
+# these scripts assume. Checked once, at source time, rather than at each call site: every
+# function below that needs it needs it unconditionally, and a lifecycle script that discovers
+# the gap halfway through — after `worktree list`, before the merge check — would have to invent
+# a verdict for a question it could not ask. Refusing up front means the operator gets the tool's
+# name instead of a script that keeps or reaps for an unrelated-looking reason.
+command -v node >/dev/null 2>&1 || {
+  echo "worktree-lib.sh: node is required (package.json engines) and is not on PATH — refusing to run" >&2
+  exit 2
+}
+
 # canon <path> -> absolute, symlink-resolved path (works for paths that do not exist).
 # macOS puts temp dirs behind /var -> /private/var, so string comparison needs this.
+#
+# Non-strict on purpose — `realpath -e` semantics would be wrong here. The sweep canonicalises
+# every path `git worktree list` reports, and a worktree directory that has vanished is still a
+# registered entry it must be able to name; a strict resolver would abort the whole sweep over
+# the one candidate it exists to report on.
+#
+# The walk-up is what buys that: resolve the deepest ancestor that does exist, then re-attach the
+# components that do not. Symlinked prefixes are therefore still resolved for a path whose leaf
+# is missing (/tmp/gone -> /private/tmp/gone), which plain string assembly would not do.
+#
+# Two divergences from the `os.path.realpath` this replaced, both measured rather than assumed:
+#
+#   - `..` following a symlink component resolves LEXICALLY, because path.resolve normalises the
+#     string before anything is followed. With /a/link -> /b, canon "/a/link/../x" answers /a/x
+#     where realpath answers /b/x.
+#   - A DANGLING symlink answers with the link's own path rather than its dead target:
+#     realpathSync throws, so the walk-up re-attaches that component verbatim. realpath follows
+#     it and answers the target.
+#
+# Neither is reachable from this family's call sites, and both fail safe if they ever were.
+# Every path handed to canon is one of: a path out of git's own records (`worktree list
+# --porcelain`, `worktrees/<name>/gitdir`), which git writes absolute and already real; $PWD,
+# likewise; or a relative `gitdir:` value joined onto a $wt that canon has ALREADY fully
+# resolved — the only place a `..` could enter, and by then no unresolved symlink is left ahead
+# of it for the lexical shortcut to skip past. The one genuinely free input is the path the
+# operator types on the command line. Mis-resolving that usually costs a keep ($wt matches no
+# porcelain block, reap answers `not-a-worktree`) — but not always: a lexically collapsed path
+# can itself name a REGISTERED worktree (`/a/link/../x` -> `/a/x` when `/a/x` exists), and then
+# every check runs consistently against that worktree rather than the one the kernel would
+# resolve the operator's string to. What holds as an invariant is narrower: no divergence can
+# make an UNSAFE removal, because all safety probes and the removal target are the same
+# consistently-resolved path; the residual is acting on a validly-reapable neighbour the
+# operator reached through a hand-typed `..` across a symlink.
 canon() {
-  python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+  node -e 'const fs=require("fs"),path=require("path");let p=path.resolve(process.argv[1]),tail="";for(;;){try{console.log(path.join(fs.realpathSync(p),tail));break}catch(e){tail=path.join(path.basename(p),tail);const parent=path.dirname(p);if(parent===p){console.log(path.join(p,tail));break}p=parent}}' "$1"
 }
 
 # main_checkout_dir <path> -> the main checkout of the repo containing <path>.
@@ -40,6 +84,10 @@ main_checkout_dir() {
 # locking status call makes every worktree look "active" the instant we inspect it — the guard
 # would then never let anything through. The guard is also ordered ahead of this call, so
 # neither mechanism alone is what keeps it working.
+#
+# `git -C` walks up to the enclosing repository when the worktree's own .git file is missing,
+# so this answers for the MAIN checkout on a broken-linked worktree; reap-worktree.sh verifies
+# that link before it ever calls here.
 is_clean() {
   local status
   status=$(git -C "$1" --no-optional-locks status --porcelain 2>/dev/null) || return 1
@@ -101,24 +149,29 @@ is_merged() {
     return 0
   fi
 
-  printf '%s' "$prs" | python3 -c '
-import json, sys
-
-try:
-    prs = json.load(sys.stdin)
-except Exception:
-    sys.exit(2)
-tip = sys.argv[1]
-
-
-def contains(pr):
-    """Did this merged PR carry the local tip? A missing or null commit list is tolerated."""
-    if pr.get("headRefOid") == tip:
-        return True
-    return any(commit.get("oid") == tip for commit in pr.get("commits") or [])
-
-
-sys.exit(0 if any(contains(pr) for pr in prs) else 1)
+  # The verdict is carried by the exit status, not by anything printed: 0 contained, 1 did not,
+  # 2 the answer could not be read at all. That third code is why the parse lives here rather
+  # than in `gh --jq` — the harness stubs gh with a script that prints JSON, and moving the
+  # query into gh would make every stub have to implement jq to be a stub at all.
+  printf '%s' "$prs" | node -e '
+const fs = require("fs");
+let prs;
+try {
+  prs = JSON.parse(fs.readFileSync(0, "utf8"));
+} catch {
+  process.exit(2);
+}
+// A top level that is not an array is not a PR list. gh answering with something else — an
+// error object, an envelope — is a question that went unanswered, so it exits 2 and the caller
+// reports "unverifiable" rather than reading "unmerged" out of a shape it never parsed.
+if (!Array.isArray(prs)) {
+  process.exit(2);
+}
+const tip = process.argv[1];
+// Did this merged PR carry the local tip? A missing or null commit list is tolerated.
+const contains = (pr) =>
+  pr.headRefOid === tip || (pr.commits || []).some((commit) => commit && commit.oid === tip);
+process.exit(prs.some(contains) ? 0 : 1);
 ' "$tip"
   rc=$?
 

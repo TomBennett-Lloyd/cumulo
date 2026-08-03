@@ -1,18 +1,22 @@
 import {
+  errorMetricsSchema,
   fleetSiteSchema,
   forecastSchema,
   generationReadingSchema,
   utcIsoTimestampSchema,
   weatherReadingSchema,
+  PERSISTENCE_24H,
 } from '@cumulo/shared';
 import type {
   ArchiveWeatherReading,
+  ErrorMetrics,
   FleetSite,
   Forecast,
   ForecastModel,
   ForecastWeatherReading,
   GenerationReading,
   UtcIsoTimestamp,
+  UtcWindow,
   WeatherReading,
 } from '@cumulo/shared';
 
@@ -31,8 +35,17 @@ import type {
  * nothing ever asks Open-Meteo for 1999 — so a smoke run cannot collide with,
  * or accidentally delete, anything the platform wrote. The 1999 timestamps
  * carry a second benefit: series and forecast-weather items get
- * `expiresAt = validTime + 90 days`, long past, so anything a crashed run
- * leaves behind is swept by DynamoDB's TTL rather than living forever.
+ * `expiresAt = validTime + 90 days`, long past, so what a crashed run leaves on
+ * those two tables is swept by DynamoDB's TTL rather than living forever. Abuse
+ * rows are swept as well — every row on that table carries an `expiresAt`, and
+ * the checks set theirs minutes rather than decades ahead.
+ *
+ * Metrics rows are the honest exception. `cumulo-metrics` declares no TTL at
+ * all (`infra/storage/tables.tf`, table 4) because metrics are the published
+ * evidence the model comparison rests on and must never expire — so a crashed
+ * run's metrics residue survives under that run's random `siteId` partition
+ * until somebody removes it by hand. The teardown is the only thing that
+ * removes it, which is why it runs in a `finally`.
  */
 export const SMOKE_LOCATION = { latitude: 0, longitude: 0 };
 export const SMOKE_DAY = '1999-01-01';
@@ -103,3 +116,53 @@ export const smokeForecastReading = (validTime: UtcIsoTimestamp): ForecastWeathe
   ...smokeWeather(validTime, 'forecast'),
   kind: 'forecast',
 });
+
+/**
+ * The client address a smoke run limits against.
+ *
+ * Derived from the run's own random `siteId` so two runs against one stack
+ * cannot count each other's requests into the same window, and free of `#`,
+ * which `requireAddress` in `src/adapters/abuse/abuse-item.ts` rejects because
+ * it is the key delimiter. The `smoke-` prefix keeps it obviously not an IP, so
+ * a row seen by hand in the console is identifiable as this script's.
+ */
+export const smokeAbuseAddress = (siteId: string): string => `smoke-${siteId}`;
+
+/**
+ * The fixed rate window a smoke run counts into.
+ *
+ * Derived from `HOUR_0` rather than read off the clock for the same reason
+ * every other value here is a constant: the teardown has to rebuild this row's
+ * key without the checks threading it there, and a window start captured at run
+ * time would have to become state passed between modules.
+ */
+export const SMOKE_RATE_WINDOW_START_EPOCH_SECONDS = Math.floor(Date.parse(HOUR_0) / 1000);
+
+/** The evaluation window a smoke run scores: the two smoke hours, half-open. */
+export const SMOKE_METRICS_PERIOD: UtcWindow = {
+  startInclusive: HOUR_0,
+  endExclusive: HOUR_2,
+};
+
+/** The one baseline the metrics schema admits, named once for the checks and the teardown. */
+export const SMOKE_METRICS_BASELINE = PERSISTENCE_24H;
+
+/**
+ * One evaluation result, per model.
+ *
+ * `maeKw` varies by model on purpose: the period query asserts both rows with a
+ * deep-equal, and identical rows would let a query that returned one row twice
+ * pass an assertion that is about `begins_with` returning both.
+ */
+export const smokeErrorMetrics = (siteId: string, model: ForecastModel): ErrorMetrics =>
+  errorMetricsSchema.parse({
+    siteId,
+    model,
+    period: SMOKE_METRICS_PERIOD,
+    baseline: SMOKE_METRICS_BASELINE,
+    maeKw: model === 'ml' ? 0.31 : 0.42,
+    rmseKw: 0.61,
+    skillScore: 0.27,
+    sampleCount: 2,
+    computedAt: HOUR_2,
+  });

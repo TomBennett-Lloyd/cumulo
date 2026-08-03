@@ -242,5 +242,38 @@ expect_out "not a directory"
 end
 
 # ==========================================================================================
+# 14. a partial discovery (unreadable subdirectory) exits 2, not a subset reported as OK
+# ==========================================================================================
+# The census and the ban are both `find`, and a `find` that cannot descend into one
+# subdirectory exits non-zero while still listing everything it reached. Unrefused, that
+# partial listing becomes "OK — no bare utils modules (N modules scanned)": a verdict over
+# a tree the gate never finished reading, with the banned name that sits behind the
+# unreadable directory unreported. The gate's two `if ! find` guards are what refuse it,
+# and this is the case that exercises them (modelled on run-script-tests.test.sh's
+# ratified reproduction of the same shape, #84).
+#
+# There is no way to fake this: the condition IS a filesystem permission. Under a root uid,
+# chmod 000 restricts nothing and the case cannot be created — so it fails loudly rather
+# than passing on a path it never exercised.
+begin "a partial discovery (unreadable subdirectory) exits 2, not a subset reported as OK"
+fixture unreadable_dir
+must mkdir -p "$DIR/apps/locked"
+must chmod 000 "$DIR/apps/locked"
+if find "$DIR/apps" -type f -name '*.ts' >/dev/null 2>&1; then
+  bad "could not make a directory unreadable (running as root?) — the partial-discovery path was NOT exercised"
+else
+  run_check "$DIR"
+  expect_rc 2 "$rc"
+  expect_out "find failed while scanning"
+  # The gate's full success prefix, not bare "OK": the refusal message echoes the fixture's
+  # temp path, and mktemp's random suffix can itself contain the substring "OK" (observed
+  # live: tmp.OKeCaP2ZLZ flaked this case while the gate behaved perfectly — #219).
+  expect_not_out "check-module-names: OK"
+fi
+# Restored unconditionally: the trap's `rm -rf` cannot remove a directory it cannot enter.
+must chmod 755 "$DIR/apps/locked"
+end
+
+# ==========================================================================================
 
 finish

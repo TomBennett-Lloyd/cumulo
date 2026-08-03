@@ -48,8 +48,9 @@ export interface BackoffSpec {
  * Full jitter: `sleep = uniform(0, min(base * 2^(retryAttempt - 1), max))`.
  *
  * Full rather than equal jitter because every site in the fleet retries against
- * the same provisioned-capacity tables — correlated backoff is what turns a
- * throttle into a thundering herd.
+ * the same handful of tables — correlated backoff is what turns a throttle into
+ * a thundering herd, whether the ceiling it piles into is a provisioned one
+ * (`series`) or on-demand's per-partition limit.
  *
  * `retryAttempt` is 1-based: 1 is the first retry (the initial try is not a
  * retry), so the first retry's cap is exactly `baseDelayMs`.

@@ -10,16 +10,19 @@ import { useId, useState, type ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
 import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
-import { useProviderQuery, type QueryState } from '../data/use-provider-query';
+import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { joinFleetSeries, minimumContributingSites } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker, rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 import {
   ADD_SITE_HINT,
+  aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
+  fleetForecastFailureMessage,
   LOADING_FLEET_FORECAST_LABEL,
   NO_FLEET_FORECAST_MESSAGE,
+  partialAggregateNotice,
 } from './state-copy';
 
 /*
@@ -42,6 +45,23 @@ import {
  * picker is the only thing that ever calls `setRange`, so no picker means no
  * second value, and the caption states the horizon the reader is actually
  * looking at.
+ *
+ * ## Hidden means empty, not merely invisible
+ *
+ * The column hides this panel rather than unmounting it so the queries and the
+ * chosen range survive a context swap — so the hooks below run in every state,
+ * hidden included. The *children* are a different question. A `role="alert"`
+ * that mounts inside `display: none` has nothing to announce: it was never on
+ * screen, and the later reveal is an attribute change rather than a DOM change,
+ * so assistive technology reports nothing at either moment (#161). Rendering the
+ * children only while visible means any failure mounts fresh into a visible tree
+ * on reveal, which is a change and is announced.
+ *
+ * The state that matters is held by the hooks, not by the markup, so dropping
+ * the subtree costs nothing: no refetch on reveal, and the range the reader
+ * picked is still the range. What a reveal does cost is the *first* fan-out,
+ * and that is deferred until one happens — so a `?site=` deep link that never
+ * shows the fleet never spends it (#178).
  *
  * ## Attribution
  *
@@ -116,7 +136,7 @@ const chartCopy = (windowText: string, hasActuals: boolean): ChartCopy =>
         tableCaption: `Table view — fleet forecast, ${windowText}, kW`,
       };
 
-/** The two provider calls this panel makes, once both have answered. */
+/** The two source calls this panel makes, once both have answered. */
 interface FleetSeries {
   readonly forecasts: readonly Forecast[];
   readonly actuals: readonly GenerationReading[];
@@ -153,11 +173,9 @@ const combineFleetQueries = (
  */
 const completenessNote = (minContributing: number, siteCount: number): ReactElement =>
   minContributing < siteCount ? (
-    <p className="panel-notice">
-      Partial aggregate: some hours include only {minContributing} of {siteCount} sites.
-    </p>
+    <p className="panel-notice">{partialAggregateNotice(minContributing, siteCount)}</p>
   ) : (
-    <p className="panel-caption">Aggregated from {siteCount} sites</p>
+    <p className="panel-caption">{aggregatedFromCaption(siteCount)}</p>
   );
 
 const readyBody = (data: FleetSeries, siteCount: number, chart: ChartCopy): ReactElement => {
@@ -188,15 +206,11 @@ const fleetBody = (
     return <PanelPending label={LOADING_FLEET_FORECAST_LABEL} />;
   }
   if (state.status === 'failed') {
-    // The source's message already names the operation it failed
-    // (`error-handling.md` rule 4); this sentence supplies the surface the
-    // reader is looking at. A retry is offered because the fan-out is the one
-    // request a transient failure genuinely can outlive.
+    // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
+    // which is offered because the fan-out is the one request a transient
+    // failure genuinely can outlive.
     return (
-      <PanelError
-        message={`Could not load the fleet forecast: ${state.error.message}`}
-        onRetry={onRetry}
-      />
+      <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
     );
   }
   return readyBody(state.data, siteCount, chart);
@@ -221,20 +235,47 @@ export const FleetPanel = ({
   const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
   // Retrying is a new question, so it is a new query key rather than an
-  // imperative refetch: `useProviderQuery` re-runs on key change and nothing
+  // imperative refetch: `useFleetQuery` re-runs on key change and nothing
   // else, and a counter is the smallest honest way to say "ask again".
   const [attempt, setAttempt] = useState(0);
 
-  // Both hooks run unconditionally, including for an empty fleet and for a
-  // source that can never return actuals: hooks are not a place for `if`, and
-  // the wasted call is a resolved empty array in exactly the case it is wasted.
-  const forecasts = useProviderQuery(
+  /*
+   * Both hooks below run unconditionally — hooks are not a place for `if` — but
+   * the *requests* they make are value-gated until the panel has been looked at
+   * once. In live mode a fleet read is a paced per-site fan-out, so a `?site=`
+   * deep link that never shows the fleet must never spend one (#178).
+   *
+   * `revealed` needs the `sites.length > 0` conjunct because of that same deep
+   * link: the panel is briefly un-hidden while the listing is still in flight,
+   * so there is a window with `hidden` false over an empty `sites`. That window
+   * is a loading state, not a reveal, and requiring a fleet to show is what
+   * stops it counting as one. (A live fleet that really is empty then never
+   * spends the fan-out either — there is nothing to sum.)
+   *
+   * The latch is monotonic, so `enabled` never returns to false once set: hide
+   * and re-reveal keep #161's spent-once-and-kept property, where a raw
+   * `revealed` would make every re-reveal a false→true flip that refetches.
+   */
+  const [everRevealed, setEverRevealed] = useState(false);
+  const revealed = !hidden && sites.length > 0;
+  if (revealed && !everRevealed) {
+    // Adjusting state during render — react.dev's own pattern for state derived
+    // from the props of this very render, and guarded so it sets at most once
+    // ever, which is what makes it terminate. An effect would be the wrong tool:
+    // there is no external system to synchronize with (`react.md` rule 1).
+    setEverRevealed(true);
+  }
+  const enabled = revealed || everRevealed;
+
+  const forecasts = useFleetQuery(
     () => dataSource.fleetForecasts(range),
     ['fleet-forecasts', range, refreshToken, attempt],
+    { enabled },
   );
-  const actuals = useProviderQuery(
+  const actuals = useFleetQuery(
     () => dataSource.fleetActuals(range),
     ['fleet-actuals', range, refreshToken, attempt],
+    { enabled },
   );
 
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
@@ -244,33 +285,37 @@ export const FleetPanel = ({
 
   return (
     <section className="fleet-panel" hidden={hidden} aria-labelledby={headingId}>
-      <header className="fleet-panel-header">
-        <h2 className="fleet-panel-title" id={headingId}>
-          Fleet
-        </h2>
-        <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
-        <p className="fleet-panel-subtitle">
-          {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
-        </p>
-      </header>
-      {sites.length === 0 ? (
-        // The empty fleet is the demo's invitation, so it gets the panel to
-        // itself: no picker over nothing, and no failed query reported for a
-        // sum the reader never asked for.
-        <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
-      ) : (
+      {hidden ? null : (
         <>
-          <p className="fleet-panel-hint">{ADD_SITE_HINT}</p>
-          {fleetLookback ? (
-            <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
+          <header className="fleet-panel-header">
+            <h2 className="fleet-panel-title" id={headingId}>
+              Fleet
+            </h2>
+            <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
+            <p className="fleet-panel-subtitle">
+              {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
+            </p>
+          </header>
+          {sites.length === 0 ? (
+            // The empty fleet is the demo's invitation, so it gets the panel to
+            // itself: no picker over nothing, and no failed query reported for a
+            // sum the reader never asked for.
+            <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
           ) : (
-            <p className="panel-caption">{HORIZON_CAPTION}</p>
-          )}
-          {fleetBody(
-            combineFleetQueries(forecasts, actuals),
-            sites.length,
-            chartCopy(windowLabel(range, fleetLookback), fleetActuals),
-            retry,
+            <>
+              <p className="fleet-panel-hint">{ADD_SITE_HINT}</p>
+              {fleetLookback ? (
+                <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
+              ) : (
+                <p className="panel-caption">{HORIZON_CAPTION}</p>
+              )}
+              {fleetBody(
+                combineFleetQueries(forecasts, actuals),
+                sites.length,
+                chartCopy(windowLabel(range, fleetLookback), fleetActuals),
+                retry,
+              )}
+            </>
           )}
         </>
       )}

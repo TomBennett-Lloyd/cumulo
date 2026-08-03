@@ -18,7 +18,7 @@ import { PanelError, PanelPending } from './panel-states';
 import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
 import { SiteList } from './SiteList';
 import { SitePanel } from './SitePanel';
-import { LOADING_FLEET_LABEL } from './state-copy';
+import { fleetListFailureMessage, LOADING_FLEET_LABEL } from './state-copy';
 
 /**
  * How the one-off fleet listing went.
@@ -93,9 +93,13 @@ interface FleetSectionProps {
  * of their own (`react.md`, "Async surface convention"). The waiting arm in
  * particular used to be a `role="status"` mounted with its text already inside
  * it, which announces nothing — it has no change to report — and only looked
- * accessible; `PanelPending` is a plain `aria-busy` container instead, and the
- * one live region left in this column is the failure's `role="alert"`, which
- * really does arrive as a change.
+ * accessible; `PanelPending` is a plain `aria-busy` container instead. That
+ * leaves this section mounting exactly one live region of its own: the failure's
+ * `role="alert"`, which really does arrive as a change. The chart readout that
+ * now sits a panel above (`.forecast-chart-readout`, mounted empty with the
+ * chart and filled only when a reader moves its selection) is *that* panel's
+ * single region rather than a second one here — `react.md`'s live-region bullet
+ * budgets per panel, which is exactly why the two stacked in one column compose.
  */
 const FleetSection = ({
   load,
@@ -111,7 +115,7 @@ const FleetSection = ({
   return (
     <>
       {load.status === 'failed' && (
-        <PanelError message={`Fleet unavailable: ${load.message}`} onRetry={onRetryLoad} />
+        <PanelError message={fleetListFailureMessage(load.message)} onRetry={onRetryLoad} />
       )}
 
       {sites.length > 0 && (
@@ -203,6 +207,8 @@ export const Dashboard = ({
   createdSitesRef.current = createdSites;
   /** The context region itself — the thing a swap has to bring back into view. */
   const contextRegionRef = useRef<HTMLDivElement>(null);
+  /** The fleet column's box, searched for the row a closing panel hands focus back to. */
+  const siteListRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -292,15 +298,65 @@ export const Dashboard = ({
    * The panel's forecast follows the selection rather than only the newly
    * created site. One loop serves both, because they are the same question
    * asked of different sites: an established site answers on the first poll and
-   * the loop stops, while a site created seconds ago answers `not-found` until
-   * its first forecast exists — which is the pending state the demo's headline
-   * minute is made of.
+   * the loop stops (its brief wait is the `checking` arm), while a site created
+   * seconds ago answers `not-found` until its first forecast exists — which is
+   * the `generating` state the demo's headline minute is made of.
    */
   const { state: forecast, retry: retryForecast } = useFirstForecast(dataSource, selectedSiteId);
+
+  /**
+   * Puts focus back on one site's row in the fleet list.
+   *
+   * The other half of the rule the occupants of the context region follow. An
+   * occupant taking the region focuses its own heading; a panel *leaving* it has
+   * to hand focus somewhere too, because the button the reader pressed to close
+   * it is about to be unmounted and focus would otherwise fall to `body` — no
+   * position, nothing announced, and a keyboard user starting the page again.
+   * The row that names the site they were reading is where they were, so it is
+   * where they go back to.
+   *
+   * Matched on `dataset.siteId` rather than by interpolating the id into a
+   * selector: an id is data, and data does not belong in a query language. If no
+   * row matches — a listing that failed, a site scrolled out of a future
+   * virtualised list — this does nothing, and focus stays on the Close button
+   * until React unmounts it. That is the same place the browser would have left
+   * it anyway, so the fallback costs nothing that was not already lost.
+   */
+  const focusSiteRow = (siteId: Site['id']): void => {
+    const rows = siteListRegionRef.current?.querySelectorAll<HTMLElement>('[data-site-id]') ?? [];
+
+    for (const row of rows) {
+      if (row.dataset.siteId === siteId) {
+        row.focus();
+        return;
+      }
+    }
+  };
 
   const closeDraft = (): void => {
     setDraft(null);
     setCreation({ status: 'editing' });
+
+    // A cancelled draft hands the region to whatever takes it back, and that
+    // occupant focuses its own heading — a re-mounting `SitePanel`. So the
+    // question here is precisely "is a panel about to remount?", and the value
+    // that answers it is `selectedSite`, because that is what the panel's own
+    // render condition below tests.
+    //
+    // Not `selectedSiteId`: the two come apart exactly when a selection names a
+    // site nothing can show — a `?site=` deep link whose listing failed, or has
+    // not landed yet — and there the id is set while the site is null. Guarding
+    // on the id would skip this focus *and* mount no panel to claim it, so
+    // focus would fall to body as the Cancel button unmounts, which is the one
+    // defect this whole mechanism exists to remove.
+    //
+    // When it is null nothing is remounting: the fleet panel was there all
+    // along, merely hidden, so the region itself is the only honest target and
+    // it takes focus here rather than growing focus logic inside `FleetPanel`
+    // that would race the row focus on close.
+    if (selectedSite === null) {
+      contextRegionRef.current?.focus();
+    }
   };
 
   const createSite = async (input: CreateSiteInput): Promise<void> => {
@@ -368,7 +424,12 @@ export const Dashboard = ({
          * region" has to be addressable to be scrolled to, and because exactly
          * one of them is ever visible — the box is the region, not a stack.
          */}
-        <div className="dashboard-context" ref={contextRegionRef}>
+        {/*
+         * `tabIndex={-1}` makes the region a focus target without putting it in
+         * the tab order: it is where focus lands when a draft is cancelled and
+         * no panel is remounting to claim it.
+         */}
+        <div className="dashboard-context" ref={contextRegionRef} tabIndex={-1}>
           {draft !== null && (
             <AddSiteForm
               key={draftKey(draft)}
@@ -389,6 +450,10 @@ export const Dashboard = ({
               firstForecast={forecast}
               onRetryFirstForecast={retryForecast}
               onClose={() => {
+                // Focus first, state second: this reads the row while it is
+                // still the selected one, and moving focus off the Close button
+                // before React unmounts it is the whole point.
+                focusSiteRow(selectedSite.id);
                 setSelectedSiteId(null);
               }}
             />
@@ -402,7 +467,10 @@ export const Dashboard = ({
            * once and kept, not re-spent every time a reader closes a site. The
            * fleet's sum changes on exactly one event — a site being added — and
            * `refreshToken` is that event, counted. Deselection is not an event:
-           * hiding the panel keeps its state, and unhiding it costs nothing.
+           * hiding the panel keeps its state, and unhiding it costs nothing. The
+           * panel defers its *first* fan-out to its first reveal for the same
+           * frugality reason, so a `?site=` deep link that never shows the fleet
+           * never spends one (#178).
            */}
           <FleetPanel
             dataSource={dataSource}
@@ -416,7 +484,7 @@ export const Dashboard = ({
           <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
             Sites
           </h2>
-          <div className="dashboard-fleet">
+          <div className="dashboard-fleet" ref={siteListRegionRef}>
             <FleetSection
               load={load}
               sites={sites}

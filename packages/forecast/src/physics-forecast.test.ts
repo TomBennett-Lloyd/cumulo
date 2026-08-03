@@ -3,13 +3,18 @@ import {
   siteSchema,
   utcIsoTimestampSchema,
   weatherReadingSchema,
+  type Forecast,
   type Site,
   type WeatherReading,
 } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
-import { createPhysicsForecast, runPhysicsChain } from './physics-forecast';
+import {
+  createPhysicsForecast,
+  runPhysicsChain,
+  type CreatePhysicsForecastInput,
+} from './physics-forecast';
 import { solarPosition } from './solar-position';
 
 /**
@@ -54,12 +59,27 @@ const issuedAt = utcIsoTimestampSchema.parse('2026-06-21T06:00:00Z');
 /** Half an hour in ms — the offset the chain applies to reach the hour's midpoint. */
 const HALF_HOUR_MS = 1_800_000;
 
+/**
+ * The `Forecast` of a run that produced one, or a failure naming what came back instead.
+ *
+ * A typed narrowing rather than a non-null assertion on `result.forecast`: an
+ * `implausible` result arriving where a test expected a row should read as that
+ * result, not as an unrelated property access on `undefined`.
+ */
+const forecastOf = (input: CreatePhysicsForecastInput): Forecast => {
+  const result = createPhysicsForecast(input);
+  if (result.status !== 'forecast') {
+    throw new Error(`expected a forecast, got '${result.status}' — ${result.detail}`);
+  }
+  return result.forecast;
+};
+
 describe('createPhysicsForecast', () => {
   it('emits a schema-valid physics forecast carrying the site, hour, vintage and weather provenance', () => {
     const site = buildSite();
     const weather = buildWeather();
 
-    const forecast = createPhysicsForecast({ site, weather, issuedAt });
+    const forecast = forecastOf({ site, weather, issuedAt });
 
     expect(forecastSchema.safeParse(forecast).success).toBe(true);
     expect(forecast.siteId).toBe(site.id);
@@ -75,7 +95,7 @@ describe('createPhysicsForecast', () => {
     // Physics v1 is a point estimate. Under `exactOptionalPropertyTypes` an absent key
     // and a key set to `undefined` are different values, and only the absent form
     // survives a JSON/DynamoDB round trip as "no band" instead of a null nobody meant.
-    const forecast = createPhysicsForecast({
+    const forecast = forecastOf({
       site: buildSite(),
       weather: buildWeather(),
       issuedAt,
@@ -87,7 +107,7 @@ describe('createPhysicsForecast', () => {
   it('reports exactly zero irradiance and zero power for a night hour', () => {
     // Exact zeros, not small numbers: a fleet total is a sum over thousands of these,
     // and a signed or drifting night-time zero would accumulate into visible drift.
-    const forecast = createPhysicsForecast({
+    const forecast = forecastOf({
       site: buildSite(),
       weather: buildWeather({
         validTime: '2026-01-15T23:00:00Z',
@@ -118,7 +138,7 @@ describe('createPhysicsForecast', () => {
       cloudCoverPct: 0,
     });
 
-    const forecast = createPhysicsForecast({ site, weather, issuedAt });
+    const forecast = forecastOf({ site, weather, issuedAt });
 
     expect(forecast.acPowerKw).toBe(site.capacityKw);
     // The equality above would also hold if the array happened to land on nameplate, so
@@ -134,6 +154,45 @@ describe('createPhysicsForecast', () => {
       createPhysicsForecast({ site, weather, issuedAt }),
     );
     expect(runPhysicsChain(site, weather)).toEqual(runPhysicsChain(site, weather));
+  });
+
+  it('reports a physically implausible hour as a value, naming the site and the hour', () => {
+    // The measured route the docstring documents: a near-grazing sun on a vertical
+    // array pointed straight at it, with every irradiance field at its
+    // `weatherReadingSchema` cap, amplifies the circumsolar term until the chain
+    // produces numbers outside `forecastSchema`'s bounds. Both inputs are schema-valid
+    // — which is exactly why this is an expected failure and comes back as a value
+    // rather than as a throw (`docs/standards/error-handling.md` rule 1). The identical
+    // case runs through the live consumer in `apps/forecast`, so the reachability this
+    // asserts on is the deployed path's, not a fixture's.
+    const site = buildSite({ tiltDegrees: 90, azimuthDegrees: 89.47 });
+    const weather = buildWeather({
+      validTime: '2026-03-20T07:00:00Z',
+      shortwaveRadiationWm2: 1500,
+      directRadiationWm2: 1500,
+      diffuseRadiationWm2: 1500,
+      directNormalIrradianceWm2: 1500,
+    });
+
+    const result = createPhysicsForecast({ site, weather, issuedAt });
+
+    expect(result.status).toBe('implausible');
+    if (result.status !== 'implausible') {
+      throw new Error('unreachable: the assertion above already refused every other arm');
+    }
+    expect(result.siteId).toBe(site.id);
+    expect(result.validTime).toBe('2026-03-20T07:00:00Z');
+    // The detail names the bound that refused, so an operator reading a queue outcome
+    // or a hindcast log knows which number was impossible rather than only that one was.
+    expect(result.detail).toContain('acPowerKw');
+  });
+
+  it('returns the forecast arm for an ordinary hour, so the implausible arm means something', () => {
+    // Testing rule 7's shape: a chain that returned `implausible` for everything would
+    // pass the case above for the wrong reason.
+    expect(
+      createPhysicsForecast({ site: buildSite(), weather: buildWeather(), issuedAt }).status,
+    ).toBe('forecast');
   });
 });
 

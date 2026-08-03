@@ -60,14 +60,14 @@ export {
   parseSeriesSortKey,
   weatherSortKey,
   archiveDayMarkerSortKey,
-  type MetricsPeriod,
   metricsSortKey,
 } from './storage-key';
 export { generateFleet, canonicalFleetSeed } from './fleet';
 export { describeThrown } from './thrown-detail';
-export { utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
+export { utcIsoTimestampSchema, type UtcIsoTimestamp, type UtcWindow } from './timestamp';
 export { weatherMessageSchema, type WeatherMessage } from './weather-message';
 export {
+  MAX_PLAUSIBLE_IRRADIANCE_WM2,
   weatherReadingSchema,
   type WeatherReading,
   forecastWeatherReadingSchema,

@@ -57,14 +57,30 @@ fi
 export WORKTREE_FETCH_MAIN=0
 
 list=$(git -C "$main_dir" worktree list --porcelain) || exit 2
-paths=$(printf '%s' "$list" | python3 -c '
-import os, sys
 
-for line in sys.stdin.read().splitlines():
-    key, _, value = line.partition(" ")
-    if key == "worktree" and value:
-        print(os.path.realpath(value))
-') || exit 2
+# Every `worktree <path>` line, canonicalised, newline-joined — the candidate list the loop
+# below offers to reap. Only that one key is read: the rest of each porcelain block describes
+# state reap re-derives for itself, and this script deliberately decides nothing about safety.
+#
+# The heredoc keeps the loop in the current shell so `paths` survives it, and canon runs here
+# rather than in the loop so that a path this run cannot even name aborts the sweep before
+# anything has been offered for deletion. canon resolves paths that no longer exist, which is
+# what lets a vanished worktree's registered entry still be named and reported.
+paths=""
+while IFS= read -r line; do
+  case "$line" in
+    "worktree "?*) ;;
+    *) continue ;;
+  esac
+  wt_path=$(canon "${line#worktree }") || exit 2
+  if [ -z "$paths" ]; then
+    paths="$wt_path"
+  else
+    paths="$paths"$'\n'"$wt_path"
+  fi
+done <<EOF
+$list
+EOF
 
 swept=0
 kept=0

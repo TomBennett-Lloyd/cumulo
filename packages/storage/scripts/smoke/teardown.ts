@@ -1,14 +1,34 @@
 import { equal, ok } from 'node:assert/strict';
 
-import { DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import type { DynamoDBDocumentClient, NativeAttributeValue } from '@aws-sdk/lib-dynamodb';
-import { archiveDayMarkerSortKey, locationId, seriesSortKey, weatherSortKey } from '@cumulo/shared';
+import {
+  archiveDayMarkerSortKey,
+  locationId,
+  metricsSortKey,
+  seriesSortKey,
+  weatherSortKey,
+} from '@cumulo/shared';
+import type { ForecastModel } from '@cumulo/shared';
 
 import { SiteAdapter, storageTableName } from '../../src/index';
+import { blockKey, rateWindowKey } from '../../src/adapters/abuse/abuse-item';
 import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
-import { HOUR_0, HOUR_1, SMOKE_DAY, SMOKE_LOCATION } from './smoke-data';
+import {
+  HOUR_0,
+  HOUR_1,
+  SMOKE_DAY,
+  SMOKE_LOCATION,
+  SMOKE_METRICS_BASELINE,
+  SMOKE_METRICS_PERIOD,
+  SMOKE_RATE_WINDOW_START_EPOCH_SECONDS,
+  smokeAbuseAddress,
+} from './smoke-data';
+
+/** Both models the metrics checks write, so both rows are addressed on the way out. */
+const SMOKE_METRICS_MODELS: readonly ForecastModel[] = ['ml', 'physics'];
 
 /**
  * Counts every item in one partition, straight through the document client.
@@ -79,6 +99,8 @@ export const runTeardown = async (
   const sitesTable = storageTableName('sites', ENVIRONMENT);
   const seriesTable = storageTableName('series', ENVIRONMENT);
   const weatherTable = storageTableName('weather', ENVIRONMENT);
+  const abuseTable = storageTableName('abuse', ENVIRONMENT);
+  const metricsTable = storageTableName('metrics', ENVIRONMENT);
   const sites = new SiteAdapter({ client, tableName: sitesTable });
   const partitionKey = locationId(SMOKE_LOCATION);
 
@@ -132,5 +154,46 @@ export const runTeardown = async (
       (count) => count === 0,
     );
     equal(remaining, 0, 'weather items survived cleanup');
+  });
+
+  await runner.check('cleanup: the abuse rows are deleted', async () => {
+    const address = smokeAbuseAddress(siteId);
+    for (const pk of [
+      rateWindowKey(address, SMOKE_RATE_WINDOW_START_EPOCH_SECONDS),
+      blockKey(address),
+    ]) {
+      // No race with TTL: both of these rows carry a near-term `expiresAt`, and
+      // deleting an item DynamoDB has already reaped is a no-op success rather
+      // than an error — which is why this deletes unconditionally instead of
+      // reading first.
+      await deleteItem(client, abuseTable, { pk });
+      const remaining = await eventually(
+        'cleanup: the abuse row is gone',
+        async () => {
+          const output = await client.send(new GetCommand({ TableName: abuseTable, Key: { pk } }));
+          return output.Item;
+        },
+        (item) => item === undefined,
+      );
+      equal(remaining, undefined, `the abuse row '${pk}' survived cleanup`);
+    }
+  });
+
+  await runner.check('cleanup: the metrics partition is empty', async () => {
+    // The one partition nothing else will ever clear: `cumulo-metrics` declares
+    // no TTL by design, so a row left here outlives the run indefinitely (see
+    // `smoke-data.ts`).
+    for (const model of SMOKE_METRICS_MODELS) {
+      await deleteItem(client, metricsTable, {
+        siteId,
+        sk: metricsSortKey(SMOKE_METRICS_PERIOD, model, SMOKE_METRICS_BASELINE),
+      });
+    }
+    const remaining = await eventually(
+      'cleanup: the metrics partition drained',
+      () => countPartitionItems(client, metricsTable, 'siteId', siteId),
+      (count) => count === 0,
+    );
+    equal(remaining, 0, 'metrics items survived cleanup');
   });
 };

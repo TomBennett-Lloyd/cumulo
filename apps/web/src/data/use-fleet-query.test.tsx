@@ -4,7 +4,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { FleetSourceResult } from './fleet-data-source';
-import { useProviderQuery } from './use-provider-query';
+import { useFleetQuery } from './use-fleet-query';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
 // itself — every rendered hook has to be torn down explicitly.
@@ -42,12 +42,52 @@ const deferred = (): Deferred => {
 interface QueryProps {
   readonly query: () => Promise<StringResult>;
   readonly key: readonly unknown[];
+  /** Omitted where the test is about the default arm, which must behave as it always has. */
+  readonly enabled?: boolean;
 }
 
+/**
+ * Omitting `enabled` calls the hook with two arguments — the form `SitePanel` uses — so the
+ * parameter defaults are genuinely exercised rather than papered over by the helper. Passing
+ * `{ enabled: props.enabled ?? true }` unconditionally would mean no test ever reached them, and
+ * a signature default flipped to `false` would survive the whole file.
+ *
+ * Both arms call the one hook exactly once, so the hook order is identical either way.
+ */
 const renderQuery = (initialProps: QueryProps) =>
-  renderHook((props: QueryProps) => useProviderQuery(props.query, props.key), { initialProps });
+  renderHook(
+    (props: QueryProps) =>
+      props.enabled === undefined
+        ? useFleetQuery(props.query, props.key)
+        : useFleetQuery(props.query, props.key, { enabled: props.enabled }),
+    { initialProps },
+  );
 
-describe('useProviderQuery', () => {
+/**
+ * Lets any already-scheduled effect and microtask run, so "nothing happened" is a settled fact
+ * rather than a claim made before the work would have started anyway.
+ */
+const flush = async (): Promise<void> => {
+  await act(async () => {
+    await Promise.resolve();
+  });
+};
+
+/** Wraps a query fn so a test can assert on how many requests were actually spent. */
+const counted = (
+  answer: () => Promise<StringResult>,
+): { readonly query: () => Promise<StringResult>; readonly callCount: () => number } => {
+  let calls = 0;
+  return {
+    query: () => {
+      calls += 1;
+      return answer();
+    },
+    callCount: () => calls,
+  };
+};
+
+describe('useFleetQuery', () => {
   it('reports loading until the source answers, then the data', async () => {
     const first = deferred();
     const { result } = renderQuery({ query: () => first.promise, key: ['sites'] });
@@ -82,7 +122,11 @@ describe('useProviderQuery', () => {
       expect(result.current.status).toBe('failed');
     });
     expect(result.current.status === 'failed' && result.current.error.code).toBe('rate-limited');
-    expect(result.current.status === 'failed' && result.current.error.retryAfterSeconds).toBe(30);
+    expect(
+      result.current.status === 'failed' &&
+        result.current.error.code === 'rate-limited' &&
+        result.current.error.retryAfterSeconds,
+    ).toBe(30);
   });
 
   it('refetches when the key changes', async () => {
@@ -126,5 +170,51 @@ describe('useProviderQuery', () => {
     await slowFirst.settle(ready('site-a data'));
 
     expect(result.current).toEqual({ status: 'ready', data: 'site-b data' });
+  });
+
+  it('starts nothing while disabled', async () => {
+    const source = counted(() => Promise.resolve(ready('never asked for')));
+    const { result, rerender } = renderQuery({
+      query: source.query,
+      key: ['site-a'],
+      enabled: false,
+    });
+
+    rerender({ query: source.query, key: ['site-b'], enabled: false });
+    await flush();
+
+    expect(source.callCount()).toBe(0);
+    expect(result.current).toEqual({ status: 'loading' });
+  });
+
+  it('fires for the current key when enabled flips true', async () => {
+    const answer = deferred();
+    const source = counted(() => answer.promise);
+    const { result, rerender } = renderQuery({
+      query: source.query,
+      key: ['site-a'],
+      enabled: false,
+    });
+
+    rerender({ query: source.query, key: ['site-a'], enabled: true });
+
+    expect(source.callCount()).toBe(1);
+
+    await answer.settle(ready('site-a data'));
+
+    expect(result.current).toEqual({ status: 'ready', data: 'site-a data' });
+  });
+
+  it('keeps its settled answer when disabled afterwards', async () => {
+    const answer = deferred();
+    const source = counted(() => answer.promise);
+    const { result, rerender } = renderQuery({ query: source.query, key: ['site-a'] });
+    await answer.settle(ready('site-a data'));
+
+    rerender({ query: source.query, key: ['site-a'], enabled: false });
+    await flush();
+
+    expect(result.current).toEqual({ status: 'ready', data: 'site-a data' });
+    expect(source.callCount()).toBe(1);
   });
 });

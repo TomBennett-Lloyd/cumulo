@@ -167,5 +167,39 @@ expect_out "z-broken"
 end
 
 # ====================================================================================
+# 5. a discovery that PARTLY worked is refused, not linted as if it were the whole
+# ====================================================================================
+# The nastier sibling of the empty list case 1 guards. `git ls-files` that fails
+# partway — a broken index, an unreadable directory under a worktree — still prints
+# everything it reached and exits non-zero, and read out of a process substitution
+# that status is invisible to the parent shell. The subset would then be linted and
+# announced as the repository: a clean census, with the unread file nowhere in it.
+#
+# Unlike run-script-tests' unreadable-directory case, this condition cannot be built
+# out of filesystem permissions — `git ls-files` reads the index, not the tree — so
+# the producer is injected instead, which is what LINT_SHELL_GIT_CMD exists for. The
+# stub lists ONLY the clean keep.sh: under a gate that ignores the status, that is a
+# green run with a census line, which is precisely the lie being refused. Hence
+# `expect_not_out "file(s)"` next to the rc — a refused listing must never reach the
+# census, because the census is the sentence that claims coverage.
+begin "gate exits 2 when git ls-files fails partway, and prints no census"
+fixture partial_discovery
+cat >"$ROOT/fakegit" <<'EOF'
+#!/usr/bin/env bash
+# Discovery fails after emitting part of its listing; everything else is real git.
+if [ "${1:-}" = "ls-files" ]; then
+  printf 'keep.sh\0'
+  exit 1
+fi
+exec git "$@"
+EOF
+must chmod +x "$ROOT/fakegit"
+capture -C "$ROOT" env LINT_SHELL_GIT_CMD="$ROOT/fakegit" bash .claude/scripts/lint-shell.sh
+expect_rc 2 "$rc"
+expect_stderr "file discovery failed"
+expect_not_out "file(s)"
+end
+
+# ====================================================================================
 
 finish

@@ -31,7 +31,27 @@ if ! . "$lib"; then
   exit 1
 fi
 
-file=$(hook_event_field "$(read_hook_event)" tool_input.file_path)
+# Preflight, before anything is read or judged. All three tools are load-bearing —
+# the interpreter reads the event, git names the owning tree, pnpm runs the lint —
+# and missing any one of them does not weaken this check, it silently deletes it:
+# every edit for the rest of the session comes back exit 0, which is the same two
+# bytes of evidence a clean file produces. Exit 2 because this is a check and a
+# check that cannot run must not be mistaken for one that passed
+# (hook-context.sh's header: cannot judge, so be loud).
+hook_require_tools post-edit-check "$HOOK_NODE_CMD" git pnpm || exit 2
+
+# Read and parse in two steps, not one nested substitution: `$(hook_event_field
+# "$(read_hook_event)" …)` reports only the OUTER command's status, so an
+# interpreter that never ran was indistinguishable from an event with no file_path
+# in it. Split, each step's failure is its own and gets its own report.
+event=$(read_hook_event) || {
+  echo "post-edit-check: could not read the hook event (stdin was unreadable) — edit-time lint did not run for this edit." >&2
+  exit 2
+}
+file=$(hook_event_field "$event" tool_input.file_path) || {
+  echo "post-edit-check: could not read the hook event ($HOOK_NODE_CMD failed) — edit-time lint did not run for this edit." >&2
+  exit 2
+}
 
 case "$file" in
   *.ts | *.tsx | *.mts | *.cts) ;;

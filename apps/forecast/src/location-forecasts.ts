@@ -41,6 +41,25 @@ export interface LocationForecastsInput {
 }
 
 /**
+ * The fan-out's whole answer: every row, or the first hour that has none.
+ *
+ * Two arms rather than a partial row list, because this service's policy is
+ * all-or-nothing per message and has to stay that way. `consume-message.ts` fails
+ * the record on the `implausible-hour` arm, which redelivers the whole message —
+ * and that redelivery is only free because every write is an idempotent Put over
+ * a deterministic key (ADR 0002). Writing the plausible rows and reporting the
+ * rest would make the two halves of a message diverge in vintage on redelivery.
+ */
+export type LocationForecastsOutcome =
+  | { readonly status: 'complete'; readonly forecasts: Forecast[] }
+  | {
+      readonly status: 'implausible-hour';
+      readonly siteId: string;
+      readonly validTime: UtcIsoTimestamp;
+      readonly detail: string;
+    };
+
+/**
  * Every site × every hour, as `Forecast` rows ready to write.
  *
  * `sites.length × readings.length` rows, always — including the hours a site
@@ -49,19 +68,31 @@ export interface LocationForecastsInput {
  * what it finds, so an absent row and a zero row are the difference between a
  * flat night and a hole in the chart nobody can explain.
  *
- * Not caught here: `createPhysicsForecast` parses its own result and throws on a
- * value outside `forecastSchema`'s bounds. That throw is the caller's to convert
- * (see `consume-message.ts`), which keeps this function a total description of
- * the fan-out rather than a place failure policy is decided.
+ * The one exception is the site-hour `@cumulo/forecast` reports `implausible` for:
+ * a schema-valid weather hour whose physics lands outside `forecastSchema`'s
+ * bounds. The fan-out stops at the first one and hands it back, because this
+ * service's answer to "who does the operator need to call?" is the queue —
+ * `consume-message.ts` fails the record, the redrive retries it, and the DLQ
+ * alarm is the signal (#136). Deciding that here would put failure policy in the
+ * pure core; reporting it keeps the decision one layer up where the queue is.
  */
-export const locationForecasts = (input: LocationForecastsInput): Forecast[] => {
+export const locationForecasts = (input: LocationForecastsInput): LocationForecastsOutcome => {
   const forecasts: Forecast[] = [];
 
   for (const site of input.sites) {
     for (const weather of input.readings) {
-      forecasts.push(createPhysicsForecast({ site, weather, issuedAt: input.issuedAt }));
+      const result = createPhysicsForecast({ site, weather, issuedAt: input.issuedAt });
+      if (result.status === 'implausible') {
+        return {
+          status: 'implausible-hour',
+          siteId: result.siteId,
+          validTime: result.validTime,
+          detail: result.detail,
+        };
+      }
+      forecasts.push(result.forecast);
     }
   }
 
-  return forecasts;
+  return { status: 'complete', forecasts };
 };

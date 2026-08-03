@@ -12,6 +12,7 @@ import {
   SERIES,
   marks,
   tableCells,
+  tooltipValues,
 } from './forecast-chart-test-fixture';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
@@ -56,9 +57,6 @@ const hoverSample = (container: HTMLElement, index: number, count: number): void
 
 const tooltipText = (container: HTMLElement): string | null =>
   container.querySelector('.forecast-chart-tooltip')?.textContent ?? null;
-
-const tooltipValues = (container: HTMLElement): readonly (string | null)[] =>
-  [...container.querySelectorAll('.forecast-chart-tooltip-value')].map((cell) => cell.textContent);
 
 /** The panel's left edge, read back out of the group's `translate`. */
 const tooltipAnchor = (container: HTMLElement): number => {

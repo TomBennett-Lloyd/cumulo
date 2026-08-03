@@ -45,13 +45,24 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
 /**
- * The state every watch starts in.
+ * The deadline as the diagnostic messages spell it.
+ *
+ * Derived once rather than in each sentence: both deadline messages are about
+ * the same timer, so a second derivation would be a place for them to disagree
+ * about the number the visitor actually waited out.
+ */
+const DEADLINE_SECONDS_TEXT = String(FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND);
+
+/**
+ * The state every watch starts in, and stays in until the fleet answers.
  *
  * A module constant rather than a fresh object per run: re-entering it is then
  * a no-op for React (it bails out of re-rendering on an identical value), which
- * matters because every effect run begins by resetting to it.
+ * matters because every effect run begins by resetting to it — and because
+ * every fault-poll before absence is confirmed re-enters it too, so a fleet
+ * that is failing repeatedly re-renders the panel zero times.
  */
-const WATCH_START_STATE: ForecastViewState = { status: 'pending', elapsedSeconds: 0 };
+const WATCH_START_STATE: ForecastViewState = { status: 'checking' };
 
 /**
  * What one poll's answer means for the loop.
@@ -61,6 +72,10 @@ const WATCH_START_STATE: ForecastViewState = { status: 'pending', elapsedSeconds
  * while a message means the fleet actually answered with a fault. Only that
  * distinction decides whether hitting the deadline is reported as a timeout or
  * as an error, so it is carried per-poll rather than recovered afterwards.
+ *
+ * `halt` is the third answer, and the one that makes waiting pointless: the
+ * fleet has said something that the next ninety seconds cannot change, so the
+ * loop stops now and reports it now.
  */
 type PollDecision =
   | { readonly kind: 'ready'; readonly forecasts: readonly Forecast[] }
@@ -68,7 +83,8 @@ type PollDecision =
       readonly kind: 'keep-waiting';
       readonly delayMs: number;
       readonly fault: string | null;
-    };
+    }
+  | { readonly kind: 'halt'; readonly message: string };
 
 const rateLimitBackoffMs = (retryAfterSeconds: number | undefined): number =>
   Math.max(retryAfterSeconds ?? 0, MIN_RATE_LIMIT_BACKOFF_SECONDS) * MS_PER_SECOND;
@@ -99,36 +115,84 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
         delayMs: rateLimitBackoffMs(error.retryAfterSeconds),
         fault: error.message,
       };
-    default:
-      // `network` and `invalid-response`: both may clear on their own while the
-      // pipeline is still working, so the loop keeps its cadence and lets the
-      // deadline decide when to stop — but the message is remembered, so a
-      // deadline reached this way is reported as an error rather than a wait.
+    case 'network':
+    case 'invalid-response':
+    case 'invalid-request':
+    case 'server-fault':
+      // A dropped connection comes back and a payload this client could not
+      // read can be a record the pipeline is still writing, so waiting is worth
+      // something for those two. `server-fault` joins them for the same reason
+      // its own arm states: a fleet that answered "I am broken" can be working
+      // again before the deadline, and the visitor has nothing else to do
+      // meanwhile. `invalid-request` is grouped with them rather than halted
+      // deliberately: halting is reserved for the one arm whose recourse is
+      // unambiguous, and a fault the loop cannot classify that confidently is
+      // better given the full wait than cut short. All four therefore keep the
+      // cadence and let the deadline decide when to stop — and the message is
+      // remembered, so a deadline reached this way is reported as an error
+      // rather than as a wait.
       return { kind: 'keep-waiting', delayMs: POLL_INTERVAL_MS, fault: error.message };
+    case 'forbidden':
+      // The arm's own contract: what is wrong is *who is asking*, and its
+      // recourse is a deployment change (`CUMULO_WEB_ORIGINS`). Nothing the
+      // loop can do changes the answer, so waiting out ninety seconds before
+      // saying so buys the visitor nothing — and a view that then rendered it
+      // as "try again" would be telling them to do the one thing that cannot
+      // work (the anti-pattern #150's review named).
+      return { kind: 'halt', message: error.message };
   }
+  // Every code is enumerated and there is no catch-all arm, so the declared
+  // return type makes an eighth `FleetDataError` code a compile error here —
+  // rather than letting it fall silently into "keep waiting", which is how
+  // `invalid-request` and `forbidden` inherited a policy nobody chose for them.
 };
 
-const pendingSince = (startedAtMs: number, nowMs: number): ForecastViewState => ({
-  status: 'pending',
+const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState => ({
+  status: 'generating',
   elapsedSeconds: Math.floor((nowMs - startedAtMs) / MS_PER_SECOND),
 });
 
 /**
  * What the panel is told when the deadline passes.
  *
- * The message carries the site the wait was about (`error-handling.md` rule 4)
+ * Three outcomes, because the run can reach ninety seconds having learned three
+ * different things — and the panel has a different sentence for each:
+ *
+ * - a fault was seen, so the deadline is an `error` carrying the fleet's own
+ *   account of it;
+ * - absence was confirmed, so the wait really was the pipeline's first-forecast
+ *   wait and running out of it is a `timeout`;
+ * - neither, so no poll ever came back at all: the run spent the whole deadline
+ *   in `checking` and `unanswered` is the only honest reason. Claiming a
+ *   timeout here would assert the pipeline is behind on a site whose forecast
+ *   may well already exist (#177's review; the tech-debt entry this consumes).
+ *
+ * `absenceConfirmed` is a parameter rather than something read from the
+ * enclosing run, so this stays legible on its own (`structure.md` rule 1).
+ * Both messages carry the site the wait was about (`error-handling.md` rule 4)
  * so a screenshot of a failed panel is diagnosable on its own.
  */
-const deadlineState = (siteId: Site['id'], lastFault: string | null): ForecastViewState =>
-  lastFault === null
-    ? {
-        status: 'failed',
-        reason: 'timeout',
-        message: `No forecast for site ${siteId} after ${String(
-          FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND,
-        )} seconds`,
-      }
-    : { status: 'failed', reason: 'error', message: lastFault };
+const deadlineState = (
+  siteId: Site['id'],
+  lastFault: string | null,
+  absenceConfirmed: boolean,
+): ForecastViewState => {
+  if (lastFault !== null) {
+    return { status: 'failed', reason: 'error', message: lastFault };
+  }
+  if (absenceConfirmed) {
+    return {
+      status: 'failed',
+      reason: 'timeout',
+      message: `No forecast for site ${siteId} after ${DEADLINE_SECONDS_TEXT} seconds`,
+    };
+  }
+  return {
+    status: 'failed',
+    reason: 'unanswered',
+    message: `No answer for site ${siteId} within ${DEADLINE_SECONDS_TEXT} seconds`,
+  };
+};
 
 export interface FirstForecastWatch {
   /** What the site detail panel should render right now. */
@@ -142,7 +206,7 @@ export interface FirstForecastWatch {
  *
  * `siteId` is the site created moments ago whose forecast the visitor is
  * waiting for — `null` while nothing is being watched, which reports the
- * neutral pending state and starts no timers. The id must be the
+ * neutral `checking` state and starts no timers. The id must be the
  * server-assigned one returned by `createSite`: polling a locally predicted id
  * addresses a site that does not exist, and this loop would wait out its whole
  * deadline on it.
@@ -175,8 +239,25 @@ export const useFirstForecast = (
     const startedAtMs = Date.now();
     let stopped = false;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    /** The last fault seen this run; decides timeout-vs-error at the deadline. */
+    /** The last fault seen this run; picks the `error` arm at the deadline. */
     let lastFault: string | null = null;
+    /**
+     * Whether the fleet has told this run the forecast does not exist yet.
+     *
+     * `decidePoll` already encodes exactly that: a `keep-waiting` with
+     * `fault === null` is a `not-found`, or an `ok` carrying an empty series —
+     * both of which are the fleet answering "there is nothing here", which is
+     * the only evidence a client has that a first forecast is genuinely being
+     * generated. A `keep-waiting` *with* a fault is the fleet failing to
+     * answer, and says nothing about existence, so it must not promote the
+     * watch out of `checking` (#177). Latched rather than recomputed per poll:
+     * once absence is confirmed, a later network blip does not un-confirm it.
+     *
+     * The deadline asks the same question at the end: ninety seconds reached
+     * without this ever being set means no poll established anything, which is
+     * `unanswered` rather than a pipeline timeout.
+     */
+    let absenceConfirmed = false;
 
     const stopPolling = (): void => {
       stopped = true;
@@ -186,9 +267,12 @@ export const useFirstForecast = (
       }
     };
 
+    // Both bindings are read when the timer fires, not when it is registered:
+    // they are this run's own `let`s, so the deadline is decided on everything
+    // the run had learned by the ninetieth second.
     const deadlineTimer = setTimeout(() => {
       stopPolling();
-      setState(deadlineState(siteId, lastFault));
+      setState(deadlineState(siteId, lastFault, absenceConfirmed));
     }, FIRST_FORECAST_DEADLINE_MS);
 
     const stopWatching = (): void => {
@@ -213,8 +297,21 @@ export const useFirstForecast = (
         return;
       }
 
+      // A halt ends the run exactly like an arrival does — the answer is final,
+      // so the deadline has nothing left to decide and the panel is told now
+      // rather than in ninety seconds. It reports in its own arm rather than as
+      // a failure, so the panel can drop the retry no retry can change.
+      if (decision.kind === 'halt') {
+        stopWatching();
+        setState({ status: 'halted', message: decision.message });
+        return;
+      }
+
+      if (decision.fault === null) {
+        absenceConfirmed = true;
+      }
       lastFault = decision.fault ?? lastFault;
-      setState(pendingSince(startedAtMs, Date.now()));
+      setState(absenceConfirmed ? generatingSince(startedAtMs, Date.now()) : WATCH_START_STATE);
       pollTimer = setTimeout(() => {
         void poll();
       }, decision.delayMs);

@@ -39,10 +39,30 @@ if ! . "$lib"; then
   exit 0
 fi
 
+# Preflight, on the same terms as post-edit-check's but settled the other way. The
+# report is not optional — without the interpreter this hook stops preparing every
+# worktree it is handed, silently, and a session then fails its first real check for
+# a reason that has nothing to do with the code. The EXIT STATUS is where the two
+# hooks part: 0, always, because this hook never blocks a session (see the header's
+# non-blocking contract). Loud and harmless, not loud and refusing.
+hook_require_tools ensure-deps "$HOOK_NODE_CMD" git pnpm || exit 0
+
 # $PWD is the fallback, not a second opinion: Claude Code runs hooks in the
 # session's working directory, so it is the same answer by another route when the
 # event carries no `cwd` (a hand-run of this script, say).
-cwd=$(hook_event_field "$(read_hook_event)" cwd)
+#
+# That fallback is exactly why the read is split into two steps here. An unreadable
+# event leaves `cwd` empty, and empty falls through to $PWD — a plausible-looking
+# answer that this hook would then act on, having read nothing. So the interpreter's
+# failure is caught on its own and reported before the fallback can paper over it.
+event=$(read_hook_event) || {
+  echo "ensure-deps: could not read the hook event (stdin was unreadable) — deps were not checked for this session." >&2
+  exit 0
+}
+cwd=$(hook_event_field "$event" cwd) || {
+  echo "ensure-deps: could not read the hook event ($HOOK_NODE_CMD failed) — deps were not checked for this session." >&2
+  exit 0
+}
 root=$(repo_root_for "${cwd:-$PWD}") || exit 0
 [ -f "$root/pnpm-lock.yaml" ] || exit 0
 [ -d "$root/node_modules" ] && exit 0

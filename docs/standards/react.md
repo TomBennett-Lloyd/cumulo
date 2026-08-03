@@ -30,15 +30,21 @@
 
 ## Async surface convention (apps/web)
 
-Every panel that waits on data says so the same way. The three states are implemented once in `apps/web/src/dashboard/panel-states.tsx` (`PanelPending`, `PanelEmpty`, `PanelError`) and their wording lives in `apps/web/src/dashboard/state-copy.ts` — reach for those rather than writing a fourth spelling of "loading…".
+Every surface that waits on data says so the same way — panels, the map region, the app boundary and the add-site form alike. The three states are implemented once in `apps/web/src/dashboard/panel-states.tsx` (`PanelPending`, `PanelEmpty`, `PanelError`), and the app's async-state and failure wording lives in `apps/web/src/dashboard/state-copy.ts` — reach for those rather than writing a fourth spelling of "loading…". Chart _chrome_ wording (the words a chart says about itself, like its clock) has its own owner, `apps/web/src/charts/chart-copy.ts`, a deliberate sibling. `apps/web/src/dashboard/state-copy-contract.test.ts` sweeps the app for phrase classes that drift back inline, so an inlined pending label or failure sentence fails a gate, not just a review.
 
 - **Pending** is a visible label inside an `aria-busy="true"` container — never a live region mounted with its text already in it. A `role="status"` that exists only while it is full has no change to report, so it announces nothing and merely looks accessible (#161).
 - **Failed** is `role="alert"` with a message in the panel's own words, plus a retry **only when retrying can work**. These components mount into a tree that is already on screen, so the alert really is a change and really is announced. A retry that re-runs an identical metered request is not a recourse — omit it and let the reader's own controls be the retry.
 - **Empty** is plain content, no live semantics, stating the next action where there is one. An empty fleet is a successful answer, not an event.
-- **At most one live region per panel.** Announcements compete; two regions in one column means the reader hears whichever won.
+- **At most one live region per panel.** Announcements compete; two regions in one panel means the reader hears whichever won. In a panel showing a chart, that one region is the chart's own readout (`.forecast-chart-readout`, `docs/design/chart-treatment.md`) — mounted empty with the chart and filled only when a reader moves the selection, so the panel spends its single budget on the sample the reader asked for.
 - **Completion is not announced.** The arrival of data is the busy container being replaced by the content — that is the signal, and adding a "loaded" announcement on top of it says the same thing twice.
+- **A live region never renders inside a `hidden`/`display: none` subtree** — a hidden panel renders its states only once it is revealed, so a failure mounts as a change rather than as an attribute flip nothing announces (`FleetPanel`).
+- **A message mounted in response to something the reader did is `role="alert"`** — the add-site refusal arrives because a button was pressed, so it really is a change to a tree already on screen.
+- **First paint mounts zero live regions** — pending is `aria-busy` and alerts arrive only as changes, pinned by `Dashboard.test.tsx`'s "first paint mounts zero live regions".
+- **An unhandled promise rejection lands at `AppErrorBoundary`**, which gives the rejection nobody awaited the same labelled failure a render throw gets rather than a silent hang.
 
-The map shell (`LazyMapRegion`/`MapView`) still carries the older placeholder treatment; converting it is #161's remainder, not a licence to copy it.
+The map shell composes `MapSurface` (`apps/web/src/map/MapSurface.tsx`) — one column behind the live canvas, the loading placeholder and the load failure — and its placeholder is the same `aria-busy` pending treatment, not a fourth spelling of it.
+
+**Focus follows the context region.** An occupant taking the region focuses its own heading, made focusable with `tabIndex={-1}` and kept out of the tab order — on a marker click, on a creation, and on a deep-link arrival alike, because a region that changes above the reader's focus point is otherwise reachable only by tabbing to it. `Close` hands focus to the closing site's row in the list, rather than letting the button it unmounts drop focus on `body`. A draft cancelled with nothing selected behind it focuses the context region itself: nothing remounts on that path, so the region is the only honest target left. `Dashboard.focus.test.tsx` holds these.
 
 ## Why
 

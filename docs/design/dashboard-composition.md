@@ -76,13 +76,17 @@ and a column that jumped on the way out would move ground the reader did not ask
 scroll is instant rather than smooth: this is feedback for an action already taken, and a smooth
 scroll would fight a reader who starts scrolling immediately after clicking.
 
-**Recorded debt: this is a scroll, not focus management.** A keyboard or screen-reader user gets
-the region scrolled into view but keeps their focus where it was, so reaching the swapped-in
-context still costs them a tab sequence through whatever lies between. Doing it properly means
-deciding where focus lands on each of the three swaps, whether the region is programmatically
-focusable, and what a `Close` returns focus to — a design question for the whole column rather
-than a line in this effect, and larger than the finding that prompted the scroll. Logged in
-`docs/tech-debt.md`.
+**The scroll is not the focus, and both are owed.** A reader who gets the region scrolled into
+view but keeps their focus where it was still reaches the swapped-in context only by tabbing
+through whatever lies between, which is no answer at all for a keyboard or screen-reader user.
+The settled rule, decided for the whole column rather than for this effect: **an occupant taking
+the region focuses its own heading** — the site panel, the draft, and a site arriving from a
+creation or from `?site=` alike; **`Close` returns focus to the closing site's row in the list**,
+because the button the reader pressed is about to be unmounted and focus would otherwise fall to
+`body`; and **a draft cancelled with nothing selected behind it focuses the context region
+itself**, which is why `.dashboard-context` carries `tabIndex={-1}` — nothing remounts on that
+path, so the region is the only honest target. `react.md`'s async surface convention owns the
+rule; `Dashboard.focus.test.tsx` pins it.
 
 jsdom cannot check any of this: it implements no layout, so it has no `scrollIntoView` and no
 scroll position to move. `Dashboard.test.tsx` pins the half that is the dashboard's own doing —
@@ -182,4 +186,5 @@ it, which is why the module's types say `string` rather than `Site['id']`.
   `dashboard/map-region-split-contract.test.ts`.
 - **The async-state vocabulary** — `panel-states.tsx` owns the three components, `state-copy.ts`
   owns their wording, and `react.md` owns the rule. Panels reuse them and do not invent siblings.
-- **The map shell's older placeholder treatment**, which is #161's remainder to convert.
+- **The map shell** — `map/MapSurface.tsx` is the one column behind the canvas, the placeholder
+  and the failure, and it wears the same async states under the same convention (#161).

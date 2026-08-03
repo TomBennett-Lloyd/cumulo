@@ -40,8 +40,8 @@ import {
   generationReadingSchema,
   siteSchema,
   utcIsoTimestampSchema,
-  type MetricsPeriod,
   type UtcIsoTimestamp,
+  type UtcWindow,
 } from '@cumulo/shared';
 import {
   MetricsAdapter,
@@ -140,6 +140,12 @@ const report = (outcome: HindcastOutcome): void => {
   if (coverage.unavailableDays.length > 0) {
     console.log(`Unavailable   ${coverage.unavailableDays.join(', ')}`);
   }
+  if (coverage.implausibleHours.length > 0) {
+    // The hours the physics refused, alongside the days the archive had none for:
+    // both are reasons `Samples` is smaller than the window, and an operator
+    // weighing a skill score needs the reason as well as the number.
+    console.log(`Implausible   ${coverage.implausibleHours.join(', ')}`);
+  }
 };
 
 const client = createStorageDocumentClient();
@@ -158,7 +164,7 @@ try {
   const observations = observationsSchema.parse(
     await readJsonFile(requireOption('observations', values.observations)),
   );
-  const period: MetricsPeriod = {
+  const period: UtcWindow = {
     startInclusive: utcIsoTimestampSchema.parse(requireOption('from', values.from)),
     endExclusive: utcIsoTimestampSchema.parse(requireOption('to', values.to)),
   };

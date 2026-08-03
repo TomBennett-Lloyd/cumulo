@@ -45,71 +45,73 @@ main_dir=$(canon "$main_dir") || exit 2
 
 common_dir=$(git -C "$main_dir" rev-parse --path-format=absolute --git-common-dir) || exit 2
 list=$(git -C "$main_dir" worktree list --porcelain) || exit 2
-entry=$(printf '%s' "$list" | python3 -c '
-import os, sys
 
-target, common = sys.argv[1], sys.argv[2]
-
-
-def admin_dir():
-    """The per-worktree admin dir the MAIN repo records for target, or "".
-
-    The porcelain output does not carry it (git 2.50), so this reads the records that
-    worktree list is itself built on: under the common git dir, worktrees/<name>/gitdir
-    holds the path of that worktree .git file. Matching on realpath is the same identity
-    rule the block scan below uses, so one lookup answers both "is this one of ours" and
-    "which admin dir is its own". The alternative -- asking the target directory to name
-    its own git dir -- is what this exists to avoid: that search walks up through parents,
-    and since Cumulo nests worktrees inside the main checkout, a worktree whose .git file
-    is missing answers with the admin dir of the MAIN repo. Reading these files cannot
-    bump the mtime the min-age probe measures.
-    """
-    base = os.path.join(common, "worktrees")
-    try:
-        names = sorted(os.listdir(base))
-    except OSError:
-        return ""
-    for name in names:
-        try:
-            with open(os.path.join(base, name, "gitdir")) as handle:
-                link = handle.read().strip()
-        except OSError:
-            continue
-        if link and os.path.realpath(os.path.dirname(link)) == target:
-            return os.path.join(base, name)
-    return ""
-
-
-blocks, cur = [], {}
-for line in sys.stdin.read().splitlines():
-    if not line.strip():
-        if cur:
-            blocks.append(cur)
-            cur = {}
-        continue
-    key, _, value = line.partition(" ")
-    cur[key] = value
-if cur:
-    blocks.append(cur)
-
-for block in blocks:
-    path = block.get("worktree", "")
-    if path and os.path.realpath(path) == target:
-        print("1 %d %d %s %s" % ("locked" in block, "detached" in block,
-                                 block.get("branch", "") or "-", admin_dir() or "-"))
-        break
-else:
-    print("0 0 0 - -")
-' "$wt" "$common_dir") || exit 2
-
-found=$(printf '%s' "$entry" | cut -d' ' -f1)
-locked=$(printf '%s' "$entry" | cut -d' ' -f2)
-detached=$(printf '%s' "$entry" | cut -d' ' -f3)
-branch_ref=$(printf '%s' "$entry" | cut -d' ' -f4)
-# Last field, taken with -f5- rather than -f5: an admin dir is a path and may contain spaces.
-admin_dir=$(printf '%s' "$entry" | cut -d' ' -f5-)
+# --- block scan: which porcelain block is ours, and what does it say ----------------------
+# `worktree list --porcelain` emits one blank-line-separated block per worktree, each opening
+# with a `worktree <path>` line. Identity is `canon`, not string equality: the caller may have
+# named the tree through a symlink or a relative path, and on macOS the temp prefixes differ by
+# /var vs /private/var alone.
+#
+# The heredoc is what keeps this loop in the current shell — piping `$list` in would run the
+# body in a subshell and every variable it sets would be discarded at the closing `done`.
+# Attributes are recorded only while cur_match is 1, so a `locked` belonging to some other
+# worktree's block cannot be read as ours.
+found=0
+cur_match=0
+locked=0
+detached=0
+branch_ref="-"
+while IFS= read -r line; do
+  case "$line" in
+    "worktree "*)
+      entry_path=$(canon "${line#worktree }") || exit 2
+      if [ "$entry_path" = "$wt" ]; then
+        cur_match=1
+        found=1
+      else
+        cur_match=0
+      fi
+      ;;
+    # `locked` appears bare or as `locked <reason>`, so this arm is a prefix match.
+    locked*) [ "$cur_match" = "1" ] && locked=1 ;;
+    detached) [ "$cur_match" = "1" ] && detached=1 ;;
+    "branch "*) [ "$cur_match" = "1" ] && branch_ref=${line#branch } ;;
+  esac
+done <<EOF
+$list
+EOF
 
 [ "$found" = "1" ] || keep "not-a-worktree"
+
+# --- admin dir: the one the MAIN repo records for this worktree ---------------------------
+# The porcelain output does not carry it (git 2.50), so this reads the records `worktree list`
+# is itself built on: under the common git dir, worktrees/<name>/gitdir holds the path of that
+# worktree's .git file, so the directory holding that file is the worktree it belongs to.
+# Matching on canon is the same identity rule the block scan above uses, so one rule answers
+# both "is this one of ours" and "which admin dir is its own".
+#
+# The alternative — asking the target directory to name its own git dir — is what this exists
+# to avoid: that search walks up through parents, and since Cumulo nests worktrees inside the
+# main checkout, a worktree whose .git file is missing answers with the admin dir of the MAIN
+# repo. Reading these files cannot bump the mtime the min-age probe measures.
+#
+# "-" means no record was found, which every downstream check reads as "this worktree cannot
+# answer for itself".
+admin_dir="-"
+for gitdir_file in "$common_dir"/worktrees/*/gitdir; do
+  # An unmatched glob expands to itself, so the existence test is also the "no worktrees dir"
+  # case; an unreadable record is skipped rather than allowed to abort the lookup.
+  [ -f "$gitdir_file" ] || continue
+  gitdir_link=""
+  IFS= read -r gitdir_link <"$gitdir_file" 2>/dev/null
+  [ -n "$gitdir_link" ] || continue
+  gitdir_owner=$(canon "$(dirname -- "$gitdir_link")") || exit 2
+  if [ "$gitdir_owner" = "$wt" ]; then
+    admin_dir=${gitdir_file%/gitdir}
+    break
+  fi
+done
+
 [ "$locked" = "1" ] && keep "locked"
 
 # --- own-cwd: never remove the directory this process is running in ----------------------
@@ -136,6 +138,33 @@ esac
 # repo's admin dir. The probe would then be reading the main checkout's activity while
 # reporting on this worktree.
 [ "$admin_dir" = "-" ] && keep "no-admin-dir"
+
+# --- broken-git-link: the worktree still points back at the admin dir recorded for it ----
+# Ordered ahead of every probe below, the min-age one included, and that ordering is the
+# point. A nested worktree that has lost its .git file answers every walk-up query with the
+# MAIN checkout — `is_clean` included, since it runs `git -C "$wt" status` — so until the link
+# is proven, "clean" or "quiet" may be a fact about the enclosing repository rather than about
+# this worktree. Refusing here means no probe ever runs on a worktree that cannot answer for
+# itself, and the operator gets a name for the breakage instead of git's remove failure.
+#
+# Shape: a linked worktree's .git is a regular file holding `gitdir: <admin dir>`. git 2.50.1
+# writes an absolute path; a relative one is resolved against the worktree before comparing,
+# since git accepts either. Missing, unreadable, wrong prefix, or pointing somewhere other
+# than the admin dir the main repo records — all one verdict: this link cannot be trusted.
+link=""
+[ -f "$wt/.git" ] && IFS= read -r link <"$wt/.git"
+case "$link" in
+  "gitdir: "?*) link=${link#gitdir: } ;;
+  *) keep "broken-git-link" ;;
+esac
+case "$link" in
+  /*) ;;
+  *) link="$wt/$link" ;;
+esac
+link_dir=$(canon "$link") || exit 2
+recorded_dir=$(canon "$admin_dir") || exit 2
+[ "$link_dir" = "$recorded_dir" ] || keep "broken-git-link"
+
 if [ "$WORKTREE_MIN_AGE_MINUTES" != "0" ]; then
   # A find that errors tells us nothing about activity, so it refuses rather than guesses.
   recent=$(find "$admin_dir" -mmin -"$WORKTREE_MIN_AGE_MINUTES" -print -quit 2>/dev/null) || keep "recently-active"

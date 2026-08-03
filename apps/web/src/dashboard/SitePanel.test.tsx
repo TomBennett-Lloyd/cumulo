@@ -212,8 +212,18 @@ describe('SitePanel', () => {
 
 /** The wait the dashboard's poll owns — before any series is worth asking for. */
 describe('SitePanel first forecast', () => {
+  it('shows a plain loading label, not the first-forecast count, while checking', () => {
+    const { dataSource } = renderPanel({ status: 'checking' });
+
+    const waiting = screen.getByText('Loading the forecast for Rathmines rooftop…');
+
+    expect(waiting.getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByText(/Generating first forecast/u)).toBeNull();
+    expect(dataSource.forecastRequests).toEqual([]);
+  });
+
   it('counts the wait out loud, and asks the source for nothing yet', () => {
-    const { dataSource } = renderPanel({ status: 'pending', elapsedSeconds: 18 });
+    const { dataSource } = renderPanel({ status: 'generating', elapsedSeconds: 18 });
 
     const waiting = screen.getByText('Generating first forecast… 18s');
 
@@ -235,6 +245,26 @@ describe('SitePanel first forecast', () => {
     expect(screen.queryByText(new RegExp(SITE.id))).toBeNull();
   });
 
+  /*
+   * The distinction the reason exists for: this run never heard back, so the
+   * sentence beside it — "the pipeline may still be working" — would be an
+   * assertion about a pipeline nobody asked successfully. The negative on
+   * `pipeline` is what pins that; its positive control is the timeout test
+   * directly above, whose copy contains the word.
+   */
+  it('an unanswered deadline claims nothing about the pipeline, and still offers a retry', () => {
+    renderPanel({
+      status: 'failed',
+      reason: 'unanswered',
+      message: `No answer for site ${SITE.id} within 90 seconds`,
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('No answer from the fleet within 90 seconds');
+    expect(alert.textContent).not.toContain('pipeline');
+    expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
+  });
+
   it('repeats the source’s own account when the fleet answered with a fault', () => {
     renderPanel({ status: 'failed', reason: 'error', message: 'Forecast service unreachable' });
 
@@ -251,6 +281,18 @@ describe('SitePanel first forecast', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     expect(onRetryFirstForecast).toHaveBeenCalledTimes(1);
+  });
+
+  it('a halted watch explains itself and offers no Try again', () => {
+    const message = 'refused by the API — set CUMULO_WEB_ORIGINS; retrying cannot help.';
+    renderPanel({ status: 'halted', message });
+
+    expect(screen.getByRole('alert').textContent).toContain(message);
+    // The paired positive control for this negative: `offers a retry that
+    // restarts the wait`, directly above, finds the button with the same query
+    // on the `failed` arm — so a null here is an absent button, not a query
+    // that never matches anything.
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 });
 

@@ -85,6 +85,12 @@ const RETRY_AFTER_SECONDS_PATTERN = /^\d+$/;
  * backing off on its own schedule is strictly safer than one backing off on a
  * skewed date. Absent is not zero, which is why this returns `undefined` and
  * the field is omitted rather than defaulted.
+ *
+ * Caveat, and it is the common case rather than the exception: from a
+ * cross-origin browser this reads `null` even when the server sent the header,
+ * because `Retry-After` is not CORS-safelisted and the API exposes no extra
+ * response headers (#21). "The server stated no wait" and "this client was not
+ * allowed to see the wait it stated" are indistinguishable here by design.
  */
 const statedRetryAfterSeconds = (response: Response): number | undefined => {
   const header = response.headers.get('Retry-After');
@@ -111,6 +117,50 @@ const rateLimited = (response: Response, message: string): FleetSourceResult<nev
 };
 
 /**
+ * The classification rule for a non-ok status the switch below does not name.
+ *
+ * Status classes carry direction, and direction is what the arms encode, so an
+ * unlisted status is classified by its class rather than swept onto whichever
+ * arm was cheapest. The tiebreak is `error-handling.md`'s: who does the
+ * operator need to call?
+ *
+ * - **≥ 500** — the fleet answered, and the answer is that it is broken. Call
+ *   the fleet's operator: `server-fault`.
+ * - **≥ 400** — the fleet read what this client sent and refused it. The listed
+ *   400 already takes this direction; an unlisted 401/405/409/422 is the same
+ *   direction, so it takes the same arm: `invalid-request`.
+ * - **Anything else** — a non-ok status below 400 is a 3xx a `fetch` surfaced
+ *   rather than followed. The fleet answered in a shape this client cannot use,
+ *   which is `invalid-response`.
+ *
+ * `network` is deliberately absent: it means the request never produced an
+ * answer, and every status here *is* an answer. Its only remaining source is
+ * {@link thrownToNetworkFailure}.
+ */
+const unlistedStatusFailure = (
+  operation: string,
+  status: number,
+  detail: string,
+): FleetSourceResult<never> => {
+  if (status >= 500) {
+    return errorResult({
+      code: 'server-fault',
+      message: `${operation}: the API answered that it failed — ${detail}`,
+    });
+  }
+  if (status >= 400) {
+    return errorResult({
+      code: 'invalid-request',
+      message: `${operation}: the API refused the request — ${detail}`,
+    });
+  }
+  return errorResult({
+    code: 'invalid-response',
+    message: `${operation}: the API answered with a status this client cannot use — ${detail}`,
+  });
+};
+
+/**
  * One Fleet API response, as the outcome a view can act on.
  *
  * `operation` is the caller's own description of what it was doing, and it is
@@ -119,8 +169,10 @@ const rateLimited = (response: Response, message: string): FleetSourceResult<nev
  * carries (`error-handling.md` rule 4).
  *
  * Success is `schema.safeParse` of the body and nothing else: a 2xx whose
- * payload does not match the domain schemas is `invalid-response`, exactly like
- * a 400, because both mean the bytes on the wire cannot be believed.
+ * payload does not match the domain schemas is `invalid-response` — the fleet
+ * sent bytes this client cannot read. A 400 is the opposite direction and the
+ * opposite arm, `invalid-request`: the fleet read what this client sent and
+ * refused it.
  */
 export const parseFleetApiResponse = async <T>(
   operation: string,
@@ -149,7 +201,7 @@ export const parseFleetApiResponse = async <T>(
   switch (response.status) {
     case 400:
       return errorResult({
-        code: 'invalid-response',
+        code: 'invalid-request',
         message: `${operation}: the API rejected the request — ${detail}`,
       });
     case 403:
@@ -168,10 +220,7 @@ export const parseFleetApiResponse = async <T>(
         `${operation}: the API is rate-limiting this client — ${detail}`,
       );
     default:
-      return errorResult({
-        code: 'network',
-        message: `${operation}: the API could not answer — ${detail}`,
-      });
+      return unlistedStatusFailure(operation, response.status, detail);
   }
 };
 

@@ -256,13 +256,15 @@ describe('consuming one weather message', () => {
     expect(recorder.written).toEqual([]);
   });
 
-  it('converts a physics invariant violation into a failed outcome rather than a throw', async () => {
+  it('fails the record for a physically implausible hour, naming the site and the hour', async () => {
     // The route `@cumulo/forecast` documents: a near-grazing sun on a vertical
     // array pointed straight at it, with every irradiance field at its schema cap,
     // amplifies the circumsolar term until the chain produces numbers outside
-    // `forecastSchema`'s bounds and its final parse throws. Both inputs are
-    // schema-valid, which is exactly why this fails the record rather than the
-    // batch: the queue's redrive is the retry, and the DLQ is the operator signal.
+    // `forecastSchema`'s bounds. Both inputs are schema-valid, so the package
+    // reports it as a value and this service decides the policy: fail the record —
+    // the queue's redrive is the retry, and the DLQ is the operator signal. The
+    // detail has to carry the site and hour, because that pair is what an operator
+    // reading the DLQ looks up; "something threw" costs them the hour instead.
     const implausible = reading({
       validTime: '2026-03-20T07:00:00Z',
       shortwaveRadiationWm2: 1500,
@@ -271,15 +273,55 @@ describe('consuming one weather message', () => {
       directNormalIrradianceWm2: 1500,
     });
 
+    const recorder = emptyRecorder();
+
     const outcome = await consumeMessage(
       deps({
-        recorder: emptyRecorder(),
+        recorder,
         sites: [sitePhysics({ tiltDegrees: 90, azimuthDegrees: 89.47 })],
       }),
       recordOf('m-1', [implausible]),
     );
 
+    expect(outcome.status).toBe('failed');
+    expect(detailOf(outcome)).toContain(RANELAGH_ID);
+    expect(detailOf(outcome)).toContain('2026-03-20T07:00:00Z');
+    // Nothing is written: the whole message fails, so redelivery rewrites the same
+    // rows rather than layering a second vintage over a half-stored horizon.
+    expect(recorder.written).toEqual([]);
+  });
+
+  it('fails the record when the fan-out throws, naming the operation rather than an hour', async () => {
+    // The fan-out's *other* arm, and the one the case above does not cover:
+    // `locationForecasts` is total over implausibility, not over bugs. A throw
+    // from the physics chain has to become this record's `failed` outcome, not
+    // escape — `handler.ts` does not catch, so an escaping throw fails the whole
+    // invocation and abandons the record's batch-mates (#136).
+    //
+    // The throw is injected through a site field rather than found in
+    // `@cumulo/forecast`, because that package has no `throw` of its own
+    // reachable from schema-valid input — that is exactly what its `implausible`
+    // value arm exists for. So this stands in for the class of bug that would
+    // otherwise be unreachable from here: a site the type accepts and the chain
+    // cannot evaluate.
+    const unreadableSite = (): SitePhysics => ({
+      ...sitePhysics(),
+      get capacityKw(): number {
+        throw new TypeError('capacityKw is not a number');
+      },
+    });
+
+    const recorder = emptyRecorder();
+
+    const outcome = await consumeMessage(
+      deps({ recorder, sites: [unreadableSite()] }),
+      recordOf('m-1', [reading()]),
+    );
+
+    expect(outcome.status).toBe('failed');
     expect(detailOf(outcome)).toContain('locationForecasts threw');
+    expect(detailOf(outcome)).toContain('capacityKw is not a number');
+    expect(recorder.written).toEqual([]);
   });
 
   it('describes a non-Error rejection rather than losing it', async () => {

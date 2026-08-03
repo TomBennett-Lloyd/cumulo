@@ -1,5 +1,7 @@
 import type { ReactElement } from 'react';
 
+import { RETRY_ACTION_LABEL } from './state-copy';
+
 /*
  * The panel column's three async states, as three components.
  *
@@ -83,7 +85,7 @@ export const PanelError = ({ message, onRetry }: PanelErrorProps): ReactElement 
     <p className="panel-error-message">{message}</p>
     {onRetry === undefined ? null : (
       <button type="button" className="panel-retry" onClick={onRetry}>
-        Try again
+        {RETRY_ACTION_LABEL}
       </button>
     )}
   </div>

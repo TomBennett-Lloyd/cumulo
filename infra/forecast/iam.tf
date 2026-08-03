@@ -81,9 +81,9 @@ data "aws_iam_policy_document" "forecast" {
   # Write the forecasts. BatchWriteItem and nothing else: this function produces
   # series rows and never reads them back — reading `series` is the fleet API's
   # job (infra/api/iam.tf carries that `Query`), and ADR 0002 sized this table's
-  # 21 RCU on that division. No `dynamodb:Query` on `series` here, so a read
-  # path appearing on this side has to be argued in a diff rather than inherited
-  # from a wildcard.
+  # provisioned read capacity (owned by infra/storage/tables.tf) on that
+  # division. No `dynamodb:Query` on `series` here, so a read path appearing on
+  # this side has to be argued in a diff rather than inherited from a wildcard.
   statement {
     sid       = "WriteForecastSeries"
     actions   = ["dynamodb:BatchWriteItem"]
