@@ -6,7 +6,7 @@ import { MetricsAdapter, storageTableName } from '../../src/index';
 import { ENVIRONMENT } from '../storage-environment';
 
 import { eventually, type CheckRunner } from './check-runner';
-import { HOUR_1, HOUR_2, SMOKE_METRICS_PERIOD, smokeErrorMetrics } from './smoke-data';
+import { HOUR_0, HOUR_1, SMOKE_METRICS_PERIOD, smokeErrorMetrics } from './smoke-data';
 import { assertTtlStatus } from './ttl-status';
 
 /** The `cumulo-metrics` checks: the per-period `begins_with`, and the absent TTL. */
@@ -47,12 +47,18 @@ export const runMetricsChecks = async (
   );
 
   await runner.check('metrics: a neighbouring period matches nothing', async () => {
-    // `begins_with` selectivity against the service rather than against a mock:
-    // this window shares its end bound with the one that was written and differs
-    // only in its start, which is exactly the near-miss a prefix has to reject.
+    // `begins_with` selectivity against the service rather than against a mock.
+    // This window shares its *start* bound with the one that was written and
+    // differs only in its end, which is the near-miss that carries information:
+    // the failure `metricsPeriodPrefix`'s trailing `#` is written against
+    // (`metrics-item.ts`) is a prefix that stops after the start bound and drops
+    // the end, and such a prefix — `HOUR_0#` — still matches the sort key this
+    // run wrote (`HOUR_0#HOUR_2#…`), so that bug fails here. A window differing
+    // in its *start* would be rejected by the broken prefix too, and so would
+    // pass either way.
     const found = await metrics.queryMetricsForPeriod(siteId, {
-      startInclusive: HOUR_1,
-      endExclusive: HOUR_2,
+      startInclusive: HOUR_0,
+      endExclusive: HOUR_1,
     });
     deepStrictEqual(found, [], 'a period this run never wrote matched rows anyway');
   });

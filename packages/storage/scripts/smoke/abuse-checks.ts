@@ -88,11 +88,22 @@ export const runAbuseChecks = async (
     'abuse: the first increment fixes expiresAt and a later one cannot extend it',
     async () => {
       const row = await eventually(
-        'abuse: the rate-window row is readable',
+        'abuse: the rate-window row shows both increments',
         () => readAbuseRow(client, abuseTable, rateRowKey),
-        (found) => found !== undefined,
+        (found) => found?.requestCount === 2,
       );
       ok(row !== undefined, 'the rate-window row was never readable');
+      // The precondition, asserted here rather than assumed. What makes the
+      // expiry below meaningful is that a *second* increment ran and asked for a
+      // later one; that increment happens in the check above, and `CheckRunner`
+      // catches per check, so a run where it failed would still reach this one —
+      // and a row still holding the first write's count and the first write's
+      // expiry would pass an expiry-only assertion while proving nothing.
+      equal(
+        row.requestCount,
+        2,
+        'the row does not show the second increment, so the expiry proves nothing',
+      );
       // `if_not_exists` proven live: the second increment asked for
       // `now + 9999` and must have lost. If it had won, a busy address could
       // keep its own counter alive past the window it belongs to, and the

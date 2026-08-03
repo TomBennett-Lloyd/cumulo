@@ -3,17 +3,18 @@
  *
  * Why this exists at all. The adapter unit tests prove what a mock can prove:
  * which command inputs we build and how we interpret the responses. They cannot
- * prove that DynamoDB agrees — that a sparse GSI really omits the sites we
- * never wrote the index attribute for, that a `BETWEEN` whose upper bound is a
- * bare `T#<timestamp>` really excludes the items at that timestamp, that a
- * transaction really lands the archive marker with its readings, that `ADD`
- * really accumulates a counter and `if_not_exists` really refuses to move an
- * expiry a second write asked to extend, that a `begins_with` on a period
- * prefix really excludes the neighbouring period, and that TTL is configured
- * the way the retention story says — on `expiresAt` for series, weather and
- * abuse, and deliberately absent from metrics, whose rows are published
- * evidence. Those are properties of the service, and only the service can be
- * asked. This script asks it, once, by hand (ADR 0002 / the #13 plan's Phase B).
+ * prove that DynamoDB agrees — that a sparse GSI's INCLUDE projection really
+ * carries every physics field we parse back out of it, that a `BETWEEN` whose
+ * upper bound is a bare `T#<timestamp>` really excludes the items at that
+ * timestamp, that a transaction really lands the archive marker with its
+ * readings, that `ADD` really accumulates a counter and `if_not_exists` really
+ * refuses to move an expiry a second write asked to extend, that a
+ * `begins_with` on a period prefix really excludes the neighbouring period, and
+ * that TTL is configured the way the retention story says — on `expiresAt` for
+ * series, weather and abuse, and deliberately absent from metrics, whose rows
+ * are published evidence. Those are properties of the service, and only the
+ * service can be asked. This script asks it, once, by hand (ADR 0002 / the #13
+ * plan's Phase B).
  *
  * TTL is asserted as *configuration*, never as deletion: reaping is
  * asynchronous over days, so nothing here waits for an expired row to vanish.
