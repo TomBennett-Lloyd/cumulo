@@ -2,7 +2,13 @@
 
 import { cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { bare, renderChart, requireSvg, SERIES } from './forecast-chart-test-fixture';
+import {
+  bare,
+  renderChart,
+  requireSvg,
+  SERIES,
+  tooltipValues,
+} from './forecast-chart-test-fixture';
 
 /**
  * The chart's live region — what a screen reader hears when a reader moves the
@@ -26,9 +32,6 @@ const readout = (container: HTMLElement): Element => {
   }
   return region;
 };
-
-const tooltipValues = (container: HTMLElement): readonly string[] =>
-  [...container.querySelectorAll('.forecast-chart-tooltip-value')].map((cell) => cell.textContent);
 
 describe('ForecastChart readout', () => {
   it('mounts the readout live region empty until a sample is selected', () => {

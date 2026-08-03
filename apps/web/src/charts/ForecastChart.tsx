@@ -76,7 +76,7 @@ import { forecastChartTable } from './forecast-chart-table';
 export type { ForecastChartBand, ForecastChartPoint } from './chart-series';
 
 export interface ForecastChartProps {
-  /** At least one point, sorted ascending by `validTimeIso`. */
+  /** May be empty — the chart then draws bare chrome; sorted ascending by `validTimeIso`. */
   readonly points: readonly ForecastChartPoint[];
   readonly ariaLabel: string;
   readonly tableCaption: string;
