@@ -11,6 +11,7 @@ import {
   DUBLIN_ID,
   TABLE,
   adapter,
+  adapterWithPolicy,
   ddbMock,
   getInputs,
   hourlyFrom,
@@ -152,6 +153,25 @@ describe('listFetchedArchiveDays', () => {
     await expect(adapter().listFetchedArchiveDays(DUBLIN, ['2026-2-10'])).rejects.toThrow(
       /YYYY-MM-DD/,
     );
+    expect(ddbMock.calls()).toHaveLength(0);
+  });
+
+  it('refuses a policy that could never send, as a caller error rather than a table failure', async () => {
+    ddbMock.on(BatchGetCommand).resolves({});
+
+    const rejection = adapterWithPolicy({ maxAttempts: 0, baseDelayMs: 0 }).listFetchedArchiveDays(
+      DUBLIN,
+      [FETCHED],
+    );
+
+    await expect(rejection).rejects.toThrow(
+      'listFetchedArchiveDays: policy.maxAttempts must be a positive integer, got 0',
+    );
+    // A plain error, not a `StorageError`: `drainBatches` refuses the identical
+    // policy from inside `sending`, where a composition-root bug would arrive
+    // dressed as DynamoDB having failed on the table (#166). Hoisted, the read
+    // path answers as the two write paths already do.
+    await expect(rejection).rejects.not.toBeInstanceOf(StorageError);
     expect(ddbMock.calls()).toHaveLength(0);
   });
 

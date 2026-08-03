@@ -205,17 +205,6 @@ const requireObservationsOfSite = (
   }
 };
 
-/**
- * RMSE of the persistence baseline over the same instants the model is scored
- * on, or `null` when the baseline reaches none of them.
- *
- * `null` rather than 0 because the two mean opposite things: 0 is a baseline
- * that was perfect, `null` is a baseline that had nothing to say (a one-day
- * period with no run-up, so every shifted point lands outside the window).
- * `skillScore` already treats a zero-error baseline as undefined, so both cases
- * end as a `null` skill score — but only by two different arguments, and
- * collapsing them here would hide one of them.
- */
 /** The replayed hours worth scoring, and the ones the physics would not produce. */
 interface ArchiveReplay {
   readonly scored: TimedPowerPoint[];
@@ -260,6 +249,17 @@ const replayArchive = (
   return { scored, implausibleHours };
 };
 
+/**
+ * RMSE of the persistence baseline over the same instants the model is scored
+ * on, or `null` when the baseline reaches none of them.
+ *
+ * `null` rather than 0 because the two mean opposite things: 0 is a baseline
+ * that was perfect, `null` is a baseline that had nothing to say (a one-day
+ * period with no run-up, so every shifted point lands outside the window).
+ * `skillScore` already treats a zero-error baseline as undefined, so both cases
+ * end as a `null` skill score — but only by two different arguments, and
+ * collapsing them here would hide one of them.
+ */
 const baselineRmseKw = (
   observations: readonly GenerationReading[],
   scoredHours: readonly TimedPowerPoint[],

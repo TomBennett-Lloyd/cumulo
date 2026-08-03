@@ -66,9 +66,12 @@ for itself. This service's answer is: **fail the record and let the queue do the
 `infra/ingestion/alarms.tf` — so the retry and the operator signal both already exist in
 infrastructure, and the blast radius is one location's hour rather than a fleet-wide run.
 
-A genuine bug inside `@cumulo/forecast` still arrives as a throw, from below that parse; it fails
-the same record by the same route, and the detail says an operation threw rather than naming an
-hour, which is the distinction an operator reading the DLQ needs.
+That value arm makes `locationForecasts` total over _implausibility_ — not over bugs. A genuine
+bug inside `@cumulo/forecast` still arrives as a throw, from below that classification, and
+`consume-message.ts` catches it at the record boundary for the same reason it catches an adapter's:
+uncaught, it would fail the whole invocation and abandon the batch-mates the per-record redrive
+exists to protect. It fails the same record by the same route, and the detail says an operation
+threw rather than naming an hour, which is the distinction an operator reading the DLQ needs.
 
 ## No deadline, and why
 

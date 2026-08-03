@@ -291,6 +291,39 @@ describe('consuming one weather message', () => {
     expect(recorder.written).toEqual([]);
   });
 
+  it('fails the record when the fan-out throws, naming the operation rather than an hour', async () => {
+    // The fan-out's *other* arm, and the one the case above does not cover:
+    // `locationForecasts` is total over implausibility, not over bugs. A throw
+    // from the physics chain has to become this record's `failed` outcome, not
+    // escape — `handler.ts` does not catch, so an escaping throw fails the whole
+    // invocation and abandons the record's batch-mates (#136).
+    //
+    // The throw is injected through a site field rather than found in
+    // `@cumulo/forecast`, because that package has no `throw` of its own
+    // reachable from schema-valid input — that is exactly what its `implausible`
+    // value arm exists for. So this stands in for the class of bug that would
+    // otherwise be unreachable from here: a site the type accepts and the chain
+    // cannot evaluate.
+    const unreadableSite = (): SitePhysics => ({
+      ...sitePhysics(),
+      get capacityKw(): number {
+        throw new TypeError('capacityKw is not a number');
+      },
+    });
+
+    const recorder = emptyRecorder();
+
+    const outcome = await consumeMessage(
+      deps({ recorder, sites: [unreadableSite()] }),
+      recordOf('m-1', [reading()]),
+    );
+
+    expect(outcome.status).toBe('failed');
+    expect(detailOf(outcome)).toContain('locationForecasts threw');
+    expect(detailOf(outcome)).toContain('capacityKw is not a number');
+    expect(recorder.written).toEqual([]);
+  });
+
   it('describes a non-Error rejection rather than losing it', async () => {
     // JavaScript allows throwing anything, and a naive `.message` would render
     // `undefined` and lose the incident.

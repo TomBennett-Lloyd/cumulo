@@ -112,20 +112,22 @@ export class WeatherAdapter extends StorageAdapterBase {
   async putForecastWeather(
     readings: readonly ForecastWeatherReading[],
   ): Promise<BatchWriteOutcome> {
-    // The key each reading will be stored under — `locationId|sk` — built from
-    // the same two `@cumulo/shared` builders `toForecastItem` uses, so what is
-    // compared here is the key DynamoDB will actually address. Two readings for
-    // one location-hour are refused rather than de-duplicated last-wins (see
-    // `requireUniqueKeys`): a provider response repeating an hour is a fault
-    // this cycle should name, not quietly halve.
+    // The items exactly as they will be stored, built once. The precondition
+    // below then reads its key off them — `locationId|sk`, the pair DynamoDB
+    // actually addresses — instead of re-deriving it from the reading, so the
+    // key that is checked cannot drift from the key that is written
+    // (`series-adapter.ts`'s `putSeriesItems` compares the same way).
+    const items = readings.map((reading) => toForecastItem(reading));
+
+    // Two readings for one location-hour are refused rather than de-duplicated
+    // last-wins (see `requireUniqueKeys`): a provider response repeating an hour
+    // is a fault this cycle should name, not quietly halve.
     //
     // Before `sending`, like every check below it: inside the wrap, a caller's
     // bad input would surface as a `StorageError` blaming the table (#166).
     requireUniqueKeys(
       'putForecastWeather',
-      readings.map(
-        (reading) => `${locationId(reading)}|${weatherSortKey('forecast', reading.validTime)}`,
-      ),
+      items.map((item) => `${item.locationId}|${item.sk}`),
     );
     // `drainBatches` refuses the same policy, but it does so inside the wrap;
     // hoisted here, an unusable retry curve is the programming error it is,
@@ -252,9 +254,12 @@ export class WeatherAdapter extends StorageAdapterBase {
     // sleep the tests already use.
     // The loop below is bounded by `maxAttempts`, so a policy below 1 would
     // run no iterations at all and resolve — a day reported written that was
-    // never sent. `drainBatches` refuses the same policy on the other two
-    // methods here, and this path must refuse it identically or the same bad
-    // deps would fail loudly on a batch write and silently on an archive day.
+    // never sent. This hoisted check is not special to this method: every batch
+    // entry point on both batching adapters now refuses the policy here, ahead
+    // of `sending`, so one bad composition root fails identically whichever it
+    // reaches. `drainBatches` still runs the identical check of its own, but
+    // that copy is defence for callers who reach the drain directly — on these
+    // paths it would fire inside the wrap, too late to blame the right party.
     // Outside `sending` deliberately: a policy this broken is a programming
     // error, not a storage outage, and dressing it as a `StorageError` would
     // tell an operator DynamoDB was down (error-handling rule 1).
