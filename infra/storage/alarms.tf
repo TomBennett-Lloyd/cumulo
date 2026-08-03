@@ -1,13 +1,22 @@
-# Throttle alarms on the two provisioned tables — required work, not
+# Throttle alarms on the two batch-written tables — required work, not
 # monitoring garnish.
 #
 # ADR 0002 accepts throttling as the failure mode of taking the free
 # provisioned allowance, which makes an *unobserved* throttle the failure mode
-# it does not accept. These four alarms are the tripwire for revisit trigger 8:
-# a throttle on `cumulo-series` means the read allocation has met real traffic,
-# and the answer is to flip `billing_mode` to PAY_PER_REQUEST — one attribute,
-# no migration — rather than to add auto-scaling (see tables.tf) or argue about
-# RCU.
+# it does not accept. These four alarms are the tripwire for revisit trigger 8,
+# and the tripwire has already been paid for: the write alarm on
+# `cumulo-weather` fired in earnest (296 events, #156), which is how that table
+# came to be on-demand.
+#
+# The pair survives the flip because both modes throttle, for different reasons,
+# and the alarm cannot tell which table it is watching. On `cumulo-series` a
+# throttle means the provisioned allocation has met real traffic, and the answer
+# is to flip `billing_mode` to PAY_PER_REQUEST — one attribute, no migration —
+# rather than to add auto-scaling (see tables.tf) or argue about RCU. On
+# `cumulo-weather`, which has already taken that answer, a throttle means one of
+# DynamoDB's own request limits — per partition, or per table — which is a hot
+# key or a traffic shape to go and read the ingestion logs about, not a number
+# to raise.
 #
 # Threshold 0 with a 60-second Sum and one evaluation period: any throttled
 # request at all, within a minute. There is deliberately no hysteresis. These
@@ -58,18 +67,20 @@ locals {
   alerts_topic_arn = "arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cumulo-alerts-${var.environment}"
 
 
-  # Both provisioned tables get the same pair of alarms, so the pair is
+  # Both batch-written tables get the same pair of alarms, so the pair is
   # described once and expanded over the tables rather than written four times.
   # Keyed by table name (not by index) so adding or removing a table never
-  # renames another table's alarm resource in state.
-  provisioned_tables = {
+  # renames another table's alarm resource in state — and for the same reason
+  # #156 renamed this local without touching a key: the keys are half of four
+  # alarm resource addresses.
+  throttle_alarmed_tables = {
     series  = aws_dynamodb_table.series.name
     weather = aws_dynamodb_table.weather.name
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "read_throttle" {
-  for_each = local.provisioned_tables
+  for_each = local.throttle_alarmed_tables
 
   alarm_name  = "cumulo-${each.key}-${var.environment}-read-throttle"
   namespace   = "AWS/DynamoDB"
@@ -88,11 +99,11 @@ resource "aws_cloudwatch_metric_alarm" "read_throttle" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "Read requests were throttled on ${each.value}. The provisioned read allocation (ADR 0002) has met real traffic; the sanctioned response is to flip billing_mode to PAY_PER_REQUEST, not to add auto-scaling."
+  alarm_description = "Read requests were throttled on ${each.value}. Reads have met a limit (ADR 0002): a read allocation if the table is provisioned, a per-partition or per-table request limit if it is on-demand. On a provisioned table the sanctioned response is to flip billing_mode to PAY_PER_REQUEST, not to add auto-scaling; on an on-demand one it is a hot key or a traffic shape to investigate."
 }
 
 resource "aws_cloudwatch_metric_alarm" "write_throttle" {
-  for_each = local.provisioned_tables
+  for_each = local.throttle_alarmed_tables
 
   alarm_name  = "cumulo-${each.key}-${var.environment}-write-throttle"
   namespace   = "AWS/DynamoDB"
@@ -115,5 +126,5 @@ resource "aws_cloudwatch_metric_alarm" "write_throttle" {
   # carrying UnprocessedItems, so a caller that ignores that field reports a
   # clean run while dropping data. The adapters retry and return a typed partial
   # result (ADR 0002 consequence 4); this alarm is what says it happened at all.
-  alarm_description = "Write requests were throttled on ${each.value}. Check for BatchWriteItem partial results in the ingestion logs — the provisioned write allocation (ADR 0002) has met real traffic."
+  alarm_description = "Write requests were throttled on ${each.value}. Check for BatchWriteItem partial results (UnprocessedItems) in the ingestion logs — writes have met a limit (ADR 0002): a write allocation if the table is provisioned, a per-partition or per-table request limit if it is on-demand."
 }

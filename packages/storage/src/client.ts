@@ -36,10 +36,12 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *    run, recorded on #156, where an ingestion cycle at the 40-distinct-location
  *    worst case drew **1,350 throttled writes in one cycle minute** and lost 26
  *    of 40 locations — arrived here, on `putForecastWeather` against the
- *    provisioned `cumulo-weather` table. No attempt count would have bought
- *    those locations back: the drain layer had already spent its three sends
- *    against a table that was short of capacity for the whole minute. The fix
- *    is capacity (#156), not attempts.
+ *    *then-provisioned* `cumulo-weather` table. No attempt count would have
+ *    bought those locations back: the drain layer had already spent its three
+ *    sends against a table that was short of capacity for the whole minute. The
+ *    fix is capacity, not attempts — and #156 has since bought that capacity by
+ *    flipping `cumulo-weather` to on-demand, so the E7-a numbers are the
+ *    evidence for this budget rather than a standing forecast of it.
  *
  * 2. **A whole-request throttle**: `ProvisionedThroughputExceededException`
  *    *thrown* rather than reported. That covers `GetItem`, `PutItem` and
@@ -66,11 +68,13 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *      not blipping.** It is reporting sustained capacity pressure, which is an
  *      alarm to answer rather than a request to retry into: ADR 0002 puts
  *      `ReadThrottleEvents`/`WriteThrottleEvents` alarms behind the provisioned
- *      tables and ~250 dashboard loads of burst reserve in front of the
- *      synchronous fan-out.
- *    - **Every site in the fleet backs off against the same provisioned
- *      tables**, so a longer per-request budget is the thundering-herd
- *      direction — the reason the curve underneath is full jitter (`./batch`).
+ *      `series` table — the one table still on provisioned capacity since #156 —
+ *      and ~250 dashboard loads of burst reserve in front of the synchronous
+ *      fan-out.
+ *    - **Every site in the fleet backs off against the same handful of tables**,
+ *      `series` and its provisioned ceiling among them, so a longer per-request
+ *      budget is the thundering-herd direction — the reason the curve underneath
+ *      is full jitter (`./batch`).
  *
  *    The cost is real and is stated rather than argued away: on the one
  *    genuinely user-visible throttle path ADR 0002 names, the synchronous
