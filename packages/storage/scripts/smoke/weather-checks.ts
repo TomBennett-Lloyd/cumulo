@@ -16,16 +16,15 @@ import {
   smokeArchiveReading,
   smokeForecastReading,
 } from './smoke-data';
+import { assertTtlStatus } from './ttl-status';
 
 /** The `cumulo-weather` checks: the archive transaction, its marker, and the ranges. */
 export const runWeatherChecks = async (
   runner: CheckRunner,
   client: DynamoDBDocumentClient,
 ): Promise<void> => {
-  const weather = new WeatherAdapter({
-    client,
-    tableName: storageTableName('weather', ENVIRONMENT),
-  });
+  const weatherTable = storageTableName('weather', ENVIRONMENT);
+  const weather = new WeatherAdapter({ client, tableName: weatherTable });
   const archiveHours = [smokeArchiveReading(HOUR_0), smokeArchiveReading(HOUR_1)];
 
   await runner.check('weather: putArchiveDay writes the day and its marker', async () => {
@@ -71,5 +70,13 @@ export const runWeatherChecks = async (
   await runner.check('weather: forecast weather batch-writes completely', async () => {
     const outcome = await weather.putForecastWeather([smokeForecastReading(HOUR_0)]);
     equal(outcome.status, 'complete', 'the forecast-weather batch did not drain');
+  });
+
+  await runner.check('weather: TTL is ENABLED on the expiresAt attribute', async () => {
+    // This table carries both retention policies on one TTL setting: the
+    // adapter puts `expiresAt` on forecast items only, so archive readings and
+    // their day markers never expire. That per-item split is only a policy if
+    // the table-level setting is actually on — which is what this reads back.
+    await assertTtlStatus(client, weatherTable, 'ENABLED');
   });
 };
