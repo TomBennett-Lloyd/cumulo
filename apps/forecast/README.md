@@ -54,15 +54,24 @@ any outcome other than `stored` or `no-active-sites` in `batchItemFailures` — 
 is redelivered on its own rather than redriving batch-mates that already succeeded, which is the
 obligation ADR 0004 makes non-optional for this consumer.
 
-The one case worth naming is the physics chain's own invariant guard. `createPhysicsForecast`
-parses its result and throws if it lands outside `forecastSchema`'s bounds, and that throw means
-either a bug in `@cumulo/forecast` **or** a weather hour that every schema accepts and no
-atmosphere produces (the low-sun circumsolar amplification route that package's docstring
-documents). `@cumulo/forecast` deliberately left the policy for the second case to this service.
-The policy is: **fail the record and let the queue do the rest.** The message is redelivered up to
+The one case worth naming is the physically implausible hour. `createPhysicsForecast` classifies
+its own result against `forecastSchema`'s bounds and returns an `implausible` value — not a throw —
+when it lands outside them, because those bounds are reachable from weather every schema accepts
+and no atmosphere produces (the low-sun circumsolar amplification route that package's docstring
+documents). Being a value is what lets each consumer answer "who does the operator need to call?"
+for itself. This service's answer is: **fail the record and let the queue do the rest.**
+`locationForecasts` stops at the first such hour and `consume-message.ts` renders it into a
+`failed` outcome whose detail names the site id and the hour. The message is redelivered up to
 `maxReceiveCount = 5` and then lands in `cumulo-weather-readings-dlq-<env>`, which is alarmed in
 `infra/ingestion/alarms.tf` — so the retry and the operator signal both already exist in
-infrastructure, and the blast radius is one location's hour rather than a fleet-wide run.
+infrastructure, and the blast radius is one location's message rather than a fleet-wide run.
+
+That value arm makes `locationForecasts` total over _implausibility_ — not over bugs. A genuine
+bug inside `@cumulo/forecast` still arrives as a throw, from below that classification, and
+`consume-message.ts` catches it at the record boundary for the same reason it catches an adapter's:
+uncaught, it would fail the whole invocation and abandon the batch-mates the per-record redrive
+exists to protect. It fails the same record by the same route, and the detail says an operation
+threw rather than naming an hour, which is the distinction an operator reading the DLQ needs.
 
 ## No deadline, and why
 

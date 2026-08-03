@@ -118,15 +118,19 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
     case 'network':
     case 'invalid-response':
     case 'invalid-request':
+    case 'server-fault':
       // A dropped connection comes back and a payload this client could not
       // read can be a record the pipeline is still writing, so waiting is worth
-      // something for those two. `invalid-request` is grouped with them rather
-      // than halted deliberately: halting is reserved for the one arm whose
-      // recourse is unambiguous, and a fault the loop cannot classify that
-      // confidently is better given the full wait than cut short. All three
-      // therefore keep the cadence and let the deadline decide when to stop —
-      // and the message is remembered, so a deadline reached this way is
-      // reported as an error rather than as a wait.
+      // something for those two. `server-fault` joins them for the same reason
+      // its own arm states: a fleet that answered "I am broken" can be working
+      // again before the deadline, and the visitor has nothing else to do
+      // meanwhile. `invalid-request` is grouped with them rather than halted
+      // deliberately: halting is reserved for the one arm whose recourse is
+      // unambiguous, and a fault the loop cannot classify that confidently is
+      // better given the full wait than cut short. All four therefore keep the
+      // cadence and let the deadline decide when to stop — and the message is
+      // remembered, so a deadline reached this way is reported as an error
+      // rather than as a wait.
       return { kind: 'keep-waiting', delayMs: POLL_INTERVAL_MS, fault: error.message };
     case 'forbidden':
       // The arm's own contract: what is wrong is *who is asking*, and its
@@ -138,7 +142,7 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
       return { kind: 'halt', message: error.message };
   }
   // Every code is enumerated and there is no catch-all arm, so the declared
-  // return type makes a seventh `FleetDataError` code a compile error here —
+  // return type makes an eighth `FleetDataError` code a compile error here —
   // rather than letting it fall silently into "keep waiting", which is how
   // `invalid-request` and `forbidden` inherited a policy nobody chose for them.
 };

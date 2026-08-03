@@ -35,6 +35,7 @@
  */
 
 import {
+  describeZodIssues,
   forecastSchema,
   type Forecast,
   type SitePhysics,
@@ -208,54 +209,71 @@ export const runPhysicsChain = (
 };
 
 /**
- * The physics forecast for one site-hour, as the `Forecast` the rest of the system
- * stores, serves and compares against ML.
+ * One site-hour's answer: the storable `Forecast`, or the hour's refusal to produce one.
+ *
+ * A discriminated union rather than a `Forecast` plus a throw, because the refusal is
+ * reachable from inputs this package's own published schemas accept — see
+ * {@link createPhysicsForecast} for the measured route — and a failure reachable from
+ * accepted inputs is an expected failure, so it is a value
+ * (`docs/standards/error-handling.md` rule 1).
+ *
+ * The `implausible` arm carries the site and hour rather than only a message, because the
+ * three consumers each need to *act* on them: name them in a queue outcome, list them in a
+ * hindcast's coverage, or print them for an operator.
+ */
+export type PhysicsForecastResult =
+  | { readonly status: 'forecast'; readonly forecast: Forecast }
+  | {
+      readonly status: 'implausible';
+      readonly siteId: SitePhysics['id'];
+      readonly validTime: UtcIsoTimestamp;
+      readonly detail: string;
+    };
+
+/**
+ * The physics forecast for one site-hour, as the `Forecast` the rest of the system stores,
+ * serves and compares against ML — or as the reason this hour has none.
  *
  * No `uncertainty` key is set at all — physics v1 emits point estimates, and under
  * `exactOptionalPropertyTypes` an omitted optional field and one explicitly set to
  * `undefined` are different things. The omitted form is the honest one: it round-trips
  * through JSON and DynamoDB as "absent" rather than as a null nobody meant.
  *
- * The result is passed through `forecastSchema.parse` as a final invariant guard, and the
- * parse is deliberately not caught: a violated bound means the chain produced a number
- * nobody should store, and that must stop the cycle loudly rather than persist quietly
- * (error-handling: fail fast, never swallow).
+ * **The `forecastSchema` parse is this package's classification point.** Its bounds are
+ * *not* unreachable from schema-valid inputs, so an hour outside them is an expected
+ * failure of this function's domain and comes back as the `implausible` arm — not a throw
+ * (`docs/standards/error-handling.md` rule 1: a failure reachable from inputs the module's
+ * own published schemas accept is a value; only states unreachable by construction throw).
  *
- * Those bounds are **not** unreachable from schema-valid inputs, and this comment used to
- * claim they were. The route is low-sun circumsolar amplification. Hay-Davies floors
- * cos(zenith) in the projection ratio at 0.01745 (`irradiance.ts`, pvlib GH 432), so `Rb`
- * tops out near 57; a near-grazing sun on a vertical array aimed straight at it therefore
- * multiplies DHI by Rb (capped at ~57.3) times the anisotropy index — 62.4x at this
- * operating point, since A — DNI over the hour's 1377.7 W/m² extraterrestrial normal
- * irradiance — exceeds 1 with DNI at its cap — rather than diverging. Feed that geometry
- * every irradiance field at its `weatherReadingSchema` cap (`MAX_PLAUSIBLE_IRRADIANCE_WM2`)
- * and the chain returns POA ≈ 95 200 W/m², a cell at ≈ 3870 °C and — once the PVWatts
- * temperature factor goes negative — DC and AC power around −5300 kW. Measured with a
- * `siteSchema`-valid Dublin site (tilt 90, azimuth 89.47) and a
- * `weatherReadingSchema`-valid reading at 2026-03-20T07:00:00Z, whose evaluation midpoint
- * sits at apparent zenith 89.9335°.
+ * The route is low-sun circumsolar amplification. Hay-Davies floors cos(zenith) in the
+ * projection ratio at 0.01745 (`irradiance.ts`, pvlib GH 432), so `Rb` tops out near 57; a
+ * near-grazing sun on a vertical array aimed straight at it therefore multiplies DHI by Rb
+ * (capped at ~57.3) times the anisotropy index — 62.4x at this operating point, since A —
+ * DNI over the hour's 1377.7 W/m² extraterrestrial normal irradiance — exceeds 1 with DNI
+ * at its cap — rather than diverging. Feed that geometry every irradiance field at its
+ * `weatherReadingSchema` cap (`MAX_PLAUSIBLE_IRRADIANCE_WM2`) and the chain returns POA ≈
+ * 95 200 W/m², a cell at ≈ 3870 °C and — once the PVWatts temperature factor goes negative
+ * — DC and AC power around −5300 kW. Measured with a `siteSchema`-valid Dublin site (tilt
+ * 90, azimuth 89.47) and a `weatherReadingSchema`-valid reading at 2026-03-20T07:00:00Z,
+ * whose evaluation midpoint sits at apparent zenith 89.9335°.
  *
- * So a throw here means "physically implausible input" as well as "bug in this package".
- * Both still warrant failing fast at this layer, and on the live path the caller's half of
- * that policy is now decided (#136). `apps/forecast/src/consume-message.ts` is the record
- * boundary: it converts this throw into a `failed` outcome for the one message that carried
- * the offending hour, and the queue's redrive — five receives, then the DLQ that
- * `infra/ingestion/alarms.tf` watches — is both the retry and the operator signal. So an
- * implausible hour costs one location's message rather than a fleet-wide run, and nothing
- * about that policy needs this function to stop failing fast.
+ * Returning the refusal rather than throwing it is what lets each consumer answer "who does
+ * the operator need to call?" for itself, and all three now do: the live path
+ * (`apps/forecast/src/location-forecasts.ts` → `consume-message.ts`) fails the one record
+ * that carried the hour, so the queue's redrive — five receives, then the DLQ that
+ * `infra/ingestion/alarms.tf` watches — stays the retry *and* the operator signal (#136);
+ * the hindcast harness (`packages/hindcast/src/hindcast.ts`) has no queue to fall back on,
+ * so it skips the hour, scores the rest, and reports the skipped hours in its coverage.
  *
- * Two halves stay open, and neither is this file's to settle: #16's hindcast harness, which
- * replays offline and has no queue to fall back on, and the general expected-failure/bug
- * boundary error-handling rule 1 draws for this package. Both live on issue #100 — the
- * `docs/tech-debt.md` entry this comment used to cite was converted into that issue by the
- * triage in 581ed5b and no longer exists.
+ * A genuine bug in this package still surfaces as a throw — from the chain itself, below
+ * this parse — which is the distinction the union is drawing.
  */
-export const createPhysicsForecast = (input: CreatePhysicsForecastInput): Forecast => {
+export const createPhysicsForecast = (input: CreatePhysicsForecastInput): PhysicsForecastResult => {
   const { site, weather, issuedAt, params } = input;
 
   const chain = runPhysicsChain(site, weather, params);
 
-  return forecastSchema.parse({
+  const parsed = forecastSchema.safeParse({
     siteId: site.id,
     model: 'physics',
     validTime: weather.validTime,
@@ -264,4 +282,15 @@ export const createPhysicsForecast = (input: CreatePhysicsForecastInput): Foreca
     poaIrradianceWm2: chain.poa.totalWm2,
     acPowerKw: chain.acPowerKw,
   });
+
+  if (!parsed.success) {
+    return {
+      status: 'implausible',
+      siteId: site.id,
+      validTime: weather.validTime,
+      detail: describeZodIssues(parsed.error),
+    };
+  }
+
+  return { status: 'forecast', forecast: parsed.data };
 };

@@ -26,8 +26,9 @@
  * (`MAX_PLAUSIBLE_IRRADIANCE_WM2`) the resulting POA reaches ~95 200 W/m², putting the cell
  * near 3870 °C and both DC and AC below zero. Clamping here would hide that input rather
  * than reject it, and would also diverge from the fixtures;
- * `createPhysicsForecast`'s final `forecastSchema.parse` is the layer that refuses to store
- * such a number, and its doc comment carries the detail.
+ * `createPhysicsForecast`'s final `forecastSchema` parse is the layer that refuses to store
+ * such a number — it returns an `implausible` result rather than a `Forecast`, and its doc
+ * comment carries the detail.
  */
 
 /** Operating point of the array for a single DC-power evaluation. */

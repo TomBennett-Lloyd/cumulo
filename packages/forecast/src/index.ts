@@ -15,6 +15,7 @@ export {
   defaultPhysicsParams,
   type PhysicsParams,
   type PhysicsChainResult,
+  type PhysicsForecastResult,
 } from './physics-forecast';
 export { solarPosition, type SolarPosition } from './solar-position';
 export {
