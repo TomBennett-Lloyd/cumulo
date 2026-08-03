@@ -64,7 +64,7 @@ for itself. This service's answer is: **fail the record and let the queue do the
 `failed` outcome whose detail names the site id and the hour. The message is redelivered up to
 `maxReceiveCount = 5` and then lands in `cumulo-weather-readings-dlq-<env>`, which is alarmed in
 `infra/ingestion/alarms.tf` — so the retry and the operator signal both already exist in
-infrastructure, and the blast radius is one location's hour rather than a fleet-wide run.
+infrastructure, and the blast radius is one location's message rather than a fleet-wide run.
 
 That value arm makes `locationForecasts` total over _implausibility_ — not over bugs. A genuine
 bug inside `@cumulo/forecast` still arrives as a throw, from below that classification, and

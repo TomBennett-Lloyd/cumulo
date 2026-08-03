@@ -23,9 +23,11 @@
  * and they point the same way:
  *
  * - DynamoDB rejects the whole request anyway (`ValidationException` on a batch
- *   or transaction carrying one key twice), so silently dropping the earlier
- *   item only changes *which* answer the caller gets, not whether it can have
- *   both;
+ *   or transaction carrying one key twice) — but only *within* one 25-item
+ *   batch: a key repeated across two of `drainBatches`' chunks is sent as two
+ *   separate calls, both succeed, and the later silently wins. In that case
+ *   this precondition is the only thing catching the duplicate, which is why
+ *   it cannot be deleted as redundant with DynamoDB's own check;
  * - keeping the last item would swallow a caller bug — two forecasts for one
  *   site-hour means an upstream loop ran twice or a merge went wrong, and
  *   quietly writing one of them is the swallowed failure rule 2 forbids;

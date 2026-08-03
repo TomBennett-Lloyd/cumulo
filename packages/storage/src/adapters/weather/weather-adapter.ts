@@ -134,8 +134,8 @@ export class WeatherAdapter extends StorageAdapterBase {
     // reported identically from every entry point on both batching adapters.
     requireUsablePolicy('putForecastWeather', this.batchPolicy);
 
-    const requests = readings.map((reading) => ({
-      PutRequest: { Item: toForecastItem(reading) },
+    const requests = items.map((item) => ({
+      PutRequest: { Item: item },
     }));
 
     const sendWriteBatch = async (batch: WriteRequestItem[]): Promise<WriteRequestItem[]> => {
