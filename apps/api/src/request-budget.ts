@@ -1,4 +1,4 @@
-import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
+import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
 
 /**
  * How much work one API invocation may start, priced in storage commands.
@@ -10,7 +10,8 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * caller then gets a gateway 504 whose body is not an `apiErrorSchema` one —
  * and on `POST /v1/sites` that is worse than an error, because the 201 body is
  * the only place the caller ever learns the new site's id. A create that
- * committed and then died in cleanup loses the id for good.
+ * committed and then died in work done afterwards loses the id for good, which
+ * is why nothing runs after that write any more (ADR 0007).
  *
  * **The unit.** Every figure here is a multiple of
  * {@link STORAGE_COMMAND_WORST_MS} — 7,000 ms, which `@cumulo/storage` states
@@ -21,19 +22,19 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * {@link hasBudgetForStorageCommands}, may this request start another command?
  *
  * **What the deadline buys.** Every request carries a `RequestDeadline`
- * (`http/request-deadline.ts`), and every *looping* term now asks it before
- * each command: series pagination, `POST`'s store-and-evict attempts,
- * `DELETE`'s counted deletes, and the series cleanup both write routes end
- * with. None of them can spin an invocation into the timeout any more — they
- * stop and answer in schema instead, which is the whole of what the deadline is
- * for. What admission cannot promise is that a command it admitted returns
- * inside its own worst case: the check prices **the next command**, so the one
- * multi-command unit left on the API — the cleanup pass, whose `deleteSiteSeries`
- * issues a Query and then a `BatchWriteItem` behind a single call — can still
- * cross if both of them go long. `sites/series-cleanup.ts` carries that
- * arithmetic and why a two-command admission is not available to it at these
- * constants; #167, which moves the pass off the request path, is what removes
- * the residual rather than narrowing it.
+ * (`http/request-deadline.ts`), and every *looping* term asks it before each
+ * command. There are three: series pagination, `POST`'s store-and-evict
+ * attempts, and `DELETE`'s counted deletes. None of them can spin an invocation
+ * into the timeout — they stop and answer in schema instead, which is the whole
+ * of what the deadline is for.
+ *
+ * **And every admitted unit is now exactly one storage command.** That is the
+ * property that makes admission's promise complete rather than approximate: the
+ * check prices *the next command*, so a unit that spent more than one command
+ * behind a single admission could outrun what was priced for it. The API had
+ * one such unit — the inline series cleanup, a Query and then a
+ * `BatchWriteItem` behind one call — and ADR 0007 retired it rather than
+ * shrinking it. Nothing here now admits work it has not priced.
  *
  * **Where it stops.** Each route keeps an ungated straight-line prefix: the
  * limiter's own commands (`IpLimiter.check` spends two on the allowed path,
@@ -50,16 +51,16 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page,
  *   ≈ 28 s.
  * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
- *   admitted per command, including the up-to-36 commands of the store loop;
- *   the cleanup that follows an eviction is admitted as one command and then
- *   spends up to two, which is the one place on this API where an admitted unit
- *   can outrun what was priced for it (`sites/series-cleanup.ts` states why).
+ *   admitted per command, including the up-to-36 commands of the store loop.
+ *   The committed write is the last thing the route does: nothing follows it,
+ *   so the 201 and the server-assigned id it carries cannot be lost to work
+ *   done after the site exists (ADR 0007).
  * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
  *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
  *   no loop to gate and is the widest ungated prefix on the API.
  * - `DELETE /v1/sites/{siteId}` — **3** on a user site (limiter 2,
- *   `getFleetSite`), ≈ 21 s, the counted deletes and the cleanup gated after
- *   it; **4** on a seed site, whose single `deleteFleetSite` is a plain
+ *   `getFleetSite`), ≈ 21 s, the counted deletes gated after it; **4** on a
+ *   seed site, whose single `deleteFleetSite` is a plain
  *   `DeleteItem` with no retry loop of its own to gate, ≈ 28 s.
  * - Any limited route *refusing* a caller — **3**: the two above plus
  *   `putBlock`, and then the 429, ≈ 21 s.
@@ -71,9 +72,8 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
  * what crosses it, at 21,000 ms. It therefore takes **three independent
  * per-command worst cases coinciding in one request's ungated prefix** to kill
- * an invocation — which the three- and four-command prefixes above can offer —
- * **or two coinciding inside an admitted cleanup pass**, whose Query and batch
- * are priced as one command between them. Each of those worst cases is itself
+ * an invocation — which the three- and four-command prefixes above can offer,
+ * and which is now the only route to it. Each of those worst cases is itself
  * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
  * module declines to size a slack against, for the same reason
  * `cycle-budget.ts` declines to size its
@@ -159,40 +159,3 @@ export const hasBudgetForStorageCommands = (remainingMs: number, commandCount: n
 
   return remainingMs > commandCount * STORAGE_COMMAND_WORST_MS + API_RESPONSE_MARGIN_MS;
 };
-
-/**
- * How many storage commands one series-cleanup pass may make: 15,000 / 7,000 =
- * **2**, floored. Not "2 on average" — 2 is the count whose worst case fits
- * inside the function timeout at all.
- */
-const SERIES_CLEANUP_REQUEST_BUDGET = Math.floor(API_LAMBDA_TIMEOUT_MS / STORAGE_COMMAND_WORST_MS);
-
-/**
- * How many series rows one cleanup pass may delete: **25**.
- *
- * One of the two commands above is the listing Query, so what is left for
- * deletes is a single `BatchWriteItem` — and a `BatchWriteItem` carries at most
- * {@link DYNAMODB_BATCH_WRITE_SIZE} items. Hence
- * `(2 − 1) × 25 = 25`, and a second batch would price the pass at 21,000 ms
- * against a 15,000 ms timeout.
- *
- * **This is a small number against the problem, and deliberately so.** A site's
- * partition holds one row per hour per model plus one per hour of actuals, kept
- * for the 90-day retention of ADR 0002 — order 2,160 rows per model for a site
- * that has existed that long, and eviction picks the *oldest* user site, which
- * is precisely the one holding the most. A 25-row pass is therefore not "delete
- * the site's series"; it is the prompt half of a job whose slow half is the TTL,
- * and for the demo's real lifecycle — a site added and evicted within a session
- * — it is often the whole job. Deleting the rest inline is not available at any
- * budget: 2,160 deletes is 2,160 write units against the `series` table's
- * provisioned write capacity (`infra/storage/tables.tf` owns the figure) —
- * minutes of the table's whole write budget — so the honest fix is to stop
- * doing this on the request path at all. `docs/tech-debt.md` carries that as
- * its own entry.
- *
- * The bound shrinks rather than breaks if the function timeout is lowered: at a
- * 7-second timeout the budget is one command, the pass lists and deletes
- * nothing, and the TTL does all of it.
- */
-export const SERIES_CLEANUP_MAX_ITEMS =
-  Math.max(SERIES_CLEANUP_REQUEST_BUDGET - 1, 0) * DYNAMODB_BATCH_WRITE_SIZE;

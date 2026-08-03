@@ -55,3 +55,4 @@ that is a supersession in disguise — write the new ADR.
 - [0004 — Ingestion transport](0004-ingestion-transport.md)
 - [0005 — Fleet API compute and hosting](0005-fleet-api-hosting.md)
 - [0006 — Demo abuse and cost protection](0006-demo-abuse-protection.md)
+- [0007 — Series deletion is TTL-only](0007-series-deletion-is-ttl-only.md)

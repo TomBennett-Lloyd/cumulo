@@ -10,11 +10,9 @@ import {
   routeRequest,
   siteInput,
 } from '../api-fixtures';
-import { SERIES_CLEANUP_MAX_ITEMS } from '../request-budget';
 
 import { CREATED_AT, scriptedFleet } from './create-site-fixtures';
 import { createSite, createSiteDeadlineEvent, createSiteStoreExhaustedEvent } from './create-site';
-import { seriesCleanupFailedEvent, seriesCleanupSkippedEvent } from './series-cleanup';
 
 /** A third id, for the tests where the index names a different site each look. */
 const RINGSEND_ID = '5b2c9d1e-3f4a-4b5c-8d6e-7f8a9b0c1d2e';
@@ -96,7 +94,6 @@ describe('POST /v1/sites', () => {
 
     expect(calls.oldestLookups).toEqual([]);
     expect(calls.evicted).toEqual([]);
-    expect(calls.cleaned).toEqual([]);
   });
 
   it('evicts the oldest user site and still answers 201 when the fleet is at its cap', async () => {
@@ -110,18 +107,6 @@ describe('POST /v1/sites', () => {
     // is not in that index at all, so nothing here can reach a seed site.
     expect(calls.evicted).toEqual([RATHMINES_ID]);
     expect(calls.written.map((site) => site.id)).toEqual([RANELAGH_ID]);
-  });
-
-  it("deletes the evicted site's series points, so the cap bounds rows and not just sites", async () => {
-    const { deps, calls } = scriptedFleet({ creates: ['cap'] });
-
-    await createSite(deps, postSite);
-
-    expect(calls.cleaned).toEqual([RATHMINES_ID]);
-    // Bounded, and by the budget derived from the function timeout rather than
-    // by anything this handler chose: an unbounded pass after the create has
-    // committed is what loses the 201 carrying the new site's id.
-    expect(calls.budgets).toEqual([SERIES_CLEANUP_MAX_ITEMS]);
   });
 
   it('retries the create when the counter says full but the index has nothing to evict', async () => {
@@ -295,13 +280,12 @@ describe('POST /v1/sites', () => {
     expect(calls.logged).toEqual([{ event: createSiteDeadlineEvent, siteId: RANELAGH_ID }]);
   });
 
-  it('keeps the 201 and its id when the deadline refuses the eviction cleanup', async () => {
-    // The criterion this whole gate exists for. Three commands of budget is
-    // exactly the eviction path — create, look up the oldest, evict-and-create —
-    // and the cleanup that follows has none. The cleanup is skipped rather than
-    // started, so the committed create's 201 still carries the server-assigned
-    // id, which is the only place the caller can ever learn it. The evicted
-    // site's points are the TTL's job, as they always were.
+  it('answers 201 with the new site id on the eviction path, with nothing running after', async () => {
+    // The criterion the deadline gate exists for, and now a structural one:
+    // exactly the eviction path's three commands of budget — create, look up the
+    // oldest, evict-and-create — and not one more. Nothing follows the committed
+    // write, so the 201 carrying the server-assigned id cannot be lost to work
+    // done after it (ADR 0007). The evicted site's points are the TTL's job.
     const { deps, calls } = scriptedFleet({ creates: ['cap'] });
 
     const response = await createSite(
@@ -312,34 +296,6 @@ describe('POST /v1/sites', () => {
     expect(response.statusCode).toBe(201);
     expect(fleetSiteSchema.parse(jsonBodyOf(response)).id).toBe(RANELAGH_ID);
     expect(calls.evicted).toEqual([RATHMINES_ID]);
-    expect(calls.cleaned).toEqual([]);
-    expect(calls.logged).toEqual([{ event: seriesCleanupSkippedEvent, siteId: RATHMINES_ID }]);
-  });
-
-  it('still answers 201 when the series cleanup fails, and says so in the log', async () => {
-    // The site exists; its predecessor's orphaned points expire on the 90-day
-    // TTL. Answering 500 here would deny a create that demonstrably happened.
-    const { deps, calls } = scriptedFleet({
-      creates: ['cap'],
-      cleanup: () =>
-        Promise.reject(
-          new StorageError(
-            { operation: 'deleteSiteSeries', table: 'cumulo-series-dev' },
-            { cause: new Error('throughput exceeded') },
-          ),
-        ),
-    });
-
-    const response = await createSite(deps, postSite);
-
-    expect(response.statusCode).toBe(201);
-    expect(calls.logged).toEqual([
-      {
-        event: seriesCleanupFailedEvent,
-        siteId: RATHMINES_ID,
-        detail:
-          "StorageError: storage operation 'deleteSiteSeries' failed on table 'cumulo-series-dev'",
-      },
-    ]);
+    expect(calls.logged).toEqual([]);
   });
 });

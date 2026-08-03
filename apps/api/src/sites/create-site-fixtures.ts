@@ -1,5 +1,5 @@
 import { MAX_USER_SITES, utcIsoTimestampSchema, type FleetSite } from '@cumulo/shared';
-import type { OldestUserSiteResult, SeriesCleanupOutcome } from '@cumulo/storage';
+import type { OldestUserSiteResult } from '@cumulo/storage';
 import { expect } from 'vitest';
 
 import { RANELAGH_ID, RATHMINES_ID } from '../api-fixtures';
@@ -24,13 +24,6 @@ import type { CreateSiteDeps } from './create-site';
 /** The route's clock, fixed: `utcIsoTimestampSchema`'s exact accepted form. */
 export const CREATED_AT = utcIsoTimestampSchema.parse('2026-07-31T09:00:00Z');
 
-/** A cleanup pass that emptied the partition and hit neither of its limits. */
-const CLEAN_SWEEP: SeriesCleanupOutcome = {
-  deletedCount: 3,
-  declinedCount: 0,
-  budgetReached: false,
-};
-
 export interface FleetScript {
   /**
    * One answer per attempt, in the adapter's own vocabulary: the site was
@@ -46,7 +39,6 @@ export interface FleetScript {
   readonly oldest?: readonly OldestUserSiteResult[];
   /** One answer per attempt: evicted, beaten to the same site, or cancelled. */
   readonly evictions?: readonly ('evicted' | 'oldest_gone' | 'conflict')[];
-  readonly cleanup?: () => Promise<SeriesCleanupOutcome>;
   /**
    * Makes `createUserSiteWithCap` *reject* rather than answer — the shape a
    * storage failure that is nobody's expected outcome arrives in, as opposed to
@@ -58,9 +50,6 @@ export interface FleetScript {
 export interface FleetCalls {
   readonly written: FleetSite[];
   readonly evicted: string[];
-  readonly cleaned: string[];
-  /** The item budget each pass was handed. */
-  readonly budgets: number[];
   readonly logged: Record<string, unknown>[];
   readonly oldestLookups: number[];
   /** One entry per `createUserSiteWithCap` call — how the budget was spent. */
@@ -83,8 +72,6 @@ export const scriptedFleet = (
   const calls: FleetCalls = {
     written: [],
     evicted: [],
-    cleaned: [],
-    budgets: [],
     logged: [],
     oldestLookups: [],
     createAttempts: [],
@@ -125,13 +112,6 @@ export const scriptedFleet = (
         calls.evicted.push(evictSiteId);
         calls.written.push(site);
         return Promise.resolve({ evicted: true });
-      },
-    },
-    series: {
-      deleteSiteSeries: (siteId, maxItems) => {
-        calls.cleaned.push(siteId);
-        calls.budgets.push(maxItems);
-        return script.cleanup?.() ?? Promise.resolve(CLEAN_SWEEP);
       },
     },
     now: () => CREATED_AT,

@@ -4,12 +4,15 @@
 # the API reads and writes nothing else" — and this file was that sentence, plus
 # the log group it writes.
 #
-# #29 widens it in four named places, and ADR 0006 is where each is argued:
+# #29 widens it in three named places, and ADR 0006 is where each is argued:
 # `UpdateItem` on the sites table for the cap counter, `Query` on the
-# `user-sites-by-age` index for oldest-first eviction, deletes on the series
-# table for the cleanup that follows an eviction, and the three item actions on
-# the new abuse table. Each is one statement below with the caller named. The
-# sentence is longer; the property it states is the same one.
+# `user-sites-by-age` index for oldest-first eviction, and the three item
+# actions on the new abuse table. Each is one statement below with the caller
+# named. The sentence is longer; the property it states is the same one.
+#
+# It widened it in a fourth — deletes on the series table, for the cleanup pass
+# that followed a delete or an eviction — and ADR 0007 retired that one by
+# deleting the pass. This table's grant is ADR 0005's original `Query` again.
 #
 # Nothing here is a managed policy. `AWSLambdaBasicExecutionRole` would grant
 # logs:* across every log group in the account, which is broader than this
@@ -117,27 +120,27 @@ data "aws_iam_policy_document" "api" {
     resources = [local.user_sites_index_arn]
   }
 
-  # The series table: read, and — as of #29 — deleted from. `querySeriesRange`
-  # is still the only read caller, behind `GET /v1/sites/{siteId}/forecast` and
-  # `GET /v1/sites/{siteId}/series`; the API creates no series row, because
-  # forecast rows are written by #12 and actuals by #16. There is deliberately
-  # no `PutItem` and no `UpdateItem`, which is the grant-level statement of
-  # that.
+  # The series table, read only — ADR 0005's original sentence for this table,
+  # restored. `querySeriesRange` is the only caller, behind
+  # `GET /v1/sites/{siteId}/forecast` and `GET /v1/sites/{siteId}/series`; the
+  # API creates no series row, because forecast rows are written by #12 and
+  # actuals by #16. There is deliberately no `PutItem` and no `UpdateItem`,
+  # which is the grant-level statement of that.
   #
-  # `DeleteItem` and `BatchWriteItem` are X3, exactly as this comment used to
-  # predict it: when a site is deleted or evicted, `deleteSiteSeries` queries
-  # its partition and drains the keys back through batched deletes, instead of
-  # leaving orphaned rows to ADR 0002's 90-day TTL. `BatchWriteItem` is the
-  # batching itself and `DeleteItem` is what each request in a batch is
-  # authorised as — the batch API grants neither on its own. No GSI ARN; the
-  # series table has none.
+  # No write action of any kind, and that is a decision rather than an omission.
+  # #29 briefly held deletes here for a pass that drained a departed site's
+  # partition on the request path; ADR 0007 deleted the pass, so the rows a
+  # deleted or evicted site leaves behind now expire on this table's own 90-day
+  # TTL instead (ADR 0002's `expiresAt`, enabled in infra/storage/tables.tf).
+  # That TTL is the sole deletion mechanism for series rows, and it is
+  # deliberately not punctual — an expired row is gone eventually, not at a
+  # named moment — which is affordable precisely because nothing reads a
+  # departed site's series. Nothing this role can do removes a series row: the
+  # API cannot destroy history it does not write. No GSI ARN; the series table
+  # has none.
   statement {
-    sid = "ReadAndPruneSeries"
-    actions = [
-      "dynamodb:Query",
-      "dynamodb:DeleteItem",
-      "dynamodb:BatchWriteItem",
-    ]
+    sid       = "ReadSeries"
+    actions   = ["dynamodb:Query"]
     resources = [local.series_table_arn]
   }
 

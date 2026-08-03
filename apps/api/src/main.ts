@@ -115,12 +115,13 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter: `querySeriesRange` for the two read routes, and
- * `deleteSiteSeries` for the cleanup that follows a deleted or evicted site.
+ * The `cumulo-series` adapter: `querySeriesRange`, for the two read routes and
+ * nothing else.
  *
- * Nothing here *writes* a series point — forecasts are #12's and actuals are
- * #16's — so the IAM policy this function runs under grants Query, DeleteItem
- * and BatchWriteItem on this table and neither PutItem nor UpdateItem
+ * This function neither writes a series point nor deletes one — forecasts are
+ * #12's, actuals are #16's, and a departed site's rows expire on the table's
+ * own 90-day TTL rather than being deleted from a request (ADR 0007). So the
+ * IAM policy it runs under grants `Query` on this table and no other action
  * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps type
  * is the compile-time half of the same statement.
  */
@@ -239,14 +240,14 @@ const guardedWrite = (
 
 /**
  * The two handlers that change the fleet's size, and so the two that need the
- * counter, the eviction index, the series cleanup and a log sink. Named
- * constants rather than object literals in the route table below: both are
+ * counter, the eviction index, the retry timer and a log sink. Neither reaches
+ * the series table: what a departing site leaves there is the TTL's (ADR 0007).
+ * Named constants rather than object literals in the route table below: both are
  * built once per container, and a reader looking for what a write route can
  * reach finds it here rather than inline among ten routes.
  */
 const createSiteDeps: CreateSiteDeps = {
   sites,
-  series,
   now,
   newSiteId,
   log: jsonLineLog,
@@ -256,7 +257,6 @@ const createSiteDeps: CreateSiteDeps = {
 
 const deleteSiteDeps: DeleteSiteDeps = {
   sites,
-  series,
   log: jsonLineLog,
   sleep,
   random: Math.random,
