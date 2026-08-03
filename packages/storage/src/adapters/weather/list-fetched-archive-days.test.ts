@@ -51,7 +51,9 @@ describe('listFetchedArchiveDays', () => {
     const request = input?.RequestItems?.[TABLE];
     expect(request?.Keys).toEqual([marker(FETCHED), marker(UNFETCHED)]);
     // ADR 0002 Consequence 3: a ConsistentRead here would double the read cost
-    // of a table provisioned at 3 RCU.
+    // — on-demand bills a consistent read at twice the unit rate exactly as a
+    // provisioned table charged it twice the allocation — and no reader of
+    // these markers needs one.
     expect(Object.keys(request ?? {})).not.toContain('ConsistentRead');
   });
 

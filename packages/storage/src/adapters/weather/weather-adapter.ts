@@ -346,8 +346,10 @@ export class WeatherAdapter extends StorageAdapterBase {
     //   nothing left to sort past. Trimming a character off the bound would
     //   work byte-wise but would hard-code the key format outside
     //   `@cumulo/shared`, so the endpoint is dropped after the read instead —
-    //   at most one extra item, against a table sized at 3 RCU for offline
-    //   readers.
+    //   at most one extra item, whose cost is trivial whichever way the table
+    //   is billed: every reader of this range is offline, and `cumulo-weather`
+    //   has been on-demand since #156, so that item is paid for per request
+    //   rather than out of a standing read allocation.
     const lowerBound = weatherSortKey('archive', fromInclusive);
     const upperBound = weatherSortKey('archive', toExclusive);
 

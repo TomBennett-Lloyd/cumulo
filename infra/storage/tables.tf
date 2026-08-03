@@ -255,7 +255,7 @@ resource "aws_dynamodb_table" "series" {
 #    52-location worst case, and $0 while the schedule is idle. Reads stay
 #    negligible for the reason the 3 RCU was chosen — every read path is
 #    offline: #16's hindcast reads a date range, and #12 receives weather on the
-#    Kinesis stream rather than reading it back. Nothing on this table's read
+#    SQS queue rather than reading it back. Nothing on this table's read
 #    path sits in front of a user.
 #
 #    There is deliberately no `on_demand_throughput` block. Its

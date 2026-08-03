@@ -186,9 +186,13 @@ describe('putArchiveDay', () => {
   });
 
   /**
-   * 25 items ≈ 50 WCU against a table provisioned for 5: DynamoDB cancels the
-   * whole transaction and reports the cause per item, where neither the SDK's
-   * classifier nor `drainBatches` can see it. These pin the one layer that can.
+   * The 25 items of a location-day share one `locationId` partition by
+   * construction, so on-demand's per-partition instantaneous limits can still
+   * cancel the transaction for capacity — an edge case now, where
+   * until #156 a 50 WCU burst against a 5 WCU ceiling made it the expected shape.
+   * DynamoDB cancels the whole transaction and reports the cause per
+   * item, where neither the SDK's classifier nor `drainBatches` can see it —
+   * on-demand or not. These pin the one layer that can.
    */
   describe('re-issues a transaction DynamoDB cancelled for capacity', () => {
     const oneDay = [archiveReading(firstHour)];

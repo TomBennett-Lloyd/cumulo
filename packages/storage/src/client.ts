@@ -67,10 +67,11 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *    - **A request still throttled after a full second of jittered backoff is
  *      not blipping.** It is reporting sustained capacity pressure, which is an
  *      alarm to answer rather than a request to retry into: ADR 0002 puts
- *      `ReadThrottleEvents`/`WriteThrottleEvents` alarms behind the provisioned
- *      `series` table — the one table still on provisioned capacity since #156 —
- *      and ~250 dashboard loads of burst reserve in front of the synchronous
- *      fan-out.
+ *      `ReadThrottleEvents`/`WriteThrottleEvents` alarms behind both
+ *      batch-written tables, `series` and `weather` alike, and ~250 dashboard
+ *      loads of burst reserve in front of the synchronous fan-out — burst
+ *      reserve being a property of `series`, the one table still on
+ *      provisioned capacity since #156.
  *    - **Every site in the fleet backs off against the same handful of tables**,
  *      `series` and its provisioned ceiling among them, so a longer per-request
  *      budget is the thundering-herd direction — the reason the curve underneath
@@ -95,10 +96,10 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *    (`capacityCancelled`, `./adapters/transaction-cancellation`), budget
  *    `batchPolicy.maxAttempts` — the same policy that drains that adapter's
  *    batches, because it is the same table running out of the same capacity.
- *    On the *site* adapter's transactions the shape is **deliberately
- *    unretried** and surfaces as a `StorageError`: `cumulo-sites` is on-demand
- *    rather than provisioned, and the budget that would pay for a retry there
- *    is the route handler's request budget, not this package's to spend.
+ *    On the *site* adapter's transactions the identical shape is
+ *    **deliberately unretried** and surfaces as a `StorageError`: the budget
+ *    that would pay for a retry there is the route handler's request budget,
+ *    not this package's to spend.
  *
  * 4. **A conflict-cancelled transaction**: `TransactionConflict`, two writers
  *    racing on the same row — the site counter, in practice. Owner: the route
