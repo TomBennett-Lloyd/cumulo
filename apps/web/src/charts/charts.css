@@ -130,6 +130,20 @@
   fill: var(--color-text-muted);
 }
 
+/* The spoken half of the readout: off the page, but in the accessibility tree.
+ * Never `display: none` or `visibility: hidden` — either removes the element
+ * from that tree, which is the one place this region exists to be, and a live
+ * region nobody can reach announces nothing. */
+.forecast-chart-readout {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .forecast-chart-axis-label {
   fill: var(--color-chart-axis-label);
   font-family: var(--font-sans);

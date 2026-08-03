@@ -48,7 +48,7 @@ interface TooltipRow {
  * absent row says "not modelled", an em-dashed one would imply a range of
  * nothing.
  */
-const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
+export const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
   const { band } = point;
   const measured: TooltipRow = {
     seriesClassName: 'forecast-chart-actuals',
@@ -72,6 +72,19 @@ const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
         },
       ];
 };
+
+/**
+ * The same rows, spoken rather than drawn: the time, then each series as its
+ * value and the name that value belongs to. The `role="img"` chart collapses to
+ * its `aria-label`, so this string is what a screen reader gets when a reader
+ * moves the selection — and it comes from `tooltipRows`, so the announcement
+ * and the tooltip cannot say different things about one sample. Every word here
+ * names data, which `chart-copy.ts` leaves to the component that owns it.
+ */
+export const readoutText = (point: ForecastChartPoint, spanHours: number): string =>
+  `${tickLabelFor(point.validTimeIso, spanHours)} — ${tooltipRows(point)
+    .map((row) => `${row.value} ${row.name}`)
+    .join(', ')}`;
 
 /** Row coordinates are local to the tooltip group, which carries the translate. */
 const tooltipRowElement = (row: TooltipRow, rowIndex: number): ReactElement => {

@@ -24,7 +24,12 @@ import {
   type ChartScale,
   type ForecastChartPoint,
 } from './chart-series';
-import { ForecastChartHoverLayer, hoverKeyAction, pointerIndex } from './forecast-chart-hover';
+import {
+  ForecastChartHoverLayer,
+  hoverKeyAction,
+  pointerIndex,
+  readoutText,
+} from './forecast-chart-hover';
 import { FORECAST_CHART_LEGEND } from './forecast-chart-legend';
 import {
   actualsElements,
@@ -194,6 +199,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     pointCount: points.length,
   };
   const spanHours = seriesSpanHours(points);
+  const activePoint = activeIndex === null ? undefined : points[activeIndex];
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
@@ -284,6 +290,17 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           onPointerLeave={clearReadout}
         />
       </svg>
+
+      {/* The readout's only route to a screen reader. The svg above is a
+          `role="img"` with one name, so its subtree — tooltip included — is
+          collapsed to that label and the selected sample is never spoken from
+          inside it. This region is mounted empty with the chart and filled only
+          when a reader moves the selection, so every announcement is a real
+          change rather than text that was already there (`react.md`). Both
+          input routes feed it, because both set the same `activeIndex`. */}
+      <p className="forecast-chart-readout" aria-live="polite">
+        {activePoint === undefined ? '' : readoutText(activePoint, spanHours)}
+      </p>
 
       {FORECAST_CHART_LEGEND}
       {forecastChartTable({ points, spanHours, caption: props.tableCaption })}
