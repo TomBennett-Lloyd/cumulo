@@ -106,10 +106,10 @@ regime is therefore cheaper per send, not dearer: one attempt bounded at 3 s, so
 ≈ 9.6 s per page and ≈ **96 s** over ten.
 
 Both are sustained throttling against `cumulo-series`' provisioned write capacity (ADR 0002;
-`infra/storage/tables.tf` owns the figure) — a hot enough
-write burst is how a table both slows down and declines items — and both blow the 50 s timeout, so
-the conclusion does not depend on which one you get. Keeping the fleet out of either is what the
-mapping's `maximum_concurrency = 2` is for.
+`infra/storage/tables.tf` owns the figure) — a hot enough write burst is how a table both slows
+down and declines items — and both blow the 50 s timeout, so the conclusion does not depend on
+which one you get. Keeping the fleet out of either is what the mapping's `maximum_concurrency = 2`
+is for.
 
 Only in those regimes can an invocation reach the timeout, and only there is the cost worth naming:
 a killed invocation's logs stop mid-batch, so `forecast.batch.summary` is absent rather than

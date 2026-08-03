@@ -47,9 +47,10 @@
 # RESTATEMENT LEDGER. This header is the pool arithmetic's one owner. Two
 # infra/README.md sites restate its figures on purpose and move with it: the
 # `Runbook: the storage stack` section's B3 readback (`expect: W 14, R 21`) and
-# the `Storage stack` table under `Cost`. Change a capacity attribute and those
-# two move in the same commit; every other mention in the repo points here
-# without a number.
+# the whole `### Storage stack` section under `Cost` — its capacity table row
+# and the notes below it both carry figures. Change a capacity attribute and
+# those two move in the same commit; every other mention in the repo points
+# here without a number (ADRs excepted).
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:

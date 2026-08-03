@@ -647,7 +647,7 @@ aws dynamodb describe-table --table-name "cumulo-weather-$ENV" \
 # expect: "PAY_PER_REQUEST"
 ```
 
-The readback above is the capacity the whole cost argument rests on: `series` alone draws on the Region's always-free pool, since [issue #156](https://github.com/TomBennett-Lloyd/cumulo/issues/156) moved `weather` to on-demand and it stopped drawing on it — `infra/storage/tables.tf`'s header owns the arithmetic, and the [storage stack's cost table](#storage-stack) is where it is spent.
+The readback above is that confirmation: `series` alone draws on the Region's always-free pool, since [issue #156](https://github.com/TomBennett-Lloyd/cumulo/issues/156) moved `weather` to on-demand and it stopped drawing on it — `infra/storage/tables.tf`'s header owns the arithmetic, and the [storage stack's cost table](#storage-stack) is where it is spent.
 
 **The two tables are read back through different queries on purpose.** An on-demand table still reports a `ProvisionedThroughput` block, with both figures zero, so the provisioned query would answer `W 0, R 0` for a healthy `weather` and for a broken one alike — it cannot tell "on-demand" from "provisioned at nothing". `BillingModeSummary` is the field that distinguishes them, and a `weather` that came back `PROVISIONED` would be #156's throttle class quietly restored: the burst shape that lost 6 of 12 locations in a live cycle, not a number that merely wants raising.
 

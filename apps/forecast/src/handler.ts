@@ -79,8 +79,8 @@ import { sqsEventSchema, type SqsBatchResponse } from './sqs-event';
  * a provisioned table (ADR 0002; `infra/storage/tables.tf` owns the figure), and a
  * hot enough write burst is how a table both slows down and declines items — and
  * both blow the 50 s timeout, so nothing below depends on which of the two you
- * actually get. The mapping's
- * `maximum_concurrency = 2` exists to keep the fleet's writes out of either.
+ * actually get. The mapping's `maximum_concurrency = 2` exists to keep the
+ * fleet's writes out of either.
  *
  * Only in *those* cases can an invocation reach the 50 s timeout, and only there is
  * the consequence worth naming: a killed invocation's logs stop mid-batch, so

@@ -264,9 +264,9 @@ export class SeriesAdapter extends StorageAdapterBase {
    * Capacity says the same thing as latency here. Those deletes draw on the
    * `series` table's provisioned write capacity (`infra/storage/tables.tf`),
    * shared with the hourly cycle's forecast writes, so a full drain spends
-   * minutes of the table's entire write budget on a site nobody is reading. The 90-day TTL removes the remainder for
-   * free and asynchronously, which is what makes a small bound the right answer
-   * rather than a regrettable one.
+   * minutes of the table's entire write budget on a site nobody is reading.
+   * The 90-day TTL removes the remainder for free and asynchronously, which is
+   * what makes a small bound the right answer rather than a regrettable one.
    *
    * Newest-first (`ScanIndexForward: false`) because a bounded pass should
    * reclaim the rows that would otherwise linger longest: `expiresAt` is
