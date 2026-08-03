@@ -68,15 +68,13 @@ resource "aws_lambda_function" "forecast" {
   # its own — it only widens the margin — but leaves the queue over-provisioned
   # for a redelivery window nothing needs.
   #
-  # The pairing is *not* gated mechanically, and that is a known gap rather than
-  # an oversight. `pnpm check:infra-mirrors` compares a Terraform attribute
-  # against a TypeScript constant at a fixed unit scale; this coupling is
-  # Terraform on both sides and at a 6× ratio rather than a unit conversion,
-  # which its six-field record shape cannot express. That limitation is already
-  # recorded in docs/tech-debt.md ("The mirror gate's record shape hard-codes
-  # the extraction modes and the equality relation"), which names this exact
-  # pair — so do not widen the gate here. Generalising it is a decision about a
-  # relation language, and it belongs in its own change.
+  # That pairing is gated, so the obligation above is not left to whoever reads
+  # this comment: `pnpm check:infra-mirrors`, in the `verify` composite and so
+  # in CI, holds the queue's `visibility_timeout_seconds` at or above a declared
+  # factor of six times this attribute — Terraform on both sides, a floor rather
+  # than an equality — and fails on a one-sided edit (#133). The pair is
+  # declared in .claude/scripts/check-infra-mirrors.sh, which is also where the
+  # next such pair goes.
   #
   # Why 50 s is the right size for the work: one message is one location's
   # 48-hour horizon, so the invocation is a `by-location` GSI query for that

@@ -9,7 +9,7 @@ import {
 } from '@cumulo/shared';
 import { z } from 'zod';
 
-import { SERIES_RETENTION_DAYS, expiresAtEpochSeconds } from '../../ttl';
+import { SERIES_RETENTION_DAYS, TTL_ATTRIBUTE_NAME, expiresAtEpochSeconds } from '../../ttl';
 
 /**
  * The wire format of a `cumulo-weather` item (ADR 0002 "Key design" §3): the
@@ -63,7 +63,7 @@ export const toForecastItem = (reading: ForecastWeatherReading): KeyedWeatherIte
   ...reading,
   locationId: locationId(reading),
   sk: weatherSortKey('forecast', reading.validTime),
-  expiresAt: expiresAtEpochSeconds(reading.validTime, FORECAST_WEATHER_RETENTION_DAYS),
+  [TTL_ATTRIBUTE_NAME]: expiresAtEpochSeconds(reading.validTime, FORECAST_WEATHER_RETENTION_DAYS),
 });
 
 export const toArchiveItem = (reading: ArchiveWeatherReading): KeyedWeatherItem => ({
@@ -79,7 +79,7 @@ export const toArchiveItem = (reading: ArchiveWeatherReading): KeyedWeatherItem 
  * attributes and the TTL. Everything else in an item is a weather-reading
  * field.
  */
-const STORAGE_ATTRIBUTES = new Set(['locationId', 'sk', 'expiresAt']);
+const STORAGE_ATTRIBUTES = new Set(['locationId', 'sk', TTL_ATTRIBUTE_NAME]);
 
 /**
  * Storage-owned attributes are removed before parsing, rather than left for

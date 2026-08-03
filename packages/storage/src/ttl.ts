@@ -18,6 +18,23 @@ import type { UtcIsoTimestamp } from '@cumulo/shared';
  */
 export const SERIES_RETENTION_DAYS = 90;
 
+/**
+ * The name of the TTL attribute itself, mirrored from Terraform.
+ *
+ * A mirror, not a source: the `ttl { attribute_name = … }` blocks on
+ * `aws_dynamodb_table.series`, `.weather` and `.abuse` in
+ * `infra/storage/tables.tf` own the deployed name, and DynamoDB expires rows by
+ * *that* name — an item written under any other one is simply never reaped, at
+ * no error and no cost signal until the table stops being small. The pair is
+ * declared to `.claude/scripts/check-infra-mirrors.sh` (rule 8), so the three
+ * tables and this constant are held equal by `pnpm check:infra-mirrors` in the
+ * `verify` composite rather than by the comments that cite each other.
+ *
+ * Every item builder and key-attribute set in this package writes the attribute
+ * through this constant, so the name has one owner on the code side too.
+ */
+export const TTL_ATTRIBUTE_NAME = 'expiresAt';
+
 const SECONDS_PER_DAY = 86_400;
 
 /**
