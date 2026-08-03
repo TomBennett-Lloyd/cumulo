@@ -1,4 +1,12 @@
-import { errorMetricsSchema, generationReadingSchema } from '@cumulo/shared';
+import {
+  MAX_PLAUSIBLE_IRRADIANCE_WM2,
+  archiveWeatherReadingSchema,
+  errorMetricsSchema,
+  generationReadingSchema,
+  siteSchema,
+  type ArchiveWeatherReading,
+  type UtcWindow,
+} from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -83,6 +91,7 @@ describe('runHindcast over a covered period', () => {
       alreadyCached: 0,
       fetched: PERIOD_DAYS.length,
       unavailableDays: [],
+      implausibleHours: [],
       apiCallCount: 1,
     });
   });
@@ -99,6 +108,7 @@ describe('runHindcast over a covered period', () => {
       alreadyCached: PERIOD_DAYS.length,
       fetched: 0,
       unavailableDays: [],
+      implausibleHours: [],
       apiCallCount: 0,
     });
   });
@@ -158,6 +168,101 @@ describe('runHindcast over a covered period', () => {
     // persist from.
     expect(withoutRunUp.metrics.rmseKw).toBe(withRunUp.metrics.rmseKw);
     expect(withoutRunUp.metrics.skillScore).not.toBe(withRunUp.metrics.skillScore);
+  });
+});
+
+describe('runHindcast over a window with an implausible hour', () => {
+  /**
+   * The measured geometry `@cumulo/forecast` documents: the fixture site turned
+   * vertical and aimed just north of east. Every other field is the fixture site's,
+   * so the location key — and therefore the archive partition — is unchanged.
+   */
+  const VERTICAL_SITE = siteSchema.parse({
+    ...SITE,
+    tiltDegrees: 90,
+    azimuthDegrees: 89.47,
+  });
+
+  const EQUINOX_DAY = '2026-03-20';
+  const IMPLAUSIBLE_HOUR = hourOf(EQUINOX_DAY, 7);
+
+  /** The two-hour window around the implausible hour and the plausible one after it. */
+  const TWO_HOURS: UtcWindow = {
+    startInclusive: IMPLAUSIBLE_HOUR,
+    endExclusive: hourOf(EQUINOX_DAY, 9),
+  };
+
+  const archiveHourAt = (hour: number, irradianceWm2: number): ArchiveWeatherReading =>
+    archiveWeatherReadingSchema.parse({
+      latitude: SITE.latitude,
+      longitude: SITE.longitude,
+      validTime: hourOf(EQUINOX_DAY, hour),
+      kind: 'archive',
+      source: 'open-meteo',
+      shortwaveRadiationWm2: irradianceWm2,
+      directRadiationWm2: irradianceWm2,
+      diffuseRadiationWm2: irradianceWm2,
+      directNormalIrradianceWm2: irradianceWm2,
+      temperature2mC: 8,
+      windSpeed10mMs: 3,
+      cloudCoverPct: 10,
+    });
+
+  it('scores the hours it could replay and names the one it could not', async () => {
+    // A hindcast replays offline and has no queue to redeliver into, so its policy
+    // is the opposite of the live consumer's: skip the impossible hour, score the
+    // rest, and say which hour went missing. `sampleCount` shrinking silently is
+    // exactly the quiet corruption error-handling rule 5 exists to prevent.
+    const store = new InMemoryArchiveStore();
+    await store.putArchiveDay(EQUINOX_DAY, [
+      // At its `weatherReadingSchema` cap, on a near-grazing equinox sun.
+      archiveHourAt(7, MAX_PLAUSIBLE_IRRADIANCE_WM2),
+      // An ordinary morning hour on the same roof: this one forecasts.
+      archiveHourAt(8, 120),
+    ]);
+    // A budget of zero: the day is already marked, so any fetch at all is a bug.
+    const { deps, sink } = harness(archiveFetchStub(0), store);
+
+    const outcome = completeOutcome(
+      await runHindcast(deps, {
+        site: VERTICAL_SITE,
+        period: TWO_HOURS,
+        observations: [
+          observationAt(IMPLAUSIBLE_HOUR, 0.4),
+          observationAt(hourOf(EQUINOX_DAY, 8), 1.1),
+        ],
+        issuedAt: ISSUED_AT,
+      }),
+    );
+
+    expect(outcome.coverage.implausibleHours).toEqual([IMPLAUSIBLE_HOUR]);
+    // One pair, not two: the skipped hour has an observation, and it still is not
+    // scored, because the model produced nothing to score it against.
+    expect(outcome.metrics.sampleCount).toBe(1);
+    expect(sink.published).toHaveLength(1);
+  });
+
+  it('reports no implausible hours for the same window of ordinary weather', async () => {
+    // Testing rule 7's shape: a run that listed every hour as implausible would pass
+    // the case above for the wrong reason, and so would one that scored nothing.
+    const store = new InMemoryArchiveStore();
+    await store.putArchiveDay(EQUINOX_DAY, [archiveHourAt(7, 60), archiveHourAt(8, 120)]);
+    const { deps } = harness(archiveFetchStub(0), store);
+
+    const outcome = completeOutcome(
+      await runHindcast(deps, {
+        site: VERTICAL_SITE,
+        period: TWO_HOURS,
+        observations: [
+          observationAt(IMPLAUSIBLE_HOUR, 0.4),
+          observationAt(hourOf(EQUINOX_DAY, 8), 1.1),
+        ],
+        issuedAt: ISSUED_AT,
+      }),
+    );
+
+    expect(outcome.coverage.implausibleHours).toEqual([]);
+    expect(outcome.metrics.sampleCount).toBe(2);
   });
 });
 

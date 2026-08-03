@@ -256,13 +256,15 @@ describe('consuming one weather message', () => {
     expect(recorder.written).toEqual([]);
   });
 
-  it('converts a physics invariant violation into a failed outcome rather than a throw', async () => {
+  it('fails the record for a physically implausible hour, naming the site and the hour', async () => {
     // The route `@cumulo/forecast` documents: a near-grazing sun on a vertical
     // array pointed straight at it, with every irradiance field at its schema cap,
     // amplifies the circumsolar term until the chain produces numbers outside
-    // `forecastSchema`'s bounds and its final parse throws. Both inputs are
-    // schema-valid, which is exactly why this fails the record rather than the
-    // batch: the queue's redrive is the retry, and the DLQ is the operator signal.
+    // `forecastSchema`'s bounds. Both inputs are schema-valid, so the package
+    // reports it as a value and this service decides the policy: fail the record —
+    // the queue's redrive is the retry, and the DLQ is the operator signal. The
+    // detail has to carry the site and hour, because that pair is what an operator
+    // reading the DLQ looks up; "something threw" costs them the hour instead.
     const implausible = reading({
       validTime: '2026-03-20T07:00:00Z',
       shortwaveRadiationWm2: 1500,
@@ -271,15 +273,22 @@ describe('consuming one weather message', () => {
       directNormalIrradianceWm2: 1500,
     });
 
+    const recorder = emptyRecorder();
+
     const outcome = await consumeMessage(
       deps({
-        recorder: emptyRecorder(),
+        recorder,
         sites: [sitePhysics({ tiltDegrees: 90, azimuthDegrees: 89.47 })],
       }),
       recordOf('m-1', [implausible]),
     );
 
-    expect(detailOf(outcome)).toContain('locationForecasts threw');
+    expect(outcome.status).toBe('failed');
+    expect(detailOf(outcome)).toContain(RANELAGH_ID);
+    expect(detailOf(outcome)).toContain('2026-03-20T07:00:00Z');
+    // Nothing is written: the whole message fails, so redelivery rewrites the same
+    // rows rather than layering a second vintage over a half-stored horizon.
+    expect(recorder.written).toEqual([]);
   });
 
   it('describes a non-Error rejection rather than losing it', async () => {

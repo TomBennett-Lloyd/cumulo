@@ -3,7 +3,6 @@ import {
   describeZodIssues,
   locationId,
   weatherMessageSchema,
-  type Forecast,
   type ForecastWeatherReading,
   type SitePhysics,
   type UtcIsoTimestamp,
@@ -18,11 +17,11 @@ import type { SqsRecord } from './sqs-event';
  *
  * This module is the record boundary. Everything above it (`handler.ts`) decides
  * what a batch reports to Lambda; everything below it is pure. So this is where
- * an `unknown` thrown by an adapter, or by the physics chain's own invariant
- * guard, becomes a value the batch can count (`docs/standards/error-handling.md`
- * rule 2a). A `consumeMessage` that threw would abandon the rest of its batch —
- * today a batch of one, but the mapping's `batch_size` is a number, not a
- * contract.
+ * an `unknown` thrown by an adapter becomes a value the batch can count
+ * (`docs/standards/error-handling.md` rule 2a), and where the fan-out's own
+ * `implausible-hour` value becomes a `failed` record. A `consumeMessage` that
+ * threw would abandon the rest of its batch — today a batch of one, but the
+ * mapping's `batch_size` is a number, not a contract.
  *
  * There is no separate "already processed?" check, and there is deliberately no
  * place to put one: SQS is at-least-once, and idempotency here is *structural*.
@@ -48,7 +47,8 @@ import type { SqsRecord } from './sqs-event';
  *   ingestion→forecast contract moved and no retry will help (the message is
  *   destined for the DLQ, which is the correct place for it); `store-partial`
  *   means DynamoDB declined writes and the next delivery will likely succeed; and
- *   `failed` names the operation that threw.
+ *   `failed` names either the adapter call that threw or the site-hour whose
+ *   physics was implausible.
  */
 export type MessageOutcome = { readonly messageId: string } & (
   | { readonly status: 'stored'; readonly siteCount: number; readonly forecastCount: number }
@@ -90,14 +90,18 @@ export interface ConsumeMessageDeps {
 }
 
 /**
- * The three awaited or throwing calls in a message's processing. A `failed`
- * outcome must say which of them threw, because the next step differs for each
+ * The two awaited calls in a message's processing — the only two that can throw.
+ * A `failed` outcome must say which of them did, because the next step differs
  * (`docs/standards/error-handling.md` rule 4): a `listActiveSitePhysicsAtLocation`
- * throw is the sites table or its index, a `putForecasts` throw is the series
- * table, and a `locationForecasts` throw is the physics chain refusing to emit a
- * row — which is a data problem at a specific location, not an AWS one.
+ * throw is the sites table or its index, and a `putForecasts` throw is the series
+ * table.
+ *
+ * The fan-out is deliberately absent. `locationForecasts` is pure and total: a
+ * physically implausible hour comes back as a value, and this module renders it
+ * into a `failed` outcome that names the site and the hour rather than an
+ * operation that threw.
  */
-type MessageOperation = 'listActiveSitePhysicsAtLocation' | 'locationForecasts' | 'putForecasts';
+type MessageOperation = 'listActiveSitePhysicsAtLocation' | 'putForecasts';
 
 const failedOutcome = (
   messageId: string,
@@ -179,9 +183,10 @@ const singleLocationId = (readings: readonly ForecastWeatherReading[]): string |
  * message shares an `issuedAt` and the whole message is one identifiable forecast
  * run.
  *
- * Each fallible step converts its own throw, so the operation survives into the
- * log line. That is the difference between an entry an operator can act on and
- * "message X failed", which costs an hour.
+ * Each fallible step converts its own failure where it happens, so what went
+ * wrong survives into the log line — the adapter call for a throw, the site and
+ * hour for an implausible one. That is the difference between an entry an
+ * operator can act on and "message X failed", which costs an hour.
  */
 export const consumeMessage = async (
   deps: ConsumeMessageDeps,
@@ -216,18 +221,23 @@ export const consumeMessage = async (
     return { messageId, status: 'no-active-sites' };
   }
 
-  let forecasts: Forecast[];
-  try {
-    forecasts = locationForecasts({ sites, readings: body.readings, issuedAt: deps.now() });
-  } catch (error: unknown) {
-    // `createPhysicsForecast`'s final `forecastSchema.parse` — a bug in the
-    // physics package, or a weather hour that is schema-valid and physically
-    // implausible. Both fail this record and neither takes down the batch: the
-    // queue's redrive (five receives, then the alarmed DLQ) is both the retry and
-    // the operator signal, which is the policy the forecast package's docstring
-    // left to this service to decide.
-    return failedOutcome(messageId, 'locationForecasts', error);
+  const fanOut = locationForecasts({ sites, readings: body.readings, issuedAt: deps.now() });
+  if (fanOut.status === 'implausible-hour') {
+    // A weather hour that every schema accepts and no atmosphere produces: the
+    // physics landed outside `forecastSchema`'s bounds. This service's policy is
+    // to fail the record — the queue's redrive (five receives, then the alarmed
+    // DLQ) is both the retry and the operator signal (#136) — and the detail names
+    // the site and the hour, because that pair is what an operator reading the DLQ
+    // has to look up. The blast radius is one location's message, not the batch.
+    return {
+      messageId,
+      status: 'failed',
+      detail:
+        `implausible physics for site ${fanOut.siteId} at ${fanOut.validTime} — ` + fanOut.detail,
+    };
   }
+
+  const { forecasts } = fanOut;
 
   let stored: BatchWriteOutcome;
   try {
