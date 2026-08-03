@@ -346,8 +346,9 @@ resource "aws_dynamodb_table" "metrics" {
 #    ON-DEMAND, by the standing rule at the top of this file: its load is
 #    request-shaped — one write per limited request from whoever is knocking —
 #    so there is no volume to size a provisioned number against, and none of it
-#    may come out of the shared free 25/25 pool that the two batch-shaped tables
-#    depend on. Under abuse the request rate is bounded by the gateway throttles
+#    may come out of the shared free 25/25 pool that `series` — the one
+#    batch-shaped table still drawing on it (#156) — depends on. Under abuse
+#    the request rate is bounded by the gateway throttles
 #    in `infra/api/gateway.tf` rather than by anything here.
 #
 #    Every row carries `expiresAt`, so stored size stays at roughly "addresses

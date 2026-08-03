@@ -611,7 +611,7 @@ That 9 is arithmetic, not memory, and it is worth re-deriving rather than trusti
 ```bash
 grep -c '^resource "aws_dynamodb_table"' tables.tf           # 5 — one per table
 grep -c '^resource "aws_cloudwatch_metric_alarm"' alarms.tf  # 2 — each a for_each over
-                                                             # local.provisioned_tables, so 4 alarms
+                                                             # local.throttle_alarmed_tables, so 4 alarms
 grep -c '^data ' alarms.tf                                   # 1 — read, not created
 ```
 
