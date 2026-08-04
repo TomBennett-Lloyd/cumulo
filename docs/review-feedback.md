@@ -163,3 +163,10 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "could we update the TTL to expire asap for that series instead of doing a batch delete? … what if there are custom sites that have been around for a while, that have a large series?" — then, on the analysis: "the ttl one seems like a good decision, i approve".
 - **Why**: The owner probed whether TTL-to-now beats TTL-only for orphaned series. Analysis showed TTL-to-now costs the same writes as the batch delete it replaces and re-grants the IAM series-write the PR removes; the rolling 90-day `expiresAt` cap means no site ever holds more than the retention window, so the "large old series" case cannot arise; orphan storage is ~$0.0003–0.0006/site/month inside the free 25 GB. A privacy-shaped requirement (not in scope) would change the answer to an offline sweeper behind its own issue — noted on ADR 0007's revisit triggers.
 - **How applied**: PR #211 merged as-is on the approval (TTL-only deletion, ADR 0007; closes #167).
+
+## 2026-08-04 — adr-0002-amendment-capacity
+
+- **Category**: approved-no-changes
+- **Feedback**: "227 and 245 look good" — owner approval for ADR 0002's dated Amendments entry recording the weather table's move to PAY_PER_REQUEST (#156) and the capacity figures the change retired.
+- **Why**: `docs/adr/**` is a humanAlways path; the amendment trues the ADR's stated values without touching its reasoning, per the convention decided 2026-08-01, and the PR body flagged the three historical mentions left as legitimately past-tense.
+- **How applied**: PR #227 merged on the approval.

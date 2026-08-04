@@ -143,11 +143,11 @@ A5 is served by **one range Query per site, issued in parallel, aggregated by th
 | Table                                | Mode        | WCU | RCU |
 | ------------------------------------ | ----------- | --- | --- |
 | `cumulo-series-<env>`                | provisioned | 14  | 21  |
-| `cumulo-weather-<env>`               | provisioned | 5   | 3   |
+| `cumulo-weather-<env>`               | on-demand   | —   | —   |
 | `cumulo-sites-<env>` (and both GSIs) | on-demand   | —   | —   |
 | `cumulo-metrics-<env>`               | on-demand   | —   | —   |
 
-**Total against the free tier: 19 WCU / 24 RCU of 25 / 25.** The standing DynamoDB capacity bill is **$0**.
+**Total against the free tier: 14 WCU / 21 RCU of 25 / 25.** The standing DynamoDB capacity bill is **$0**.
 
 The rule is one line: **a table whose load is batch-shaped — driven by a clock, with a volume this document can compute — is provisioned; a table whose load is request-shaped, driven by whoever happens to be looking, is on-demand.** `series` and `weather` are written by the hourly cycle and read by paths whose size is a function of fleet size. `sites` and `metrics` are touched by human-triggered CRUD and by #29's abuse surface, where the arrival rate is exactly the thing that cannot be predicted.
 
@@ -354,3 +354,4 @@ The trade this buys is not money — the alternative was ≈ $2.88/month — it 
 Per `README.md`: amendments true up stated values the code has legitimately moved; the decision and its rationale are immutable.
 
 - **2026-08-01 — SDK retry attempts 4 → 2 (#122).** Two stacked retry layers (the SDK's and `drainBatches`'s) walked independent backoff curves over the same throttle, up to 12 round trips per batch; #122 assigned each layer one job — the drain layer owns batch throttling (`UnprocessedItems` on HTTP 200, Consequence 4's own mechanism), the SDK layer owns transport blips with one retry. Consequence 5's decision (pin explicitly, never inherit) is unchanged; only the pinned value moved. The value and the full layer-ownership record now live on `STORAGE_MAX_ATTEMPTS` in `packages/storage/src/client.ts`.
+- **2026-08-03 — `cumulo-weather` provisioned 5 WCU / 3 RCU → on-demand (#156).** The `WriteThrottleEvents` alarm Consequence 2 requires fired on the seeded demo fleet: 296 throttle events, and 6 of 12 locations failed to publish their readings; an earlier 40-location run had thrown 1,350. The cause is a granularity this document did not price — a 25-item `BatchWriteItem` page arrives as one burst against 5 WCU/s and outruns the bounded retry patience above (`drainBatches` 3 sends, the SDK's 2 attempts) regardless of how low the per-cycle utilisation is, so writes are lost inside a cycle that fits with an order of magnitude to spare. The response is the one revisit trigger 8 names for `series` — flip `billing_mode` to on-demand, one attribute, no migration, no key change — applied to the other provisioned table, and it is the escape hatch "Reversibility is what makes this cheap to get wrong" exists for. The provisioned pool is therefore `series` only, at 14 WCU / 21 RCU of the Region's 25 / 25: the weather drain arithmetic in "The write path fits" and the drain column of the fleet-headroom table now describe `series` alone. The value now lives on the `cumulo-weather` table in `infra/storage/tables.tf`.
