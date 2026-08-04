@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { TTL_ATTRIBUTE_NAME } from '../../ttl';
+
 /**
  * The wire format of a `cumulo-abuse` item: the two kinds of row the per-IP
  * limiter keeps, the keys that address them, and the parses that read them back.
@@ -74,7 +76,7 @@ export const blockKey = (ip: string): string => {
 export interface BlockItem {
   readonly pk: string;
   readonly blockedUntil: number;
-  readonly expiresAt: number;
+  readonly [TTL_ATTRIBUTE_NAME]: number;
 }
 
 export const toBlockItem = (ip: string, blockedUntilEpochSeconds: number): BlockItem => ({
@@ -82,7 +84,7 @@ export const toBlockItem = (ip: string, blockedUntilEpochSeconds: number): Block
   blockedUntil: blockedUntilEpochSeconds,
   // Deliberately the same number: the row's usefulness and its lifetime are the
   // same fact, so there is nothing to keep in step.
-  expiresAt: blockedUntilEpochSeconds,
+  [TTL_ATTRIBUTE_NAME]: blockedUntilEpochSeconds,
 });
 
 /**

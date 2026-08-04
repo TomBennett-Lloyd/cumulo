@@ -1,5 +1,6 @@
 import { GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
+import { TTL_ATTRIBUTE_NAME } from '../../ttl';
 import { StorageAdapterBase, type StorageAdapterDeps } from '../storage-adapter-base';
 
 import { blockKey, rateWindowKey, toBlockItem, toBlockedUntil, toRequestCount } from './abuse-item';
@@ -78,7 +79,7 @@ export class AbuseAdapter extends StorageAdapterBase {
    * back on the same round trip (`UPDATED_NEW`), so deciding "over the limit"
    * costs one call rather than a write plus a read.
    *
-   * `expiresAt` is written with `if_not_exists`, so the first request in a
+   * The TTL attribute is written with `if_not_exists`, so the first request in a
    * window sets the row's lifetime and later ones never push it out: a busy
    * address cannot keep its own counter alive past the window it belongs to.
    * The caller chooses that instant, and should leave slack past the window's
@@ -99,7 +100,14 @@ export class AbuseAdapter extends StorageAdapterBase {
         new UpdateCommand({
           TableName: this.tableName,
           Key: { pk },
-          UpdateExpression: 'ADD requestCount :one SET expiresAt = if_not_exists(expiresAt, :exp)',
+          // The TTL attribute is named through {@link TTL_ATTRIBUTE_NAME}
+          // rather than spelled into the expression: this is the only writer of
+          // a rate-window row's TTL, and it writes it in an expression string
+          // where a stale name is not a type error. Renaming the constant would
+          // otherwise leave these rows written under a name DynamoDB no longer
+          // reaps — the silent failure `ttl.ts` describes, in the one table
+          // whose whole point is that its rows go away.
+          UpdateExpression: `ADD requestCount :one SET ${TTL_ATTRIBUTE_NAME} = if_not_exists(${TTL_ATTRIBUTE_NAME}, :exp)`,
           ExpressionAttributeValues: { ':one': 1, ':exp': expiresAtEpochSeconds },
           ReturnValues: 'UPDATED_NEW',
         }),

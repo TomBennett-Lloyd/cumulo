@@ -80,8 +80,9 @@ resource "aws_lambda_function" "api" {
   # same commit or fails the build. The gateway's 30 s is restated there as
   # `API_GATEWAY_INTEGRATION_TIMEOUT_MS` and
   # `request-budget.test.ts` holds this value under it — the inequality the
-  # mirror gate cannot express, so raising this past 30 s fails a test instead
-  # of failing in production.
+  # mirror gate has no second side to address, AWS owning that 30 s and no file
+  # in this repo declaring it, so raising this past 30 s fails a test instead of
+  # failing in production.
   timeout = 15
 
   # 256 MB, and this number is load-bearing beyond performance: it is the figure

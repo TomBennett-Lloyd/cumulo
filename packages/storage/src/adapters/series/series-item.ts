@@ -7,7 +7,7 @@ import {
   type GenerationReading,
 } from '@cumulo/shared';
 
-import { SERIES_RETENTION_DAYS, expiresAtEpochSeconds } from '../../ttl';
+import { SERIES_RETENTION_DAYS, TTL_ATTRIBUTE_NAME, expiresAtEpochSeconds } from '../../ttl';
 
 /**
  * The wire format of a `cumulo-series` item (ADR 0002 "Key design" table 2):
@@ -32,9 +32,9 @@ export interface SeriesItemKeys {
   readonly sk: string;
   /**
    * DynamoDB TTL, in epoch **seconds**. Series data is disposable after the
-   * 90-day accuracy window; see `ttl.ts`.
+   * 90-day accuracy window; see `ttl.ts`, which also owns the attribute's name.
    */
-  readonly expiresAt: number;
+  readonly [TTL_ATTRIBUTE_NAME]: number;
 }
 
 export type ForecastItem = Forecast & SeriesItemKeys;
@@ -52,7 +52,7 @@ export type SeriesPoint =
   | { readonly type: 'generation'; readonly reading: GenerationReading };
 
 /** Attributes that address or expire an item rather than describing it. */
-const KEY_ATTRIBUTES: ReadonlySet<string> = new Set(['sk', 'expiresAt']);
+const KEY_ATTRIBUTES: ReadonlySet<string> = new Set(['sk', TTL_ATTRIBUTE_NAME]);
 
 /**
  * Domain forecast → stored item.
@@ -67,7 +67,7 @@ const KEY_ATTRIBUTES: ReadonlySet<string> = new Set(['sk', 'expiresAt']);
 export const toForecastItem = (forecast: Forecast): ForecastItem => ({
   ...forecast,
   sk: seriesSortKey(forecast.validTime, { kind: 'forecast', model: forecast.model }),
-  expiresAt: expiresAtEpochSeconds(forecast.validTime, SERIES_RETENTION_DAYS),
+  [TTL_ATTRIBUTE_NAME]: expiresAtEpochSeconds(forecast.validTime, SERIES_RETENTION_DAYS),
 });
 
 /**
@@ -78,7 +78,7 @@ export const toForecastItem = (forecast: Forecast): ForecastItem => ({
 export const toGenerationReadingItem = (reading: GenerationReading): GenerationReadingItem => ({
   ...reading,
   sk: seriesSortKey(reading.validTime, { kind: 'generation' }),
-  expiresAt: expiresAtEpochSeconds(reading.validTime, SERIES_RETENTION_DAYS),
+  [TTL_ATTRIBUTE_NAME]: expiresAtEpochSeconds(reading.validTime, SERIES_RETENTION_DAYS),
 });
 
 const domainAttributes = (item: Record<string, unknown>): Record<string, unknown> => {

@@ -36,6 +36,12 @@ variable "environment" {
   type        = string
   default     = "dev"
 
+  # This pattern has a mirror in code: `ENVIRONMENT_PATTERN` in
+  # `packages/storage/src/table-name.ts` rejects the same suffixes before
+  # `storageTableName()` interpolates one. Per architecture rule 8 the pair is
+  # declared to `check:infra-mirrors` as well as cited here, so the two patterns
+  # cannot drift apart quietly — the gate compares the pattern texts on every
+  # `verify` run.
   validation {
     condition     = can(regex("^[a-z0-9-]+$", var.environment))
     error_message = "environment must be lowercase alphanumerics and hyphens, e.g. dev — it is interpolated directly into table names."

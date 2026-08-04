@@ -99,7 +99,10 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * refuses anything it cannot parse rather than skipping it, so an expression
  * here does not weaken the gate quietly, it stops the build with a non-verdict.
  * The value's *relation* to the gateway ceiling is carried by
- * `request-budget.test.ts` instead, where an inequality can be expressed.
+ * `request-budget.test.ts` instead — not because the gate holds only
+ * equalities (it holds strict bounds and floors too), but because that ceiling
+ * has no second declared side here for a record to name, as the constant below
+ * spells out.
  */
 export const API_LAMBDA_TIMEOUT_MS = 15_000;
 
@@ -115,10 +118,12 @@ export const API_LAMBDA_TIMEOUT_MS = 15_000;
  * **test** holds it under this ceiling.
  *
  * That last link is the one that was missing. `check-infra-mirrors.sh` records
- * this inequality as the half of the number it cannot express — its records are
- * equalities between two files, and one side of this one is a value AWS owns
- * and no file here declares. Restating it as a constant moves it somewhere a
- * test can bite, which closes it without pretending the gate grew a feature.
+ * this inequality as the half of the number it cannot express — not for want of
+ * a relation (its records hold strict bounds and floors as well as equalities)
+ * but for want of a second side: this ceiling is a value AWS owns and no file
+ * in this repo declares, so there is nothing for a record to address.
+ * Restating it as a constant moves it somewhere a test can bite, which closes
+ * it without pretending the gate grew a feature.
  */
 export const API_GATEWAY_INTEGRATION_TIMEOUT_MS = 30_000;
 
