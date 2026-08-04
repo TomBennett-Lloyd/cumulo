@@ -1,8 +1,9 @@
 import type { UtcIsoTimestamp } from '@cumulo/shared';
 
 /**
- * DynamoDB TTL: the `expiresAt` attribute values written by the series and
- * weather adapters.
+ * DynamoDB TTL: the expiry attribute values written by the series, weather and
+ * abuse adapters — the three tables `infra/storage/tables.tf` gives a `ttl`
+ * block, and every row in this repo that goes away on its own.
  *
  * DynamoDB requires TTL to be a Number attribute holding a Unix epoch time in
  * **seconds** — milliseconds are silently never expired, which is the kind of
@@ -37,10 +38,11 @@ export const SERIES_RETENTION_DAYS = 90;
  * is why it interpolates rather than spells), and the smoke check that reads the
  * deployed TTL configuration back.
  *
- * **Restatement ledger** (`docs/standards/architecture.md` rule 9) — the sites
- * that carry the literal `'expiresAt'` on purpose, because they assert the wire
- * shape rather than produce it, and would prove nothing if they agreed with the
- * code by construction. Renaming this constant means visiting these:
+ * **Restatement ledger** (`docs/standards/architecture.md` rule 9) — every site
+ * that carries the literal `'expiresAt'` on purpose: they assert the wire shape
+ * rather than produce it, or (the gate and its harness) declare and doctor it,
+ * and each would prove nothing if it agreed with the code by construction.
+ * Renaming this constant means visiting all of these:
  *
  *   * `infra/storage/tables.tf` — the three `ttl { attribute_name = … }` blocks.
  *     The deployed owner, and the only one this repo can rename without AWS;
@@ -52,9 +54,24 @@ export const SERIES_RETENTION_DAYS = 90;
  *   * `adapters/abuse/abuse-adapter.test.ts` — pins the exact
  *     `UpdateExpression` text DynamoDB is sent, which is the wire shape the
  *     interpolation above must keep producing.
- *   * `adapters/abuse/abuse-item.test.ts` and
- *     `adapters/weather/put-archive-day.test.ts` — items and absences asserted
- *     as DynamoDB would hold them.
+ *   * `adapters/abuse/abuse-item.test.ts`,
+ *     `adapters/weather/put-archive-day.test.ts` and
+ *     `adapters/weather/put-forecast-weather.test.ts` — items, presences and
+ *     absences asserted as DynamoDB would hold them.
+ *   * `scripts/smoke/abuse-checks.ts` — reads the expiry back off a live row
+ *     typed as `Record<string, NativeAttributeValue>`, so nothing couples it to
+ *     this constant at all: a rename leaves it compiling, passing every offline
+ *     check, and asserting about an attribute the adapter no longer writes,
+ *     until a smoke run against real DynamoDB says otherwise. The weakest link
+ *     in this list, and the reason the list exists.
+ *   * `.claude/scripts/check-infra-mirrors.sh` — its header prose counts "the
+ *     `expiresAt` TTL attribute" as three of its records, and
+ *     `check-infra-mirrors.test.sh`'s fixtures restate the name on three
+ *     `ttl` blocks and on a stand-in for this constant. Both are deliberate:
+ *     a harness generated from the values it checks would follow a rename into
+ *     agreement with it. A rename therefore leaves the suite green while it
+ *     exercises an abandoned name, which is a harness proving nothing rather
+ *     than a harness failing.
  */
 export const TTL_ATTRIBUTE_NAME = 'expiresAt';
 

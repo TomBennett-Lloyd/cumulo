@@ -99,7 +99,10 @@ import { DYNAMODB_BATCH_WRITE_SIZE, STORAGE_COMMAND_WORST_MS } from '@cumulo/sto
  * refuses anything it cannot parse rather than skipping it, so an expression
  * here does not weaken the gate quietly, it stops the build with a non-verdict.
  * The value's *relation* to the gateway ceiling is carried by
- * `request-budget.test.ts` instead, where an inequality can be expressed.
+ * `request-budget.test.ts` instead — not because the gate holds only
+ * equalities (it holds strict bounds and floors too), but because that ceiling
+ * has no second declared side here for a record to name, as the constant below
+ * spells out.
  */
 export const API_LAMBDA_TIMEOUT_MS = 15_000;
 

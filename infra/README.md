@@ -922,7 +922,7 @@ One Lambda, one API Gateway HTTP API with its `$default` stage and integration, 
 cd infra/api
 ```
 
-**This is the first stack in the platform that is reachable from the public internet**, and the one property to hold onto while reading the rest: the write endpoint is unauthenticated by design (ADR 0001 — auth is #30), so the stage throttle is what turns "we hope nobody hammers the demo" into an arithmetic bound of ≈ $36/month. It is two lines in `gateway.tf`, and an apply that dropped them would remove the bound silently.
+**This is the first stack in the platform that is reachable from the public internet**, and the one property to hold onto while reading the rest: the write endpoint is unauthenticated by design (ADR 0001 — auth is #30), so the stage throttle is what turns "we hope nobody hammers the demo" into an arithmetic bound of ≈ $36/month. It is two lines in `gateway.tf`, and an apply that dropped them would remove the bound — silently for one of the two. `throttling_rate_limit` is a declared infra mirror (#133), held strictly above the web fan-out's launch rate, so deleting it (or the block around it) exits 2 at `pnpm verify`; dropping `throttling_burst_limit` on its own is the half nothing catches.
 
 **Prerequisites**, in this order and for these reasons:
 
