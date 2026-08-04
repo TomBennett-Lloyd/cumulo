@@ -25,6 +25,7 @@ import {
   type BatchPolicy,
   type BatchWriteOutcome,
 } from '../../batch';
+import { requireUniqueKeys } from '../../write-preconditions';
 import { StorageAdapterBase, type BatchingAdapterDeps } from '../storage-adapter-base';
 import { capacityCancelled } from '../transaction-cancellation';
 
@@ -111,8 +112,30 @@ export class WeatherAdapter extends StorageAdapterBase {
   async putForecastWeather(
     readings: readonly ForecastWeatherReading[],
   ): Promise<BatchWriteOutcome> {
-    const requests = readings.map((reading) => ({
-      PutRequest: { Item: toForecastItem(reading) },
+    // The items exactly as they will be stored, built once. The precondition
+    // below then reads its key off them — `locationId|sk`, the pair DynamoDB
+    // actually addresses — instead of re-deriving it from the reading, so the
+    // key that is checked cannot drift from the key that is written
+    // (`series-adapter.ts`'s `putSeriesItems` compares the same way).
+    const items = readings.map((reading) => toForecastItem(reading));
+
+    // Two readings for one location-hour are refused rather than de-duplicated
+    // last-wins (see `requireUniqueKeys`): a provider response repeating an hour
+    // is a fault this cycle should name, not quietly halve.
+    //
+    // Before `sending`, like every check below it: inside the wrap, a caller's
+    // bad input would surface as a `StorageError` blaming the table (#166).
+    requireUniqueKeys(
+      'putForecastWeather',
+      items.map((item) => `${item.locationId}|${item.sk}`),
+    );
+    // `drainBatches` refuses the same policy, but it does so inside the wrap;
+    // hoisted here, an unusable retry curve is the programming error it is,
+    // reported identically from every entry point on both batching adapters.
+    requireUsablePolicy('putForecastWeather', this.batchPolicy);
+
+    const requests = items.map((item) => ({
+      PutRequest: { Item: item },
     }));
 
     const sendWriteBatch = async (batch: WriteRequestItem[]): Promise<WriteRequestItem[]> => {
@@ -198,6 +221,17 @@ export class WeatherAdapter extends StorageAdapterBase {
       );
     }
 
+    // With one location and one day already enforced above, a duplicate item is
+    // a repeated hour — so `validTime` is the whole key here. Refused, not
+    // de-duplicated (see `requireUniqueKeys`): `TransactWriteItems` rejects a
+    // transaction carrying a key twice, so the choice is only between a
+    // caller-blaming refusal here and a `ValidationException` dressed as a
+    // `StorageError` there.
+    requireUniqueKeys(
+      'putArchiveDay',
+      readings.map((reading) => reading.validTime),
+    );
+
     // One transaction, so the marker and the readings it vouches for land
     // together or not at all: a partial fetch can never leave a marker
     // claiming coverage it does not have (ADR 0002 §3 / #16). Splitting this
@@ -220,9 +254,12 @@ export class WeatherAdapter extends StorageAdapterBase {
     // sleep the tests already use.
     // The loop below is bounded by `maxAttempts`, so a policy below 1 would
     // run no iterations at all and resolve — a day reported written that was
-    // never sent. `drainBatches` refuses the same policy on the other two
-    // methods here, and this path must refuse it identically or the same bad
-    // deps would fail loudly on a batch write and silently on an archive day.
+    // never sent. This hoisted check is not special to this method: every batch
+    // entry point on both batching adapters now refuses the policy here, ahead
+    // of `sending`, so one bad composition root fails identically whichever it
+    // reaches. `drainBatches` still runs the identical check of its own, but
+    // that copy is defence for callers who reach the drain directly — on these
+    // paths it would fire inside the wrap, too late to blame the right party.
     // Outside `sending` deliberately: a policy this broken is a programming
     // error, not a storage outage, and dressing it as a `StorageError` would
     // tell an operator DynamoDB was down (error-handling rule 1).
@@ -302,6 +339,11 @@ export class WeatherAdapter extends StorageAdapterBase {
       // and hands back only what never got an answer.
       return response.UnprocessedKeys?.[this.tableName]?.Keys ?? [];
     };
+
+    // Hoisted for the same reason as on the two write paths: `drainBatches`
+    // would refuse this policy from inside the wrap, where a composition-root
+    // bug reads as DynamoDB having failed on the table (#166).
+    requireUsablePolicy('listFetchedArchiveDays', this.batchPolicy);
 
     const outcome = await this.sending('listFetchedArchiveDays', { locationId: partitionKey }, () =>
       drainBatches(sendGetBatch, keys, BATCH_GET_SIZE, this.batchPolicy),

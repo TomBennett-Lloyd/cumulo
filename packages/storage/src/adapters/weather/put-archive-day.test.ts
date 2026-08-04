@@ -1,6 +1,7 @@
 import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { StorageError } from '../../errors';
 import { captureStorageError } from '../storage-error-capture';
 
 import type { WeatherAdapter } from './weather-adapter';
@@ -166,6 +167,26 @@ describe('putArchiveDay', () => {
     }
   });
 
+  it('refuses a day that repeats an hour, before any command is sent', async () => {
+    // One location and one day are already enforced above, so a duplicate item
+    // can only be a repeated hour. `TransactWriteItems` rejects a transaction
+    // carrying one key twice, so refusing here changes only who gets blamed:
+    // the caller that built the day, rather than the table.
+    ddbMock.on(TransactWriteCommand).resolves({});
+
+    const rejection = adapter().putArchiveDay(DAY, [
+      archiveReading(firstHour),
+      archiveReading(secondHour),
+      archiveReading(firstHour),
+    ]);
+
+    await expect(rejection).rejects.toThrow(
+      `putArchiveDay: two items share the key ${firstHour} — the caller must de-duplicate before writing`,
+    );
+    await expect(rejection).rejects.not.toBeInstanceOf(StorageError);
+    expect(ddbMock.calls()).toHaveLength(0);
+  });
+
   it('wraps a failed transaction in a StorageError naming the marker it was writing', async () => {
     const failure = new Error('TransactionCanceledException');
     ddbMock.on(TransactWriteCommand).rejects(failure);
@@ -266,11 +287,15 @@ describe('putArchiveDay', () => {
     // identical policy, so the two paths in this adapter answer alike.
     ddbMock.on(TransactWriteCommand).resolves({});
 
-    await expect(
-      adapterWithPolicy({ ...instantPolicy, maxAttempts: 0 }).putArchiveDay(DAY, [
-        archiveReading(firstHour),
-      ]),
-    ).rejects.toThrow(/maxAttempts must be a positive integer/);
+    const rejection = adapterWithPolicy({ ...instantPolicy, maxAttempts: 0 }).putArchiveDay(DAY, [
+      archiveReading(firstHour),
+    ]);
+
+    await expect(rejection).rejects.toThrow(/maxAttempts must be a positive integer/);
+    // A plain error, which is the half that the hoist buys: the same policy
+    // reaching `drainBatches` inside a wrap would arrive as a `StorageError`
+    // blaming the table. The other three batch entry points now answer alike.
+    await expect(rejection).rejects.not.toBeInstanceOf(StorageError);
     expect(ddbMock.calls()).toHaveLength(0);
   });
 

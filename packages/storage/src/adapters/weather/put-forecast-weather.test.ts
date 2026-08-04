@@ -1,12 +1,15 @@
 import { BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { StorageError } from '../../errors';
 import { captureStorageError } from '../storage-error-capture';
 
 import {
+  CORK,
   DUBLIN_ID,
   TABLE,
   adapter,
+  adapterWithPolicy,
   ddbMock,
   forecastReading,
   hourlyFrom,
@@ -59,9 +62,15 @@ describe('putForecastWeather', () => {
   it('collapses the antimeridian: 180°E and 180°W share one partition', async () => {
     ddbMock.on(BatchWriteCommand).resolves({});
 
+    // Consecutive hours rather than the same hour twice, precisely *because*
+    // the two longitudes collapse to one partition: at one hour these would be
+    // two Puts for one key, which this method now refuses (and DynamoDB would
+    // reject) — see the duplicate-key case below. Different hours keep the
+    // partition question the only one being asked.
+    const [firstHour = '', secondHour = ''] = hourlyFrom(HOUR, 2);
     await adapter().putForecastWeather([
-      forecastReading(HOUR, { latitude: -16.5, longitude: 180 }),
-      forecastReading(HOUR, { latitude: -16.5, longitude: -180 }),
+      forecastReading(firstHour, { latitude: -16.5, longitude: 180 }),
+      forecastReading(secondHour, { latitude: -16.5, longitude: -180 }),
     ]);
 
     const [input] = writeInputs();
@@ -121,6 +130,44 @@ describe('putForecastWeather', () => {
     ddbMock.on(BatchWriteCommand).resolves({});
 
     expect(await adapter().putForecastWeather([])).toEqual({ status: 'complete' });
+    expect(ddbMock.calls()).toHaveLength(0);
+  });
+
+  it('refuses two readings for one location-hour before any command is sent', async () => {
+    ddbMock.on(BatchWriteCommand).resolves({});
+    const repeated = forecastReading(HOUR);
+
+    const rejection = adapter().putForecastWeather([
+      repeated,
+      forecastReading(HOUR, CORK),
+      repeated,
+    ]);
+
+    await expect(rejection).rejects.toThrow(
+      `putForecastWeather: two items share the key ${DUBLIN_ID}|FORECAST#T#${HOUR} — the caller must de-duplicate before writing`,
+    );
+    // A plain error, not a `StorageError`: a provider response repeating an
+    // hour is a fault upstream of this table, and naming the table would send
+    // the operator to the wrong place (#166). The Cork reading at the same
+    // hour is untouched by the check — the location is half the key.
+    await expect(rejection).rejects.not.toBeInstanceOf(StorageError);
+    expect(ddbMock.calls()).toHaveLength(0);
+  });
+
+  it('refuses a policy that could never send, as a caller error rather than a table failure', async () => {
+    ddbMock.on(BatchWriteCommand).resolves({});
+
+    const rejection = adapterWithPolicy({ maxAttempts: 0, baseDelayMs: 0 }).putForecastWeather([
+      forecastReading(HOUR),
+    ]);
+
+    await expect(rejection).rejects.toThrow(
+      'putForecastWeather: policy.maxAttempts must be a positive integer, got 0',
+    );
+    // `drainBatches` refuses the identical policy from inside `sending`, where
+    // it would arrive as a `StorageError` claiming the table failed. Hoisted,
+    // this path answers as `putArchiveDay` already does.
+    await expect(rejection).rejects.not.toBeInstanceOf(StorageError);
     expect(ddbMock.calls()).toHaveLength(0);
   });
 

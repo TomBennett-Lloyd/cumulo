@@ -2,12 +2,13 @@
  * One rendering of an unknown thrown value, for this service's structured log
  * lines.
  *
- * Shared rather than restated: `main.ts`'s boundary describes what a request
- * threw, and `sites/series-cleanup.ts` describes what a best-effort cleanup
- * threw. Two contexts, one intent — turn a `catch`'s `unknown` into something a
- * human reads in CloudWatch Logs Insights — so a change to the format would
- * leave the other caller wrong until it changed the same way, which is the
- * repetition policy's test for extracting (`docs/standards/structure.md` rule 7).
+ * Its consumer is `main.ts`'s request boundary, which describes what a request
+ * threw. Its own module rather than a closure inside that boundary because the
+ * intent — turn a `catch`'s `unknown` into something a human reads in
+ * CloudWatch Logs Insights — is a decision about the *log format*, and the next
+ * `catch` this service is allowed to write must render its throw identically or
+ * be wrong (`docs/standards/structure.md` rule 7). Keeping it addressable is
+ * what makes that a shared statement rather than a coincidence.
  *
  * `unknown` is the honest parameter type: JavaScript allows throwing anything,
  * and a thrown string is precisely the case where a naive `.message` would log

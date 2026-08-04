@@ -51,13 +51,13 @@ const SERIES_HORIZON_HOURS = 48;
  * the requests that are not part of it, rather than sitting exactly on a limit
  * whose other consumers this app cannot see.
  *
- * This is deliberately **not** a declared infra mirror
- * (`architecture.md` rule 8). `throttling_rate_limit` lives inside the stage's
- * `default_route_settings` sub-block, and `check-infra-mirrors.sh` reads only
- * attributes indented directly inside a `resource` block — it refuses a nested
- * one outright (exit 2, "declares no top-level attribute"), verified by running
- * the gate against this pair. So the citation above is the enforcement, and the
- * gate's limitation is recorded in `docs/tech-debt.md`.
+ * The pair is a declared infra mirror (`architecture.md` rule 8), held by
+ * `.claude/scripts/check-infra-mirrors.sh` in the `verify` composite — and held
+ * as a strict bound rather than an equality: this constant must stay *below*
+ * the stage's `default_route_settings.throttling_rate_limit`, which is the
+ * mechanical form of "under the sustained rate with room left". Raising the
+ * fan-out to the throttle, or lowering the throttle to the fan-out, is a red
+ * build rather than a fleet that spends the whole shared bucket on itself.
  *
  * The routes this fans out over — `GET /v1/sites` and `GET …/forecast` — are
  * **not** metered by the API's per-IP limiter (the route table in
@@ -67,7 +67,7 @@ const SERIES_HORIZON_HOURS = 48;
  * blocked for an hour by loading the dashboard once. That is why the fleet view
  * reads `/forecast` per site and why it must never be re-pointed at `/series`.
  */
-const FLEET_FANOUT_LAUNCHES_PER_SECOND = 8;
+export const FLEET_FANOUT_LAUNCHES_PER_SECOND = 8;
 
 /** GET carries no body and no headers of its own; shared so it is written once. */
 const GET_INIT: RequestInit = { method: 'GET' };

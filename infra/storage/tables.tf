@@ -230,6 +230,12 @@ resource "aws_dynamodb_table" "series" {
   # The adapter writes `expiresAt` (epoch seconds) = validTime + 90 days.
   # Deletes are free and asynchronous — TTL is not a guaranteed-punctual clock,
   # so nothing may depend on an expired item being gone at a particular moment.
+  #
+  # The attribute name below is owned jointly with `TTL_ATTRIBUTE_NAME` in
+  # `packages/storage/src/ttl.ts`, which every writer of an expiring item
+  # derives its key from; per architecture rule 8 the pair is declared to
+  # `check:infra-mirrors`, so renaming one side fails `verify` rather than
+  # leaving items that never expire.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true
@@ -301,6 +307,11 @@ resource "aws_dynamodb_table" "weather" {
   # their day markers carry no `expiresAt` and therefore never expire — an
   # archive item that vanished would silently re-spend Open-Meteo quota, and a
   # marker that vanished before its readings would be worse.
+  #
+  # The attribute name below is the same declared mirror of `TTL_ATTRIBUTE_NAME`
+  # in `packages/storage/src/ttl.ts` that the `series` table carries, checked
+  # per table by `check:infra-mirrors` (rule 8) — a rename here alone reds the
+  # gate on this address.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true
@@ -381,6 +392,10 @@ resource "aws_dynamodb_table" "abuse" {
     type = "S"
   }
 
+  # Third instance of the same declared mirror: the attribute name below and
+  # `TTL_ATTRIBUTE_NAME` in `packages/storage/src/ttl.ts`, which the limiter's
+  # adapter writes every row's expiry under. Declared to `check:infra-mirrors`
+  # per architecture rule 8, so a rename cannot land on one side only.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true

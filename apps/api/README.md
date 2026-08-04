@@ -76,14 +76,11 @@ own `{ "message": … }`:
   error boundary can run, so there is nothing left to answer in schema — and on `POST /v1/sites`
   that is worse than an error, because the 201 body is the only place the caller learns the new
   site's id. The per-request deadline (`http/request-deadline.ts`) makes this unreachable through
-  every _looping_ path: series pagination, `POST`'s store-and-evict attempts, `DELETE`'s counted
-  deletes and the series cleanup all stop between commands and answer in schema instead. Two
-  residuals remain, both stated rather than silent — independent per-command worst cases coinciding
-  in one request's ungated straight-line prefix, which `request-budget.ts` counts per route and
-  `docs/tech-debt.md` owns; and two coinciding tail events inside an admitted series-cleanup pass,
-  which is admitted at one command and then spends up to two (`sites/series-cleanup.ts`), owned by
-  [#167](https://github.com/TomBennett-Lloyd/cumulo/issues/167), which moves the pass off the
-  request path.
+  every _looping_ path: series pagination, `POST`'s store-and-evict attempts and `DELETE`'s counted
+  deletes all stop between commands and answer in schema instead, and every admitted unit is exactly
+  one storage command, so none can outrun what was priced for it. One residual remains, stated
+  rather than silent — independent per-command worst cases coinciding in one request's ungated
+  straight-line prefix, which `request-budget.ts` counts per route and `docs/tech-debt.md` owns.
 
 So a client cannot recognise either of these from the body and must not try: **map on the status**,
 and read `Retry-After` when it is present rather than requiring it.
@@ -111,12 +108,15 @@ than by a check — eviction reads a sparse GSI that only user sites are written
 itself is a counter item updated in the same DynamoDB transaction as the site row, which is what
 makes "at most 40" a guarantee rather than a race between two concurrent creates.
 
-Deleting a site — by eviction or by `DELETE` — also prunes its `cumulo-series` rows, best-effort
-(access pattern X3). "Best-effort" is the honest word: the cleanup is awaited and its failures are
-logged (`api.site.series-cleanup-failed`, `api.site.series-cleanup-incomplete`) but never fail the
-request, because the site is already gone by then and a 500 would be a lie about the operation the
-caller asked for. Anything left behind is unreachable — every series route resolves the site first —
-and expires under ADR 0002's 90-day TTL.
+Deleting a site — by eviction or by `DELETE` — leaves its `cumulo-series` rows to the table's TTL
+(access pattern X3,
+[ADR 0007](../../docs/adr/0007-series-deletion-is-ttl-only.md)). Nothing is deleted on the request
+path, and the row's own removal is what makes that safe: every series route resolves the site first
+and 404s, so the points are unreachable from the moment the site is gone, and nothing writes more of
+them because ingestion and forecasting only serve fleet-listed sites. What is left costs no reads
+and expires within ADR 0002's 90-day retention. The prompt half this replaces could only ever remove
+one batch of a partition holding thousands of rows, and it ran after the caller's write had
+committed — where its latency was the 201 or 204's to lose.
 
 ## Abuse protection
 

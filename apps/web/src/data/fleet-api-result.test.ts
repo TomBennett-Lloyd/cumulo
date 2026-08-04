@@ -118,21 +118,43 @@ describe('parseFleetApiResponse', () => {
     expect('retryAfterSeconds' in error).toBe(false);
   });
 
-  it('maps 500 to network', async () => {
+  it('maps 500 to server-fault', async () => {
     const response = jsonResponse(apiErrorBody('internal', 'the request could not be completed'), {
       status: 500,
     });
 
     const error = expectFailure(await parse(response));
-    expect(error.code).toBe('network');
+    expect(error.code).toBe('server-fault');
     expect(error.message).toContain(OPERATION);
   });
 
-  it('maps an unlisted status to network rather than to silence', async () => {
+  it('maps an unlisted 5xx to server-fault rather than to silence', async () => {
     const error = expectFailure(await parse(new Response('Bad Gateway', { status: 502 })));
 
-    expect(error.code).toBe('network');
+    expect(error.code).toBe('server-fault');
     expect(error.message).toContain('502');
+  });
+
+  it('maps an unlisted 4xx to invalid-request, the direction its class states', async () => {
+    // 422 is a status this API does not answer today. It is classified by its
+    // class rather than swept onto a catch-all, so growing it changes nothing
+    // here — and the blame it carries is the fleet refusing what we sent.
+    const response = jsonResponse(apiErrorBody('validation_failed', 'unprocessable'), {
+      status: 422,
+    });
+
+    const error = expectFailure(await parse(response));
+    expect(error.code).toBe('invalid-request');
+    expect(error.message).toContain('422');
+  });
+
+  it('maps a non-ok status below 400 to invalid-response', async () => {
+    // A 3xx `fetch` surfaced rather than followed: the fleet answered, and the
+    // answer is a shape this client cannot use.
+    const error = expectFailure(await parse(new Response('See Other', { status: 303 })));
+
+    expect(error.code).toBe('invalid-response');
+    expect(error.message).toContain('303');
   });
 });
 

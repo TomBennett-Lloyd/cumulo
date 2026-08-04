@@ -77,12 +77,12 @@ describe('HttpFleetDataSource reads', () => {
     expect(expectFailure(await source.listSites()).code).toBe('forbidden');
   });
 
-  it('maps a 500 to network', async () => {
+  it('maps a 500 to server-fault', async () => {
     const { source } = sourceAnswering(() =>
       jsonResponse({ code: 'internal', message: 'the request could not be completed' }, 500),
     );
 
-    expect(expectFailure(await source.listSites()).code).toBe('network');
+    expect(expectFailure(await source.listSites()).code).toBe('server-fault');
   });
 
   it('maps a rejecting transport to network without letting the rejection escape', async () => {
@@ -265,7 +265,7 @@ describe('HttpFleetDataSource fleet fan-out', () => {
     );
 
     const error = expectFailure(await source.fleetForecasts(24));
-    expect(error.code).toBe('network');
+    expect(error.code).toBe('server-fault');
     expect(error.message).toContain(SITE_A);
   });
 

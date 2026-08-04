@@ -1,4 +1,4 @@
-import { utcIsoTimestampSchema } from '@cumulo/shared';
+import { utcIsoTimestampSchema, type Forecast } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,7 +9,7 @@ import {
   reading,
   sitePhysics,
 } from './forecast-fixtures';
-import { locationForecasts } from './location-forecasts';
+import { locationForecasts, type LocationForecastsInput } from './location-forecasts';
 
 /**
  * The pure core, tested densely and cheaply (`docs/standards/testing.md` rule 2).
@@ -23,17 +23,26 @@ import { locationForecasts } from './location-forecasts';
 
 const rathmines = sitePhysics({ id: RATHMINES_ID, latitude: 53.3201, longitude: -6.2652 });
 
+/**
+ * The rows of a completed fan-out, or a failure naming what came back instead. A
+ * typed narrowing rather than an assertion: an `implausible-hour` outcome reaching
+ * a test that expected rows should read as that outcome, not as a length mismatch.
+ */
+const rowsOf = (input: LocationForecastsInput): Forecast[] => {
+  const outcome = locationForecasts(input);
+  if (outcome.status !== 'complete') {
+    throw new Error(`expected a complete fan-out, got '${outcome.status}' — ${outcome.detail}`);
+  }
+  return outcome.forecasts;
+};
+
 describe('locationForecasts', () => {
   it('produces nothing for a location with no sites', () => {
-    expect(locationForecasts({ sites: [], readings: [reading()], issuedAt: ISSUED_AT })).toEqual(
-      [],
-    );
+    expect(rowsOf({ sites: [], readings: [reading()], issuedAt: ISSUED_AT })).toEqual([]);
   });
 
   it('produces nothing for a location with no readings', () => {
-    expect(
-      locationForecasts({ sites: [sitePhysics()], readings: [], issuedAt: ISSUED_AT }),
-    ).toEqual([]);
+    expect(rowsOf({ sites: [sitePhysics()], readings: [], issuedAt: ISSUED_AT })).toEqual([]);
   });
 
   it('produces one row per site per hour', () => {
@@ -43,7 +52,7 @@ describe('locationForecasts', () => {
       reading({ validTime: '2026-07-31T13:00:00Z' }),
     ];
 
-    const forecasts = locationForecasts({
+    const forecasts = rowsOf({
       sites: [sitePhysics(), rathmines],
       readings,
       issuedAt: ISSUED_AT,
@@ -61,7 +70,7 @@ describe('locationForecasts', () => {
       reading({ validTime: '2026-07-31T12:00:00Z' }),
     ];
 
-    const forecasts = locationForecasts({
+    const forecasts = rowsOf({
       sites: [sitePhysics(), rathmines],
       readings,
       issuedAt: ISSUED_AT,
@@ -78,7 +87,7 @@ describe('locationForecasts', () => {
   it('emits a zero-power row for a night hour rather than omitting it', () => {
     // The read side plots what it finds, so an absent row and a zero row are the
     // difference between a flat night and a hole in the chart.
-    const [nightForecast] = locationForecasts({
+    const [nightForecast] = rowsOf({
       sites: [sitePhysics()],
       readings: [nightReading()],
       issuedAt: ISSUED_AT,
@@ -93,7 +102,7 @@ describe('locationForecasts', () => {
     // Testing rule 7's shape applied to a fixture rather than a knob: a suite in
     // which every hour returned 0 would pass the night assertion for the wrong
     // reason.
-    const [middayForecast] = locationForecasts({
+    const [middayForecast] = rowsOf({
       sites: [sitePhysics()],
       readings: [reading()],
       issuedAt: ISSUED_AT,
@@ -106,7 +115,7 @@ describe('locationForecasts', () => {
   it('stamps every row with the model, the vintage and the weather provenance', () => {
     const vintage = utcIsoTimestampSchema.parse('2026-07-31T12:34:56Z');
 
-    const forecasts = locationForecasts({
+    const forecasts = rowsOf({
       sites: [sitePhysics(), rathmines],
       readings: [reading(), nightReading()],
       issuedAt: vintage,
@@ -128,7 +137,7 @@ describe('locationForecasts', () => {
       reading({ validTime: '2026-07-31T12:00:00Z' }),
     ];
 
-    const forecasts = locationForecasts({
+    const forecasts = rowsOf({
       sites: [sitePhysics()],
       readings,
       issuedAt: ISSUED_AT,
@@ -151,6 +160,34 @@ describe('locationForecasts', () => {
       }),
     );
 
-    expect(locationForecasts({ sites, readings, issuedAt: ISSUED_AT })).toHaveLength(240);
+    expect(rowsOf({ sites, readings, issuedAt: ISSUED_AT })).toHaveLength(240);
+  });
+
+  it('stops at the first implausible hour and reports the site and hour it belongs to', () => {
+    // The whole record fails on this outcome (`consume-message.ts`), so stopping is
+    // the honest shape: half a horizon written and half reported would leave the two
+    // halves of one message on different vintages after the redelivery.
+    const outcome = locationForecasts({
+      sites: [sitePhysics({ tiltDegrees: 90, azimuthDegrees: 89.47 })],
+      readings: [
+        reading({ validTime: '2026-07-31T11:00:00Z' }),
+        reading({
+          validTime: '2026-03-20T07:00:00Z',
+          shortwaveRadiationWm2: 1500,
+          directRadiationWm2: 1500,
+          diffuseRadiationWm2: 1500,
+          directNormalIrradianceWm2: 1500,
+        }),
+      ],
+      issuedAt: ISSUED_AT,
+    });
+
+    expect(outcome.status).toBe('implausible-hour');
+    if (outcome.status !== 'implausible-hour') {
+      throw new Error('unreachable: the assertion above already refused every other arm');
+    }
+    expect(outcome.siteId).toBe(RANELAGH_ID);
+    expect(outcome.validTime).toBe('2026-03-20T07:00:00Z');
+    expect(outcome.detail).toContain('acPowerKw');
   });
 });

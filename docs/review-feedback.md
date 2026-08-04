@@ -156,3 +156,17 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "approve" — owner ratified ADR 0006's four decisions as presented: MAX_USER_SITES = 40, the 30/60 s → 1 h block threshold, no WAF (HTTP-API unattachable; CloudFront-in-front recorded as the upgrade path with the limiter-identity prerequisite), and the free-10 alarm allocation with the 11th at $0.10/month.
 - **Why**: `docs/adr/**` is a humanAlways path; the ADR is where the decisions that ossify live, and the four numbers above are the ones a future reader will hold the owner to.
 - **How applied**: PR #147 merged on the approval; C8's live evidence run (E1–E7) closes #29 against the deployed behaviour.
+
+## 2026-08-03 — adr-0007-ttl-only-deletion
+
+- **Category**: design-question-then-approval
+- **Feedback**: "could we update the TTL to expire asap for that series instead of doing a batch delete? … what if there are custom sites that have been around for a while, that have a large series?" — then, on the analysis: "the ttl one seems like a good decision, i approve".
+- **Why**: The owner probed whether TTL-to-now beats TTL-only for orphaned series. Analysis showed TTL-to-now costs the same writes as the batch delete it replaces and re-grants the IAM series-write the PR removes; the rolling 90-day `expiresAt` cap means no site ever holds more than the retention window, so the "large old series" case cannot arise; orphan storage is ~$0.0003–0.0006/site/month inside the free 25 GB. A privacy-shaped requirement (not in scope) would change the answer to an offline sweeper behind its own issue — noted on ADR 0007's revisit triggers.
+- **How applied**: PR #211 merged as-is on the approval (TTL-only deletion, ADR 0007; closes #167).
+
+## 2026-08-04 — adr-0002-amendment-capacity
+
+- **Category**: approved-no-changes
+- **Feedback**: "227 and 245 look good" — owner approval for ADR 0002's dated Amendments entry recording the weather table's move to PAY_PER_REQUEST (#156) and the capacity figures the change retired.
+- **Why**: `docs/adr/**` is a humanAlways path; the amendment trues the ADR's stated values without touching its reasoning, per the convention decided 2026-08-01, and the PR body flagged the three historical mentions left as legitimately past-tense.
+- **How applied**: PR #227 merged on the approval.
