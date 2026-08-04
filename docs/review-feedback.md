@@ -170,3 +170,10 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "227 and 245 look good" — owner approval for ADR 0002's dated Amendments entry recording the weather table's move to PAY_PER_REQUEST (#156) and the capacity figures the change retired.
 - **Why**: `docs/adr/**` is a humanAlways path; the amendment trues the ADR's stated values without touching its reasoning, per the convention decided 2026-08-01, and the PR body flagged the three historical mentions left as legitimately past-tense.
 - **How applied**: PR #227 merged on the approval.
+
+## 2026-08-04 — architecture-trigger-owned-values
+
+- **Category**: approved-no-changes
+- **Feedback**: "227 and 245 look good" — owner approval for widening the architecture trigger pair (CLAUDE.md standards index row + `docs/standards/architecture.md`'s own Trigger line) to fire on restating an owned value in code **or prose**, keeping the two phrasings in step.
+- **Why**: CLAUDE.md is a humanAlways path; the trigger is what routes agents to rule 9, and #231's review showed the narrow phrasing under-firing on prose restatements.
+- **How applied**: PR #245 merged on the approval.
