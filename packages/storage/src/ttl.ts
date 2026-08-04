@@ -39,10 +39,12 @@ export const SERIES_RETENTION_DAYS = 90;
  * deployed TTL configuration back.
  *
  * **Restatement ledger** (`docs/standards/architecture.md` rule 9) — every site
- * that carries the literal `'expiresAt'` on purpose: they assert the wire shape
- * rather than produce it, or (the gate and its harness) declare and doctor it,
- * and each would prove nothing if it agreed with the code by construction.
- * Renaming this constant means visiting all of these:
+ * where the literal `'expiresAt'` is load-bearing: asserted as the wire shape,
+ * or (the gate and its harness) declared and doctored, and each would prove
+ * nothing if it agreed with the code by construction. Prose mentions of the
+ * name — comments, docs, smoke check descriptions — are deliberately not
+ * enumerated here (#249 owns that class). Renaming this constant means
+ * visiting all of these:
  *
  *   * `infra/storage/tables.tf` — the three `ttl { attribute_name = … }` blocks.
  *     The deployed owner, and the only one this repo can rename without AWS;
