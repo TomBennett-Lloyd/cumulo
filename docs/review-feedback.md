@@ -156,3 +156,10 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "approve" — owner ratified ADR 0006's four decisions as presented: MAX_USER_SITES = 40, the 30/60 s → 1 h block threshold, no WAF (HTTP-API unattachable; CloudFront-in-front recorded as the upgrade path with the limiter-identity prerequisite), and the free-10 alarm allocation with the 11th at $0.10/month.
 - **Why**: `docs/adr/**` is a humanAlways path; the ADR is where the decisions that ossify live, and the four numbers above are the ones a future reader will hold the owner to.
 - **How applied**: PR #147 merged on the approval; C8's live evidence run (E1–E7) closes #29 against the deployed behaviour.
+
+## 2026-08-04 — adr-0002-amendment-capacity
+
+- **Category**: approved-no-changes
+- **Feedback**: "227 and 245 look good" — owner approval for ADR 0002's dated Amendments entry recording the weather table's move to PAY_PER_REQUEST (#156) and the capacity figures the change retired.
+- **Why**: `docs/adr/**` is a humanAlways path; the amendment trues the ADR's stated values without touching its reasoning, per the convention decided 2026-08-01, and the PR body flagged the three historical mentions left as legitimately past-tense.
+- **How applied**: PR #227 merged on the approval.
