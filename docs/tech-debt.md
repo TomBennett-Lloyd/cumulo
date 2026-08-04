@@ -47,8 +47,6 @@ Maintenance: a row dies with its issue. Each capturing issue's implementation ed
 | The token preview hand-rolls a chart the chrome convention cannot reach · A dashboard test pins the chart's chrome wording by whole-table `toEqual` · Five of the twelve consolidated strings sit outside every phrase-class sweep · The spoken chart readout carries neither the unit nor the clock | [#235](https://github.com/TomBennett-Lloyd/cumulo/issues/235)           |
 | The hooks' "stdin was unreadable" report is dead code behind a hang                                                                                                                                                                                                                                  | [#236](https://github.com/TomBennett-Lloyd/cumulo/issues/236)           |
 
-> > > > > > > origin/main
-
 ---
 
 ## 2026-07-30 — `aws_budgets_budget.cost_types` left at AWS defaults
