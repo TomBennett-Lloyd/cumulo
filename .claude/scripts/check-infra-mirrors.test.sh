@@ -788,5 +788,116 @@ expect_not_out "check-infra-mirrors: OK"
 end
 
 # ==========================================================================================
+# 27. a wrong field count made of a TRAILING EMPTY field is refused too
+# ==========================================================================================
+# The hole the arity check had until the #133 review: `str-eq|…|VALUE|` has six
+# fields where the mode takes five, but the sixth is empty — and an arity check
+# that asked "is there anything beyond the last field?" read that empty string
+# and answered no. A record whose author meant a sixth field is a record the
+# reader does not implement, whether or not they got as far as typing the value,
+# so the count is taken from the separators and this shape refuses like any
+# other wrong count. Reached by doctoring a copy of the gate, as cases 10, 25
+# and 26 are, because MIRRORS is baked into the script.
+begin "a str-eq record with a trailing empty sixth field exits 2"
+fixture trailing_field 300 300_000
+gate_copy check-infra-mirrors-trailing-field.sh
+# \K rather than a capture group, for the reason case 20 states. The `series`
+# address is what keeps the edit on ONE of the three str-eq records, so the
+# refusal below is about that record rather than about all of them.
+must perl -pi -e 's/aws_dynamodb_table\.series\|.*TTL_ATTRIBUTE_NAME\K"/|"/' "$COPY"
+fixture_has "$COPY" 'TTL_ATTRIBUTE_NAME|"'
+run_script_with bash "$COPY" "$DIR"
+expect_rc 2 "$rc"
+expect_out "check-infra-mirrors: 1 declared mirror(s) could not be checked"
+expect_out "BLOCKED MIRRORS[4]: mode 'str-eq' takes exactly 5 fields after the tag, not 6"
+expect_not_out "check-infra-mirrors: OK"
+end
+
+# ==========================================================================================
+# 28. a backslash in the Terraform string value is refused, not compared
+# ==========================================================================================
+# The reader does not interpret escape sequences, and HCL and TypeScript do not
+# spell them alike — so `"expires\tAt"` is a text this gate cannot honestly say
+# is equal or unequal to anything. Exit 2, not 1: without the guard the two
+# texts would simply differ and the gate would report drift, which is a verdict
+# it has not earned.
+begin "a backslash in a Terraform string value is a non-verdict"
+fixture tf_string_escape 300 300_000
+must perl -0pi -e 's/resource "aws_dynamodb_table" "abuse" \{.*?attribute_name = \K"expiresAt"/"expires\\tAt"/s' "$DIR/$TABLES_REL"
+fixture_has "$DIR/$TABLES_REL" 'attribute_name = "expires\tAt"'
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "'aws_dynamodb_table.abuse'.ttl.attribute_name contains a backslash"
+expect_out "BLOCKED"
+expect_not_out "check-infra-mirrors: OK"
+end
+
+# ==========================================================================================
+# 29. a backslash in the Terraform validation pattern is refused too
+# ==========================================================================================
+# The same refusal on the regex side, where it matters more: `[a-z0-9\-]` and
+# `[a-z0-9-]` are the same pattern to a regex engine and different texts to a
+# string comparison, so a reader that compared them would report drift between
+# two validations that admit exactly the same environment names.
+begin "a backslash in the Terraform validation pattern is a non-verdict"
+fixture tf_regex_escape 300 300_000
+must perl -pi -e 's{\Q[a-z0-9-]\E}{[a-z0-9\\-]}' "$DIR/$VARIABLES_REL"
+fixture_has "$DIR/$VARIABLES_REL" 'can(regex("^[a-z0-9\-]+$", var.environment))'
+fixture_lacks "$DIR/$VARIABLES_REL" 'can(regex("^[a-z0-9-]+$", var.environment))'
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "'variable.environment'.validation.condition has a backslash in its pattern"
+expect_out "BLOCKED"
+expect_not_out "check-infra-mirrors: OK"
+end
+
+# ==========================================================================================
+# 30. and a backslash on the TypeScript side of either pair
+# ==========================================================================================
+# Both TypeScript readers refuse it as well, and asymmetry here would be the
+# worst of both: a name or a pattern the gate reads one way on one side and
+# another way on the other is exactly the pair it must decline to approve.
+begin "a backslash in the TypeScript constant is a non-verdict"
+fixture ts_string_escape 300 300_000
+must perl -pi -e "s{'expiresAt'}{'expires\\\\tAt'}" "$DIR/$TTL_TS_REL"
+fixture_has "$DIR/$TTL_TS_REL" "TTL_ATTRIBUTE_NAME = 'expires\\tAt';"
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "TTL_ATTRIBUTE_NAME contains a backslash"
+expect_out "BLOCKED"
+expect_not_out "check-infra-mirrors: OK"
+end
+
+begin "a backslash in the TypeScript pattern is a non-verdict"
+fixture ts_regex_escape 300 300_000
+must perl -pi -e 's{\Q[a-z0-9-]\E}{[a-z0-9\\-]}' "$DIR/$TABLE_NAME_TS_REL"
+fixture_has "$DIR/$TABLE_NAME_TS_REL" 'ENVIRONMENT_PATTERN = /^[a-z0-9\-]+$/;'
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "ENVIRONMENT_PATTERN has a backslash in its pattern"
+expect_out "BLOCKED"
+expect_not_out "check-infra-mirrors: OK"
+end
+
+# ==========================================================================================
+# 31. a flagged regex literal is not the same claim as the HCL validation
+# ==========================================================================================
+# `/^[a-z0-9-]+$/i` has the same pattern TEXT as the Terraform condition and a
+# different meaning: it admits `DEV`, which `terraform apply` would reject. A
+# reader that compared the text alone would call that agreement, so the flagged
+# literal is not read at all — the constant no longer has the one shape the
+# record is about.
+begin "a flagged TypeScript regex literal is a non-verdict"
+fixture ts_regex_flag 300 300_000
+must perl -pi -e 's{ENVIRONMENT_PATTERN = /\^\[a-z0-9-\]\+\$/;}{ENVIRONMENT_PATTERN = /^[a-z0-9-]+\$/i;}' "$DIR/$TABLE_NAME_TS_REL"
+fixture_has "$DIR/$TABLE_NAME_TS_REL" 'ENVIRONMENT_PATTERN = /^[a-z0-9-]+$/i;'
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "declares no 'export const ENVIRONMENT_PATTERN = /<pattern>/;'"
+expect_out "BLOCKED"
+expect_not_out "check-infra-mirrors: OK"
+end
+
+# ==========================================================================================
 
 finish

@@ -28,8 +28,10 @@ describe('API request budget', () => {
   });
 
   it('sits below the gateway integration ceiling it was chosen against', () => {
-    // The inequality `check-infra-mirrors.sh` records as inexpressible: its
-    // records are equalities between two files, and this bound belongs to AWS.
+    // The inequality `check-infra-mirrors.sh` records as inexpressible: every
+    // record addresses a value declared in one file against a value declared in
+    // another, and this bound is AWS's — no file here declares it, so there is
+    // no second side for a record to name.
     // Held here instead — the mirror gate keeps the constant equal to the
     // deployed timeout, so a Terraform change that raised the function past
     // 30 s reaches this assertion and fails, rather than reaching production

@@ -30,8 +30,31 @@ export const SERIES_RETENTION_DAYS = 90;
  * tables and this constant are held equal by `pnpm check:infra-mirrors` in the
  * `verify` composite rather than by the comments that cite each other.
  *
- * Every item builder and key-attribute set in this package writes the attribute
- * through this constant, so the name has one owner on the code side too.
+ * Every production writer of an expiring item names the attribute through this
+ * constant, so the name has one owner on the code side too: the series, weather
+ * and abuse item builders and key-attribute sets, the abuse adapter's
+ * `UpdateExpression` (a string, where a stale name is not a type error, which
+ * is why it interpolates rather than spells), and the smoke check that reads the
+ * deployed TTL configuration back.
+ *
+ * **Restatement ledger** (`docs/standards/architecture.md` rule 9) — the sites
+ * that carry the literal `'expiresAt'` on purpose, because they assert the wire
+ * shape rather than produce it, and would prove nothing if they agreed with the
+ * code by construction. Renaming this constant means visiting these:
+ *
+ *   * `infra/storage/tables.tf` — the three `ttl { attribute_name = … }` blocks.
+ *     The deployed owner, and the only one this repo can rename without AWS;
+ *     held equal to this constant by `check:infra-mirrors`, so it is the one
+ *     entry here that fails a build rather than waiting to be visited.
+ *   * `adapters/series/series-fixtures.ts` — the stored items written out
+ *     literally (that module's own docblock says why), and the series item and
+ *     marshalling tests that assert over them.
+ *   * `adapters/abuse/abuse-adapter.test.ts` — pins the exact
+ *     `UpdateExpression` text DynamoDB is sent, which is the wire shape the
+ *     interpolation above must keep producing.
+ *   * `adapters/abuse/abuse-item.test.ts` and
+ *     `adapters/weather/put-archive-day.test.ts` — items and absences asserted
+ *     as DynamoDB would hold them.
  */
 export const TTL_ATTRIBUTE_NAME = 'expiresAt';
 

@@ -115,10 +115,12 @@ export const API_LAMBDA_TIMEOUT_MS = 15_000;
  * **test** holds it under this ceiling.
  *
  * That last link is the one that was missing. `check-infra-mirrors.sh` records
- * this inequality as the half of the number it cannot express — its records are
- * equalities between two files, and one side of this one is a value AWS owns
- * and no file here declares. Restating it as a constant moves it somewhere a
- * test can bite, which closes it without pretending the gate grew a feature.
+ * this inequality as the half of the number it cannot express — not for want of
+ * a relation (its records hold strict bounds and floors as well as equalities)
+ * but for want of a second side: this ceiling is a value AWS owns and no file
+ * in this repo declares, so there is nothing for a record to address.
+ * Restating it as a constant moves it somewhere a test can bite, which closes
+ * it without pretending the gate grew a feature.
  */
 export const API_GATEWAY_INTEGRATION_TIMEOUT_MS = 30_000;
 

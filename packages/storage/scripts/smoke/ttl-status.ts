@@ -3,6 +3,8 @@ import { equal, ok } from 'node:assert/strict';
 import { DescribeTimeToLiveCommand } from '@aws-sdk/client-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
+import { TTL_ATTRIBUTE_NAME } from '../../src/ttl';
+
 /**
  * Asserts one table's TTL *posture*, read back from DynamoDB.
  *
@@ -26,6 +28,12 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
  * it beyond carrying it, and a second bare client would be a second
  * configuration to keep in step with `createStorageDocumentClient`.
  *
+ * The attribute it expects is `TTL_ATTRIBUTE_NAME` from the package's own
+ * source rather than a name spelled again here: this check exists to compare
+ * the deployed table against what the adapters write, and a private copy of the
+ * name would be free to agree with the table while the adapters disagreed with
+ * both.
+ *
  * `Assumption:` a table on which TTL was never configured reports `DISABLED`
  * rather than an absent description. `cumulo-metrics` is that table, and the
  * operator confirms it independently with
@@ -33,9 +41,6 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
  * trusting a FAIL line from here. If AWS disagrees, this helper is what changes
  * — and the divergence gets reported rather than quietly accommodated.
  */
-
-/** The one attribute name every TTL-bearing table in this repo uses. */
-const TTL_ATTRIBUTE = 'expiresAt';
 
 export const assertTtlStatus = async (
   client: DynamoDBDocumentClient,
@@ -61,8 +66,8 @@ export const assertTtlStatus = async (
     // write would look retained and nothing would ever expire.
     equal(
       TimeToLiveDescription.AttributeName,
-      TTL_ATTRIBUTE,
-      `${tableName}: TTL is enabled on an attribute other than '${TTL_ATTRIBUTE}'`,
+      TTL_ATTRIBUTE_NAME,
+      `${tableName}: TTL is enabled on an attribute other than '${TTL_ATTRIBUTE_NAME}'`,
     );
   }
 };

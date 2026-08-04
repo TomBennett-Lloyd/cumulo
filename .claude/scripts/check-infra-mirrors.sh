@@ -153,9 +153,10 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #     below it. That works precisely because the `eq` record below holds the
 #     constant equal to Terraform — the test bites on the deployed value rather
 #     than on a number somebody kept in step by hand. The equality half and the
-#     inequality half are different claims and should not be confused; that
-#     file's docblock says this gate cannot express the inequality, and it
-#     stays true.
+#     inequality half are different claims and should not be confused; both
+#     that file's docblock and `infra/api/lambda.tf`'s comment say what this
+#     bullet says — the ceiling has no second side here for a record to name —
+#     and that is what stays true however many relations this list grows.
 #   * A PROSE mirror — a value restated in a comment or a doc. Declined for the
 #     reason in this file's header: free text has no line shape an honest
 #     brittle reader can anchor on. Architecture rule 9 (one owner per stated
@@ -665,7 +666,7 @@ index=0
 for record in "${MIRRORS[@]}"; do
   index=$((index + 1))
 
-  IFS='|' read -r mode f1 f2 f3 f4 f5 f6 f7 extra <<<"$record"
+  IFS='|' read -r mode f1 f2 f3 f4 f5 f6 f7 <<<"$record"
 
   case $mode in
     eq | ts-lt) arity=6 ;;
@@ -678,13 +679,18 @@ for record in "${MIRRORS[@]}"; do
       ;;
   esac
 
-  fields=("$f1" "$f2" "$f3" "$f4" "$f5" "$f6" "$f7")
-  beyond=""
-  if [ "$arity" -lt 7 ]; then
-    beyond=${fields[$arity]}
-  fi
-  if [ -z "${fields[$((arity - 1))]}" ] || [ -n "$beyond" ] || [ -n "${extra:-}" ]; then
-    blockers+=("MIRRORS[$index]: mode '$mode' takes exactly $arity fields after the tag: $record")
+  # The arity is counted from the record's SEPARATORS, never inferred from what
+  # the fields hold. A record with one field too many but that field left empty
+  # (`…|VALUE|`) reads back as an empty string, which is exactly what a field
+  # the record never had reads back as — so "is there anything beyond the last
+  # field?" answers no and lets the typo through, which is the quiet version of
+  # the loud refusal this check exists to be. The separator count is the arity
+  # whatever the fields contain, so every wrong count refuses, trailing empties
+  # included. (An empty field at the RIGHT count is caught next, by the
+  # alphabets below: no field's pattern matches the empty string.)
+  separators=${record//[^|]/}
+  if [ "${#separators}" -ne "$arity" ]; then
+    blockers+=("MIRRORS[$index]: mode '$mode' takes exactly $arity fields after the tag, not ${#separators}: $record")
     continue
   fi
 
