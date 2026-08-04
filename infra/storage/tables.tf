@@ -19,25 +19,38 @@
 # check nobody can read; a real resource block always carries the prefix, so
 # the grep stays a detector rather than a false positive generator.
 #
-# `series` (14 WCU / 21 RCU) and `weather` (5 / 3) total 19 WCU / 24 RCU, which
-# fits inside DynamoDB's *permanently free* 25 WCU / 25 RCU per Region. That
-# allowance is a hard edge, not a discount: an auto-scaling policy would raise
-# capacity above 25 units the first time real load arrived and start billing
-# without anyone deciding to — no alarm, no plan diff, no review.
+# `series` (14 WCU / 21 RCU) is the only table left drawing on the pool, and it
+# sits inside DynamoDB's *permanently free* 25 WCU / 25 RCU per Region with 11
+# WCU / 4 RCU unclaimed. That allowance is a hard edge, not a discount: an
+# auto-scaling policy would raise capacity above 25 units the first time real
+# load arrived and start billing without anyone deciding to — no alarm, no plan
+# diff, no review.
 #
-# The escape hatch for sustained load is a `billing_mode` flip to
-# PAY_PER_REQUEST — one attribute, no migration, no downtime, allowed up to 4
-# times per 24-hour rolling window, and a table's first switch instantly
+# The escape hatch for load an allocation cannot absorb is a `billing_mode`
+# flip to PAY_PER_REQUEST — one attribute, no migration, no downtime, allowed up
+# to 4 times per 24-hour rolling window, and a table's first switch instantly
 # sustains at least 4,000 WCU / 12,000 RCU. That, not auto-scaling, is the
-# answer if the throttle alarms in alarms.tf ever fire (ADR 0002 revisit
-# trigger 8).
+# answer when the throttle alarms in alarms.tf fire (ADR 0002 revisit trigger
+# 8) — and `weather` has already taken it (#156, 2026-08-03), which is why the
+# arithmetic above is one table's rather than two.
 #
 # The standing rule that keeps the shared regional pool from being renegotiated
 # per ticket: **a new table defaults to on-demand unless its load is
 # batch-shaped** — driven by a clock, with a volume the ADR can compute. Only a
 # ticket adding another clock-driven batch table touches the 25/25 pool, and it
-# arrives with an arithmetic argument rather than an estimate.
+# arrives with an arithmetic argument rather than an estimate — an argument
+# about burst as well as rate, since what unseated `weather` was the size of one
+# `BatchWriteItem` page against the retry patience behind it, not the units per
+# cycle (see 3 below).
 # ---------------------------------------------------------------------------
+#
+# RESTATEMENT LEDGER. This header is the pool arithmetic's one owner. Two
+# infra/README.md sites restate its figures on purpose and move with it: the
+# `Runbook: the storage stack` section's B3 readback (`expect: W 14, R 21`) and
+# the whole `### Storage stack` section under `Cost` — its capacity table row
+# and the notes below it both carry figures. Change a capacity attribute and
+# those two move in the same commit; every other mention in the repo points
+# here without a number (ADRs excepted).
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
@@ -50,8 +63,12 @@
 #   * No `server_side_encryption` block — the omission selects the AWS-owned
 #     key, which is encryption at rest at no charge. A customer-managed KMS key
 #     would add ~$1/month plus per-request charges for no compliance benefit.
-#   * No `stream_enabled` — ADR 0001's transport is Kinesis; DynamoDB Streams
-#     would be a second event source to bill for and a second trigger surface.
+#   * No `stream_enabled` — DynamoDB Streams would be a second event source to
+#     bill for and a second trigger surface. ADR 0004 ("DynamoDB Streams stay
+#     off") re-argued the omission after the transport moved to SQS: a
+#     stream-as-transport would couple the forecast trigger to the storage item
+#     shape and fire on archive-cache writes that must not trigger live
+#     forecasting.
 #   * table_class STANDARD — Standard-IA trades request price for storage price,
 #     and storage is free at this volume.
 #
@@ -104,11 +121,11 @@ resource "aws_dynamodb_table" "sites" {
     type = "S"
   }
 
-  # F1: on a stream record for location L, read the physics parameters of every
-  # active site at L. Sparse by construction — the adapter writes `gsiLocation`
-  # only while a site is active, so an inactive site is structurally absent from
-  # the index the forecast service reads, rather than filtered out by code that
-  # a later change could forget.
+  # F1: on a queue message for location L (ADR 0004's SQS transport), read the
+  # physics parameters of every active site at L. Sparse by construction — the
+  # adapter writes `gsiLocation` only while a site is active, so an inactive
+  # site is structurally absent from the index the forecast service reads,
+  # rather than filtered out by code that a later change could forget.
   #
   # INCLUDE rather than ALL: the projection is exactly the physics parameters
   # the forecast service needs, so the index stays small and a name change on
@@ -183,6 +200,7 @@ resource "aws_dynamodb_table" "sites" {
 #    3,600 s cycle with zero burst assumed. The 21 RCU carries the dashboard
 #    fan-out — ~25 read units per load, so ~50 loads/minute sustained, with the
 #    300-second burst reserve absorbing ~250 instantly.
+#    (Restatement ledger: this file's header.)
 resource "aws_dynamodb_table" "series" {
   name         = "cumulo-series-${var.environment}"
   billing_mode = "PROVISIONED"
@@ -212,6 +230,12 @@ resource "aws_dynamodb_table" "series" {
   # The adapter writes `expiresAt` (epoch seconds) = validTime + 90 days.
   # Deletes are free and asynchronous — TTL is not a guaranteed-punctual clock,
   # so nothing may depend on an expired item being gone at a particular moment.
+  #
+  # The attribute name below is owned jointly with `TTL_ATTRIBUTE_NAME` in
+  # `packages/storage/src/ttl.ts`, which every writer of an expiring item
+  # derives its key from; per architecture rule 8 the pair is declared to
+  # `check:infra-mirrors`, so renaming one side fails `verify` rather than
+  # leaving items that never expire.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true
@@ -231,18 +255,39 @@ resource "aws_dynamodb_table" "series" {
 #    plus one `ARCHIVE#DAY#<date>` marker per fetched day — the exact cache-hit
 #    test that keeps Open-Meteo quota from being spent twice (H2).
 #
-#    PROVISIONED at 5 WCU / 3 RCU. Batch-shaped: 1,440 write units per cycle,
-#    draining in ~288 s. 3 RCU because every read path is offline — #16's
-#    hindcast reads a date range, and #12 receives weather on the Kinesis stream
-#    rather than reading it back. Nothing on this table's read path sits in
-#    front of a user.
+#    ON-DEMAND since #156 (ADR 0002, Amendments 2026-08-03); provisioned at
+#    5 WCU / 3 RCU before that. The load is still batch-shaped and the ADR's
+#    sustained arithmetic still holds — 1,440 write units per cycle, draining in
+#    ~288 s of 3,600 — but what moved this table is burst shape, not rate.
+#    Ingestion writes each location's 48-hour horizon as two `BatchWriteItem`
+#    pages of ≤25 items; one page needs 5 s of accumulation at 5 WCU/s, while
+#    the bounded retry budget behind it (`drainBatches` 3 sends, SDK 2 attempts)
+#    spends itself in under ~2 s. Once the burst credit is gone the page cannot
+#    be funded before patience runs out, and no WCU number the free pool could
+#    have afforded closes that gap — it only moves the location count at which
+#    the cliff appears. Confirmed live twice: 296 WriteThrottleEvents with 6 of
+#    12 locations losing their weather on the seeded demo fleet (2026-08-03,
+#    #156), after 1,350 throttles at the 40-location worst case (E7-a).
+#
+#    Cost is activity-shaped rather than standing: ~0.42 M write units/month at
+#    the canonical 12-location hourly fleet ≈ $0.30/month, ≈ $1.28 at the
+#    52-location worst case, and $0 while the schedule is idle. Reads stay
+#    negligible for the reason the 3 RCU was chosen — every read path is
+#    offline: #16's hindcast reads a date range, and #12 receives weather on the
+#    SQS queue rather than reading it back. Nothing on this table's read
+#    path sits in front of a user.
+#
+#    There is deliberately no `on_demand_throughput` block. Its
+#    `max_write_request_units` ceiling is a per-second cap, so a 25-item page
+#    can outrun it exactly as it outran 5 WCU/s — the ceiling would reintroduce
+#    the throttle class this flip exists to remove, on a table whose whole month
+#    costs cents. The backstop against runaway spend is the account-wide budget
+#    alarm in infra/bootstrap/budget.tf, which watches money rather than
+#    throughput and therefore cannot drop a write.
 resource "aws_dynamodb_table" "weather" {
   name         = "cumulo-weather-${var.environment}"
-  billing_mode = "PROVISIONED"
+  billing_mode = "PAY_PER_REQUEST"
   table_class  = "STANDARD"
-
-  write_capacity = 5
-  read_capacity  = 3
 
   hash_key  = "locationId"
   range_key = "sk"
@@ -262,6 +307,11 @@ resource "aws_dynamodb_table" "weather" {
   # their day markers carry no `expiresAt` and therefore never expire — an
   # archive item that vanished would silently re-spend Open-Meteo quota, and a
   # marker that vanished before its readings would be worse.
+  #
+  # The attribute name below is the same declared mirror of `TTL_ATTRIBUTE_NAME`
+  # in `packages/storage/src/ttl.ts` that the `series` table carries, checked
+  # per table by `check:infra-mirrors` (rule 8) — a rename here alone reds the
+  # gate on this address.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true
@@ -320,8 +370,9 @@ resource "aws_dynamodb_table" "metrics" {
 #    ON-DEMAND, by the standing rule at the top of this file: its load is
 #    request-shaped — one write per limited request from whoever is knocking —
 #    so there is no volume to size a provisioned number against, and none of it
-#    may come out of the shared free 25/25 pool that the two batch-shaped tables
-#    depend on. Under abuse the request rate is bounded by the gateway throttles
+#    may come out of the shared free 25/25 pool that `series` — the one
+#    batch-shaped table still drawing on it (#156) — depends on. Under abuse
+#    the request rate is bounded by the gateway throttles
 #    in `infra/api/gateway.tf` rather than by anything here.
 #
 #    Every row carries `expiresAt`, so stored size stays at roughly "addresses
@@ -341,6 +392,10 @@ resource "aws_dynamodb_table" "abuse" {
     type = "S"
   }
 
+  # Third instance of the same declared mirror: the attribute name below and
+  # `TTL_ATTRIBUTE_NAME` in `packages/storage/src/ttl.ts`, which the limiter's
+  # adapter writes every row's expiry under. Declared to `check:infra-mirrors`
+  # per architecture rule 8, so a rename cannot land on one side only.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true

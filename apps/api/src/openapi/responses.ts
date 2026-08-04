@@ -119,13 +119,11 @@ const throttledResponse: ResponsesObject = {
  * `main.ts`'s error boundary runs, so no code in this repository shapes the body
  * and this document would be describing something it does not produce. It is
  * unreachable through every *looping* path — the per-request deadline
- * (`http/request-deadline.ts`) stops those between commands — and the two
- * residuals that remain are stated rather than silent, in `apps/api/README.md`'s
+ * (`http/request-deadline.ts`) stops those between commands — and the one
+ * residual that remains is stated rather than silent, in `apps/api/README.md`'s
  * error contract: independent per-command worst cases coinciding in a route's
  * ungated straight-line prefix, counted per route in `../request-budget.ts` and
- * carried in `docs/tech-debt.md`; and two coinciding tail events inside an
- * admitted series-cleanup pass, which is admitted at one command and then spends
- * up to two (`../sites/series-cleanup.ts`), which #167 removes wholesale.
+ * carried in `docs/tech-debt.md`.
  */
 export const commonFailures: ResponsesObject = {
   ...throttledResponse,

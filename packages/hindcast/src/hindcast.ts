@@ -147,6 +147,15 @@ export interface HindcastCoverage {
   readonly alreadyCached: number;
   readonly fetched: number;
   readonly unavailableDays: readonly UtcDay[];
+  /**
+   * The archived hours the physics refused to forecast — schema-valid weather no
+   * atmosphere produces (`createPhysicsForecast`'s `implausible` result). Listed
+   * for the same reason `unavailableDays` is: these hours are missing from the
+   * score, `sampleCount` already shrank truthfully, and an operator deciding
+   * whether to trust the skill score needs to see *which* hours went missing and
+   * why. Like `unavailableDays`, they are **not** on the metrics row itself.
+   */
+  readonly implausibleHours: readonly UtcIsoTimestamp[];
   readonly apiCallCount: number;
 }
 
@@ -196,6 +205,50 @@ const requireObservationsOfSite = (
   }
 };
 
+/** The replayed hours worth scoring, and the ones the physics would not produce. */
+interface ArchiveReplay {
+  readonly scored: TimedPowerPoint[];
+  readonly implausibleHours: readonly UtcIsoTimestamp[];
+}
+
+/**
+ * Run every archived hour through the production physics call, keeping the hours it
+ * forecast and noting the ones it refused.
+ *
+ * Skipping rather than aborting is this consumer's answer to "who does the operator
+ * need to call?" (`docs/standards/error-handling.md` rule 1). A hindcast replays
+ * offline over a season and has no queue to redeliver into: aborting a 730-day run
+ * because one archived hour is physically implausible would throw away every other
+ * hour's evidence, and the run is a measurement, not a write path. The skipped hours
+ * ride out in the coverage, so the shrunken `sampleCount` has a stated cause.
+ */
+const replayArchive = (
+  input: HindcastInput,
+  archivedHours: readonly WeatherReading[],
+): ArchiveReplay => {
+  const scored: TimedPowerPoint[] = [];
+  const implausibleHours: UtcIsoTimestamp[] = [];
+
+  for (const weather of archivedHours) {
+    // `params` is spread over `defaultPhysicsParams` downstream, so an absent
+    // override and an empty one are the same run — which is why this can be a
+    // `??` rather than a conditional key under `exactOptionalPropertyTypes`.
+    const result = createPhysicsForecast({
+      site: input.site,
+      weather,
+      issuedAt: input.issuedAt,
+      params: input.params ?? {},
+    });
+    if (result.status === 'implausible') {
+      implausibleHours.push(result.validTime);
+    } else {
+      scored.push(result.forecast);
+    }
+  }
+
+  return { scored, implausibleHours };
+};
+
 /**
  * RMSE of the persistence baseline over the same instants the model is scored
  * on, or `null` when the baseline reaches none of them.
@@ -226,7 +279,8 @@ const baselineRmseKw = (
  *    are the hours the metrics row claims, not whole days spilling past its
  *    edges.
  * 3. **Replay** each hour through `createPhysicsForecast` — the production call,
- *    with the caller's `issuedAt` and model params.
+ *    with the caller's `issuedAt` and model params. An hour it reports
+ *    `implausible` for is skipped rather than scored, and named in the coverage.
  * 4. **Align** the replay against the in-period observations. `alignByValidTime`
  *    is an inner join, so an hour the archive has and the site does not (or the
  *    reverse) simply contributes no pair; no pairs at all means there is nothing
@@ -235,10 +289,15 @@ const baselineRmseKw = (
  *    observations and then aligned back onto the in-period hours, which is what
  *    lets the window's first day be scored against the day before it.
  *
- * Failures propagate rather than being converted: a `StorageError` from either
- * adapter is an outage, and a `ZodError` from `errorMetricsSchema` means the
- * metrics are not storable — neither is something a hindcast run can act on, and
- * both should stop the run loudly instead of publishing a partial truth.
+ * Two kinds of failure, split by whether this run can act on it
+ * (`docs/standards/error-handling.md` rule 1). A `StorageError` from either
+ * adapter is an outage and a `ZodError` from `errorMetricsSchema` means the
+ * metrics are not storable: neither is something a hindcast can do anything with,
+ * so both propagate and stop the run loudly instead of publishing a partial truth.
+ * A physically implausible archive hour is the other kind — `createPhysicsForecast`
+ * reports it as a value, and step 3 skips it, because throwing away a season's
+ * evidence over one impossible hour would be its own dishonesty. Those hours come
+ * back in `coverage.implausibleHours`, on the same terms as `unavailableDays`.
  */
 export const runHindcast = async (
   deps: HindcastDeps,
@@ -258,16 +317,16 @@ export const runHindcast = async (
     period.endExclusive,
   );
 
-  const replayed: TimedPowerPoint[] = archivedHours.map((weather) =>
-    // `params` is spread over `defaultPhysicsParams` downstream, so an absent
-    // override and an empty one are the same run — which is why this can be a
-    // `??` rather than a conditional key under `exactOptionalPropertyTypes`.
-    createPhysicsForecast({ site, weather, issuedAt, params: input.params ?? {} }),
-  );
+  const replay = replayArchive(input, archivedHours);
 
   const scoredHours = observations.filter((reading) => withinPeriod(period, reading.validTime));
-  const pairs = alignByValidTime(replayed, scoredHours);
+  const pairs = alignByValidTime(replay.scored, scoredHours);
   if (pairs.length === 0) {
+    // A window whose *every* hour was implausible lands here too, and reports
+    // `no-observations` — which under-describes the cause, since the actuals may
+    // have been fine. Accepted rather than widened into a fourth outcome: the case
+    // has never been seen, the metrics table is left untouched either way, and the
+    // extra arm would have to be considered by every reader of this union forever.
     return { status: 'no-observations' };
   }
 
@@ -298,6 +357,7 @@ export const runHindcast = async (
       alreadyCached: coverage.alreadyCached.length,
       fetched: coverage.fetched.length,
       unavailableDays: coverage.unavailableDays,
+      implausibleHours: replay.implausibleHours,
       apiCallCount: coverage.apiCallCount,
     },
   };

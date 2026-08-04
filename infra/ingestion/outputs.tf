@@ -59,8 +59,10 @@
 # `terraform destroy` takes all of it to $0 with no ordered dependencies, no
 # final snapshot, and no detaching network interfaces — and, unlike the Kinesis
 # stream ADR 0004 replaced, a queue nobody remembers to destroy really does cost
-# nothing. The log group is the part of a forgotten stack that does keep
-# spending; retention is what keeps that a fraction of a cent.
+# nothing. Within this stack the log group is the one thing that keeps spending,
+# and retention keeps that a fraction of a cent; a schedule left *enabled* also
+# meters the weather table's on-demand writes (#156, ~$0.30/mo at the canonical
+# fleet), billed under the storage stack it writes into.
 
 output "queue_url" {
   description = "URL of the weather-readings queue ingestion publishes to. This is the value #12's event source mapping consumes and the value the function's QUEUE_URL environment variable carries — server-assigned, so read it from here rather than assembling it from an account id. Contains the account id — see the note above."

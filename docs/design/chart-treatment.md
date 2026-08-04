@@ -82,6 +82,20 @@ Composition rules that keep both legible where they overlap:
   confidence of the values on either side of it — partial data is labelled partial, in the chart as
   much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
+- **A run that would be a degenerate path is drawn in the marker vocabulary instead.** Breaking a
+  series at every gap can leave a run holding a single sample, and a path with one vertex paints
+  nothing at all — so an isolated hour between two gaps would vanish and the chart would silently
+  understate how much was measured or modelled. It is the same defect as bridging the gap, arrived
+  at from the other side. Three cases, each reusing a mark the treatment already defines rather
+  than inventing a fourth:
+  - An **isolated measured hour** is a ≥ 8px dot ringed in `--color-surface` — the end-dot
+    vocabulary above, at an ordinary sample instead of at the horizon.
+  - A **lone banded hour** draws its P90→P10 interval as a vertical **2px round-capped stroke** in
+    `--color-chart-band-stroke`, and omits the wash: a 1px hairline at 35% alpha over a single
+    column is invisible, which would defeat the fix, and 2px is the chart's existing data-line
+    weight rather than a new one. The median line still passes through the hour, so the interval
+    reads as that hour's uncertainty. An interval whose bounds coincide collapses to its round cap.
+  - A **single-sample series** draws its median as a ringed dot in `--color-chart-1`.
 
 ## Legend
 
@@ -216,7 +230,24 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   that timestamp, so the pointer never has to land on a line or inside the fill to get a number.
   The value leads and is high-contrast; the series name follows in `--color-text-muted`. Series are
   keyed with a short stroke of their colour, not a filled box.
-- **Keyboard focus shows exactly what hover shows.**
+- **Keyboard focus shows exactly what hover shows — and says so out loud.** The plot's `<svg>`
+  keeps `role="img"` with one `aria-label`: a reader arriving at the chart should hear its name,
+  not wade through every text node inside it. That is also why the tooltip cannot carry the
+  announcement — the label collapses the whole subtree, so nothing drawn inside the SVG is spoken
+  however it is marked up. The selected sample reaches assistive tech through **one visually
+  hidden `aria-live="polite"` region in the figure**, between the plot and the legend. It is
+  mounted empty with the chart and filled only when a reader moves the selection, so every
+  announcement is a real change — a live region mounted with its text already inside it announces
+  nothing. It is styled off-screen and never with `display: none` or `visibility: hidden`, either
+  of which would remove it from the accessibility tree it exists to reach.
+  **The announcement and the tooltip are composed from the same rows**, so the spoken readout
+  cannot drift from the drawn one; and pointer and keyboard both feed that single region, because
+  both do nothing but set the active sample — forking the source per input device would recreate
+  exactly the drift this rule exists to prevent, and `polite` coalescing bounds the chatter a
+  moving pointer produces.
+  The live region is the focus-mode and VoiceOver enhancement, not the accessible surface: a
+  screen reader in browse mode consumes arrow keys before the chart ever sees them, so **the table
+  twin below remains the canonical route** to every value.
 - **Tooltips enhance, they never gate.** Every value in the tooltip is also reachable without a
   pointer, through direct labels or the table view. Every chart has a table-view twin — the
   WCAG-clean equivalent — reachable from the chart container.

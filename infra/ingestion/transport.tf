@@ -34,6 +34,11 @@ resource "aws_sqs_queue" "weather_readings" {
   # must not raise its function timeout past 50 s without raising this number in
   # the same change. The constraint lives here as well as there because this is
   # the side that can be read from the queue.
+  #
+  # That pairing is gated: `pnpm check:infra-mirrors`, in the `verify` composite
+  # and so in CI, holds this number at or above the declared factor of six times
+  # the consumer's timeout and fails on a one-sided edit (#133); the pair is
+  # declared in .claude/scripts/check-infra-mirrors.sh.
   visibility_timeout_seconds = 300
 
   # maxReceiveCount = 5: a message the consumer cannot process is retried five

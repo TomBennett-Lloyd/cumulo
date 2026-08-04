@@ -13,7 +13,8 @@
 #
 # The keys are therefore a mirror of `StorageTable`'s union members, and adding
 # a table means adding both at once. There is no gate on that pairing: the
-# `check:infra-mirrors` gate compares single numeric values, not key sets, so
+# `check:infra-mirrors` gate compares single declared values — a number or a
+# string, one named attribute against one named constant — not key sets, so
 # this comment is the only thing pointing at the other half. Keep it honest.
 
 output "table_names" {

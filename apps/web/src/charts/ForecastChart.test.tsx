@@ -2,7 +2,7 @@
 
 import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { xForIndex } from './chart-geometry';
+import { xForIndex, yForKw } from './chart-geometry';
 import type { ForecastChartPoint } from './chart-series';
 import { CHART_PLOT, HORIZON_LABEL_WIDTH } from './ForecastChart';
 import {
@@ -22,6 +22,14 @@ afterEach(cleanup);
 
 const vertexCount = (mark: Element): number =>
   (mark.getAttribute('points') ?? '').split(' ').length;
+
+/**
+ * The axis the lone-band fixture below produces. Its tallest mark is that hour's
+ * own P90 of 7 kW, which rounds up to the nice maximum written here — spelled
+ * out rather than recomputed, so the test states the scale it expects instead of
+ * re-deriving it from the code under test.
+ */
+const LONE_BAND_AXIS_MAX_KW = 8;
 
 const MS_PER_HOUR = 3_600_000;
 /** The fixture source's 7-day window: 168 hours back, now, and 24 forward. */
@@ -105,6 +113,8 @@ describe('ForecastChart', () => {
   it('breaks the actuals line at a gap rather than bridging a missing measurement', () => {
     // A mid-series null is a partial result and must read as one: bridging it
     // would draw a measurement nobody took (docs/tech-debt.md, 2026-07-31).
+    // The first measurement is left alone by the gap after it, so it is a dot
+    // rather than the one-vertex polyline SVG would decline to paint.
     const container = renderChart([
       banded(6, 1, 0.9),
       banded(9, 4, null),
@@ -112,16 +122,51 @@ describe('ForecastChart', () => {
       banded(15, 5, 4.8),
     ]);
     const actuals = marks(container, '.forecast-chart-actuals');
+    const markers = marks(container, '.forecast-chart-actuals-marker');
 
-    expect(actuals).toHaveLength(2);
-    expect(actuals.map(vertexCount)).toStrictEqual([1, 2]);
+    expect(actuals).toHaveLength(1);
+    expect(actuals.map(vertexCount)).toStrictEqual([2]);
+    // The isolated hour, then the end dot at the horizon.
+    expect(markers).toHaveLength(2);
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, 4, CHART_PLOT)));
+    expect(markers[1]?.getAttribute('cx')).toBe(String(xForIndex(3, 4, CHART_PLOT)));
   });
 
   it('breaks the band at a gap in the modelled uncertainty', () => {
-    const container = renderChart([banded(6, 1, null), bare(9, 4, null), banded(12, 6, null)]);
+    const container = renderChart([
+      banded(6, 1, null),
+      banded(9, 4, null),
+      bare(12, 4, null),
+      banded(15, 6, null),
+    ]);
+    const interval = requireMark(container, '.forecast-chart-band-interval');
+    const intervalX = String(xForIndex(3, 4, CHART_PLOT));
 
-    expect(marks(container, '.forecast-chart-band')).toHaveLength(2);
-    expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(4);
+    expect(marks(container, '.forecast-chart-band')).toHaveLength(1);
+    expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(2);
+    // The trailing banded hour stands alone: a polygon over one sample is two
+    // coincident edges and paints nothing, so it draws its bounds as an
+    // interval instead (chart-treatment.md).
+    expect(marks(container, '.forecast-chart-band-interval')).toHaveLength(1);
+    expect(interval.getAttribute('x1')).toBe(intervalX);
+    expect(interval.getAttribute('x2')).toBe(intervalX);
+    expect(interval.getAttribute('y1')).toBe(String(yForKw(7, LONE_BAND_AXIS_MAX_KW, CHART_PLOT)));
+    expect(interval.getAttribute('y2')).toBe(String(yForKw(5, LONE_BAND_AXIS_MAX_KW, CHART_PLOT)));
+  });
+
+  it('renders an isolated measured hour between two gaps as a ring-marked dot', () => {
+    const container = renderChart([
+      banded(6, 1, null),
+      banded(9, 4, 3.8),
+      banded(12, 6, null),
+      banded(15, 5, 4.9),
+      banded(18, 4, 4.1),
+    ]);
+    const markers = marks(container, '.forecast-chart-actuals-marker');
+
+    expect(markers).toHaveLength(2);
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(1, 5, CHART_PLOT)));
+    expect(marks(container, '.forecast-chart-actuals')).toHaveLength(1);
   });
 
   it('omits the band entirely when no point carries one', () => {
@@ -236,13 +281,26 @@ describe('ForecastChart', () => {
     expect(screen.getByRole('columnheader', { name: 'Time (UTC)' })).toBeDefined();
   });
 
-  it('renders a single-sample series without throwing', () => {
+  it('renders a single-sample series as marks, not degenerate paths', () => {
+    // Every series here is one sample long, so nothing on the plot has a second
+    // vertex to stroke towards. Drawn as paths the whole chart would be blank.
     const container = renderChart([banded(12, 6, 5.9)]);
 
-    expect(marks(container, '.forecast-chart-band')).toHaveLength(1);
+    expect(marks(container, '.forecast-chart-band')).toHaveLength(0);
+    expect(marks(container, '.forecast-chart-band-interval')).toHaveLength(1);
+    expect(marks(container, '.forecast-chart-median-marker')).toHaveLength(1);
+    expect(marks(container, '.forecast-chart-actuals-marker')).toHaveLength(1);
     expect(container.querySelectorAll('.forecast-chart-table tbody tr')).toHaveLength(1);
-    expect(requireMark(container, '.forecast-chart-median').getAttribute('points')).not.toContain(
-      'NaN',
-    );
+  });
+
+  it('renders an empty series as bare chrome rather than a median mark', () => {
+    // The guard in `medianElements`: with no samples there is no line to stroke
+    // and no first sample to fall back to as a marker, so the series draws
+    // nothing at all instead of indexing a point that is not there.
+    const container = renderChart([]);
+
+    expect(requireSvg(container)).toBeDefined();
+    expect(marks(container, '.forecast-chart-median')).toHaveLength(0);
+    expect(marks(container, '.forecast-chart-median-marker')).toHaveLength(0);
   });
 });

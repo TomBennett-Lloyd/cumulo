@@ -99,7 +99,7 @@ describe('createStorageDocumentClient retry classification', () => {
     });
 
   it('spends the whole pinned budget on a whole-request throttle', async () => {
-    // The shape ADR 0002 names as the provisioned tables' expected failure: a
+    // The shape ADR 0002 names as the provisioned table's expected failure: a
     // Get/Put/Delete, a Query page, or a wholly-declined batch rejected outright
     // rather than reporting UnprocessedItems. It carries the service model's
     // throttling trait, so the SDK layer is its retry owner.

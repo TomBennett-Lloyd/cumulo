@@ -31,6 +31,14 @@ import type { CreateSiteInput, Forecast, GenerationReading, Site } from '@cumulo
  *   consumer whose request is fixed (the first-forecast poll) can only wait
  *   out its own deadline and report — deliberately pinned behaviour, not an
  *   invitation to hot-retry.
+ * - `server-fault` — server → client: the fleet *answered*, and the answer is
+ *   that it is broken (a 5xx). Recourse is to retry on a backoff, the same
+ *   shape of recourse `network` has — but the two are separate arms because
+ *   the question that decides blame is "who does the operator need to call?"
+ *   and the answers differ: the fleet's operator here, the visitor's own
+ *   connection there. That is why #162's "same recourse ⇒ same arm" principle
+ *   does not collapse them, and it is what keeps `network`'s own doc true:
+ *   only requests that never produced an answer land there.
  * - `forbidden` — the API refused this client on policy, not on content. The
  *   one failure a retry cannot fix: nothing the caller can add to the request
  *   makes it succeed, because what is wrong is *who is asking*. Its recourse is
@@ -59,6 +67,7 @@ export type FleetDataError =
   | { readonly code: 'not-found'; readonly message: string }
   | { readonly code: 'invalid-response'; readonly message: string }
   | { readonly code: 'invalid-request'; readonly message: string }
+  | { readonly code: 'server-fault'; readonly message: string }
   | { readonly code: 'forbidden'; readonly message: string };
 
 /**
@@ -177,8 +186,17 @@ export interface FleetSourceCapabilities {
  *   origin the app is served from has to be in the API's `CUMULO_WEB_ORIGINS`.
  *   A view that renders this as "try again" is telling the visitor to do the one
  *   thing that cannot work.
- * - **5xx** (`internal`), or a `fetch` that rejects → `network`. Retryable as
- *   is, on a backoff.
+ * - **5xx** (`internal`, and any other status at or above 500) →
+ *   `server-fault`. The fleet answered; the answer is that it is broken.
+ *   Retryable on a backoff, but the operator to call is the fleet's.
+ * - **Any other unlisted 4xx** (401, 405, 409, 422… — statuses this API may
+ *   grow) → `invalid-request`, by the same direction the listed 400 takes: a
+ *   4xx is the fleet reading what this client sent and refusing it.
+ * - **Any remaining non-ok status** (a 3xx a `fetch` surfaced rather than
+ *   followed) → `invalid-response`: the fleet answered in a shape this client
+ *   cannot use.
+ * - **A `fetch` that rejects** → `network`. That arm is now reachable only
+ *   this way, which is what makes its doc ("never produced an answer") true.
  *
  * A 200 carrying an empty series is **not** an error: the API answers a
  * forecast-less site with `200 { "forecasts": [], "attribution": {…} }` — the

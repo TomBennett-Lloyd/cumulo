@@ -1,0 +1,84 @@
+# 0007 — Series deletion is TTL-only
+
+- **Status:** accepted
+- **Date:** 2026-08-02
+- **Issue:** #167
+
+## Context
+
+ADR 0002's access-pattern inventory ends with **X3 — "Delete an evicted site and stop its series growing"** — and maps it to "DeleteItem plus a range delete on `series`". #29 implemented that literally, and inline: both `POST /v1/sites` (when a create at the cap evicts the oldest user site) and `DELETE /v1/sites/{siteId}` listed the departed site's `cumulo-series` partition with a Query and removed rows with a `BatchWriteItem`, behind the caller's own request. The review that shipped it bounded the pass at 25 rows and said in the same breath that the bound was a stopgap that made the failure mode safe, not a design. This ADR takes the decision that was deferred there.
+
+Three independent ceilings say the same thing about the inline pass, which is why the answer is a design change rather than a larger number.
+
+### Ceiling 1 — latency
+
+The pass runs _after_ the caller's write has committed, so overrunning the 15 s function timeout converts a committed 201 into a gateway 504 — and on create, that 201 body is the only place the server ever discloses the new site's id. At the retry budget ADR 0002's Amendments pin (2 attempts, 1,000 ms throttling base), one DynamoDB command is worth 7,000 ms worst case, so a 15 s function affords **two**: the listing Query and a single `BatchWriteItem`. DynamoDB caps a batch write at 25 items, so the whole pass is capped at one 25-row batch. 25 is not a tuning knob; it is what two commands buy.
+
+### Ceiling 2 — capacity
+
+`cumulo-series` is provisioned at **14 WCU** (ADR 0002 § Capacity mode) and shares that allocation with the hourly ingestion cycle. A full partition is order **2,160 rows per model per site** at the 90-day retention — 90 days × 24 hourly valid times — and eviction deliberately picks the _oldest_ user site, which is the _largest_ partition. Draining one is roughly **154 s of the table's entire write budget**, spent removing rows nobody reads. 25 of ~2,160 is not cleanup; it is the prompt sliver of a job whose real worker is already the TTL, and it looked sufficient only because the demo's own sites are short-lived.
+
+### Ceiling 3 — the admission arithmetic
+
+#165 gave every looping term on the API a deadline check before each command: `hasBudgetForStorageCommands` admits a unit only when `remainingMs > commandCount × STORAGE_COMMAND_WORST_MS + API_RESPONSE_MARGIN_MS`. For the cleanup's two commands that is
+
+```
+2 × 7,000 + 1,000 = 15,000
+```
+
+against `API_LAMBDA_TIMEOUT_MS = 15,000`, under a strict `>`. A request's remaining time is at most the whole 15,000 ms, at its very first instant, so **a worst-case two-command admission is unsatisfiable at every instant of every request** — the pass could only ever be admitted at one command while being free to spend two, which is the batch-tail residual #165 shipped as a stated gap and handed to this issue. The third ceiling is therefore not about how much the pass can do; it is that the pass cannot be honestly priced at all where it stands.
+
+### What the TTL already does, for free
+
+`cumulo-series` carries `expiresAt` (ADR 0002 § Key design: TTL at `validTime` + 90 days). The attribute is enabled in Terraform on the table and written by _both_ series item kinds — forecast points and generation readings alike — so no series row is ever permanent, whether or not anything deletes it. TTL deletion consumes no write capacity and no read capacity. Whatever X3 buys, it is not boundedness: it is promptness, and the question this ADR answers is what promptness is worth here.
+
+## Decision
+
+**X3's series half is TTL-only. Nothing deletes a series row on the request path; `expiresAt` — the 90-day TTL ADR 0002 already gave `cumulo-series` — does the entire job.** The site row's own delete stays prompt and transactional, because that is what carries the value the inline pass was credited with: the moment the site row is gone the series rows are unreachable (every series route resolves the site first and 404s) and they stop growing (ingestion and forecast only ever serve fleet-listed sites). What is retired with the pass is everything that existed to bound it: `cleanUpSiteSeries` and its module, `SERIES_CLEANUP_MAX_ITEMS` and the `deleteSiteSeries` budget parameter, `SeriesAdapter.deleteSiteSeries` and its batch policy, the three `api.site.series-cleanup-*` log events, and the delete half of the API's `ReadAndPruneSeries` IAM grant — which returns the API's series access to exactly ADR 0005's original sentence, "`Query` only on the series table".
+
+Two consequences of that are worth stating as part of the decision rather than after it. First, on the create path nothing runs after the committed write, so **the 201 can no longer be lost to cleanup latency** — the failure mode the latency ceiling describes is removed rather than bounded. Second, every admitted unit left on the API is exactly one storage command, so no admitted unit can outrun what was priced for it.
+
+## Options considered
+
+### A. A sweeper — scheduled, or DynamoDB-Streams-driven off the site delete
+
+The strongest option on the merits of the job itself. It drains a full partition over many invocations against its own capacity budget, throttles itself against ingestion's hourly cycle, and cannot take a user request down with it. It keeps promptness, which is the only thing X3 ever bought.
+
+Rejected because it is the platform's first standing dollar, paid to bring forward deletions that cost nothing to defer:
+
+- **It needs its own alarm.** A sweeper's characteristic failure is stopping quietly — precisely the absence-shaped failure #164 exists to make detectable — so shipping one without an alarm would be shipping the failure mode. And the always-free ten CloudWatch alarms are **fully spent**: storage's four, ingestion's three, forecast's one and the API's two (`infra/api/outputs.tf` carries that census). An alarm is $0.10/month for existing, fired or not, so the eleventh alarm is a standing charge — small, but it would be the first one in the platform: ADR 0004's headline is that "no resource in Cumulo bills for existing", and this would end that, in a project whose stated posture is that idle cost is the steady state.
+- **It is a Lambda, a schedule or a stream subscription, an IAM role and a teardown step** of new operational surface, at a scale where the work it does is deleting a couple of megabytes of rows that expire on their own.
+- ADR 0002 turned DynamoDB Streams **off** deliberately ("a second event source would bill for existing and add a trigger surface"), so the Streams-driven variant reopens a settled decision to serve this one job.
+
+The rejection is about the price of promptness at this scale, not about the design being wrong. Revisit trigger 1 below is exactly the condition under which this option comes back.
+
+### B. Keep a bounded inline pass — the vestige
+
+Cheapest to ship: change nothing. Rejected by the three ceilings together. Latency puts a committed 201 at risk for the caller's benefit and nobody else's; capacity means the pass clears roughly 1% of a full partition, so the TTL is doing the work regardless; and the admission arithmetic means the pass cannot even be priced honestly at these constants. A vestige that clears 25 of ~2,160 rows is a token gesture that a reader of the code would reasonably mistake for a cleanup mechanism, which makes it worse than nothing.
+
+### C. TTL-only — chosen
+
+Deletes the request-path dependency, the budget constant, the storage delete surface and half an IAM grant, and leaves the mechanism that was already doing the work.
+
+Its genuine downside, stated plainly: **rows for departed sites now linger for up to the full retention window, and the platform has no way to delete a site's data promptly.** If a reason to want prompt deletion ever appears — a privacy request, a takedown, an operator who needs the table clean before a demo — there is no lever, and inventing one means building option A at that moment. Today that is acceptable because the demo is anonymous by design (ADR 0001) and a series row holds a modelled kilowatt figure for a location the visitor volunteered, not personal data; it stops being acceptable the moment either of those changes. The second downside is smaller and worth naming anyway: "the delete endpoint deletes everything" is what a reader expects, so the divergence has to be written down at each site that could mislead — `delete-site.ts`, the API README's route contract and this ADR — rather than being obvious from the code.
+
+## Consequences
+
+**Easier.** One fewer thing on the create path, and the create path's worst case gets shorter rather than better-guarded. `apps/api` loses a module, a constant and a dependency; `packages/storage` loses a delete surface; `infra/api`'s series grant narrows to `Query`, so the API can no longer delete a series row even if a future bug asked it to. The API's log vocabulary loses three events whose only reader was this pass.
+
+**Harder, and accepted.** Orphaned series rows are now the normal case rather than the failure case. Quantified against ADR 0002 § Assumed scale rather than estimated:
+
+- **Lifetime.** `expiresAt` is `validTime` + 90 days, and a departed site's newest rows carry valid times up to the 48-hour horizon ahead of its last ingestion cycle. So the last row of a departed partition falls due at most **90 days plus the forecast horizon** after the site leaves. DynamoDB's TTL deletion is best-effort and asynchronous, so that figure bounds when expiry becomes _due_, not when the item physically leaves the table.
+- **Visibility: none.** Every series route resolves the site first and 404s, and every series access in the platform is a Query by `siteId` partition — nothing scans `cumulo-series`. An orphan partition is not reachable, not listed, and not read.
+- **Cost: zero reads, zero WCU.** TTL deletes are not billed as writes and consume no provisioned capacity, so the retired pass's 14-WCU contention with ingestion goes away with it.
+- **Storage.** A full departed partition is order 2,160 rows per model plus its generation readings — a few thousand items of a few hundred bytes, so **order a megabyte or two** per site. The always-free allowance is **25 GB**, and the whole platform's steady-state footprint at assumed scale is ~3.5 GB. It would take on the order of ten thousand full-sized departed partitions inside one TTL window for storage to become a question.
+- **Adversarial churn does not change that.** ADR 0006 caps user sites at **40** with oldest-first eviction, and holds one IP to **30 limited-route requests per 60 s** before an hour's block, with the three write routes additionally throttled at **2 rps / burst 4**. A churn attack can therefore evict at most 40 full-sized partitions — the seed fleet is structurally exempt via GSI2 — after which the oldest user site is one the churn itself created minutes earlier, whose partition holds only what the hourly cycle has had time to write, which for a site younger than a cycle is nothing. Churn cannot manufacture full partitions faster than the hourly cycle fills them; standing orphan volume is bounded by genuine fleet turnover, not by request rate.
+
+**`expiresAt` is now the sole deletion mechanism for `cumulo-series`, and that sharpens an existing gap.** The attribute name is stated twice — `ttl { attribute_name = "expiresAt" }` in `infra/storage/tables.tf` and the item builders in `packages/storage/src/adapters/series/series-item.ts` — and the mirror gate cannot currently express that pair, because its record shape hard-codes the extraction modes and the equality relation. That is [#133](https://github.com/TomBennett-Lloyd/cumulo/issues/133), already filed; this ADR cites it rather than fixing it. The exposure existed before this decision — a silent rename on either side would have broken expiry regardless — but its blast radius grows, because expiry is no longer the slow half of a two-part mechanism. It is the whole mechanism.
+
+**What earlier ADRs say about X3 describes the superseded mechanism.** ADR 0002's inventory maps X3 to "DeleteItem plus a range delete on `series`", and ADR 0006 states that an evicted site's "series rows are then range-deleted best-effort". Both sentences described the implementation accurately when they were written and describe this ADR's predecessor now; neither body is edited, because decisions here are immutable and `docs/adr/README.md`'s amendment rule permits truing up a moved _value_, never reasoning — rewording why a mechanism was chosen is a supersession in disguise, which is why this is a new ADR. Both decisions stand in full: 0002's storage split, its key design and its `expiresAt` TTL are the reason this option exists at all, and 0006's cap, eviction order and limiter are untouched. Only the mechanism behind X3's series half narrows, and this document is the forward pointer for it.
+
+**What would make us revisit.** ADRs are immutable: any change supersedes this one with a new ADR and never edits it. Concrete triggers, both of which revive the sweeper arm:
+
+1. **A prompt-deletion requirement with a privacy shape** — a takedown request, a data-deletion obligation, or #30's auth making a site belong to somebody who can ask for it back. TTL-only has no lever for this by construction, and the answer is option A above, costed then against whatever the alarm budget looks like then.
+2. **Fleet churn × retention approaching the free storage allowance** — the arithmetic above says that means order ten thousand full-sized departed partitions in a 90-day window, which would mean the demo has traffic this document did not anticipate. The same signal would also show up as ADR 0002's revisit trigger 6 (the DynamoDB line becoming a meaningful fraction of the ceiling).

@@ -62,10 +62,10 @@ data "aws_iam_policy_document" "ingestion" {
 
   # Write the readings. `putForecastWeather` uses BatchWriteItem and nothing
   # else: ingestion never reads `cumulo-weather` back, which is the premise
-  # ADR 0002 sized that table's 3 RCU on and ADR 0004 rejected option E for
-  # breaking. No dynamodb:Query, no dynamodb:GetItem — if a read path ever
-  # appears here, it has to be argued in a diff rather than inherited from a
-  # wildcard.
+  # ADR 0002 sized that table's 3 RCU on before #156 flipped it to on-demand,
+  # and which ADR 0004 rejected option E for breaking. The premise outlived the
+  # sizing: no dynamodb:Query, no dynamodb:GetItem — if a read path ever appears
+  # here, it has to be argued in a diff rather than inherited from a wildcard.
   statement {
     sid       = "WriteWeatherReadings"
     actions   = ["dynamodb:BatchWriteItem"]

@@ -67,24 +67,22 @@ resource "aws_lambda_function" "api" {
   # What that does not make the timeout is unreachable, and the honest statement
   # is the one apps/api/README.md's error contract makes: a request killed here
   # never reaches the API's error boundary, so the caller gets a gateway 504
-  # rather than an `apiErrorSchema` body, and two residuals still lead there.
-  # Both are stated rather than silent — independent per-command worst cases
-  # coinciding in a route's ungated straight-line prefix, counted per route in
-  # `request-budget.ts` and carried in docs/tech-debt.md; and two coinciding tail
-  # events inside an admitted series-cleanup pass, which is admitted at one
-  # command and then spends up to two (`apps/api/src/sites/series-cleanup.ts`),
-  # owned by #167, which moves the pass off the request path entirely.
+  # rather than an `apiErrorSchema` body, and one residual still leads there. It
+  # is stated rather than silent: independent per-command worst cases coinciding
+  # in a route's ungated straight-line prefix, counted per route in
+  # `request-budget.ts` and carried in docs/tech-debt.md.
   #
   # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS` in that same module,
-  # which sizes the series-cleanup budget and the deadline against it — #29
-  # needed a handler to know how long it may keep starting DynamoDB requests.
-  # This file still owns the deployed value; the two are held equal by
-  # `pnpm check:infra-mirrors` in the `verify` composite, so lowering this
-  # number shrinks that budget in the same commit or fails the build. The
-  # gateway's 30 s is restated there as `API_GATEWAY_INTEGRATION_TIMEOUT_MS` and
+  # which sizes the deadline against it — #29 needed a handler to know how long
+  # it may keep starting DynamoDB requests. This file still owns the deployed
+  # value; the two are held equal by `pnpm check:infra-mirrors` in the `verify`
+  # composite, so lowering this number shortens every request's deadline in the
+  # same commit or fails the build. The gateway's 30 s is restated there as
+  # `API_GATEWAY_INTEGRATION_TIMEOUT_MS` and
   # `request-budget.test.ts` holds this value under it — the inequality the
-  # mirror gate cannot express, so raising this past 30 s fails a test instead
-  # of failing in production.
+  # mirror gate has no second side to address, AWS owning that 30 s and no file
+  # in this repo declaring it, so raising this past 30 s fails a test instead of
+  # failing in production.
   timeout = 15
 
   # 256 MB, and this number is load-bearing beyond performance: it is the figure

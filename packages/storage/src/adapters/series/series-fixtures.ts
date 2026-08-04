@@ -186,23 +186,5 @@ export const writeRequests = (
     });
   });
 
-/** The keys of every `DeleteRequest` the adapter batched, batch by batch. */
-export const deleteRequestKeys = (
-  ddb: AwsClientStub<DynamoDBDocumentClient>,
-): Record<string, unknown>[][] =>
-  ddb.commandCalls(BatchWriteCommand).map((call) => {
-    const requests = call.args[0].input.RequestItems?.[TABLE_NAME];
-    if (requests === undefined) {
-      throw new Error(`BatchWriteCommand did not target ${TABLE_NAME}`);
-    }
-    return requests.map((request) => {
-      const key = request.DeleteRequest?.Key;
-      if (key === undefined) {
-        throw new Error('expected every batch entry to be a DeleteRequest');
-      }
-      return key;
-    });
-  });
-
 export const anyInputHasConsistentRead = (ddb: AwsClientStub<DynamoDBDocumentClient>): boolean =>
   ddb.calls().some((call) => 'ConsistentRead' in call.args[0].input);
