@@ -32,18 +32,26 @@
  * subject anybody can review.
  */
 
-/** The empty fleet is the demo's invitation, so it names the next action. */
-export const EMPTY_FLEET_MESSAGE = 'No sites yet — click anywhere on the map to add the first one.';
-
 /**
- * The same invitation for a fleet that already has sites.
+ * The empty fleet is the demo's invitation, so it names the next action.
  *
- * Separate from {@link EMPTY_FLEET_MESSAGE} rather than shared with a flag:
- * one is the whole answer a reader gets when there is nothing else on screen,
- * the other is a hint beside a chart. They are free to diverge.
+ * The action it names is the map's add-site control, not a bare click. Clicking
+ * the basemap stopped being enough when that control arrived (#265): a click
+ * only places a site while the mode is armed, so the invitation this sentence
+ * used to extend now sends a reader to do the one thing that does nothing.
+ *
+ * That older wording is not quoted here, for the reason the retired empty-fleet
+ * line is not quoted above: the copy-contract test sweeps for it across
+ * `apps/web/src` with comments included, and an explanation containing the
+ * phrase would be the one thing keeping that sweep from ever going quiet.
+ *
+ * It had a sibling, `ADD_SITE_HINT`, saying the same thing beside the fleet
+ * chart for a fleet that already had sites. That one is gone rather than
+ * rewritten: a control the reader can see is what replaced it, and prose
+ * explaining a visible button is the kind of copy that goes stale next.
  */
-export const ADD_SITE_HINT =
-  'Click anywhere on the map to add a site and watch its first forecast arrive.';
+export const EMPTY_FLEET_MESSAGE =
+  'No sites yet — press “Add a site” on the map, then click where it goes.';
 
 /** The site listing itself is loading — the column has no rows to show yet. */
 export const LOADING_FLEET_LABEL = 'Loading the fleet…';

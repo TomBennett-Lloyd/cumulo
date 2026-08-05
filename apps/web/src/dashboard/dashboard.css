@@ -85,9 +85,10 @@
   line-height: var(--leading-tight);
 }
 
-/* The context region: whichever of the draft, the site and the fleet currently
-   holds the top of the content column. It carries no styling of its own — exactly one of
-   its three occupants is ever visible, so there is nothing to space or align.
+/* The context region: whichever of the site and the fleet currently holds the top
+   of the content column. It carries no styling of its own — exactly one of its two
+   occupants is ever visible, so there is nothing to space or align. (A draft was a
+   third until #265 moved it into a modal over the page; add-site.css owns that box.)
    It exists as a box because the region has to be *addressable* to be scrolled
    to, which is Dashboard.tsx's context-scroll effect. */
 

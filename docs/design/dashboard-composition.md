@@ -37,25 +37,38 @@ the same in a column as in a flow — and every "region" it names is a place in 
 
 ## The context swap
 
-**One region, directly under the map, shows exactly one of three things, and which one is a
+**One region, directly under the map, shows exactly one of two things, and which one is a
 function of state rather than of a page the reader chose.** In precedence order:
 
-1. **A draft**, while the reader has clicked an empty spot on the map and the add-site form is
-   open.
-2. **A site**, while `selectedSiteId` names one.
-3. **The fleet**, otherwise. This is the resting state — the aggregate is reachable by doing
+1. **A site**, while `selectedSiteId` names one.
+2. **The fleet**, otherwise. This is the resting state — the aggregate is reachable by doing
    nothing, which is the issue's own requirement that "aggregate context is always reachable
    rather than a separate destination".
 
 Below that region, unchanging: the site list, then the page footer.
 
-Two consequences are worth stating because they were choices rather than defaults.
+**A draft used to be a third occupant, and is now a modal.** #265 moved the add-site form into a
+native `<dialog>` (`apps/web/src/add-site/AddSiteDialog.tsx`), opened with `showModal()` over the
+whole page. Placing a site is a short, committed detour rather than a context to read, and two
+things followed from treating it as one. It stopped competing for a region it only ever borrowed:
+the fleet panel is no longer hidden and a site panel no longer unmounts for the duration, so the
+reading a reader had is still there, unchanged, the instant they cancel. And the region no longer
+has to be scrolled into view for it — a modal is painted in the top layer over wherever the reader
+already is.
+
+Opening the draft is also no longer a bare click on the basemap: the map carries an add-site
+control that arms the next click, and the mode is spent on the click that uses it. A click on an
+empty spot with the mode disarmed does nothing at all. The control itself is the map's own chrome
+and is recorded there — [`map-treatment.md`](map-treatment.md)'s "Map chrome" section, over
+`apps/web/src/map/MapControls.tsx`.
 
 **A draft outranks a selection but does not clear it.** "Where shall the new site go" and "which
-site am I reading" are different questions, and cancelling a draft hands the reader back the site
-they had open rather than the fleet they had left. The code expresses this by testing `draft`
-in the site panel's condition rather than by clearing `selectedSiteId` when a draft opens — the
-selection is never destroyed, only outranked.
+site am I reading" are different questions, and abandoning the first never answers the second.
+That precedence used to be a rule the code had to state — the site panel's condition tested
+`draft` — and it is physical now: the dialog is modal, the page behind it is inert, and there is
+nothing left to outrank. What survives from the old arrangement is the half that was always the
+point, that `selectedSiteId` is never cleared when a draft opens, so cancelling hands the reader
+back the site they had open rather than the fleet they had left.
 
 **The swap happens in a fixed region, so the map never moves.** That is most of the point of a
 swap over a stack: the region does not lurch when a selection arrives, and the map — the thing the
@@ -75,12 +88,14 @@ Two shapes were available. Bounding the list's height puts the region permanentl
 cost of a second scroller nested inside the first — the arrangement the redesign had just removed,
 and the one that makes a reader scroll two things to reach one. Scrolling to the region on a swap
 keeps the single scroller and treats the swap as the event it is. The second was chosen:
-`Dashboard.tsx` holds a ref on `.dashboard-context` (the one wrapping box the three occupants
-share, which is why that box exists at all) and an effect brings it into view whenever
-`selectedSiteId` or `draft` becomes non-null. A scroll position is an external system in exactly
-the sense the address bar is, which is what makes this an effect rather than a line in the click
-handlers (`react.md` rule 1) — and it has to be, because a context also arrives without a click:
-a creation selects the site it just made, and a `?site=` link opens on one.
+`Dashboard.tsx` holds a ref on `.dashboard-context` (the one wrapping box both occupants share,
+which is why that box exists at all) and an effect brings it into view whenever `selectedSiteId`
+becomes non-null. A scroll position is an external system in exactly the sense the address bar is,
+which is what makes this an effect rather than a line in the click handlers (`react.md` rule 1) —
+and it has to be, because a context also arrives without a click: a creation selects the site it
+just made, and a `?site=` link opens on one. A draft is deliberately not one of the arrivals it
+watches: the modal is over the page, so there is nothing to bring into view and scrolling the
+inert page beneath it would move ground for no reason the reader could see.
 
 It scrolls _into_ a context and never out of one. Closing hands the same region back to the fleet,
 and a page that jumped on the way out would move ground the reader did not ask to move. The
@@ -91,13 +106,21 @@ scroll would fight a reader who starts scrolling immediately after clicking.
 view but keeps their focus where it was still reaches the swapped-in context only by tabbing
 through whatever lies between, which is no answer at all for a keyboard or screen-reader user.
 The settled rule, decided for the whole surface rather than for this effect: **an occupant taking
-the region focuses its own heading** — the site panel, the draft, and a site arriving from a
-creation or from `?site=` alike; **`Close` returns focus to the closing site's row in the list**,
-because the button the reader pressed is about to be unmounted and focus would otherwise fall to
-`body`; and **a draft cancelled with nothing selected behind it focuses the context region
-itself**, which is why `.dashboard-context` carries `tabIndex={-1}` — nothing remounts on that
-path, so the region is the only honest target. `react.md`'s async surface convention owns the
-rule; `Dashboard.focus.test.tsx` pins it.
+the region focuses its own heading** — the site panel, and a site arriving from a creation or from
+`?site=` alike; **`Close` returns focus to the closing site's row in the list**, because the button
+the reader pressed is about to be unmounted and focus would otherwise fall to `body`; and **a
+dismissed draft returns focus to the map's add-site control**, the control the reader opened it
+with. `react.md`'s async surface convention owns the rule; `Dashboard.focus.test.tsx` pins it.
+
+That last one is the modal's bill, and it is worth naming because the platform normally pays it: a
+`<dialog>` closed with `close()` restores focus itself, but this one closes by being _unmounted_,
+and a removed dialog never runs the close steps. So the dashboard supplies the landing by hand,
+from the dialog's effect cleanup rather than from its `cancel` handler — on the Escape path the
+browser's own restoration is still running while `cancel` is being dispatched, and would overwrite
+a focus set there. A creation is the one dismissal that has somewhere better to send the reader,
+and it says so without a special case: the site panel's heading effect runs on a change of
+`site.id`, and React flushes a commit's unmount cleanups before its mount effects, so the panel
+gets the last word.
 
 jsdom cannot check any of this: it implements no layout, so it has no `scrollIntoView` and no
 scroll position to move. `Dashboard.test.tsx` pins the half that is the dashboard's own doing —

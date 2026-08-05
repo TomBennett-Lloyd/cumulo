@@ -14,6 +14,30 @@
  *   at.
  */
 
+/* The modal the form now opens in (`AddSiteDialog.tsx`).
+ *
+ * The box is the dialog's and the padding stays the form's, so the form is
+ * still the same component rendered in a different place rather than one that
+ * knows it is in a dialog. `border: none` because the backdrop is what separates
+ * this from the page — an outline as well would be a second edge for one
+ * boundary — and the surface colour is the form's own, kept here too so the
+ * element's own box matches it while the browser is painting the top layer.
+ *
+ * `max-width` and the `width` beside it are raw lengths, which the token gate
+ * permits through properties its allow-list omits (see stylelint.config.mjs's
+ * residual note). There is no measure scale to reach for; `.about-dialog` sets
+ * its own `max-width` the same way, two dialogs following one absent token
+ * category rather than two independent guesses. */
+.add-site-dialog {
+  width: 100%;
+  max-width: 30rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
 .add-site-form {
   display: grid;
   gap: var(--space-4);

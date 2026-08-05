@@ -37,15 +37,39 @@ describe('MapSurface with a live map canvas', () => {
     // look right and never draw a tile.
     const containerRef = createRef<HTMLDivElement>();
 
-    const { container } = render(<MapSurface canvas={{ kind: 'map', containerRef }} />);
+    const { container } = render(
+      <MapSurface canvas={{ kind: 'map', containerRef, addSiteArmed: false }} />,
+    );
 
     expect(container.firstElementChild?.className).toBe('map-view');
     expect(containerRef.current?.classList.contains('map-canvas')).toBe(true);
     expect(containerRef.current?.parentElement?.className).toBe('map-view');
   });
 
+  it('marks the canvas while a click on it would drop a site', () => {
+    // The armed cursor is `map.css`'s to draw and a browser's to compute; what
+    // the shell owes is the hook it hangs on, in both of its states. Asserted
+    // both ways because a canvas permanently wearing the class would look
+    // identical to one that tracks the mode, from inside a single render.
+    const armedRef = createRef<HTMLDivElement>();
+    const restingRef = createRef<HTMLDivElement>();
+
+    render(<MapSurface canvas={{ kind: 'map', containerRef: armedRef, addSiteArmed: true }} />);
+    render(<MapSurface canvas={{ kind: 'map', containerRef: restingRef, addSiteArmed: false }} />);
+
+    expect(armedRef.current?.classList.contains('map-canvas-armed')).toBe(true);
+    expect(restingRef.current?.classList.contains('map-canvas-armed')).toBe(false);
+    // Still the same box either way — the sizing rules hang on `.map-canvas`,
+    // so arming must not be a layout change.
+    expect(armedRef.current?.classList.contains('map-canvas')).toBe(true);
+  });
+
   it('credits Open-Meteo on the map', () => {
-    render(<MapSurface canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>() }} />);
+    render(
+      <MapSurface
+        canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>(), addSiteArmed: false }}
+      />,
+    );
 
     expect(openMeteoLinkHref()).toBe('https://open-meteo.com/');
   });
@@ -65,7 +89,9 @@ describe('MapSurface with a live map canvas', () => {
     // should read that predicate, and docs/tech-debt.md's entry on the band's
     // occlusion, rather than this assertion.
     render(
-      <MapSurface canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>() }}>
+      <MapSurface
+        canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>(), addSiteArmed: false }}
+      >
         <p>Site markers</p>
       </MapSurface>,
     );

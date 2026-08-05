@@ -126,6 +126,41 @@ Encoding a site's _output_ on the map — a sequential ramp, a heatmap layer —
 here. If it arrives later it is a single-hue light-to-dark ramp with its own validated steps,
 and it needs a legend; it does not get to reuse the marker slots.
 
+## Map chrome
+
+The map carries two permanent controls, grouped in the **top-right** corner over the tiles
+(`.map-controls`, `apps/web/src/map/MapControls.tsx`). The corner is not a preference: the bottom
+edge belongs to the credits band all the way across, and a control tucked beside it is a control
+the band can occlude.
+
+Both sit on `--color-surface-veil` — the same answer the Attribution section reaches for below, and
+for the same reason: a control painted straight onto tiles has whatever contrast the pixel beneath
+it happens to give. These carry full `--color-text` rather than the band's muted ink, so they sit
+well clear of the floor that mix was validated against.
+
+- **Reset map view** returns the camera to the framing the map opened on. It takes that framing
+  whole, from the one constant that also constructs the map (`apps/web/src/map/framing.ts`) — the
+  point being that every reader-reachable axis comes back, rotation and tilt included (axes behind
+  options the app leaves disabled, like roll, join the constant when the option does — the constant's
+  own comment carries that obligation). A reset that named only the
+  axes somebody happened to think of is not a smaller version of this control, it is a broken one:
+  maplibre gives every reader drag-rotate and pitch by default, so the forgotten axes are one
+  gesture away.
+- **Add a site** is a two-state control rather than a button, because it arms the next click on the
+  basemap instead of doing something itself. It carries `aria-pressed`, and the armed state changes
+  the basemap cursor to a crosshair — so the mode is legible on the control, in the accessibility
+  tree, and under the pointer that is about to act on it. Disarmed, a click on the basemap does
+  nothing; the mode is spent on the click that uses it.
+
+The pressed fill is base ink (`--color-text` on `--color-bg`), deliberately **not** a marker slot.
+The `--color-map-marker-*` family carries data identity, and a control borrowing one would make
+"this site is selected" and "add-site mode is on" the same colour on the same surface.
+
+That pressed fill is also why the mode is never carried by colour alone — the same relief rule the
+markers follow above. `aria-pressed` is the state a screen reader is given, the crosshair is the
+state a pointer user sees without looking away from the map, and the control's own label names what
+it does in either state.
+
 ## Dark mode
 
 Every rule above is written in token names, so dark mode changes nothing structural: the same

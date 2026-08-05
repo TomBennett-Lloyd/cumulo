@@ -11,6 +11,8 @@ import type { FleetSourceResult, FleetDataSource } from '../data/fleet-data-sour
 import {
   addSite,
   advanceBy,
+  armAddSite,
+  clickBasemap,
   clickMap,
   CREATED_SITE_NAME,
   fleetList,
@@ -363,7 +365,10 @@ describe('Dashboard', () => {
 });
 
 /*
- * The context swap: one region of the column, three things that can occupy it.
+ * The context swap: one region of the column, two things that can occupy it —
+ * a site, and the fleet at rest. A draft was a third until it moved into a modal
+ * over the page (`add-site/AddSiteDialog.tsx`), and what it does to the region
+ * now, which is nothing, is `Dashboard.draft-dialog.test.tsx`'s subject.
  *
  * These are assertions about *which* context is on screen and about what that
  * costs, which is why several of them read the `hidden` attribute directly. The
@@ -399,32 +404,6 @@ describe('Dashboard context region', () => {
     expect(fleetForecasts).toHaveBeenCalledTimes(1);
   });
 
-  it('lets a draft take the region without losing the site the reader had open', async () => {
-    const site = firstSeededSite();
-    const container = renderDashboard(new DemoFleetDataSource());
-    await settle();
-
-    fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
-
-    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
-
-    clickMap();
-
-    // The draft outranks both the site and the fleet, and neither is unmounted
-    // *because* it was outranked — the selection survives underneath it.
-    expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Add site' })).toBeDefined();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    // Cancelling hands the reader back the site they were reading, not the
-    // fleet they had left. A dashboard that cleared the selection when a draft
-    // opened would land on the fleet panel here.
-    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
-  });
-
   it('scrolls the column to the region a context takes, and leaves it alone on close', async () => {
     const site = firstSeededSite();
     const container = renderDashboard(new DemoFleetDataSource());
@@ -458,8 +437,10 @@ describe('Dashboard context region', () => {
 
     clickMap();
 
-    // A draft is the other way into the region, and it arrives the same way for the reader.
-    expect(scrolledIntoView()).toEqual([contextRegion, contextRegion]);
+    // A draft is no longer one of the arrivals: it opens as a modal in the top layer, over
+    // wherever the reader is, so there is nothing to bring into view and scrolling the inert page
+    // beneath it would move ground for no reason the reader could see. The count stands still.
+    expect(scrolledIntoView()).toEqual([contextRegion]);
   });
 
   it('re-sums the fleet when a site is added to it', async () => {
@@ -475,6 +456,43 @@ describe('Dashboard context region', () => {
     // Creation is the one event that changes the sum, so it is the one event
     // that re-spends the fan-out.
     expect(fleetForecasts).toHaveBeenCalledTimes(2);
+  });
+});
+
+/*
+ * The gate between a click on the basemap and a draft.
+ *
+ * `StubMapRegion` reports every basemap click, exactly as the real map does, so
+ * what these two prove is the *dashboard's* rule rather than the stand-in's. The
+ * negative case is the one that bites: delete the gate from `onMapClick` and it
+ * is the only assertion in the suite that changes.
+ */
+describe('Dashboard add-site mode', () => {
+  it('ignores a map click while add-site mode is disarmed', async () => {
+    renderDashboard(new DemoFleetDataSource());
+    await settle();
+
+    clickBasemap();
+
+    expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
+  });
+
+  it('opens one draft per arming, and spends the arming on it', async () => {
+    const container = renderDashboard(new DemoFleetDataSource());
+    await settle();
+
+    armAddSite();
+    clickBasemap();
+
+    expect(screen.getByRole('button', { name: 'Add site' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    clickBasemap();
+
+    // Single-shot: the arming was spent on the first click, so the second is an
+    // ordinary basemap click again and the region is back on the fleet.
+    expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
   });
 });
 

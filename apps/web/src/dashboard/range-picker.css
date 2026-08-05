@@ -24,10 +24,11 @@
  * The unpressed fill is `--color-bg`, not `--color-surface`: the picker sits
  * inside a `--color-surface` card (`.fleet-panel`), so a surface-on-surface chip
  * has no edge at all and the two windows the reader has *not* chosen read as
- * plain text rather than as controls. `--color-bg` against a card is the same
- * pairing `.fleet-panel-hint` uses two rules away in fleet-panel.css, which is
- * why it is that token rather than a border invented here. The toggle this shape
- * came from sits on the page background, where the inversion never arises. */
+ * plain text rather than as controls. `--color-bg` against a card is the app's
+ * standing answer to that inversion rather than a border invented here — the
+ * add-a-site hint in fleet-panel.css used to be the second example of it, and it
+ * left with the map's own add-site control (#265). The toggle this shape came
+ * from sits on the page background, where the inversion never arises. */
 .range-picker-button {
   padding: var(--space-2) var(--space-4);
   border: none;

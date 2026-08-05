@@ -44,6 +44,21 @@ const STATE_COPY = 'dashboard/state-copy.ts';
  */
 const RETIRED_EMPTY_FLEET_LINE = 'No active sites yet';
 
+/**
+ * The instruction the map's add-site control replaced, kept as assertion 4's
+ * positive control.
+ *
+ * It was written twice — the empty fleet's invitation and `ADD_SITE_HINT`
+ * beside the fleet chart — which is the whole reason this sweep exists rather
+ * than a rewrite of the two known copies. A bare click on the basemap does not
+ * place a site any more (#265), so any surface still promising one is teaching
+ * the reader an interaction the app no longer has.
+ *
+ * `state-copy.ts` deliberately does not quote it either, for the same reason as
+ * the line above.
+ */
+const RETIRED_ADD_SITE_INSTRUCTION = 'Click anywhere on the map to add a site';
+
 /** Sources the convention governs: app code, excluding tests, fixtures and the preview harness. */
 const isGoverned = (path: string): boolean =>
   /\.tsx?$/.test(path) &&
@@ -150,6 +165,20 @@ describe('state copy has one owner', () => {
     expect(
       report(linesMatching(governedFiles, retiredPhrase, verbatim)),
       'There is no inactive site to contrast with, so the word asserts a distinction the data model does not make (issue 104)',
+    ).toBe('');
+  });
+
+  it('never tells the reader a bare map click adds a site, not even in a comment', () => {
+    // Deliberately looser than the retired sentence: what must not come back is
+    // the *instruction*, in whatever words a future panel reaches for, so the
+    // pattern matches the promise rather than one spelling of it.
+    const retiredInstruction = /click\w*\s+(?:anywhere\s+)?(?:on\s+)?the\s+map\s+to\s+add/i;
+
+    expect(retiredInstruction.test(RETIRED_ADD_SITE_INSTRUCTION)).toBe(true);
+
+    expect(
+      report(linesMatching(governedFiles, retiredInstruction, verbatim)),
+      'A basemap click only places a site while the map’s add-site control is armed (issue 265)',
     ).toBe('');
   });
 

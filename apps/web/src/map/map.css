@@ -68,6 +68,68 @@
   color: var(--color-text);
 }
 
+/* ── Map controls ────────────────────────────────────────────────────────────
+ *
+ * The reset and add-site controls (`MapControls.tsx`), overlaid on the map's
+ * *top* right. The corner is not a preference: the bottom edge is the credits
+ * band's, all the way across (`.map-attribution` below), and a control tucked
+ * beside it would be a control the band can occlude.
+ *
+ * `--color-surface-veil` is the same answer the credits band uses, for the same
+ * reason: a control sitting on tiles has whatever contrast the pixel under it
+ * happens to give, and the veil puts a mostly-known colour behind the ink while
+ * the map stays continuous. This one carries full `--color-text` rather than the
+ * band's muted ink, so it sits well clear of the floor that mix was validated
+ * against (docs/design/map-treatment.md, Attribution). */
+.map-controls {
+  position: absolute;
+  inset: var(--space-3) var(--space-3) auto auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* One shape for both, because they are one control group and would be wrong if
+ * only one of them changed (structure.md rule 7). Deliberately its own pair of
+ * classes rather than `.theme-toggle`'s or `.range-picker-button`'s: those are
+ * page chrome and a data control respectively, and both are free to change
+ * without dragging map chrome along. */
+.map-control-reset,
+.map-control-add {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-veil);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+/* Pressed wears base ink, not a map marker slot — the convention `.theme-toggle`
+ * follows in app.css and for the same reason: the marker tokens carry data
+ * identity, and a control borrowing one would make "selected site" and "add-site
+ * mode is on" the same colour on the same surface. */
+.map-control-add[aria-pressed='true'] {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* The armed cursor, and the reason it is not written on `.map-canvas` itself.
+ *
+ * maplibre styles its own container — `.maplibregl-canvas-container.maplibregl-interactive
+ * { cursor: grab }` in maplibre-gl.css — and a declaration applied directly to
+ * an element always beats one inherited from an ancestor, whatever the
+ * ancestor's specificity. So `cursor` on the armed wrapper would be silently
+ * dead. This targets the same element maplibre does, one class heavier.
+ *
+ * `:not(:active)` keeps maplibre's `grabbing` during a drag: a reader who is
+ * panning is panning, armed or not, and the crosshair belongs to the click that
+ * places a site rather than to the gesture that moves the map. */
+.map-canvas-armed .maplibregl-canvas-container:not(:active) {
+  cursor: crosshair;
+}
+
 /* The credits, drawn over the bottom edge of the map rather than in a strip
  * under it. Pinned to all three lower edges (`inset: auto 0 0 0`) so the band
  * is as wide as the map and moves with it; out of flow, so the canvas keeps the

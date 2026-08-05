@@ -1,6 +1,7 @@
 import type { Site } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
+import { MapControls } from '../map/MapControls';
 import type { MapPosition } from '../map/MapView';
 import { MapView } from '../map/MapView';
 import { SiteMarkers } from '../map/SiteMarkers';
@@ -11,8 +12,18 @@ export interface MapRegionProps {
   readonly sites: readonly Site[];
   readonly selectedSiteId: Site['id'] | null;
   readonly onSelectSite: (siteId: Site['id']) => void;
-  /** A click on the basemap itself — where a new site would go. Markers handle their own. */
+  /**
+   * A click on the basemap itself — where a new site would go. Markers handle
+   * their own.
+   *
+   * Reported whether or not add-site mode is armed: whether a click *means*
+   * anything is the dashboard's question, and a region that filtered on its own
+   * would put the same rule in two places.
+   */
   readonly onMapClick: (position: MapPosition) => void;
+  /** Whether the next basemap click drops a draft — drawn on the toggle and on the cursor. */
+  readonly addSiteArmed: boolean;
+  readonly onToggleAddSite: () => void;
 }
 
 /**
@@ -49,8 +60,17 @@ export const MapRegion = ({
   selectedSiteId,
   onSelectSite,
   onMapClick,
+  addSiteArmed,
+  onToggleAddSite,
 }: MapRegionProps): ReactElement => (
-  <MapView theme={theme} onMapClick={onMapClick}>
+  <MapView theme={theme} onMapClick={onMapClick} addSiteArmed={addSiteArmed}>
     <SiteMarkers sites={sites} selectedSiteId={selectedSiteId} onSelectSite={onSelectSite} />
+    {/*
+     * After the markers, so the control group paints over any marker that
+     * drifts under the top-right corner: both are positioned, so DOM order is
+     * paint order between them, and a reset button a cluster could bury would
+     * be unreachable exactly when the reader most wants it.
+     */}
+    <MapControls armed={addSiteArmed} onToggleArmed={onToggleAddSite} />
   </MapView>
 );
