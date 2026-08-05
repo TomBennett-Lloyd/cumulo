@@ -277,7 +277,7 @@ describe('FleetPanel as the column keeps it mounted', () => {
     expect(dataSource.forecastCallCount).toBe(2);
   });
 
-  it('credits Open-Meteo nowhere inside itself — the column footer owns that credit', async () => {
+  it('credits Open-Meteo nowhere inside itself — the page footer owns that credit', async () => {
     await renderSettled(new CountingFleetSource(FULL_FLEET));
 
     expect(screen.queryByRole('link', { name: 'Open-Meteo.com' })).toBeNull();

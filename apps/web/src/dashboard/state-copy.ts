@@ -171,11 +171,14 @@ export const fleetListFailureMessage = (detail: string): string => `Fleet unavai
  *
  * It offers a reload rather than a retry because `lazy` caches the rejected
  * promise — an in-page retry would be a control that cannot work. The second
- * clause is the part worth keeping: everything beside the map still works, and a
- * reader who is not told that will assume the page is broken.
+ * clause is the part worth keeping: everything below the map still works, and a
+ * reader who is not told that will assume the page is broken. It says *below*
+ * rather than *beside* because that is where those things now are (#265) — a
+ * message that points a reader somewhere empty is worse than one that points
+ * nowhere.
  */
 export const MAP_LOAD_FAILURE_MESSAGE =
-  'The map could not be loaded. Reload the page to try again — the fleet list and forecasts beside it are unaffected.';
+  'The map could not be loaded. Reload the page to try again — the fleet list and forecasts below it are unaffected.';
 
 /** The whole tree threw: the boundary's heading, with {@link APP_FAILURE_ADVICE} under it. */
 export const APP_FAILURE_HEADING = 'The dashboard hit an unexpected error';

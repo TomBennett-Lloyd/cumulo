@@ -3,13 +3,14 @@
  * toggle and the whole-app failure card — the chrome that surrounds the one
  * surface the app now has.
  *
- * The frame changed shape with #148. There is no view nav any more, and the
- * shell is no longer a document that grows down the page: it is a fixed-height
- * column — header bar, then everything else — so the map beside the panel
- * column can be given a real height to fill instead of guessing at a `vh`
- * fraction. That is why `.app` is `100dvh` rather than `min-height`: the
- * dashboard's `height: 100%` needs a parent whose height is a resolved value,
- * and `min-height` does not give it one.
+ * The frame has been two shapes. #148 made it a fixed-height column so the map
+ * beside the panel column could be handed a real height to fill; #265 removed
+ * the column beside the map, and with one full-bleed map over one content
+ * measure there is nothing left that needs the viewport as its ceiling. So the
+ * shell is an ordinary scrolling document again: `min-height: 100dvh` so a
+ * short page still reaches the bottom of the screen, and no maximum, because
+ * the content below the map is meant to run past it. `dashboard.css` owns the
+ * flow itself.
  *
  * `dvh` rather than `vh` for the mobile browser chrome that appears and
  * disappears as the page scrolls; `vh` there is the height the viewport
@@ -35,7 +36,7 @@ body {
 .app {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  min-height: 100dvh;
 }
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
@@ -76,13 +77,14 @@ body {
   font-size: var(--text-sm);
 }
 
-/* Everything that is not the header. `min-height: 0` is what lets it be
- * shorter than its content: a flex item's default minimum is its content size,
- * so without this the dashboard's own scrolling column would push the page
- * taller than the viewport instead of scrolling inside it. */
+/* Everything that is not the header. `flex: 1` is what puts the app failure
+ * card in the middle of the screen on a page with nothing else on it — it
+ * claims the space the header left, and `.app-failure`'s `margin: auto`
+ * centres in that. It no longer carries `min-height: 0`: that existed to let
+ * this box be *shorter* than its content while the dashboard scrolled a column
+ * inside itself, and the document is the scroller now (#265). */
 .app-main {
   flex: 1;
-  min-height: 0;
 }
 
 /* `margin: auto` on a flex item centres it on both axes in the space the header
@@ -136,16 +138,4 @@ body {
 .theme-toggle[aria-pressed='true'] {
   background: var(--color-text);
   color: var(--color-bg);
-}
-
-/* Below the width where the map and the panel column both stay usable side by
- * side, the dashboard stacks (see dashboard.css) — and a stacked surface is
- * taller than the viewport by construction. So the shell stops being a fixed
- * column and becomes an ordinary page that scrolls, which is the behaviour a
- * reader on a narrow screen expects anyway. */
-@media (width < 64rem) {
-  .app {
-    height: auto;
-    min-height: 100dvh;
-  }
 }

@@ -80,7 +80,7 @@ default-vs-hover and hover-vs-selected, and it is default-vs-selected that a rea
 slots 3, 4 and 5 against the light surface — slot 3 is the hover fill — so the relief rule
 applies here directly: hover always brings a labelled tooltip naming the site, selection always
 opens the site's detail panel, and both change the marker's size. A reader who cannot separate
-the hues still gets the state from the label and the geometry. The site list beside the map is
+the hues still gets the state from the label and the geometry. The site list under the map is
 the table view: every marker state has a row equivalent, and the map is never the only way to
 reach a site.
 
@@ -150,12 +150,30 @@ absorbs the other.
 
 Placement:
 
-- Both credits live in a **persistent strip along the bottom of the map**, backed by
-  `--color-surface` rather than floating directly on tiles. A caption floating on imagery has
-  whatever contrast the pixel beneath it happens to give; on a surface it has the contrast the
-  palette was validated for.
+- Both credits live in a **persistent band across the bottom of the map**, backed by
+  `--color-surface-veil` and overlaid on the tiles.
+
+  This band used to be a strip _under_ the map, on `--color-surface`, and the argument for that
+  was contrast: a caption floating on imagery has whatever contrast the pixel beneath it happens
+  to give, while on a surface it has the contrast the palette was validated for. That argument
+  survives the move — it is the reason `--color-surface-veil` exists (#265). The veil is a
+  mostly-opaque surface colour, so the ink is still reading against a known colour rather than
+  against tiles; what the translucency buys is that the map does not stop at the credit line. The
+  contrast answer is therefore the veil, not the position, and a credit painted directly on
+  tiles is still refused.
+
+  What forced the question was the map going full bleed
+  ([`dashboard-composition.md`](dashboard-composition.md)): a strip below an edge-to-edge map is
+  a band of chrome across the page rather than part of the map, and it takes its height out of
+  the map on every screen.
+
 - **Both are visible without interaction.** No "i" toggle, no hover-to-reveal, no collapsing the
-  credits behind a control at narrow widths — the strip wraps to two lines instead.
+  credits behind a control at narrow widths — the band wraps to two lines instead. Overlaying
+  does not weaken this: the band is opaque enough to read at rest, and it is never faded,
+  animated in, or suppressed while the reader is panning.
+- **Both stay clickable.** The band takes pointer events like any other content; a credit whose
+  link cannot be followed is not a credit, and `pointer-events: none` on an overlay is the
+  obvious way to lose one by accident.
 - Tile credit first, weather credit second, reading order matching what the reader is looking at:
   the map, then the data drawn on it.
 - The Open-Meteo credit's own styling belongs to the `OpenMeteoAttribution` component — muted ink

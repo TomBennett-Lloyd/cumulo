@@ -85,7 +85,7 @@ describe('LazyMapRegion when the map chunk never arrives', () => {
     const failure = await screen.findByRole('alert');
 
     expect(failure.textContent).toContain('The map could not be loaded');
-    // The whole point of a local boundary: everything beside the map survives.
+    // The whole point of a local boundary: everything below the map survives.
     expect(screen.getByText('Fleet list')).toBeDefined();
   });
 

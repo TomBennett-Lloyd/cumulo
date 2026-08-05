@@ -2,7 +2,7 @@
 
 Design record for
 [#148 — one integrated experience, not view-toggled pages](https://github.com/TomBennett-Lloyd/cumulo/issues/148),
-covering how the dashboard's one surface is put together: what occupies the panel column beside
+covering how the dashboard's one surface is put together: what occupies the context region under
 the map, what replaces what, what stays mounted when it is not visible, and where the two
 Open-Meteo credits sit.
 
@@ -23,12 +23,21 @@ of. Selecting a site on the map and reading that site's forecast were two differ
 every departure threw away the work: coming back re-fetched everything the reader had already
 waited for.
 
-The redesign has one surface. The map is the canvas; a docked column beside it carries the
-reading. Nothing is navigated to.
+The redesign has one surface. The map is the canvas and the reading sits with it; nothing is
+navigated to.
+
+Where the reading sits changed once since. #148 docked it in a column beside the map, which made
+the two visible at once at the cost of giving the map two thirds of the width and the reading a
+26–30rem measure — and of a second scroller, since a column of panels beside a fixed-height map
+has to scroll inside a page that cannot. #265 took the map full bleed across the top and put the
+reading in one centred measure below it: one scroller, the full width for the map, and no
+breakpoint, because the stacked arrangement a narrow screen already got is now the only one. The
+composition below is unchanged by that move — what swaps, what stays mounted, and what is owed is
+the same in a column as in a flow — and every "region" it names is a place in that flow.
 
 ## The context swap
 
-**One region at the top of the column shows exactly one of three things, and which one is a
+**One region, directly under the map, shows exactly one of three things, and which one is a
 function of state rather than of a page the reader chose.** In precedence order:
 
 1. **A draft**, while the reader has clicked an empty spot on the map and the add-site form is
@@ -38,7 +47,7 @@ function of state rather than of a page the reader chose.** In precedence order:
    nothing, which is the issue's own requirement that "aggregate context is always reachable
    rather than a separate destination".
 
-Below that region, unchanging: the site list, then the column's footer.
+Below that region, unchanging: the site list, then the page footer.
 
 Two consequences are worth stating because they were choices rather than defaults.
 
@@ -49,21 +58,22 @@ in the site panel's condition rather than by clearing `selectedSiteId` when a dr
 selection is never destroyed, only outranked.
 
 **The swap happens in a fixed region, so the map never moves.** That is most of the point of a
-swap over a stack: the column's height does not lurch when a selection arrives, and the map — the
-thing the reader is pointing at — keeps its geometry through every context change.
+swap over a stack: the region does not lurch when a selection arrives, and the map — the thing the
+reader is pointing at — keeps its geometry and its place through every context change.
 
-**A swap scrolls the column back to the region, because being first is not the same as being in
-view.** The original argument for an unbounded site list was that the context region sits at the
-top of the column, so a selection always lands where the reader is looking. That holds at
-`scrollTop: 0` and nowhere else. Sixty rows are taller than the map beside them; a reader who has
-scrolled down to row forty and clicks a marker gets their answer written into a region that is now
-off the top of the screen, and the only feedback they receive is a row highlight. Review cycle 1
-of #148 caught it.
+**A swap scrolls the page back to the region, because being first is not the same as being in
+view.** The original argument for an unbounded site list was that the context region is the first
+thing under the map, so a selection always lands where the reader is looking. That holds at
+`scrollTop: 0` and nowhere else. Sixty rows are taller than a screen; a reader who has scrolled
+down to row forty and clicks a marker gets their answer written into a region that is now off the
+top of the screen, and the only feedback they receive is a row highlight. Review cycle 1 of #148
+caught it, and the full-bleed layout sharpened it rather than settling it — the region now has a
+60vh map above it, so a selection lands further out of view than it did.
 
 Two shapes were available. Bounding the list's height puts the region permanently in view at the
-cost of a scroller nested inside the column's own — the arrangement the redesign had just removed,
-and the one that makes a reader scroll two things to reach one. Scrolling the column to the region
-on a swap keeps the single scroller and treats the swap as the event it is. The second was chosen:
+cost of a second scroller nested inside the first — the arrangement the redesign had just removed,
+and the one that makes a reader scroll two things to reach one. Scrolling to the region on a swap
+keeps the single scroller and treats the swap as the event it is. The second was chosen:
 `Dashboard.tsx` holds a ref on `.dashboard-context` (the one wrapping box the three occupants
 share, which is why that box exists at all) and an effect brings it into view whenever
 `selectedSiteId` or `draft` becomes non-null. A scroll position is an external system in exactly
@@ -72,14 +82,14 @@ handlers (`react.md` rule 1) — and it has to be, because a context also arrive
 a creation selects the site it just made, and a `?site=` link opens on one.
 
 It scrolls _into_ a context and never out of one. Closing hands the same region back to the fleet,
-and a column that jumped on the way out would move ground the reader did not ask to move. The
+and a page that jumped on the way out would move ground the reader did not ask to move. The
 scroll is instant rather than smooth: this is feedback for an action already taken, and a smooth
 scroll would fight a reader who starts scrolling immediately after clicking.
 
 **The scroll is not the focus, and both are owed.** A reader who gets the region scrolled into
 view but keeps their focus where it was still reaches the swapped-in context only by tabbing
 through whatever lies between, which is no answer at all for a keyboard or screen-reader user.
-The settled rule, decided for the whole column rather than for this effect: **an occupant taking
+The settled rule, decided for the whole surface rather than for this effect: **an occupant taking
 the region focuses its own heading** — the site panel, the draft, and a site arriving from a
 creation or from `?site=` alike; **`Close` returns focus to the closing site's row in the list**,
 because the button the reader pressed is about to be unmounted and focus would otherwise fall to
@@ -92,11 +102,12 @@ jsdom cannot check any of this: it implements no layout, so it has no `scrollInt
 scroll position to move. `Dashboard.test.tsx` pins the half that is the dashboard's own doing —
 that a context arriving is what triggers the scroll, that the element scrolled is the context
 region, and that closing triggers nothing — against a stand-in installed in
-`dashboard-test-fixture.tsx`. The other half is a browser criterion: **with the column scrolled
+`dashboard-test-fixture.tsx`. The other half is a browser criterion: **with the page scrolled
 down to the site list, clicking a marker leaves the site panel visible without the reader
 scrolling back up.** The browser lane that could own it exists (`apps/web/e2e/`, `testing.md`
-rule 10), but no spec in it reads a scroll position today — the criterion is stated here and
-checked by hand, not by a gate.
+rule 10), and it now measures the layout the criterion is about (`composition.spec.ts` reads the
+map's box and the chart's), but no spec in it reads a scroll position — the criterion is stated
+here and checked by hand, not by a gate.
 
 ## The fleet panel stays mounted
 
@@ -145,15 +156,17 @@ becomes true for the HTTP source, one boolean flips and the honest surface follo
 The Open-Meteo credit is a CC BY 4.0 licence condition wherever weather-derived data is displayed
 (CLAUDE.md, hard constraints). The surface carries exactly two, and the count is the design:
 
-- **The map strip**, which belongs to the map and is `MapRegion`'s obligation.
-- **The column footer**, one persistent credit at the foot of the panel column, present in every
+- **The map's own band**, overlaid on the bottom edge of the map and `MapRegion`'s obligation.
+  Where it sits and what keeps it legible over tiles is
+  [`map-treatment.md`](map-treatment.md)'s to say.
+- **The page footer**, one persistent credit under the chart and table sections, present in every
   state and through every context swap.
 
 The arrangement the old views had — a credit inside each panel — is what this replaces. Those
 multiplied with the panels, and each one came and went with whatever mounted it, which meant the
-credit was reliably missing in exactly the states nobody looks at. A credit that belongs to a
-_column_ rather than to a panel cannot be lost by a selection. The app-level error boundary
-carries one too, so a crashed tree does not drop the obligation with the render.
+credit was reliably missing in exactly the states nobody looks at. A credit that belongs to the
+_page_ rather than to a panel cannot be lost by a selection. The app-level error boundary carries
+one too, so a crashed tree does not drop the obligation with the render.
 
 `App.test.tsx` asserts the count is exactly two. That is a real assertion, not a tolerance: three
 would mean a panel had grown its own again.
@@ -188,5 +201,5 @@ it, which is why the module's types say `string` rather than `Site['id']`.
   `dashboard/map-region-split-contract.test.ts`.
 - **The async-state vocabulary** — `panel-states.tsx` owns the three components, `state-copy.ts`
   owns their wording, and `react.md` owns the rule. Panels reuse them and do not invent siblings.
-- **The map shell** — `map/MapSurface.tsx` is the one column behind the canvas, the placeholder
+- **The map shell** — `map/MapSurface.tsx` is the one box behind the canvas, the placeholder
   and the failure, and it wears the same async states under the same convention (#161).

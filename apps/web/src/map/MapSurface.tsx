@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode, Ref } from 'react';
 import { MapAttributionStrip } from './MapAttributionStrip';
 
 /*
- * The map's column, written once.
+ * The map's shell, written once.
  *
  * Before this module there were four copies of `<div className="map-view">` —
  * the real map, the loading placeholder, the load failure, and a test stand-in —
@@ -74,7 +74,8 @@ const mapCanvasElement = (canvas: MapCanvasSlot): ReactElement => {
 };
 
 /**
- * The map column: a canvas box, whatever is drawn over it, and the credits.
+ * The map's box: a canvas, whatever is drawn over it, and the credits over
+ * its bottom edge.
  *
  * `MapAttributionStrip` is unconditional and has no prop that could remove it.
  * The Open-Meteo credit is a licence obligation wherever weather-derived data

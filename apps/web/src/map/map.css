@@ -11,22 +11,27 @@
  * painted mark, and that nothing here fades a marker to cope with crowding.
  */
 
-/* The map is a column — tiles above, credits below — rather than a strip
- * floating over the tiles. That is the treatment's placement rule made
- * structural: the credits cannot end up on imagery even by accident, because
- * they are not drawn on it. */
+/* The map is a positioning context for the credits drawn over its bottom edge
+ * (`.map-attribution` below, and `docs/design/map-treatment.md`'s Attribution
+ * section for why they moved onto the tiles). It keeps `overflow: hidden` so
+ * the canvas is clipped to this box, and it carries no corner radius: the map
+ * runs edge to edge across the page now (`.dashboard-map` in dashboard.css),
+ * and a rounded corner on a full-bleed band would round against the window. */
 .map-view {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  border-radius: var(--radius-md);
   background: var(--color-surface);
 }
 
-/* `min-height: 0` lets the canvas shrink inside the flex column instead of
- * pushing the credits off the bottom edge — the strip is persistent, so it can
- * never be the thing that gives way. */
+/* The canvas takes the whole box: the credits are out of flow above it, so
+ * there is nothing else in this column to share the height with. `min-height:
+ * 0` stays because a flex item's default minimum is its content, and the
+ * failure and placeholder states that wear this class have text in them — a
+ * long message would otherwise make the box taller than the map it stands in
+ * for, which is the one thing those two states must never do. */
 .map-canvas {
   flex: 1 1 auto;
   min-height: 0;
@@ -63,16 +68,31 @@
   color: var(--color-text);
 }
 
-/* Wrapping to two lines is the narrow-width behaviour, in place of collapsing
- * either credit behind a control. */
+/* The credits, drawn over the bottom edge of the map rather than in a strip
+ * under it. Pinned to all three lower edges (`inset: auto 0 0 0`) so the band
+ * is as wide as the map and moves with it; out of flow, so the canvas keeps the
+ * full height and the map gains back the ~34px the strip used to cost it.
+ *
+ * `--color-surface-veil` is what makes that legal rather than merely nicer. The
+ * treatment's rule is that a credit must have the contrast the palette was
+ * validated for instead of whatever pixel lands under it, and the veil is that
+ * answer in an overlay: a mostly-opaque surface between the ink and the tiles,
+ * so the text is reading against a known colour while the map stays continuous
+ * behind it. No `pointer-events` games — a CC BY 4.0 credit has to be
+ * clickable, and this band is over the tiles, not over anything a reader
+ * needs to reach.
+ *
+ * Wrapping to two lines is still the narrow-width behaviour, in place of
+ * collapsing either credit behind a control. */
 .map-attribution {
+  position: absolute;
+  inset: auto 0 0 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border-top: calc(var(--space-1) / 4) solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-veil);
 }
 
 /* The weather credit styles itself, from `@cumulo/ui`. This is only the tile
@@ -99,7 +119,7 @@
  *    itself. Every painted state is smaller than the area that responds to it.
  * 2. No state is carried by hue alone. Hover and selection each change the
  *    diameter as well as the fill, hover and focus both name the site in a
- *    tooltip, and the site list beside the map is the table view of the same
+ *    tooltip, and the site list under the map is the table view of the same
  *    states — the relief the light palette's contrast warning on slot 3
  *    requires.
  * 3. Crowding is answered by clustering, never by fading: there is deliberately

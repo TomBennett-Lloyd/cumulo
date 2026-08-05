@@ -82,7 +82,7 @@ interface FleetSectionProps {
 }
 
 /**
- * The fleet column's contents: the list, or an honest account of why there is
+ * The Sites section's contents: the list, or an honest account of why there is
  * no list.
  *
  * A failed listing shows the reason and a retry rather than an empty list
@@ -139,8 +139,9 @@ export interface DashboardProps {
 }
 
 /**
- * The fleet dashboard: the map as the canvas, the panel column beside it, and
- * the flow that turns a click on the map into a site with a forecast.
+ * The fleet dashboard: the map as a full-width canvas across the top, the
+ * reading beneath it, and the flow that turns a click on the map into a site
+ * with a forecast.
  *
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the list rows and the
@@ -150,10 +151,11 @@ export interface DashboardProps {
  * `selection-url.ts` is the whole of the deep link, and the dashboard reads it
  * once at mount and writes it whenever the selection moves.
  *
- * The column is a context swap, not a set of stacked slots: one region shows the
- * fleet's story, one site's, or a draft, and which one is a function of state
- * rather than of a page the reader navigated to. `docs/design/dashboard-composition.md`
- * records the rule and what it is buying.
+ * The top of that reading is a context swap, not a set of stacked slots: one
+ * region shows the fleet's story, one site's, or a draft, and which one is a
+ * function of state rather than of a page the reader navigated to.
+ * `docs/design/dashboard-composition.md` records the rule and what it is
+ * buying.
  *
  * Two things it deliberately never does. It never re-lists the fleet: the
  * listing is a mount-time request, and a dashboard that polled it would fan out
@@ -207,7 +209,7 @@ export const Dashboard = ({
   createdSitesRef.current = createdSites;
   /** The context region itself — the thing a swap has to bring back into view. */
   const contextRegionRef = useRef<HTMLDivElement>(null);
-  /** The fleet column's box, searched for the row a closing panel hands focus back to. */
+  /** The Sites section's box, searched for the row a closing panel hands focus back to. */
   const siteListRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
@@ -264,19 +266,22 @@ export const Dashboard = ({
   // A scroll position is an external system in the same sense the address bar
   // is — a property of the document that no render owns and no re-render
   // restores — so keeping it level with the context is an effect's job
-  // (`react.md` rule 1). The column is one scroller over an unbounded site
-  // list, so a reader who has scrolled to row forty and clicks a marker gets
-  // their answer written into a region that is now off the top of the screen:
-  // the swap happens, and the feedback is invisible. This puts the region back
-  // where it can be read.
+  // (`react.md` rule 1). The page scrolls over an unbounded site list, so a
+  // reader who has scrolled to row forty and clicks a marker gets their answer
+  // written into a region that is now off the top of the screen: the swap
+  // happens, and the feedback is invisible. This puts the region back where it
+  // can be read. The full-bleed layout (#265) did not retire the problem — it
+  // moved the scroller from the panel column to the document and put a 60vh
+  // map above the region, so a selection now lands *further* out of view than
+  // it used to.
   //
   // It cannot be a line in the click handlers, for the reason the URL effect
   // cannot either: a context also arrives without a click — a creation selects
   // the site it just made, and a `?site=` link opens on one.
   //
   // Only *into* a context, never out of one. Closing a panel hands the same
-  // region back to the fleet, and a column that jumped on the way out would
-  // move ground the reader did not ask to move. `block: 'start'` and the
+  // region back to the fleet, and a page that jumped on the way out would move
+  // ground the reader did not ask to move. `block: 'start'` and the
   // default (instant) behaviour rather than smooth scrolling: this is feedback
   // for an action already taken, not an animation, and it must not fight a
   // reader who scrolls immediately after clicking.
@@ -409,7 +414,14 @@ export const Dashboard = ({
         />
       </div>
 
-      <aside className="dashboard-aside">
+      {/*
+       * A `div` rather than the `<aside>` this used to be. `aside` marks a
+       * complementary landmark — content beside the thing the page is about —
+       * which is what this was while it sat in a column next to the map. It is
+       * the page's own reading now, running under the map inside `<main>`, so
+       * the landmark would be describing a shape the layout no longer has.
+       */}
+      <div className="dashboard-content">
         {/*
          * The context region: one of three things, in a fixed place.
          *
@@ -500,20 +512,21 @@ export const Dashboard = ({
         </section>
 
         {/*
-         * The column's one weather credit, at its foot rather than inside a
-         * panel. Every panel above it shows Open-Meteo-derived numbers, and a
-         * credit that lived in one of them would come and go with a selection
-         * — eventually absent exactly when it mattered. The map carries its own
-         * in its strip; two credits on one screen at rest is the design, not an
-         * oversight (CC BY 4.0, CLAUDE.md hard constraints). "At rest" because
-         * a surface a reader opens may owe its own: the About dialog
-         * (`header/AboutDialog.tsx`) credits every source it lists, making a
-         * third while it is open. More is compliance; fewer is the failure.
+         * The page's one weather credit, at the foot of the content rather than
+         * inside a panel. Every panel above it shows Open-Meteo-derived numbers,
+         * and a credit that lived in one of them would come and go with a
+         * selection — eventually absent exactly when it mattered. The map
+         * carries its own, overlaid on its bottom edge; two credits on one
+         * screen at rest is the design, not an oversight (CC BY 4.0, CLAUDE.md
+         * hard constraints). "At rest" because a surface a reader opens may owe
+         * its own: the About dialog (`header/AboutDialog.tsx`) credits every
+         * source it lists, making a third while it is open. More is compliance;
+         * fewer is the failure.
          */}
-        <footer className="dashboard-aside-footer">
+        <footer className="dashboard-footer">
           <OpenMeteoAttribution />
         </footer>
-      </aside>
+      </div>
     </div>
   );
 };

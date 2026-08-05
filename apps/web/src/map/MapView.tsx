@@ -74,7 +74,7 @@ export interface MapViewProps {
 
 /**
  * The map surface: a maplibre instance, the overlays drawn on it, and the
- * attribution strip beneath it.
+ * attribution band overlaid on its bottom edge.
  *
  * This is the app's one adapter onto maplibre, and it is deliberately thin —
  * WebGL cannot run in jsdom, so anything that lives here cannot be unit-tested

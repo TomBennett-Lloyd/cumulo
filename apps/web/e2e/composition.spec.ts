@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
@@ -12,10 +13,52 @@ import { routeBasemap } from './hermetic-basemap';
  * those defensible reasons is that the default configuration — the one every
  * visitor gets — is asserted by nobody.
  *
- * Kept to three cases on purpose. This lane is slow (a cold production build
- * per run) and it is not where behaviour gets tested; `src/**` owns that.
- * A case earns its place here only if assembling the app is what makes it true.
+ * Kept small on purpose. This lane is slow (a cold production build per run)
+ * and it is not where behaviour gets tested; `src/**` owns that. A case earns
+ * its place here only if assembling the app is what makes it true.
  */
+
+/**
+ * How far a measured box may miss the edge it is meant to meet, in CSS pixels.
+ *
+ * Two pixels rather than zero because these are `getBoundingClientRect` reads
+ * of a laid-out page: sub-pixel layout, a fractional device pixel ratio and the
+ * browser's own rounding all land in the last pixel or so. Two is far below any
+ * real failure — a map inset in a padded column misses the viewport edge by a
+ * `--space-4` on each side, and a strip that fell back into flow would sit a
+ * whole strip-height clear of the map's bottom.
+ */
+const EDGE_TOLERANCE_PX = 2;
+
+/**
+ * A laid-out box in client space — what `Locator.boundingBox` yields once it has
+ * one.
+ *
+ * Derived from the locator's own return type rather than hand-written, so this
+ * cannot drift from what Playwright actually hands back (`typing.md` rule 3's
+ * principle, applied to a library boundary instead of a schema).
+ */
+type LayoutBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
+
+/**
+ * One element's box, or a failure naming the element that had none.
+ *
+ * `boundingBox` returns `null` for an element with no layout at all, which is a
+ * different defect from a box in the wrong place and deserves a different
+ * message — a caller that spread the null into arithmetic would report a
+ * mysterious `NaN` comparison instead (`error-handling.md` rule 1). The name is
+ * a parameter rather than something reached in from the enclosing test
+ * (`structure.md` rule 1).
+ */
+const layoutBoxOf = async (locator: Locator, name: string): Promise<LayoutBox> => {
+  const box = await locator.boundingBox();
+
+  if (box === null) {
+    throw new Error(`${name} is on the page but has no layout box.`);
+  }
+
+  return box;
+};
 
 /**
  * The size `generateFleet` (packages/shared/src/fleet.ts) produces for the demo
@@ -25,7 +68,7 @@ import { routeBasemap } from './hermetic-basemap';
  */
 const DEMO_FLEET_SIZE = 60;
 
-/** The map strip and the aside footer each owe one. More surfaces may owe more. */
+/** The map overlay and the page footer each owe one. More surfaces may owe more. */
 const MINIMUM_WEATHER_CREDITS = 2;
 
 test.beforeEach(async ({ page }) => {
@@ -83,4 +126,86 @@ test('credits Open-Meteo visibly, as CC BY 4.0 requires', async ({ page }) => {
   const credits = page.getByRole('link', { name: 'Open-Meteo.com' }).filter({ visible: true });
 
   await expect.poll(async () => credits.count()).toBeGreaterThanOrEqual(MINIMUM_WEATHER_CREDITS);
+});
+
+test('runs the map edge to edge, with its credits overlaid on its own bottom edge', async ({
+  page,
+}) => {
+  /*
+   * Two halves of one decision (#265), and neither is checkable anywhere else.
+   * Full bleed is a claim about what every ancestor of the map contributes —
+   * the shell, `.app-main`, `.dashboard` — so it is false the moment any one of
+   * them grows a padding, and no test of a single component can see that. The
+   * overlay is a claim about `position: absolute` resolving against
+   * `.map-view`, which jsdom applies no stylesheet to compute at all.
+   */
+  const canvas = page.locator('.map-canvas');
+  const attribution = page.locator('.map-attribution');
+
+  await expect(canvas).toBeVisible();
+  await expect(attribution).toBeVisible();
+
+  /*
+   * `clientWidth` rather than the configured viewport width: the page scrolls
+   * now, so a classic scrollbar takes real width out of the layout viewport,
+   * and a full-bleed map is as wide as the space there is rather than as wide
+   * as the window. Comparing against the window would make this fail by exactly
+   * a scrollbar on any engine that draws one.
+   */
+  const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  const mapBox = await layoutBoxOf(canvas, 'The map canvas');
+
+  expect(Math.abs(mapBox.width - layoutWidth)).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+  expect(Math.abs(mapBox.x)).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+
+  /*
+   * Inside the map's box and sitting on its bottom edge — which together are
+   * what "overlaid on the tiles" means as a measurement. A strip that fell back
+   * into the flow below the map would clear this bottom by its own height, and
+   * one that escaped the map's width would fail the horizontal bounds.
+   */
+  const stripBox = await layoutBoxOf(attribution, 'The map attribution');
+
+  expect(stripBox.x).toBeGreaterThanOrEqual(mapBox.x - EDGE_TOLERANCE_PX);
+  expect(stripBox.x + stripBox.width).toBeLessThanOrEqual(
+    mapBox.x + mapBox.width + EDGE_TOLERANCE_PX,
+  );
+  expect(Math.abs(stripBox.y + stripBox.height - (mapBox.y + mapBox.height))).toBeLessThanOrEqual(
+    EDGE_TOLERANCE_PX,
+  );
+
+  /*
+   * And the credit inside it is still a credit. Moving a CC BY 4.0 link onto
+   * imagery is exactly the change that could leave it painted-over, covered by
+   * the map's own event surface, or disabled by a `pointer-events` rule reached
+   * for to keep the map draggable — so the licence obligation is re-measured
+   * here, in the band's new position, rather than assumed from the count above.
+   */
+  const credit = attribution.getByRole('link', { name: 'Open-Meteo.com' });
+
+  await expect(credit).toBeVisible();
+  await expect(credit).toBeEnabled();
+});
+
+test('stacks the fleet chart under the map rather than beside it', async ({ page }) => {
+  /*
+   * The layout decision itself, at the default viewport — the width at which
+   * the old arrangement put this chart in a column *next to* the map, so it is
+   * the width where a regression to it would be invisible to a narrow-viewport
+   * check. There is no breakpoint any more, which is the claim: the same flow
+   * at every width.
+   *
+   * `>=` on the raw edges rather than a tolerance: these two boxes are in
+   * different, non-overlapping parts of the flow, separated by a `--space-4`
+   * gap and the panel's own padding, so there is nothing here for sub-pixel
+   * rounding to decide. A tolerance would only be admitting an overlap.
+   */
+  const chart = page.locator('.fleet-panel .forecast-chart-figure');
+
+  await expect(chart).toBeVisible();
+
+  const mapBox = await layoutBoxOf(page.locator('.map-canvas'), 'The map canvas');
+  const chartBox = await layoutBoxOf(chart, 'The fleet chart figure');
+
+  expect(chartBox.y).toBeGreaterThanOrEqual(mapBox.y + mapBox.height);
 });

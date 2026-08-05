@@ -21,7 +21,7 @@ import {
 } from './state-copy';
 
 /*
- * One site's whole story, beside the map.
+ * One site's whole story, under the map.
  *
  * Two waits live in this panel and they are not the same wait, which is why the
  * forecast region branches on `firstForecast` before it fetches anything. A

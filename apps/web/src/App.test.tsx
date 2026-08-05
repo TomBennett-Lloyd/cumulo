@@ -84,7 +84,7 @@ const stubSystemPrefersDark = (prefersDark: boolean): void => {
 /**
  * Render the app and wait until its one surface is on screen.
  *
- * The panel column's "Sites" heading is the marker: it is the first thing the
+ * The dashboard's "Sites" heading is the marker: it is the first thing the
  * dashboard renders that belongs to the dashboard rather than the shell, so
  * finding it proves the shell mounted the surface — and awaiting it settles the
  * fleet listing the dashboard kicks off, so nothing resolves after the test.
@@ -245,11 +245,12 @@ describe('App shell', () => {
 });
 
 describe('App attribution', () => {
-  it('credits Open-Meteo twice at rest — once for the map, once for the panel column', async () => {
+  it('credits Open-Meteo twice at rest — once for the map, once for the page', async () => {
     // Two, and exactly two, is the design rather than a tolerance. The surface
     // has two halves that each display weather-derived data and each survive
-    // the other being empty: the map keeps its credit in its own strip, and the
-    // column keeps one at its foot that outlasts every context swap. What the
+    // the other being empty: the map keeps its own credit overlaid on its
+    // bottom edge, and the page keeps one at the foot of its content that
+    // outlasts every context swap. What the
     // count rules out is the failure the old views had — a credit per panel,
     // multiplying with the panels and disappearing with whichever one happened
     // to be unmounted (CC BY 4.0, CLAUDE.md hard constraints).
