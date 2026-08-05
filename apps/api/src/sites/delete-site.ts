@@ -191,7 +191,10 @@ export const deleteSite = async (
     return noSuchSite();
   }
 
-  // No body and no content-type: 204 is the one response on this API that has
-  // nothing to say, and an empty JSON object would be a lie about that.
+  // No body and no content-type: this is the one *resource* response on this
+  // API that has nothing to say, and an empty JSON object would be a lie about
+  // that. The router's CORS preflight answer is the other 204 the service
+  // produces (`http/router.ts`), and it belongs to the CORS mechanism rather
+  // than to any resource — same shape, different reason.
   return { statusCode: 204, headers: {} };
 };

@@ -334,6 +334,31 @@ describe('the abuse protections on the route table', () => {
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('rate_limited');
   });
 
+  it('answers a preflight 204 without touching the origin check or the abuse table', async () => {
+    const { getBlock, incrementRateWindow } = await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(
+      gatewayEvent({
+        method: 'OPTIONS',
+        rawPath: '/v1/sites',
+        headers: {
+          origin: 'http://localhost:5173',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'content-type',
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(204);
+    // That Origin is deliberately not in the allow-list: were the origin check
+    // running, this would be the 403 a write from it earns. And an OPTIONS must
+    // not count toward the caller's rate window — a browser sends one per write,
+    // so charging for it would halve every limit the limiter states.
+    expect(getBlock).not.toHaveBeenCalled();
+    expect(incrementRateWindow).not.toHaveBeenCalled();
+  });
+
   it('limits the span-capped series read, whose cost per request the caller picks', async () => {
     const { getBlock } = await stubStorage();
     const { handler } = await import('./main');

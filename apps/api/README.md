@@ -14,7 +14,7 @@ discipline: there is no HTTP client in this package to misuse.
 | ------------------------------- | -------------------------------------------------------------------------------------- |
 | `http/gateway-event.ts`         | Parses the API Gateway payload-v2 event into an `ApiRequest`. No `@types/aws-lambda`.  |
 | `http/response.ts`              | The response shape, the `apiErrorSchema` failure body, and response-schema validation. |
-| `http/router.ts`                | The route table and its matcher. 404 on no match, 400 on a body that is not JSON.      |
+| `http/router.ts`                | Route table and matcher. 204 on preflight, 404 on no match, 400 on non-JSON body.      |
 | `abuse/ip-limiter.ts`           | The per-IP limiter and its policy numbers, over the `cumulo-abuse` table.              |
 | `abuse/origin-check.ts`         | Pure `Origin` allow-list check for the write routes. Friction, not auth.               |
 | `sites/site-id-param.ts`        | The `{siteId}` path parameter, validated once for the three routes that take one.      |

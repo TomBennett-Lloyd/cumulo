@@ -173,6 +173,30 @@ export const matchRoute = (
   return undefined;
 };
 
+/**
+ * Whether any route serves this path **under some method**.
+ *
+ * The method-blind half of {@link matchRoute}, and the only question a preflight
+ * asks: `OPTIONS /v1/sites` is not a request to do anything to the fleet, it is a
+ * request to be told whether the browser may later send the method named in
+ * `Access-Control-Request-Method`. Answering it by matching the method would
+ * 404 every preflight, since no table here declares an `OPTIONS` route and none
+ * should — the answer is the same for every method the CORS configuration
+ * allows.
+ *
+ * It reuses the same two private helpers as {@link matchRoute}, so a path this
+ * says exists is exactly a path some route can serve: a preflight that succeeds
+ * for a path the follow-up request would 404 on is a worse lie than a refusal.
+ */
+export const matchesAnyRoutePath = (routes: readonly Route[], path: string): boolean => {
+  const actual = canonicalPathSegments(path);
+  if (actual === undefined) {
+    return false;
+  }
+
+  return routes.some((route) => matchSegments(route.segments, actual) !== undefined);
+};
+
 /** A body that was not JSON is a value here, not a throw — it is a caller's 400. */
 type JsonBodyResult = { readonly ok: true; readonly body: unknown } | { readonly ok: false };
 
@@ -195,9 +219,27 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
 /**
  * Route one parsed request to its handler.
  *
- * Two failures are answered here rather than in any handler, because both are
+ * Three answers are given here rather than in any handler, because all three are
  * properties of the *request* and not of the resource:
  *
+ * - **A CORS preflight** → 204, before matching and before the body parse.
+ *   Preflight is a property of the CORS mechanism, not of any resource, so no
+ *   route declares `OPTIONS` and the answer is the same for all of them. It is
+ *   answered here for the reason the 404 and the 400 are. The gateway would
+ *   answer it itself — HTTP APIs auto-answer preflight for an `OPTIONS` request
+ *   matching no route — but this API's `$default` catch-all proxies everything
+ *   here, so "no route" never happens and the auto-answer never fires.
+ *
+ *   The 204 sets **no `Access-Control-*` header**: the gateway attaches the
+ *   preflight header set to this response from its own `cors_configuration`
+ *   (`infra/api/gateway.tf`), and a header set here would be a second opinion on
+ *   the same question. That decoration is claimed for *this* preflight only —
+ *   the allow-methods, allow-headers and max-age headers are preflight-only by
+ *   the CORS spec, so what an ordinary response carries is a separate question
+ *   this comment does not answer. A path no route serves is still a 404,
+ *   including a non-canonical one (`/v1/sites/`), for the gateway-parity reason
+ *   on {@link canonicalPathSegments} — a preflight that approved a path the real
+ *   request would 404 on tells the browser a lie.
  * - **No route matches** → 404 `not_found`. Method mismatch included: a 405
  *   would tell an unauthenticated caller which methods a path supports, and the
  *   error contract has one code for "there is nothing here" on purpose. A
@@ -205,6 +247,23 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *   the gateway-parity reason on {@link canonicalPathSegments}.
  * - **A body that is not JSON** → 400 `validation_failed`, before the handler
  *   runs. A handler never sees text it would have to `JSON.parse` itself.
+ *
+ * Answering the preflight before matching is also what keeps it clear of the
+ * abuse protections: those wrap individual handlers in `main.ts`, so an
+ * `OPTIONS` that returns here has by construction touched neither the origin
+ * check nor the rate limiter — a browser's preflight is not a caller's request.
+ *
+ * **Restatement ledger** (`docs/standards/architecture.md` rule 9). The
+ * preflight branch below owns what a preflight gets — 204, no body, no
+ * `Access-Control-*` header. One other site states that behaviour with literals
+ * of its own rather than pointing here, because it is the configuration the
+ * behaviour leans on rather than a passing mention of it:
+ *
+ * - `infra/api/gateway.tf`, the comment above `allow_methods` in
+ *   `cors_configuration` — it explains that auto-preflight cannot fire under the
+ *   `$default` catch-all and that this router answers the 204 instead. Change
+ *   what an `OPTIONS` gets here and that comment is wrong with nothing red:
+ *   prose has no gate, which is why it is listed rather than trusted.
  *
  * Neither message quotes the request. Reflecting a caller-controlled path back
  * into a response body is free to do and free to regret.
@@ -218,6 +277,14 @@ export const routeRequest = async (
   request: ApiRequest,
   deadline: RequestDeadline,
 ): Promise<ApiResponse> => {
+  if (request.method === 'OPTIONS') {
+    // No body and no headers: 204 is the whole answer, and the gateway attaches
+    // the `Access-Control-*` headers on the way out.
+    return matchesAnyRoutePath(routes, request.path)
+      ? { statusCode: 204, headers: {} }
+      : errorResponse('not_found', 'no route matches this method and path');
+  }
+
   const match = matchRoute(routes, request);
   if (match === undefined) {
     return errorResponse('not_found', 'no route matches this method and path');
