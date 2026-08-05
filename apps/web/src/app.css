@@ -40,10 +40,17 @@ body {
 }
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
- * does not get, so the brand, the tagline and the menu button sit on one
- * baseline and wrap to a second line only when the width forces it. The third
- * item used to be the theme toggle; it is behind the disclosure now
- * (`header/HeaderMenu.tsx`), and the bar still carries exactly one control. */
+ * does not get, so the brand, the tagline, the site search and the menu button
+ * sit on one baseline and wrap to a second line only when the width forces it —
+ * which is the only narrow-width mechanism the shell has, here as everywhere
+ * else in it (there is no breakpoint in this app).
+ *
+ * The bar carries two controls: the search that finds a site by name, and the
+ * disclosure everything else hides behind. The theme toggle was once bare here
+ * and is inside that disclosure now (`header/HeaderMenu.tsx`); the search earned
+ * its place on the bar rather than in the menu because a control hidden behind a
+ * press is not a shortcut. `header/header.css` owns both of their treatments —
+ * this rule is only the row they sit in, and the token gallery wears it too. */
 .app-header {
   display: flex;
   flex-wrap: wrap;

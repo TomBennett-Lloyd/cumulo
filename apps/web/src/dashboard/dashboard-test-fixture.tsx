@@ -139,9 +139,22 @@ export const StubMapRegion = ({
  * has nothing to scroll to and the dashboard asks nobody to move.
  */
 
+/**
+ * Mounts the dashboard the way the shell does, minus WebGL.
+ *
+ * `onToggleTheme` is a no-op rather than a spy: the dashboard forwards it to the
+ * header's menu and never calls it, so what a press *means* is the shell's wiring
+ * (`App.test.tsx`) and the menu's own (`header/HeaderMenu.test.tsx`). A spy here
+ * would only be a spy nobody asserts.
+ */
 export const renderDashboard = (dataSource: FleetDataSource): HTMLElement => {
   const { container } = render(
-    <Dashboard theme="light" dataSource={dataSource} mapRegion={StubMapRegion} />,
+    <Dashboard
+      theme="light"
+      onToggleTheme={() => undefined}
+      dataSource={dataSource}
+      mapRegion={StubMapRegion}
+    />,
   );
   return container;
 };

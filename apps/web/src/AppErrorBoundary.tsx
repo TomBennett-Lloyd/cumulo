@@ -7,13 +7,20 @@ import { APP_FAILURE_ADVICE, APP_FAILURE_HEADING } from './dashboard/state-copy'
 /*
  * The last line before a blank page.
  *
- * The dashboard is now the whole app: one surface, no nav, every panel and the
- * map hanging off a single tree. React answers an uncaught render error by
- * unmounting the root, so without a boundary above that tree any one panel
- * throwing takes the header, the theme toggle and the Open-Meteo credit with it
- * — and the credit is a licence obligation, not chrome. This is the standing
- * tech-debt entry "No error boundary above the dashboard's async work",
- * answered for the app as a whole.
+ * The dashboard is now the whole app: one surface, no nav, the header bar, every
+ * panel and the map hanging off a single tree. React answers an uncaught render
+ * error by unmounting the root, so without a boundary above that tree any one
+ * panel throwing takes the entire page and the Open-Meteo credit with it — and
+ * the credit is a licence obligation, not chrome. This is the standing tech-debt
+ * entry "No error boundary above the dashboard's async work", answered for the
+ * app as a whole.
+ *
+ * What this boundary replaces grew in #265's search chunk, and it is worth
+ * naming: the header is inside it now, because the bar's search needs the fleet
+ * and so is rendered by `Dashboard` (`header/AppHeader.tsx`). A failure
+ * therefore takes the brand, the theme toggle and About with it rather than
+ * leaving them standing over the card below. The obligation that cannot be lost
+ * is discharged here instead, which is what the credit in `AppFailure` is for.
  *
  * Two kinds of event land here, because they are the same kind of event. React
  * throws a render error *to* this boundary; the event loop reports an unhandled

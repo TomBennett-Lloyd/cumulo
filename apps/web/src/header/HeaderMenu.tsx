@@ -12,7 +12,13 @@ export interface HeaderMenuProps {
 }
 
 /**
- * The header's one control: a disclosure button over the shell's odds and ends.
+ * The header's catch-all: a disclosure button over the shell's odds and ends.
+ *
+ * It was the bar's only control until the site search landed beside it
+ * (`AppHeader.tsx`). The split between the two is what each is for rather than
+ * how important it is: finding a site is the thing a reader does repeatedly and
+ * is on the bar, and everything that is done once a session is behind this
+ * button.
  *
  * ## A disclosure, not a menu
  *

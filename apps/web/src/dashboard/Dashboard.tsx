@@ -9,6 +9,7 @@ import { CreationThrottle } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import type { FleetDataSource } from '../data/fleet-data-source';
 import { useFirstForecast } from '../data/use-first-forecast';
+import { AppHeader } from '../header/AppHeader';
 import type { MapPosition } from '../map/MapView';
 import type { Theme } from '../theme';
 import { FleetPanel } from './FleetPanel';
@@ -127,6 +128,14 @@ const FleetSection = ({
 
 export interface DashboardProps {
   readonly theme: Theme;
+  /**
+   * Flipping the theme, passed straight through to the header's menu.
+   *
+   * The dashboard has no opinion about theming — it forwards the theme to the
+   * map, which paints its basemap in it, and this to the bar it now renders.
+   * Both arrive from `useTheme` in the shell above.
+   */
+  readonly onToggleTheme: () => void;
   /** Where the fleet lives. Defaults to the in-memory demo fleet. */
   readonly dataSource?: FleetDataSource;
   /**
@@ -139,9 +148,15 @@ export interface DashboardProps {
 }
 
 /**
- * The fleet dashboard: the map as a full-width canvas across the top, the
- * reading beneath it, and the flow that turns a click on the map into a site
- * with a forecast.
+ * The fleet dashboard: the header bar, the map as a full-width canvas across the
+ * top, the reading beneath it, and the flow that turns a click on the map into a
+ * site with a forecast.
+ *
+ * The bar is here rather than in the shell because of one item on it. The
+ * header's site search reads the fleet and selects into `selectedSiteId`, and
+ * both of those are this component's — so the bar came down to the state rather
+ * than the state going up to the shell (`header/AppHeader.tsx` states the trade,
+ * including what it costs when the tree below throws).
  *
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the list rows, the card
@@ -174,6 +189,7 @@ export interface DashboardProps {
  */
 export const Dashboard = ({
   theme,
+  onToggleTheme,
   dataSource = demoFleetDataSource,
   mapRegion: MapRegionSlot = LazyMapRegion,
 }: DashboardProps): ReactElement => {
@@ -416,140 +432,163 @@ export const Dashboard = ({
   };
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-map" ref={mapRegionRef}>
-        <MapRegionSlot
-          theme={theme}
-          sites={sites}
-          selectedSiteId={selectedSiteId}
-          onSelectSite={selectSiteForReader}
-          onMapClick={(position) => {
-            // The gate the add-site control arms. Without it every click on the
-            // basemap opened a draft, so panning past a marker handed the reader
-            // a form they never asked for — and the affordance had to be
-            // explained in prose beside the fleet chart, because nothing on the
-            // map said it.
-            if (!addSiteArmed) {
-              return;
-            }
-
-            setDraft(position);
-            setCreation({ status: 'editing' });
-            // Single-shot: the mode is spent on the click that used it, so a
-            // reader is never left armed without a draft on screen to show for
-            // it.
-            setAddSiteArmed(false);
-          }}
-          addSiteArmed={addSiteArmed}
-          onToggleAddSite={() => {
-            setAddSiteArmed((armed) => !armed);
-          }}
-          selectedSite={selectedSite}
-          selectionOrigin={selectionOrigin}
-          firstForecast={forecast}
-          onRetryFirstForecast={retryForecast}
-          onDeselectSite={() => {
-            // State only. Where focus goes on the way out is the card's own
-            // business, from the unmount this triggers — it captured the element
-            // that opened it, which is the one thing the dashboard cannot see.
-            setSelectedSiteId(null);
-          }}
-        />
-      </div>
-
+    <>
       {/*
-       * A `div` rather than the `<aside>` this used to be. `aside` marks a
-       * complementary landmark — content beside the thing the page is about —
-       * which is what this was while it sat in a column next to the map. It is
-       * the page's own reading now, running under the map inside `<main>`, so
-       * the landmark would be describing a shape the layout no longer has.
+       * The bar, and the reason it is here rather than in the shell: its search
+       * reads `sites` and selects through `selectSiteForReader`, which is the
+       * same selection a marker press and a row press make
+       * (`header/AppHeader.tsx`). A search hit is reader-initiated by
+       * construction, so the card it opens focuses its own heading and
+       * `SelectionCamera` brings a site that is off screen into frame — neither
+       * of which this component had to be told anything new to do.
+       *
+       * A sibling of `<main>` rather than a child of it: a `<header>` inside
+       * `<main>` is a section header and carries no banner landmark.
        */}
-      <div className="dashboard-content">
-        {/*
-         * The fleet's chart, first under the map and never displaced.
-         *
-         * There is no context region here any more. One region showing either a
-         * site or the fleet was the shape the reading had while a site's detail
-         * was a panel in this flow; the detail is a card on the site's own marker
-         * now, so nothing swaps, nothing is hidden, and the fleet chart is on
-         * screen in every state of the page.
-         *
-         * The selection reaches it as an overlay rather than as a replacement,
-         * which is the whole argument for the move: a reader comparing one roof
-         * against the fleet was previously asked to remember one chart while
-         * looking at the other. The fleet's sum still changes on exactly one
-         * event — a site being added — and `refreshToken` is that event, counted.
-         */}
-        <FleetPanel
-          dataSource={dataSource}
-          sites={sites}
-          selectedSite={selectedSite}
-          selectionReady={forecast.status === 'ready'}
-          refreshToken={createdSites.length}
-        />
+      <AppHeader
+        theme={theme}
+        onToggleTheme={onToggleTheme}
+        sites={sites}
+        onSelectSite={selectSiteForReader}
+      />
 
-        <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
-          <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
-            Sites
-          </h2>
-          <div className="dashboard-fleet">
-            <FleetSection
-              load={load}
+      <main className="app-main">
+        <div className="dashboard">
+          <div className="dashboard-map" ref={mapRegionRef}>
+            <MapRegionSlot
+              theme={theme}
               sites={sites}
               selectedSiteId={selectedSiteId}
               onSelectSite={selectSiteForReader}
-              onRetryLoad={() => {
-                setListAttempt((attempt) => attempt + 1);
+              onMapClick={(position) => {
+                // The gate the add-site control arms. Without it every click on the
+                // basemap opened a draft, so panning past a marker handed the reader
+                // a form they never asked for — and the affordance had to be
+                // explained in prose beside the fleet chart, because nothing on the
+                // map said it.
+                if (!addSiteArmed) {
+                  return;
+                }
+
+                setDraft(position);
+                setCreation({ status: 'editing' });
+                // Single-shot: the mode is spent on the click that used it, so a
+                // reader is never left armed without a draft on screen to show for
+                // it.
+                setAddSiteArmed(false);
+              }}
+              addSiteArmed={addSiteArmed}
+              onToggleAddSite={() => {
+                setAddSiteArmed((armed) => !armed);
+              }}
+              selectedSite={selectedSite}
+              selectionOrigin={selectionOrigin}
+              firstForecast={forecast}
+              onRetryFirstForecast={retryForecast}
+              onDeselectSite={() => {
+                // State only. Where focus goes on the way out is the card's own
+                // business, from the unmount this triggers — it captured the element
+                // that opened it, which is the one thing the dashboard cannot see.
+                setSelectedSiteId(null);
               }}
             />
           </div>
-        </section>
 
-        {/*
-         * The page's one weather credit, at the foot of the content rather than
-         * inside a panel. Every panel above it shows Open-Meteo-derived numbers,
-         * and a credit that lived in one of them would come and go with a
-         * selection — eventually absent exactly when it mattered. The map
-         * carries its own, overlaid on its bottom edge; two credits on one
-         * screen at rest is the design, not an oversight (CC BY 4.0, CLAUDE.md
-         * hard constraints). "At rest" because a surface a reader opens may owe
-         * its own: the About dialog (`header/AboutDialog.tsx`) credits every
-         * source it lists, making a third while it is open. More is compliance;
-         * fewer is the failure.
-         */}
-        <footer className="dashboard-footer">
-          <OpenMeteoAttribution />
-        </footer>
-      </div>
+          {/*
+           * A `div` rather than the `<aside>` this used to be. `aside` marks a
+           * complementary landmark — content beside the thing the page is about —
+           * which is what this was while it sat in a column next to the map. It is
+           * the page's own reading now, running under the map inside `<main>`, so
+           * the landmark would be describing a shape the layout no longer has.
+           */}
+          <div className="dashboard-content">
+            {/*
+             * The fleet's chart, first under the map and never displaced.
+             *
+             * There is no context region here any more. One region showing either a
+             * site or the fleet was the shape the reading had while a site's detail
+             * was a panel in this flow; the detail is a card on the site's own marker
+             * now, so nothing swaps, nothing is hidden, and the fleet chart is on
+             * screen in every state of the page.
+             *
+             * The selection reaches it as an overlay rather than as a replacement,
+             * which is the whole argument for the move: a reader comparing one roof
+             * against the fleet was previously asked to remember one chart while
+             * looking at the other. The fleet's sum still changes on exactly one
+             * event — a site being added — and `refreshToken` is that event, counted.
+             */}
+            <FleetPanel
+              dataSource={dataSource}
+              sites={sites}
+              selectedSite={selectedSite}
+              selectionReady={forecast.status === 'ready'}
+              refreshToken={createdSites.length}
+            />
 
-      {/*
-       * The draft, in the top layer over all of the above.
-       *
-       * A sibling of the whole surface rather than a child of the reading,
-       * because a modal is painted over the whole page — nesting it inside the
-       * flow would only leave a reader of this file placing it there. (It was an
-       * occupant of the context region until #265, and that region is gone
-       * entirely now, so there is not even a box left to nest it in.)
-       *
-       * `key={draftKey(draft)}` is unchanged and still load-bearing:
-       * `AddSiteForm` reads the coordinates once at mount, so a draft at a new
-       * location has to remount rather than re-render (`AddSiteForm.tsx` has the
-       * argument). Mounting the dialog *is* opening it, so the same key now
-       * carries the modality too.
-       */}
-      {draft !== null && (
-        <AddSiteDialog
-          key={draftKey(draft)}
-          latitude={draft.latitude}
-          longitude={draft.longitude}
-          submitting={creation.status === 'submitting'}
-          refusal={creation.status === 'refused' ? creation.refusal : null}
-          error={creation.status === 'failed' ? creation.message : null}
-          onSubmit={handleSubmit}
-          onCancel={closeDraft}
-          onReturnFocus={returnFocusFromDraft}
-        />
-      )}
-    </div>
+            <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
+              <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
+                Sites
+              </h2>
+              <div className="dashboard-fleet">
+                <FleetSection
+                  load={load}
+                  sites={sites}
+                  selectedSiteId={selectedSiteId}
+                  onSelectSite={selectSiteForReader}
+                  onRetryLoad={() => {
+                    setListAttempt((attempt) => attempt + 1);
+                  }}
+                />
+              </div>
+            </section>
+
+            {/*
+             * The page's one weather credit, at the foot of the content rather than
+             * inside a panel. Every panel above it shows Open-Meteo-derived numbers,
+             * and a credit that lived in one of them would come and go with a
+             * selection — eventually absent exactly when it mattered. The map
+             * carries its own, overlaid on its bottom edge; two credits on one
+             * screen at rest is the design, not an oversight (CC BY 4.0, CLAUDE.md
+             * hard constraints). "At rest" because a surface a reader opens may owe
+             * its own: the About dialog (`header/AboutDialog.tsx`) credits every
+             * source it lists, making a third while it is open. More is compliance;
+             * fewer is the failure.
+             */}
+            <footer className="dashboard-footer">
+              <OpenMeteoAttribution />
+            </footer>
+          </div>
+
+          {/*
+           * The draft, in the top layer over all of the above.
+           *
+           * A sibling of the whole surface rather than a child of the reading,
+           * because a modal is painted over the whole page — nesting it inside the
+           * flow would only leave a reader of this file placing it there. (It was an
+           * occupant of the context region until #265, and that region is gone
+           * entirely now, so there is not even a box left to nest it in.)
+           *
+           * `key={draftKey(draft)}` is unchanged and still load-bearing:
+           * `AddSiteForm` reads the coordinates once at mount, so a draft at a new
+           * location has to remount rather than re-render (`AddSiteForm.tsx` has the
+           * argument). Mounting the dialog *is* opening it, so the same key now
+           * carries the modality too.
+           */}
+          {draft !== null && (
+            <AddSiteDialog
+              key={draftKey(draft)}
+              latitude={draft.latitude}
+              longitude={draft.longitude}
+              submitting={creation.status === 'submitting'}
+              refusal={creation.status === 'refused' ? creation.refusal : null}
+              error={creation.status === 'failed' ? creation.message : null}
+              onSubmit={handleSubmit}
+              onCancel={closeDraft}
+              onReturnFocus={returnFocusFromDraft}
+            />
+          )}
+        </div>
+      </main>
+    </>
   );
 };

@@ -12,7 +12,7 @@ export interface SelectionCameraProps {
  * Brings a selection into view when it is not already.
  *
  * A selection can arrive from somewhere that is not the map — a row in the list
- * below it, a `?site=` link, a creation, the search that lands later — and the
+ * below it, a `?site=` link, a creation, the header's search — and the
  * camera has no reason to be pointing anywhere near the site those name. Before
  * this, such a selection drew a card at a coordinate off screen: the marker
  * highlighted, the fleet chart gained a series, and the thing the reader asked
@@ -33,7 +33,9 @@ export interface SelectionCameraProps {
  * Adapter code, and deliberately not unit-tested: jsdom gives maplibre no WebGL,
  * so there is no camera here to have bounds (`testing.md` rule 3). The browser
  * lane owns the criterion — selecting a site the camera cannot see brings it
- * into view — through the search case that arrives with #265's remaining chunk.
+ * into view — and asserts it in `e2e/header.spec.ts`, which pans the whole fleet
+ * off screen, searches for a site by name, and measures that the card the
+ * selection opens has a box inside the viewport.
  */
 export const SelectionCamera = ({ site }: SelectionCameraProps): null => {
   const map = useContext(MapContext);

@@ -5,33 +5,31 @@ import { Dashboard } from './dashboard/Dashboard';
 import type { MapRegionComponent } from './dashboard/MapRegion';
 import type { FleetDataSource } from './data/fleet-data-source';
 import { selectFleetDataSource } from './data/fleet-source-selection';
-import { Brand } from './header/Brand';
-import { PRODUCT_TAGLINE } from './header/header-copy';
-import { HeaderMenu } from './header/HeaderMenu';
 import { useTheme } from './use-theme';
 
 /**
- * The web app shell: a compact header bar, the menu it hangs off, and the one
- * place the app decides where its data comes from.
+ * The web app shell: the page frame, the boundary under it, and the one place
+ * the app decides where its data comes from.
  *
  * There is one surface now. The nav that toggled three unmounted-on-leave views
  * is gone (#148): the map is the canvas, the panels under it tell the fleet's
  * story or one site's, and moving between them is a selection rather than a
- * page change. That deletes the shell's only state — nothing here is
- * switched any more — so the shell's whole job is the frame around the
- * dashboard and the boundary under it.
+ * page change. That deleted the shell's only state — nothing here is switched
+ * any more.
  *
- * Theming is deliberately not spelled out here: `useTheme` owns the whole
+ * The header went with it. The bar carries a site search, which needs the fleet
+ * and selects into the very `selectedSiteId` the markers and rows read, so
+ * `Dashboard` renders `AppHeader` above its map (`header/AppHeader.tsx` has the
+ * argument, and the cost). What is left here is genuinely the frame: the
+ * outermost box, the boundary, the data source, and the theme.
+ *
+ * Theming is deliberately not spelled out here either: `useTheme` owns the whole
  * mechanism — where the app starts, the document attribute, the persisted
- * choice — and the shell only says where the toggle sits and passes the theme
- * down to the map, which paints its basemap in it. The token gallery consumes
- * the same hook, so what a reviewer checks on that page is what ships here.
- *
- * Where the toggle sits is now "inside `HeaderMenu`" rather than "bare in the
- * header": the bar has one control on it, and what that control reveals is the
- * menu's business, not the shell's. The gallery keeps its own bare toggle,
- * which is why `ThemeToggle` stays a shared component and did not move into
- * `header/`.
+ * choice — and the shell only passes the theme and its toggle down, to the map
+ * that paints its basemap in it and to the menu the toggle sits in. The token
+ * gallery consumes the same hook, so what a reviewer checks on that page is what
+ * ships here — and it keeps its own bare toggle, which is why `ThemeToggle`
+ * stays a shared component rather than moving into `header/`.
  */
 
 /**
@@ -78,26 +76,25 @@ export const App = ({ mapRegion }: AppProps = {}): ReactElement => {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <Brand />
-        <p className="app-tagline">{PRODUCT_TAGLINE}</p>
-        <HeaderMenu theme={theme} onToggleTheme={toggle} />
-      </header>
-
+      {/*
+       * The boundary wraps the whole surface, header included. `Dashboard`
+       * returns the bar and the `<main>` under it as siblings rather than
+       * nesting one in the other, which is what keeps the `<header>` a page
+       * banner: a `<header>` inside `<main>` is a section header and carries no
+       * landmark at all.
+       *
+       * Spread rather than `mapRegion={mapRegion}`: `exactOptionalPropertyTypes`
+       * makes an explicit `undefined` a type error on an optional prop, and
+       * "the caller said nothing" has to stay a genuine absence for the
+       * dashboard's own default to be the value that wins.
+       */}
       <AppErrorBoundary>
-        <main className="app-main">
-          {/*
-           * Spread rather than `mapRegion={mapRegion}`: `exactOptionalPropertyTypes`
-           * makes an explicit `undefined` a type error on an optional prop, and
-           * "the caller said nothing" has to stay a genuine absence for the
-           * dashboard's own default to be the value that wins.
-           */}
-          <Dashboard
-            theme={theme}
-            dataSource={fleetDataSource}
-            {...(mapRegion === undefined ? {} : { mapRegion })}
-          />
-        </main>
+        <Dashboard
+          theme={theme}
+          onToggleTheme={toggle}
+          dataSource={fleetDataSource}
+          {...(mapRegion === undefined ? {} : { mapRegion })}
+        />
       </AppErrorBoundary>
     </div>
   );

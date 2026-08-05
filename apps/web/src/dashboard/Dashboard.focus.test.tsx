@@ -246,6 +246,28 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     expect(document.activeElement).toBe(marker);
   });
 
+  it('focuses the card heading when the header’s search picks a site', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const site = await firstListedSite(dataSource);
+    renderDashboard(dataSource);
+    await settle();
+
+    const search = screen.getByRole('combobox', { name: 'Search sites by name' });
+    fireEvent.change(search, { target: { value: site.name } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    /*
+     * The fourth opener, and the reason it needed no new focus code: the search
+     * selects through `selectSiteForReader` like a marker and a row do, so the
+     * card is reader-initiated and takes the focus by the rule already in place.
+     * What this case rules out is the version where the bar wires itself
+     * straight to `setSelectedSiteId` — every assertion about the selection
+     * would still pass, and the reader would be left in a text field with their
+     * answer somewhere below.
+     */
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: site.name }));
+  });
+
   it('focuses the new site’s card heading when a creation succeeds', async () => {
     renderDashboard(new DemoFleetDataSource());
     await settle();
