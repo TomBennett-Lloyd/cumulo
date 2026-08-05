@@ -104,8 +104,25 @@
   line-height: var(--leading-normal);
 }
 
+/* Muted and underlined, matching `.cumulo-attribution a` in
+ * `@cumulo/ui`'s attribution.css — which is where the reasoning lives, because
+ * the two links carry the same obligation on the same surface and would be
+ * wrong if only one of them changed (`structure.md` rule 7). In short:
+ * `--color-accent` is below AA for small text on the veil this band now sits
+ * on, muted ink is not, and the underline is what keeps the link findable once
+ * it is the same colour as the prose beside it.
+ *
+ * The OSM credit is a licence condition of the tile data exactly as the
+ * Open-Meteo one is of the weather data, so "it is only the tile credit" is
+ * never a reason to hold it to a lower legibility bar. */
 .map-attribution-tiles a {
-  color: var(--color-accent);
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+
+.map-attribution-tiles a:hover,
+.map-attribution-tiles a:focus-visible {
+  color: var(--color-text);
 }
 
 /* ── Site markers ────────────────────────────────────────────────────────────

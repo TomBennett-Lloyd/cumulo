@@ -207,6 +207,11 @@
  * makes in `map/map.css` for the same two obligations, arrived at
  * independently because these are two surfaces free to diverge, not one
  * treatment in two places (`structure.md` rule 7).
+ *
+ * That freedom is being exercised as of #265: the map's pair sits on a
+ * translucent veil over tiles and took underlined muted links to stay legible
+ * there, while this pair sits on an opaque card and has not. Same words, same
+ * obligations, different surfaces — which is what rule 7 predicted.
  */
 .about-dialog-basemap {
   color: var(--color-text-muted);
@@ -222,6 +227,19 @@
  * appears in a stylesheet: dark navy on a dark card, which is how the
  * basemap credits first shipped in this dialog and were caught in a screenshot
  * rather than by lint.
+ *
+ * These links are knowingly out of step with the credits' links since #265,
+ * and the divergence is temporary. The map's two credits moved to muted
+ * underlined ink because `--color-accent` is below AA for small text on this
+ * palette's surfaces (4.30:1 on `--color-surface`) and could not survive a
+ * translucent one at all; the dialog's own links still carry the accent and
+ * still fail at that same 4.30:1. They are not fixed here because the fix is
+ * one app-wide decision about the accent hue rather than a per-surface repaint
+ * — routed as its own issue from `docs/tech-debt.md`. The dialog composes
+ * `OpenMeteoAttribution`, so the weather credit *inside* this card already
+ * wears the new treatment and will not match the links around it until that
+ * issue lands. That mismatch is the visible edge of a real defect, not a
+ * styling slip to quietly even out.
  */
 .about-dialog a {
   color: var(--color-accent);

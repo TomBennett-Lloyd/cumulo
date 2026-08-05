@@ -160,17 +160,14 @@ Placement:
   against a mostly-known colour rather than against tiles, while the map does not stop at the
   credit line. A credit painted directly on tiles is still refused.
 
-  **The veil does not yet have a passing contrast record, and this is the one placement rule
-  currently written ahead of its evidence.** Measured against the composite a reader actually sees
-  (veil over marker fills, land, and basemap label ink), the muted credit text clears AA
-  throughout, but the link in `--color-accent` does not: 3.13:1 worst case at the shipped 85%
-  mix. Raising the mix does not settle it — the ceiling is the opaque surface's own 4.30:1, because
-  `--color-accent` on `--color-surface` is itself below AA for small text, app-wide and since #15.
-  The numbers live in
-  [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation header, which owns them;
-  the open decision — accent hue, opaque band, or a documented exception — is in
-  `docs/tech-debt.md`. Until it is settled, treat this bullet as describing the intended treatment
-  rather than a validated one.
+  The veil is validated against the composite a reader actually sees — veil over marker fills,
+  land, and basemap label ink — rather than against itself, because a translucent surface has no
+  contrast of its own. At the shipped mix the credit's muted ink measures 4.91:1 and its
+  hover/focus ink 12.16:1, both clearing AA for small text. **That mix is the legibility floor for
+  muted ink, not a taste setting**: a lower one stops the credit reading over dark basemap ink, and
+  a higher one stops the map showing through, which is the whole point. The numbers and the ratio
+  live in [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation header, which owns
+  them; this document names the decision and does not restate the value.
 
   What forced the question was the map going full bleed
   ([`dashboard-composition.md`](dashboard-composition.md)): a strip below an edge-to-edge map is
@@ -187,5 +184,14 @@ Placement:
 - Tile credit first, weather credit second, reading order matching what the reader is looking at:
   the map, then the data drawn on it.
 - The Open-Meteo credit's own styling belongs to the `OpenMeteoAttribution` component — muted ink
-  at `--text-xs`, link in `--color-accent`. Map views do not restyle it, and do not hand-roll
-  their own copy of the string.
+  at `--text-xs`, with the **link also in muted ink, underlined**, brightening to full text ink on
+  hover and keyboard focus. Map views do not restyle it, and do not hand-roll their own copy of
+  the string.
+
+  The link is not accent-coloured, and that is a legibility rule rather than a stylistic
+  preference: `--color-accent` is below AA for small text on this palette's own opaque surfaces,
+  so it cannot clear the bar on a translucent one either. Dropping the colour means the underline
+  is the only thing left marking the link as a link, which is exactly what WCAG 1.4.1 asks for and
+  why the underline is permanent rather than revealed on hover. The tile credit beside it takes
+  the identical treatment — the same obligation on the same surface, so the two would be wrong if
+  only one changed.
