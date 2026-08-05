@@ -28,16 +28,35 @@ import type { Theme } from '../theme';
  * like this, and desaturating it needs the banned filter) and Protomaps (a
  * self-hosted PMTiles archive or an API key, for no benefit at this scale).
  * There is no ADR because reversing this is a change to the constant below plus
- * the one ledgered copy of its origin — OpenFreeMap being donation-funded and
- * SLA-free is precisely why that swap is kept small.
+ * the sites ledgered under it — every one of them a line, none of them
+ * structural. OpenFreeMap being donation-funded and SLA-free is precisely why
+ * that swap is kept cheap.
  *
- * Restatement ledger (`architecture.md` rule 9). One site outside this module
- * carries this URL's origin as a literal of its own, because it cannot import
- * one: `apps/web/e2e/hermetic-basemap.ts`, whose Playwright route glob is a
- * pattern matched against outgoing requests rather than a URL built from a
- * constant. Change the provider here and that glob has to change with it — miss
- * it and the browser lane stops stubbing anything, silently fetching the live
- * third-party style on every CI run instead of failing.
+ * Restatement ledger (`architecture.md` rule 9). A provider swap has to move
+ * all of the following, none of which can import its way out of holding a
+ * literal. The origin this constant declares:
+ *
+ * - `basemap.test.ts:6,10` — asserts both full style URLs. An expectation built
+ *   from the constant would assert nothing, so it spells them out; that is the
+ *   asserting carrier rule 9 ledgers rather than forbids.
+ * - `apps/web/e2e/hermetic-basemap.ts` — the Playwright route glob, a pattern
+ *   matched against outgoing requests rather than a URL built from a constant.
+ *   Miss it and the browser lane stops stubbing anything, silently fetching the
+ *   live third-party style on every CI run instead of failing.
+ *
+ * And the provider's *identity*, a separate obligation from its origin that the
+ * same swap moves:
+ *
+ * - `MapAttributionStrip.tsx` (the visible credit link and its href) and
+ *   `MapAttributionStrip.test.tsx` (the assertion on that href). Crediting a
+ *   provider whose tiles are no longer being served is a licence failure, not a
+ *   stale string.
+ * - `README.md`'s data-sources credit — the same obligation in prose, carrying
+ *   the ODbL link that the tile data's licence requires.
+ *
+ * Deliberately not a member: `docs/design/map-treatment.md` names OpenFreeMap
+ * among the candidates #17 was to choose between. It reasons about that decision
+ * rather than asserting today's provider, so a swap leaves it true as written.
  */
 const OPENFREEMAP_STYLES = 'https://tiles.openfreemap.org/styles';
 
