@@ -41,20 +41,53 @@ const EDGE_TOLERANCE_PX = 2;
 type LayoutBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
 
 /**
- * One element's box, or a failure naming the element that had none.
+ * One element's box, once the browser has laid it out.
  *
- * `boundingBox` returns `null` for an element with no layout at all, which is a
- * different defect from a box in the wrong place and deserves a different
- * message — a caller that spread the null into arithmetic would report a
- * mysterious `NaN` comparison instead (`error-handling.md` rule 1). The name is
- * a parameter rather than something reached in from the enclosing test
- * (`structure.md` rule 1).
+ * Polled rather than read once, and that is a correctness fix rather than a
+ * tolerance: this helper used to throw on the first `null`, which made every
+ * caller a race against layout. It lost on CI while passing on every local run
+ * (#274 — "The map canvas is on the page but has no layout box", 862ms, so it
+ * raced rather than hung). The window is real and specific. `.map-canvas` is
+ * worn by both the pending shell and the live map — that is `MapSurface`'s whole
+ * point, the same box either side of the swap — so a `toBeVisible` before the
+ * measurement can be satisfied by the *placeholder*, and the box read that
+ * follows can land in the instant the placeholder has gone and maplibre's
+ * container has not yet been laid out. A faster machine simply never loses that
+ * instant.
+ *
+ * So the readiness handling is the poll and nothing else: no `waitForTimeout`,
+ * no retry budget, no tolerance on the measurements the callers then make. The
+ * state being waited on is "this element has a box", which is exactly the
+ * precondition of measuring one.
+ *
+ * `boundingBox` returning `null` therefore stops meaning "not yet" and starts
+ * meaning "never" — an element with no layout at all, which is a different
+ * defect from a box in the wrong place and still deserves its own message
+ * rather than a `NaN` comparison downstream (`error-handling.md` rule 1). The
+ * poll's timeout is what reports it now, so an element that genuinely never
+ * gets a box still fails, and fails naming itself.
+ *
+ * The second read is not redundant. `expect.poll` reports whether the condition
+ * held, not the value it held — so the box is read again once the poll has
+ * established there is one, and the guard after it covers the one case that
+ * leaves: an element that had a box and lost it between the two reads. That is
+ * a genuinely different failure from never having had one, and says so.
+ *
+ * The name is a parameter rather than something reached in from the enclosing
+ * test (`structure.md` rule 1), and it is what makes both messages point at the
+ * element that actually failed.
  */
 const layoutBoxOf = async (locator: Locator, name: string): Promise<LayoutBox> => {
+  await expect
+    .poll(async () => locator.boundingBox(), {
+      message: `${name} never acquired a layout box.`,
+    })
+    .not.toBeNull();
+
   const box = await locator.boundingBox();
 
   if (box === null) {
-    throw new Error(`${name} is on the page but has no layout box.`);
+    throw new Error(`${name} had a layout box and then lost it.`);
   }
 
   return box;
