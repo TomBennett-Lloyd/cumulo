@@ -193,6 +193,62 @@ describe('routeRequest', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it('answers 204 with no body and no headers to OPTIONS on a routed path, without calling any handler', async () => {
+    // The preflight fix. No route declares OPTIONS, so matching by method would
+    // 404 every preflight the browser sends before a write — and the gateway
+    // cannot auto-answer it, because `$default` proxies everything here.
+    // The empty-headers assertion is load-bearing: the gateway owns the
+    // `Access-Control-*` headers, and a set of them here would be a second
+    // opinion on the same question.
+    const seen: RouteRequest[] = [];
+    const routes = [recordingRoute('POST', ['v1', 'sites'], seen)];
+
+    const response = await routeRequest(
+      routes,
+      apiRequest({ method: 'OPTIONS', path: '/v1/sites' }),
+      fullBudgetDeadline,
+    );
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers).toEqual({});
+    expect(response.body).toBeUndefined();
+    expect(seen).toHaveLength(0);
+  });
+
+  it('answers 404 to OPTIONS on a canonical path the populated table does not serve', async () => {
+    // The table is deliberately non-empty and the path deliberately canonical,
+    // so the only thing that can produce this 404 is the segment match failing.
+    // Against an empty table this would pass however the segments were compared
+    // — `[].some(…)` is false whatever the predicate says — and against a
+    // trailing-slash path the canonical guard would answer before matching ran.
+    const seen: RouteRequest[] = [];
+    const routes = [recordingRoute('POST', ['v1', 'sites'], seen)];
+
+    const response = await routeRequest(
+      routes,
+      apiRequest({ method: 'OPTIONS', path: '/v1/nope' }),
+      fullBudgetDeadline,
+    );
+
+    expect(response.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('answers 404 to OPTIONS on a non-canonical path', async () => {
+    // Same gateway-parity rule the write path obeys: approving `/v1/sites/` at
+    // preflight would promise the browser a request that then 404s.
+    const routes = [recordingRoute('POST', ['v1', 'sites'], [])];
+
+    const response = await routeRequest(
+      routes,
+      apiRequest({ method: 'OPTIONS', path: '/v1/sites/' }),
+      fullBudgetDeadline,
+    );
+
+    expect(response.statusCode).toBe(404);
+  });
+
   it('does not report a malformed body on a request that matched nothing', async () => {
     // Order matters: an unmatched path is 404 even when its body is garbage,
     // because "there is no such route" is the more useful answer.

@@ -39,8 +39,10 @@ body {
 }
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
- * does not get, so the title, the tagline and the toggle sit on one baseline
- * and wrap to a second line only when the width forces it. */
+ * does not get, so the brand, the tagline and the menu button sit on one
+ * baseline and wrap to a second line only when the width forces it. The third
+ * item used to be the theme toggle; it is behind the disclosure now
+ * (`header/HeaderMenu.tsx`), and the bar still carries exactly one control. */
 .app-header {
   display: flex;
   flex-wrap: wrap;

@@ -51,6 +51,12 @@ import type { Theme } from '../theme';
  *   `MapAttributionStrip.test.tsx` (the assertion on that href). Crediting a
  *   provider whose tiles are no longer being served is a licence failure, not a
  *   stale string.
+ * - `header/AboutDialog.tsx` (and `header/AboutDialog.test.tsx`) — the same
+ *   credit again, in the About dialog's data-sources block, which names every
+ *   source the app draws on in one place. A second carrier rather than a shared
+ *   component because the strip states an obligation the map owes while it is on
+ *   screen and this states what the product is built on; they are free to be
+ *   worded differently and only the provider's identity has to agree.
  * - `README.md`'s data-sources credit — the same obligation in prose, carrying
  *   the ODbL link that the tile data's licence requires.
  *
