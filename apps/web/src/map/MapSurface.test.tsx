@@ -44,15 +44,26 @@ describe('MapSurface with a live map canvas', () => {
     expect(containerRef.current?.parentElement?.className).toBe('map-view');
   });
 
-  it('credits Open-Meteo beneath the map', () => {
+  it('credits Open-Meteo on the map', () => {
     render(<MapSurface canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>() }} />);
 
     expect(openMeteoLinkHref()).toBe('https://open-meteo.com/');
   });
 
-  it('draws overlays between the canvas and the credits', () => {
-    // Markers and clusters arrive as children; they belong over the canvas and
-    // above the strip, which is the stacking the map's column depends on.
+  it('places overlays between the canvas and the credits in DOM order', () => {
+    // Markers and clusters arrive as children, and this asserts where they sit
+    // in the markup: after the canvas, before the credits.
+    //
+    // DOM order is *not* paint order here, and the distinction matters enough
+    // to spell out. The credits are positioned (`.map-attribution` is
+    // `position: absolute` since #265) and the children are not, so the credits
+    // paint *above* any marker they overlap rather than below it — the reverse
+    // of what a reader might infer from this ordering. A marker under the band
+    // is therefore not clickable, which is why `e2e/map-regressions.spec.ts`'s
+    // `basemapPoint` treats `.map-attribution` as a covering overlay alongside
+    // `.maplibregl-marker`. Anyone reasoning about stacking from this test
+    // should read that predicate, and docs/tech-debt.md's entry on the band's
+    // occlusion, rather than this assertion.
     render(
       <MapSurface canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>() }}>
         <p>Site markers</p>

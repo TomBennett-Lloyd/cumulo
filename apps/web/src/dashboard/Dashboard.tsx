@@ -271,9 +271,10 @@ export const Dashboard = ({
   // written into a region that is now off the top of the screen: the swap
   // happens, and the feedback is invisible. This puts the region back where it
   // can be read. The full-bleed layout (#265) did not retire the problem — it
-  // moved the scroller from the panel column to the document and put a 60vh
-  // map above the region, so a selection now lands *further* out of view than
-  // it used to.
+  // moved the scroller from the panel column to the document and put a
+  // full-height map band above the region (`.dashboard-map` in dashboard.css
+  // owns that height), so a selection now lands *further* out of view than it
+  // used to.
   //
   // It cannot be a line in the click handlers, for the reason the URL effect
   // cannot either: a context also arrives without a click — a creation selects

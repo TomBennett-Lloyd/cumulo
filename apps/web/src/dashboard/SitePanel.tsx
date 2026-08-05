@@ -212,13 +212,13 @@ export interface SitePanelProps {
 }
 
 /**
- * Everything known about one site, as the panel column's context.
+ * Everything known about one site, as the content column's context.
  *
- * No Open-Meteo credit inside the panel: the column carries one persistent
- * credit at its foot, which is on screen in every context the column can be in
- * — a credit per panel would multiply as panels do, and a credit that comes and
- * goes with a selection is one that will eventually be missing when it matters
- * (CC BY 4.0, CLAUDE.md hard constraints).
+ * No Open-Meteo credit inside the panel: the page carries one persistent credit
+ * at the foot of its content, which is on screen in every context the region can
+ * be in — a credit per panel would multiply as panels do, and a credit that
+ * comes and goes with a selection is one that will eventually be missing when it
+ * matters (CC BY 4.0, CLAUDE.md hard constraints).
  */
 export const SitePanel = ({
   dataSource,

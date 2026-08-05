@@ -1,5 +1,5 @@
 /*
- * The map surface and its attribution strip.
+ * The map surface and its attribution band.
  *
  * Tokens only, like every stylesheet outside `packages/ui/src/tokens` — the
  * gate in stylelint.config.mjs is what enforces it, and a missing token is a

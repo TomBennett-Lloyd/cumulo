@@ -155,12 +155,22 @@ Placement:
 
   This band used to be a strip _under_ the map, on `--color-surface`, and the argument for that
   was contrast: a caption floating on imagery has whatever contrast the pixel beneath it happens
-  to give, while on a surface it has the contrast the palette was validated for. That argument
-  survives the move — it is the reason `--color-surface-veil` exists (#265). The veil is a
-  mostly-opaque surface colour, so the ink is still reading against a known colour rather than
-  against tiles; what the translucency buys is that the map does not stop at the credit line. The
-  contrast answer is therefore the veil, not the position, and a credit painted directly on
-  tiles is still refused.
+  to give, while on a surface it has the contrast the palette was validated for. The veil is what
+  carries that argument across the move (#265) — a mostly-opaque surface colour, so the ink reads
+  against a mostly-known colour rather than against tiles, while the map does not stop at the
+  credit line. A credit painted directly on tiles is still refused.
+
+  **The veil does not yet have a passing contrast record, and this is the one placement rule
+  currently written ahead of its evidence.** Measured against the composite a reader actually sees
+  (veil over marker fills, land, and basemap label ink), the muted credit text clears AA
+  throughout, but the link in `--color-accent` does not: 3.13:1 worst case at the shipped 85%
+  mix. Raising the mix does not settle it — the ceiling is the opaque surface's own 4.30:1, because
+  `--color-accent` on `--color-surface` is itself below AA for small text, app-wide and since #15.
+  The numbers live in
+  [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation header, which owns them;
+  the open decision — accent hue, opaque band, or a documented exception — is in
+  `docs/tech-debt.md`. Until it is settled, treat this bullet as describing the intended treatment
+  rather than a validated one.
 
   What forced the question was the map going full bleed
   ([`dashboard-composition.md`](dashboard-composition.md)): a strip below an edge-to-edge map is

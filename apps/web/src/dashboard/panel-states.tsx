@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { RETRY_ACTION_LABEL } from './state-copy';
 
 /*
- * The panel column's three async states, as three components.
+ * The content column's three async states, as three components.
  *
  * Every panel in the column answers the same three questions — is this still
  * arriving, did it fail, is there nothing to show — and before this module each

@@ -1,7 +1,7 @@
 /*
  * What apps/web says when it is waiting, has nothing to show, or has failed.
  *
- * The panel column is where most of this copy renders, but it is not the only
+ * The content column is where most of this copy renders, but it is not the only
  * place the same three states reach the reader: the map region waits and fails
  * on its own, the app-wide boundary is the last of these sentences before a
  * blank page, and the add-site form has a pending label of its own. They are

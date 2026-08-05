@@ -26,7 +26,7 @@ import {
 } from './state-copy';
 
 /*
- * The fleet's story, in the panel column's resting state.
+ * The fleet's story, in the content column's resting state.
  *
  * ## Capability honesty is structural here, not editorial
  *

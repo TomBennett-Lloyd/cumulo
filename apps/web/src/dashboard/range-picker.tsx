@@ -21,7 +21,7 @@ import type { RangeHours } from '../data/fleet-data-source';
  *
  * It lives in `dashboard/` because that is where both of its callers now live:
  * the three chart *views* it was extracted from are gone (#148), and a control
- * used only by the panel column has no business sitting in a directory named
+ * used only by the content column has no business sitting in a directory named
  * after the pages that used to exist. Its styling moved with it, into
  * `range-picker.css`.
  */

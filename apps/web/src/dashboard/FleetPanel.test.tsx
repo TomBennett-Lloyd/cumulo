@@ -194,7 +194,7 @@ describe('FleetPanel with nothing to show', () => {
   });
 });
 
-describe('FleetPanel as the column keeps it mounted', () => {
+describe('FleetPanel as the content column keeps it mounted', () => {
   it('re-sums the fleet when the dashboard bumps the refresh token', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
     const { rerender } = render(panel(dataSource, false));

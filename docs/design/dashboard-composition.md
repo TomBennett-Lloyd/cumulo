@@ -67,8 +67,9 @@ thing under the map, so a selection always lands where the reader is looking. Th
 `scrollTop: 0` and nowhere else. Sixty rows are taller than a screen; a reader who has scrolled
 down to row forty and clicks a marker gets their answer written into a region that is now off the
 top of the screen, and the only feedback they receive is a row highlight. Review cycle 1 of #148
-caught it, and the full-bleed layout sharpened it rather than settling it — the region now has a
-60vh map above it, so a selection lands further out of view than it did.
+caught it, and the full-bleed layout sharpened it rather than settling it — the region now has the
+whole map band above it (`.dashboard-map` in `apps/web/src/dashboard/dashboard.css` owns that
+height), so a selection lands further out of view than it did.
 
 Two shapes were available. Bounding the list's height puts the region permanently in view at the
 cost of a second scroller nested inside the first — the arrangement the redesign had just removed,

@@ -37,7 +37,7 @@ const MapRegionImpl = lazy(async () => ({ default: (await import('./MapRegion'))
  *
  * `MapSurface` is the shell rather than a hand-written copy of it, which settles
  * both of the things this state has to get right. It occupies the identical flex
- * column inside `.dashboard-map`'s fixed 70vh box, so the swap to the real map
+ * column inside `.dashboard-map`'s fixed box, so the swap to the real map
  * shifts nothing on the page — the two are the same markup, not two spellings
  * agreeing today. And it carries `MapAttributionStrip` unconditionally: the
  * Open-Meteo credit is a licence obligation wherever weather-derived data

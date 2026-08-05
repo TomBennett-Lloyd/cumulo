@@ -30,15 +30,29 @@
  * one surface on this page that is better for having no frame — a basemap
  * inset in a card reads as a picture of a place, and this one is the place.
  *
- * A band rather than a screenful. 60vh leaves the chart under it visible on a
- * desktop viewport without a scroll, which is the whole argument for putting
- * the two on one flow; the minimum is the point below which a basemap stops
- * being worth drawing, and it wins on a short window. `flex: none` because the
- * height is the point: a flex item's default `shrink: 1` would let a tall
- * content column below claw it back. */
+ * A band rather than a screenful. 60% of the viewport leaves the chart under it
+ * visible on a desktop viewport without a scroll, which is the whole argument
+ * for putting the two on one flow; the minimum is the point below which a
+ * basemap stops being worth drawing, and it wins on a short window. `flex: none`
+ * because the height is the point: a flex item's default `shrink: 1` would let a
+ * tall content column below claw it back.
+ *
+ * `svh`, and deliberately not the `dvh` app.css states a preference for — the
+ * two boxes are being asked different questions. `.app` wants a *minimum* that
+ * always reaches the bottom of whatever is visible right now, and `dvh`
+ * tracking mobile browser chrome is exactly right for that. This box is a
+ * *fixed size* with a WebGL canvas inside it that watches its container: under
+ * `dvh` every appearance and disappearance of the URL bar would resize the
+ * canvas mid-scroll, which is a GL reallocation per chrome transition and the
+ * one cost this band must not carry. Plain `vh` has the opposite defect — it is
+ * the chrome-retracted height, so while the URL bar is showing the map is more
+ * than 60% of what the reader can actually see and pushes the chart further
+ * below the fold than intended. `svh` is the chrome-showing height and it is
+ * static: never oversized, and never a resize. The map simply keeps that height
+ * when the chrome retracts, and the content below gains the difference. */
 .dashboard-map {
   flex: none;
-  height: 60vh;
+  height: 60svh;
   min-height: 24rem;
 }
 
@@ -72,7 +86,7 @@
 }
 
 /* The context region: whichever of the draft, the site and the fleet currently
-   holds the top of the column. It carries no styling of its own — exactly one of
+   holds the top of the content column. It carries no styling of its own — exactly one of
    its three occupants is ever visible, so there is nothing to space or align.
    It exists as a box because the region has to be *addressable* to be scrolled
    to, which is Dashboard.tsx's context-scroll effect. */

@@ -180,11 +180,20 @@ test('runs the map edge to edge, with its credits overlaid on its own bottom edg
    * the map's own event surface, or disabled by a `pointer-events` rule reached
    * for to keep the map draggable — so the licence obligation is re-measured
    * here, in the band's new position, rather than assumed from the count above.
+   *
+   * `click({ trial: true })` is what actually measures that, and the reason the
+   * two assertions beside it are not enough: `toBeVisible` passes on a link
+   * with another element painted over it, and `toBeEnabled` is vacuous on an
+   * anchor, which has no disabled state to report. A trial click runs
+   * Playwright's full actionability sequence — including the hit test that
+   * `elementFromPoint` at the link's centre resolves to the link — and then
+   * stops without navigating. That is precisely the failure mode the move
+   * introduced, so it is the one the case has to name.
    */
   const credit = attribution.getByRole('link', { name: 'Open-Meteo.com' });
 
   await expect(credit).toBeVisible();
-  await expect(credit).toBeEnabled();
+  await credit.click({ trial: true });
 });
 
 test('stacks the fleet chart under the map rather than beside it', async ({ page }) => {
