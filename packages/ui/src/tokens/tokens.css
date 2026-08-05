@@ -29,6 +29,12 @@
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
 
+  /* Translucent surface for text panels floated over imagery — map tiles, a
+     photographic hero — where an opaque panel would crop the picture but plain
+     text on it would be unreadable. Mixed from this block's own
+     --color-surface, so the veil stays a surface in both modes. */
+  --color-surface-veil: color-mix(in srgb, #fbfcfd 85%, transparent);
+
   /* Keyboard focus ring. Currently the accent hue in both modes, declared as a
      token of its own because focus is a distinct job from accent: a later
      decision to make the ring diverge (a higher-contrast hue, or one that reads
@@ -117,6 +123,8 @@
   --color-border: #2a2f34;
   --color-accent: #3987e5;
   --color-accent-contrast: #0d0f10;
+
+  --color-surface-veil: color-mix(in srgb, #16181a 85%, transparent);
 
   --color-focus-ring: #3987e5;
 
