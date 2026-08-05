@@ -94,7 +94,9 @@ that a context arriving is what triggers the scroll, that the element scrolled i
 region, and that closing triggers nothing — against a stand-in installed in
 `dashboard-test-fixture.tsx`. The other half is a browser criterion: **with the column scrolled
 down to the site list, clicking a marker leaves the site panel visible without the reader
-scrolling back up.**
+scrolling back up.** The browser lane that could own it exists (`apps/web/e2e/`, `testing.md`
+rule 10), but no spec in it reads a scroll position today — the criterion is stated here and
+checked by hand, not by a gate.
 
 ## The fleet panel stays mounted
 

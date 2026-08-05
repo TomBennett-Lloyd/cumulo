@@ -27,9 +27,17 @@ import type { Theme } from '../theme';
  * Rejected: a plain OSM raster layer (its usage policy is hostile to an app
  * like this, and desaturating it needs the banned filter) and Protomaps (a
  * self-hosted PMTiles archive or an API key, for no benefit at this scale).
- * There is no ADR because reversing this is a one-line change to the constant
- * below — OpenFreeMap being donation-funded and SLA-free is precisely why that
- * swap is kept to one line.
+ * There is no ADR because reversing this is a change to the constant below plus
+ * the one ledgered copy of its origin — OpenFreeMap being donation-funded and
+ * SLA-free is precisely why that swap is kept small.
+ *
+ * Restatement ledger (`architecture.md` rule 9). One site outside this module
+ * carries this URL's origin as a literal of its own, because it cannot import
+ * one: `apps/web/e2e/hermetic-basemap.ts`, whose Playwright route glob is a
+ * pattern matched against outgoing requests rather than a URL built from a
+ * constant. Change the provider here and that glob has to change with it — miss
+ * it and the browser lane stops stubbing anything, silently fetching the live
+ * third-party style on every CI run instead of failing.
  */
 const OPENFREEMAP_STYLES = 'https://tiles.openfreemap.org/styles';
 

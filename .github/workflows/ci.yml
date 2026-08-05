@@ -119,11 +119,18 @@ jobs:
   # here).
   #
   # (a) Blocking, not advisory, and that is the whole decision. It runs on every
-  #     push and PR like every other job in this file, and auto-merge requires
-  #     green CI, so a spec that goes red stops the merge. A regression case
-  #     that cannot fail the build is a report, not a gate — and these specs are
-  #     regression cases: #17 shipped defects that lived in exactly this layer
-  #     and were found by hand in a browser, because no gate could see them.
+  #     push and PR like every other job in this file, and `main`'s branch
+  #     protection carries this job among its required status contexts, so a red
+  #     spec cannot be merged past — the same enforcement every other job here
+  #     gets, rather than a convention anyone has to remember. That list is
+  #     branch-protection state and not something this file declares, which
+  #     couples the two in one direction worth knowing about: renaming this job
+  #     without renaming its required context leaves the context permanently
+  #     unreported, and an unreported required context blocks every PR. A
+  #     regression case that cannot fail the build is a report, not a gate — and
+  #     these specs are regression cases: #17 shipped defects that lived in
+  #     exactly this layer and were found by hand in a browser, because no gate
+  #     could see them.
   # (b) Why not a gate inside `verify`, against this repo's usual rule: `verify`
   #     is the per-commit local composite, and it stays browser-binary-free and
   #     fast on purpose — a developer who has never run `playwright install`

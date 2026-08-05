@@ -50,6 +50,15 @@ export default defineConfig({
   retries: 0,
 
   /*
+   * A committed `test.only` is a silent narrowing of the gate: the run stays
+   * green, reports a pass, and has stopped asserting everything else. Focusing
+   * one spec while working on it is still available — pass the file as a CLI
+   * argument — and that leaves no trace in the tree. What must be impossible is
+   * the version of it that gets committed.
+   */
+  forbidOnly: true,
+
+  /*
    * `list` for readable logs; `html` writes the report that CI uploads on a
    * failed run. Both are named explicitly because the default flips by
    * environment — `dot` under CI, which writes no report at all, so the
@@ -58,7 +67,20 @@ export default defineConfig({
    */
   reporter: [['list'], ['html', { open: 'never' }]],
 
-  use: { baseURL: `http://${PREVIEW_HOST}:${String(PREVIEW_PORT)}` },
+  use: {
+    baseURL: `http://${PREVIEW_HOST}:${String(PREVIEW_PORT)}`,
+
+    /*
+     * What a red run leaves behind. With `retries: 0` there is no second
+     * attempt to reproduce on, and nobody can re-run a failure on the CI
+     * runner's machine, so whatever is captured on the failing attempt is the
+     * entire debugging surface — which is what the `web-e2e` job's artifact
+     * step promises. Failure-only on both: a trace per passing test would be
+     * tens of megabytes of upload for a run nobody will look at.
+     */
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+  },
 
   /*
    * One project. The lane costs a production build per run and asserts

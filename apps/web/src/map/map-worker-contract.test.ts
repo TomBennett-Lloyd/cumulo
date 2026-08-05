@@ -11,11 +11,13 @@ import { describe, expect, it } from 'vitest';
  * requested, and the map renders as a black rectangle. No jsdom test can catch
  * that: jsdom has no WebGL and no worker pipeline, so none reaches the failure,
  * and a mocked maplibre would only prove the mock was called (testing.md
- * rule 3). The defect is visible in a browser and nowhere else, which is why
- * the browser lane is its second observer — `e2e/composition.spec.ts` waits for
- * a laid-out WebGL canvas against the built app (testing.md rule 10). This file
- * stays as the cheap first line in front of it: a mechanical check on the
- * source, biting in `verify` with no build and no browser binary.
+ * rule 3). The defect is visible in a browser and nowhere else. That lane now
+ * exists — `apps/web/e2e/` (testing.md rule 10) — but no spec in it would see
+ * this failure today: maplibre creates and sizes its canvas without the worker,
+ * and the lane's hermetic basemap serves a style with no sources and no layers,
+ * so nothing is ever handed to the worker to parse. So this file is still the
+ * only observer the wiring has: a mechanical check on the source, biting in
+ * `verify` with no build and no browser binary.
  *
  * It fails on the code that shipped before this fix, which is the point
  * (testing.md rule 4). Reading the file off disk needs the node environment —

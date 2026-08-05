@@ -23,9 +23,10 @@ import { routeBasemap } from './hermetic-basemap';
  * axis from its own numbers. A chart that fits in one and not the other is a
  * real defect that a single case would miss.
  *
- * Nothing here waits on the demo's 45-second first forecast. That delay belongs
- * to *created* sites, whose first forecast has to be generated; the seeded fleet
- * answers on its first poll, and no case below creates a site.
+ * Nothing here waits on the demo's first-forecast delay
+ * (`DEFAULT_FIRST_FORECAST_DELAY_MS`, src/data/demo-fleet-data-source.ts). That
+ * delay belongs to *created* sites, whose first forecast has to be generated;
+ * the seeded fleet answers on its first poll, and no case below creates a site.
  */
 
 /**
@@ -160,8 +161,8 @@ test('draws a selected site’s chart at a real size, with its labels inside it'
    * laid out differently under a single site's.
    *
    * A seeded row, so the panel's forecast is answered on the first poll; the
-   * demo's headline minute belongs to sites this session creates, and nothing
-   * here creates one.
+   * first-forecast delay named above belongs to sites this session creates, and
+   * nothing here creates one.
    */
   await page.locator('[data-site-id]').first().click();
   await expect(page.locator('.site-panel-title')).toBeVisible();

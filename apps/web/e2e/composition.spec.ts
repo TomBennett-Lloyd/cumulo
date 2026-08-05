@@ -17,7 +17,12 @@ import { routeBasemap } from './hermetic-basemap';
  * A case earns its place here only if assembling the app is what makes it true.
  */
 
-/** 12 cluster locations x 5 sites — `generateFleet` in packages/shared/src/fleet.ts. */
+/**
+ * The size `generateFleet` (packages/shared/src/fleet.ts) produces for the demo
+ * fleet, from its own location count and sites-per-location. The number is here
+ * because this spec measures against it; the arithmetic that yields it is the
+ * generator's and is not restated (`architecture.md` rule 9).
+ */
 const DEMO_FLEET_SIZE = 60;
 
 /** The map strip and the aside footer each owe one. More surfaces may owe more. */

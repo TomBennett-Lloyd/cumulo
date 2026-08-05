@@ -22,7 +22,14 @@ import type { Page } from '@playwright/test';
  * here depends on cartography that OpenFreeMap is free to redraw.
  */
 
-/** Everything the basemap provider serves. Broad on purpose: one rule, no leaks. */
+/**
+ * Everything the basemap provider serves. Broad on purpose: one rule, no leaks.
+ *
+ * The origin is owned by `OPENFREEMAP_STYLES` in `src/map/basemap.ts` and is
+ * restated here only because a route glob is a pattern, not a URL this file
+ * could build from that constant — which is why the owner's comment carries
+ * this file in its restatement ledger (`architecture.md` rule 9).
+ */
 const OPENFREEMAP_ORIGIN_GLOB = 'https://tiles.openfreemap.org/**';
 
 /**

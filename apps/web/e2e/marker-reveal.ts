@@ -4,8 +4,8 @@ import { expect } from '@playwright/test';
 /*
  * Getting one site marker on screen, without pinning how many zooms that takes.
  *
- * The lane boots the demo fleet at `INITIAL_ZOOM` (4.6, src/map/framing.ts), and
- * at that camera the sixty seeded sites read as a dozen knots: what is drawn is
+ * The lane boots the demo fleet at `INITIAL_ZOOM` (src/map/framing.ts), and at
+ * that camera the seeded sites read as a handful of knots: what is drawn is
  * `.map-cluster-marker` bubbles, not `.map-site-marker` buttons. Any assertion
  * about a *site* marker therefore has to zoom in first, and how far in is a
  * function of the seed data's spacing and the window size — two things a spec

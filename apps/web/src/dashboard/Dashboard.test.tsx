@@ -136,9 +136,12 @@ describe('Dashboard', () => {
     // which nothing has resolved and every panel is still waiting.
     //
     // The known limit: the stub map region stands in for the real placeholder,
-    // whose own zero-live-region property is `MapSurface.test.tsx`'s. The
-    // shipping composition — real map shell included — is the browser lane's
-    // (`testing.md` rule 10), in `e2e/composition.spec.ts`.
+    // whose own zero-live-region property is `MapSurface.test.tsx`'s. Nothing
+    // asserts the property on the shipping composition, real map shell
+    // included. That is the browser lane's kind of work and the lane now exists
+    // — `apps/web/e2e/` (`testing.md` rule 10) — but no spec in it queries
+    // `[role="status"]`, `[role="alert"]` or `[aria-live]` today, so the two
+    // halves above are the whole of the coverage this property has.
     const container = renderDashboard(new DemoFleetDataSource());
 
     expect(container.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).toHaveLength(
@@ -435,7 +438,9 @@ describe('Dashboard context region', () => {
      * or the list, and that closing triggers nothing. jsdom has no layout, so the scroll itself is
      * a stand-in (`dashboard-test-fixture.tsx`) and the pixels are a browser criterion — a reader
      * who has scrolled the column down to the site list and clicks a marker can see the site panel
-     * without scrolling back up.
+     * without scrolling back up. The browser lane exists (`apps/web/e2e/`, `testing.md` rule 10)
+     * but no spec in it reads a scroll position today, so that half is unasserted rather than
+     * asserted elsewhere.
      *
      * The fleet at rest is not a swap: the region is already showing it, so nothing moves.
      */

@@ -85,8 +85,10 @@ export const StubMapRegion = ({
  *
  * What it cannot show is the movement. Nothing in jsdom has a scroll position, so "the swapped-in
  * context is actually on screen in a column the reader had scrolled halfway down" is a browser
- * criterion, checked in a browser and named in `docs/design/dashboard-composition.md`. Nothing
- * read back from here is evidence of that, and `Dashboard.test.tsx` says so where it asserts.
+ * criterion, named in `docs/design/dashboard-composition.md`. The browser lane exists
+ * (`apps/web/e2e/`, `testing.md` rule 10) but no spec in it asserts a scroll position today, so
+ * that criterion has no automated owner at all. Nothing read back from here is evidence of it,
+ * and `Dashboard.test.tsx` says so where it asserts.
  */
 const scrollIntoViewStub = vi.fn<(options?: boolean | ScrollIntoViewOptions) => void>();
 
