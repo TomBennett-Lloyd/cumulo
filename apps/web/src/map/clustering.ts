@@ -92,7 +92,7 @@ interface OrderedMapPoint {
  * 12px is an empirical number, and the honest justification is the test rather
  * than a token: it is the radius at which the fleet's twelve seeded centres
  * still read as twelve knots at the zoom the map opens on
- * (`framing.ts`'s `INITIAL_ZOOM`, floored to level 4). The pair that decides it
+ * (`framing.ts`'s `INITIAL_CAMERA.zoom`, floored to level 4). The pair that decides it
  * is Bristol and Cardiff, about 40km apart — at supercluster's default 40px
  * they stay merged until zoom 6, and at 24px until zoom 5, either of which
  * shows a reader ten knots on a map `map-treatment.md` promises has twelve.

@@ -78,13 +78,21 @@ interface MarkerShape {
  * something to hard-code though — the fleet's framing is free to change — so
  * each is asked what is actually under it.
  *
- * Two things are drawn over the basemap and take pointer events. Markers, which
- * is the question the production guard asks (`isMarkerClick`, src/map/map-click.ts).
- * And, since #265, the credits: the attribution band is overlaid on the map's
- * bottom edge rather than sitting in a strip beneath it, so both lower corners
- * are now under it at every viewport. A click landing there correctly opens no
- * draft — the band is content, not basemap — which arrived as this helper
- * silently returning a point the map never sees.
+ * Three things are drawn over the basemap and take pointer events. Markers,
+ * which is the question the production guard asks (`isMarkerClick`,
+ * src/map/map-click.ts). The credits: the attribution band is overlaid on the
+ * map's bottom edge rather than sitting in a strip beneath it, so both lower
+ * corners are now under it at every viewport. A click landing there correctly
+ * opens no draft — the band is content, not basemap — which arrived as this
+ * helper silently returning a point the map never sees.
+ *
+ * And the map's own controls, in the top-right (`.map-controls`, #265). That one
+ * is the nastiest of the three because of *which* control sits there: hand the
+ * right-top corner back as a "basemap point" and the armed case clicks the
+ * add-site toggle, while the disarmed case clicks it too — arming the mode,
+ * opening no form, and going green for precisely the wrong reason. Left-top wins
+ * the search today, so this list is what stops that becoming true on the first
+ * viewport or fleet layout where it does not.
  *
  * Throwing when all four are covered is deliberate. A silent fallback would turn
  * "there is nowhere left to click the basemap" into a mysteriously failing
@@ -113,7 +121,10 @@ const basemapPoint = async (page: Page): Promise<ViewportPoint> => {
     const covered = await page.evaluate((point) => {
       const element = document.elementFromPoint(point.x, point.y);
 
-      return element !== null && element.closest('.maplibregl-marker, .map-attribution') !== null;
+      return (
+        element !== null &&
+        element.closest('.maplibregl-marker, .map-attribution, .map-controls') !== null
+      );
     }, corner);
 
     if (!covered) {
@@ -185,6 +196,33 @@ const dragMap = async (page: Page): Promise<void> => {
   await page.mouse.down();
   await page.mouse.move(start.x + direction * DRAG_DISTANCE_PX, start.y, { steps: DRAG_STEPS });
   await page.mouse.up();
+};
+
+/**
+ * Rotates and tilts the camera, with the gesture a reader actually has.
+ *
+ * maplibre binds `dragRotate` to the **right** button and leaves
+ * `pitchWithRotate` on beside it, both by default — so this is not an exotic
+ * state a spec has to construct, it is one right-drag away for anybody who owns
+ * a mouse. The drag is diagonal for that reason: the horizontal component moves
+ * bearing and the vertical one moves pitch, so one gesture leaves the camera off
+ * the opening framing on both of the axes a `center`-and-`zoom` reset cannot
+ * see.
+ *
+ * Same covered-corner search as the pan, for the same reason — a press that
+ * lands on a marker or on a control never reaches the map.
+ */
+const rotateMap = async (page: Page): Promise<void> => {
+  const start = await basemapPoint(page);
+  const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  const direction = start.x < layoutWidth / 2 ? 1 : -1;
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(start.x + direction * DRAG_DISTANCE_PX, start.y - DRAG_DISTANCE_PX / 2, {
+    steps: DRAG_STEPS,
+  });
+  await page.mouse.up({ button: 'right' });
 };
 
 /**
@@ -381,6 +419,46 @@ test('puts the camera back where it opened when the view is reset (issue 265)', 
   await expect
     .poll(async () => originDrift(opening, await markerOrigins(page)), {
       message: 'Reset did not return the camera to the framing the map opened on.',
+    })
+    .toBeLessThanOrEqual(RESET_TOLERANCE_PX);
+});
+
+test('puts a rotated and tilted camera back when the view is reset (issue 265)', async ({
+  page,
+}) => {
+  /*
+   * The axes a reset is most likely to forget, and the ones it did forget: this
+   * shipped restoring `center` and `zoom` only, so a right-drag left the map
+   * rotated and pitched and "Reset map view" returned it to exactly where it
+   * already was (review cycle 1 measured 91.5px of rotation against 0.1px of
+   * reset). Nothing in the unit lane could see it — jsdom has no camera — and
+   * the pan case above stayed green throughout, which is precisely why this is
+   * its own case rather than a third leg of that one.
+   *
+   * A separate case also keeps the diagnosis separate: a pan that stops
+   * resetting and a rotation that stops resetting are different defects in
+   * different axes, and one test asserting both would report only whichever
+   * failed first.
+   */
+  await expect(page.locator(ANY_MARKER).first()).toBeVisible();
+
+  const opening = await markerOrigins(page);
+
+  expect(opening.length).toBeGreaterThan(0);
+
+  await rotateMap(page);
+
+  await expect
+    .poll(async () => originDrift(opening, await markerOrigins(page)), {
+      message: 'The camera never rotated, so the reset below would prove nothing.',
+    })
+    .toBeGreaterThan(RESET_TOLERANCE_PX);
+
+  await page.locator('.map-control-reset').click();
+
+  await expect
+    .poll(async () => originDrift(opening, await markerOrigins(page)), {
+      message: 'Reset left the camera rotated or tilted — it restored only centre and zoom.',
     })
     .toBeLessThanOrEqual(RESET_TOLERANCE_PX);
 });

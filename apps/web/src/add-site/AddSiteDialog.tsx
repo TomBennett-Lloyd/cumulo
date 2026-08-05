@@ -63,7 +63,9 @@ export interface AddSiteDialogProps extends AddSiteFormProps {
  * that heading, focused by the form's own mount effect, so the first thing
  * announced on open is the dialog's subject. Closing the gap properly means
  * `AddSiteForm` accepting the id — a change to a component this chunk was
- * scoped to leave alone.
+ * scoped to leave alone, and recorded in `docs/tech-debt.md` ("The app's two
+ * native dialogs disagree about whether a modal names itself") because
+ * `header/AboutDialog.tsx` answers the same question the other way.
  */
 export const AddSiteDialog = ({ onReturnFocus, ...form }: AddSiteDialogProps): ReactElement => {
   const dialogRef = useRef<HTMLDialogElement>(null);

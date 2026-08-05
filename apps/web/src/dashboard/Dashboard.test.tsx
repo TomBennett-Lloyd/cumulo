@@ -365,7 +365,10 @@ describe('Dashboard', () => {
 });
 
 /*
- * The context swap: one region of the column, three things that can occupy it.
+ * The context swap: one region of the column, two things that can occupy it —
+ * a site, and the fleet at rest. A draft was a third until it moved into a modal
+ * over the page (`add-site/AddSiteDialog.tsx`), and what it does to the region
+ * now, which is nothing, is `Dashboard.draft-dialog.test.tsx`'s subject.
  *
  * These are assertions about *which* context is on screen and about what that
  * costs, which is why several of them read the `hidden` attribute directly. The

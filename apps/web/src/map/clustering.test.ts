@@ -3,7 +3,7 @@ import { canonicalFleetSeed, generateFleet } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 import type { MapPoint, MapViewport } from './clustering';
 import { buildClusterIndex, clusterSizeBand, pointsForViewport } from './clustering';
-import { INITIAL_ZOOM } from './framing';
+import { INITIAL_CAMERA } from './framing';
 
 const fleet = generateFleet(canonicalFleetSeed);
 
@@ -16,7 +16,7 @@ const fleet = generateFleet(canonicalFleetSeed);
  * shows something else entirely (`testing.md` rule 7). Floored because
  * supercluster indexes one tree per integer zoom.
  */
-const OPENING_ZOOM = Math.floor(INITIAL_ZOOM);
+const OPENING_ZOOM = Math.floor(INITIAL_CAMERA.zoom);
 
 /**
  * Ireland and the UK on screen together — the framing `MapView` opens on, and

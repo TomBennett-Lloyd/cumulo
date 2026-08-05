@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { useContext } from 'react';
 
-import { INITIAL_CENTER, INITIAL_ZOOM } from './framing';
+import { INITIAL_CAMERA } from './framing';
 import { MapContext } from './MapContext';
 
 /*
@@ -50,9 +50,14 @@ export interface MapControlsProps {
  * to enabled on the map's arrival would be chrome moving under the reader for a
  * reason it could not see.
  *
- * `INITIAL_CENTER`/`INITIAL_ZOOM` are imported from `framing.ts`, which owns the
- * opening camera. Restating them here would give "reset" a second definition,
- * free to disagree with what the map actually opened on.
+ * `INITIAL_CAMERA` is imported from `framing.ts`, which owns the opening camera,
+ * and it is spread **whole**. Restating any of it here would give "reset" a
+ * second definition, free to disagree with what the map actually opened on —
+ * which is not hypothetical: this reset used to name `center` and `zoom` only,
+ * so a reader who right-dragged (maplibre's `dragRotate` and `pitchWithRotate`
+ * are both on by default) got a rotated, tilted map that "Reset map view"
+ * politely left rotated and tilted. Taking the whole object is what makes a
+ * partial reset unrepresentable rather than merely discouraged.
  */
 export const MapControls = ({ armed, onToggleArmed }: MapControlsProps): ReactElement => {
   const map = useContext(MapContext);
@@ -62,7 +67,7 @@ export const MapControls = ({ armed, onToggleArmed }: MapControlsProps): ReactEl
       return;
     }
 
-    map.easeTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM });
+    map.easeTo({ ...INITIAL_CAMERA });
   };
 
   return (

@@ -23,11 +23,12 @@ import type { MapRegionProps } from './MapRegion';
  * `MapRegion` cannot mount — which is why `Dashboard` takes the map region as a
  * prop (see `MapRegion.tsx` for the seam's reasoning) and why
  * {@link StubMapRegion} is a plain second way to reach the callbacks the real
- * map calls — selecting a site, clicking the basemap, and arming add-site mode. Every assertion in the suites is about what the *dashboard*
- * then does; that the real map fires those callbacks at all is browser
- * behaviour (`testing.md` rule 10), and is checked in
- * `e2e/map-regressions.spec.ts` — a basemap click opening the draft form, a
- * marker press opening the site panel.
+ * map calls: selecting a site, clicking the basemap, and arming add-site mode.
+ * Every assertion in the suites is about what the *dashboard* then does; that
+ * the real map fires those callbacks at all is browser behaviour
+ * (`testing.md` rule 10), and is checked in `e2e/map-regressions.spec.ts` — an
+ * *armed* basemap click opening the draft dialog, an unarmed one opening
+ * nothing, and a marker press opening the site panel.
  */
 
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */

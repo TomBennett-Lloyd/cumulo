@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Theme } from '../theme';
 import { basemapStyleUrl } from './basemap';
 import type { MapPosition } from './clustering';
-import { INITIAL_CENTER, INITIAL_ZOOM } from './framing';
+import { INITIAL_CAMERA } from './framing';
 import { MapContext } from './MapContext';
 import { MapSurface } from './MapSurface';
 import { isMarkerClick } from './map-click';
@@ -127,10 +127,14 @@ export const MapView = ({
     // `attributionControl: false` because maplibre's own control would be a
     // second, differently-styled copy of the credits `MapAttributionStrip`
     // already renders on the surface where they are legible.
+    //
+    // The camera is spread whole rather than picked apart, which is what keeps
+    // this and `MapControls`'s reset the same framing by construction instead of
+    // by agreement — `framing.ts`'s header has the argument, and the bug that
+    // paid for it.
     const instance = new MapLibreMap({
       container,
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
+      ...INITIAL_CAMERA,
       attributionControl: false,
     });
 

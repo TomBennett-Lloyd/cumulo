@@ -57,9 +57,10 @@ has to be scrolled into view for it — a modal is painted in the top layer over
 already is.
 
 Opening the draft is also no longer a bare click on the basemap: the map carries an add-site
-control that arms the next click, and the mode is spent on the click that uses it
-(`docs/design/map-treatment.md`, and `apps/web/src/map/MapControls.tsx`). A click on an empty spot
-with the mode disarmed does nothing at all.
+control that arms the next click, and the mode is spent on the click that uses it. A click on an
+empty spot with the mode disarmed does nothing at all. The control itself is the map's own chrome
+and is recorded there — [`map-treatment.md`](map-treatment.md)'s "Map chrome" section, over
+`apps/web/src/map/MapControls.tsx`.
 
 **A draft outranks a selection but does not clear it.** "Where shall the new site go" and "which
 site am I reading" are different questions, and abandoning the first never answers the second.
