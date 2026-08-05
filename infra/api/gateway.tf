@@ -29,10 +29,17 @@ resource "aws_apigatewayv2_api" "api" {
     # is anonymous by design (ADR 0001) so there is nothing to send.
     allow_origins = ["*"]
 
-    # The four methods the route table uses, plus OPTIONS. The gateway answers
-    # preflight itself once this block exists, so OPTIONS never reaches the
-    # Lambda — it is listed because a method absent from this list is a method
-    # the browser is told it may not use.
+    # The four methods the route table uses, plus OPTIONS — a method absent from
+    # this list is a method the browser is told it may not use.
+    #
+    # The gateway does NOT answer preflight itself on this API. Auto-preflight
+    # engages only for an OPTIONS request that matches no route, and the
+    # $default catch-all below matches everything, OPTIONS included (found live,
+    # #263). A preflight is therefore forwarded to the Lambda like any other
+    # request: the router answers it 204 with no body and no Access-Control-*
+    # header (apps/api/src/http/router.ts), and the gateway decorates that 204
+    # with the headers this block configures — the same decoration it applies to
+    # every response when the request carries an Origin.
     allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
     # `content-type` is required rather than tidy: `application/json` is not a
