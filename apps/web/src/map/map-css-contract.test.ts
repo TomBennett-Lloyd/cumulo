@@ -8,9 +8,11 @@ import { describe, expect, it } from 'vitest';
  * A component test cannot reach any of this: jsdom applies no stylesheet, so
  * `getComputedStyle` on a rendered marker reports the initial value of every
  * property below and would pass against an empty file. Reading the stylesheet
- * as text is the honest form of the check the repo can run today; measuring a
- * *rendered* marker needs a real browser, which is the Playwright harness this
- * ticket deliberately left out of scope.
+ * as text is the honest form of the check this lane can run; measuring a
+ * *rendered* marker needs a real browser, which is the browser lane's kind of
+ * work (testing.md rule 10). That lane now exists — `apps/web/e2e/` — but no
+ * spec in it measures a marker's hit target or opacity today, so this text
+ * check is still the only observer these declarations have.
  *
  * So this proves the declarations exist, not that they take effect — which is
  * exactly the failure it is here to catch: a hit target quietly shrunk back to

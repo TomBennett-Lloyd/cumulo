@@ -32,8 +32,16 @@ import { isMarkerClick } from './map-click';
  * it, failing on its first import in production only. `?worker&url` routes it
  * through Vite's worker pipeline, which emits a self-contained chunk.
  *
- * `map-worker-contract.test.ts` is the ratchet: nothing else in CI can see a
- * missing worker, because the failure only exists in a browser.
+ * `map-worker-contract.test.ts` is the only observer this wiring has: a source
+ * contract that bites in `verify`, with no build and no browser binary. The
+ * failure itself only exists in a browser, and the browser lane now exists —
+ * `apps/web/e2e/`, `testing.md` rule 10 — but no spec in it would see a hung
+ * worker today. maplibre creates and sizes `.maplibregl-canvas` without its
+ * worker, so `composition.spec.ts`'s laid-out-canvas assertion stays green with
+ * the worker request hanging; and the lane's hermetic basemap serves a style
+ * with no sources and no layers, so no tile is ever handed to the worker to
+ * parse. Seeing this failure in the lane would take a spec that asserts on
+ * something drawn *from* tile data.
  */
 setWorkerUrl(workerUrl);
 

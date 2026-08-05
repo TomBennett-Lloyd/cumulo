@@ -35,5 +35,14 @@ export default defineConfig({
     // into a served asset URL and silently breaks any test that reads a file
     // off disk. Component tests declare the environment they need.
     environment: 'node',
+
+    // Vitest owns `src/` and nothing else. Narrowed from the default glob
+    // (`**/*.test.*` anywhere in the package) when the Playwright lane landed
+    // in `e2e/`: those specs import `@playwright/test`, which throws outside a
+    // Playwright runner, so a default glob that reached them would fail the
+    // unit suite rather than skip it. `*.spec.ts` there and `*.test.ts` here
+    // already differ, but the boundary that matters is the directory — it holds
+    // whatever the browser lane grows next, fixtures included.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });

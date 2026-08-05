@@ -59,7 +59,8 @@ export interface AppProps {
    * Left out in the app, so `Dashboard`'s own `LazyMapRegion` default is the
    * one statement of what the map actually is. What that default does — the
    * on-demand chunk, its placeholder and its local failure surface — is proven
-   * in `dashboard/LazyMapRegion.test.tsx` and in a browser, not here (#107).
+   * in `dashboard/LazyMapRegion.test.tsx` and, for the shipping default in the
+   * real shell, in the browser lane (`e2e/composition.spec.ts`) — not here.
    */
   readonly mapRegion?: MapRegionComponent;
 }

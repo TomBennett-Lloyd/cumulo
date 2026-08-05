@@ -71,9 +71,10 @@ jobs:
       # the two — the safe direction, but not a pinned one.
       - run: pnpm verify
 
-  # The only job here that produces a build, and the one deliberate exception to
-  # the rule the comment above states — that CI calls the `verify` composite and
-  # never a hand-picked gate.
+  # One of the two jobs here that produce a build, and one of the two deliberate
+  # exceptions to the rule the comment above states — that CI calls the `verify`
+  # composite and never a hand-picked gate. The other of each is `web-e2e`
+  # below; its own comment carries its reasons, and this one's follow.
   #
   # (a) Why not a gate inside `verify`: `verify` has no build step at all, and
   #     whether it should is #111's question — per-package `build` scripts,
@@ -111,6 +112,76 @@ jobs:
         run: pnpm --filter @cumulo/web build
       - name: assert bundle properties
         run: bash .claude/scripts/check-web-bundle.sh
+
+  # The browser lane: Playwright drives the shipping composition in a real
+  # Chromium, against a production build the config's own webServer command
+  # makes (apps/web/e2e/playwright.config.ts owns that; nothing is restated
+  # here).
+  #
+  # (a) Blocking, not advisory, and that is the whole decision. It runs on every
+  #     push and PR like every other job in this file, and `main`'s branch
+  #     protection carries this job among its required status contexts, so a red
+  #     spec cannot be merged past — the same enforcement every other job here
+  #     gets, rather than a convention anyone has to remember. That list is
+  #     branch-protection state and not something this file declares, which
+  #     couples the two in one direction worth knowing about: renaming this job
+  #     without renaming its required context leaves the context permanently
+  #     unreported, and an unreported required context blocks every PR. A
+  #     regression case that cannot fail the build is a report, not a gate — and
+  #     these specs are regression cases: #17 shipped defects that lived in
+  #     exactly this layer and were found by hand in a browser, because no gate
+  #     could see them.
+  # (b) Why not a gate inside `verify`, against this repo's usual rule: `verify`
+  #     is the per-commit local composite, and it stays browser-binary-free and
+  #     fast on purpose — a developer who has never run `playwright install`
+  #     must still be able to run it, and it must not grow a multi-minute step.
+  #     This lane needs an installed browser plus a production build. So the
+  #     split is by cost, not by importance, and it is drawn *through* the lane
+  #     rather than around it: the lane's lint and typecheck half is in `verify`
+  #     already (the `tsc -p e2e` appended to the web package's `typecheck`), so
+  #     a spec that stops compiling fails locally like any other file. Only the
+  #     half that needs a browser lives out here as a parallel job — reachable
+  #     locally in one command, `pnpm --filter @cumulo/web test:e2e`, after a
+  #     one-time `pnpm --filter @cumulo/web exec playwright install chromium`.
+  # (c) Cost, written down rather than left to be rediscovered: ~2–3 min, in
+  #     parallel with the jobs above, so repo-wide wall time is unchanged.
+  #     Roughly — install ≈1 min, the chromium download ≈30–60 s uncached, the
+  #     vite build ≈5 s, the specs themselves under a minute. $0: this is a
+  #     public repo, whose Actions minutes are free. Caching the browser
+  #     binaries is deliberately *not* done yet — a cache key has its own
+  #     staleness failure mode, and it buys nothing until the download is
+  #     measured to be this job's long pole rather than assumed to be.
+  # (d) Hermetic. The specs stub the OpenFreeMap basemap style at the network
+  #     boundary (apps/web/e2e/hermetic-basemap.ts), so this job has no
+  #     external service dependency and a third-party outage cannot redden CI.
+  web-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Chromium only, matching the config's single project: downloading engines
+      # no project ever launches is the easiest minute in this job to waste.
+      # `--with-deps` is the half that is CI-only — it apt-installs the shared
+      # libraries a bare runner image lacks, which a developer's machine has.
+      - name: install chromium (+ system deps)
+        run: pnpm --filter @cumulo/web exec playwright install --with-deps chromium
+      - name: e2e (playwright)
+        run: pnpm --filter @cumulo/web test:e2e
+      # Only on failure: the html report (screenshots, traces, per-test logs) is
+      # the debugging surface for a red e2e run. if-no-files-found is a loud error
+      # because an empty upload here would mean the reporter config regressed.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          if-no-files-found: error
 
   gitleaks:
     runs-on: ubuntu-latest
@@ -168,7 +239,8 @@ jobs:
       # `fileexists` guards the `source_code_hash` call and a resource
       # precondition carries the missing-artefact error at plan time instead.
       # Same asymmetry as the ingestion stack: CI builds no Lambda artefact (the
-      # web-build job above builds the browser bundle and nothing else).
+      # web-build and web-e2e jobs above both build the browser bundle, and
+      # between them that is every build CI performs).
       - name: terraform init (api)
         run: terraform -chdir=infra/api init -backend=false -lockfile=readonly
       - name: terraform validate (api)

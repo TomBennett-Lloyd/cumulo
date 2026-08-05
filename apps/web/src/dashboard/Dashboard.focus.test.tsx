@@ -32,7 +32,9 @@ import {
  *
  * `document.activeElement` is the whole assertion, and jsdom does implement it.
  * What jsdom cannot show is the focus *ring* — no layout, no painting — so that
- * this landing is visible remains a browser criterion, checked in a browser.
+ * this landing is visible is a browser criterion (`testing.md` rule 10) and is
+ * checked in `e2e/keyboard-focus.spec.ts`, which drives the keyboard-initiated
+ * path in real Chromium and reads the computed outline off the focused heading.
  */
 
 /** A well-formed id no fleet contains: a link to a site deleted, or mistyped. */

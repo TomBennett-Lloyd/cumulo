@@ -25,7 +25,9 @@ import type { MapRegionProps } from './MapRegion';
  * {@link StubMapRegion} is a plain second way to reach the two callbacks the
  * real map calls. Every assertion in the suites is about what the *dashboard*
  * then does; that the real map fires those callbacks at all is browser
- * behaviour, and is checked in a browser.
+ * behaviour (`testing.md` rule 10), and is checked in
+ * `e2e/map-regressions.spec.ts` — a basemap click opening the draft form, a
+ * marker press opening the site panel.
  */
 
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
@@ -83,8 +85,10 @@ export const StubMapRegion = ({
  *
  * What it cannot show is the movement. Nothing in jsdom has a scroll position, so "the swapped-in
  * context is actually on screen in a column the reader had scrolled halfway down" is a browser
- * criterion, checked in a browser and named in `docs/design/dashboard-composition.md`. Nothing
- * read back from here is evidence of that, and `Dashboard.test.tsx` says so where it asserts.
+ * criterion, named in `docs/design/dashboard-composition.md`. The browser lane exists
+ * (`apps/web/e2e/`, `testing.md` rule 10) but no spec in it asserts a scroll position today, so
+ * that criterion has no automated owner at all. Nothing read back from here is evidence of it,
+ * and `Dashboard.test.tsx` says so where it asserts.
  */
 const scrollIntoViewStub = vi.fn<(options?: boolean | ScrollIntoViewOptions) => void>();
 

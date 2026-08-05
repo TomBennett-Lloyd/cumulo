@@ -144,9 +144,12 @@ export interface SiteMarkersProps {
  * The fleet, drawn on the map: a marker per site where sites separate, a bubble
  * per knot where they do not.
  *
- * Like `MapView`, this is adapter code and deliberately untested (testing.md
- * rule 3) — WebGL does not run in jsdom, and a suite that mocked maplibre would
- * only prove the mock was called. Everything with a decision in it was moved
+ * Like `MapView`, this is adapter code and deliberately untested in jsdom
+ * (testing.md rule 3) — WebGL does not run there, and a suite that mocked
+ * maplibre would only prove the mock was called. It is exercised as part of the
+ * shipping composition by the browser lane (testing.md rule 10):
+ * `apps/web/e2e/map-regressions.spec.ts` presses a real marker and asserts the
+ * one-interactive-element shape. Everything with a decision in it was moved
  * out: which points exist is `clustering.ts`, what they look like is
  * `MarkerButton`/`ClusterButton` and `map.css`, and all three are tested
  * directly.
