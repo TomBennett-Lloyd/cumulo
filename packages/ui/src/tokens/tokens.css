@@ -28,16 +28,25 @@
  *   veil 90% (shipped): --color-text-muted  4.91:1 PASS  (worst: light muted
  *                                                         over dark map ink)
  *                       --color-text       12.16:1 PASS  (the hover/focus ink)
- *                       --color-accent      3.49:1 FAIL  ← not used here
+ *                       --color-accent      3.49:1 FAIL  light  ← not used here
+ *                                           3.76:1 FAIL  dark   ← not used here
  *
- * The accent line is the point of this record rather than a footnote. Accent is
- * NOT used as text over the veil, and must not be reintroduced: it fails on the
- * veil at every percentage because it fails on the veil's own base surface —
- * #2a78d6 on --color-surface is 4.30:1 and on --color-bg 3.92:1, below AA for
- * small text, app-wide and since this palette was approved. No mix ratio can
- * rescue an ink whose opaque ceiling is already under the bar, which is why the
- * credits' links were moved to muted ink with an underline
- * (../attribution/attribution.css) instead of the veil being tuned upward.
+ * The accent lines are the point of this record rather than a footnote. Accent
+ * is NOT used as text over the veil, in either mode, and must not be
+ * reintroduced: at the shipped mix it is below AA on the veil in both, which is
+ * the operative fact on its own.
+ *
+ * Why tuning the mix is not the answer differs by mode, and the distinction
+ * matters to anyone tempted to try it. In LIGHT mode accent is below AA on the
+ * opaque surfaces too — #2a78d6 is 4.30:1 on --color-surface and 3.92:1 on
+ * --color-bg — so there is no mix ratio to find: the ink's own ceiling is under
+ * the bar. In DARK mode accent does clear AA on its opaque surfaces (#3987e5 is
+ * 4.89:1 on --color-surface, 5.28:1 on --color-bg), and it only reaches AA on
+ * the veil at about 97%, which is a mix with no translucency left to give.
+ * Either way the fix was the ink and not the background, which is why the
+ * credits' links moved to muted ink with an underline
+ * (../attribution/attribution.css). The light-mode opaque failure is app-wide
+ * and predates the veil; it is tracked in docs/tech-debt.md.
  *
  * 90% is therefore the legibility floor for muted ink, not a taste setting:
  * 85% put muted at 4.40:1, which is a fail, and an earlier revision of this
