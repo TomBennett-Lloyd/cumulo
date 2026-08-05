@@ -138,11 +138,20 @@ export const readoutText = (
     .map((row) => `${row.value} ${row.name}`)
     .join(', ')}`;
 
-/** Row coordinates are local to the tooltip group, which carries the translate. */
+/**
+ * Row coordinates are local to the tooltip group, which carries the translate.
+ *
+ * Keyed by `seriesClassName` rather than by `name`, because a name is not unique
+ * and never was: an overlay's name is a *site* name, which is free text a visitor
+ * types, so a site called "Median" collided with the forecast row and React
+ * rendered one of the two. The class is one per series by construction — it is
+ * the same value that colours the key stroke — so it cannot collide without two
+ * rows genuinely being the same series.
+ */
 const tooltipRowElement = (row: TooltipRow, rowIndex: number): ReactElement => {
   const y = TOOLTIP_PADDING + TOOLTIP_ROW_HEIGHT * (rowIndex + FIRST_SERIES_ROW + 1);
   return (
-    <g key={row.name}>
+    <g key={row.seriesClassName}>
       <line
         className={row.seriesClassName}
         x1={TOOLTIP_PADDING}

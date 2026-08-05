@@ -33,10 +33,15 @@ export interface FleetQueryOptions {
   /**
    * Whether this query is allowed to spend a request. Defaults to `true`.
    *
-   * A caller sets it to `false` while the answer is not worth paying for yet — a panel whose data
-   * nobody has asked to see (#178). It gates the *request*, never the hook: `useFleetQuery` is
-   * still called unconditionally on every render (`docs/standards/react.md` — `enabled` is a
-   * value, not a conditional hook).
+   * A caller sets it to `false` while the answer is not worth paying for yet. `FleetPanel` is the
+   * only shipped caller and gates all three of its queries: the fleet's sum on there being a fleet
+   * to sum, and the selected site's overlay on that site having a first forecast at all — asking a
+   * minutes-old site for its window would spend metered requests to be told what the dashboard's
+   * poll is already asking. (It gated on a reveal latch until #265, which is where the "#178"
+   * this used to cite went.)
+   *
+   * It gates the *request*, never the hook: `useFleetQuery` is still called unconditionally on
+   * every render (`docs/standards/react.md` — `enabled` is a value, not a conditional hook).
    */
   readonly enabled?: boolean;
 }
@@ -66,9 +71,17 @@ export interface FleetQueryOptions {
  * before the `loading` reset rather than after it.
  *
  * Disabling while a request is still in flight is the one lossy case: the response is discarded
- * as superseded and the state stays `loading` until the key or `enabled` changes again. No shipped
- * caller can reach it — the `FleetPanel` latch only ever goes false→true — but a caller that ties
- * `enabled` to a live condition owns that spinner, and should key off the condition instead.
+ * as superseded and the state stays `loading` until the key or `enabled` changes again. A shipped
+ * caller reaches it now — `FleetPanel`'s overlay ties `enabled` to a live condition (the selected
+ * site having a first forecast), which goes true→false whenever a reader deselects or moves to a
+ * site whose forecast has not arrived, and can do so with the previous site's request still out.
+ *
+ * That is survivable *there* and only because of how that caller reads the result: it draws an
+ * overlay only from a `ready` state, so a stranded `loading` renders nothing rather than a spinner
+ * nobody can clear, and the very condition that stranded it is the one that means "no overlay".
+ * The state is also not stranded for long: the site is part of that query's key, so returning to
+ * it is a key change and re-fires. A caller that would *show* the wait owns that spinner, and
+ * should key off the condition instead of gating on it.
  */
 export const useFleetQuery = <T>(
   query: () => Promise<FleetSourceResult<T>>,

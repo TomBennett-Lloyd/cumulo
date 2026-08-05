@@ -53,7 +53,7 @@ const site = (id: string, name: string): Site => ({
 });
 
 export const SITE_A = site(SITE_A_ID, 'Ashford Row');
-const SITE_B = site(SITE_B_ID, 'Brambling Way');
+export const SITE_B = site(SITE_B_ID, 'Brambling Way');
 
 export const SITES: readonly Site[] = [SITE_A, SITE_B];
 
@@ -273,11 +273,37 @@ export const SITE_A_SELECTED: FleetPanelSelection = {
   selectionReady: true,
 };
 
+/**
+ * The same, for the fleet's other site — the second half of a reader moving from
+ * one selection to the next.
+ *
+ * The two sites carry deliberately different hours in {@link FORECASTS}, which is
+ * what lets a test tell "the chart is drawing site B" from "the chart relabelled
+ * site A's numbers".
+ */
+export const SITE_B_SELECTED: FleetPanelSelection = {
+  selectedSite: SITE_B,
+  selectionReady: true,
+};
+
 /** Site A selected while its first forecast is still being generated. */
 export const SITE_A_PENDING: FleetPanelSelection = {
   selectedSite: SITE_A,
   selectionReady: false,
 };
+
+/**
+ * One rendered table row, in column order — the row header and its cells together.
+ *
+ * `th, td` rather than the `cell` role, because the time column is a `rowheader` and a row read as
+ * four values would drop the hour each of them belongs to.
+ *
+ * Here rather than in one suite because both of them read the chart's table twin: it is where the
+ * plotted numbers are readable as text, so it is where the fleet's sum and the selected site's
+ * line are both pinned.
+ */
+export const rowCells = (row: HTMLElement): readonly string[] =>
+  Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent);
 
 /** Waits for both fleet reads to have answered, whatever they answered. */
 export const settle = async (): Promise<void> => {

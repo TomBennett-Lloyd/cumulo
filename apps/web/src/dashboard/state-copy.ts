@@ -121,6 +121,24 @@ export const aggregatedFromCaption = (siteCount: number): string =>
   `Aggregated from ${String(siteCount)} sites`;
 
 /**
+ * The fleet chart is complete; the selected site's line over it is not.
+ *
+ * A notice rather than an error, on the same rule as the missing-measurements
+ * one above: what failed is an *addition* to a chart that arrived intact, so the
+ * honest thing is to label the chart partial and leave it standing
+ * (`error-handling.md` rule 5). Reporting it as a failure would tell a reader
+ * the fleet sum in front of them is suspect, which it is not.
+ *
+ * It names the site, because a reader looking at a chart with one line missing
+ * needs to know *which* line — and this sentence is the only place the app says
+ * so. The source's own message is deliberately not appended: the recourse here
+ * is a button, not a diagnosis, and the transport detail belongs to the failures
+ * a reader can act on with it.
+ */
+export const siteOverlayFailureNotice = (siteName: string): string =>
+  `${siteName}’s own forecast could not be loaded, so the chart shows the fleet only.`;
+
+/**
  * The first-forecast poll gave up before the pipeline answered.
  *
  * The deadline is a parameter rather than baked into the sentence: the number

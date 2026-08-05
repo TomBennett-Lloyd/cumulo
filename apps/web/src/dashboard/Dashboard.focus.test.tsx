@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { Site } from '@cumulo/shared';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,6 +59,31 @@ const UNRESOLVED_SITE_ID = '11111111-2222-4333-8444-555555555555';
 const press = (control: HTMLElement): void => {
   control.focus();
   fireEvent.click(control);
+};
+
+/**
+ * The first two sites the fleet lists — a reader moving from one selection to
+ * the next needs two of them.
+ *
+ * Asked of the source rather than regenerated from the seed, for the reason
+ * `firstListedSite` gives: a test that derived the ids the way the demo fleet
+ * does would still pass if both drifted together. Local to this suite because
+ * only this suite needs a pair.
+ */
+const twoListedSites = async (dataSource: FleetDataSource): Promise<readonly [Site, Site]> => {
+  const listed = await dataSource.listSites();
+
+  if (listed.kind !== 'ok') {
+    throw new Error('The fleet under test refused to list its sites.');
+  }
+
+  const [first, second] = listed.value;
+
+  if (first === undefined || second === undefined) {
+    throw new Error('The fleet under test has fewer than two sites to move between.');
+  }
+
+  return [first, second];
 };
 
 /**
@@ -127,6 +153,59 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     // panel this replaced searched the site list instead, which was the right
     // answer only for the one opener it knew about.
     expect(document.activeElement).toBe(marker);
+  });
+
+  it('follows the reader from one site to the next, and lands on the marker they last pressed', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const [siteA, siteB] = await twoListedSites(dataSource);
+    renderDashboard(dataSource);
+    await settle();
+
+    const markerA = screen.getByRole('button', { name: `Marker: ${siteA.name}` });
+    const markerB = screen.getByRole('button', { name: `Marker: ${siteB.name}` });
+
+    press(markerA);
+    press(markerB);
+
+    // B's card announces itself, exactly as A's did.
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: siteB.name }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    /*
+     * Marker **B**, and the distinction is the whole case. The two cards live in
+     * one commit — A unmounts as B mounts — and React flushes A's cleanup before
+     * B's mount effect. A cleanup that restored unconditionally would therefore
+     * put focus on marker A, B would capture *that* as its opener, and closing B
+     * would strand the reader on the marker of a site they had already left. The
+     * guard is what makes A stand aside: the reader's press moved focus to
+     * marker B before the commit, so A no longer holds the focus it would be
+     * giving back.
+     */
+    expect(document.activeElement).toBe(markerB);
+  });
+
+  it('leaves focus alone when the reader moved it out of the card before closing', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const site = await firstListedSite(dataSource);
+    renderDashboard(dataSource);
+    await settle();
+
+    press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+
+    const row = within(fleetList()).getByRole('button', {
+      name: (name) => name.startsWith(site.name),
+    });
+    // The reader tabs away and dismisses from somewhere else. Escape is fired on
+    // the card because that is what still owns the handler; where the *focus* is
+    // is the point.
+    row.focus();
+    fireEvent.keyDown(screen.getByRole('heading', { name: site.name }), { key: 'Escape' });
+
+    // Not the marker. A card that has already lost the focus is not entitled to
+    // move it, and yanking a reader back to a control they deliberately left is
+    // the same defect as never landing them anywhere.
+    expect(document.activeElement).toBe(row);
   });
 
   it('hands focus back to the list row that opened the card', async () => {

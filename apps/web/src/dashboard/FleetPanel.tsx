@@ -24,6 +24,8 @@ import {
   LOADING_FLEET_FORECAST_LABEL,
   NO_FLEET_FORECAST_MESSAGE,
   partialAggregateNotice,
+  RETRY_ACTION_LABEL,
+  siteOverlayFailureNotice,
 } from './state-copy';
 
 /*
@@ -55,6 +57,13 @@ import {
  * this one roof, and two axes would invent a correlation the numbers do not
  * contain. The chart is the site's *only* chart: its card on the map carries the
  * site's facts and the state of its first forecast, and nothing plotted.
+ *
+ * That second read fails on its own terms, and says so on its own terms. The
+ * fleet's sum is not withdrawn because an addition to it did not arrive — but an
+ * addition that failed *silently* is indistinguishable from a site whose output
+ * tracks the fleet, so the panel labels the chart partial and offers a retry
+ * that re-asks for that one site (`error-handling.md` rule 5). The two retries
+ * are separate counters on purpose; the comments on them say why.
  *
  * ## Capability honesty is structural here, not editorial
  *
@@ -197,11 +206,27 @@ const completenessNote = (minContributing: number, siteCount: number): ReactElem
  * component around them (`structure.md` rule 1), and a signature that grows a
  * parameter per surface stops being readable at about this point.
  */
+/**
+ * What the selected site contributes to the chart right now.
+ *
+ * A union rather than an optional series plus a loose error flag (`typing.md`
+ * rule 4): "a series and a failure" and "neither, but a site name to apologise
+ * about" are not states this panel has. `none` covers every reason there is
+ * nothing to draw and nothing to say — no selection, a selection whose first
+ * forecast has not arrived, a read still in flight — because the reader is owed
+ * the same thing in all three: the fleet's chart, unannotated.
+ */
+type OverlayState =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'series'; readonly series: ChartOverlaySeries }
+  | { readonly kind: 'failed'; readonly siteName: string };
+
 interface FleetChartContext {
   readonly siteCount: number;
   readonly chart: ChartCopy;
-  /** The selected site's line, or nothing at all when no site is contributing one. */
-  readonly overlay: ChartOverlaySeries | undefined;
+  readonly overlay: OverlayState;
+  /** Re-asks for the selected site's hours, and only those. */
+  readonly onRetryOverlay: () => void;
 }
 
 /**
@@ -220,12 +245,42 @@ const fleetChart = (
 ): ReactElement => {
   const common = { points, ariaLabel: chart.ariaLabel, tableCaption: chart.tableCaption };
 
-  return overlay === undefined ? (
-    <ForecastChart {...common} />
+  return overlay.kind === 'series' ? (
+    <ForecastChart {...common} overlay={overlay.series} />
   ) : (
-    <ForecastChart {...common} overlay={overlay} />
+    <ForecastChart {...common} />
   );
 };
+
+/**
+ * The chart is complete and the line over it is not, said out loud.
+ *
+ * Partial results are labelled partial (`error-handling.md` rule 5), and an
+ * overlay that failed silently is the exact shape that rule refuses: the reader
+ * selected a site, the chart drew a fleet, and nothing on screen distinguished
+ * "this site tracks the fleet's shape closely" from "this site's line never
+ * arrived".
+ *
+ * Deliberately **not** a live region. `react.md` budgets one per panel and this
+ * panel's is the chart's own readout, which is the announcement a reader asked
+ * for by moving the selection; a second region here would mean whichever won.
+ * It is the same non-live treatment the completeness note above uses, for the
+ * same reason — an incomplete answer is a caption on the answer, not an event.
+ *
+ * It carries a retry because re-asking genuinely can work: this is one request
+ * for one site, not the fleet's fan-out, so the button spends what a fresh
+ * selection would spend and nothing more. That is the test `react.md` sets for
+ * offering one at all.
+ */
+const overlayNote = (overlay: OverlayState, onRetry: () => void): ReactElement | null =>
+  overlay.kind === 'failed' ? (
+    <p className="panel-notice">
+      {siteOverlayFailureNotice(overlay.siteName)}{' '}
+      <button type="button" className="panel-retry" onClick={onRetry}>
+        {RETRY_ACTION_LABEL}
+      </button>
+    </p>
+  ) : null;
 
 const readyBody = (data: FleetSeries, context: FleetChartContext): ReactElement => {
   const forecastPoints = aggregateFleetForecast(data.forecasts);
@@ -236,6 +291,7 @@ const readyBody = (data: FleetSeries, context: FleetChartContext): ReactElement 
   return (
     <div className="fleet-panel-body">
       {completenessNote(minimumContributingSites(forecastPoints), context.siteCount)}
+      {overlayNote(context.overlay, context.onRetryOverlay)}
       {fleetChart(joinFleetSeries(forecastPoints, aggregateFleetActuals(data.actuals)), context)}
     </div>
   );
@@ -277,6 +333,31 @@ const siteOverlayForecasts = (
     ? Promise.resolve({ kind: 'ok', value: [] })
     : dataSource.siteForecasts(site.id, range);
 
+/**
+ * The selection and the answer about it, collapsed into the one value the body
+ * renders from.
+ *
+ * A `loading` read is `none` rather than a third visible state: the fleet's
+ * chart is already on screen and complete, and a spinner for a line that is
+ * about to appear over it would be chrome flashing on top of content the reader
+ * is reading. The failure is the one that has to speak, because it is the one
+ * that ends with something missing and no other explanation for it.
+ */
+const overlayState = (
+  site: Site | null,
+  forecasts: QueryState<readonly Forecast[]>,
+): OverlayState => {
+  if (site === null) {
+    return { kind: 'none' };
+  }
+  if (forecasts.status === 'failed') {
+    return { kind: 'failed', siteName: site.name };
+  }
+  return forecasts.status === 'ready'
+    ? { kind: 'series', series: siteOverlaySeries(site, forecasts.data) }
+    : { kind: 'none' };
+};
+
 export interface FleetPanelProps {
   readonly dataSource: FleetDataSource;
   /** The dashboard's one site list — listing plus session-created sites. */
@@ -306,10 +387,20 @@ export const FleetPanel = ({
 }: FleetPanelProps): ReactElement => {
   const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
-  // Retrying is a new question, so it is a new query key rather than an
-  // imperative refetch: `useFleetQuery` re-runs on key change and nothing
-  // else, and a counter is the smallest honest way to say "ask again".
-  const [attempt, setAttempt] = useState(0);
+  /*
+   * Retrying is a new question, so it is a new query key rather than an
+   * imperative refetch: `useFleetQuery` re-runs on key change and nothing else,
+   * and a counter is the smallest honest way to say "ask again".
+   *
+   * Two counters, not one, and the split is about cost. The fleet's retry
+   * re-spends a paced per-site fan-out; the overlay's re-asks a single site for
+   * a single window. A shared counter would make the cheap recourse buy the
+   * expensive request as well — a reader pressing "try again" on one missing
+   * line would silently re-sum sixty sites — and would make the expensive one
+   * refetch a line that never failed.
+   */
+  const [fleetAttempt, setFleetAttempt] = useState(0);
+  const [overlayAttempt, setOverlayAttempt] = useState(0);
 
   /*
    * An empty fleet has nothing to sum, so it asks nothing. That is the whole of
@@ -327,37 +418,38 @@ export const FleetPanel = ({
 
   const forecasts = useFleetQuery(
     () => dataSource.fleetForecasts(range),
-    ['fleet-forecasts', range, refreshToken, attempt],
+    ['fleet-forecasts', range, refreshToken, fleetAttempt],
     { enabled },
   );
   const actuals = useFleetQuery(
     () => dataSource.fleetActuals(range),
-    ['fleet-actuals', range, refreshToken, attempt],
+    ['fleet-actuals', range, refreshToken, fleetAttempt],
     { enabled },
   );
   /*
    * The selected site's own hours, over the same window as the sum they are
    * drawn on. The key names every input the query reads, which is
    * `useFleetQuery`'s contract — including the site, so changing the selection
-   * drops the previous site's answer rather than letting it land on the chart.
+   * drops the previous site's answer rather than letting it land on the chart
+   * under the next site's name.
    */
   const overlayForecasts = useFleetQuery(
     () => siteOverlayForecasts(dataSource, selectedSite, range),
-    ['site-overlay', selectedSite?.id ?? null, range, attempt],
+    ['site-overlay', selectedSite?.id ?? null, range, overlayAttempt],
     { enabled: selectionReady },
   );
 
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
-  const retry = (): void => {
-    setAttempt((previous) => previous + 1);
+  const retryFleet = (): void => {
+    setFleetAttempt((previous) => previous + 1);
   };
-  // Derived during render: the overlay exists exactly while there is a site and
-  // an answer about it, and mirroring that into state would be a second copy of
-  // a fact the two values above already carry (`react.md` rule 1).
-  const overlay =
-    selectedSite === null || overlayForecasts.status !== 'ready'
-      ? undefined
-      : siteOverlaySeries(selectedSite, overlayForecasts.data);
+  const retryOverlay = (): void => {
+    setOverlayAttempt((previous) => previous + 1);
+  };
+  // Derived during render: what the selection contributes is exactly a function
+  // of the site and the answer about it, and mirroring that into state would be
+  // a second copy of a fact the two values already carry (`react.md` rule 1).
+  const overlay = overlayState(selectedSite, overlayForecasts);
 
   return (
     <section className="fleet-panel" aria-labelledby={headingId}>
@@ -395,8 +487,9 @@ export const FleetPanel = ({
               siteCount: sites.length,
               chart: chartCopy(windowLabel(range, fleetLookback), fleetActuals),
               overlay,
+              onRetryOverlay: retryOverlay,
             },
-            retry,
+            retryFleet,
           )}
         </>
       )}

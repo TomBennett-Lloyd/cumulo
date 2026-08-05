@@ -525,10 +525,11 @@ export const Dashboard = ({
       {/*
        * The draft, in the top layer over all of the above.
        *
-       * Rendered from the dashboard rather than from inside the context region
-       * because it is no longer part of that flow — a modal is painted over the
-       * whole page, and nesting it in the region it replaced would only leave a
-       * reader of this file believing it still lives there.
+       * A sibling of the whole surface rather than a child of the reading,
+       * because a modal is painted over the whole page — nesting it inside the
+       * flow would only leave a reader of this file placing it there. (It was an
+       * occupant of the context region until #265, and that region is gone
+       * entirely now, so there is not even a box left to nest it in.)
        *
        * `key={draftKey(draft)}` is unchanged and still load-bearing:
        * `AddSiteForm` reads the coordinates once at mount, so a draft at a new

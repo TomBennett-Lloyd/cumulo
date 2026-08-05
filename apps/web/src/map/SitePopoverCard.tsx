@@ -168,8 +168,13 @@ export interface SitePopoverCardProps {
  * answer was wrong for every opener that is not a row. The capture happens
  * *inside* the effect, after React has flushed the commit's unmount cleanups, so
  * a creation lands on the map's add-site control (where the dismissed dialog put
- * it) rather than on the submit button that is no longer in the document. An
- * opener that has since left the document is not chased: focus stays where the
+ * it) rather than on the submit button that is no longer in the document.
+ *
+ * **It gives focus back only if it still has focus to give**, which is the whole
+ * of the cleanup's guard below and is not a detail — an unconditional restore
+ * both yanks a reader who has moved on and, on a selection moving from one site
+ * to the next, hands the second card the *first* site's opener. An opener that
+ * has since left the document is not chased either: focus stays where the
  * browser puts it, which is the same place a card with no landing at all would
  * have left it.
  *
@@ -193,6 +198,7 @@ export const SitePopoverCard = ({
   onClose,
 }: SitePopoverCardProps): ReactElement => {
   const titleId = useId();
+  const cardRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -202,11 +208,45 @@ export const SitePopoverCard = ({
 
     const active = document.activeElement;
     const opener = active instanceof HTMLElement ? active : null;
+    const card = cardRef.current;
 
     headingRef.current?.focus();
 
     return () => {
-      if (opener?.isConnected === true) {
+      // An opener that has left the document is not chased: focusing a detached
+      // element silently moves focus to `body`, which is where it would have
+      // fallen anyway.
+      if (opener?.isConnected !== true) {
+        return;
+      }
+
+      /*
+       * Only give focus back if this card still has it to give.
+       *
+       * A leaving card is not entitled to move a focus that is no longer its
+       * own. Two cases make that concrete and both are ordinary. A reader who
+       * tabs out of the card and then dismisses it from somewhere else is
+       * exactly where they chose to be, and a restore would yank them back to a
+       * control they had already left. And pressing marker B while site A's card
+       * is open moves focus to marker B *before* the commit — so A's cleanup, if
+       * it restored unconditionally, would put focus back on marker A, B's mount
+       * effect would then capture marker A as its opener, and closing B would
+       * strand the reader on the marker of a site they stopped looking at two
+       * interactions ago.
+       *
+       * "Still has it" is `body` or inside this card. `body` is the usual answer
+       * on a real dismissal: React detaches this subtree during the mutation
+       * phase and the browser drops focus to `body` before this passive cleanup
+       * runs, so the heading or the Close button the reader was on is already
+       * gone. The `contains` arm covers the case where the DOM is still up —
+       * this effect re-running on a change of `selectionOrigin`, and StrictMode's
+       * development remount.
+       */
+      const focused = document.activeElement;
+      const cardStillHoldsFocus =
+        focused === null || focused === document.body || card?.contains(focused) === true;
+
+      if (cardStillHoldsFocus) {
         opener.focus();
       }
     };
@@ -227,7 +267,12 @@ export const SitePopoverCard = ({
   };
 
   return (
-    <section className="site-popover" aria-labelledby={titleId} onKeyDown={closeOnEscape}>
+    <section
+      className="site-popover"
+      ref={cardRef}
+      aria-labelledby={titleId}
+      onKeyDown={closeOnEscape}
+    >
       <header className="site-popover-header">
         <h2 className="site-popover-title" id={titleId} ref={headingRef} tabIndex={-1}>
           {site.name}

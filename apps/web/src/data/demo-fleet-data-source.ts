@@ -30,7 +30,13 @@ const MS_PER_HOUR = 3_600_000;
  */
 const DEFAULT_FIRST_FORECAST_DELAY_MS = 45_000;
 
-/** Hours of forecast the demo returns — enough to fill the detail panel's table. */
+/**
+ * Hours of forecast the demo returns.
+ *
+ * Enough that the first-forecast poll's `ready` answer is a real series rather
+ * than a token one: it is what tells the site's card the wait is over, and what
+ * `FleetPanel` then draws as the selected site's line over the fleet's sum.
+ */
 const FORECAST_HORIZON_HOURS = 12;
 
 /** Clear-sky plane-of-array peak, W/m². Plausible for these latitudes in summer. */
@@ -75,7 +81,7 @@ const daylightFraction = (hourOfDayUtc: number): number => {
  * the hour containing `nowMs`.
  *
  * Each entry goes through `forecastSchema.parse`, so what this returns is
- * exactly what the panel would receive from the real API — including branded
+ * exactly what the dashboard's poll would receive from the real API — including branded
  * timestamps. A parse failure here would be a bug in this function rather than
  * an expected failure, which is why it throws rather than returning a result.
  *

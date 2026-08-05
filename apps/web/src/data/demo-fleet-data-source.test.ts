@@ -141,7 +141,10 @@ describe('DemoFleetDataSource', () => {
       expect(forecast.weatherSource).toBe('open-meteo');
       expect(forecast.acPowerKw).toBeLessThanOrEqual(validInput.capacityKw);
     }
-    // Distinct, ascending hours — a series the detail panel can tabulate.
+    // Distinct, ascending hours — one point per hour, which is what the fleet
+    // chart's overlay joins onto its x-domain by timestamp. Duplicated hours
+    // would collapse there rather than fail, and the line would silently lose
+    // samples.
     expect(new Set(forecasts.map((forecast) => forecast.validTime)).size).toBe(forecasts.length);
   });
 
