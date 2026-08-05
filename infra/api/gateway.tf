@@ -37,9 +37,10 @@ resource "aws_apigatewayv2_api" "api" {
     # $default catch-all below matches everything, OPTIONS included (found live,
     # #263). A preflight is therefore forwarded to the Lambda like any other
     # request: the router answers it 204 with no body and no Access-Control-*
-    # header (apps/api/src/http/router.ts), and the gateway decorates that 204
-    # with the headers this block configures — the same decoration it applies to
-    # every response when the request carries an Origin.
+    # header (apps/api/src/http/router.ts), and the gateway attaches this
+    # block's preflight headers to that 204. `allow_methods`, `allow_headers`
+    # and `max_age` are preflight-only by the CORS spec — what an ordinary
+    # response carries is a narrower set and a separate question.
     allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
     # `content-type` is required rather than tidy: `application/json` is not a

@@ -230,12 +230,16 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *   matching no route — but this API's `$default` catch-all proxies everything
  *   here, so "no route" never happens and the auto-answer never fires.
  *
- *   The 204 sets **no `Access-Control-*` header**: the gateway decorates every
- *   response leaving it with the CORS headers configured in `infra/api/`, and a
- *   header set here would be a second opinion on the same question. A path no
- *   route serves is still a 404, including a non-canonical one (`/v1/sites/`),
- *   for the gateway-parity reason on {@link canonicalPathSegments} — a preflight
- *   that approved a path the real request would 404 on tells the browser a lie.
+ *   The 204 sets **no `Access-Control-*` header**: the gateway attaches the
+ *   preflight header set to this response from its own `cors_configuration`
+ *   (`infra/api/gateway.tf`), and a header set here would be a second opinion on
+ *   the same question. That decoration is claimed for *this* preflight only —
+ *   the allow-methods, allow-headers and max-age headers are preflight-only by
+ *   the CORS spec, so what an ordinary response carries is a separate question
+ *   this comment does not answer. A path no route serves is still a 404,
+ *   including a non-canonical one (`/v1/sites/`), for the gateway-parity reason
+ *   on {@link canonicalPathSegments} — a preflight that approved a path the real
+ *   request would 404 on tells the browser a lie.
  * - **No route matches** → 404 `not_found`. Method mismatch included: a 405
  *   would tell an unauthenticated caller which methods a path supports, and the
  *   error contract has one code for "there is nothing here" on purpose. A
@@ -248,6 +252,18 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  * abuse protections: those wrap individual handlers in `main.ts`, so an
  * `OPTIONS` that returns here has by construction touched neither the origin
  * check nor the rate limiter — a browser's preflight is not a caller's request.
+ *
+ * **Restatement ledger** (`docs/standards/architecture.md` rule 9). The
+ * preflight branch below owns what a preflight gets — 204, no body, no
+ * `Access-Control-*` header. One other site states that behaviour with literals
+ * of its own rather than pointing here, because it is the configuration the
+ * behaviour leans on rather than a passing mention of it:
+ *
+ * - `infra/api/gateway.tf`, the comment above `allow_methods` in
+ *   `cors_configuration` — it explains that auto-preflight cannot fire under the
+ *   `$default` catch-all and that this router answers the 204 instead. Change
+ *   what an `OPTIONS` gets here and that comment is wrong with nothing red:
+ *   prose has no gate, which is why it is listed rather than trusted.
  *
  * Neither message quotes the request. Reflecting a caller-controlled path back
  * into a response body is free to do and free to regret.

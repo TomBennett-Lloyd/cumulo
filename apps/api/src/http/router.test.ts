@@ -215,15 +215,24 @@ describe('routeRequest', () => {
     expect(seen).toHaveLength(0);
   });
 
-  it('answers 404 to OPTIONS on a path no route serves', async () => {
+  it('answers 404 to OPTIONS on a canonical path the populated table does not serve', async () => {
+    // The table is deliberately non-empty and the path deliberately canonical,
+    // so the only thing that can produce this 404 is the segment match failing.
+    // Against an empty table this would pass however the segments were compared
+    // — `[].some(…)` is false whatever the predicate says — and against a
+    // trailing-slash path the canonical guard would answer before matching ran.
+    const seen: RouteRequest[] = [];
+    const routes = [recordingRoute('POST', ['v1', 'sites'], seen)];
+
     const response = await routeRequest(
-      [],
+      routes,
       apiRequest({ method: 'OPTIONS', path: '/v1/nope' }),
       fullBudgetDeadline,
     );
 
     expect(response.statusCode).toBe(404);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('not_found');
+    expect(seen).toHaveLength(0);
   });
 
   it('answers 404 to OPTIONS on a non-canonical path', async () => {
