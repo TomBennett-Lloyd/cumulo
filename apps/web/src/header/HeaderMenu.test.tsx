@@ -128,6 +128,24 @@ describe('HeaderMenu and the About dialog', () => {
     expect(menuButton().getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('does not treat a press inside the dialog as a press outside the menu', () => {
+    renderMenu();
+    openMenu();
+    fireEvent.click(screen.getByRole('button', { name: 'About Cumulo' }));
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Close' }));
+
+    /*
+     * The dialog is a React *sibling* of the element the outside-press listener
+     * measures against, so every press inside it is literally "outside" that
+     * element — which is why the listener stands down entirely while the dialog
+     * is open rather than trying to decide the question. Without that, reaching
+     * for the dialog's own Close button unmounts the popover behind it, and the
+     * focus the browser then restores to the About button lands on nothing.
+     */
+    expect(menuButton().getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('closes the dialog when it asks to be dismissed', () => {
     renderMenu();
     openMenu();

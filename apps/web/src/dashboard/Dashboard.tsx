@@ -504,8 +504,11 @@ export const Dashboard = ({
          * panel. Every panel above it shows Open-Meteo-derived numbers, and a
          * credit that lived in one of them would come and go with a selection
          * — eventually absent exactly when it mattered. The map carries its own
-         * in its strip; two credits on one screen is the design, not an
-         * oversight (CC BY 4.0, CLAUDE.md hard constraints).
+         * in its strip; two credits on one screen at rest is the design, not an
+         * oversight (CC BY 4.0, CLAUDE.md hard constraints). "At rest" because
+         * a surface a reader opens may owe its own: the About dialog
+         * (`header/AboutDialog.tsx`) credits every source it lists, making a
+         * third while it is open. More is compliance; fewer is the failure.
          */}
         <footer className="dashboard-aside-footer">
           <OpenMeteoAttribution />

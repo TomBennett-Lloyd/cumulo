@@ -79,10 +79,11 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
   await expect(aboutDialog.getByRole('link', { name: 'Open-Meteo.com' })).toBeVisible();
 
   /*
-   * Escape, twice, and the two dismissals are deliberately separate.
+   * Two dismissals live on this one key, and they are deliberately separate —
+   * the dialog's, then the popover's, with a reopen in between.
    *
-   * The first is the browser's: an unprevented `cancel` closes the modal and
-   * restores focus to the control that opened it. The popover behind it is
+   * This first one is the browser's: an unprevented `cancel` closes the modal
+   * and restores focus to the control that opened it. The popover behind it is
    * untouched — which is the whole reason `HeaderMenu` renders the dialog as a
    * sibling of the popover rather than inside it, since React's synthetic
    * events bubble along the React tree and would otherwise hand this keypress
@@ -94,9 +95,29 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
   await expect(popover).toBeVisible();
   await expect(aboutButton).toBeFocused();
 
-  // The second is the component's, and it owes the same courtesy by hand: the
-  // control the reader is standing on is about to unmount, so focus goes back
-  // to the button that opened the popover rather than to `body`.
+  /*
+   * And it reopens — which is the assertion that makes the `cancel` wiring
+   * load-bearing rather than decorative.
+   *
+   * Escape dismisses the element whether or not anything is listening: the
+   * browser closes it and this spec would see it hidden either way. What only a
+   * *second* opening can show is whether the component was told. Unwired, React
+   * still believes the dialog is open, the next press sets state that is
+   * already set, no effect re-runs, and About is dead for the rest of the
+   * session — a dialog that opens exactly once per page load, with every
+   * assertion above still green.
+   */
+  await page.keyboard.press('Enter');
+  await expect(aboutDialog).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(aboutDialog).toBeHidden();
+  await expect(aboutButton).toBeFocused();
+
+  // The popover's dismissal is the component's own, and it owes the same
+  // courtesy by hand: the control the reader is standing on is about to
+  // unmount, so focus goes back to the button that opened the popover rather
+  // than to `body`.
   await page.keyboard.press('Escape');
   await expect(popover).toBeHidden();
   await expect(menuButton).toHaveAttribute('aria-expanded', 'false');

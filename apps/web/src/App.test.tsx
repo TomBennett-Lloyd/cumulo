@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { MapRegionComponent } from './dashboard/MapRegion';
+import { PRODUCT_TAGLINE } from './header/header-copy';
 import { MapSurface } from './map/MapSurface';
 import { THEME_STORAGE_KEY } from './theme';
 
@@ -219,7 +220,12 @@ describe('App shell', () => {
     await renderApp(StandInMapRegion);
 
     expect(screen.getByRole('heading', { name: 'Cumulo', level: 1 })).toBeDefined();
-    expect(screen.getByText(/Residential solar fleet forecasting/)).toBeDefined();
+    // The constant the header renders, not a fragment of it. Spelling any part
+    // of the sentence out here would make this file a second place the tagline
+    // is written down, which is the thing `header/header-copy.ts` exists to
+    // prevent — and would leave this passing against the old words after an
+    // edit in its one home (`architecture.md` rule 9).
+    expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
   });
 
   it('leaves the header bar with one control on it, and the rest behind it', async () => {
