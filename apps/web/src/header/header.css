@@ -1,0 +1,243 @@
+/*
+ * The header shell's sheet: the brand lockup, the menu disclosure and the About
+ * dialog.
+ *
+ * Deliberately not in `app.css`. That file is the page frame — and it is a
+ * *shared* frame: the token gallery (`preview/TokensHarness.tsx`) wears
+ * `.app`, `.app-header`, `.app-title` and `.app-subtitle` around its own body.
+ * Everything here belongs to the shipped header alone, so keeping it in its own
+ * sheet means a change to the product's chrome cannot restyle a page the
+ * product's chrome does not appear on. The one class the two surfaces still
+ * share, `.app-title`, keeps its treatment there and gains only a relationship
+ * here (`.brand-name`).
+ *
+ * Loaded from `main.tsx` with every other sheet, in cascade order — components
+ * do not import their own CSS in this app (see that file's header).
+ */
+
+/* ---- Brand lockup ------------------------------------------------------- */
+
+.brand {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/*
+ * The mark's box. Sized in `width`/`height` rather than in a token because the
+ * token set has no layout-size scale — the residual the CSS gate documents in
+ * stylelint.config.mjs, not a value slipping past it. The colours, which the
+ * gate does guard, are tokens below.
+ */
+.brand-mark {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+/* Base ink, not a chart or map slot: those tokens carry data identity, and a
+ * brand mark borrowing one would make "the product" and "a selected site" the
+ * same colour. `Brand.tsx` says the rest. */
+.brand-mark-sun {
+  fill: var(--color-accent);
+}
+
+.brand-mark-cloud {
+  fill: var(--color-text-muted);
+}
+
+/* The wordmark's type is `.app-title`'s, still. This is only its relationship
+ * to the mark beside it: nothing between them but the lockup's own gap. */
+.brand-name {
+  white-space: nowrap;
+}
+
+/* ---- Menu disclosure ---------------------------------------------------- */
+
+/*
+ * `margin-left: auto` is what pushes the menu to the far end of the header bar
+ * — the position the theme toggle used to claim for itself before it moved in
+ * here. `position: relative` makes this the popover's containing block, so the
+ * popover hangs off the button rather than off the page.
+ */
+.header-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.header-menu-button {
+  padding: var(--space-2) var(--space-4);
+  border-width: calc(var(--space-1) / 4);
+  border-style: solid;
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.header-menu-button[aria-expanded='true'] {
+  border-color: var(--color-accent);
+}
+
+/*
+ * The app's only overlay, and so the app's only `z-index`. The header sits
+ * above the surface in DOM order but is not a positioned ancestor, so without a
+ * stacking order of its own an absolutely positioned popover would be painted
+ * under whatever the dashboard positions below it — maplibre's controls among
+ * them. A single value, well clear of them, is cheaper than a layer scale
+ * nothing else in the app would use.
+ */
+.header-menu-popover {
+  position: absolute;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 12rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-width: calc(var(--space-1) / 4);
+  border-style: solid;
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/*
+ * `ThemeToggle` is shared with the token gallery and styled once, in `app.css`,
+ * where its `margin-left: auto` put it at the end of a header bar. Inside a
+ * stacked popover that margin would shove it to one side, so the *placement*
+ * half is overridden by the surface that placed it — which is this one — while
+ * the button's own treatment stays where it is owned.
+ */
+.header-menu-popover .theme-toggle {
+  margin-left: 0;
+  text-align: center;
+}
+
+.header-menu-item {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: start;
+  cursor: pointer;
+}
+
+.header-menu-item:hover {
+  background: var(--color-bg);
+}
+
+/* ---- About dialog ------------------------------------------------------- */
+
+/*
+ * The element is a native `<dialog>`, so the browser supplies the top layer,
+ * the centring and the backdrop. What is left to say is the card's own
+ * treatment and its measure — nothing here re-implements modality, and the
+ * `::backdrop` is deliberately left at the user agent's own scrim: the token
+ * set has no overlay colour, and inventing one in a stylesheet is exactly what
+ * the gate exists to refuse.
+ */
+.about-dialog {
+  max-width: 32rem;
+  padding: var(--space-6);
+  border-width: calc(var(--space-1) / 4);
+  border-style: solid;
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.about-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.about-dialog-body p {
+  margin: 0;
+}
+
+.about-dialog-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.about-dialog-lede {
+  color: var(--color-text-muted);
+}
+
+/* The credits are a licence obligation, not a footnote — spaced off the prose
+ * above them so they read as their own block, and never smaller than the
+ * attribution treatment `@cumulo/ui` already sets. */
+.about-dialog-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top-width: calc(var(--space-1) / 4);
+  border-top-style: solid;
+  border-top-color: var(--color-border);
+}
+
+.about-dialog-sources-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/*
+ * The tile credit, matched to the weather credit above it so neither reads as
+ * the more important of the two — the same pairing `.map-attribution-tiles`
+ * makes in `map/map.css` for the same two obligations, arrived at
+ * independently because these are two surfaces free to diverge, not one
+ * treatment in two places (`structure.md` rule 7).
+ */
+.about-dialog-basemap {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+/*
+ * Links, said once for the whole card.
+ *
+ * This app has no global anchor treatment — every surface states its own — so a
+ * link on a new surface renders in the *user agent's* colour until something
+ * says otherwise. That is a raw value the CSS gate cannot see, because it never
+ * appears in a stylesheet: dark navy on a dark card, which is how the
+ * basemap credits first shipped in this dialog and were caught in a screenshot
+ * rather than by lint.
+ */
+.about-dialog a {
+  color: var(--color-accent);
+}
+
+/* The one control in the dialog, at the end and on its own line: a modal a
+ * pointer user cannot dismiss is a trap, and Escape is not a pointer. */
+.about-dialog-close {
+  align-self: flex-end;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
