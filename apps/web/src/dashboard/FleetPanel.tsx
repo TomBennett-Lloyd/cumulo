@@ -219,7 +219,7 @@ export interface FleetPanelProps {
   readonly dataSource: FleetDataSource;
   /** The dashboard's one site list — listing plus session-created sites. */
   readonly sites: readonly Site[];
-  /** Kept mounted but hidden while a site panel or draft occupies the context region. */
+  /** Kept mounted but hidden while a site panel occupies the context region. */
   readonly hidden: boolean;
   /** Bumped by the dashboard when a site is created, to re-sum the fleet. */
   readonly refreshToken: number;

@@ -53,11 +53,18 @@ export const StubMapRegion = ({
 }: MapRegionProps): ReactElement => (
   <div>
     {/*
-     * Named exactly as `MapControls` names it, because the suites press it by
-     * accessible name: a stand-in whose control had a different label would let
-     * the real one be renamed without a single test noticing.
+     * Named and classed exactly as `MapControls` names and classes it. The name
+     * is how the suites press it; the class is how the *dashboard* finds it,
+     * since a closing draft returns focus by querying `.map-control-add` inside
+     * the map's box. A stand-in that dropped either would let the real control
+     * be renamed or reclassed without a single test noticing.
      */}
-    <button type="button" aria-pressed={addSiteArmed} onClick={onToggleAddSite}>
+    <button
+      type="button"
+      className="map-control-add"
+      aria-pressed={addSiteArmed}
+      onClick={onToggleAddSite}
+    >
       Add a site
     </button>
 

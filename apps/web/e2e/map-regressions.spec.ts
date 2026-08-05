@@ -262,7 +262,66 @@ test('opens the draft form when an armed basemap click lands (issue 265)', async
   const point = await basemapPoint(page);
   await page.mouse.click(point.x, point.y);
 
-  await expect(page.locator('form.add-site-form')).toBeVisible();
+  /*
+   * The draft opens as a modal, and both halves of that are asserted: the
+   * dialog is showing, and the form is *inside* it rather than somewhere else
+   * on the page. A `<dialog>` that was rendered but never had `showModal()`
+   * called on it is `display: none` under the user agent stylesheet, so
+   * `toBeVisible` on the dialog is what separates "the element exists" from
+   * "the element opened".
+   */
+  const dialog = page.locator('dialog.add-site-dialog');
+
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('form.add-site-form')).toBeVisible();
+
+  /*
+   * And the reader is inside it. Modality is what makes that matter — a form
+   * over an inert page that left focus behind on the page would be a keyboard
+   * trap in reverse — and it is only measurable here, since jsdom has no top
+   * layer to put anything in.
+   */
+  await expect(dialog).toContainText('Add a site');
+  expect(await page.evaluate(() => document.activeElement?.closest('dialog') !== null)).toBe(true);
+});
+
+test('closes the draft on Escape and hands focus back to the map control (issue 265)', async ({
+  page,
+}) => {
+  /*
+   * The half of the modal that only a browser has. Escape reaches a `<dialog>`
+   * through the user agent's own close steps, and the focus landing afterwards
+   * is the piece this app has to supply by hand: the dialog closes by being
+   * *unmounted* rather than by `close()`, and a removed dialog never runs the
+   * close steps, so nothing restores focus on its own. `AddSiteDialog` does it
+   * from its effect cleanup for that reason — and specifically not from the
+   * `cancel` handler, where the browser's own restoration (to whatever was
+   * focused before `showModal`, which here is the map canvas the reader clicked)
+   * would overwrite it a moment later.
+   */
+  const toggle = page.locator('.map-control-add');
+  const dialog = page.locator('dialog.add-site-dialog');
+
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  await toggle.click();
+
+  const point = await basemapPoint(page);
+  await page.mouse.click(point.x, point.y);
+
+  await expect(dialog).toBeVisible();
+
+  await page.keyboard.press('Escape');
+
+  await expect(dialog).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+
+  /*
+   * And the mode really was spent rather than left armed by the dismissal, so
+   * the reader is back exactly where they started: one press away from placing
+   * a site, and not one click away from an accident.
+   */
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('ignores a basemap click while add-site mode is disarmed (issue 265)', async ({ page }) => {

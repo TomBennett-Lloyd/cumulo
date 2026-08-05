@@ -43,8 +43,8 @@ const UNRESOLVED_SITE_ID = '11111111-2222-4333-8444-555555555555';
 /**
  * A fleet whose listing never arrives, wrapping the demo fleet for everything else.
  *
- * The state it buys is the one the guard in `closeDraft` turns on, and it is
- * only reachable this way: a *successful* listing runs the dashboard's stale-id
+ * The state it buys — a selection with no site to show for it — is only
+ * reachable this way: a *successful* listing runs the dashboard's stale-id
  * guard, which clears a selection naming nobody, so a selection can only outlive
  * its site when the listing failed. Distinct from `Dashboard.test.tsx`'s
  * `FlakyFleetSource`, which is about a listing that recovers on retry — this one
@@ -112,7 +112,7 @@ describe('Dashboard focus', () => {
     expect(document.activeElement).toBe(row);
   });
 
-  it('gives the heading back to the site panel when a draft over it is cancelled', async () => {
+  it('announces the draft by focusing the dialog’s own heading', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
     renderDashboard(dataSource);
@@ -121,26 +121,46 @@ describe('Dashboard focus', () => {
     fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
     clickMap();
 
-    // The draft is an occupant like any other, and announces itself the same way.
+    // A modal announces itself the same way an occupant of the region did: with
+    // its own heading. What changed underneath is that the site panel it opened
+    // over is still mounted behind it rather than displaced.
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Add a site' }));
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    // The panel remounts and claims the heading itself, so the dashboard must not
-    // compete for the focus here.
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: site.name }));
   });
 
-  it('lands on the context region when a draft with nothing behind it is cancelled', async () => {
+  it('returns focus to the map’s add-site control when a draft over a site is cancelled', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const site = await firstListedSite(dataSource);
+    const container = renderDashboard(dataSource);
+    await settle();
+
+    fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+    clickMap();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    /*
+     * Not the site panel's heading, which is where this landed while the draft
+     * was an occupant of the context region. The panel was displaced then and
+     * remounted on cancel, claiming the heading itself; a modal displaces
+     * nothing, so the panel is still exactly where the reader left it and has
+     * no reason to re-announce. The control they opened the draft with is the
+     * honest place to put them back.
+     */
+    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
+    // And the panel really is still there — otherwise the assertion above would
+    // be about a page with nothing on it.
+    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
+  });
+
+  it('returns focus to the map’s add-site control when a draft with nothing behind it is cancelled', async () => {
     const container = renderDashboard(new DemoFleetDataSource());
     await settle();
 
     clickMap();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    // Nothing remounts on this path — the fleet panel was hidden, not gone — so
-    // the region itself is the only honest target left.
-    expect(document.activeElement).toBe(container.querySelector('.dashboard-context'));
+    // Without the hand-off, focus falls to `body` as the dialog leaves the
+    // document — a keyboard reader starting the page again.
+    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
   });
 
   /*
@@ -148,13 +168,12 @@ describe('Dashboard focus', () => {
    *
    * A `?site=` link whose listing failed leaves `selectedSiteId` set and
    * `selectedSite` null: the id is real to the URL and to the forecast poll, but
-   * no site answers to it, so no `SitePanel` is mounted. Cancelling a draft here
-   * is the one path where guarding the region focus on the *id* would skip it
-   * while nothing remounted to claim it — focus to body, the exact defect this
-   * mechanism removes. The guard therefore asks `selectedSite`, which is what
-   * the panel's own render condition asks.
+   * no site answers to it, so no `SitePanel` is mounted. It is kept because it
+   * is the state in which *nothing at all* is on screen to take the focus, so a
+   * return that was quietly conditional on something else claiming it would
+   * strand a reader here.
    */
-  it('lands on the context region when a cancelled draft’s selection names no site', async () => {
+  it('returns focus to the control when a cancelled draft’s selection names no site', async () => {
     visit(`/?site=${UNRESOLVED_SITE_ID}`);
     const container = renderDashboard(fleetWithFailedListing());
     await settle();
@@ -168,7 +187,7 @@ describe('Dashboard focus', () => {
     clickMap();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(document.activeElement).toBe(container.querySelector('.dashboard-context'));
+    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
   });
 
   it('focuses the new site’s panel heading when a creation succeeds', async () => {

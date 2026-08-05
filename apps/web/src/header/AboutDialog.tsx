@@ -1,6 +1,7 @@
 import { OpenMeteoAttribution } from '@cumulo/ui';
 import { useEffect, useId, useRef, type ReactElement } from 'react';
 
+import { syncDialogOpen } from '../dialog-modality';
 import { PRODUCT_TAGLINE } from './header-copy';
 
 export interface AboutDialogProps {
@@ -9,48 +10,6 @@ export interface AboutDialogProps {
   /** What the dialog asking to be dismissed means — Escape, or its own Close. */
   readonly onClose: () => void;
 }
-
-/**
- * Open or close a `<dialog>`, modally where the DOM implementation has modality.
- *
- * `showModal` and `close` are the whole reason this is a native dialog: they put
- * the element in the top layer, paint the backdrop, make the page behind it
- * inert, give Escape its meaning, and restore focus to whatever was focused
- * before on the way out. None of that is behaviour a component should
- * reimplement.
- *
- * jsdom 30 — the DOM the unit lane runs in — implements `HTMLDialogElement`
- * with `open` and nothing else (`constructor,open` is the entire prototype).
- * Toggling the attribute is what a DOM without a top layer can honestly do: the
- * dialog is open and its content is present, and *every* property that needs a
- * top layer is by definition the browser lane's to prove (`testing.md`
- * rule 10) — `e2e/header.spec.ts` drives Escape through a real Chromium and
- * measures the dismissal and the focus restoration there. The alternative,
- * standing a fake `showModal` up in the unit lane, would have the suite assert
- * that a stub was called while proving nothing about modality at all.
- *
- * Guarded on the method rather than on an environment flag so the branch states
- * the capability it actually needs, and so nothing here has to know what is
- * running it.
- */
-const syncDialogOpen = (dialog: HTMLDialogElement, shouldBeOpen: boolean): void => {
-  if (dialog.open === shouldBeOpen) {
-    // Already there — and on the Escape path it got there by itself, because
-    // an unprevented `cancel` closes the dialog before this effect runs.
-    return;
-  }
-
-  if (typeof dialog.showModal !== 'function') {
-    dialog.open = shouldBeOpen;
-    return;
-  }
-
-  if (shouldBeOpen) {
-    dialog.showModal();
-  } else {
-    dialog.close();
-  }
-};
 
 /**
  * What Cumulo is and where its data comes from, behind the header menu.
