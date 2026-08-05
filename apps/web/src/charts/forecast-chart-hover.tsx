@@ -143,10 +143,21 @@ export const readoutText = (
  *
  * Keyed by `seriesClassName` rather than by `name`, because a name is not unique
  * and never was: an overlay's name is a *site* name, which is free text a visitor
- * types, so a site called "Median" collided with the forecast row and React
- * rendered one of the two. The class is one per series by construction — it is
- * the same value that colours the key stroke — so it cannot collide without two
- * rows genuinely being the same series.
+ * types, so a site called "Median" shares a key with the forecast's own median
+ * row. The class is one per series by construction — it is the same value that
+ * colours the key stroke — so it cannot collide without two rows genuinely being
+ * the same series.
+ *
+ * What the collision actually cost is worth stating precisely, because it is
+ * less than it sounds and the fix is still right. No row was ever observed to
+ * disappear: on the shapes this chart produces, React reconciled the duplicate
+ * keys to the correct four rows with the correct numbers, and a DOM assertion
+ * written against the bug passed. What React does emit is a warning that
+ * children "may be duplicated and/or omitted — the behavior is unsupported and
+ * could change in a future version", which is a promise about future renders
+ * rather than a report about this one. That warning is the only observer, and
+ * `forecast-chart-hover.test.tsx` asserts it rather than a dropped row, for
+ * exactly that reason.
  */
 const tooltipRowElement = (row: TooltipRow, rowIndex: number): ReactElement => {
   const y = TOOLTIP_PADDING + TOOLTIP_ROW_HEIGHT * (rowIndex + FIRST_SERIES_ROW + 1);

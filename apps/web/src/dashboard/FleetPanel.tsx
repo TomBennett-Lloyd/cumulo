@@ -432,6 +432,12 @@ export const FleetPanel = ({
    * `useFleetQuery`'s contract — including the site, so changing the selection
    * drops the previous site's answer rather than letting it land on the chart
    * under the next site's name.
+   *
+   * True from the query's effect onwards, and not for the render in between:
+   * that hook resets to `loading` from an effect, so one committed frame after a
+   * selection moves still holds the previous site's data while the label below
+   * has already followed the new prop. `docs/tech-debt.md` has it, with the
+   * reason the guard for it belongs in the hooks rather than here.
    */
   const overlayForecasts = useFleetQuery(
     () => siteOverlayForecasts(dataSource, selectedSite, range),

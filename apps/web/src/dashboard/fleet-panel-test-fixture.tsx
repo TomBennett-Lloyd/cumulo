@@ -166,9 +166,12 @@ export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
  * members genuinely share the canned data and the call log, and `this.` is what makes that sharing
  * visible. The members are arrow properties because the interface's are.
  *
- * The counting is the point of several tests: "does toggling `hidden` refetch" and "does a new
- * `refreshToken` refetch" are questions about calls, not about pixels, and only a stub that
- * remembers can answer them.
+ * The counting is the point of several tests, and what it counts is what this panel is frugal
+ * about. "Does a new `refreshToken` re-sum the fleet", "does an empty fleet ask anything at all",
+ * "does moving the selection ask about the new site rather than relabel the old one's answer" and
+ * "does the overlay's retry spend a per-site request without re-spending the fan-out" are all
+ * questions about calls rather than about pixels, and only a stub that remembers can answer them.
+ * (It also counted reveals until #265, when the panel stopped being hideable.)
  */
 export class CountingFleetSource implements FleetDataSource {
   readonly forecastRanges: RangeHours[] = [];

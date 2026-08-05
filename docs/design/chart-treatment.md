@@ -266,8 +266,15 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   an overlay if the chart carries one, at that timestamp — so the pointer never has to land on a
   line or inside the fill to get a number. The value leads and is high-contrast; the series name
   follows in `--color-text-muted`. Series are keyed with a short stroke of their colour, not a
-  filled box. A row whose series has nothing at that sample is **omitted** rather than dashed out:
-  an absent row says "not modelled", an em-dashed one would imply a range of nothing.
+  filled box. **The band row is omitted rather than dashed out** where a point carries no modelled
+  uncertainty: an absent row says "not modelled", an em-dashed one would imply a range of nothing.
+  The other rows keep their place and carry an em dash when that series has nothing at the sample —
+  a measurement past the horizon, an hour an overlay does not cover — because a value that is
+  merely missing is a different statement from one that was never modelled, and a row vanishing
+  under the pointer would make the readout change height as the reader moves along the series.
+  **Speech drops every absent row instead**, including the dashes: screen readers at default
+  punctuation verbosity say nothing for an em dash, so an unmeasured hour would otherwise announce
+  a labelled series with no value at all.
 - **Keyboard focus shows exactly what hover shows — and says so out loud.** The plot's `<svg>`
   keeps `role="img"` with one `aria-label`: a reader arriving at the chart should hear its name,
   not wade through every text node inside it. That is also why the tooltip cannot carry the

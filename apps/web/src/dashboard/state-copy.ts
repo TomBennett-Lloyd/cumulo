@@ -123,9 +123,10 @@ export const aggregatedFromCaption = (siteCount: number): string =>
 /**
  * The fleet chart is complete; the selected site's line over it is not.
  *
- * A notice rather than an error, on the same rule as the missing-measurements
- * one above: what failed is an *addition* to a chart that arrived intact, so the
- * honest thing is to label the chart partial and leave it standing
+ * A notice rather than an error, and {@link partialAggregateNotice} above is its
+ * sibling: both label a chart that arrived and is incomplete, rather than
+ * withdrawing it. What failed here is an *addition* to a sum that is intact, so
+ * the honest thing is to say which part is missing and leave the rest standing
  * (`error-handling.md` rule 5). Reporting it as a failure would tell a reader
  * the fleet sum in front of them is suspect, which it is not.
  *

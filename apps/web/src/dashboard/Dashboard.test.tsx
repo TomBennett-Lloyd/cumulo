@@ -462,7 +462,7 @@ describe('Dashboard add-site mode', () => {
   });
 
   it('opens one draft per arming, and spends the arming on it', async () => {
-    const container = renderDashboard(new DemoFleetDataSource());
+    renderDashboard(new DemoFleetDataSource());
     await settle();
 
     armAddSite();
@@ -474,9 +474,12 @@ describe('Dashboard add-site mode', () => {
     clickBasemap();
 
     // Single-shot: the arming was spent on the first click, so the second is an
-    // ordinary basemap click again and the region is back on the fleet.
+    // ordinary basemap click again and opens nothing. This used to assert the
+    // fleet panel's `hidden` attribute alongside — "the region is back on the
+    // fleet" — which stopped meaning anything when the panel stopped being
+    // hideable (#265); an attribute that is never set reads `false` whatever the
+    // page does.
     expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
   });
 });
 
