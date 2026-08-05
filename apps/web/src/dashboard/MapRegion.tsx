@@ -31,7 +31,8 @@ export interface MapRegionProps {
  * above it is the dashboard's own logic, everything below it is adapter code
  * already excluded from unit testing for the same reason. What the seam does not
  * cover — that the real map calls these callbacks at all — is covered where it
- * has to be, in a browser.
+ * has to be: the browser lane (`testing.md` rule 10), in
+ * `apps/web/e2e/map-regressions.spec.ts`.
  */
 export type MapRegionComponent = (props: MapRegionProps) => ReactElement;
 

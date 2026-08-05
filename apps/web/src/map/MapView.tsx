@@ -32,8 +32,12 @@ import { isMarkerClick } from './map-click';
  * it, failing on its first import in production only. `?worker&url` routes it
  * through Vite's worker pipeline, which emits a self-contained chunk.
  *
- * `map-worker-contract.test.ts` is the ratchet: nothing else in CI can see a
- * missing worker, because the failure only exists in a browser.
+ * `map-worker-contract.test.ts` is the cheap first line: a source contract that
+ * bites in `verify`, with no build and no browser binary. The failure itself
+ * only exists in a browser, and CI now has a second observer that sees the
+ * failure rather than the source — `e2e/composition.spec.ts` waits for a
+ * laid-out WebGL canvas against the built app, which a hung worker never
+ * paints (`testing.md` rule 10).
  */
 setWorkerUrl(workerUrl);
 

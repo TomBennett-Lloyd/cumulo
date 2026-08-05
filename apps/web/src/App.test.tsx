@@ -19,9 +19,11 @@ import { THEME_STORAGE_KEY } from './theme';
  * standing up a fake maplibre instead would leave the suite asserting that a
  * mock was called (`testing.md` rule 3).
  *
- * What that leaves uncovered is the shipping default — the real `LazyMapRegion`
- * in the real shell — which only a browser harness closes (#107). Its two
- * off-happy-path states are covered directly in `dashboard/LazyMapRegion.test.tsx`.
+ * What that leaves uncovered here is the shipping default — the real
+ * `LazyMapRegion` in the real shell — which is the browser lane's (`testing.md`
+ * rule 10): `e2e/composition.spec.ts` mounts it against the built app and waits
+ * for a laid-out WebGL canvas. Its two off-happy-path states are covered
+ * directly in `dashboard/LazyMapRegion.test.tsx`.
  *
  * The dashboard runs against the real fixture source rather than a stub,
  * because what these tests are for is the wiring: that the shell mounts the

@@ -137,7 +137,8 @@ describe('Dashboard', () => {
     //
     // The known limit: the stub map region stands in for the real placeholder,
     // whose own zero-live-region property is `MapSurface.test.tsx`'s. The
-    // shipping composition — real map shell included — is #107's browser harness.
+    // shipping composition — real map shell included — is the browser lane's
+    // (`testing.md` rule 10), in `e2e/composition.spec.ts`.
     const container = renderDashboard(new DemoFleetDataSource());
 
     expect(container.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).toHaveLength(

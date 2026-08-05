@@ -8,12 +8,14 @@ import { describe, expect, it } from 'vitest';
  * maplibre v6 resolves its worker from its own `import.meta.url` unless told
  * otherwise. Under Vite that address points into `node_modules/.vite/deps/`,
  * where the worker file does not exist: the request hangs, no tile is ever
- * requested, and the map renders as a black rectangle. Nothing else in this
- * repo can catch that. jsdom has no WebGL and no worker pipeline, so no unit
- * test reaches the failure, and a mocked maplibre would only prove the mock was
- * called (testing.md rule 3) — the defect is visible in a browser and nowhere
- * else, which is exactly the situation a mechanical check on the source earns
- * its keep in.
+ * requested, and the map renders as a black rectangle. No jsdom test can catch
+ * that: jsdom has no WebGL and no worker pipeline, so none reaches the failure,
+ * and a mocked maplibre would only prove the mock was called (testing.md
+ * rule 3). The defect is visible in a browser and nowhere else, which is why
+ * the browser lane is its second observer — `e2e/composition.spec.ts` waits for
+ * a laid-out WebGL canvas against the built app (testing.md rule 10). This file
+ * stays as the cheap first line in front of it: a mechanical check on the
+ * source, biting in `verify` with no build and no browser binary.
  *
  * It fails on the code that shipped before this fix, which is the point
  * (testing.md rule 4). Reading the file off disk needs the node environment —
