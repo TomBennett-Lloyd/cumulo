@@ -79,10 +79,25 @@ default-vs-hover and hover-vs-selected, and it is default-vs-selected that a rea
 **Colour never carries a state alone.** Light mode carries the documented contrast warning on
 slots 3, 4 and 5 against the light surface — slot 3 is the hover fill — so the relief rule
 applies here directly: hover always brings a labelled tooltip naming the site, selection always
-opens the site's detail panel, and both change the marker's size. A reader who cannot separate
-the hues still gets the state from the label and the geometry. The site list under the map is
-the table view: every marker state has a row equivalent, and the map is never the only way to
-reach a site.
+opens the site's own card above the marker (`apps/web/src/map/SitePopover.tsx`), and both change
+the marker's size. A reader who cannot separate the hues still gets the state from the label and
+the geometry. The site list under the map is the table view: every marker state has a row
+equivalent, and the map is never the only way to reach a site.
+
+**A selected site gets a card, anchored to its marker.** It carries the site's name, its physical
+configuration, and the state of its first forecast — and no chart, because the forecast itself is
+drawn as a second series on the fleet chart below the map
+([`dashboard-composition.md`](dashboard-composition.md) has that argument). The card is mounted
+through a maplibre marker like every other overlay here, which is what makes it ride the camera
+and what puts it inside `isMarkerClick`'s exclusion, so a press on `Close` cannot also be read as
+a click on the basemap. It sits **above** the marker rather than over it: a card centred on the
+coordinate would cover the mark that says which site it is about.
+
+**A selection the camera cannot see brings the camera to it, and nothing else does.** A site
+selected from the list, a link or a creation may be well outside the current view, so
+`SelectionCamera` eases to it — at the current zoom, and only when it is outside
+`map.getBounds()`. Re-centring on a marker the reader just pressed would move the one thing they
+were looking at, and changing the zoom would undo a framing they chose.
 
 **Hit targets are bigger than the marks.** A `--space-3` circle is a 12px target, which is fine
 to look at and hostile to click. The interactive area is a transparent circle of at least

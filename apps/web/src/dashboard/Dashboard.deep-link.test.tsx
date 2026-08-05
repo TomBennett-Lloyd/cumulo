@@ -10,6 +10,7 @@ import {
   fleetPanel,
   renderDashboard,
   settle,
+  sitePopover,
   visit,
 } from './dashboard-test-fixture';
 
@@ -48,11 +49,12 @@ describe('Dashboard deep links', () => {
     const container = renderDashboard(dataSource);
     await settle();
 
-    // The site's own context, reached without a click — and the fleet panel
-    // yielding the region is what says the selection really took, rather than
-    // the heading having been rendered somewhere harmless.
+    // The site's own card, reached without a click — and the fleet panel is
+    // still right there under the map, because a selection no longer displaces
+    // anything (#265).
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
+    expect(sitePopover(container)).not.toBeNull();
+    expect(fleetPanel(container)).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await settle();
@@ -63,12 +65,12 @@ describe('Dashboard deep links', () => {
     // whose close only undid its own writes would leave a reader who arrived
     // cold on `?site=` still advertising a site they have shut, and would hand
     // that stale link back to anyone copying the URL afterwards.
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    expect(sitePopover(container)).toBeNull();
     expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
     expect(window.location.search).toBe('');
   });
 
-  it('never spends the fleet fan-out on a deep link, and spends it once on first reveal', async () => {
+  it('spends the fleet fan-out once on a deep link, the trade for a chart that is never hidden', async () => {
     const dataSource = new DemoFleetDataSource();
     const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
     const site = await firstListedSite(dataSource);
@@ -77,21 +79,26 @@ describe('Dashboard deep links', () => {
     renderDashboard(dataSource);
     await settle();
 
-    // The whole of #178, at the level a reader actually arrives on. In live mode
-    // this call is a `GET /v1/sites` plus a paced per-site `/forecast` fan-out —
-    // spent, before this, on every deep link whose reader never looks at the
-    // fleet. `FleetPanel.reveal.test.tsx` pins the panel's own predicate; what
-    // this adds is the composition, which is where the timing lives: the panel
-    // is briefly un-hidden while the listing is still in flight, and it is only
-    // because the listing's resolve and the URL selection's hide land in the
-    // same commit that the loading window never latches as a reveal.
-    expect(fleetForecasts).not.toHaveBeenCalled();
+    /*
+     * #178 deferred this fan-out until the fleet panel was first revealed, so a
+     * deep-linked reader who never looked at the fleet never paid for it. #265
+     * spent that saving deliberately: the fleet's chart is on screen from first
+     * paint in every state of the page, and the selected site is drawn *over*
+     * it, so there is no reader left who does not look at the fleet — only one
+     * who would be shown a spinner where the chart already is. In live mode the
+     * cost is a paced per-site fan-out (~8 s over 60 sites).
+     *
+     * What survives is the half that was always load-bearing: it is spent
+     * **once**. The listing resolving and the deep link's selection landing in
+     * the same commit must not read as two events.
+     */
+    expect(fleetForecasts).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await settle();
 
-    // Closing back to the fleet is the first reveal, and it is paid for once —
-    // #161's spent-once-and-kept property, now simply starting later.
+    // Deselection is still not an event that changes the sum — #161's
+    // spent-once-and-kept property, unchanged.
     expect(fleetForecasts).toHaveBeenCalledTimes(1);
   });
 
@@ -103,10 +110,10 @@ describe('Dashboard deep links', () => {
     const container = renderDashboard(dataSource);
     await settle();
 
-    // The listing has answered, so the id is now known to name nobody: the
-    // reader gets the fleet, and the URL stops advertising a site that is not
-    // there.
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    // The listing has answered, so the id is now known to name nobody: no card
+    // opens, and the URL stops advertising a site that is not there.
+    expect(sitePopover(container)).toBeNull();
+    expect(fleetPanel(container)).not.toBeNull();
     expect(window.location.search).toBe('');
 
     const pollsSoFar = getSiteForecast.mock.calls.length;

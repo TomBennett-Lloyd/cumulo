@@ -250,7 +250,7 @@ describe('App attribution', () => {
     // has two halves that each display weather-derived data and each survive
     // the other being empty: the map keeps its own credit overlaid on its
     // bottom edge, and the page keeps one at the foot of its content that
-    // outlasts every context swap. What the
+    // outlasts every selection. What the
     // count rules out is the failure the old views had — a credit per panel,
     // multiplying with the panels and disappearing with whichever one happened
     // to be unmounted (CC BY 4.0, CLAUDE.md hard constraints).

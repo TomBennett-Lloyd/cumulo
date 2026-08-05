@@ -11,7 +11,7 @@ import type { Forecast } from '@cumulo/shared';
  * - `error` — the fleet answered, and the answer was a fault.
  *
  * Split because the recourse differs: a timeout is worth waiting out again,
- * a fault usually is not, and the panel says something different for each.
+ * a fault usually is not, and the card says something different for each.
  * `unanswered` is the third because it is a third fact, not a shading of the
  * first: `timeout` is the fleet confirming absence and the pipeline being
  * behind, and a run that was never answered has no standing to claim either.
@@ -19,11 +19,11 @@ import type { Forecast } from '@cumulo/shared';
 export type ForecastFailureReason = 'timeout' | 'unanswered' | 'error';
 
 /**
- * What the site detail panel knows about a site's forecast, right now.
+ * What the selected site's card knows about that site's forecast, right now.
  *
  * A discriminated union rather than a bag of optionals (`typing.md` rule 4):
  * `{ forecasts: [], error: undefined, pending: false }` has no meaning, and the
- * panel would have to invent one. Here every arm carries exactly the data its
+ * card would have to invent one. Here every arm carries exactly the data its
  * rendering needs and nothing else — `elapsedSeconds` cannot be read on a ready
  * forecast, and `forecasts` cannot be read on a waiting one.
  *
@@ -38,14 +38,14 @@ export type ForecastFailureReason = 'timeout' | 'unanswered' | 'error';
  *   `elapsedSeconds` is worth counting out loud.
  * - `halted` — the fleet's answer made waiting pointless and retrying is not a
  *   recourse (today: `forbidden`, whose fix is a deployment change). Distinct
- *   from `failed` so the panel can drop the retry that cannot work.
+ *   from `failed` so the card can drop the retry that cannot work.
  *
  * `elapsedSeconds` lives in the state rather than being counted inside the
- * panel because the wait belongs to the polling hook (#17 C6), which owns the
- * clock; a panel that timed the wait itself would disagree with the hook the
+ * card because the wait belongs to the polling hook (#17 C6), which owns the
+ * clock; a card that timed the wait itself would disagree with the hook the
  * moment either remounted.
  *
- * Declared here, in its own module, because two chunks meet on it: the panel
+ * Declared here, in its own module, because two sides meet on it: `map/SitePopoverCard.tsx`
  * renders it and the first-forecast hook produces it. Neither owns the other.
  */
 export type ForecastViewState =

@@ -47,10 +47,15 @@ interface QueryProps {
 }
 
 /**
- * Omitting `enabled` calls the hook with two arguments — the form `SitePanel` uses — so the
- * parameter defaults are genuinely exercised rather than papered over by the helper. Passing
- * `{ enabled: props.enabled ?? true }` unconditionally would mean no test ever reached them, and
- * a signature default flipped to `false` would survive the whole file.
+ * Omitting `enabled` calls the hook with two arguments, so the parameter defaults are genuinely
+ * exercised rather than papered over by the helper. Passing `{ enabled: props.enabled ?? true }`
+ * unconditionally would mean no test ever reached them, and a signature default flipped to
+ * `false` would survive the whole file (`testing.md` rule 9).
+ *
+ * No shipped caller omits `enabled` today — every `useFleetQuery` in `FleetPanel` passes one
+ * since #265 — so this is the only place the two-argument form runs at all. That is a reason to
+ * keep it rather than to drop it: the form is the hook's published contract, and a default that
+ * nothing exercises is a default that quietly stops working.
  *
  * Both arms call the one hook exactly once, so the hook order is identical either way.
  */

@@ -4,23 +4,31 @@ import { expect, test } from '@playwright/test';
 import { routeBasemap } from './hermetic-basemap';
 
 /*
- * The keyboard path to a site, driven by a real keyboard.
+ * Who gets the focus when a site opens, driven by a real keyboard and a real
+ * address bar.
  *
- * The dashboard's answer to a selection is a focus move: `SitePanel` focuses its
- * own heading on mount so the context swap announces itself rather than leaving
- * a reader's focus on a control that is about to unmount (#93, and the panel's
- * own comment). Under jsdom that is provable only as far as `document.activeElement`
- * — the assertion `Dashboard.focus.test.tsx` already makes. What it cannot show
- * is the half a reader actually experiences: whether the ring `@cumulo/ui` paints
- * on `:focus-visible` is on the heading afterwards. `:focus-visible` is a
- * browser heuristic over *how* focus arrived, jsdom implements no heuristic and
- * paints nothing, and no amount of unit testing can substitute for one.
+ * The dashboard's answer to a *reader-initiated* selection is a focus move: the
+ * site's card focuses its own heading on mount so the new surface announces
+ * itself rather than leaving a reader's focus on a control that is about to
+ * unmount (#93). Under jsdom that is provable only as far as
+ * `document.activeElement` — the assertion `Dashboard.focus.test.tsx` already
+ * makes. What it cannot show is the half a reader actually experiences: whether
+ * the ring `@cumulo/ui` paints on `:focus-visible` is on the heading afterwards.
+ * `:focus-visible` is a browser heuristic over *how* focus arrived, jsdom
+ * implements no heuristic and paints nothing, and no amount of unit testing can
+ * substitute for one.
  *
- * So the whole case is one interaction performed the way a keyboard user
+ * So the first case is one interaction performed the way a keyboard user
  * performs it: Tab until a row has focus, press Enter, and measure what the
- * browser then decided to paint. Every step is a real key event — `Locator.press`
- * on the row would reach the same handler while telling us nothing about whether
- * the row is reachable by tabbing at all.
+ * browser then decided to paint. Every step is a real key event —
+ * `Locator.press` on the row would reach the same handler while telling us
+ * nothing about whether the row is reachable by tabbing at all.
+ *
+ * The second case is the other half of the same rule, and it is the reason #260
+ * was routed to this lane at all. A `?site=` link is *not* a reader asking for
+ * anything now, so the card must take no focus — and "no focus was taken" is a
+ * claim about the whole assembled page arriving over HTTP, which is what this
+ * lane is and jsdom's synchronous mount is not.
  */
 
 /**
@@ -87,7 +95,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('hands a keyboard selection to the panel heading, ring and all', async ({ page }) => {
+test('hands a keyboard selection to the card heading, ring and all', async ({ page }) => {
   /*
    * Both halves of the page first. The rows are what this tabs to; the map is
    * what it tabs *through*, and starting before its markers have mounted would
@@ -105,23 +113,79 @@ test('hands a keyboard selection to the panel heading, ring and all', async ({ p
    * The row answered, and answered for the site whose row it was. Without this
    * the case would still pass if Enter had selected some other site — the
    * heading would be focused either way, and the reader would be looking at a
-   * panel they did not ask for.
+   * site they did not ask for.
    */
   await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
 
-  await expect(page.locator('.site-panel-title')).toBeFocused();
+  await expect(page.locator('.site-popover-title')).toBeFocused();
 
   /*
    * And the ring is on it. The heading is `tabIndex={-1}` and takes focus
    * programmatically, so this measures the browser's `:focus-visible` heuristic
    * as much as the stylesheet: Chromium carries focus-visible across a
    * programmatic move when the interaction that triggered it was a keystroke,
-   * which is the whole reason the panel is allowed to move focus silently. If
+   * which is the whole reason the card is allowed to move focus silently. If
    * this ever reads `none`, a keyboard reader is being moved to a heading with
    * no visible sign of where they landed.
    */
-  const ring = await focusRing(page, '.site-panel-title');
+  const ring = await focusRing(page, '.site-popover-title');
 
   expect(ring.style).toBe('solid');
   expect(ring.widthPx).toBeGreaterThan(0);
+
+  await page.keyboard.press('Escape');
+
+  /*
+   * And back where they came from. Escape closes from inside the card, which
+   * unmounts the Close button focus would otherwise fall off — so the landing is
+   * the row that opened it, matched by the id this case already holds rather
+   * than by position in the list.
+   */
+  await expect(page.locator('.site-popover')).toHaveCount(0);
+  await expect.poll(async () => focusedSiteId(page)).toBe(siteId);
+});
+
+// The issue number is spelled out rather than written with a hash: the frontend
+// gate's hex-colour rule matches `#260` in a string literal, and a rule fighting
+// you is a design signal rather than a thing to suppress (CLAUDE.md).
+test('takes no focus at all when ?site= opens the card (issue 260)', async ({ page }) => {
+  /*
+   * The regression this issue is: the card mounts when the fleet listing
+   * resolves, and on a deep link that moment is not page load — it is whenever
+   * the listing comes back, which over a real network can be well after the
+   * reader has started using the page. A card that focused its heading on mount
+   * therefore took focus from somebody who had done nothing to ask for it (WCAG
+   * 3.2.5). The settlement is that focus follows the *reader*, never the address
+   * bar, and this is the case that would fail if that rule were dropped.
+   *
+   * An id read off the running page rather than a constant, for the reason
+   * `dashboard-test-fixture.ts` gives about the same thing: a link's id comes
+   * from a real fleet, and one derived the way the demo fleet derives its own
+   * would still pass if both drifted together.
+   */
+  await expect(page.locator('[data-site-id]').first()).toBeVisible();
+
+  const siteId = await page.locator('[data-site-id]').first().getAttribute('data-site-id');
+
+  if (siteId === null) {
+    throw new Error('The first site row carries no data-site-id to deep-link with.');
+  }
+
+  await page.goto(`/?site=${siteId}`);
+
+  // The card really did open. Asserted first and deliberately: a card that
+  // failed to mount at all would leave focus on `body` too, and would pass the
+  // assertion below while proving nothing.
+  await expect(page.locator('.site-popover')).toBeVisible();
+  await expect(page.locator('.site-popover-title')).toHaveCount(1);
+
+  /*
+   * `body` is where a freshly loaded document leaves focus, and it is where this
+   * page has to leave it. Read as the tag name rather than through
+   * `toBeFocused`, because what is being asserted is that *nothing* took focus —
+   * there is no element to point a locator at.
+   */
+  const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
+
+  expect(focusedTag).toBe('BODY');
 });

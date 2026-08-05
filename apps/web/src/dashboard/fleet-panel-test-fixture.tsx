@@ -103,15 +103,33 @@ const ACTUALS: readonly GenerationReading[] = [
   readingAt(SITE_B_ID, 6, 3.5),
 ];
 
-/** The canned answers to the two fleet-level calls the panel makes. */
+/** The canned answers to the calls the panel makes. */
 export interface StubFleet {
   readonly forecasts: FleetSourceResult<readonly Forecast[]>;
   readonly actuals: FleetSourceResult<readonly GenerationReading[]>;
+  /**
+   * Non-null fails the *overlay* read only.
+   *
+   * A message rather than a whole result, because the site's own hours are always filtered from
+   * {@link FORECASTS} when they succeed — what varies is only whether the read failed, and a
+   * second copy of the success value would be a second thing to keep in step.
+   */
+  readonly siteForecastError: string | null;
 }
 
 const ready = <T,>(value: T): FleetSourceResult<T> => ({ kind: 'ok', value });
 
-export const FULL_FLEET: StubFleet = { forecasts: ready(FORECASTS), actuals: ready(ACTUALS) };
+export const FULL_FLEET: StubFleet = {
+  forecasts: ready(FORECASTS),
+  actuals: ready(ACTUALS),
+  siteForecastError: null,
+};
+
+/** The fleet sums fine; the selected site's own hours do not arrive. */
+export const OVERLAYLESS_FLEET: StubFleet = {
+  ...FULL_FLEET,
+  siteForecastError: 'siteForecasts: network refused',
+};
 
 /** 07:00 loses site B, so that hour aggregates one of the fleet's two sites and 06:00 keeps both. */
 export const PARTIAL_FLEET: StubFleet = {
@@ -155,6 +173,16 @@ export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
 export class CountingFleetSource implements FleetDataSource {
   readonly forecastRanges: RangeHours[] = [];
 
+  /**
+   * Every per-site forecast request, as `<siteId>@<range>`.
+   *
+   * Recorded rather than merely counted because the overlay's whole contract is *which* site was
+   * asked about over *which* window: an overlay drawn from the previous selection's answer, or
+   * from a window the chart is not showing, would be a chart quietly lying about one of its two
+   * series.
+   */
+  readonly siteForecastRequests: string[] = [];
+
   /** Counted separately from the forecasts: "neither call was spent" is two facts, not one. */
   private actualsCalls = 0;
 
@@ -189,10 +217,28 @@ export class CountingFleetSource implements FleetDataSource {
     throw new Error('CountingFleetSource: the fleet panel takes its sites as a prop');
   };
 
-  readonly siteForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    throw new Error('CountingFleetSource: the fleet panel must not call siteForecasts');
+  /**
+   * One site's own hours — the overlay's source, served out of the same canned fleet.
+   *
+   * Filtered from {@link FORECASTS} rather than answered from a second set of numbers, because
+   * that is what makes the overlay assertions mean something: the site's line really is a
+   * component of the sum drawn under it, so a table row showing the site above the fleet's own
+   * median would be a defect these tests can see.
+   */
+  readonly siteForecasts = (
+    siteId: string,
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
+    this.siteForecastRequests.push(`${siteId}@${String(range)}`);
+    return Promise.resolve(
+      this.canned.siteForecastError === null
+        ? { kind: 'ok', value: FORECASTS.filter((forecast) => forecast.siteId === siteId) }
+        : { kind: 'error', error: { code: 'network', message: this.canned.siteForecastError } },
+    );
   };
 
+  // The overlay is the site's median and nothing else, so measured output is never asked for. A
+  // throw rather than an empty answer: it is a bug worth a loud crash, not a state to render.
   readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
     throw new Error('CountingFleetSource: the fleet panel must not call siteActuals');
   };
@@ -206,6 +252,33 @@ export class CountingFleetSource implements FleetDataSource {
   };
 }
 
+/**
+ * What the dashboard tells the panel about the selection, as one value.
+ *
+ * The two props travel together in every case that matters — a site with no answer about it yet
+ * draws no overlay, and an answer with no site is nothing — so the fixture passes them as a pair
+ * rather than letting a test set one and forget the other.
+ */
+export interface FleetPanelSelection {
+  readonly selectedSite: Site | null;
+  readonly selectionReady: boolean;
+}
+
+/** The resting state: nothing selected, so no overlay and no per-site request. */
+export const NO_SELECTION: FleetPanelSelection = { selectedSite: null, selectionReady: false };
+
+/** Site A selected, with its first forecast already in — the state that draws an overlay. */
+export const SITE_A_SELECTED: FleetPanelSelection = {
+  selectedSite: SITE_A,
+  selectionReady: true,
+};
+
+/** Site A selected while its first forecast is still being generated. */
+export const SITE_A_PENDING: FleetPanelSelection = {
+  selectedSite: SITE_A,
+  selectionReady: false,
+};
+
 /** Waits for both fleet reads to have answered, whatever they answered. */
 export const settle = async (): Promise<void> => {
   await waitFor(() => {
@@ -214,28 +287,44 @@ export const settle = async (): Promise<void> => {
 };
 
 /**
- * The panel as the column mounts it, over the shared two-site fleet.
+ * The panel as the page mounts it, over the shared two-site fleet.
  *
- * A returned element rather than a render call, because the hide/reveal tests mount it once and
- * then `rerender` it with one prop moved — and a prop added to {@link FleetPanel} would otherwise
- * leave a dozen copies wrong at once (`structure.md` rule 7). The fleet is a parameter of
- * {@link renderSettled}, which is what the tests that vary it use.
+ * A returned element rather than a render call, because the refresh and overlay tests mount it
+ * once and then `rerender` it with one prop moved — and a prop added to {@link FleetPanel} would
+ * otherwise leave a dozen copies wrong at once (`structure.md` rule 7). The fleet is a parameter
+ * of {@link renderSettled}, which is what the tests that vary it use.
+ *
+ * The selection is the one thing this varies, because it is the one thing the page varies about
+ * this panel now: it is never hidden and never unmounted (#265), so `hidden` stopped being a
+ * parameter at the same time it stopped being a prop.
  */
 export const panel = (
   dataSource: FleetDataSource,
-  hidden: boolean,
+  selection: FleetPanelSelection = NO_SELECTION,
   refreshToken = 0,
 ): ReactElement => (
-  <FleetPanel dataSource={dataSource} sites={SITES} hidden={hidden} refreshToken={refreshToken} />
+  <FleetPanel
+    dataSource={dataSource}
+    sites={SITES}
+    selectedSite={selection.selectedSite}
+    selectionReady={selection.selectionReady}
+    refreshToken={refreshToken}
+  />
 );
 
-/** A visible panel over the given fleet, once its reads have answered. */
+/** A settled panel over the given fleet, with nothing selected. */
 export const renderSettled = async (
   dataSource: FleetDataSource,
   sites: readonly Site[] = SITES,
 ): Promise<HTMLElement> => {
   const { container } = render(
-    <FleetPanel dataSource={dataSource} sites={sites} hidden={false} refreshToken={0} />,
+    <FleetPanel
+      dataSource={dataSource}
+      sites={sites}
+      selectedSite={null}
+      selectionReady={false}
+      refreshToken={0}
+    />,
   );
   await settle();
   return container;

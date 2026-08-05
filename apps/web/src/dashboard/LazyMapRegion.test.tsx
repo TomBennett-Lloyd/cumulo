@@ -25,6 +25,16 @@ vi.mock('./MapRegion', () => {
   throw new Error('Failed to fetch dynamically imported module');
 });
 
+/**
+ * A map region with nothing selected and an empty fleet — the least this
+ * component can be handed.
+ *
+ * None of it is read by either state under test: the placeholder and the
+ * failure are both `MapSurface` shells, and neither reaches the props. They are
+ * spelled out because `MapRegionProps` is the contract `LazyMapRegion` promises
+ * to pass straight through, and a partial literal here would let a prop be added
+ * to that contract and quietly not forwarded.
+ */
 const mapRegionProps = {
   theme: 'light',
   sites: [],
@@ -33,6 +43,11 @@ const mapRegionProps = {
   onMapClick: () => undefined,
   addSiteArmed: false,
   onToggleAddSite: () => undefined,
+  selectedSite: null,
+  selectionOrigin: 'deep-link',
+  firstForecast: { status: 'checking' },
+  onRetryFirstForecast: () => undefined,
+  onDeselectSite: () => undefined,
 } as const;
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup

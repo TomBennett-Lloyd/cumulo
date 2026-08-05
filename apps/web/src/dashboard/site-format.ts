@@ -4,8 +4,8 @@ import type { Site } from '@cumulo/shared';
  * How the dashboard spells the domain's numbers.
  *
  * One module rather than a formatter beside each component: the site list and
- * the detail panel display the same capacity for the same site to the same
- * reader, so a capacity that gained a decimal place in one and not the other
+ * the site's card on the map display the same capacity for the same site to the
+ * same reader, so a capacity that gained a decimal place in one and not the other
  * would be a defect, not a variation (`structure.md` rule 7). Units are named
  * once here and nowhere else, which is also what keeps "kW" from drifting into
  * "kw" across two files.

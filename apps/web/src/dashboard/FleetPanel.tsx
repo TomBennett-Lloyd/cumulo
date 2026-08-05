@@ -9,12 +9,14 @@ import {
 import { useId, useState, type ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
-import type { FleetDataSource, RangeHours } from '../data/fleet-data-source';
+import type { ChartOverlaySeries, ForecastChartPoint } from '../charts/ForecastChart';
+import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { joinFleetSeries, minimumContributingSites } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker, rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
+import { siteOverlaySeries } from './site-overlay';
 import {
   aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
@@ -25,7 +27,34 @@ import {
 } from './state-copy';
 
 /*
- * The fleet's story, in the content column's resting state.
+ * The fleet's story, and — while a site is selected — that site's line over it.
+ *
+ * ## One chart, always on screen
+ *
+ * This panel used to be the *resting* state of a context region that a site
+ * panel could take from it, so it was rendered `hidden` rather than unmounted
+ * and its first fan-out was deferred until it was first revealed (#178). #265
+ * removed the region: a site's card is anchored to its marker on the map now,
+ * nothing displaces this panel, and there is no hidden state left to model. The
+ * latch went with it.
+ *
+ * The trade that leaves, stated because it is a real cost and it was accepted
+ * rather than overlooked: **a `?site=` deep link now spends the fleet fan-out**,
+ * which in live mode is a paced per-site request (~8 s over 60 sites). #178
+ * saved that spend for a reader who never looked at the fleet, and a reader who
+ * never looks at the fleet is exactly who no longer exists — the fleet chart is
+ * on screen from first paint in every state of the page. Deferring a request for
+ * a chart the reader is already looking at would buy nothing and cost a spinner.
+ *
+ * ## The selected site is one more series, not a second chart
+ *
+ * When a site is selected and its first forecast has arrived, this panel fetches
+ * that site's forecasts and hands them to `ForecastChart` as an overlay. One kW
+ * axis, never two (`docs/design/chart-treatment.md`) — the point of drawing the
+ * site here at all is that a reader can see how much of the fleet's afternoon is
+ * this one roof, and two axes would invent a correlation the numbers do not
+ * contain. The chart is the site's *only* chart: its card on the map carries the
+ * site's facts and the state of its first forecast, and nothing plotted.
  *
  * ## Capability honesty is structural here, not editorial
  *
@@ -45,29 +74,12 @@ import {
  * second value, and the caption states the horizon the reader is actually
  * looking at.
  *
- * ## Hidden means empty, not merely invisible
- *
- * The column hides this panel rather than unmounting it so the queries and the
- * chosen range survive a context swap — so the hooks below run in every state,
- * hidden included. The *children* are a different question. A `role="alert"`
- * that mounts inside `display: none` has nothing to announce: it was never on
- * screen, and the later reveal is an attribute change rather than a DOM change,
- * so assistive technology reports nothing at either moment (#161). Rendering the
- * children only while visible means any failure mounts fresh into a visible tree
- * on reveal, which is a change and is announced.
- *
- * The state that matters is held by the hooks, not by the markup, so dropping
- * the subtree costs nothing: no refetch on reveal, and the range the reader
- * picked is still the range. What a reveal does cost is the *first* fan-out,
- * and that is deferred until one happens — so a `?site=` deep link that never
- * shows the fleet never spends it (#178).
- *
  * ## Attribution
  *
- * There is deliberately no Open-Meteo credit inside this panel. The column
- * carries one persistent credit in its footer, which stays on screen through
- * every state and every context swap; a second one here would be the same
- * obligation discharged twice in the same column.
+ * There is deliberately no Open-Meteo credit inside this panel. The page carries
+ * one persistent credit in its footer, which stays on screen through every state
+ * the reading can be in; a second one here would be the same obligation
+ * discharged twice on the same flow.
  */
 
 /** Both fleet reads open on the nearest window, and stay there without a picker. */
@@ -177,7 +189,45 @@ const completenessNote = (minContributing: number, siteCount: number): ReactElem
     <p className="panel-caption">{aggregatedFromCaption(siteCount)}</p>
   );
 
-const readyBody = (data: FleetSeries, siteCount: number, chart: ChartCopy): ReactElement => {
+/**
+ * Everything the body needs that is not the fleet's own numbers, as one value.
+ *
+ * Threaded rather than passed as four more parameters: `readyBody` and
+ * `fleetBody` are top-level functions precisely so they can be read without the
+ * component around them (`structure.md` rule 1), and a signature that grows a
+ * parameter per surface stops being readable at about this point.
+ */
+interface FleetChartContext {
+  readonly siteCount: number;
+  readonly chart: ChartCopy;
+  /** The selected site's line, or nothing at all when no site is contributing one. */
+  readonly overlay: ChartOverlaySeries | undefined;
+}
+
+/**
+ * The chart, with the overlay prop present only when there is an overlay.
+ *
+ * Two calls rather than `overlay={overlay}` with a possibly-`undefined` value:
+ * under `exactOptionalPropertyTypes` an absent optional prop and one explicitly
+ * set to `undefined` are different values, and `ForecastChart`'s contract is
+ * that an *absent* overlay renders exactly what it rendered before overlays
+ * existed — no mark, no legend row, no table column. Spreading the shared props
+ * keeps the two arms from drifting (`structure.md` rule 7).
+ */
+const fleetChart = (
+  points: readonly ForecastChartPoint[],
+  { chart, overlay }: FleetChartContext,
+): ReactElement => {
+  const common = { points, ariaLabel: chart.ariaLabel, tableCaption: chart.tableCaption };
+
+  return overlay === undefined ? (
+    <ForecastChart {...common} />
+  ) : (
+    <ForecastChart {...common} overlay={overlay} />
+  );
+};
+
+const readyBody = (data: FleetSeries, context: FleetChartContext): ReactElement => {
   const forecastPoints = aggregateFleetForecast(data.forecasts);
   if (forecastPoints.length === 0) {
     return <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />;
@@ -185,20 +235,15 @@ const readyBody = (data: FleetSeries, siteCount: number, chart: ChartCopy): Reac
 
   return (
     <div className="fleet-panel-body">
-      {completenessNote(minimumContributingSites(forecastPoints), siteCount)}
-      <ForecastChart
-        points={joinFleetSeries(forecastPoints, aggregateFleetActuals(data.actuals))}
-        ariaLabel={chart.ariaLabel}
-        tableCaption={chart.tableCaption}
-      />
+      {completenessNote(minimumContributingSites(forecastPoints), context.siteCount)}
+      {fleetChart(joinFleetSeries(forecastPoints, aggregateFleetActuals(data.actuals)), context)}
     </div>
   );
 };
 
 const fleetBody = (
   state: QueryState<FleetSeries>,
-  siteCount: number,
-  chart: ChartCopy,
+  context: FleetChartContext,
   onRetry: () => void,
 ): ReactElement => {
   if (state.status === 'loading') {
@@ -212,15 +257,42 @@ const fleetBody = (
       <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
     );
   }
-  return readyBody(state.data, siteCount, chart);
+  return readyBody(state.data, context);
 };
+
+/**
+ * The selected site's forecasts, or an empty answer when nothing is selected.
+ *
+ * The empty arm is not dead: `enabled` gates the *request*, and a caller whose
+ * `selectionReady` says yes while holding no site is asking about nobody, which
+ * is honestly answered by no hours rather than by a crash. Top-level and fully
+ * parameterised so it reads on its own (`structure.md` rule 1).
+ */
+const siteOverlayForecasts = (
+  dataSource: FleetDataSource,
+  site: Site | null,
+  range: RangeHours,
+): Promise<FleetSourceResult<readonly Forecast[]>> =>
+  site === null
+    ? Promise.resolve({ kind: 'ok', value: [] })
+    : dataSource.siteForecasts(site.id, range);
 
 export interface FleetPanelProps {
   readonly dataSource: FleetDataSource;
   /** The dashboard's one site list — listing plus session-created sites. */
   readonly sites: readonly Site[];
-  /** Kept mounted but hidden while a site panel occupies the context region. */
-  readonly hidden: boolean;
+  /** The site whose line is drawn over the fleet's, or `null` when none is selected. */
+  readonly selectedSite: Site | null;
+  /**
+   * Whether {@link FleetPanelProps.selectedSite}'s first forecast has arrived —
+   * the dashboard's poll, as one boolean.
+   *
+   * It gates the overlay request rather than merely the drawing. A site created
+   * seconds ago has no forecast at all, and asking its `/forecast` window on a
+   * cadence would spend metered requests to be told so; the poll is already
+   * asking that question and is the only surface that should.
+   */
+  readonly selectionReady: boolean;
   /** Bumped by the dashboard when a site is created, to re-sum the fleet. */
   readonly refreshToken: number;
 }
@@ -228,7 +300,8 @@ export interface FleetPanelProps {
 export const FleetPanel = ({
   dataSource,
   sites,
-  hidden,
+  selectedSite,
+  selectionReady,
   refreshToken,
 }: FleetPanelProps): ReactElement => {
   const headingId = useId();
@@ -239,32 +312,18 @@ export const FleetPanel = ({
   const [attempt, setAttempt] = useState(0);
 
   /*
-   * Both hooks below run unconditionally — hooks are not a place for `if` — but
-   * the *requests* they make are value-gated until the panel has been looked at
-   * once. In live mode a fleet read is a paced per-site fan-out, so a `?site=`
-   * deep link that never shows the fleet must never spend one (#178).
+   * An empty fleet has nothing to sum, so it asks nothing. That is the whole of
+   * the gate now: this panel is on screen in every state of the page, so there
+   * is no longer a reader who might never look at it and no reveal to defer the
+   * first fan-out to (#178, retired with the context region in #265 — the
+   * docblock above states the trade).
    *
-   * `revealed` needs the `sites.length > 0` conjunct because of that same deep
-   * link: the panel is briefly un-hidden while the listing is still in flight,
-   * so there is a window with `hidden` false over an empty `sites`. That window
-   * is a loading state, not a reveal, and requiring a fleet to show is what
-   * stops it counting as one. (A live fleet that really is empty then never
-   * spends the fan-out either — there is nothing to sum.)
-   *
-   * The latch is monotonic, so `enabled` never returns to false once set: hide
-   * and re-reveal keep #161's spent-once-and-kept property, where a raw
-   * `revealed` would make every re-reveal a false→true flip that refetches.
+   * It still matters on a deep link, for a different reason than it used to: the
+   * listing is briefly in flight with `sites` empty, and a fan-out fired then
+   * would be a sum of nothing followed immediately by a second one over the real
+   * fleet.
    */
-  const [everRevealed, setEverRevealed] = useState(false);
-  const revealed = !hidden && sites.length > 0;
-  if (revealed && !everRevealed) {
-    // Adjusting state during render — react.dev's own pattern for state derived
-    // from the props of this very render, and guarded so it sets at most once
-    // ever, which is what makes it terminate. An effect would be the wrong tool:
-    // there is no external system to synchronize with (`react.md` rule 1).
-    setEverRevealed(true);
-  }
-  const enabled = revealed || everRevealed;
+  const enabled = sites.length > 0;
 
   const forecasts = useFleetQuery(
     () => dataSource.fleetForecasts(range),
@@ -276,51 +335,68 @@ export const FleetPanel = ({
     ['fleet-actuals', range, refreshToken, attempt],
     { enabled },
   );
+  /*
+   * The selected site's own hours, over the same window as the sum they are
+   * drawn on. The key names every input the query reads, which is
+   * `useFleetQuery`'s contract — including the site, so changing the selection
+   * drops the previous site's answer rather than letting it land on the chart.
+   */
+  const overlayForecasts = useFleetQuery(
+    () => siteOverlayForecasts(dataSource, selectedSite, range),
+    ['site-overlay', selectedSite?.id ?? null, range, attempt],
+    { enabled: selectionReady },
+  );
 
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
   const retry = (): void => {
     setAttempt((previous) => previous + 1);
   };
+  // Derived during render: the overlay exists exactly while there is a site and
+  // an answer about it, and mirroring that into state would be a second copy of
+  // a fact the two values above already carry (`react.md` rule 1).
+  const overlay =
+    selectedSite === null || overlayForecasts.status !== 'ready'
+      ? undefined
+      : siteOverlaySeries(selectedSite, overlayForecasts.data);
 
   return (
-    <section className="fleet-panel" hidden={hidden} aria-labelledby={headingId}>
-      {hidden ? null : (
+    <section className="fleet-panel" aria-labelledby={headingId}>
+      <header className="fleet-panel-header">
+        <h2 className="fleet-panel-title" id={headingId}>
+          Fleet
+        </h2>
+        <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
+        <p className="fleet-panel-subtitle">
+          {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
+        </p>
+      </header>
+      {sites.length === 0 ? (
+        // The empty fleet is the demo's invitation, so it gets the panel to
+        // itself: no picker over nothing, and no failed query reported for a
+        // sum the reader never asked for.
+        <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
+      ) : (
         <>
-          <header className="fleet-panel-header">
-            <h2 className="fleet-panel-title" id={headingId}>
-              Fleet
-            </h2>
-            <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
-            <p className="fleet-panel-subtitle">
-              {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
-            </p>
-          </header>
-          {sites.length === 0 ? (
-            // The empty fleet is the demo's invitation, so it gets the panel to
-            // itself: no picker over nothing, and no failed query reported for a
-            // sum the reader never asked for.
-            <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
+          {/*
+           * No add-a-site hint here any more. The map carries a labelled
+           * control for that now (`map/MapControls.tsx`), and a paragraph
+           * explaining a visible button is both redundant and the half most
+           * likely to be left describing an interaction that has moved on
+           * — which is exactly what it was doing.
+           */}
+          {fleetLookback ? (
+            <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
           ) : (
-            <>
-              {/*
-               * No add-a-site hint here any more. The map carries a labelled
-               * control for that now (`map/MapControls.tsx`), and a paragraph
-               * explaining a visible button is both redundant and the half most
-               * likely to be left describing an interaction that has moved on
-               * — which is exactly what it was doing.
-               */}
-              {fleetLookback ? (
-                <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
-              ) : (
-                <p className="panel-caption">{HORIZON_CAPTION}</p>
-              )}
-              {fleetBody(
-                combineFleetQueries(forecasts, actuals),
-                sites.length,
-                chartCopy(windowLabel(range, fleetLookback), fleetActuals),
-                retry,
-              )}
-            </>
+            <p className="panel-caption">{HORIZON_CAPTION}</p>
+          )}
+          {fleetBody(
+            combineFleetQueries(forecasts, actuals),
+            {
+              siteCount: sites.length,
+              chart: chartCopy(windowLabel(range, fleetLookback), fleetActuals),
+              overlay,
+            },
+            retry,
           )}
         </>
       )}

@@ -1,13 +1,12 @@
 import type { Site } from '@cumulo/shared';
 import type { MapLibreMap } from 'maplibre-gl';
-import { Marker } from 'maplibre-gl';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
-import type { MapPosition, MapViewport } from './clustering';
+import type { MapViewport } from './clustering';
 import { buildClusterIndex, pointsForViewport } from './clustering';
 import { ClusterButton } from './ClusterButton';
 import { MapContext } from './MapContext';
+import { MapMarkerAnchor } from './MapMarkerAnchor';
 import { MarkerButton } from './MarkerButton';
 
 /** What the map is showing right now, in the clustering module's vocabulary. */
@@ -18,44 +17,6 @@ const viewportOf = (map: MapLibreMap): MapViewport => {
     zoom: map.getZoom(),
     bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
   };
-};
-
-interface MapMarkerAnchorProps {
-  readonly map: MapLibreMap;
-  readonly position: MapPosition;
-  readonly children: ReactNode;
-}
-
-/**
- * One maplibre marker, holding one React subtree at one coordinate.
- *
- * The split matters: because each anchor owns exactly one marker and React
- * owns the list of anchors, a change that leaves a marker's key alone — the
- * reader selecting a site, say — leaves its DOM element in place. A version
- * that tore down every marker whenever the point list changed would look
- * identical and quietly drop keyboard focus on every click, since the focused
- * button would be removed from the document mid-interaction.
- *
- * The element is made once per anchor in a lazy initialiser rather than in the
- * effect, because it is also the portal target this component returns during
- * render.
- */
-const MapMarkerAnchor = ({ map, position, children }: MapMarkerAnchorProps): ReactElement => {
-  const [element] = useState(() => document.createElement('div'));
-
-  // The marker's lifetime on the map is the external system here (react.md
-  // rule 1); its contents are React's business and go through the portal.
-  useEffect(() => {
-    const marker = new Marker({ element })
-      .setLngLat([position.longitude, position.latitude])
-      .addTo(map);
-
-    return () => {
-      marker.remove();
-    };
-  }, [map, element, position.longitude, position.latitude]);
-
-  return createPortal(children, element);
 };
 
 interface FleetMarkersProps {

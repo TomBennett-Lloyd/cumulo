@@ -4,8 +4,12 @@ import type { ReactElement } from 'react';
 import { MapControls } from '../map/MapControls';
 import type { MapPosition } from '../map/MapView';
 import { MapView } from '../map/MapView';
+import { SelectionCamera } from '../map/SelectionCamera';
 import { SiteMarkers } from '../map/SiteMarkers';
+import { SitePopover } from '../map/SitePopover';
 import type { Theme } from '../theme';
+import type { ForecastViewState } from './forecast-view-state';
+import type { SelectionOrigin } from './selection-origin';
 
 export interface MapRegionProps {
   readonly theme: Theme;
@@ -24,6 +28,24 @@ export interface MapRegionProps {
   /** Whether the next basemap click drops a draft — drawn on the toggle and on the cursor. */
   readonly addSiteArmed: boolean;
   readonly onToggleAddSite: () => void;
+  /**
+   * The selected site itself, not just its id.
+   *
+   * Distinct from `selectedSiteId` on purpose. The markers only need to know
+   * *which* id is selected, and they are drawn from `sites` anyway; the card and
+   * the camera need the site's coordinates and its name, and resolving the id
+   * against `sites` a second time down here would be a second lookup free to
+   * disagree with the dashboard's. It is `null` both when nothing is selected
+   * and when the selection names a site the listing never produced.
+   */
+  readonly selectedSite: Site | null;
+  /** Whether a reader asked for the selection, or the address bar did — the focus rule. */
+  readonly selectionOrigin: SelectionOrigin;
+  /** The dashboard's first-forecast poll for the selected site. */
+  readonly firstForecast: ForecastViewState;
+  readonly onRetryFirstForecast: () => void;
+  /** Clears the selection: the card's close button, and Escape inside it. */
+  readonly onDeselectSite: () => void;
 }
 
 /**
@@ -44,15 +66,42 @@ export interface MapRegionProps {
  * cover — that the real map calls these callbacks at all — is covered where it
  * has to be: the browser lane (`testing.md` rule 10), in
  * `apps/web/e2e/map-regressions.spec.ts`.
+ *
+ * The seam moved *up* the page in #265 without moving in the code. A selected
+ * site's card used to be the dashboard's own markup, under the map; it is drawn
+ * on the map now, so the props below carry the selection's whole story rather
+ * than only its id. The half of that card with decisions in it is still
+ * substitutable: the stand-in in `dashboard-test-fixture.tsx` renders the very
+ * same `SitePopoverCard`, and only the maplibre anchoring around it is replaced.
  */
 export type MapRegionComponent = (props: MapRegionProps) => ReactElement;
 
 /**
- * The map as the app runs it: the basemap, and the fleet drawn on top of it.
+ * The map as the app runs it: the basemap, the fleet drawn on top of it, and
+ * whichever site the reader is asking about.
  *
  * A component of its own rather than JSX inline in `Dashboard`, because it is
  * the thing being substituted — naming it is what makes the substitution one
  * prop instead of a conditional inside the dashboard.
+ *
+ * Child order is paint order, and each position below is a decision:
+ *
+ * - **Markers first.** They are the map's data layer and everything else is
+ *   drawn about them.
+ * - **The camera next**, which paints nothing at all — it moves the map when a
+ *   selection arrives from off screen.
+ * - **The card after the markers**, because both are maplibre markers appended
+ *   to the same overlay container, so the later mount wins the pixels they
+ *   share. A card the fleet's own markers could bury would be a card the reader
+ *   cannot read exactly where the fleet is dense.
+ * - **The controls last**, so the group paints over any marker or card that
+ *   drifts under the top-right corner: a reset button a cluster could bury would
+ *   be unreachable exactly when the reader most wants it.
+ *
+ * `key={selectedSite.id}` on the card is not cosmetic. The card captures the
+ * element that held focus when it opened and hands focus back to it when it
+ * closes, so moving from one site to another has to be a *remount* — otherwise
+ * the second site's card would still be holding the first site's opener.
  */
 export const MapRegion = ({
   theme,
@@ -62,15 +111,25 @@ export const MapRegion = ({
   onMapClick,
   addSiteArmed,
   onToggleAddSite,
+  selectedSite,
+  selectionOrigin,
+  firstForecast,
+  onRetryFirstForecast,
+  onDeselectSite,
 }: MapRegionProps): ReactElement => (
   <MapView theme={theme} onMapClick={onMapClick} addSiteArmed={addSiteArmed}>
     <SiteMarkers sites={sites} selectedSiteId={selectedSiteId} onSelectSite={onSelectSite} />
-    {/*
-     * After the markers, so the control group paints over any marker that
-     * drifts under the top-right corner: both are positioned, so DOM order is
-     * paint order between them, and a reset button a cluster could bury would
-     * be unreachable exactly when the reader most wants it.
-     */}
+    <SelectionCamera site={selectedSite} />
+    {selectedSite !== null && (
+      <SitePopover
+        key={selectedSite.id}
+        site={selectedSite}
+        selectionOrigin={selectionOrigin}
+        firstForecast={firstForecast}
+        onRetryFirstForecast={onRetryFirstForecast}
+        onClose={onDeselectSite}
+      />
+    )}
     <MapControls armed={addSiteArmed} onToggleArmed={onToggleAddSite} />
   </MapView>
 );

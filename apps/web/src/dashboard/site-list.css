@@ -1,0 +1,76 @@
+/*
+ * The site list — the map's table view, under the map.
+ *
+ * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css: the
+ * gate in stylelint.config.mjs is what enforces it, and a missing token is a
+ * design-system signal rather than a licence to write a literal (react.md
+ * rule 5).
+ *
+ * The row states deliberately reuse the *map marker* tokens rather than a
+ * generic highlight. map-treatment.md makes the list the map's table view:
+ * hovering a row and hovering its marker are the same state, so they wear the
+ * same colour, and a reader moving between the two views is never asked to
+ * learn a second vocabulary. Selection and hover additionally change weight
+ * and border, because colour never carries a state alone.
+ *
+ * Until #265 this file held the list *and* the site detail panel that sat above
+ * it, and was named for the pair. The panel became a card anchored to the site's
+ * own marker (`map/site-popover.css`), and the two halves stopped being one
+ * subject the moment they stopped being one column — so the list kept the file
+ * and the file took the list's name.
+ */
+
+.site-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-style: solid;
+  /* Left edge only: the selected/hover cue is the bar, and reserving its width
+     on every row is what stops selection from nudging the text sideways. */
+  border-width: 0 0 0 var(--space-1);
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.site-row:hover {
+  border-color: var(--color-map-marker-hover);
+  background: var(--color-bg);
+}
+
+/* Keyboard focus gets the selected treatment *plus* the app-wide focus ring —
+   the `:focus-visible` rule in `@cumulo/ui`'s styles.css, painted in
+   `--color-focus-ring` (issue #93). That ring is deliberately not suppressed
+   here (map-treatment.md: everything reachable by pointer is reachable without
+   one); this rule only layers the row's own colour on top of it, which the
+   zero-specificity `:where()` in that rule is what makes possible. */
+.site-row:focus-visible {
+  border-color: var(--color-map-marker-selected);
+}
+
+.site-row-selected {
+  border-color: var(--color-map-marker-selected);
+  font-weight: var(--font-weight-semibold);
+}
+
+.site-row-capacity {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

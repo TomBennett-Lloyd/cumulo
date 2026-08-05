@@ -65,7 +65,7 @@ export const LOADING_FLEET_LABEL = 'Loading the fleet…';
  */
 export const LOADING_FLEET_FORECAST_LABEL = 'Summing the fleet’s forecasts…';
 
-/** One site's series is loading; the site is named because the panel can swap. */
+/** One site's forecast is being fetched; the site is named because the selection can move. */
 export const loadingSiteSeriesLabel = (siteName: string): string =>
   `Loading the forecast for ${siteName}…`;
 
@@ -95,17 +95,17 @@ export const ADDING_SITE_LABEL = 'Adding site…';
 /** The fan-out succeeded and summed to nothing — an answer, not a failure. */
 export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
 
-/** A site exists but its forecast does not yet — the usual state seconds after creation. */
-export const NO_SITE_FORECAST_MESSAGE = 'No forecast available for this site yet';
-
-/**
- * Measured output is absent for the window shown.
- *
- * A notice rather than an error: the forecast beside it is complete and
- * trustworthy, and only the measured half is missing (`error-handling.md` —
- * partial results are labelled partial).
+/*
+ * Three sentences left this module in #265, and the reason is the same for all
+ * three: the surface that said them no longer exists. The site detail panel drew
+ * a windowed chart of one site's forecasts and measurements, so it owed the
+ * reader an empty answer, a "nothing was measured in this range" notice, and a
+ * failure sentence naming the site. The site's card on the map draws no chart —
+ * one site's forecast is now a series on the fleet's (`site-overlay.ts`) — so
+ * there is no window to be empty, no measured half to be missing, and no
+ * per-site series call to fail. Copy for a surface that is gone is copy that
+ * eventually gets reused by someone who assumes the surface came back.
  */
-export const NO_MEASUREMENTS_NOTICE = 'No measurements recorded in this range';
 
 /**
  * The aggregate is short of sites for some hours, stated in both directions.
@@ -156,10 +156,6 @@ export const firstForecastUnansweredMessage = (deadlineSeconds: number): string 
  * what these add is the surface the reader is looking at, which the transport
  * knows nothing about.
  */
-
-/** One site's window failed to load; the site is named because the panel can swap. */
-export const siteSeriesFailureMessage = (siteName: string, detail: string): string =>
-  `Could not load the forecast for ${siteName}: ${detail}`;
 
 /** The fleet fan-out failed — one sentence for both of the panel's two queries. */
 export const fleetForecastFailureMessage = (detail: string): string =>

@@ -11,8 +11,7 @@ export interface AddSiteDialogProps extends AddSiteFormProps {
    * A callback rather than an element, because the control it lands on belongs
    * to the map (`map/MapControls.tsx`) and this dialog has no business holding a
    * handle to it. The dashboard owns both and is the one place that can say
-   * where focus goes — including saying *nothing goes here*, when a site panel
-   * is arriving to claim it.
+   * where focus goes.
    */
   readonly onReturnFocus: () => void;
 }
