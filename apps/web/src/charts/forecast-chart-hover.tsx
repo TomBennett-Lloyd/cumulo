@@ -1,6 +1,11 @@
 import type { ReactElement } from 'react';
 import { snapToNearestIndex, tickLabelFor, tooltipAnchorX, xForIndex } from './chart-geometry';
-import { formatKw, type ChartScale, type ForecastChartPoint } from './chart-series';
+import {
+  formatKw,
+  type ChartOverlayReading,
+  type ChartScale,
+  type ForecastChartPoint,
+} from './chart-series';
 
 /**
  * The chart's hover layer: the crosshair that finds the X, the tooltip that
@@ -54,8 +59,18 @@ interface TooltipRow {
  * omitted rather than dashed out when the point carries no uncertainty: an
  * absent row says "not modelled", an em-dashed one would imply a range of
  * nothing.
+ *
+ * An overlay appends its row rather than displacing one, so the forecast rows
+ * read the same whether or not a second series is on the plot. It goes through
+ * this one producer and not around it: the treatment's "the announcement and
+ * the tooltip are composed from the same rows" is what stops the spoken readout
+ * drifting from the drawn one, and a series added to only one of them is
+ * exactly that drift.
  */
-const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
+const tooltipRows = (
+  point: ForecastChartPoint,
+  overlay: ChartOverlayReading | undefined,
+): readonly TooltipRow[] => {
   const { band } = point;
   const measured: TooltipRow = {
     seriesClassName: 'forecast-chart-actuals',
@@ -69,16 +84,30 @@ const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
     name: 'Median',
     present: true,
   };
-  return band === undefined
-    ? [measured, median]
+  const forecast: readonly TooltipRow[] =
+    band === undefined
+      ? [measured, median]
+      : [
+          measured,
+          median,
+          {
+            seriesClassName: 'forecast-chart-band-bound',
+            value: `${formatKw(band.p10Kw)}–${formatKw(band.p90Kw)}`,
+            name: 'P10–P90',
+            present: true,
+          },
+        ];
+  return overlay === undefined
+    ? forecast
     : [
-        measured,
-        median,
+        ...forecast,
         {
-          seriesClassName: 'forecast-chart-band-bound',
-          value: `${formatKw(band.p10Kw)}–${formatKw(band.p90Kw)}`,
-          name: 'P10–P90',
-          present: true,
+          // The series' own class, so the key stroke is the overlay's slot-2
+          // hue by construction rather than by a second declaration.
+          seriesClassName: 'forecast-chart-overlay',
+          value: formatKw(overlay.kw),
+          name: overlay.label,
+          present: overlay.kw !== null,
         },
       ];
 };
@@ -99,8 +128,12 @@ const tooltipRows = (point: ForecastChartPoint): readonly TooltipRow[] => {
  * dash still reads ("0.0 2.0 P10 P90"), and respelling a range for speech alone
  * would fork this string from the tooltip it is deliberately one producer with.
  */
-export const readoutText = (point: ForecastChartPoint, spanHours: number): string =>
-  `${tickLabelFor(point.validTimeIso, spanHours)} — ${tooltipRows(point)
+export const readoutText = (
+  point: ForecastChartPoint,
+  spanHours: number,
+  overlay: ChartOverlayReading | undefined,
+): string =>
+  `${tickLabelFor(point.validTimeIso, spanHours)} — ${tooltipRows(point, overlay)
     .filter((row) => row.present)
     .map((row) => `${row.value} ${row.name}`)
     .join(', ')}`;
@@ -136,6 +169,12 @@ export interface ForecastChartHoverLayerProps {
   readonly activeIndex: number | null;
   readonly scale: ChartScale;
   readonly spanHours: number;
+  /**
+   * The overlay at the active sample, or `undefined` where the chart carries no
+   * overlay. Required-and-nullable rather than optional, like `activeIndex`
+   * above: the chart is the one caller and always knows the answer.
+   */
+  readonly overlay: ChartOverlayReading | undefined;
 }
 
 /**
@@ -146,14 +185,14 @@ export interface ForecastChartHoverLayerProps {
 export const ForecastChartHoverLayer = (
   props: ForecastChartHoverLayerProps,
 ): ReactElement | null => {
-  const { activeIndex, points, scale, spanHours } = props;
+  const { activeIndex, overlay, points, scale, spanHours } = props;
   const point = activeIndex === null ? undefined : points[activeIndex];
   if (activeIndex === null || point === undefined) {
     return null;
   }
 
   const crosshairX = xForIndex(activeIndex, scale.pointCount, scale.plot);
-  const rows = tooltipRows(point);
+  const rows = tooltipRows(point, overlay);
   const panelHeight = TOOLTIP_PADDING * 2 + TOOLTIP_ROW_HEIGHT * (rows.length + FIRST_SERIES_ROW);
   const anchorX = tooltipAnchorX({
     snappedX: crosshairX,

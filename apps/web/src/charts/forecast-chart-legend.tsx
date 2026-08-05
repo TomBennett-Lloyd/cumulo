@@ -1,13 +1,15 @@
 import type { ReactElement } from 'react';
 
 /**
- * The chart's legend: fixed in draw order and always present, because three
+ * The chart's legend: fixed in draw order and always present, because several
  * series are on the plot and identity is never carried by colour alone
  * (`docs/design/chart-treatment.md`). Legend text wears text tokens, never the
  * series colour — the swatch beside it is what names the series.
  *
- * A constant rather than a component: it takes no input and never varies, so
- * there is nothing to parameterise and nothing to re-render.
+ * A function rather than the constant this was: the three forecast entries
+ * never vary, but a chart may also carry one overlay, and a series that is not
+ * on the plot must not be in the legend. The overlay's row is appended rather
+ * than slotted in, so the fixed entries never reorder or repaint around it.
  */
 
 /**
@@ -15,7 +17,7 @@ import type { ReactElement } from 'react';
  * swatch size a bare 10% wash is nearly invisible, and the edges are what make
  * it read as a band.
  */
-export const FORECAST_CHART_LEGEND: ReactElement = (
+export const forecastChartLegend = (overlayLabel: string | undefined): ReactElement => (
   <ul className="forecast-chart-legend">
     <li>
       <svg className="forecast-chart-legend-key" viewBox="0 0 28 14" aria-hidden="true">
@@ -37,5 +39,13 @@ export const FORECAST_CHART_LEGEND: ReactElement = (
       </svg>
       Actuals
     </li>
+    {overlayLabel === undefined ? null : (
+      <li>
+        <svg className="forecast-chart-legend-key" viewBox="0 0 28 14" aria-hidden="true">
+          <line className="forecast-chart-swatch-overlay" x1="0" x2="28" y1="7" y2="7" />
+        </svg>
+        {overlayLabel}
+      </li>
+    )}
   </ul>
 );

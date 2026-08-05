@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex, yForKw } from './chart-geometry';
-import type { ForecastChartPoint } from './chart-series';
+import type { ChartOverlaySeries, ForecastChartPoint } from './chart-series';
 import { CHART_PLOT, HORIZON_LABEL_WIDTH } from './ForecastChart';
 import {
   banded,
   bare,
+  isoHour,
   marks,
   renderChart,
+  renderChartWithOverlay,
   requireMark,
   requireSvg,
   SERIES,
@@ -291,6 +293,122 @@ describe('ForecastChart', () => {
     expect(marks(container, '.forecast-chart-median-marker')).toHaveLength(1);
     expect(marks(container, '.forecast-chart-actuals-marker')).toHaveLength(1);
     expect(container.querySelectorAll('.forecast-chart-table tbody tr')).toHaveLength(1);
+  });
+
+  /*
+   * The overlay: one more series on the same axis, in slot 2. `OVERLAY` covers
+   * SERIES' first three hours and stops, so every test below is also a test of
+   * what happens at the hours it does not cover.
+   */
+  const OVERLAY: ChartOverlaySeries = {
+    label: 'Baseline',
+    points: [
+      { validTimeIso: isoHour(6), kw: 2.5 },
+      { validTimeIso: isoHour(9), kw: 3.5 },
+      { validTimeIso: isoHour(12), kw: 4.5 },
+    ],
+  };
+
+  it('draws the overlay across the hours it covers and stops at the ones it does not', () => {
+    const container = renderChartWithOverlay(SERIES, OVERLAY);
+    const overlay = marks(container, '.forecast-chart-overlay');
+
+    expect(overlay).toHaveLength(1);
+    expect(vertexCount(requireMark(container, '.forecast-chart-overlay'))).toBe(3);
+    expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(0);
+  });
+
+  it('breaks the overlay at a gap and marks a run left holding one hour', () => {
+    // Same two rules as the actuals: never bridge, never vanish.
+    const container = renderChartWithOverlay(SERIES, {
+      label: 'Baseline',
+      points: [
+        { validTimeIso: isoHour(6), kw: 2.5 },
+        { validTimeIso: isoHour(9), kw: null },
+        { validTimeIso: isoHour(12), kw: 4.5 },
+        { validTimeIso: isoHour(15), kw: 4 },
+      ],
+    });
+    const markers = marks(container, '.forecast-chart-overlay-marker');
+
+    expect(marks(container, '.forecast-chart-overlay')).toHaveLength(1);
+    expect(vertexCount(requireMark(container, '.forecast-chart-overlay'))).toBe(2);
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, SERIES.length, CHART_PLOT)));
+  });
+
+  it('names the overlay in the legend, after the three fixed entries', () => {
+    const container = renderChartWithOverlay(SERIES, OVERLAY);
+    const entries = [...container.querySelectorAll('.forecast-chart-legend li')];
+
+    expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
+      'Forecast (P10–P90)',
+      'Forecast (median)',
+      'Actuals',
+      'Baseline',
+    ]);
+  });
+
+  it('gives the overlay a table column headed by its label', () => {
+    const container = renderChartWithOverlay(SERIES, OVERLAY);
+    const headers = [...container.querySelectorAll('.forecast-chart-table thead th')];
+
+    expect(headers.map((header) => header.textContent)).toStrictEqual([
+      'Time (UTC)',
+      'P10',
+      'Median',
+      'P90',
+      'Actual',
+      'Baseline',
+    ]);
+    expect(tableCells(container, 0)).toStrictEqual(['0.0', '1.0', '2.0', '0.9', '2.5']);
+    // An hour the overlay never covered reads as the same em dash a missing
+    // measurement does — the table twin says "no value", not "zero".
+    expect(tableCells(container, 3)).toStrictEqual(['4.0', '5.0', '6.0', '—', '—']);
+  });
+
+  it('speaks the overlay in the readout, and drops it at an hour it does not cover', () => {
+    const container = renderChartWithOverlay(SERIES, OVERLAY);
+    const svg = requireSvg(container);
+    const readout = (): string | null =>
+      container.querySelector('.forecast-chart-readout')?.textContent ?? null;
+
+    act(() => {
+      svg.focus();
+    });
+    expect(readout()).toBe('06:00 — 0.9 Actual, 1.0 Median, 0.0–2.0 P10–P90, 2.5 Baseline');
+
+    // Past the overlay's last hour: the row is dropped rather than spoken as an
+    // em dash, which a screen reader says nothing for.
+    fireEvent.keyDown(svg, { key: 'End' });
+    expect(readout()).toBe('18:00 — 2.0 Median, 1.0–3.0 P10–P90');
+  });
+
+  it('raises the axis so an overlay above the forecast still lands inside the plot', () => {
+    // Scaled to the forecast alone, a taller overlay is drawn off the top of
+    // the plot — a value the reader cannot see at all.
+    const container = renderChartWithOverlay(SERIES, {
+      label: 'Baseline',
+      points: SERIES.map((point) => ({ validTimeIso: point.validTimeIso, kw: 20 })),
+    });
+    const ys = (requireMark(container, '.forecast-chart-overlay').getAttribute('points') ?? '')
+      .split(' ')
+      .map((pair) => Number(pair.split(',')[1]));
+
+    expect(ys).not.toStrictEqual([]);
+    for (const y of ys) {
+      expect(y).toBeGreaterThanOrEqual(CHART_PLOT.top);
+    }
+  });
+
+  it('draws no overlay mark, legend row or table column without the prop', () => {
+    const container = renderChart(SERIES);
+
+    expect(marks(container, '.forecast-chart-overlay')).toHaveLength(0);
+    expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(0);
+    expect(container.querySelectorAll('.forecast-chart-legend li')).toHaveLength(3);
+    expect(container.querySelectorAll('.forecast-chart-table thead th')).toHaveLength(5);
+    expect(tableCells(container, 0)).toHaveLength(4);
   });
 
   it('renders an empty series as bare chrome rather than a median mark', () => {
