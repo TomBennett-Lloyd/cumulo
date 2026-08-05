@@ -49,6 +49,15 @@ export default defineConfig({
    */
   retries: 0,
 
+  /*
+   * `list` for readable logs; `html` writes the report that CI uploads on a
+   * failed run. Both are named explicitly because the default flips by
+   * environment — `dot` under CI, which writes no report at all, so the
+   * failure-only artifact upload in the `web-e2e` job would find nothing.
+   * `open: 'never'` keeps a locally failing run from launching a browser UI.
+   */
+  reporter: [['list'], ['html', { open: 'never' }]],
+
   use: { baseURL: `http://${PREVIEW_HOST}:${String(PREVIEW_PORT)}` },
 
   /*
