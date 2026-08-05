@@ -17,6 +17,43 @@
  *   dark:  --pairs adjacent, surface #16181a → ALL CHECKS PASS
  *   map marker triad (slots 1–3) additionally validated with --pairs all in
  *   both modes, because default/hover/selected markers are on screen together.
+ *
+ * --color-surface-veil is a THIRD surface, and it is validated differently
+ * because text on it reads against a *composite*: the surface at the mix
+ * percentage, plus whatever the map drew underneath at the remainder. So it was
+ * measured that way (#265, WCAG 2.x sRGB, small text ⇒ AA 4.5:1), over the
+ * worst-case backdrops a credit can land on — the three marker fills,
+ * --color-bg-ish land, and a basemap label in ink:
+ *
+ *   veil 90% (shipped): --color-text-muted  4.91:1 PASS  (worst: light muted
+ *                                                         over dark map ink)
+ *                       --color-text       12.16:1 PASS  (the hover/focus ink)
+ *                       --color-accent      3.49:1 FAIL  light  ← not used here
+ *                                           3.76:1 FAIL  dark   ← not used here
+ *
+ * The accent lines are the point of this record rather than a footnote. Accent
+ * is NOT used as text over the veil, in either mode, and must not be
+ * reintroduced: at the shipped mix it is below AA on the veil in both, which is
+ * the operative fact on its own.
+ *
+ * Why tuning the mix is not the answer differs by mode, and the distinction
+ * matters to anyone tempted to try it. In LIGHT mode accent is below AA on the
+ * opaque surfaces too — #2a78d6 is 4.30:1 on --color-surface and 3.92:1 on
+ * --color-bg — so there is no mix ratio to find: the ink's own ceiling is under
+ * the bar. In DARK mode accent does clear AA on its opaque surfaces (#3987e5 is
+ * 4.89:1 on --color-surface, 5.28:1 on --color-bg), and it only reaches AA on
+ * the veil at about 97%, which is a mix with no translucency left to give.
+ * Either way the fix was the ink and not the background, which is why the
+ * credits' links moved to muted ink with an underline
+ * (../attribution/attribution.css). The light-mode opaque failure is app-wide
+ * and predates the veil; it is tracked in docs/tech-debt.md.
+ *
+ * 90% is therefore the legibility floor for muted ink, not a taste setting:
+ * 85% put muted at 4.40:1, which is a fail, and an earlier revision of this
+ * header wrongly recorded that number as a pass. Lower it again and the credit
+ * stops being legible over dark basemap ink; raise it and the map stops showing
+ * through, which is the whole purpose of a veil. Re-run the measurement before
+ * changing it.
  */
 
 :root {
@@ -28,6 +65,23 @@
   --color-border: #dbe2e9;
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
+
+  /* Translucent surface for text panels floated over imagery — map tiles, a
+     photographic hero — where an opaque panel would crop the picture but plain
+     text on it would be unreadable.
+
+     Mixed from --color-surface by reference rather than by restating its
+     literal: a custom property resolves where it is *used*, and `data-theme`
+     sits on :root, so this one declaration yields the light surface's veil and
+     the dark surface's veil without either copy of the hex existing
+     (`architecture.md` rule 9 — consume the owner). The dark block re-declares
+     it anyway, identically, because tokens.test.ts requires every colour token
+     to appear in both blocks; that invariant is worth more than the two lines
+     it costs here.
+
+     Read the veil's contrast record in this file's header before changing the
+     percentage: the mix ratio is a legibility decision, not a taste one. */
+  --color-surface-veil: color-mix(in srgb, var(--color-surface) 90%, transparent);
 
   /* Keyboard focus ring. Currently the accent hue in both modes, declared as a
      token of its own because focus is a distinct job from accent: a later
@@ -117,6 +171,12 @@
   --color-border: #2a2f34;
   --color-accent: #3987e5;
   --color-accent-contrast: #0d0f10;
+
+  /* Identical text to the light block on purpose — `var(--color-surface)`
+     resolves to this block's surface at use time. It is re-declared only to
+     keep tokens.test.ts's "dark overrides every colour token" invariant
+     mechanically true. */
+  --color-surface-veil: color-mix(in srgb, var(--color-surface) 90%, transparent);
 
   --color-focus-ring: #3987e5;
 

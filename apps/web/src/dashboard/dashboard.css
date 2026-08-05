@@ -1,56 +1,75 @@
 /*
- * Dashboard layout: map beside the panel column.
+ * Dashboard layout: one column, top to bottom — a full-bleed map, then
+ * everything the map is about.
  *
  * Tokens only (stylelint.config.mjs). Lengths that no token category covers —
- * the column measure and the map's height — are the documented residual of the
+ * the content measure and the map's height — are the documented residual of the
  * CSS gate, so they are written as `rem`/`vh` and kept to this file's layout
  * decisions rather than spread through the components.
  *
- * The surface fills the shell rather than growing down the page (#148): `.app`
- * is a `100dvh` column, `.app-main` is the flexible remainder, and this grid
- * takes all of it. That is what lets the map be given a height it can actually
- * fill, and what makes the panel column — not the document — the thing that
- * scrolls.
+ * #148 put the panel column beside the map and made the surface fill the shell
+ * so both halves could share one viewport. #265 replaced that with a single
+ * flow at every width: the map is a band across the top of an ordinary
+ * scrolling document, and the reading sits under it in one centred measure.
+ * Three things fall out of that, and each was a cost of the old shape rather
+ * than a feature of it. The map gets the whole width instead of two thirds of
+ * it. There is one scroller — the document — instead of a column scrolling
+ * inside a page that could not. And there is no breakpoint: the arrangement a
+ * narrow screen got is now the arrangement, so there is no second layout to
+ * keep true. `app.css` owns the shell this sits in.
  */
 
 .dashboard {
-  display: grid;
-
-  /*
-   * The panel column's floor is set by the chart inside it, not by taste.
-   * `ForecastChart` draws into a 480-unit viewBox (`CHART_VIEW_BOX_WIDTH` in
-   * ../charts/ForecastChart.tsx) and scales to its container, so the column's
-   * width decides how small the chart's own type renders. At the 26rem floor,
-   * minus a panel card's `--space-4` padding either side, the SVG lays out at
-   * roughly 384px — a scale of about 0.8, which puts `--text-xs` tick labels at
-   * about 9.6px. That is the floor of legibility, so it is the floor of the
-   * column. The 30rem ceiling keeps the map the larger half at every width the
-   * two columns survive at.
-   */
-  grid-template-columns: minmax(0, 1fr) minmax(26rem, 30rem);
-  gap: var(--space-4);
-  box-sizing: border-box;
-  height: 100%;
-  padding: var(--space-4);
-}
-
-/* The map needs a height from somewhere — it has no intrinsic one — and now the
- * shell hands it a real one: the full grid row. The minimum is the point below
- * which a basemap stops being worth drawing. */
-.dashboard-map {
-  height: 100%;
-  min-height: 24rem;
-}
-
-/* The column scrolls, the page does not. Its content is a stack of panels of
- * unknown total height, and the alternative — letting it push the grid taller —
- * would put a scrollbar on the document and move the map off screen. */
-.dashboard-aside {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  min-width: 0;
-  overflow-y: auto;
+}
+
+/* Full bleed: no padding here and none on any ancestor, so the map runs edge to
+ * edge and `.map-view` drops its corner radius to match (map.css). A map is the
+ * one surface on this page that is better for having no frame — a basemap
+ * inset in a card reads as a picture of a place, and this one is the place.
+ *
+ * A band rather than a screenful. 60% of the viewport leaves the chart under it
+ * visible on a desktop viewport without a scroll, which is the whole argument
+ * for putting the two on one flow; the minimum is the point below which a
+ * basemap stops being worth drawing, and it wins on a short window. `flex: none`
+ * because the height is the point: a flex item's default `shrink: 1` would let a
+ * tall content column below claw it back.
+ *
+ * `svh`, and deliberately not the `dvh` app.css states a preference for — the
+ * two boxes are being asked different questions. `.app` wants a *minimum* that
+ * always reaches the bottom of whatever is visible right now, and `dvh`
+ * tracking mobile browser chrome is exactly right for that. This box is a
+ * *fixed size* with a WebGL canvas inside it that watches its container: under
+ * `dvh` every appearance and disappearance of the URL bar would resize the
+ * canvas mid-scroll, which is a GL reallocation per chrome transition and the
+ * one cost this band must not carry. Plain `vh` has the opposite defect — it is
+ * the chrome-retracted height, so while the URL bar is showing the map is more
+ * than 60% of what the reader can actually see and pushes the chart further
+ * below the fold than intended. `svh` is the chrome-showing height and it is
+ * static: never oversized, and never a resize. The map simply keeps that height
+ * when the chrome retracts, and the content below gains the difference. */
+.dashboard-map {
+  flex: none;
+  height: 60svh;
+  min-height: 24rem;
+}
+
+/* The reading, in one measure under the map. Centred rather than left-aligned
+ * because the map above it is the full width and has no edge to align to, and
+ * bounded because a chart and a sixty-row list stretched across a wide monitor
+ * are both harder to read than the same content at a book's width. The measure
+ * is where the map's padding went: full bleed is the map's, not the page's. */
+.dashboard-content {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 72rem;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0 auto;
+  padding: 0 var(--space-4) var(--space-4);
 }
 
 .dashboard-slot {
@@ -67,24 +86,24 @@
 }
 
 /* The context region: whichever of the draft, the site and the fleet currently
-   holds the top of the column. It carries no styling of its own — exactly one of
+   holds the top of the content column. It carries no styling of its own — exactly one of
    its three occupants is ever visible, so there is nothing to space or align.
    It exists as a box because the region has to be *addressable* to be scrolled
    to, which is Dashboard.tsx's context-scroll effect. */
 
 /* The list, below its heading. It used to be a scroller of its own — sixty rows
-   are taller than the map beside them, and the old column put the site detail
-   panel *after* this section, so an unbounded list pushed the thing a selection
-   was for below the fold. The context swap (#148) moved that panel to the top of
-   the column, which removes *that* reason, and a scroller nested inside the
-   aside's own scroller was only ever the cost of the old order. One scroller
-   now, and it is the column's.
+   are taller than the map, and the old column put the site detail panel *after*
+   this section, so an unbounded list pushed the thing a selection was for below
+   the fold. The context swap (#148) moved that panel above it, which removes
+   *that* reason, and a scroller nested inside another scroller was only ever
+   the cost of the old order. One scroller now, and since #265 it is the
+   document's.
 
-   Being first in the column is not the same as being in view, though: with the
-   column scrolled down to the list, the region a selection fills is off the top
-   of the screen and the swap happens where nobody can see it. What answers that
-   is the scroll, not a bounded list — Dashboard.tsx brings `.dashboard-context`
-   back into view whenever a context takes it (#148 review cycle 1;
+   Being first is not the same as being in view, though: with the page scrolled
+   down to the list, the region a selection fills is off the top of the screen
+   and the swap happens where nobody can see it. What answers that is the
+   scroll, not a bounded list — Dashboard.tsx brings `.dashboard-context` back
+   into view whenever a context takes it (#148 review cycle 1;
    docs/design/dashboard-composition.md). */
 .dashboard-fleet {
   display: grid;
@@ -92,37 +111,13 @@
   margin-top: var(--space-3);
 }
 
-/* The credit sits at the foot of the column and belongs to the column, not to
+/* The credit at the foot of the page, belonging to the page rather than to
    whichever panel is currently above it — so it takes the top margin that
-   separates it from the last card and nothing else. `margin-top: auto` is
-   deliberate: in the flex column it pins the credit to the bottom when the
-   panels do not fill the height, and simply follows them when they do. */
-.dashboard-aside-footer {
-  margin-top: auto;
+   separates it from the last card and nothing else. It used to carry
+   `margin-top: auto` as well, which pinned it to the bottom of a column that
+   had a fixed height to have a bottom of; on a document that ends where its
+   content ends there is no space left over for `auto` to absorb, and the
+   declaration would only be describing a shape this page no longer has. */
+.dashboard-footer {
   padding-top: var(--space-2);
-}
-
-/* Below the width where two columns still leave the map usable, the panel
- * column moves under it. It is never dropped: the list is the map's table view,
- * and a narrow screen is exactly where a reader is most likely to need it.
- *
- * Stacked, the surface is taller than the viewport by construction, so the
- * fixed-height arrangement is abandoned wholesale: the grid stops filling a
- * viewport it no longer fits in, the map takes a fraction of the screen, and
- * the column gives its scroll back to the page. Two nested scrollers on a
- * narrow screen is the one arrangement worse than a long page. The breakpoint
- * matches `.app`'s in app.css — they describe the same moment. */
-@media (width < 64rem) {
-  .dashboard {
-    grid-template-columns: minmax(0, 1fr);
-    height: auto;
-  }
-
-  .dashboard-map {
-    height: 50vh;
-  }
-
-  .dashboard-aside {
-    overflow-y: visible;
-  }
 }

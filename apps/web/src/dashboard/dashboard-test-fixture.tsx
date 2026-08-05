@@ -123,7 +123,7 @@ export const visit = (url: string): void => {
   window.history.replaceState(null, '', url);
 };
 
-/** The panel column's resting state, whether or not it is the visible context. */
+/** The content column's resting state, whether or not it is the visible context. */
 export const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
 
 /** The fleet as rows — the map's table view, and where a closing panel returns focus. */

@@ -1,5 +1,5 @@
 /*
- * Site list and site detail panel — the aside column beside the map.
+ * Site list and site detail panel — the content column under the map.
  *
  * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css: the
  * gate in stylelint.config.mjs is what enforces it, and a missing token is a

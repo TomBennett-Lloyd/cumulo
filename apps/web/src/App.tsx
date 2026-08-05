@@ -15,9 +15,9 @@ import { useTheme } from './use-theme';
  * place the app decides where its data comes from.
  *
  * There is one surface now. The nav that toggled three unmounted-on-leave views
- * is gone (#148): the map is the canvas, the panel column beside it tells the
- * fleet's story or one site's, and moving between them is a selection rather
- * than a page change. That deletes the shell's only state — nothing here is
+ * is gone (#148): the map is the canvas, the panels under it tell the fleet's
+ * story or one site's, and moving between them is a selection rather than a
+ * page change. That deletes the shell's only state — nothing here is
  * switched any more — so the shell's whole job is the frame around the
  * dashboard and the boundary under it.
  *

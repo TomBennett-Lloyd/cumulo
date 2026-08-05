@@ -58,11 +58,19 @@ interface MarkerShape {
  * Ireland, which the opening camera puts in the centre of the box, so the
  * corners are the part of the map that is reliably water. Which corner is not
  * something to hard-code though — the fleet's framing is free to change — so
- * each is asked the same question the production guard asks (`isMarkerClick`,
- * src/map/map-click.ts): is the thing under this point inside a marker?
+ * each is asked what is actually under it.
+ *
+ * Two things are drawn over the basemap and take pointer events. Markers, which
+ * is the question the production guard asks (`isMarkerClick`, src/map/map-click.ts).
+ * And, since #265, the credits: the attribution band is overlaid on the map's
+ * bottom edge rather than sitting in a strip beneath it, so both lower corners
+ * are now under it at every viewport. A click landing there correctly opens no
+ * draft — the band is content, not basemap — which arrived as this helper
+ * silently returning a point the map never sees.
  *
  * Throwing when all four are covered is deliberate. A silent fallback would turn
- * "the map is entirely under markers" into a mysteriously failing click.
+ * "there is nowhere left to click the basemap" into a mysteriously failing
+ * click, which is exactly the shape the overlay change surfaced.
  */
 const basemapPoint = async (page: Page): Promise<ViewportPoint> => {
   const box = await page.locator('.map-canvas').boundingBox();
@@ -87,7 +95,7 @@ const basemapPoint = async (page: Page): Promise<ViewportPoint> => {
     const covered = await page.evaluate((point) => {
       const element = document.elementFromPoint(point.x, point.y);
 
-      return element !== null && element.closest('.maplibregl-marker') !== null;
+      return element !== null && element.closest('.maplibregl-marker, .map-attribution') !== null;
     }, corner);
 
     if (!covered) {
@@ -95,7 +103,7 @@ const basemapPoint = async (page: Page): Promise<ViewportPoint> => {
     }
   }
 
-  throw new Error('Every corner of the map is covered by a marker overlay.');
+  throw new Error('Every corner of the map is covered by a marker or by the credits.');
 };
 
 const markerShapes = async (page: Page): Promise<readonly MarkerShape[]> =>

@@ -84,12 +84,18 @@
 }
 
 /*
- * The app's only overlay, and so the app's only `z-index`. The header sits
- * above the surface in DOM order but is not a positioned ancestor, so without a
- * stacking order of its own an absolutely positioned popover would be painted
- * under whatever the dashboard positions below it — maplibre's controls among
- * them. A single value, well clear of them, is cheaper than a layer scale
+ * The app's only *stacked* overlay, and so the app's only `z-index`. The header
+ * sits above the surface in DOM order but is not a positioned ancestor, so
+ * without a stacking order of its own an absolutely positioned popover would be
+ * painted under whatever the dashboard positions below it — maplibre's controls
+ * among them. A single value, well clear of them, is cheaper than a layer scale
  * nothing else in the app would use.
+ *
+ * Not the app's only overlay any more: `.map-attribution` (map/map.css) is
+ * positioned over the basemap since #265. It needs no `z-index` because it
+ * competes with nothing — it is the last positioned element in its own
+ * container and paints above its siblings on document order alone — so this is
+ * still the only stacking value in the app, which a grep for `z-index` confirms.
  */
 .header-menu-popover {
   position: absolute;
@@ -207,6 +213,11 @@
  * makes in `map/map.css` for the same two obligations, arrived at
  * independently because these are two surfaces free to diverge, not one
  * treatment in two places (`structure.md` rule 7).
+ *
+ * That freedom is being exercised as of #265: the map's pair sits on a
+ * translucent veil over tiles and took underlined muted links to stay legible
+ * there, while this pair sits on an opaque card and has not. Same words, same
+ * obligations, different surfaces — which is what rule 7 predicted.
  */
 .about-dialog-basemap {
   color: var(--color-text-muted);
@@ -222,6 +233,20 @@
  * appears in a stylesheet: dark navy on a dark card, which is how the
  * basemap credits first shipped in this dialog and were caught in a screenshot
  * rather than by lint.
+ *
+ * These links are knowingly out of step with the credits' links since #265,
+ * and the divergence is temporary. The map's two credits moved to muted
+ * underlined ink because `--color-accent` is below AA for small text on the
+ * translucent `--color-surface-veil` they now sit on, in both modes. This card
+ * is opaque, so it is a weaker case — and a mode-dependent one: in LIGHT mode
+ * these links do fail, at 4.30:1 on `--color-surface`, while in DARK mode
+ * accent clears AA here (4.89:1). They are not fixed locally because the light
+ * failure is app-wide rather than this card's, and the fix is one decision
+ * about the accent hue rather than a per-surface repaint — routed as its own
+ * issue from `docs/tech-debt.md`. The dialog composes `OpenMeteoAttribution`,
+ * so the weather credit *inside* this card already wears the new treatment and
+ * will not match the links around it until that issue lands. That mismatch is
+ * the visible edge of a real defect, not a styling slip to quietly even out.
  */
 .about-dialog a {
   color: var(--color-accent);

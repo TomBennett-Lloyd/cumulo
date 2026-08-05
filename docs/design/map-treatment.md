@@ -80,7 +80,7 @@ default-vs-hover and hover-vs-selected, and it is default-vs-selected that a rea
 slots 3, 4 and 5 against the light surface — slot 3 is the hover fill — so the relief rule
 applies here directly: hover always brings a labelled tooltip naming the site, selection always
 opens the site's detail panel, and both change the marker's size. A reader who cannot separate
-the hues still gets the state from the label and the geometry. The site list beside the map is
+the hues still gets the state from the label and the geometry. The site list under the map is
 the table view: every marker state has a row equivalent, and the map is never the only way to
 reach a site.
 
@@ -150,14 +150,51 @@ absorbs the other.
 
 Placement:
 
-- Both credits live in a **persistent strip along the bottom of the map**, backed by
-  `--color-surface` rather than floating directly on tiles. A caption floating on imagery has
-  whatever contrast the pixel beneath it happens to give; on a surface it has the contrast the
-  palette was validated for.
+- Both credits live in a **persistent band across the bottom of the map**, backed by
+  `--color-surface-veil` and overlaid on the tiles.
+
+  This band used to be a strip _under_ the map, on `--color-surface`, and the argument for that
+  was contrast: a caption floating on imagery has whatever contrast the pixel beneath it happens
+  to give, while on a surface it has the contrast the palette was validated for. The veil is what
+  carries that argument across the move (#265) — a mostly-opaque surface colour, so the ink reads
+  against a mostly-known colour rather than against tiles, while the map does not stop at the
+  credit line. A credit painted directly on tiles is still refused.
+
+  The veil is validated against the composite a reader actually sees — veil over marker fills,
+  land, and basemap label ink — rather than against itself, because a translucent surface has no
+  contrast of its own. At the shipped mix the credit's muted ink measures 4.91:1 and its
+  hover/focus ink 12.16:1, both clearing AA for small text. **That mix is the legibility floor for
+  muted ink, not a taste setting**: a lower one stops the credit reading over dark basemap ink, and
+  a higher one stops the map showing through, which is the whole point. The numbers and the ratio
+  live in [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation header, which owns
+  them; this document names the decision and does not restate the value.
+
+  What forced the question was the map going full bleed
+  ([`dashboard-composition.md`](dashboard-composition.md)): a strip below an edge-to-edge map is
+  a band of chrome across the page rather than part of the map, and it takes its height out of
+  the map on every screen.
+
 - **Both are visible without interaction.** No "i" toggle, no hover-to-reveal, no collapsing the
-  credits behind a control at narrow widths — the strip wraps to two lines instead.
+  credits behind a control at narrow widths — the band wraps to two lines instead. Overlaying
+  does not weaken this: the band is opaque enough to read at rest, and it is never faded,
+  animated in, or suppressed while the reader is panning.
+- **Both stay clickable.** The band takes pointer events like any other content; a credit whose
+  link cannot be followed is not a credit, and `pointer-events: none` on an overlay is the
+  obvious way to lose one by accident.
 - Tile credit first, weather credit second, reading order matching what the reader is looking at:
   the map, then the data drawn on it.
 - The Open-Meteo credit's own styling belongs to the `OpenMeteoAttribution` component — muted ink
-  at `--text-xs`, link in `--color-accent`. Map views do not restyle it, and do not hand-roll
-  their own copy of the string.
+  at `--text-xs`, with the **link also in muted ink, underlined**, brightening to full text ink on
+  hover and keyboard focus. Map views do not restyle it, and do not hand-roll their own copy of
+  the string.
+
+  The link is not accent-coloured, and that is a legibility rule rather than a stylistic
+  preference: on the veil, `--color-accent` is below AA for small text in **both** modes. Tuning
+  the mix is not the way out of that, and for different reasons per mode — in light the accent is
+  under the bar on the opaque surfaces too, so it has no ceiling to reach; in dark it would need a
+  mix with essentially no translucency left. The per-mode numbers are
+  [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s to state. Dropping the colour means
+  the underline is the only thing left marking the link as a link, which is exactly what WCAG
+  1.4.1 asks for and why the underline is permanent rather than revealed on hover. The tile credit
+  beside it takes the identical treatment — the same obligation on the same surface, so the two
+  would be wrong if only one changed.
