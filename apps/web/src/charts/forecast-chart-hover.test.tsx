@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { xForIndex } from './chart-geometry';
 import { CHART_PLOT, CHART_VIEW_BOX_WIDTH } from './ForecastChart';
 import {
+  banded,
   bare,
+  isoHour,
   renderChart,
+  renderChartWithOverlay,
   requireMark,
   requireSvg,
   SERIES,
@@ -271,6 +274,58 @@ describe('ForecastChart hover layer', () => {
 
     expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(CHART_PLOT.left);
     expect(tooltipAnchor(container)).toBeLessThan(xForIndex(4, SERIES.length, CHART_PLOT));
+  });
+
+  it('gives every tooltip row a key of its own when an overlay shares a row’s name', () => {
+    /*
+     * An overlay's name is a *site* name, which is free text a visitor types into
+     * the add-site form — so "Median" is a name somebody can have, and keyed by
+     * name that row shares a key with the forecast's own median row.
+     *
+     * What this asserts is React's warning, and the choice is worth explaining
+     * because the obvious assertion does not work. Duplicate keys are a
+     * *reconciliation* hazard: on the shapes this chart produces, React still
+     * ends up rendering the right four rows with the right numbers, so a DOM
+     * assertion here passes with the bug in place — it was written that way
+     * first and did not bite. The warning is the only thing that observes the
+     * defect today, and it is a real signal rather than a proxy: React is saying
+     * children may be "duplicated and/or omitted", which is a promise about
+     * future renders, not this one. Waiting for a row to actually vanish means
+     * waiting for a React upgrade or a row set nobody has drawn yet.
+     *
+     * Spying rather than silencing: `LazyMapRegion.test.tsx` uses the same shape
+     * for the same reason, and the assertion is on what was logged.
+     */
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const container = renderChartWithOverlay([banded(6, 1, 0.9), bare(9, 4, 3.8)], {
+      label: 'Median',
+      points: [
+        { validTimeIso: isoHour(6), kw: 7.5 },
+        { validTimeIso: isoHour(9), kw: 8.5 },
+      ],
+    });
+    const svg = requireSvg(container);
+
+    act(() => {
+      svg.focus();
+    });
+    // Stepping onto a point with no modelled uncertainty drops the band row, so
+    // the row *set* changes — which is when keyed matching has to tell the two
+    // "Median" rows apart rather than pairing them off by position.
+    fireEvent.keyDown(svg, { key: 'ArrowRight' });
+
+    const keyWarnings = logged.mock.calls
+      .map((call) => call.map(String).join(' '))
+      .filter((message) => /same key/iu.test(message));
+
+    expect(keyWarnings).toEqual([]);
+    // The rows the reader is owed are all still there, which is what the keys
+    // are protecting. Asserted after the warning, because this is the assertion
+    // that passes either way today.
+    expect(tooltipValues(container)).toStrictEqual(['3.8', '4.0', '8.5']);
+
+    logged.mockRestore();
   });
 
   it('positions the whole readout with SVG attributes and no inline style', () => {

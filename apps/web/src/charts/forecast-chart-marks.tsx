@@ -4,7 +4,9 @@ import {
   actualAt,
   allIndices,
   bandPolygonPoints,
+  contiguousRuns,
   medianAt,
+  overlayAt,
   p10At,
   p90At,
   polylinePoints,
@@ -14,10 +16,11 @@ import {
 } from './chart-series';
 
 /**
- * The plot's data marks: the band and its bounds, the median, and the measured
- * actuals. Each builder returns an array that `ForecastChart.tsx` spreads
- * straight into the `<svg>`, so every element here is a direct child of the
- * plot and draw order is the order the arrays are composed in.
+ * The plot's data marks: the band and its bounds, the median, the measured
+ * actuals, and an optional overlay series drawn beside them. Each builder
+ * returns an array that `ForecastChart.tsx` spreads straight into the `<svg>`,
+ * so every element here is a direct child of the plot and draw order is the
+ * order the arrays are composed in.
  *
  * **A run of one sample is a mark, not a path.** A `<polyline>` with a single
  * vertex and a band polygon whose two edges coincide are both degenerate — SVG
@@ -172,5 +175,46 @@ export const medianElements = (
       className="forecast-chart-median"
       points={polylinePoints(allIndices(points.length), (index) => medianAt(points, index), scale)}
     />,
+  ];
+};
+
+/**
+ * A second series on the same axis, resolved onto the forecast's x-domain
+ * before it gets here. It is the first series added alongside the forecast, so
+ * it takes slot 2 — slot 1 is spoken for everywhere in the product
+ * (`docs/design/chart-treatment.md`, "Categorical series order").
+ *
+ * It obeys the two rules the actuals obey, for the same reasons: a `null` hour
+ * breaks the line rather than being bridged, and a run left holding one sample
+ * becomes a marker rather than the one-vertex polyline SVG declines to paint.
+ * The runs are derived here rather than passed in because nothing outside this
+ * builder needs them — the overlay has no horizon and no end dot.
+ */
+export const overlayElements = (
+  values: readonly (number | null)[],
+  scale: ChartScale,
+): readonly ReactElement[] => {
+  const runs = contiguousRuns(values.length, (index) => values[index] != null);
+  return [
+    ...runs
+      .filter(spansMultipleSamples)
+      .map((run) => (
+        <polyline
+          key={run.startIndex}
+          className="forecast-chart-overlay"
+          points={polylinePoints(run.indices, (index) => overlayAt(values, index), scale)}
+        />
+      )),
+    ...runs
+      .filter((run) => !spansMultipleSamples(run))
+      .map((run) => (
+        <circle
+          key={`lone-${String(run.startIndex)}`}
+          className="forecast-chart-overlay-marker"
+          cx={xForIndex(run.startIndex, scale.pointCount, scale.plot)}
+          cy={yForKw(overlayAt(values, run.startIndex), scale.axisMaxKw, scale.plot)}
+          r={MARKER_RADIUS}
+        />
+      )),
   ];
 };

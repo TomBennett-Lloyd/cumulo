@@ -99,19 +99,55 @@ Composition rules that keep both legible where they overlap:
 
 ## Legend
 
-Three series are on the plot, so **a legend is always present** — identity is never carried by
-colour alone. Entries are fixed in draw order and do not reorder or repaint when a series is
-toggled off:
+Several series are on the plot, so **a legend is always present** — identity is never carried by
+colour alone. The three forecast entries are fixed in draw order and do not reorder or repaint when
+a series is toggled off, or when a fourth arrives:
 
 | Entry              | Swatch                                                                                                   |
 | ------------------ | -------------------------------------------------------------------------------------------------------- |
 | Forecast (P10–P90) | rect filled `--color-chart-band-fill`, with hairline top and bottom edges in `--color-chart-band-stroke` |
 | Forecast (median)  | short 2px line key in `--color-chart-1`                                                                  |
 | Actuals            | short 2px line key in `--color-chart-actuals`                                                            |
+| _an overlay_       | short 2px line key in `--color-chart-2` — see below                                                      |
 
 The swatch mirrors the mark: a rect for the area, a line key for the lines. The band's swatch is
 the one place where the bound stroke is doing double duty — at swatch size a bare 10% wash is
 nearly invisible, and the edges are what make it read as a band.
+
+## An overlay is a fourth series, and the rules it is held to
+
+A chart may carry **one overlay** — a second series on the same plot, in slot 2. The fleet chart is
+the shipped case: selecting a site draws that site's forecast over the fleet's sum, so a reader can
+see how much of the afternoon is one roof without holding two charts in their head. Four
+decisions govern it, and each of them was previously written only in a code comment:
+
+- **It appends rather than taking a place in draw order.** The legend's three forecast entries keep
+  their positions and their swatches whether or not an overlay is present. Slotting a fourth entry
+  _into_ the order would repaint or shift the fixed three on a selection — the exact instability
+  the fixed-order rule above exists to prevent — for the sake of an ordering nobody reads the
+  legend by. The mark itself is drawn between the median and the actuals, so the measurement still
+  wins every overlap; the legend and the draw order are allowed to differ because they answer
+  different questions.
+- **The overlay draws its median only — never a band.** Its source may well carry P10–P90 (a
+  per-site forecast does), and it is deliberately dropped: the band treatment at the top of this
+  document belongs to the plot's primary series, and two washes over one another leave the reader
+  with a question the chart cannot answer, namely whose uncertainty they are looking at. An overlay
+  is a line. Measured actuals are dropped for the same shape of reason plus a cost — they are a
+  second metered source call, spent to draw a second near-ink line where the treatment reserves
+  near-ink for exactly one series.
+- **It shares the one value axis**, like everything else here — see the single-axis rule below.
+  The axis is scaled to whatever is on the plot, so an overlay running above the primary series
+  raises the axis rather than being drawn off the top of it.
+- **It reaches every surface from one join.** The overlay arrives in its own time base and is
+  resolved onto the plot's x-domain once; the mark, the legend row, the tooltip row, the spoken
+  readout and the table column all read that one result, so no two of them can disagree about what
+  the overlay says at an hour. An hour the plot does not show is dropped; an hour the overlay does
+  not cover is a gap, on the gap rules above.
+
+`apps/web/src/charts/` owns the implementation of all four — `ForecastChart.tsx` composes them,
+`chart-series.ts` owns the join, and `forecast-chart-legend.tsx`, `-marks.tsx`, `-hover.tsx` and
+`-table.tsx` own the four surfaces. This document owns the rules; none of the values above are
+restated there.
 
 **Legend text wears text tokens, never the series colour** — `--color-text` for the label, or
 `--color-text-muted` where the legend is secondary chrome. Identity comes from the coloured swatch
@@ -226,10 +262,19 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 
 - **A crosshair finds the X.** A vertical hairline tracks the pointer and snaps to the nearest
   timestamp — readers aim at a time, not at a 2px line.
-- **One tooltip, every series.** The readout lists the actual, the median, and the P10–P90 range at
-  that timestamp, so the pointer never has to land on a line or inside the fill to get a number.
-  The value leads and is high-contrast; the series name follows in `--color-text-muted`. Series are
-  keyed with a short stroke of their colour, not a filled box.
+- **One tooltip, every series.** The readout lists the actual, the median, the P10–P90 range and
+  an overlay if the chart carries one, at that timestamp — so the pointer never has to land on a
+  line or inside the fill to get a number. The value leads and is high-contrast; the series name
+  follows in `--color-text-muted`. Series are keyed with a short stroke of their colour, not a
+  filled box. **The band row is omitted rather than dashed out** where a point carries no modelled
+  uncertainty: an absent row says "not modelled", an em-dashed one would imply a range of nothing.
+  The other rows keep their place and carry an em dash when that series has nothing at the sample —
+  a measurement past the horizon, an hour an overlay does not cover — because a value that is
+  merely missing is a different statement from one that was never modelled, and a row vanishing
+  under the pointer would make the readout change height as the reader moves along the series.
+  **Speech drops every absent row instead**, including the dashes: screen readers at default
+  punctuation verbosity say nothing for an em dash, so an unmeasured hour would otherwise announce
+  a labelled series with no value at all.
 - **Keyboard focus shows exactly what hover shows — and says so out loud.** The plot's `<svg>`
   keeps `role="img"` with one `aria-label`: a reader arriving at the chart should hear its name,
   not wade through every text node inside it. That is also why the tooltip cannot carry the
@@ -251,6 +296,15 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 - **Tooltips enhance, they never gate.** Every value in the tooltip is also reachable without a
   pointer, through direct labels or the table view. Every chart has a table-view twin — the
   WCAG-clean equivalent — reachable from the chart container.
+- **The table twin carries a column per plotted value, and grows one for an overlay.** The time
+  column heads each row; the forecast's three quantities and the measurement take one each; an
+  overlay takes a sixth, headed by the series' own name. `forecast-chart-table.tsx` owns the
+  columns and their order. The extra column is not only symmetry with the legend: the contrast
+  WARN above obligates a relief channel for a light-mode chart reaching slot 3, and a chart that
+  drew a fourth series without a fourth way to read it would be shipping the sub-threshold case
+  the WARN refuses. An overlay sits in slot 2, which clears the threshold, so the column is not
+  yet discharging that obligation — it is there so the _next_ series added does not have to
+  invent it.
 
 ## Attribution
 

@@ -1,0 +1,98 @@
+/*
+ * The selected site's card, drawn on the map above its own marker.
+ *
+ * Tokens only, as everywhere outside `packages/ui/src/tokens/tokens.css` — the
+ * gate in stylelint.config.mjs is what enforces it, and a missing token is a
+ * design-system signal rather than a licence to write a literal (react.md
+ * rule 5). The one length below that is not a token is the card's width, which
+ * is the documented residual of that gate: the scale has spacing, type and radii
+ * categories and no measure category, so a width has nothing to reference (see
+ * the residual note in stylelint.config.mjs).
+ *
+ * It lives beside `map.css` rather than inside it because the two files answer
+ * different questions — that one is the surface and its markers, this one is the
+ * card a selection puts on top of them — and because this card replaced a panel
+ * in the reading column that had a stylesheet of its own, deleted with
+ * `SitePanel` in #265.
+ */
+
+/* Anchored above the marker, not over it. The element maplibre wraps is
+   zero-sized and sits exactly on the coordinate, so `left: 50%` is the site and
+   the translate centres the card on it; `bottom` lifts the card clear of the
+   mark it belongs to, which would otherwise be underneath it and unreadable.
+
+   `--color-border` at hairline weight rather than a drop shadow: the token set
+   has no elevation category, and `box-shadow` is on the CSS gate's strict-value
+   list, so a shadow here would have to be a raw value. The border does the same
+   job the marker tooltip's does — separate the card from whatever tile is under
+   it — and `--color-surface` behind it is fully opaque, unlike the credits
+   band's veil, because this card carries text a reader has to read rather than
+   a credit that has to stay legible over a continuous map. */
+.site-popover {
+  position: absolute;
+  bottom: var(--space-4);
+  left: 50%;
+  display: grid;
+  width: 17rem;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  transform: translateX(-50%);
+}
+
+.site-popover-header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+/* `--text-lg`, a step below the panel's old `--text-xl`: the card is a card on
+   the map rather than the top of the reading, and the fleet panel's own title
+   is now the largest heading under it. */
+.site-popover-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.site-popover-close {
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* Two columns at this width, so the four facts read as a block rather than as a
+   list the card has to grow to hold. */
+.site-popover-facts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.site-popover-fact dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.site-popover-fact dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}

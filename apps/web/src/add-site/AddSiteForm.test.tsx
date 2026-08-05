@@ -242,8 +242,8 @@ describe('AddSiteForm', () => {
   });
 
   /*
-   * The form announces itself the same way the site panel does: by focusing its
-   * own heading on mount. Without it a visitor who has just placed a pin has
+   * The form announces itself the same way a selected site's card does: by
+   * focusing its own heading. Without it a visitor who has just placed a pin has
    * their focus left wherever it was while a form opens somewhere else.
    *
    * It is a modal that arrives now rather than an occupant of the reading

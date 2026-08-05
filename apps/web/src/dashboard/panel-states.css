@@ -65,6 +65,22 @@
   font-size: var(--text-sm);
 }
 
+/* A notice may carry a recourse, and it carries it *inside the sentence* rather
+   than as a block beneath it. This is a composition of two classes that already
+   exist rather than a third: the notice says one series is missing, and the
+   retry belongs to that clause. `.panel-error`'s block button is the shape for a
+   panel whose whole content failed; borrowing it here would announce the chart
+   itself as broken when the chart is fine. Colour and size are inherited so the
+   control cannot drift from the sentence it sits in, and the underline is what
+   marks it as actionable once it is no longer a filled button. */
+.panel-notice .panel-retry {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
 /* The quiet footnote under a chart: what window is shown, how complete it is.
    Smaller than a state line because it accompanies content rather than
    standing in for it. */

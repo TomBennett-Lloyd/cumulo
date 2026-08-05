@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 
 import type { FleetDataSource } from '../data/fleet-data-source';
+import { SitePopoverCard } from '../map/SitePopoverCard';
 import { Dashboard } from './Dashboard';
 import type { MapRegionProps } from './MapRegion';
 
@@ -28,7 +29,15 @@ import type { MapRegionProps } from './MapRegion';
  * the real map fires those callbacks at all is browser behaviour
  * (`testing.md` rule 10), and is checked in `e2e/map-regressions.spec.ts` — an
  * *armed* basemap click opening the draft dialog, an unarmed one opening
- * nothing, and a marker press opening the site panel.
+ * nothing, and a marker press opening the site's card.
+ *
+ * The selected site's card is the *real* `SitePopoverCard`, not a stand-in for
+ * it. What jsdom cannot host is the maplibre marker the app portals that card
+ * into, and `SitePopover.tsx` is exactly and only that anchoring — so the seam
+ * falls between the two, and the half with the decisions in it (the facts, the
+ * forecast arms, Escape, and where focus goes) is the half these suites drive.
+ * A stand-in card here would have left the dashboard's focus assertions
+ * asserting the stand-in's own focus behaviour.
  */
 
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
@@ -51,6 +60,11 @@ export const StubMapRegion = ({
   onMapClick,
   addSiteArmed,
   onToggleAddSite,
+  selectedSite,
+  selectionOrigin,
+  firstForecast,
+  onRetryFirstForecast,
+  onDeselectSite,
 }: MapRegionProps): ReactElement => (
   <div>
     {/*
@@ -95,37 +109,37 @@ export const StubMapRegion = ({
         Marker: {site.name}
       </button>
     ))}
+
+    {/*
+     * The selected site's card, real and keyed exactly as `MapRegion` keys it.
+     * The key is load-bearing rather than tidy: the card captures whatever held
+     * focus when it opened, so moving from one site to another has to remount
+     * it, and a stand-in that dropped the key would let the dashboard's focus
+     * suites pass over a card still holding the previous site's opener.
+     */}
+    {selectedSite !== null && (
+      <SitePopoverCard
+        key={selectedSite.id}
+        site={selectedSite}
+        selectionOrigin={selectionOrigin}
+        firstForecast={firstForecast}
+        onRetryFirstForecast={onRetryFirstForecast}
+        onClose={onDeselectSite}
+      />
+    )}
   </div>
 );
 
-/**
- * Stands in for the scroll the column performs when a context takes the region.
- *
- * jsdom implements no layout and therefore no `scrollIntoView` at all — the method is simply
- * absent from its elements, so the dashboard's context-scroll effect would throw here rather than
- * harmlessly doing nothing. Standing one in is what lets these suites mount a dashboard at all,
- * and it lets a test read back *which* element was asked, on *which* transition — the two halves
- * of the mechanism that are the dashboard's own doing.
- *
- * What it cannot show is the movement. Nothing in jsdom has a scroll position, so "the swapped-in
- * context is actually on screen in a column the reader had scrolled halfway down" is a browser
- * criterion, named in `docs/design/dashboard-composition.md`. The browser lane exists
- * (`apps/web/e2e/`, `testing.md` rule 10) but no spec in it asserts a scroll position today, so
- * that criterion has no automated owner at all. Nothing read back from here is evidence of it,
- * and `Dashboard.test.tsx` says so where it asserts.
+/*
+ * There is no `scrollIntoView` stand-in here any more, and nothing needs one.
+ * jsdom implements no layout and so has no `scrollIntoView` at all — the method
+ * is simply absent from its elements — which is why the dashboard's old
+ * context-scroll effect needed one to keep from throwing. That effect went with
+ * the context region (#265): a selection is answered on the map now, so the page
+ * has nothing to scroll to and the dashboard asks nobody to move.
  */
-const scrollIntoViewStub = vi.fn<(options?: boolean | ScrollIntoViewOptions) => void>();
-
-HTMLElement.prototype.scrollIntoView = scrollIntoViewStub;
-
-/** The elements the dashboard has asked to bring into view since it was mounted, in call order. */
-export const scrolledIntoView = (): readonly unknown[] => scrollIntoViewStub.mock.contexts;
 
 export const renderDashboard = (dataSource: FleetDataSource): HTMLElement => {
-  // The record belongs to this mount. The stub lives on a prototype shared by every test in the
-  // file, so without this a suite would read the scrolls of whatever ran before it.
-  scrollIntoViewStub.mockClear();
-
   const { container } = render(
     <Dashboard theme="light" dataSource={dataSource} mapRegion={StubMapRegion} />,
   );
@@ -147,8 +161,22 @@ export const visit = (url: string): void => {
   window.history.replaceState(null, '', url);
 };
 
-/** The content column's resting state, whether or not it is the visible context. */
+/** The fleet's panel, which is on screen in every state of the page since #265. */
 export const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
+
+/** The selected site's card, as the map draws it — `null` when nothing is selected. */
+export const sitePopover = (root: HTMLElement): Element | null =>
+  root.querySelector('.site-popover');
+
+/**
+ * The fleet chart's table twin, which is where the overlay is readable as text.
+ *
+ * The chart carries the selected site as a second series, and the SVG says so in
+ * coordinates nobody can assert on without re-deriving the geometry. The table
+ * says it in a column headed with the site's name.
+ */
+export const fleetChartTable = (): HTMLElement =>
+  screen.getByRole('table', { name: /^Table view — fleet forecast/u });
 
 /** The fleet as rows — the map's table view, and where a closing panel returns focus. */
 export const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });

@@ -15,11 +15,12 @@ import {
   clickBasemap,
   clickMap,
   CREATED_SITE_NAME,
+  fleetChartTable,
   fleetList,
   fleetPanel,
   renderDashboard,
-  scrolledIntoView,
   settle,
+  sitePopover,
   submitDraft,
   visit,
 } from './dashboard-test-fixture';
@@ -101,15 +102,16 @@ const firstSeededSite = (): Site => {
 };
 
 /**
- * The site panel's chart, once one is drawn — the panel's own ready state.
+ * The selected site's own line on the fleet chart, once one is drawn.
  *
- * Queried by the chart's table twin rather than by its SVG because the rows are
- * what the assertions below count, and because the caption names the site: the
- * fleet panel draws a chart too, and a query that matched any chart would go
- * green on the wrong one the day the fleet panel stopped being hidden.
+ * There is one chart on this page now, and a selected site reaches it as a
+ * second series rather than as a chart of its own (#265). The series is readable
+ * as text in the chart's table twin, where it is a column headed with the site's
+ * name — so this is both "the site's forecast is on screen" and "it is on screen
+ * *as this site*", which a bare count of charts would not be.
  */
-const siteChartTable = (siteName: string): HTMLElement | null =>
-  screen.queryByRole('table', { name: `Table view — ${siteName}, kW` });
+const siteOverlayColumn = (siteName: string): HTMLElement | null =>
+  screen.queryByRole('columnheader', { name: siteName });
 
 const attributionLinks = (): readonly HTMLElement[] =>
   screen.getAllByRole('link', { name: 'Open-Meteo.com' });
@@ -171,17 +173,21 @@ describe('Dashboard', () => {
     expect(listSites).toHaveBeenCalledTimes(1);
   });
 
-  it('swaps the fleet panel for the panel of a site selected on the map, and marks its row', async () => {
+  it('answers a site selected on the map with its card, and marks its row', async () => {
     const site = firstSeededSite();
     const container = renderDashboard(new DemoFleetDataSource());
     await settle();
 
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    expect(sitePopover(container)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
 
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(true);
+    expect(sitePopover(container)).not.toBeNull();
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
+    // And the fleet keeps its place. A selection used to displace this panel;
+    // nothing displaces it now, which is what lets the site be drawn *over* the
+    // fleet rather than instead of it (#265).
+    expect(fleetPanel(container)).not.toBeNull();
     expect(
       within(fleetList())
         .getByRole('button', { name: (name) => name.startsWith(site.name) })
@@ -213,24 +219,23 @@ describe('Dashboard', () => {
     await settle();
 
     // The site exists and is selected; its forecast does not exist yet, and the
-    // panel says so rather than showing an empty chart. The wait is a plain
-    // `aria-busy` label, not a live region mounted with its text already inside
-    // it (`react.md`, "Async surface convention") — so it is found by its words.
+    // card on the map says so rather than the chart drawing an empty line. The
+    // wait is a plain `aria-busy` label, not a live region mounted with its text
+    // already inside it (`react.md`, "Async surface convention") — so it is
+    // found by its words.
     expect(screen.getByText(/Generating first forecast/u)).toBeDefined();
-    expect(siteChartTable(CREATED_SITE_NAME)).toBeNull();
+    expect(siteOverlayColumn(CREATED_SITE_NAME)).toBeNull();
 
     // Stops at the first second the forecast is on screen, so the elapsed time
     // below is when it *became* visible rather than when this test looked.
     while (
-      siteChartTable(CREATED_SITE_NAME) === null &&
+      siteOverlayColumn(CREATED_SITE_NAME) === null &&
       Date.now() - submittedAtMs < CREATION_TO_FORECAST_BUDGET_MS
     ) {
       await advanceBy(CLOCK_STEP_MS);
     }
 
-    const table = siteChartTable(CREATED_SITE_NAME);
-
-    if (table === null) {
+    if (siteOverlayColumn(CREATED_SITE_NAME) === null) {
       throw new Error(
         `No forecast ${String(Date.now() - submittedAtMs)}ms after the site was created.`,
       );
@@ -241,7 +246,9 @@ describe('Dashboard', () => {
     // pass this by never exercising the generating state at all.
     expect(Date.now() - submittedAtMs).toBeLessThanOrEqual(CREATION_TO_FORECAST_BUDGET_MS);
     expect(Date.now() - submittedAtMs).toBeGreaterThanOrEqual(DEMO_FIRST_FORECAST_DELAY_MS);
-    expect(within(table).getAllByRole('row').length).toBeGreaterThan(1);
+    // Rows, not just a header: a column of nothing would satisfy the wait above
+    // while showing the reader no forecast at all.
+    expect(within(fleetChartTable()).getAllByRole('row').length).toBeGreaterThan(1);
   });
 
   it('watches the site id the fleet assigned, never one of its own making', async () => {
@@ -340,7 +347,7 @@ describe('Dashboard', () => {
     // wrong, the pipeline is behind, and what the reader can do about it is
     // wait longer.
     expect(failure.textContent).toContain('No forecast arrived within 90 seconds');
-    expect(siteChartTable(CREATED_SITE_NAME)).toBeNull();
+    expect(siteOverlayColumn(CREATED_SITE_NAME)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
@@ -365,25 +372,22 @@ describe('Dashboard', () => {
 });
 
 /*
- * The context swap: one region of the column, two things that can occupy it —
- * a site, and the fleet at rest. A draft was a third until it moved into a modal
- * over the page (`add-site/AddSiteDialog.tsx`), and what it does to the region
- * now, which is nothing, is `Dashboard.draft-dialog.test.tsx`'s subject.
+ * What a selection costs, and what it leaves alone.
  *
- * These are assertions about *which* context is on screen and about what that
- * costs, which is why several of them read the `hidden` attribute directly. The
- * distinction the design turns on — hidden versus unmounted — is invisible to a
- * role query, because a `hidden` subtree is out of the accessibility tree
- * either way. Only the DOM can say whether the panel is still there behind it,
- * and "still there" is the whole point.
+ * The reading under the map used to be a context region that a site could take
+ * from the fleet, so this block was about *which* context was on screen. #265
+ * moved the site's detail onto its own marker and left the reading as a plain
+ * flow, so the questions worth asking here changed shape: what survives a
+ * selection, and how many fan-outs the composition spends doing it.
+ *
+ * The fan-out counts are taken on the real demo source rather than through a
+ * canned one, because what is under test is how many requests the *composition*
+ * makes — so the calls have to be the ones the shipping panel actually makes.
  */
-describe('Dashboard context region', () => {
-  it('gives the region back on close, without re-summing a fleet it never lost', async () => {
+describe('Dashboard selection', () => {
+  it('closes back to the fleet alone, without re-summing a fleet it never lost', async () => {
     const site = firstSeededSite();
     const dataSource = new DemoFleetDataSource();
-    // Counted on the real source rather than through a canned one: what is
-    // under test is how many fan-outs the *composition* spends, so the calls
-    // have to be the ones the shipping panel actually makes.
     const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
     const container = renderDashboard(dataSource);
     await settle();
@@ -395,52 +399,32 @@ describe('Dashboard context region', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await settle();
 
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    expect(sitePopover(container)).toBeNull();
     expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
+    expect(siteOverlayColumn(site.name)).toBeNull();
     // One sum across the whole select-and-close round trip. In live mode a
-    // second one is a paced fan-out of one request per site — which is what
-    // keeping the panel mounted buys, and what an unmount on every deselection
-    // would spend.
+    // second one is a paced fan-out of one request per site, and a selection is
+    // not a change to the fleet's sum — only a second line drawn over it.
     expect(fleetForecasts).toHaveBeenCalledTimes(1);
   });
 
-  it('scrolls the column to the region a context takes, and leaves it alone on close', async () => {
+  it('draws the selected site over the fleet without re-summing the fleet', async () => {
     const site = firstSeededSite();
-    const container = renderDashboard(new DemoFleetDataSource());
+    const dataSource = new DemoFleetDataSource();
+    const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
+    const siteForecasts = vi.spyOn(dataSource, 'siteForecasts');
+    renderDashboard(dataSource);
     await settle();
 
-    const contextRegion = container.querySelector('.dashboard-context');
-
-    /*
-     * What this pins is the dashboard's half of the mechanism: that a context arriving is what
-     * triggers the scroll, that the element scrolled is the context region rather than the column
-     * or the list, and that closing triggers nothing. jsdom has no layout, so the scroll itself is
-     * a stand-in (`dashboard-test-fixture.tsx`) and the pixels are a browser criterion — a reader
-     * who has scrolled the column down to the site list and clicks a marker can see the site panel
-     * without scrolling back up. The browser lane exists (`apps/web/e2e/`, `testing.md` rule 10)
-     * but no spec in it reads a scroll position today, so that half is unasserted rather than
-     * asserted elsewhere.
-     *
-     * The fleet at rest is not a swap: the region is already showing it, so nothing moves.
-     */
-    expect(scrolledIntoView()).toEqual([]);
-
     fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+    await settle();
 
-    expect(scrolledIntoView()).toEqual([contextRegion]);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-    // Closing hands the same region back to the fleet. A column that jumped on the way out would
-    // move ground the reader did not ask to move, so the count stands still here.
-    expect(scrolledIntoView()).toEqual([contextRegion]);
-
-    clickMap();
-
-    // A draft is no longer one of the arrivals: it opens as a modal in the top layer, over
-    // wherever the reader is, so there is nothing to bring into view and scrolling the inert page
-    // beneath it would move ground for no reason the reader could see. The count stands still.
-    expect(scrolledIntoView()).toEqual([contextRegion]);
+    // The site's own hours are one request for one site; the fleet's sum is the
+    // fan-out, and it is not re-spent. That ratio is the whole argument for
+    // overlaying rather than swapping.
+    expect(siteForecasts).toHaveBeenCalledWith(site.id, 24);
+    expect(fleetForecasts).toHaveBeenCalledTimes(1);
+    expect(siteOverlayColumn(site.name)).not.toBeNull();
   });
 
   it('re-sums the fleet when a site is added to it', async () => {
@@ -478,7 +462,7 @@ describe('Dashboard add-site mode', () => {
   });
 
   it('opens one draft per arming, and spends the arming on it', async () => {
-    const container = renderDashboard(new DemoFleetDataSource());
+    renderDashboard(new DemoFleetDataSource());
     await settle();
 
     armAddSite();
@@ -490,9 +474,12 @@ describe('Dashboard add-site mode', () => {
     clickBasemap();
 
     // Single-shot: the arming was spent on the first click, so the second is an
-    // ordinary basemap click again and the region is back on the fleet.
+    // ordinary basemap click again and opens nothing. This used to assert the
+    // fleet panel's `hidden` attribute alongside — "the region is back on the
+    // fleet" — which stopped meaning anything when the panel stopped being
+    // hideable (#265); an attribute that is never set reads `false` whatever the
+    // page does.
     expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
   });
 });
 

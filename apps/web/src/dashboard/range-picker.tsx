@@ -3,25 +3,31 @@ import type { ReactElement } from 'react';
 import type { RangeHours } from '../data/fleet-data-source';
 
 /**
- * The window picker both panels carry, and the labels that name a window
- * anywhere else on screen.
+ * The window picker, and the labels that name a window anywhere else on screen.
  *
- * Extracted rather than left duplicated because the two copies had the same
+ * Extracted when two panels carried one, because the two copies had the same
  * intent (`structure.md` rule 7): the offered windows are a property of what
- * `FleetDataSource` can serve, not of the panel asking, so adding a 72 h
- * window or renaming `7 d` would leave any copy that missed the change simply
- * wrong. What differs between the two call sites is the group's accessible name
- * — "which range?" means a forecast window in the site panel and an aggregation
- * window in the fleet panel — and that is a parameter, not a mode flag: nothing
- * in the markup branches on it.
+ * `FleetDataSource` can serve, not of the panel asking, so adding a 72 h window
+ * or renaming `7 d` would leave any copy that missed the change simply wrong.
  *
- * The *default* window deliberately stays with each panel. Both open on 24 h
- * today, but a panel could reasonably open wider without making the other
- * wrong, so that one is an independent choice rather than a shared fact.
+ * One caller carries the picker today — the fleet panel — because #265 took the
+ * site's own chart off the page and made a selected site a series on the fleet's
+ * (`site-overlay.ts`), which put both series under one window control. The
+ * module stays a module rather than folding back into `FleetPanel.tsx` for two
+ * reasons that outlive the count: `rangeLabel` names a window in copy that is
+ * not the picker's (the chart's accessible name and its table caption), and the
+ * `RangeHours` → label mapping is the one place a fourth window has to be added.
+ * The accessible name stays a parameter for the same reason it always was — it
+ * is what a second caller would differ in, and nothing in the markup branches
+ * on it.
  *
- * It lives in `dashboard/` because that is where both of its callers now live:
- * the three chart *views* it was extracted from are gone (#148), and a control
- * used only by the content column has no business sitting in a directory named
+ * The *default* window deliberately stays with the caller. A panel could
+ * reasonably open wider than another without making either wrong, so that one is
+ * an independent choice rather than a shared fact.
+ *
+ * It lives in `dashboard/` because that is where its caller lives: the three
+ * chart *views* it was extracted from are gone (#148), and a control used only
+ * by the reading under the map has no business sitting in a directory named
  * after the pages that used to exist. Its styling moved with it, into
  * `range-picker.css`.
  */

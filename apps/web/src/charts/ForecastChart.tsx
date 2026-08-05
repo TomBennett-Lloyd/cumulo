@@ -19,8 +19,13 @@ import {
 import {
   axisTickText,
   contiguousRuns,
+  highestOverlayKw,
   highestValueKw,
+  overlayReadingAt,
+  overlayValuesByIndex,
   seriesSpanHours,
+  type ChartOverlayColumn,
+  type ChartOverlaySeries,
   type ChartScale,
   type ForecastChartPoint,
 } from './chart-series';
@@ -30,12 +35,13 @@ import {
   pointerIndex,
   readoutText,
 } from './forecast-chart-hover';
-import { FORECAST_CHART_LEGEND } from './forecast-chart-legend';
+import { forecastChartLegend } from './forecast-chart-legend';
 import {
   actualsElements,
   bandElements,
   boundElements,
   medianElements,
+  overlayElements,
 } from './forecast-chart-marks';
 import { forecastChartTable } from './forecast-chart-table';
 
@@ -60,6 +66,14 @@ import { forecastChartTable } from './forecast-chart-table';
  * with a single sample has no path to stroke and becomes a marker instead of
  * disappearing — `forecast-chart-marks.tsx` holds that rule and its reasoning.
  *
+ * **An overlay is one more series, not a second chart.** The optional `overlay`
+ * prop puts a second series on the same kW axis in slot 2 — the treatment's
+ * fixed categorical order, with slot 1 reserved for the forecast everywhere in
+ * the product. One axis, never two: a second y-scale would invent a correlation
+ * the data does not contain (`docs/design/chart-treatment.md`). It is joined
+ * onto this series' x-domain once and then flows to the mark, the legend row,
+ * the table column and the readout from that one join.
+ *
  * **The readout has one source of truth.** Pointer and keyboard both do exactly
  * one thing — set `activeIndex` — and `forecast-chart-hover.tsx` draws whatever
  * that index says. There is no separate keyboard rendering path to drift from
@@ -73,13 +87,25 @@ import { forecastChartTable } from './forecast-chart-table';
  * `structure.md` rule 4's ceiling.
  */
 
-export type { ForecastChartBand, ForecastChartPoint } from './chart-series';
+export type {
+  ChartOverlayPoint,
+  ChartOverlaySeries,
+  ForecastChartBand,
+  ForecastChartPoint,
+} from './chart-series';
 
 export interface ForecastChartProps {
   /** May be empty — the chart then draws bare chrome; sorted ascending by `validTimeIso`. */
   readonly points: readonly ForecastChartPoint[];
   readonly ariaLabel: string;
   readonly tableCaption: string;
+  /**
+   * One more series on the same kW axis, in its own time base — the chart joins
+   * it onto `points`' x-domain. Omitted, the chart renders exactly what it
+   * rendered before overlays existed: no mark, no legend row, no table column,
+   * and nothing in the readout.
+   */
+  readonly overlay?: ChartOverlaySeries;
 }
 
 /**
@@ -193,13 +219,27 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const { points } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // Joined once and read by every consumer below, so the mark, the table column
+  // and the readout can never disagree about what the overlay says at an hour.
+  const overlay: ChartOverlayColumn | undefined =
+    props.overlay === undefined
+      ? undefined
+      : { label: props.overlay.label, values: overlayValuesByIndex(points, props.overlay) };
+  // An overlay running above the forecast would otherwise be drawn off the top
+  // of the plot. With no overlay this is `highestValueKw` unchanged, which is
+  // seeded at 0 and so cannot be lowered by the second argument.
+  const peakKw = Math.max(
+    highestValueKw(points),
+    overlay === undefined ? 0 : highestOverlayKw(overlay.values),
+  );
   const scale: ChartScale = {
     plot: CHART_PLOT,
-    axisMaxKw: niceAxisMax(highestValueKw(points)),
+    axisMaxKw: niceAxisMax(peakKw),
     pointCount: points.length,
   };
   const spanHours = seriesSpanHours(points);
   const activePoint = activeIndex === null ? undefined : points[activeIndex];
+  const overlayReading = activeIndex === null ? undefined : overlayReadingAt(overlay, activeIndex);
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
@@ -238,8 +278,9 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   return (
     <figure className="forecast-chart-figure">
       {/* Draw order is back to front: grid → band → bounds → horizon → median →
-          actuals → marker. Actuals are drawn last of the data and win every
-          overlap; the hover chrome and its pointer target sit above all of it. */}
+          overlay → actuals → marker. Actuals are drawn last of the data and win
+          every overlap — an added series never covers the measurement — and the
+          hover chrome and its pointer target sit above all of it. */}
       <svg
         ref={svgRef}
         className="forecast-chart"
@@ -256,6 +297,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {boundElements(points, bandRuns, scale)}
         {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}
         {medianElements(points, scale)}
+        {overlay === undefined ? null : overlayElements(overlay.values, scale)}
         {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
         {xLabelElements(points, scale, spanHours)}
         <text className="forecast-chart-axis-title" x={0} y={AXIS_TITLE_BASELINE}>
@@ -276,6 +318,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           activeIndex={activeIndex}
           scale={scale}
           spanHours={spanHours}
+          overlay={overlayReading}
         />
         {/* Last child, and the whole plot: the readout must never depend on the
             pointer hitting a 2px line. `charts.css` gives it the pointer-events
@@ -299,11 +342,11 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           change rather than text that was already there (`react.md`). Both
           input routes feed it, because both set the same `activeIndex`. */}
       <p className="forecast-chart-readout" aria-live="polite">
-        {activePoint === undefined ? '' : readoutText(activePoint, spanHours)}
+        {activePoint === undefined ? '' : readoutText(activePoint, spanHours, overlayReading)}
       </p>
 
-      {FORECAST_CHART_LEGEND}
-      {forecastChartTable({ points, spanHours, caption: props.tableCaption })}
+      {forecastChartLegend(overlay?.label)}
+      {forecastChartTable({ points, spanHours, caption: props.tableCaption, overlay })}
     </figure>
   );
 };

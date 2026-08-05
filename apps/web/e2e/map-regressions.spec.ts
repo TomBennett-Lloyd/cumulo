@@ -463,14 +463,19 @@ test('puts a rotated and tilted camera back when the view is reset (issue 265)',
     .toBeLessThanOrEqual(RESET_TOLERANCE_PX);
 });
 
-test('answers a marker press with the site panel and nothing else (#17)', async ({ page }) => {
+test('answers a marker press with the site’s card and nothing else (#17)', async ({ page }) => {
   /*
    * Defect 1. maplibre mounts markers *inside* the container its own click
    * handler is bound to, so before `isMarkerClick` a press on a site was
    * answered twice — selecting it, then opening "add a site here" on top of the
-   * selection. `Dashboard` ranks a draft above a selection, so the second answer
-   * is the one the reader was left looking at: the site panel they asked for
-   * never appeared at all.
+   * selection. The draft outranked the selection, so the second answer is the
+   * one the reader was left looking at: the site's own surface never appeared at
+   * all.
+   *
+   * The same guard now covers one more thing than it did. The card that answers
+   * a selection is itself mounted through a maplibre marker
+   * (`map/MapMarkerAnchor.tsx`), so every click *inside* it — Close most of all —
+   * is excluded from the basemap handler by the same `closest` test.
    */
   const marker = await revealSiteMarker(page);
   const siteName = await marker.getAttribute('aria-label');
@@ -481,7 +486,7 @@ test('answers a marker press with the site panel and nothing else (#17)', async 
 
   await marker.click();
 
-  await expect(page.locator('.site-panel-title')).toHaveText(siteName);
+  await expect(page.locator('.site-popover-title')).toHaveText(siteName);
   await expect(page.locator('form.add-site-form')).toHaveCount(0);
 });
 

@@ -68,6 +68,28 @@
   stroke-width: 2;
 }
 
+/* An overlay is the first series added alongside the forecast, so it takes slot
+ * 2: slot 1 is the forecast's hue everywhere in the product, and the categorical
+ * slots are assigned in fixed order and never cycled (chart-treatment.md). The
+ * legend swatch shares this rule rather than restating the stroke, so the key
+ * cannot drift from the line it names. */
+.forecast-chart-overlay,
+.forecast-chart-swatch-overlay {
+  fill: none;
+  stroke: var(--color-chart-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* An overlay hour left alone between two gaps, in the marker vocabulary the
+ * actuals use — same ring, same radius, the overlay's own hue. */
+.forecast-chart-overlay-marker {
+  fill: var(--color-chart-2);
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
 .forecast-chart-actuals {
   fill: none;
   stroke: var(--color-chart-actuals);

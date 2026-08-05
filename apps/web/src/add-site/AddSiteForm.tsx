@@ -255,9 +255,10 @@ export const AddSiteForm = ({
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   /*
-   * The same rule the site panel follows: a surface that arrives focuses its own
-   * heading, so a reader whose focus is somewhere else on the page is told
-   * something changed rather than left to find out.
+   * The same rule the selected site's card follows: a surface that arrives
+   * because the reader asked for it focuses its own heading, so a reader whose
+   * focus is somewhere else on the page is told something changed rather than
+   * left to find out (`react.md`'s focus paragraph).
    *
    * The *reason* moved with the form. While this was an occupant of the reading
    * column's context region, the heading announced a region that had swapped

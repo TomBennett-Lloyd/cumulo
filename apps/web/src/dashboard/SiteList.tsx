@@ -24,11 +24,13 @@ export interface SiteListProps {
  * what makes the list keyboard-reachable, focusable in site order and
  * announced as actionable, with no key handling of our own to get wrong.
  *
- * `data-site-id` is how the dashboard finds one row again: closing a site panel
- * unmounts the Close button under the reader's focus, and the row that opened
- * the panel is where that focus belongs. An attribute rather than a ref per row
- * because the list is unbounded and the dashboard wants exactly one of them,
- * once, in an event handler.
+ * `data-site-id` names each row's site on the element itself. Nothing in the app
+ * reads it any more — the focus hand-off that used to search this list for a row
+ * is now a capture-and-restore inside the site's card (`map/SitePopoverCard.tsx`),
+ * which is the same answer for every opener rather than only for a row. What
+ * still reads it is the browser lane, where it is how a spec says "a site row"
+ * without knowing the fleet: `e2e/keyboard-focus.spec.ts` tabs until it holds
+ * one, and `e2e/composition.spec.ts` counts them.
  *
  * Presentational (`react.md` rule 4): it holds no selection state and fetches
  * nothing. The dashboard owns `selectedSiteId`, because the map markers read

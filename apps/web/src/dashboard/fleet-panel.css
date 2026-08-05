@@ -1,5 +1,5 @@
 /*
- * The fleet panel: the context region's resting state, as a card.
+ * The fleet panel: the first thing under the map, and the page's one chart.
  *
  * Chrome borrowed from `.dashboard-slot` deliberately — surface, `--radius-md`,
  * `--space-4` of padding — because this panel is one of the column's cards and
@@ -25,14 +25,12 @@
   background: var(--color-surface);
 }
 
-/* The panel stays mounted while another context occupies the region, so the
-   `hidden` attribute has to beat the `display: grid` above — the UA stylesheet's
-   `[hidden] { display: none }` loses to any class rule that sets `display`, and
-   a panel that keeps its query state but not its invisibility is worse than one
-   that unmounted. */
-.fleet-panel[hidden] {
-  display: none;
-}
+/* No `[hidden]` restatement here any more. This panel used to be hidden while a
+   site panel held the context region, and `display: grid` above beats the user
+   agent's `[hidden] { display: none }`, so the rule had to be written out. #265
+   anchored the site's card to its own marker on the map instead: nothing
+   displaces this panel, it is never handed `hidden`, and a rule for a state that
+   cannot occur is a rule nobody can tell has stopped working. */
 
 /* Title, size and promise read as one block, so they sit closer together than
    the panel's own rhythm. */

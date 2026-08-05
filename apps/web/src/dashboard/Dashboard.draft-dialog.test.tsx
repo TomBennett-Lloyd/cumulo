@@ -88,10 +88,14 @@ describe('Dashboard draft dialog', () => {
      * The change a modal makes to the page under it: none. While the draft was
      * an occupant of the context region it displaced whatever was there, so the
      * fleet panel was hidden and a site panel unmounted for the duration. The
-     * backdrop does that job now, and emptying the region behind it would buy
-     * nothing a reader can see while costing them the context they had.
+     * backdrop does that job now, and emptying the page behind it would buy
+     * nothing a reader can see while costing them the reading they had.
+     *
+     * Read as presence rather than as the absence of a `hidden` attribute: the
+     * fleet panel has no `hidden` prop any more (#265), so an attribute check
+     * would pass on a panel that had been unmounted outright and prove nothing.
      */
-    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
+    expect(fleetPanel(container)).not.toBeNull();
     expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
   });
 

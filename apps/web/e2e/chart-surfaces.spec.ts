@@ -17,11 +17,14 @@ import { routeBasemap } from './hermetic-basemap';
  * That is exactly the class of defect #19 kept producing: labels clipped at the
  * canvas edge, and elements that mounted at zero height.
  *
- * Two charts rather than one, because they are laid out by different states of
- * the same column: the fleet chart takes the width of the resting panel, a
- * site's chart the width of the panel that replaced it, and each draws its own
- * axis from its own numbers. A chart that fits in one and not the other is a
- * real defect that a single case would miss.
+ * One chart, in two states, because that is what the page has since #265: a
+ * selected site is a second series *on* the fleet chart rather than a chart of
+ * its own. Both states are still worth measuring separately, and for the reason
+ * that mattered when they were two charts — the axis is scaled to the numbers on
+ * the plot, and adding a single site's line under a sixty-site sum changes what
+ * the labels say and how wide they are. A chart whose labels fit before a
+ * selection and are clipped after it is exactly the #19 defect, arriving through
+ * a door the resting-state case cannot see.
  *
  * Nothing here waits on the demo's first-forecast delay
  * (`DEFAULT_FIRST_FORECAST_DELAY_MS`, src/data/demo-fleet-data-source.ts). That
@@ -151,21 +154,39 @@ test('draws the fleet chart at a real size, with its labels inside it', async ({
   await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
 });
 
-test('draws a selected site’s chart at a real size, with its labels inside it', async ({
-  page,
-}) => {
+test('keeps the fleet chart laid out once a selected site is drawn over it', async ({ page }) => {
   /*
-   * The same contract in the other column state. A site's chart is drawn from
-   * one site's series rather than the fleet's sum, so its axis carries different
-   * numbers — a scale that fits the fleet's four-hundred-kW labels can still be
-   * laid out differently under a single site's.
-   *
-   * A seeded row, so the panel's forecast is answered on the first poll; the
-   * first-forecast delay named above belongs to sites this session creates, and
-   * nothing here creates one.
+   * The same contract in the other state of the same chart. A seeded row, so the
+   * site's forecast is answered on the first poll; the first-forecast delay
+   * named above belongs to sites this session creates, and nothing here creates
+   * one.
    */
-  await page.locator('[data-site-id]').first().click();
-  await expect(page.locator('.site-panel-title')).toBeVisible();
+  const row = page.locator('[data-site-id]').first();
+  const siteName = await row.locator('.site-row-name').textContent();
 
-  await expectChartLaidOut(page.locator('.site-panel .forecast-chart-figure'));
+  if (siteName === null) {
+    throw new Error('The first site row has no name in it.');
+  }
+
+  await row.click();
+
+  const figure = page.locator('.fleet-panel .forecast-chart-figure');
+
+  /*
+   * The mark, and then the name. Polled rather than read once because the
+   * overlay is a second request that lands after the row is pressed — and both
+   * halves are asserted because either alone is satisfiable by a broken chart: a
+   * mark with no legend row is a line the reader cannot identify (the treatment's
+   * rule that colour never names a series alone), and a legend row with no mark
+   * is a chart claiming a series it never drew.
+   */
+  await expect
+    .poll(async () => figure.locator('.forecast-chart-overlay').count())
+    .toBeGreaterThan(0);
+  await expect(figure.locator('.forecast-chart-legend')).toContainText(siteName);
+
+  // And the geometry still holds with the extra series on the plot. The axis is
+  // scaled to what is drawn, so a single site's line under a sixty-site sum is a
+  // real change to where the labels land.
+  await expectChartLaidOut(figure);
 });

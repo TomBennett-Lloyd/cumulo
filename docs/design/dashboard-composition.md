@@ -2,9 +2,8 @@
 
 Design record for
 [#148 — one integrated experience, not view-toggled pages](https://github.com/TomBennett-Lloyd/cumulo/issues/148),
-covering how the dashboard's one surface is put together: what occupies the context region under
-the map, what replaces what, what stays mounted when it is not visible, and where the two
-Open-Meteo credits sit.
+covering how the dashboard's one surface is put together: what a selection changes, what it
+leaves alone, where focus goes, and where the two Open-Meteo credits sit.
 
 This is the composition, not the styling. The surfaces it arranges have their own records —
 [`map-treatment.md`](map-treatment.md) for the map and its markers,
@@ -31,30 +30,44 @@ the two visible at once at the cost of giving the map two thirds of the width an
 26–30rem measure — and of a second scroller, since a column of panels beside a fixed-height map
 has to scroll inside a page that cannot. #265 took the map full bleed across the top and put the
 reading in one centred measure below it: one scroller, the full width for the map, and no
-breakpoint, because the stacked arrangement a narrow screen already got is now the only one. The
-composition below is unchanged by that move — what swaps, what stays mounted, and what is owed is
-the same in a column as in a flow — and every "region" it names is a place in that flow.
+breakpoint, because the stacked arrangement a narrow screen already got is now the only one.
 
-## The context swap
+## A selection changes what is drawn, not what is on screen
 
-**One region, directly under the map, shows exactly one of two things, and which one is a
-function of state rather than of a page the reader chose.** In precedence order:
+**Nothing under the map swaps.** The reading is a plain flow, top to bottom: the fleet's chart,
+the site list, the page footer. All three are present in every state the page can be in.
 
-1. **A site**, while `selectedSiteId` names one.
-2. **The fleet**, otherwise. This is the resting state — the aggregate is reachable by doing
-   nothing, which is the issue's own requirement that "aggregate context is always reachable
-   rather than a separate destination".
+That is the second answer this composition has given. #148's answer was a **context region** —
+one box under the map showing either a selected site's panel or the fleet's, whichever the state
+called for. It kept the aggregate reachable by doing nothing, which was the issue's own
+requirement, and it cost three things that only became obvious once the surface was being used.
+A reader comparing one roof against the fleet was asked to remember one chart while looking at the
+other. A selection wrote its answer into a region that was frequently off the top of the screen,
+so the dashboard grew a scroll effect to chase it. And the fleet panel had to be `hidden` rather
+than unmounted, with all the live-region care that a `display: none` subtree needs, purely so that
+its expensive fan-out survived being displaced.
 
-Below that region, unchanging: the site list, then the page footer.
+#265 replaced the region with two moves that between them retire all three costs:
 
-**A draft used to be a third occupant, and is now a modal.** #265 moved the add-site form into a
-native `<dialog>` (`apps/web/src/add-site/AddSiteDialog.tsx`), opened with `showModal()` over the
-whole page. Placing a site is a short, committed detour rather than a context to read, and two
-things followed from treating it as one. It stopped competing for a region it only ever borrowed:
-the fleet panel is no longer hidden and a site panel no longer unmounts for the duration, so the
-reading a reader had is still there, unchanged, the instant they cancel. And the region no longer
-has to be scrolled into view for it — a modal is painted in the top layer over wherever the reader
-already is.
+- **A selected site's detail is a card on the site's own marker** (`apps/web/src/map/SitePopover.tsx`,
+  anchored through `MapMarkerAnchor`). The answer to "which site is this" is drawn where the
+  question was asked, and it rides the camera, so panning keeps it over its site.
+- **A selected site's forecast is a second series on the fleet chart**
+  (`apps/web/src/dashboard/site-overlay.ts`, drawn by `ForecastChart`'s `overlay` prop on one kW
+  axis). The comparison that used to need two charts and a memory is now one chart with two lines
+  on it — which is the whole reason the card carries no chart of its own.
+
+What the card carries instead is the site's identity and physical facts, and the state of its
+first forecast: the `checking`/`generating`/`failed`/`halted` arms of the dashboard's poll, in the
+app's shared async vocabulary (`react.md`). The `ready` arm renders nothing at all, because by
+then the answer is on the chart below.
+
+**A draft is a modal, and it clears nothing.** #265 moved the add-site form into a native
+`<dialog>` (`apps/web/src/add-site/AddSiteDialog.tsx`), opened with `showModal()` over the whole
+page. Placing a site is a short, committed detour rather than a context to read. The precedence
+rule the old arrangement had to state — a draft outranks a selection but never clears it — is
+physical now: the page behind is inert, so there is nothing to outrank, and cancelling hands the
+reader back exactly the page they had, selection included.
 
 Opening the draft is also no longer a bare click on the basemap: the map carries an add-site
 control that arms the next click, and the mode is spent on the click that uses it. A click on an
@@ -62,100 +75,83 @@ empty spot with the mode disarmed does nothing at all. The control itself is the
 and is recorded there — [`map-treatment.md`](map-treatment.md)'s "Map chrome" section, over
 `apps/web/src/map/MapControls.tsx`.
 
-**A draft outranks a selection but does not clear it.** "Where shall the new site go" and "which
-site am I reading" are different questions, and abandoning the first never answers the second.
-That precedence used to be a rule the code had to state — the site panel's condition tested
-`draft` — and it is physical now: the dialog is modal, the page behind it is inert, and there is
-nothing left to outrank. What survives from the old arrangement is the half that was always the
-point, that `selectedSiteId` is never cleared when a draft opens, so cancelling hands the reader
-back the site they had open rather than the fleet they had left.
+**The one thing that can still be out of view is the site**, not the reading. A selection can
+arrive from a row, a link or a creation, and the camera has no reason to be pointing anywhere near
+what those name. `apps/web/src/map/SelectionCamera.tsx` eases the camera to a selected site that
+is outside the current bounds, and does nothing at all when it is already inside them — moving the
+map for a marker the reader just pressed would shove the one thing they were looking at. It keeps
+the zoom, because the framing is the reader's choice and not the selection's.
 
-**The swap happens in a fixed region, so the map never moves.** That is most of the point of a
-swap over a stack: the region does not lurch when a selection arrives, and the map — the thing the
-reader is pointing at — keeps its geometry and its place through every context change.
+The page itself never scrolls on a selection any more, and the effect that used to do it is gone
+with the region it chased.
 
-**A swap scrolls the page back to the region, because being first is not the same as being in
-view.** The original argument for an unbounded site list was that the context region is the first
-thing under the map, so a selection always lands where the reader is looking. That holds at
-`scrollTop: 0` and nowhere else. Sixty rows are taller than a screen; a reader who has scrolled
-down to row forty and clicks a marker gets their answer written into a region that is now off the
-top of the screen, and the only feedback they receive is a row highlight. Review cycle 1 of #148
-caught it, and the full-bleed layout sharpened it rather than settling it — the region now has the
-whole map band above it (`.dashboard-map` in `apps/web/src/dashboard/dashboard.css` owns that
-height), so a selection lands further out of view than it did.
+## Focus follows the reader, never the address bar
 
-Two shapes were available. Bounding the list's height puts the region permanently in view at the
-cost of a second scroller nested inside the first — the arrangement the redesign had just removed,
-and the one that makes a reader scroll two things to reach one. Scrolling to the region on a swap
-keeps the single scroller and treats the swap as the event it is. The second was chosen:
-`Dashboard.tsx` holds a ref on `.dashboard-context` (the one wrapping box both occupants share,
-which is why that box exists at all) and an effect brings it into view whenever `selectedSiteId`
-becomes non-null. A scroll position is an external system in exactly the sense the address bar is,
-which is what makes this an effect rather than a line in the click handlers (`react.md` rule 1) —
-and it has to be, because a context also arrives without a click: a creation selects the site it
-just made, and a `?site=` link opens on one. A draft is deliberately not one of the arrivals it
-watches: the modal is over the page, so there is nothing to bring into view and scrolling the
-inert page beneath it would move ground for no reason the reader could see.
+A page that changes above the reader's focus point owes them a landing, and a page that changes
+for no reason of theirs owes them the opposite. The settled rule:
 
-It scrolls _into_ a context and never out of one. Closing hands the same region back to the fleet,
-and a page that jumped on the way out would move ground the reader did not ask to move. The
-scroll is instant rather than smooth: this is feedback for an action already taken, and a smooth
-scroll would fight a reader who starts scrolling immediately after clicking.
-
-**The scroll is not the focus, and both are owed.** A reader who gets the region scrolled into
-view but keeps their focus where it was still reaches the swapped-in context only by tabbing
-through whatever lies between, which is no answer at all for a keyboard or screen-reader user.
-The settled rule, decided for the whole surface rather than for this effect: **an occupant taking
-the region focuses its own heading** — the site panel, and a site arriving from a creation or from
-`?site=` alike; **`Close` returns focus to the closing site's row in the list**, because the button
-the reader pressed is about to be unmounted and focus would otherwise fall to `body`; and **a
-dismissed draft returns focus to the map's add-site control**, the control the reader opened it
-with. `react.md`'s async surface convention owns the rule; `Dashboard.focus.test.tsx` pins it.
+- **A reader-initiated selection focuses the card's own heading** — a marker press, a row press, a
+  creation. `tabIndex={-1}`, so it is a target without joining the tab order.
+- **A `?site=` selection moves focus nowhere.** This is the settlement of
+  [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and the asymmetry is the point
+  rather than an exception for page load: the card mounts when the fleet listing _resolves_, which
+  on a deep link can be seconds in, so a mount-time focus move takes focus from a reader who has
+  since started using the page (WCAG 3.2.5). The dashboard carries which of the two happened
+  beside the selection itself (`apps/web/src/dashboard/selection-origin.ts`); the alternative fix
+  considered and rejected was skipping the effect's first run, which is a rule about run counts
+  rather than about who acted, and says nothing about the second late arrival.
+- **Closing returns focus to whatever held it when the card opened**, captured on the way in. The
+  panel this replaced reconstructed the landing instead — it searched the site list for the row
+  naming its site — which was the right answer only for the one opener it knew about. Capturing
+  covers a marker, a row and a creation with no case analysis, and an opener that has since left
+  the document is simply not chased.
+- **A dismissed draft returns focus to the map's add-site control**, the control the reader opened
+  it with.
 
 That last one is the modal's bill, and it is worth naming because the platform normally pays it: a
 `<dialog>` closed with `close()` restores focus itself, but this one closes by being _unmounted_,
 and a removed dialog never runs the close steps. So the dashboard supplies the landing by hand,
 from the dialog's effect cleanup rather than from its `cancel` handler — on the Escape path the
 browser's own restoration is still running while `cancel` is being dispatched, and would overwrite
-a focus set there. A creation is the one dismissal that has somewhere better to send the reader,
-and it says so without a special case: the site panel's heading effect runs on a change of
-`site.id`, and React flushes a commit's unmount cleanups before its mount effects, so the panel
-gets the last word.
+a focus set there. React flushes a commit's unmount cleanups before its mount effects, which is
+what makes a creation land correctly without a special case anywhere: the dialog's cleanup puts
+focus on the add-site control, and the new site's card — mounting in the same commit — captures
+_that_ as its opener and then takes the focus for its own heading.
 
-jsdom cannot check any of this: it implements no layout, so it has no `scrollIntoView` and no
-scroll position to move. `Dashboard.test.tsx` pins the half that is the dashboard's own doing —
-that a context arriving is what triggers the scroll, that the element scrolled is the context
-region, and that closing triggers nothing — against a stand-in installed in
-`dashboard-test-fixture.tsx`. The other half is a browser criterion: **with the page scrolled
-down to the site list, clicking a marker leaves the site panel visible without the reader
-scrolling back up.** The browser lane that could own it exists (`apps/web/e2e/`, `testing.md`
-rule 10), and it now measures the layout the criterion is about (`composition.spec.ts` reads the
-map's box and the chart's), but no spec in it reads a scroll position — the criterion is stated
-here and checked by hand, not by a gate.
+`react.md`'s focus paragraph owns the rule. `Dashboard.focus.test.tsx` and
+`map/SitePopoverCard.test.tsx` pin it as far as `document.activeElement` goes; the ring a reader
+actually sees, and a deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.
 
-## The fleet panel stays mounted
+## The fleet panel is never hidden, and always paid for
 
-`FleetPanel` is rendered always and carries a `hidden` attribute when something else holds the
-region. This deliberately inverts the old nav's unmount-on-leave rule, and the reason is
-arithmetic rather than taste.
+`FleetPanel` is rendered unconditionally, with no `hidden` prop and no reveal latch. There is no
+fleet-level endpoint: a fleet sum in live mode is a client-side fan-out of one request per site —
+about eight seconds over sixty sites, paced to stay inside the API's per-IP limiter — so the
+question that matters is how often that is spent.
 
-There is no fleet-level endpoint. A fleet sum in live mode is a client-side fan-out of one
-request per site — about eight seconds over sixty sites, paced to stay inside the API's per-IP
-limiter. That is a cost worth paying once and keeping, and it is emphatically not a cost worth
-re-paying every time a reader closes a site panel.
+It is spent on mount, and re-spent on exactly one event: a site being added, which is the only
+thing that changes the sum. `refreshToken={createdSites.length}` is that event, counted.
+Deselection is not an event, and neither is selection — a selected site is one extra per-site
+request for its own line, not a re-sum.
 
-So the panel is fetched once per session and re-summed on exactly one event: a site being added,
-which is the only thing that changes the sum. `refreshToken={createdSites.length}` is that event,
-counted. Deselection is not an event — hiding the panel keeps its query state, and unhiding it
-costs nothing and shows a chart that is already drawn.
+**The trade accepted in #265, stated because it is a real cost.** #178 deferred the first fan-out
+until the panel was first revealed, so a `?site=` deep-linked reader who never looked at the fleet
+never paid for it. That saving depended on the panel being hideable, and nothing hides it now: the
+fleet chart is on screen from first paint in every state, with the selected site drawn over it. A
+deferral would therefore buy no reader anything — there is no longer a reader who does not look at
+the fleet — and would cost every deep link a spinner where the chart already is. So the deep link
+pays the fan-out, once. `Dashboard.deep-link.test.tsx` asserts the "once" rather than leaving it
+to prose.
 
-The cost accepted in exchange: adding a site in live mode spends a fresh fan-out, bounded by
+The other cost is unchanged: adding a site in live mode spends a fresh fan-out, bounded by
 `CreationThrottle`'s three-per-minute allowance.
 
-One implementation note that is easy to lose: `.fleet-panel` sets `display: grid`, which beats
-the user agent's `[hidden] { display: none }`, so `fleet-panel.css` restates the hidden rule
-explicitly. A panel that kept its state but not its invisibility would be worse than one that
-unmounted.
+Two implementation notes that went with the hiding. `fleet-panel.css` no longer restates
+`[hidden] { display: none }` — it had to, because `.fleet-panel` sets `display: grid` and beats
+the user agent rule, and a panel that kept its state but not its invisibility would have been
+worse than one that unmounted. And the panel no longer withholds its children while hidden, which
+was the #161 fix for a `role="alert"` mounting inside a `display: none` subtree with nothing to
+announce. Both were answers to a state the page can no longer be in.
 
 ## Capability honesty is structural
 
@@ -184,7 +180,7 @@ The Open-Meteo credit is a CC BY 4.0 licence condition wherever weather-derived 
   Where it sits and what keeps it legible over tiles is
   [`map-treatment.md`](map-treatment.md)'s to say.
 - **The page footer**, one persistent credit under the chart and table sections, present in every
-  state and through every context swap.
+  state a selection can put the page in.
 
 The arrangement the old views had — a credit inside each panel — is what this replaces. Those
 multiplied with the panels, and each one came and went with whatever mounted it, which meant the
@@ -214,7 +210,7 @@ the answer to "does that site exist?" actually arrives, rather than in a second 
 derived state — and it counts sites created this session as known, so retrying a failed listing
 cannot clear the selection of a site the reader just added. Without the guard a dead deep link
 leaves the first-forecast poll asking for a nonexistent site every five seconds for its full
-ninety-second deadline, with no panel on screen to show for it. The write preserves query
+ninety-second deadline, with no card on screen to show for it. The write preserves query
 parameters it does not own; the id it reads back is untrusted text until the listing vouches for
 it, which is why the module's types say `string` rather than `Site['id']`.
 

@@ -39,8 +39,8 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
  *
  * Twice the demo pipeline's 45-second latency: long enough that an ordinarily
  * slow pipeline is not called broken, short enough that a visitor is not left
- * watching a spinner with no ending. Reaching it is a product event — the panel
- * says the wait ended and offers a retry — not a silent stall.
+ * watching a spinner with no ending. Reaching it is a product event — the site's
+ * card says the wait ended and offers a retry — not a silent stall.
  */
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
@@ -60,7 +60,7 @@ const DEADLINE_SECONDS_TEXT = String(FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND)
  * a no-op for React (it bails out of re-rendering on an identical value), which
  * matters because every effect run begins by resetting to it — and because
  * every fault-poll before absence is confirmed re-enters it too, so a fleet
- * that is failing repeatedly re-renders the panel zero times.
+ * that is failing repeatedly re-renders the card zero times.
  */
 const WATCH_START_STATE: ForecastViewState = { status: 'checking' };
 
@@ -92,10 +92,15 @@ const rateLimitBackoffMs = (retryAfterSeconds: number | undefined): number =>
 /**
  * The whole policy of the loop, as a pure function of one answer.
  *
- * An `ok` carrying no forecasts is treated as "not yet" rather than as success:
- * a `ready` state with an empty series would render a panel with a forecast
- * table and no rows, which reads as "this site produces nothing" instead of
- * "this site is still waiting".
+ * An `ok` carrying no forecasts is treated as "not yet" rather than as success,
+ * and what a premature `ready` costs moved with the surfaces in #265. It used to
+ * be a per-site table drawn with no rows in it. Now `ready` is the state that
+ * retires the card's visible wait *and* releases `FleetPanel`'s overlay request
+ * (`selectionReady`), so an empty series would take the count off the screen and
+ * put a named-but-empty line in the fleet chart's legend and table — the reader
+ * is told the answer arrived and shown a gap where it should be. "Still
+ * waiting" and "this site produces nothing" are different sentences, and only
+ * one of them is true here.
  */
 const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecision => {
   if (result.kind === 'ok') {
@@ -153,10 +158,10 @@ const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState 
 });
 
 /**
- * What the panel is told when the deadline passes.
+ * What the card is told when the deadline passes.
  *
  * Three outcomes, because the run can reach ninety seconds having learned three
- * different things — and the panel has a different sentence for each:
+ * different things — and the card has a different sentence for each:
  *
  * - a fault was seen, so the deadline is an `error` carrying the fleet's own
  *   account of it;
@@ -170,7 +175,7 @@ const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState 
  * `absenceConfirmed` is a parameter rather than something read from the
  * enclosing run, so this stays legible on its own (`structure.md` rule 1).
  * Both messages carry the site the wait was about (`error-handling.md` rule 4)
- * so a screenshot of a failed panel is diagnosable on its own.
+ * so a screenshot of a failed card is diagnosable on its own.
  */
 const deadlineState = (
   siteId: Site['id'],
@@ -195,7 +200,12 @@ const deadlineState = (
 };
 
 export interface FirstForecastWatch {
-  /** What the site detail panel should render right now. */
+  /**
+   * The selection's forecast state, for the two surfaces that read it: the site's
+   * card on the map renders the wait, the failure and the halt
+   * (`map/SitePopoverCard.tsx`), and `FleetPanel` reads `ready` as permission to
+   * fetch that site's own hours for the chart's overlay.
+   */
   readonly state: ForecastViewState;
   /** Abandons the current wait and starts a fresh one, deadline included. */
   readonly retry: () => void;
@@ -298,9 +308,9 @@ export const useFirstForecast = (
       }
 
       // A halt ends the run exactly like an arrival does — the answer is final,
-      // so the deadline has nothing left to decide and the panel is told now
+      // so the deadline has nothing left to decide and the card is told now
       // rather than in ninety seconds. It reports in its own arm rather than as
-      // a failure, so the panel can drop the retry no retry can change.
+      // a failure, so the card can drop the retry no retry can change.
       if (decision.kind === 'halt') {
         stopWatching();
         setState({ status: 'halted', message: decision.message });
@@ -326,7 +336,7 @@ export const useFirstForecast = (
 
   const retry = useCallback(() => {
     // Both halves belong to the interaction (`react.md` rule 1): the state
-    // reset so the panel leaves its failed rendering in the same commit the
+    // reset so the card leaves its failed rendering in the same commit the
     // visitor clicked in, and the token bump so the effect starts a new run.
     setState(WATCH_START_STATE);
     setAttempt((previous) => previous + 1);

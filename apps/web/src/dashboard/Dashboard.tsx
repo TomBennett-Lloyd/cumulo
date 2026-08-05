@@ -15,9 +15,9 @@ import { FleetPanel } from './FleetPanel';
 import { LazyMapRegion } from './LazyMapRegion';
 import type { MapRegionComponent } from './MapRegion';
 import { PanelError, PanelPending } from './panel-states';
+import type { SelectionOrigin } from './selection-origin';
 import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
 import { SiteList } from './SiteList';
-import { SitePanel } from './SitePanel';
 import { fleetListFailureMessage, LOADING_FLEET_LABEL } from './state-copy';
 
 /**
@@ -144,20 +144,25 @@ export interface DashboardProps {
  * with a forecast.
  *
  * This is where the pieces meet, and it owns exactly the state they share.
- * `selectedSiteId` is the clearest case — the markers, the list rows and the
- * context panel all render from that one value, which is what makes selecting a
- * site on the map and selecting it in the list the same act rather than two
- * views that agree by luck. That one value is also what `?site=` addresses:
- * `selection-url.ts` is the whole of the deep link, and the dashboard reads it
- * once at mount and writes it whenever the selection moves.
+ * `selectedSiteId` is the clearest case — the markers, the list rows, the card
+ * on the map and the chart's overlay all render from that one value, which is
+ * what makes selecting a site on the map and selecting it in the list the same
+ * act rather than views that agree by luck. That one value is also what `?site=`
+ * addresses: `selection-url.ts` is the whole of the deep link, and the dashboard
+ * reads it once at mount and writes it whenever the selection moves.
  *
- * The top of that reading is a context swap, not a set of stacked slots: one
- * region shows the fleet's story or one site's, and which one is a function of
- * state rather than of a page the reader navigated to. Placing a site is the
- * one thing that is *not* in that region — it opens as a modal over the whole
- * page (`add-site/AddSiteDialog.tsx`), which is why the swap has two occupants
- * rather than three. `docs/design/dashboard-composition.md` records the rule
- * and what it is buying.
+ * A selection has a second half here, `selectionOrigin`, and it exists for one
+ * rule: focus moves for a reader and never for a link (`selection-origin.ts`,
+ * settling #260).
+ *
+ * Nothing under the map swaps any more. One region alternating between a site's
+ * panel and the fleet's was the shape the reading had until #265; a site's
+ * detail is now a card anchored to its own marker, so the reading below is a
+ * plain flow — the fleet's chart, the site list, the credit — and a selection
+ * changes what is *drawn on* those surfaces rather than which of them is there.
+ * Placing a site is a modal over the whole page
+ * (`add-site/AddSiteDialog.tsx`). `docs/design/dashboard-composition.md` records
+ * the reasoning and what it is buying.
  *
  * Two things it deliberately never does. It never re-lists the fleet: the
  * listing is a mount-time request, and a dashboard that polled it would fan out
@@ -188,6 +193,32 @@ export const Dashboard = ({
   const [selectedSiteId, setSelectedSiteId] = useState<Site['id'] | null>(() =>
     readSiteIdFromSearch(window.location.search),
   );
+  /**
+   * Who asked for the current selection — the fact the focus rule turns on
+   * (`selection-origin.ts`, settling #260).
+   *
+   * It starts at `'deep-link'` because that is the only thing the initialiser
+   * above can be answering: at mount the selection is whatever the address bar
+   * carried, and nobody has done anything yet. Every handler that moves the
+   * selection sets `'reader'` in the same commit, so the two values cannot
+   * disagree about a selection either of them can see. It is deliberately not
+   * cleared alongside a deselection: with no site there is no card to focus, and
+   * a value nothing reads is a value nothing can be wrong about.
+   */
+  const [selectionOrigin, setSelectionOrigin] = useState<SelectionOrigin>('deep-link');
+  /**
+   * Selecting a site, the way everything but the address bar does it.
+   *
+   * One helper rather than the pair of `set` calls written out at each of the
+   * three call sites: "which site" and "who asked" are one fact about one event,
+   * and a call site that set the first without the second would silently reuse
+   * the previous origin — which is the deep-link bug this exists to prevent,
+   * reintroduced from the other end.
+   */
+  const selectSiteForReader = (siteId: Site['id']): void => {
+    setSelectedSiteId(siteId);
+    setSelectionOrigin('reader');
+  };
   const [draft, setDraft] = useState<MapPosition | null>(null);
   const [creation, setCreation] = useState<CreationState>({ status: 'editing' });
   /**
@@ -220,12 +251,8 @@ export const Dashboard = ({
    */
   const createdSitesRef = useRef(createdSites);
   createdSitesRef.current = createdSites;
-  /** The context region itself — the thing a swap has to bring back into view. */
-  const contextRegionRef = useRef<HTMLDivElement>(null);
   /** The map's box, searched for the add-site control a closing draft returns focus to. */
   const mapRegionRef = useRef<HTMLDivElement>(null);
-  /** The Sites section's box, searched for the row a closing panel hands focus back to. */
-  const siteListRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -278,42 +305,14 @@ export const Dashboard = ({
     writeSiteIdToUrl(selectedSiteId);
   }, [selectedSiteId]);
 
-  // A scroll position is an external system in the same sense the address bar
-  // is — a property of the document that no render owns and no re-render
-  // restores — so keeping it level with the context is an effect's job
-  // (`react.md` rule 1). The page scrolls over an unbounded site list, so a
-  // reader who has scrolled to row forty and clicks a marker gets their answer
-  // written into a region that is now off the top of the screen: the swap
-  // happens, and the feedback is invisible. This puts the region back where it
-  // can be read. The full-bleed layout (#265) did not retire the problem — it
-  // moved the scroller from the panel column to the document and put a
-  // full-height map band above the region (`.dashboard-map` in dashboard.css
-  // owns that height), so a selection now lands *further* out of view than it
-  // used to.
-  //
-  // It cannot be a line in the click handlers, for the reason the URL effect
-  // cannot either: a context also arrives without a click — a creation selects
-  // the site it just made, and a `?site=` link opens on one.
-  //
-  // Only *into* a context, never out of one. Closing a panel hands the same
-  // region back to the fleet, and a page that jumped on the way out would move
-  // ground the reader did not ask to move. `block: 'start'` and the
-  // default (instant) behaviour rather than smooth scrolling: this is feedback
-  // for an action already taken, not an animation, and it must not fight a
-  // reader who scrolls immediately after clicking.
-  //
-  // A draft is deliberately not one of the arrivals this watches any more. It
-  // opens in a modal now (`add-site/AddSiteDialog.tsx`), which is painted in the
-  // top layer over wherever the reader happens to be — so there is nothing to
-  // bring into view, and scrolling the inert page underneath it would move
-  // ground for no reason the reader could see.
-  useEffect(() => {
-    if (selectedSiteId === null) {
-      return;
-    }
-
-    contextRegionRef.current?.scrollIntoView({ block: 'start' });
-  }, [selectedSiteId]);
+  // There is no context-scroll effect here any more, and its absence is the
+  // point. A selection used to be written into a region under the map, so a
+  // reader who had scrolled down to row forty got their answer somewhere off the
+  // top of the screen and the dashboard had to bring the region back into view
+  // (#148 review cycle 1). #265 anchored the answer to the site's own marker on
+  // the map instead — there is nothing under the reader's scroll position to
+  // chase, and the one thing that can be out of view is the *site*, which the
+  // map's own `SelectionCamera` brings into frame without moving the page.
 
   // Derived during render rather than mirrored into state. Memoised for
   // identity rather than speed: this array is what the map clusters, and a
@@ -331,34 +330,15 @@ export const Dashboard = ({
    */
   const { state: forecast, retry: retryForecast } = useFirstForecast(dataSource, selectedSiteId);
 
-  /**
-   * Puts focus back on one site's row in the fleet list.
-   *
-   * The other half of the rule the occupants of the context region follow. An
-   * occupant taking the region focuses its own heading; a panel *leaving* it has
-   * to hand focus somewhere too, because the button the reader pressed to close
-   * it is about to be unmounted and focus would otherwise fall to `body` — no
-   * position, nothing announced, and a keyboard user starting the page again.
-   * The row that names the site they were reading is where they were, so it is
-   * where they go back to.
-   *
-   * Matched on `dataset.siteId` rather than by interpolating the id into a
-   * selector: an id is data, and data does not belong in a query language. If no
-   * row matches — a listing that failed, a site scrolled out of a future
-   * virtualised list — this does nothing, and focus stays on the Close button
-   * until React unmounts it. That is the same place the browser would have left
-   * it anyway, so the fallback costs nothing that was not already lost.
+  /*
+   * There is no `focusSiteRow` here any more, and it is worth saying what
+   * replaced it. A closing site panel used to hand focus back by *searching the
+   * list* for the row naming its site, which was right only because a row was
+   * the only way to open one that this dashboard could see. The card on the map
+   * remembers the element that actually held focus when it opened and hands it
+   * back on close (`map/SitePopoverCard.tsx`), which is the same answer for a
+   * marker, a row and a creation without the dashboard knowing which happened.
    */
-  const focusSiteRow = (siteId: Site['id']): void => {
-    const rows = siteListRegionRef.current?.querySelectorAll<HTMLElement>('[data-site-id]') ?? [];
-
-    for (const row of rows) {
-      if (row.dataset.siteId === siteId) {
-        row.focus();
-        return;
-      }
-    }
-  };
 
   /**
    * Where focus lands when the add-site dialog leaves, and when it lands there
@@ -370,22 +350,21 @@ export const Dashboard = ({
    * handler would simply be overwritten (`add-site/AddSiteDialog.tsx` carries
    * the ordering argument).
    *
-   * Unconditional, which the draft's old context-region focus was not — and the
-   * difference is the modal. While the draft was an occupant of the region it
-   * displaced whatever was there, so cancelling *remounted* a `SitePanel` that
-   * then focused its own heading, and this had to stand aside for it. A modal
-   * displaces nothing: the panel behind never unmounted and has no reason to
-   * re-focus, so a dashboard that stood aside here would leave focus on `body`
-   * as the dialog leaves the document — the exact defect the mechanism exists
-   * to remove.
+   * Unconditional, and the reason it can be is that the dialog displaces
+   * nothing: the map and everything under it are still exactly where the reader
+   * left them, so nothing else has cause to claim the focus back and a dashboard
+   * that stood aside here would leave it on `body` as the dialog leaves the
+   * document — the exact defect this mechanism exists to remove.
    *
    * A creation is the one close that *does* have something else to say, and it
-   * says it without a guard here. `SitePanel`'s heading effect runs on a change
-   * of `site.id`, and React flushes every unmount cleanup in a commit before
-   * any mount or update effect in that same commit — so the panel's heading is
-   * the last focus set, which is the rule every occupant of the context region
-   * follows. `Dashboard.focus.test.tsx`'s creation case is what holds that
-   * ordering honest rather than a comment claiming it.
+   * says it without a guard here. React flushes every unmount cleanup in a
+   * commit before any mount effect in that same commit, so this runs first and
+   * the new site's card — mounting in the same commit, and reader-initiated —
+   * focuses its own heading last. That ordering is also what makes the card's
+   * captured opener the add-site control rather than the submit button that just
+   * left the document, so closing the card afterwards lands somewhere real.
+   * `Dashboard.focus.test.tsx`'s creation case is what holds it honest rather
+   * than a comment claiming it.
    *
    * The target is the control the reader opened the draft with, matched inside
    * the map's own box rather than across the document: it is the map's control,
@@ -417,7 +396,9 @@ export const Dashboard = ({
     // The returned site, server-assigned id and all. Appended locally rather
     // than re-listed: one fan-out avoided, and the site is already in hand.
     setCreatedSites((current) => [...current, result.value]);
-    setSelectedSiteId(result.value.id);
+    // A creation is a reader-initiated selection like any other: they placed the
+    // site, so its card announces itself and takes the focus.
+    selectSiteForReader(result.value.id);
     setDraft(null);
     setCreation({ status: 'editing' });
   };
@@ -441,9 +422,7 @@ export const Dashboard = ({
           theme={theme}
           sites={sites}
           selectedSiteId={selectedSiteId}
-          onSelectSite={(siteId) => {
-            setSelectedSiteId(siteId);
-          }}
+          onSelectSite={selectSiteForReader}
           onMapClick={(position) => {
             // The gate the add-site control arms. Without it every click on the
             // basemap opened a draft, so panning past a marker handed the reader
@@ -465,6 +444,16 @@ export const Dashboard = ({
           onToggleAddSite={() => {
             setAddSiteArmed((armed) => !armed);
           }}
+          selectedSite={selectedSite}
+          selectionOrigin={selectionOrigin}
+          firstForecast={forecast}
+          onRetryFirstForecast={retryForecast}
+          onDeselectSite={() => {
+            // State only. Where focus goes on the way out is the card's own
+            // business, from the unmount this triggers — it captured the element
+            // that opened it, which is the one thing the dashboard cannot see.
+            setSelectedSiteId(null);
+          }}
         />
       </div>
 
@@ -477,76 +466,38 @@ export const Dashboard = ({
        */}
       <div className="dashboard-content">
         {/*
-         * The context region: one of *two* things now, in a fixed place.
+         * The fleet's chart, first under the map and never displaced.
          *
-         * The draft used to be a third occupant here, outranking a selection
-         * without clearing it — a precedence rule the composition had to state
-         * because nothing on screen showed it. It is a modal now, so the
-         * precedence is physical: the page behind is inert and there is nothing
-         * to outrank. The selection still survives a draft, which is what makes
-         * cancelling hand the reader back the site they had open; that is now a
-         * property of the dashboard simply never clearing it, rather than of
-         * this condition testing `draft`.
+         * There is no context region here any more. One region showing either a
+         * site or the fleet was the shape the reading had while a site's detail
+         * was a panel in this flow; the detail is a card on the site's own marker
+         * now, so nothing swaps, nothing is hidden, and the fleet chart is on
+         * screen in every state of the page.
          *
-         * Both occupants share one wrapping element because "the context
-         * region" has to be addressable to be scrolled to, and because exactly
-         * one of them is ever visible — the box is the region, not a stack.
+         * The selection reaches it as an overlay rather than as a replacement,
+         * which is the whole argument for the move: a reader comparing one roof
+         * against the fleet was previously asked to remember one chart while
+         * looking at the other. The fleet's sum still changes on exactly one
+         * event — a site being added — and `refreshToken` is that event, counted.
          */}
-        <div className="dashboard-context" ref={contextRegionRef}>
-          {selectedSite !== null && (
-            <SitePanel
-              dataSource={dataSource}
-              site={selectedSite}
-              firstForecast={forecast}
-              onRetryFirstForecast={retryForecast}
-              onClose={() => {
-                // Focus first, state second: this reads the row while it is
-                // still the selected one, and moving focus off the Close button
-                // before React unmounts it is the whole point.
-                focusSiteRow(selectedSite.id);
-                setSelectedSiteId(null);
-              }}
-            />
-          )}
-
-          {/*
-           * Mounted always, hidden when something else holds the region — which
-           * inverts, on purpose, the unmount-on-leave rule the old view nav
-           * followed. A fleet re-sum in live mode is a paced fan-out of one
-           * request per site (~8 s over 60 sites), so it is a thing to be spent
-           * once and kept, not re-spent every time a reader closes a site. The
-           * fleet's sum changes on exactly one event — a site being added — and
-           * `refreshToken` is that event, counted. Deselection is not an event:
-           * hiding the panel keeps its state, and unhiding it costs nothing. The
-           * panel defers its *first* fan-out to its first reveal for the same
-           * frugality reason, so a `?site=` deep link that never shows the fleet
-           * never spends one (#178).
-           *
-           * A draft no longer hides it. The modal covers the page itself, so
-           * emptying the region behind the backdrop would buy nothing a reader
-           * can see and would cost them the context they had — visible again,
-           * unchanged, the instant they cancel.
-           */}
-          <FleetPanel
-            dataSource={dataSource}
-            sites={sites}
-            hidden={selectedSite !== null}
-            refreshToken={createdSites.length}
-          />
-        </div>
+        <FleetPanel
+          dataSource={dataSource}
+          sites={sites}
+          selectedSite={selectedSite}
+          selectionReady={forecast.status === 'ready'}
+          refreshToken={createdSites.length}
+        />
 
         <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
           <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
             Sites
           </h2>
-          <div className="dashboard-fleet" ref={siteListRegionRef}>
+          <div className="dashboard-fleet">
             <FleetSection
               load={load}
               sites={sites}
               selectedSiteId={selectedSiteId}
-              onSelectSite={(siteId) => {
-                setSelectedSiteId(siteId);
-              }}
+              onSelectSite={selectSiteForReader}
               onRetryLoad={() => {
                 setListAttempt((attempt) => attempt + 1);
               }}
@@ -574,10 +525,11 @@ export const Dashboard = ({
       {/*
        * The draft, in the top layer over all of the above.
        *
-       * Rendered from the dashboard rather than from inside the context region
-       * because it is no longer part of that flow — a modal is painted over the
-       * whole page, and nesting it in the region it replaced would only leave a
-       * reader of this file believing it still lives there.
+       * A sibling of the whole surface rather than a child of the reading,
+       * because a modal is painted over the whole page — nesting it inside the
+       * flow would only leave a reader of this file placing it there. (It was an
+       * occupant of the context region until #265, and that region is gone
+       * entirely now, so there is not even a box left to nest it in.)
        *
        * `key={draftKey(draft)}` is unchanged and still load-bearing:
        * `AddSiteForm` reads the coordinates once at mount, so a draft at a new

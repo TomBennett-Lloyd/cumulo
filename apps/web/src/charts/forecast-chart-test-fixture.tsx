@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { ForecastChart, type ForecastChartPoint } from './ForecastChart';
+import { ForecastChart, type ChartOverlaySeries, type ForecastChartPoint } from './ForecastChart';
 
 /**
  * Shared fixtures and DOM lookups for the `ForecastChart` suites. The static
@@ -9,14 +9,16 @@ import { ForecastChart, type ForecastChartPoint } from './ForecastChart';
  * together to stay meaningful (`structure.md` rule 7).
  */
 
-const iso = (hour: number): string => `2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`;
+/** Exported so an overlay can be built in the same time base the points use. */
+export const isoHour = (hour: number): string =>
+  `2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`;
 
 export const banded = (
   hour: number,
   medianKw: number,
   actualKw: number | null,
 ): ForecastChartPoint => ({
-  validTimeIso: iso(hour),
+  validTimeIso: isoHour(hour),
   medianKw,
   band: { p10Kw: medianKw - 1, p90Kw: medianKw + 1 },
   actualKw,
@@ -28,7 +30,7 @@ export const bare = (
   medianKw: number,
   actualKw: number | null,
 ): ForecastChartPoint => ({
-  validTimeIso: iso(hour),
+  validTimeIso: isoHour(hour),
   medianKw,
   actualKw,
 });
@@ -42,12 +44,32 @@ export const SERIES: readonly ForecastChartPoint[] = [
   banded(18, 2, null),
 ];
 
+/** Shared by both render helpers so the two cannot label the same chart differently. */
+const ARIA_LABEL = 'Sunnyside Farm: forecast and actuals';
+const TABLE_CAPTION = 'Table view — Sunnyside Farm, kW';
+
+/**
+ * The chart with the `overlay` prop genuinely absent, not passed as
+ * `undefined`. Every suite renders through this, so the no-overlay path stays
+ * the one the whole existing suite exercises (`testing.md` rule 9).
+ */
 export const renderChart = (points: readonly ForecastChartPoint[]): HTMLElement => {
+  const { container } = render(
+    <ForecastChart points={points} ariaLabel={ARIA_LABEL} tableCaption={TABLE_CAPTION} />,
+  );
+  return container;
+};
+
+export const renderChartWithOverlay = (
+  points: readonly ForecastChartPoint[],
+  overlay: ChartOverlaySeries,
+): HTMLElement => {
   const { container } = render(
     <ForecastChart
       points={points}
-      ariaLabel="Sunnyside Farm: forecast and actuals"
-      tableCaption="Table view — Sunnyside Farm, kW"
+      ariaLabel={ARIA_LABEL}
+      tableCaption={TABLE_CAPTION}
+      overlay={overlay}
     />,
   );
   return container;

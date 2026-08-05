@@ -65,7 +65,7 @@ export const LOADING_FLEET_LABEL = 'Loading the fleet…';
  */
 export const LOADING_FLEET_FORECAST_LABEL = 'Summing the fleet’s forecasts…';
 
-/** One site's series is loading; the site is named because the panel can swap. */
+/** One site's forecast is being fetched; the site is named because the selection can move. */
 export const loadingSiteSeriesLabel = (siteName: string): string =>
   `Loading the forecast for ${siteName}…`;
 
@@ -95,17 +95,17 @@ export const ADDING_SITE_LABEL = 'Adding site…';
 /** The fan-out succeeded and summed to nothing — an answer, not a failure. */
 export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
 
-/** A site exists but its forecast does not yet — the usual state seconds after creation. */
-export const NO_SITE_FORECAST_MESSAGE = 'No forecast available for this site yet';
-
-/**
- * Measured output is absent for the window shown.
- *
- * A notice rather than an error: the forecast beside it is complete and
- * trustworthy, and only the measured half is missing (`error-handling.md` —
- * partial results are labelled partial).
+/*
+ * Three sentences left this module in #265, and the reason is the same for all
+ * three: the surface that said them no longer exists. The site detail panel drew
+ * a windowed chart of one site's forecasts and measurements, so it owed the
+ * reader an empty answer, a "nothing was measured in this range" notice, and a
+ * failure sentence naming the site. The site's card on the map draws no chart —
+ * one site's forecast is now a series on the fleet's (`site-overlay.ts`) — so
+ * there is no window to be empty, no measured half to be missing, and no
+ * per-site series call to fail. Copy for a surface that is gone is copy that
+ * eventually gets reused by someone who assumes the surface came back.
  */
-export const NO_MEASUREMENTS_NOTICE = 'No measurements recorded in this range';
 
 /**
  * The aggregate is short of sites for some hours, stated in both directions.
@@ -119,6 +119,25 @@ export const partialAggregateNotice = (contributing: number, total: number): str
 /** The complementary answer: every displayed hour holds the whole fleet. */
 export const aggregatedFromCaption = (siteCount: number): string =>
   `Aggregated from ${String(siteCount)} sites`;
+
+/**
+ * The fleet chart is complete; the selected site's line over it is not.
+ *
+ * A notice rather than an error, and {@link partialAggregateNotice} above is its
+ * sibling: both label a chart that arrived and is incomplete, rather than
+ * withdrawing it. What failed here is an *addition* to a sum that is intact, so
+ * the honest thing is to say which part is missing and leave the rest standing
+ * (`error-handling.md` rule 5). Reporting it as a failure would tell a reader
+ * the fleet sum in front of them is suspect, which it is not.
+ *
+ * It names the site, because a reader looking at a chart with one line missing
+ * needs to know *which* line — and this sentence is the only place the app says
+ * so. The source's own message is deliberately not appended: the recourse here
+ * is a button, not a diagnosis, and the transport detail belongs to the failures
+ * a reader can act on with it.
+ */
+export const siteOverlayFailureNotice = (siteName: string): string =>
+  `${siteName}’s own forecast could not be loaded, so the chart shows the fleet only.`;
 
 /**
  * The first-forecast poll gave up before the pipeline answered.
@@ -156,10 +175,6 @@ export const firstForecastUnansweredMessage = (deadlineSeconds: number): string 
  * what these add is the surface the reader is looking at, which the transport
  * knows nothing about.
  */
-
-/** One site's window failed to load; the site is named because the panel can swap. */
-export const siteSeriesFailureMessage = (siteName: string, detail: string): string =>
-  `Could not load the forecast for ${siteName}: ${detail}`;
 
 /** The fleet fan-out failed — one sentence for both of the panel's two queries. */
 export const fleetForecastFailureMessage = (detail: string): string =>

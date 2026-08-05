@@ -5,33 +5,38 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
+import { FleetPanel } from './FleetPanel';
 import {
   CountingFleetSource,
   FAILED_FLEET,
   FORECASTLESS_FLEET,
   FULL_FLEET,
   HORIZON_ONLY_CAPABILITIES,
+  NO_SELECTION,
   PARTIAL_FLEET,
   panel,
   renderSettled,
+  rowCells,
   settle,
   SITE_A,
   type StubFleet,
 } from './fleet-panel-test-fixture';
 import { EMPTY_FLEET_MESSAGE } from './state-copy';
 
+/*
+ * What the fleet panel says about the fleet.
+ *
+ * Its other subject — what a *selected site* adds to the same chart — is
+ * `FleetPanel.overlay.test.tsx`, split off when this file reached the 300-line
+ * ceiling (`structure.md` rule 4) with the overlay's failure and retry cases
+ * still to write. The two suites share `fleet-panel-test-fixture.tsx`, which is
+ * where the canned fleet and the two lines every test writes to get a panel on
+ * screen live.
+ */
+
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
 // itself — every render has to be torn down explicitly or later queries match two panels.
 afterEach(cleanup);
-
-/**
- * One rendered table row, in column order — the row header and its cells together.
- *
- * `th, td` rather than the `cell` role, because the time column is a `rowheader` and a row read as
- * four values would drop the hour each of them belongs to.
- */
-const rowCells = (row: HTMLElement): readonly string[] =>
-  Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent);
 
 const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site[]> => {
   const listed = await dataSource.listSites();
@@ -212,87 +217,72 @@ describe('FleetPanel with nothing to show', () => {
   });
 });
 
-describe('FleetPanel as the content column keeps it mounted', () => {
+describe('FleetPanel as the page keeps it mounted', () => {
   it('re-sums the fleet when the dashboard bumps the refresh token', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
-    const { rerender } = render(panel(dataSource, false));
+    const { rerender } = render(panel(dataSource));
     await settle();
 
     expect(dataSource.forecastCallCount).toBe(1);
 
-    rerender(panel(dataSource, false, 1));
+    rerender(panel(dataSource, NO_SELECTION, 1));
 
     await waitFor(() => {
       expect(dataSource.forecastCallCount).toBe(2);
     });
   });
 
-  it('empties itself while hidden, and comes back without refetching', async () => {
+  it('sums the fleet on mount, without waiting to be looked at', async () => {
+    /*
+     * The trade #265 accepted, pinned as a fact rather than left as prose. The panel used to
+     * defer its first fan-out until it was first revealed, because a `?site=` deep link could
+     * leave it hidden forever (#178). Nothing hides it now — it is on screen in every state of
+     * the page — so a deferral would only buy a spinner in front of a chart the reader is
+     * already looking at.
+     */
     const dataSource = new CountingFleetSource(FULL_FLEET);
-    const { container, rerender } = render(panel(dataSource, false));
-    await settle();
+    render(panel(dataSource));
 
-    expect(dataSource.forecastCallCount).toBe(1);
-
-    rerender(panel(dataSource, true));
-
-    expect(container.querySelector('.fleet-panel')?.hasAttribute('hidden')).toBe(true);
-    // The children leave the tree with the reveal, not just the paint: an alert that mounts
-    // inside `display: none` never announces, and the reveal is an attribute change no screen
-    // reader reads as one (#161). The state that matters is in the hooks, not the markup.
-    expect(container.querySelector('svg')).toBeNull();
-
-    rerender(panel(dataSource, false));
-
-    expect(container.querySelector('.fleet-panel')?.hasAttribute('hidden')).toBe(false);
-    // Back on screen from the aggregate the hooks held throughout — the source was asked once.
-    expect(container.querySelector('svg')).not.toBeNull();
-    expect(dataSource.forecastCallCount).toBe(1);
-  });
-
-  it('drops a failure alert out of the DOM while hidden, rather than hiding it in place', async () => {
-    const dataSource = new CountingFleetSource(FAILED_FLEET);
-    const { rerender } = render(panel(dataSource, false));
-    await settle();
-
-    expect(screen.getByRole('alert').textContent).toContain('Could not load the fleet forecast');
-
-    rerender(panel(dataSource, true));
-
-    // `hidden: true` puts elements excluded from the accessibility tree back in scope for the
-    // query, so null here means *absent*, not merely inert. An alert left in the DOM through the
-    // hide is an alert the eventual reveal cannot announce.
-    expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
-  });
-
-  it('mounts the failure alert fresh on re-reveal, from the answer it got while hidden', async () => {
-    const dataSource = new CountingFleetSource(FAILED_FLEET);
-    const { rerender } = render(panel(dataSource, false));
-    // Revealed once, so the fan-out is spent and the failure is on screen. A panel that has never
-    // been revealed asks nothing at all (#178) — `FleetPanel.reveal.test.tsx` holds that half.
-    await settle();
-
-    rerender(panel(dataSource, true));
-    rerender(panel(dataSource, true, 1));
-
-    // Once revealed, a refresh token still re-sums while hidden: the reveal is what buys the first
-    // request, not a condition on every later one.
     await waitFor(() => {
-      expect(dataSource.forecastCallCount).toBe(2);
+      expect(dataSource.forecastCallCount).toBe(1);
     });
-    expect(screen.queryByRole('alert', { hidden: true })).toBeNull();
+    expect(dataSource.actualsCallCount).toBe(1);
+  });
 
-    // The token stays at 1 through the reveal: the dashboard's token is a count of created sites,
-    // so it never goes backwards, and re-rendering with the default 0 here would be a key change —
-    // a third request that says nothing about revealing.
-    rerender(panel(dataSource, false, 1));
+  it('asks nothing at all of a fleet with no sites in it', async () => {
+    // The other half of the gate that survived the reveal latch, and the one that still matters
+    // on a deep link: the listing is briefly in flight with no sites, and a fan-out fired then
+    // would be a sum of nothing followed straight away by a real one.
+    const dataSource = new CountingFleetSource(FULL_FLEET);
+    render(
+      <FleetPanel
+        dataSource={dataSource}
+        sites={[]}
+        selectedSite={null}
+        selectionReady={false}
+        refreshToken={0}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(EMPTY_FLEET_MESSAGE)).toBeDefined();
+    });
+    expect(dataSource.forecastCallCount).toBe(0);
+    expect(dataSource.actualsCallCount).toBe(0);
+  });
+
+  it('reports a failed sum in an alert that mounts into a tree already on screen', async () => {
+    const dataSource = new CountingFleetSource(FAILED_FLEET);
+    render(panel(dataSource));
 
     // A first mount into a tree that is already on screen — which is the one arrangement in which
-    // `role="alert"` actually announces.
+    // `role="alert"` actually announces (#161). It is the only arrangement left: the panel is
+    // never hidden, so an alert can no longer mount inside a `display: none` subtree that
+    // assistive technology never reads.
     expect((await screen.findByRole('alert')).textContent).toContain(
       'Could not load the fleet forecast: fleetForecasts range=24: upstream timed out',
     );
-    expect(dataSource.forecastCallCount).toBe(2);
+    expect(dataSource.forecastCallCount).toBe(1);
   });
 
   it('credits Open-Meteo nowhere inside itself — the page footer owns that credit', async () => {
