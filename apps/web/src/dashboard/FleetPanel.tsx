@@ -16,7 +16,6 @@ import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker, rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 import {
-  ADD_SITE_HINT,
   aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
   fleetForecastFailureMessage,
@@ -26,7 +25,7 @@ import {
 } from './state-copy';
 
 /*
- * The fleet's story, in the panel column's resting state.
+ * The fleet's story, in the content column's resting state.
  *
  * ## Capability honesty is structural here, not editorial
  *
@@ -220,7 +219,7 @@ export interface FleetPanelProps {
   readonly dataSource: FleetDataSource;
   /** The dashboard's one site list — listing plus session-created sites. */
   readonly sites: readonly Site[];
-  /** Kept mounted but hidden while a site panel or draft occupies the context region. */
+  /** Kept mounted but hidden while a site panel occupies the context region. */
   readonly hidden: boolean;
   /** Bumped by the dashboard when a site is created, to re-sum the fleet. */
   readonly refreshToken: number;
@@ -303,7 +302,13 @@ export const FleetPanel = ({
             <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
           ) : (
             <>
-              <p className="fleet-panel-hint">{ADD_SITE_HINT}</p>
+              {/*
+               * No add-a-site hint here any more. The map carries a labelled
+               * control for that now (`map/MapControls.tsx`), and a paragraph
+               * explaining a visible button is both redundant and the half most
+               * likely to be left describing an interaction that has moved on
+               * — which is exactly what it was doing.
+               */}
               {fleetLookback ? (
                 <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
               ) : (

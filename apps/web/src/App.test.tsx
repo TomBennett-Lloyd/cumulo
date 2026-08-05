@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { MapRegionComponent } from './dashboard/MapRegion';
+import { PRODUCT_TAGLINE } from './header/header-copy';
 import { MapSurface } from './map/MapSurface';
 import { THEME_STORAGE_KEY } from './theme';
 
@@ -83,7 +84,7 @@ const stubSystemPrefersDark = (prefersDark: boolean): void => {
 /**
  * Render the app and wait until its one surface is on screen.
  *
- * The panel column's "Sites" heading is the marker: it is the first thing the
+ * The dashboard's "Sites" heading is the marker: it is the first thing the
  * dashboard renders that belongs to the dashboard rather than the shell, so
  * finding it proves the shell mounted the surface — and awaiting it settles the
  * fleet listing the dashboard kicks off, so nothing resolves after the test.
@@ -92,6 +93,23 @@ const renderApp = async (mapRegion: MapRegionComponent): Promise<void> => {
   render(<App mapRegion={mapRegion} />);
   await screen.findByRole('heading', { name: 'Sites' });
 };
+
+/**
+ * Open the header menu, the way a visitor reaches anything in it.
+ *
+ * The theme toggle is no longer bare in the header bar — it lives behind this
+ * disclosure (`header/HeaderMenu.tsx`), so every theming case below has to open
+ * the menu before it can press anything. Going through the button rather than
+ * rendering the popover directly is the point: what these cases prove is that
+ * the shell's wiring survives, and reaching past the disclosure would prove it
+ * for a header nobody ships.
+ */
+const openHeaderMenu = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+};
+
+/** The theme toggle, reached where a visitor reaches it. */
+const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark theme' });
 
 beforeEach(() => {
   stubSystemPrefersDark(false);
@@ -120,11 +138,10 @@ describe('App theming', () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');
 
     await renderApp(StandInMapRegion);
+    openHeaderMenu();
 
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(screen.getByRole('button', { name: 'Dark theme' }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    expect(themeToggle().getAttribute('aria-pressed')).toBe('true');
   });
 
   it('follows the system preference when the visitor has never chosen', async () => {
@@ -146,7 +163,8 @@ describe('App theming', () => {
 
   it('flips the document theme each time the toggle is pressed', async () => {
     await renderApp(StandInMapRegion);
-    const toggle = screen.getByRole('button', { name: 'Dark theme' });
+    openHeaderMenu();
+    const toggle = themeToggle();
 
     fireEvent.click(toggle);
 
@@ -159,7 +177,8 @@ describe('App theming', () => {
 
   it('reports the current theme through the toggle it lives on', async () => {
     await renderApp(StandInMapRegion);
-    const toggle = screen.getByRole('button', { name: 'Dark theme' });
+    openHeaderMenu();
+    const toggle = themeToggle();
 
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
 
@@ -177,7 +196,8 @@ describe('App theming', () => {
     // later would be overruled by a preference they never expressed.
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dark theme' }));
+    openHeaderMenu();
+    fireEvent.click(themeToggle());
 
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('light');
   });
@@ -200,22 +220,61 @@ describe('App shell', () => {
     await renderApp(StandInMapRegion);
 
     expect(screen.getByRole('heading', { name: 'Cumulo', level: 1 })).toBeDefined();
-    expect(screen.getByText(/Residential solar fleet forecasting/)).toBeDefined();
+    // The constant the header renders, not a fragment of it. Spelling any part
+    // of the sentence out here would make this file a second place the tagline
+    // is written down, which is the thing `header/header-copy.ts` exists to
+    // prevent — and would leave this passing against the old words after an
+    // edit in its one home (`architecture.md` rule 9).
+    expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
+  });
+
+  it('leaves the header bar with one control on it, and the rest behind it', async () => {
+    await renderApp(StandInMapRegion);
+
+    // The bar is height the map does not get, so what sits on it is a design
+    // decision rather than an accident of where a component was added. The
+    // theme toggle used to be bare here; it is behind the disclosure now, and
+    // this is the assertion that notices if something bare comes back.
+    expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
+
+    openHeaderMenu();
+
+    expect(screen.getByRole('button', { name: 'Dark theme' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'About Cumulo' })).toBeDefined();
   });
 });
 
 describe('App attribution', () => {
-  it('credits Open-Meteo twice — once for the map, once for the panel column', async () => {
+  it('credits Open-Meteo twice at rest — once for the map, once for the page', async () => {
     // Two, and exactly two, is the design rather than a tolerance. The surface
     // has two halves that each display weather-derived data and each survive
-    // the other being empty: the map keeps its credit in its own strip, and the
-    // column keeps one at its foot that outlasts every context swap. What the
+    // the other being empty: the map keeps its own credit overlaid on its
+    // bottom edge, and the page keeps one at the foot of its content that
+    // outlasts every context swap. What the
     // count rules out is the failure the old views had — a credit per panel,
     // multiplying with the panels and disappearing with whichever one happened
     // to be unmounted (CC BY 4.0, CLAUDE.md hard constraints).
+    //
+    // "At rest" is the whole qualification: the About dialog owes a credit too
+    // (below), and it is mounted-but-closed on this page. Were its content in
+    // the document while closed, this count would read three — which is the
+    // reason `AboutDialog` renders its body only while open.
     await renderApp(StandInMapRegion);
 
     expect(screen.getAllByRole('link', { name: 'Open-Meteo.com' })).toHaveLength(2);
+  });
+
+  it('adds a third credit when the About dialog names its data sources', async () => {
+    // A surface that lists where the app's data comes from and omitted the
+    // weather source would be the one place the omission is most visible. It is
+    // a third obligation discharged, not the resting count drifting: the two
+    // above are still on screen behind the dialog.
+    await renderApp(StandInMapRegion);
+    openHeaderMenu();
+
+    fireEvent.click(screen.getByRole('button', { name: 'About Cumulo' }));
+
+    expect(screen.getAllByRole('link', { name: 'Open-Meteo.com' })).toHaveLength(3);
   });
 });
 

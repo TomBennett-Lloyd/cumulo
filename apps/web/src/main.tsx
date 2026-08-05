@@ -11,6 +11,7 @@
  */
 import '@cumulo/ui/styles.css';
 import './app.css';
+import './header/header.css';
 import './dashboard/dashboard.css';
 import './map/map.css';
 import './add-site/add-site.css';

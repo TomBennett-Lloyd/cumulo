@@ -22,12 +22,13 @@ import type { MapRegionProps } from './MapRegion';
  * Nothing here is a mock of maplibre. jsdom implements no WebGL, so the real
  * `MapRegion` cannot mount — which is why `Dashboard` takes the map region as a
  * prop (see `MapRegion.tsx` for the seam's reasoning) and why
- * {@link StubMapRegion} is a plain second way to reach the two callbacks the
- * real map calls. Every assertion in the suites is about what the *dashboard*
- * then does; that the real map fires those callbacks at all is browser
- * behaviour (`testing.md` rule 10), and is checked in
- * `e2e/map-regressions.spec.ts` — a basemap click opening the draft form, a
- * marker press opening the site panel.
+ * {@link StubMapRegion} is a plain second way to reach the callbacks the real
+ * map calls: selecting a site, clicking the basemap, and arming add-site mode.
+ * Every assertion in the suites is about what the *dashboard* then does; that
+ * the real map fires those callbacks at all is browser behaviour
+ * (`testing.md` rule 10), and is checked in `e2e/map-regressions.spec.ts` — an
+ * *armed* basemap click opening the draft dialog, an unarmed one opening
+ * nothing, and a marker press opening the site panel.
  */
 
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
@@ -48,8 +49,31 @@ export const StubMapRegion = ({
   selectedSiteId,
   onSelectSite,
   onMapClick,
+  addSiteArmed,
+  onToggleAddSite,
 }: MapRegionProps): ReactElement => (
   <div>
+    {/*
+     * Named and classed exactly as `MapControls` names and classes it. The name
+     * is how the suites press it; the class is how the *dashboard* finds it,
+     * since a closing draft returns focus by querying `.map-control-add` inside
+     * the map's box. A stand-in that dropped either would let the real control
+     * be renamed or reclassed without a single test noticing.
+     */}
+    <button
+      type="button"
+      className="map-control-add"
+      aria-pressed={addSiteArmed}
+      onClick={onToggleAddSite}
+    >
+      Add a site
+    </button>
+
+    {/*
+     * Fires the click unconditionally, exactly as the real map does. Whether an
+     * unarmed click means anything is the dashboard's decision, and a stand-in
+     * that filtered would be asserting its own copy of the gate under test.
+     */}
     <button
       type="button"
       onClick={() => {
@@ -123,15 +147,39 @@ export const visit = (url: string): void => {
   window.history.replaceState(null, '', url);
 };
 
-/** The panel column's resting state, whether or not it is the visible context. */
+/** The content column's resting state, whether or not it is the visible context. */
 export const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
 
 /** The fleet as rows — the map's table view, and where a closing panel returns focus. */
 export const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
 
-/** Drops a draft at {@link CLICK_POSITION}, the way a click on the real map would. */
-export const clickMap = (): void => {
+/** Presses the map's add-site toggle, the control that decides what a click means. */
+export const armAddSite = (): void => {
+  fireEvent.click(screen.getByRole('button', { name: 'Add a site' }));
+};
+
+/**
+ * Clicks the basemap at {@link CLICK_POSITION} without touching the toggle.
+ *
+ * The raw event, for the suites that are about the gate itself. Everything else
+ * wants {@link clickMap}, which is the whole gesture.
+ */
+export const clickBasemap = (): void => {
   fireEvent.click(screen.getByRole('button', { name: 'Click the map' }));
+};
+
+/**
+ * Drops a draft at {@link CLICK_POSITION}, the way a reader does it on the real
+ * map: arm add-site mode, then click.
+ *
+ * Two presses rather than one because that is now the gesture — a bare click is
+ * ignored (#265). Kept as one helper so the suites that are about what happens
+ * *after* a draft opens say "click the map" once, rather than restating the
+ * arming rule in a dozen places that would all have to change together.
+ */
+export const clickMap = (): void => {
+  armAddSite();
+  clickBasemap();
 };
 
 /** Presses the draft form's submit, which the throttle may still refuse. */

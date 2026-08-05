@@ -167,7 +167,25 @@ describe('FleetPanel with nothing to show', () => {
     expect(screen.getByText(EMPTY_FLEET_MESSAGE)).toBeDefined();
     expect(container.querySelector('svg')).toBeNull();
     expect(screen.queryByRole('group', { name: 'Aggregation range' })).toBeNull();
-    expect(container.querySelector('.fleet-panel-hint')).toBeNull();
+  });
+
+  it('leaves the add-a-site invitation to the map, in every fleet state', async () => {
+    // The panel used to carry a paragraph of instructions beside its chart. The
+    // map's own labelled control replaced it (#265), and this is what stops a
+    // second copy of that prose growing back here — the map is where the reader
+    // is looking when they place a site, and one instruction is enough.
+    const withSites = await renderSettled(new CountingFleetSource(FULL_FLEET));
+
+    expect(withSites.querySelector('.fleet-panel-hint')).toBeNull();
+    expect(withSites.textContent).not.toContain('anywhere on the map');
+
+    cleanup();
+    const empty = await renderSettled(new CountingFleetSource(FULL_FLEET), []);
+
+    // The empty fleet keeps *an* invitation — it is the demo's opening line —
+    // and it names the control rather than a bare click, which is the thing the
+    // control changed about what a click does.
+    expect(empty.textContent).toContain('press “Add a site” on the map');
   });
 
   it('explains a fleet with sites but no forecast hours', async () => {
@@ -194,7 +212,7 @@ describe('FleetPanel with nothing to show', () => {
   });
 });
 
-describe('FleetPanel as the column keeps it mounted', () => {
+describe('FleetPanel as the content column keeps it mounted', () => {
   it('re-sums the fleet when the dashboard bumps the refresh token', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
     const { rerender } = render(panel(dataSource, false));
@@ -277,7 +295,7 @@ describe('FleetPanel as the column keeps it mounted', () => {
     expect(dataSource.forecastCallCount).toBe(2);
   });
 
-  it('credits Open-Meteo nowhere inside itself — the column footer owns that credit', async () => {
+  it('credits Open-Meteo nowhere inside itself — the page footer owns that credit', async () => {
     await renderSettled(new CountingFleetSource(FULL_FLEET));
 
     expect(screen.queryByRole('link', { name: 'Open-Meteo.com' })).toBeNull();

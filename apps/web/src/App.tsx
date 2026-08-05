@@ -5,17 +5,19 @@ import { Dashboard } from './dashboard/Dashboard';
 import type { MapRegionComponent } from './dashboard/MapRegion';
 import type { FleetDataSource } from './data/fleet-data-source';
 import { selectFleetDataSource } from './data/fleet-source-selection';
-import { ThemeToggle } from './ThemeToggle';
+import { Brand } from './header/Brand';
+import { PRODUCT_TAGLINE } from './header/header-copy';
+import { HeaderMenu } from './header/HeaderMenu';
 import { useTheme } from './use-theme';
 
 /**
- * The web app shell: a compact header bar, the theme toggle, and the one place
- * the app decides where its data comes from.
+ * The web app shell: a compact header bar, the menu it hangs off, and the one
+ * place the app decides where its data comes from.
  *
  * There is one surface now. The nav that toggled three unmounted-on-leave views
- * is gone (#148): the map is the canvas, the panel column beside it tells the
- * fleet's story or one site's, and moving between them is a selection rather
- * than a page change. That deletes the shell's only state — nothing here is
+ * is gone (#148): the map is the canvas, the panels under it tell the fleet's
+ * story or one site's, and moving between them is a selection rather than a
+ * page change. That deletes the shell's only state — nothing here is
  * switched any more — so the shell's whole job is the frame around the
  * dashboard and the boundary under it.
  *
@@ -24,6 +26,12 @@ import { useTheme } from './use-theme';
  * choice — and the shell only says where the toggle sits and passes the theme
  * down to the map, which paints its basemap in it. The token gallery consumes
  * the same hook, so what a reviewer checks on that page is what ships here.
+ *
+ * Where the toggle sits is now "inside `HeaderMenu`" rather than "bare in the
+ * header": the bar has one control on it, and what that control reveals is the
+ * menu's business, not the shell's. The gallery keeps its own bare toggle,
+ * which is why `ThemeToggle` stays a shared component and did not move into
+ * `header/`.
  */
 
 /**
@@ -71,12 +79,9 @@ export const App = ({ mapRegion }: AppProps = {}): ReactElement => {
   return (
     <div className="app">
       <header className="app-header">
-        <h1 className="app-title">Cumulo</h1>
-        <p className="app-tagline">
-          Residential solar fleet forecasting — per-site forecasts with uncertainty, summed across a
-          fleet you can add to.
-        </p>
-        <ThemeToggle theme={theme} onToggle={toggle} />
+        <Brand />
+        <p className="app-tagline">{PRODUCT_TAGLINE}</p>
+        <HeaderMenu theme={theme} onToggleTheme={toggle} />
       </header>
 
       <AppErrorBoundary>

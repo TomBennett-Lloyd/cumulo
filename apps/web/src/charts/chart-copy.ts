@@ -3,7 +3,7 @@
  *
  * A deliberate sibling of `apps/web/src/dashboard/state-copy.ts` rather than an
  * extension of it: that module owns async-state copy (waiting, empty, failed)
- * read by the panel column, this one owns the words a plot prints about its own
+ * read by the content column, this one owns the words a plot prints about its own
  * frame, read by charts and their table twins. Different surfaces, different
  * consumers, free to diverge.
  *

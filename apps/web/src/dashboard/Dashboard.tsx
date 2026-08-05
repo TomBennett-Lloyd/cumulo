@@ -3,7 +3,7 @@ import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { AddSiteForm } from '../add-site/AddSiteForm';
+import { AddSiteDialog } from '../add-site/AddSiteDialog';
 import type { CreationRefusal } from '../add-site/creation-throttle';
 import { CreationThrottle } from '../add-site/creation-throttle';
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
@@ -82,7 +82,7 @@ interface FleetSectionProps {
 }
 
 /**
- * The fleet column's contents: the list, or an honest account of why there is
+ * The Sites section's contents: the list, or an honest account of why there is
  * no list.
  *
  * A failed listing shows the reason and a retry rather than an empty list
@@ -139,8 +139,9 @@ export interface DashboardProps {
 }
 
 /**
- * The fleet dashboard: the map as the canvas, the panel column beside it, and
- * the flow that turns a click on the map into a site with a forecast.
+ * The fleet dashboard: the map as a full-width canvas across the top, the
+ * reading beneath it, and the flow that turns a click on the map into a site
+ * with a forecast.
  *
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the list rows and the
@@ -150,10 +151,13 @@ export interface DashboardProps {
  * `selection-url.ts` is the whole of the deep link, and the dashboard reads it
  * once at mount and writes it whenever the selection moves.
  *
- * The column is a context swap, not a set of stacked slots: one region shows the
- * fleet's story, one site's, or a draft, and which one is a function of state
- * rather than of a page the reader navigated to. `docs/design/dashboard-composition.md`
- * records the rule and what it is buying.
+ * The top of that reading is a context swap, not a set of stacked slots: one
+ * region shows the fleet's story or one site's, and which one is a function of
+ * state rather than of a page the reader navigated to. Placing a site is the
+ * one thing that is *not* in that region — it opens as a modal over the whole
+ * page (`add-site/AddSiteDialog.tsx`), which is why the swap has two occupants
+ * rather than three. `docs/design/dashboard-composition.md` records the rule
+ * and what it is buying.
  *
  * Two things it deliberately never does. It never re-lists the fleet: the
  * listing is a mount-time request, and a dashboard that polled it would fan out
@@ -187,6 +191,17 @@ export const Dashboard = ({
   const [draft, setDraft] = useState<MapPosition | null>(null);
   const [creation, setCreation] = useState<CreationState>({ status: 'editing' });
   /**
+   * Whether the next click on the basemap drops a draft.
+   *
+   * Here rather than inside the map region because it is the *dashboard's*
+   * click handler that has to obey it: the map reports every basemap click it
+   * receives, and what a click means is this component's question. It is also
+   * why the flag can be single-shot without the map knowing — opening a draft
+   * clears it below, so placing a site is one deliberate act rather than a mode
+   * a reader can forget they left on and then be handed a form by.
+   */
+  const [addSiteArmed, setAddSiteArmed] = useState(false);
+  /**
    * One throttle per tab, at its shipped limits. Constructed lazily so its
    * window is anchored to this dashboard rather than to module import, and held
    * in state so no re-render can hand the visitor a fresh allowance.
@@ -207,7 +222,9 @@ export const Dashboard = ({
   createdSitesRef.current = createdSites;
   /** The context region itself — the thing a swap has to bring back into view. */
   const contextRegionRef = useRef<HTMLDivElement>(null);
-  /** The fleet column's box, searched for the row a closing panel hands focus back to. */
+  /** The map's box, searched for the add-site control a closing draft returns focus to. */
+  const mapRegionRef = useRef<HTMLDivElement>(null);
+  /** The Sites section's box, searched for the row a closing panel hands focus back to. */
   const siteListRegionRef = useRef<HTMLDivElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
@@ -264,29 +281,39 @@ export const Dashboard = ({
   // A scroll position is an external system in the same sense the address bar
   // is — a property of the document that no render owns and no re-render
   // restores — so keeping it level with the context is an effect's job
-  // (`react.md` rule 1). The column is one scroller over an unbounded site
-  // list, so a reader who has scrolled to row forty and clicks a marker gets
-  // their answer written into a region that is now off the top of the screen:
-  // the swap happens, and the feedback is invisible. This puts the region back
-  // where it can be read.
+  // (`react.md` rule 1). The page scrolls over an unbounded site list, so a
+  // reader who has scrolled to row forty and clicks a marker gets their answer
+  // written into a region that is now off the top of the screen: the swap
+  // happens, and the feedback is invisible. This puts the region back where it
+  // can be read. The full-bleed layout (#265) did not retire the problem — it
+  // moved the scroller from the panel column to the document and put a
+  // full-height map band above the region (`.dashboard-map` in dashboard.css
+  // owns that height), so a selection now lands *further* out of view than it
+  // used to.
   //
   // It cannot be a line in the click handlers, for the reason the URL effect
   // cannot either: a context also arrives without a click — a creation selects
   // the site it just made, and a `?site=` link opens on one.
   //
   // Only *into* a context, never out of one. Closing a panel hands the same
-  // region back to the fleet, and a column that jumped on the way out would
-  // move ground the reader did not ask to move. `block: 'start'` and the
+  // region back to the fleet, and a page that jumped on the way out would move
+  // ground the reader did not ask to move. `block: 'start'` and the
   // default (instant) behaviour rather than smooth scrolling: this is feedback
   // for an action already taken, not an animation, and it must not fight a
   // reader who scrolls immediately after clicking.
+  //
+  // A draft is deliberately not one of the arrivals this watches any more. It
+  // opens in a modal now (`add-site/AddSiteDialog.tsx`), which is painted in the
+  // top layer over wherever the reader happens to be — so there is nothing to
+  // bring into view, and scrolling the inert page underneath it would move
+  // ground for no reason the reader could see.
   useEffect(() => {
-    if (selectedSiteId === null && draft === null) {
+    if (selectedSiteId === null) {
       return;
     }
 
     contextRegionRef.current?.scrollIntoView({ block: 'start' });
-  }, [selectedSiteId, draft]);
+  }, [selectedSiteId]);
 
   // Derived during render rather than mirrored into state. Memoised for
   // identity rather than speed: this array is what the map clusters, and a
@@ -333,30 +360,45 @@ export const Dashboard = ({
     }
   };
 
+  /**
+   * Where focus lands when the add-site dialog leaves, and when it lands there
+   * at all.
+   *
+   * Called from the dialog's own unmount cleanup rather than from a click
+   * handler, because on the Escape path the browser restores focus itself while
+   * the `cancel` event is still being dispatched — a focus call made in the
+   * handler would simply be overwritten (`add-site/AddSiteDialog.tsx` carries
+   * the ordering argument).
+   *
+   * Unconditional, which the draft's old context-region focus was not — and the
+   * difference is the modal. While the draft was an occupant of the region it
+   * displaced whatever was there, so cancelling *remounted* a `SitePanel` that
+   * then focused its own heading, and this had to stand aside for it. A modal
+   * displaces nothing: the panel behind never unmounted and has no reason to
+   * re-focus, so a dashboard that stood aside here would leave focus on `body`
+   * as the dialog leaves the document — the exact defect the mechanism exists
+   * to remove.
+   *
+   * A creation is the one close that *does* have something else to say, and it
+   * says it without a guard here. `SitePanel`'s heading effect runs on a change
+   * of `site.id`, and React flushes every unmount cleanup in a commit before
+   * any mount or update effect in that same commit — so the panel's heading is
+   * the last focus set, which is the rule every occupant of the context region
+   * follows. `Dashboard.focus.test.tsx`'s creation case is what holds that
+   * ordering honest rather than a comment claiming it.
+   *
+   * The target is the control the reader opened the draft with, matched inside
+   * the map's own box rather than across the document: it is the map's control,
+   * the map region is substitutable (see `MapRegion.tsx`), and a document-wide
+   * query would happily find a second one somebody added elsewhere.
+   */
+  const returnFocusFromDraft = (): void => {
+    mapRegionRef.current?.querySelector<HTMLElement>('.map-control-add')?.focus();
+  };
+
   const closeDraft = (): void => {
     setDraft(null);
     setCreation({ status: 'editing' });
-
-    // A cancelled draft hands the region to whatever takes it back, and that
-    // occupant focuses its own heading — a re-mounting `SitePanel`. So the
-    // question here is precisely "is a panel about to remount?", and the value
-    // that answers it is `selectedSite`, because that is what the panel's own
-    // render condition below tests.
-    //
-    // Not `selectedSiteId`: the two come apart exactly when a selection names a
-    // site nothing can show — a `?site=` deep link whose listing failed, or has
-    // not landed yet — and there the id is set while the site is null. Guarding
-    // on the id would skip this focus *and* mount no panel to claim it, so
-    // focus would fall to body as the Cancel button unmounts, which is the one
-    // defect this whole mechanism exists to remove.
-    //
-    // When it is null nothing is remounting: the fleet panel was there all
-    // along, merely hidden, so the region itself is the only honest target and
-    // it takes focus here rather than growing focus logic inside `FleetPanel`
-    // that would race the row focus on close.
-    if (selectedSite === null) {
-      contextRegionRef.current?.focus();
-    }
   };
 
   const createSite = async (input: CreateSiteInput): Promise<void> => {
@@ -394,7 +436,7 @@ export const Dashboard = ({
 
   return (
     <div className="dashboard">
-      <div className="dashboard-map">
+      <div className="dashboard-map" ref={mapRegionRef}>
         <MapRegionSlot
           theme={theme}
           sites={sites}
@@ -403,47 +445,55 @@ export const Dashboard = ({
             setSelectedSiteId(siteId);
           }}
           onMapClick={(position) => {
+            // The gate the add-site control arms. Without it every click on the
+            // basemap opened a draft, so panning past a marker handed the reader
+            // a form they never asked for — and the affordance had to be
+            // explained in prose beside the fleet chart, because nothing on the
+            // map said it.
+            if (!addSiteArmed) {
+              return;
+            }
+
             setDraft(position);
             setCreation({ status: 'editing' });
+            // Single-shot: the mode is spent on the click that used it, so a
+            // reader is never left armed without a draft on screen to show for
+            // it.
+            setAddSiteArmed(false);
+          }}
+          addSiteArmed={addSiteArmed}
+          onToggleAddSite={() => {
+            setAddSiteArmed((armed) => !armed);
           }}
         />
       </div>
 
-      <aside className="dashboard-aside">
+      {/*
+       * A `div` rather than the `<aside>` this used to be. `aside` marks a
+       * complementary landmark — content beside the thing the page is about —
+       * which is what this was while it sat in a column next to the map. It is
+       * the page's own reading now, running under the map inside `<main>`, so
+       * the landmark would be describing a shape the layout no longer has.
+       */}
+      <div className="dashboard-content">
         {/*
-         * The context region: one of three things, in a fixed place.
+         * The context region: one of *two* things now, in a fixed place.
          *
-         * A draft outranks a selection but deliberately does not clear it. The
-         * two are different questions — "where shall the new site go" and
-         * "which site am I reading" — and cancelling a draft should hand the
-         * reader back the site they had open rather than the fleet they had
-         * left. That is why the site panel's condition tests `draft` rather
-         * than the dashboard clearing `selectedSiteId` when a draft opens.
+         * The draft used to be a third occupant here, outranking a selection
+         * without clearing it — a precedence rule the composition had to state
+         * because nothing on screen showed it. It is a modal now, so the
+         * precedence is physical: the page behind is inert and there is nothing
+         * to outrank. The selection still survives a draft, which is what makes
+         * cancelling hand the reader back the site they had open; that is now a
+         * property of the dashboard simply never clearing it, rather than of
+         * this condition testing `draft`.
          *
-         * The three occupants share one wrapping element because "the context
+         * Both occupants share one wrapping element because "the context
          * region" has to be addressable to be scrolled to, and because exactly
          * one of them is ever visible — the box is the region, not a stack.
          */}
-        {/*
-         * `tabIndex={-1}` makes the region a focus target without putting it in
-         * the tab order: it is where focus lands when a draft is cancelled and
-         * no panel is remounting to claim it.
-         */}
-        <div className="dashboard-context" ref={contextRegionRef} tabIndex={-1}>
-          {draft !== null && (
-            <AddSiteForm
-              key={draftKey(draft)}
-              latitude={draft.latitude}
-              longitude={draft.longitude}
-              submitting={creation.status === 'submitting'}
-              refusal={creation.status === 'refused' ? creation.refusal : null}
-              error={creation.status === 'failed' ? creation.message : null}
-              onSubmit={handleSubmit}
-              onCancel={closeDraft}
-            />
-          )}
-
-          {draft === null && selectedSite !== null && (
+        <div className="dashboard-context" ref={contextRegionRef}>
+          {selectedSite !== null && (
             <SitePanel
               dataSource={dataSource}
               site={selectedSite}
@@ -471,11 +521,16 @@ export const Dashboard = ({
            * panel defers its *first* fan-out to its first reveal for the same
            * frugality reason, so a `?site=` deep link that never shows the fleet
            * never spends one (#178).
+           *
+           * A draft no longer hides it. The modal covers the page itself, so
+           * emptying the region behind the backdrop would buy nothing a reader
+           * can see and would cost them the context they had — visible again,
+           * unchanged, the instant they cancel.
            */}
           <FleetPanel
             dataSource={dataSource}
             sites={sites}
-            hidden={draft !== null || selectedSite !== null}
+            hidden={selectedSite !== null}
             refreshToken={createdSites.length}
           />
         </div>
@@ -500,17 +555,49 @@ export const Dashboard = ({
         </section>
 
         {/*
-         * The column's one weather credit, at its foot rather than inside a
-         * panel. Every panel above it shows Open-Meteo-derived numbers, and a
-         * credit that lived in one of them would come and go with a selection
-         * — eventually absent exactly when it mattered. The map carries its own
-         * in its strip; two credits on one screen is the design, not an
-         * oversight (CC BY 4.0, CLAUDE.md hard constraints).
+         * The page's one weather credit, at the foot of the content rather than
+         * inside a panel. Every panel above it shows Open-Meteo-derived numbers,
+         * and a credit that lived in one of them would come and go with a
+         * selection — eventually absent exactly when it mattered. The map
+         * carries its own, overlaid on its bottom edge; two credits on one
+         * screen at rest is the design, not an oversight (CC BY 4.0, CLAUDE.md
+         * hard constraints). "At rest" because a surface a reader opens may owe
+         * its own: the About dialog (`header/AboutDialog.tsx`) credits every
+         * source it lists, making a third while it is open. More is compliance;
+         * fewer is the failure.
          */}
-        <footer className="dashboard-aside-footer">
+        <footer className="dashboard-footer">
           <OpenMeteoAttribution />
         </footer>
-      </aside>
+      </div>
+
+      {/*
+       * The draft, in the top layer over all of the above.
+       *
+       * Rendered from the dashboard rather than from inside the context region
+       * because it is no longer part of that flow — a modal is painted over the
+       * whole page, and nesting it in the region it replaced would only leave a
+       * reader of this file believing it still lives there.
+       *
+       * `key={draftKey(draft)}` is unchanged and still load-bearing:
+       * `AddSiteForm` reads the coordinates once at mount, so a draft at a new
+       * location has to remount rather than re-render (`AddSiteForm.tsx` has the
+       * argument). Mounting the dialog *is* opening it, so the same key now
+       * carries the modality too.
+       */}
+      {draft !== null && (
+        <AddSiteDialog
+          key={draftKey(draft)}
+          latitude={draft.latitude}
+          longitude={draft.longitude}
+          submitting={creation.status === 'submitting'}
+          refusal={creation.status === 'refused' ? creation.refusal : null}
+          error={creation.status === 'failed' ? creation.message : null}
+          onSubmit={handleSubmit}
+          onCancel={closeDraft}
+          onReturnFocus={returnFocusFromDraft}
+        />
+      )}
     </div>
   );
 };

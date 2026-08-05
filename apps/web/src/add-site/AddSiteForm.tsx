@@ -255,14 +255,22 @@ export const AddSiteForm = ({
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   /*
-   * The same rule the site panel follows: whatever takes the column's context
-   * region focuses its own heading, so a reader whose focus is somewhere else
-   * on the page is told the region changed rather than left to find out.
+   * The same rule the site panel follows: a surface that arrives focuses its own
+   * heading, so a reader whose focus is somewhere else on the page is told
+   * something changed rather than left to find out.
    *
-   * Mount *is* the whole of "taking the region" here, hence the empty
-   * dependencies: a second map click gives this form a new `key` and remounts
-   * it (see the note above on why the coordinates are read once), so there is
-   * no later moment at which a live form becomes a different draft.
+   * The *reason* moved with the form. While this was an occupant of the reading
+   * column's context region, the heading announced a region that had swapped
+   * underneath the reader. It opens inside a modal now
+   * (`AddSiteDialog.tsx`), and the heading is what names that dialog to a screen
+   * reader on arrival — the dialog element carries no accessible name of its own,
+   * which that component's header explains. Same line of code, same correctness,
+   * different argument.
+   *
+   * Mount *is* the whole of "arriving" here, hence the empty dependencies: a
+   * second draft gives this form a new `key` and remounts it (see the note above
+   * on why the coordinates are read once), so there is no later moment at which
+   * a live form becomes a different draft.
    *
    * Focus is document state, an external system no render owns — the case an
    * effect is for (`react.md` rule 1).

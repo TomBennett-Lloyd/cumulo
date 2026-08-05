@@ -7,9 +7,9 @@ import { routeBasemap } from './hermetic-basemap';
  * The keyboard path to a site, driven by a real keyboard.
  *
  * The dashboard's answer to a selection is a focus move: `SitePanel` focuses its
- * own heading on mount so the column swap announces itself rather than leaving a
- * reader's focus on a control that is about to unmount (#93, and the panel's own
- * comment). Under jsdom that is provable only as far as `document.activeElement`
+ * own heading on mount so the context swap announces itself rather than leaving
+ * a reader's focus on a control that is about to unmount (#93, and the panel's
+ * own comment). Under jsdom that is provable only as far as `document.activeElement`
  * — the assertion `Dashboard.focus.test.tsx` already makes. What it cannot show
  * is the half a reader actually experiences: whether the ring `@cumulo/ui` paints
  * on `:focus-visible` is on the heading afterwards. `:focus-visible` is a
@@ -27,11 +27,12 @@ import { routeBasemap } from './hermetic-basemap';
  * How many Tab presses to allow before calling the row unreachable.
  *
  * A ceiling, not a measurement of the tab order: the map's marker buttons come
- * before the aside in DOM order and their number moves with the clustering, so
- * pinning an exact count would make this case fail on a camera change rather
- * than on a defect. Generous enough to cross every marker, small enough that an
- * aside nothing can tab into fails loudly here rather than as an unexplained
- * Playwright timeout.
+ * before the content column in DOM order — the map is the first thing in the
+ * dashboard and the column follows it down the page (#265) — and their number
+ * moves with the clustering, so pinning an exact count would make this case
+ * fail on a camera change rather than on a defect. Generous enough to cross
+ * every marker, small enough that a site list nothing can tab into fails loudly
+ * here rather than as an unexplained Playwright timeout.
  */
 const MAX_TAB_PRESSES = 100;
 
@@ -49,7 +50,7 @@ const focusedSiteId = async (page: Page): Promise<string | null> =>
 /**
  * Tab until a site row holds focus, and hand back which site it is.
  *
- * Throws rather than returning null when the aside is never reached: a caller
+ * Throws rather than returning null when the site list is never reached: a caller
  * has nothing to do with "no row", and the message names the reason where a
  * bare timeout would not.
  */

@@ -21,7 +21,7 @@ export interface MarkerButtonProps {
  * "focused by keyboard" is the one that decides — a React `onFocus` handler
  * would light the marker up on a mouse click too. Selection is the one state
  * that comes in as a prop, because it is the *dashboard's* state: the list
- * beside the map renders the same site from the same `selectedSiteId`.
+ * under the map renders the same site from the same `selectedSiteId`.
  *
  * The tooltip is rendered always and revealed by CSS, rather than mounted on
  * hover: `aria-label` already names the marker for a screen reader, and text

@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode, Ref } from 'react';
 import { MapAttributionStrip } from './MapAttributionStrip';
 
 /*
- * The map's column, written once.
+ * The map's shell, written once.
  *
  * Before this module there were four copies of `<div className="map-view">` —
  * the real map, the loading placeholder, the load failure, and a test stand-in —
@@ -28,7 +28,20 @@ import { MapAttributionStrip } from './MapAttributionStrip';
  * a failure message would be a state no caller can mean.
  */
 export type MapCanvasSlot =
-  | { readonly kind: 'map'; readonly containerRef: Ref<HTMLDivElement> }
+  | {
+      readonly kind: 'map';
+      readonly containerRef: Ref<HTMLDivElement>;
+      /**
+       * Whether the next click on this canvas drops a site.
+       *
+       * On the `map` arm alone, because it is the only arm with a basemap to
+       * click: a placeholder that could be "armed" would be a state no caller
+       * can mean. It reaches the DOM as a class rather than a cursor set on the
+       * GL container by hand, so the whole treatment stays in `map.css` where
+       * the token gate can see it.
+       */
+      readonly addSiteArmed: boolean;
+    }
   | { readonly kind: 'placeholder'; readonly label: string }
   | { readonly kind: 'failure'; readonly message: string };
 
@@ -57,7 +70,12 @@ export interface MapSurfaceProps {
 const mapCanvasElement = (canvas: MapCanvasSlot): ReactElement => {
   switch (canvas.kind) {
     case 'map':
-      return <div className="map-canvas" ref={canvas.containerRef} />;
+      return (
+        <div
+          className={canvas.addSiteArmed ? 'map-canvas map-canvas-armed' : 'map-canvas'}
+          ref={canvas.containerRef}
+        />
+      );
     case 'placeholder':
       return (
         <div className="map-canvas map-placeholder" aria-busy="true">
@@ -74,7 +92,8 @@ const mapCanvasElement = (canvas: MapCanvasSlot): ReactElement => {
 };
 
 /**
- * The map column: a canvas box, whatever is drawn over it, and the credits.
+ * The map's box: a canvas, whatever is drawn over it, and the credits over
+ * its bottom edge.
  *
  * `MapAttributionStrip` is unconditional and has no prop that could remove it.
  * The Open-Meteo credit is a licence obligation wherever weather-derived data

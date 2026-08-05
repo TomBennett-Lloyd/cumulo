@@ -242,12 +242,16 @@ describe('AddSiteForm', () => {
   });
 
   /*
-   * The form is one of the three things that can occupy the column's context
-   * region, and it announces itself the same way the site panel does: by
-   * focusing its own heading on mount. Without it a visitor who clicks the map
-   * has their focus left wherever it was while the region changes silently.
+   * The form announces itself the same way the site panel does: by focusing its
+   * own heading on mount. Without it a visitor who has just placed a pin has
+   * their focus left wherever it was while a form opens somewhere else.
+   *
+   * It is a modal that arrives now rather than an occupant of the reading
+   * column's context region (`AddSiteDialog.tsx`), which makes the heading do a
+   * second job: the `<dialog>` carries no accessible name of its own, so this is
+   * what a screen reader is given on arrival.
    */
-  it('takes the region by focusing its own heading', () => {
+  it('announces itself on arrival by focusing its own heading', () => {
     renderForm();
 
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Add a site' }));

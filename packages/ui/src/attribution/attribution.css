@@ -1,7 +1,30 @@
 /*
  * Styling for <OpenMeteoAttribution />. Tokens only — the credit has to stay
- * legible on every surface and in both themes, so it borrows the muted ink and
- * the accent link colour rather than choosing its own.
+ * legible on every surface and in both themes, so it borrows the palette's inks
+ * rather than choosing its own.
+ *
+ * The link is muted ink and underlined rather than accent-coloured, which is a
+ * legibility decision and not a stylistic one (#265). This credit is a CC BY 4.0
+ * licence condition, so it has to be readable on every surface it can land on —
+ * and since the map's credits moved onto the tiles it lands on
+ * `--color-surface-veil`, a translucent surface whose effective contrast is the
+ * surface composited with whatever the basemap drew underneath. `--color-accent`
+ * does not survive that: on the veil it is below AA for small text in *both*
+ * modes (3.49:1 light, 3.76:1 dark), which is the operative reason it is not
+ * used here. In light mode it is additionally below AA on the opaque surfaces
+ * — 4.30:1 on --color-surface — so raising the veil toward opacity would not
+ * have rescued it there either; dark accent does clear AA on its own opaque
+ * surfaces, and the veil is what it fails. Muted ink survives both. The
+ * measured record lives in `../tokens/tokens.css`'s header, which owns those
+ * numbers.
+ *
+ * The underline is what pays for dropping the colour. WCAG 1.4.1 wants a link
+ * distinguishable from surrounding text by more than colour alone, and with the
+ * link now the same ink as the prose around it, the underline is the *only*
+ * thing marking it — so it is load-bearing, not decoration, and must not be
+ * traded for a hover-only underline. Hover and keyboard focus brighten to full
+ * text ink, which is the state change a pointer or a Tab has earned; the focus
+ * ring itself comes from `../styles.css` and is not restated here.
  */
 
 .cumulo-attribution {
@@ -12,5 +35,11 @@
 }
 
 .cumulo-attribution a {
-  color: var(--color-accent);
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+
+.cumulo-attribution a:hover,
+.cumulo-attribution a:focus-visible {
+  color: var(--color-text);
 }

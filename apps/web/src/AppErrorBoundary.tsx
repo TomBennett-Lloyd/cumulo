@@ -29,7 +29,7 @@ import { APP_FAILURE_ADVICE, APP_FAILURE_HEADING } from './dashboard/state-copy'
  * failed map chunk is a known, routine production event (an `index.html` cached
  * from before a redeploy points at a hashed chunk that 404s) and the right
  * answer is to lose the map and keep the fleet list, the panels and the
- * add-site flow working beside it. Deleting the local boundary would promote
+ * add-site flow working below it. Deleting the local boundary would promote
  * that everyday failure into a whole-page failure. This boundary is the outer
  * net for what nothing else expected.
  */
