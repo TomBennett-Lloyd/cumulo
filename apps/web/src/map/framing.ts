@@ -30,8 +30,11 @@
  */
 
 /**
- * Every axis of the map's camera, named here so that "the opening camera" is one
- * value rather than a list a caller can partially copy.
+ * Every reader-reachable axis of the map's camera, named here so that "the
+ * opening camera" is one value rather than a list a caller can partially copy.
+ * maplibre 6.1 also has `roll` (and `elevation`) behind options this app leaves
+ * disabled — whoever enables `rollEnabled` must add the axis HERE, or the reset
+ * inherits exactly the partial-restore bug this object exists to prevent.
  *
  * Structural rather than imported from maplibre on purpose — see the header. It
  * is assignable to both `MapOptions` at construction and `CameraOptions` at

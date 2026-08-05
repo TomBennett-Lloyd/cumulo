@@ -140,7 +140,9 @@ well clear of the floor that mix was validated against.
 
 - **Reset map view** returns the camera to the framing the map opened on. It takes that framing
   whole, from the one constant that also constructs the map (`apps/web/src/map/framing.ts`) — the
-  point being that _every_ axis comes back, rotation and tilt included. A reset that named only the
+  point being that every reader-reachable axis comes back, rotation and tilt included (axes behind
+  options the app leaves disabled, like roll, join the constant when the option does — the constant's
+  own comment carries that obligation). A reset that named only the
   axes somebody happened to think of is not a smaller version of this control, it is a broken one:
   maplibre gives every reader drag-rotate and pitch by default, so the forgotten axes are one
   gesture away.
