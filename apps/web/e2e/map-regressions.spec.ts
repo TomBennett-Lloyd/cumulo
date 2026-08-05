@@ -34,6 +34,24 @@ const WIDE_VIEWPORT = { width: 1280, height: 900 };
 /** Keeps a candidate click point off the map's own edge furniture. */
 const EDGE_INSET_PX = 24;
 
+/** Far enough that no rounding could account for it, short enough to stay on the map. */
+const DRAG_DISTANCE_PX = 300;
+
+/**
+ * Intermediate mouse positions in a drag.
+ *
+ * maplibre's drag-pan handler works from `mousemove` deltas, so a single jump
+ * from press to release is a gesture it can miss entirely. Ten is a pan, not an
+ * animation budget — nothing here waits on it.
+ */
+const DRAG_STEPS = 10;
+
+/** How far a marker may miss its opening position after a reset, in CSS pixels. */
+const RESET_TOLERANCE_PX = 2;
+
+/** Both kinds of marker: which one is drawn is the camera's business, not this spec's. */
+const ANY_MARKER = '.map-site-marker, .map-cluster-marker';
+
 interface ViewportPoint {
   readonly x: number;
   readonly y: number;
@@ -106,6 +124,83 @@ const basemapPoint = async (page: Page): Promise<ViewportPoint> => {
   throw new Error('Every corner of the map is covered by a marker or by the credits.');
 };
 
+/**
+ * Every marker's top-left corner, in screen space, ordered so two readings can
+ * be compared without knowing which marker is which.
+ *
+ * Identity is the thing this deliberately avoids needing. Panning changes the
+ * bounds, so markers leave and enter the overlay and DOM order shuffles; the
+ * seed fleet's clusters mostly share the name "Cluster of N sites", so names do
+ * not single one out either. What a camera reset actually claims is stronger
+ * than "that marker came back" anyway: *every* marker is where it was, because
+ * the camera is what puts them there. So the whole set is the measurement.
+ */
+const markerOrigins = async (page: Page): Promise<readonly ViewportPoint[]> =>
+  page.locator(ANY_MARKER).evaluateAll((markers) =>
+    markers
+      .map((marker) => {
+        const box = marker.getBoundingClientRect();
+
+        return { x: box.x, y: box.y };
+      })
+      .sort((left, right) => left.x - right.x || left.y - right.y),
+  );
+
+/**
+ * The worst distance between two marker readings, so one number can carry the
+ * whole question — and `Infinity` when the sets are not even the same size,
+ * which is a camera in a different place rather than a near miss.
+ */
+const originDrift = (before: readonly ViewportPoint[], after: readonly ViewportPoint[]): number => {
+  if (before.length !== after.length) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return before.reduce((worst, origin, index) => {
+    const moved = after[index];
+
+    if (moved === undefined) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.max(worst, Math.abs(origin.x - moved.x), Math.abs(origin.y - moved.y));
+  }, 0);
+};
+
+/**
+ * Presses the basemap and drags horizontally, away from whichever edge the
+ * press landed near.
+ *
+ * The press has to land on basemap rather than on a marker — a marker swallows
+ * the `mousedown` and the map never pans — so it reuses the same covered-corner
+ * search a click does. Horizontal only, and away from the nearer side, so the
+ * path cannot leave the map's box whatever the viewport is.
+ */
+const dragMap = async (page: Page): Promise<void> => {
+  const start = await basemapPoint(page);
+  const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  const direction = start.x < layoutWidth / 2 ? 1 : -1;
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + direction * DRAG_DISTANCE_PX, start.y, { steps: DRAG_STEPS });
+  await page.mouse.up();
+};
+
+/**
+ * The cursor the GL container is actually painting, as the browser computes it.
+ *
+ * Read off `.maplibregl-canvas-container` rather than off `.map-canvas` because
+ * that is the element maplibre sets `cursor: grab` on directly, and a
+ * declaration on an element beats one inherited from its ancestor whatever the
+ * specificity — which is exactly the trap the armed rule in `map.css` is written
+ * to avoid, and therefore the thing worth measuring.
+ */
+const canvasCursor = async (page: Page): Promise<string> =>
+  page
+    .locator('.maplibregl-canvas-container')
+    .evaluate((element) => window.getComputedStyle(element).cursor);
+
 const markerShapes = async (page: Page): Promise<readonly MarkerShape[]> =>
   page.locator('.maplibregl-marker').evaluateAll((wrappers) =>
     wrappers.map((wrapper) => ({
@@ -136,19 +231,99 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('opens the draft form when the basemap itself is clicked', async ({ page }) => {
+test('opens the draft form when an armed basemap click lands (issue 265)', async ({ page }) => {
   /*
-   * The positive control for the case below, and a case in its own right: the
-   * map-click subscription has to keep answering the clicks it *is* for. Without
-   * this, deleting the handler outright would leave the marker-propagation
-   * assertion perfectly green.
+   * The positive control for the two cases below, and a case in its own right:
+   * the map-click subscription has to keep answering the clicks it *is* for.
+   * Without this, deleting the handler outright would leave both the
+   * marker-propagation assertion and the disarmed case perfectly green.
+   *
+   * Arming first is the gesture now (#265). A bare click used to open a draft,
+   * which made panning past a marker a way to be handed a form nobody asked for.
    */
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  const toggle = page.locator('.map-control-add');
+
+  /*
+   * The armed cursor, measured either side of the press — and the resting read
+   * is the negative control that makes the second one mean something. maplibre
+   * sets `cursor: grab` on its own container, so the crosshair is a rule that
+   * has to *win* rather than merely exist; a `map.css` selector that lost would
+   * report `grab` here and be invisible to every other gate, since jsdom
+   * computes no styles and the css contract test only proves text was written.
+   */
+  expect(await canvasCursor(page)).toBe('grab');
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => canvasCursor(page)).toBe('crosshair');
 
   const point = await basemapPoint(page);
   await page.mouse.click(point.x, point.y);
 
   await expect(page.locator('form.add-site-form')).toBeVisible();
+});
+
+test('ignores a basemap click while add-site mode is disarmed (issue 265)', async ({ page }) => {
+  /*
+   * The other half of the mode, and the reason it exists: the map reports every
+   * basemap click, and the dashboard answers only the armed ones.
+   *
+   * `toHaveCount(0)` is satisfied by a page where nothing ever happens, so it
+   * carries no proof on its own — the armed case above is what supplies it, by
+   * showing that this same helper's point and this same click do open a form
+   * once the toggle has been pressed. The `aria-pressed` read below is the
+   * other guard: it fails loudly if the control ever ships already armed, which
+   * would make this case pass for the wrong reason.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  await expect(page.locator('.map-control-add')).toHaveAttribute('aria-pressed', 'false');
+
+  const point = await basemapPoint(page);
+  await page.mouse.click(point.x, point.y);
+
+  await expect(page.locator('form.add-site-form')).toHaveCount(0);
+});
+
+test('puts the camera back where it opened when the view is reset (issue 265)', async ({
+  page,
+}) => {
+  /*
+   * `MapControls` reads its target from `framing.ts` — the module that also
+   * supplies `MapView`'s opening camera — so what this proves is that the two
+   * are the same framing rather than two constants that happen to agree. It is
+   * a browser criterion in the strict sense: it needs a real camera, a real
+   * drag, and marker geometry read off a laid-out page, none of which jsdom has.
+   *
+   * Markers are the instrument rather than the subject. Their screen positions
+   * are a function of the camera, so "every marker is back within two pixels" is
+   * the observable form of "the camera went back" — and unlike reading the map's
+   * own centre, it goes through the same rendering path a reader looks at.
+   */
+  await expect(page.locator(ANY_MARKER).first()).toBeVisible();
+
+  const opening = await markerOrigins(page);
+
+  expect(opening.length).toBeGreaterThan(0);
+
+  await dragMap(page);
+
+  // The overlay reclusters on `moveend`, so the drag's effect arrives as a
+  // state rather than after a duration — polled, never slept on.
+  await expect
+    .poll(async () => originDrift(opening, await markerOrigins(page)), {
+      message: 'The map never moved, so the reset below would prove nothing.',
+    })
+    .toBeGreaterThan(RESET_TOLERANCE_PX);
+
+  await page.locator('.map-control-reset').click();
+
+  await expect
+    .poll(async () => originDrift(opening, await markerOrigins(page)), {
+      message: 'Reset did not return the camera to the framing the map opened on.',
+    })
+    .toBeLessThanOrEqual(RESET_TOLERANCE_PX);
 });
 
 test('answers a marker press with the site panel and nothing else (#17)', async ({ page }) => {

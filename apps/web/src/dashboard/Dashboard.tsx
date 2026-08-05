@@ -189,6 +189,17 @@ export const Dashboard = ({
   const [draft, setDraft] = useState<MapPosition | null>(null);
   const [creation, setCreation] = useState<CreationState>({ status: 'editing' });
   /**
+   * Whether the next click on the basemap drops a draft.
+   *
+   * Here rather than inside the map region because it is the *dashboard's*
+   * click handler that has to obey it: the map reports every basemap click it
+   * receives, and what a click means is this component's question. It is also
+   * why the flag can be single-shot without the map knowing — opening a draft
+   * clears it below, so placing a site is one deliberate act rather than a mode
+   * a reader can forget they left on and then be handed a form by.
+   */
+  const [addSiteArmed, setAddSiteArmed] = useState(false);
+  /**
    * One throttle per tab, at its shipped limits. Constructed lazily so its
    * window is anchored to this dashboard rather than to module import, and held
    * in state so no re-render can hand the visitor a fresh allowance.
@@ -409,8 +420,25 @@ export const Dashboard = ({
             setSelectedSiteId(siteId);
           }}
           onMapClick={(position) => {
+            // The gate the add-site control arms. Without it every click on the
+            // basemap opened a draft, so panning past a marker handed the reader
+            // a form they never asked for — and the affordance had to be
+            // explained in prose beside the fleet chart, because nothing on the
+            // map said it.
+            if (!addSiteArmed) {
+              return;
+            }
+
             setDraft(position);
             setCreation({ status: 'editing' });
+            // Single-shot: the mode is spent on the click that used it, so a
+            // reader is never left armed without a draft on screen to show for
+            // it.
+            setAddSiteArmed(false);
+          }}
+          addSiteArmed={addSiteArmed}
+          onToggleAddSite={() => {
+            setAddSiteArmed((armed) => !armed);
           }}
         />
       </div>

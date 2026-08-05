@@ -11,6 +11,8 @@ import type { FleetSourceResult, FleetDataSource } from '../data/fleet-data-sour
 import {
   addSite,
   advanceBy,
+  armAddSite,
+  clickBasemap,
   clickMap,
   CREATED_SITE_NAME,
   fleetList,
@@ -475,6 +477,43 @@ describe('Dashboard context region', () => {
     // Creation is the one event that changes the sum, so it is the one event
     // that re-spends the fan-out.
     expect(fleetForecasts).toHaveBeenCalledTimes(2);
+  });
+});
+
+/*
+ * The gate between a click on the basemap and a draft.
+ *
+ * `StubMapRegion` reports every basemap click, exactly as the real map does, so
+ * what these two prove is the *dashboard's* rule rather than the stand-in's. The
+ * negative case is the one that bites: delete the gate from `onMapClick` and it
+ * is the only assertion in the suite that changes.
+ */
+describe('Dashboard add-site mode', () => {
+  it('ignores a map click while add-site mode is disarmed', async () => {
+    renderDashboard(new DemoFleetDataSource());
+    await settle();
+
+    clickBasemap();
+
+    expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
+  });
+
+  it('opens one draft per arming, and spends the arming on it', async () => {
+    const container = renderDashboard(new DemoFleetDataSource());
+    await settle();
+
+    armAddSite();
+    clickBasemap();
+
+    expect(screen.getByRole('button', { name: 'Add site' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    clickBasemap();
+
+    // Single-shot: the arming was spent on the first click, so the second is an
+    // ordinary basemap click again and the region is back on the fleet.
+    expect(screen.queryByRole('button', { name: 'Add site' })).toBeNull();
+    expect(fleetPanel(container)?.hasAttribute('hidden')).toBe(false);
   });
 });
 

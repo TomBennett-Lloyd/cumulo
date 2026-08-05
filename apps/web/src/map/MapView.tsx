@@ -68,7 +68,19 @@ export interface MapViewProps {
    * `isMarkerClick`.
    */
   readonly onMapClick?: (position: MapPosition) => void;
-  /** Overlays — markers, clusters — which reach the map through `MapContext`. */
+  /**
+   * Whether the next basemap click drops a site, which the canvas says with a
+   * crosshair.
+   *
+   * Passed through to the canvas slot rather than applied to maplibre's own
+   * container in an effect. The imperative form — reaching for
+   * `map.getCanvas().style.cursor` — is what the library's examples reach for,
+   * and it would be a fourth effect here synchronizing a value React already
+   * has, against a DOM node React already owns (`react.md` rule 1: effects are
+   * for external systems, and a cursor is not one).
+   */
+  readonly addSiteArmed: boolean;
+  /** Overlays — markers, clusters, controls — which reach the map through `MapContext`. */
   readonly children?: ReactNode;
 }
 
@@ -89,7 +101,12 @@ export interface MapViewProps {
  * make `theme` a dependency of map *creation*, and the map would be destroyed
  * and rebuilt every time the visitor flipped the toggle.
  */
-export const MapView = ({ theme, onMapClick, children }: MapViewProps): ReactElement => {
+export const MapView = ({
+  theme,
+  onMapClick,
+  addSiteArmed,
+  children,
+}: MapViewProps): ReactElement => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
 
@@ -184,7 +201,7 @@ export const MapView = ({ theme, onMapClick, children }: MapViewProps): ReactEle
   }, [map]);
 
   return (
-    <MapSurface canvas={{ kind: 'map', containerRef }}>
+    <MapSurface canvas={{ kind: 'map', containerRef, addSiteArmed }}>
       <MapContext value={map}>{children}</MapContext>
     </MapSurface>
   );

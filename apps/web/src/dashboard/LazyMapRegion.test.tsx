@@ -31,6 +31,8 @@ const mapRegionProps = {
   selectedSiteId: null,
   onSelectSite: () => undefined,
   onMapClick: () => undefined,
+  addSiteArmed: false,
+  onToggleAddSite: () => undefined,
 } as const;
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup

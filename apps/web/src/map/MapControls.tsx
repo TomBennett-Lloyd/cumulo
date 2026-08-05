@@ -1,0 +1,96 @@
+import type { ReactElement } from 'react';
+import { useContext } from 'react';
+
+import { INITIAL_CENTER, INITIAL_ZOOM } from './framing';
+import { MapContext } from './MapContext';
+
+/*
+ * The two things a reader can ask of the map itself, drawn on top of it.
+ *
+ * They are one component rather than two because they are one control group in
+ * one corner: the box is what positions them, and a second component would mean
+ * a second caller deciding where map chrome lives.
+ *
+ * The pair is deliberately asymmetric, and the asymmetry is the interesting
+ * part. **Reset** is the map's own business — it speaks to the camera through
+ * `MapContext` and the dashboard never hears about it, because where the camera
+ * points is not application state. **Add a site** is the opposite: the map has
+ * no opinion about whether the reader is placing a site, so the toggle is
+ * controlled, and `Dashboard` holds the flag that its own click handler reads.
+ *
+ * Why an explicit mode at all: before it, every click on the basemap opened a
+ * draft, which made panning past a marker a way to be handed a form nobody
+ * asked for, and made the whole affordance something the panel had to explain in
+ * prose. A pressed control says it instead, which is why `ADD_SITE_HINT` left
+ * `state-copy.ts` with this file's arrival.
+ */
+
+export interface MapControlsProps {
+  /** Whether the next basemap click drops a draft. Owned by the dashboard. */
+  readonly armed: boolean;
+  readonly onToggleArmed: () => void;
+}
+
+/**
+ * The map's control group: reset the camera, and arm add-site mode.
+ *
+ * Rendered as a `MapView` child, so it lands inside `MapSurface`'s box and above
+ * the canvas — `map.css` puts it in the top-right corner specifically, because
+ * the bottom edge belongs to the credits band (`docs/design/map-treatment.md`).
+ *
+ * The reset button is `disabled` until the map instance exists rather than
+ * quietly doing nothing when pressed. That window is one frame — `MapView`
+ * creates the instance in its mount effect and `MapContext` is `null` until then
+ * — but "there is no camera to reset" is a real state, and a control that looks
+ * live and is not is the failure this avoids. The handler still asks, because
+ * `disabled` is a fact about the DOM that the type checker cannot read.
+ *
+ * The toggle is *not* gated the same way: arming is dashboard state and is
+ * meaningful before the first tile, and a control that flickered from disabled
+ * to enabled on the map's arrival would be chrome moving under the reader for a
+ * reason it could not see.
+ *
+ * `INITIAL_CENTER`/`INITIAL_ZOOM` are imported from `framing.ts`, which owns the
+ * opening camera. Restating them here would give "reset" a second definition,
+ * free to disagree with what the map actually opened on.
+ */
+export const MapControls = ({ armed, onToggleArmed }: MapControlsProps): ReactElement => {
+  const map = useContext(MapContext);
+
+  const resetView = (): void => {
+    if (map === null) {
+      return;
+    }
+
+    map.easeTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM });
+  };
+
+  return (
+    <div className="map-controls">
+      <button
+        type="button"
+        className="map-control-reset"
+        disabled={map === null}
+        onClick={resetView}
+      >
+        Reset map view
+      </button>
+
+      {/*
+       * `aria-pressed` rather than a second button or a class alone: this is one
+       * control with two states, and the pressed state is what a screen reader
+       * has instead of the fill `map.css` paints. `map-treatment.md`'s rule that
+       * colour never carries a state alone applies to the map's chrome as much
+       * as to its markers.
+       */}
+      <button
+        type="button"
+        className="map-control-add"
+        aria-pressed={armed}
+        onClick={onToggleArmed}
+      >
+        Add a site
+      </button>
+    </div>
+  );
+};

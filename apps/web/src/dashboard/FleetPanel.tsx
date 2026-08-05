@@ -16,7 +16,6 @@ import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker, rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 import {
-  ADD_SITE_HINT,
   aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
   fleetForecastFailureMessage,
@@ -303,7 +302,13 @@ export const FleetPanel = ({
             <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
           ) : (
             <>
-              <p className="fleet-panel-hint">{ADD_SITE_HINT}</p>
+              {/*
+               * No add-a-site hint here any more. The map carries a labelled
+               * control for that now (`map/MapControls.tsx`), and a paragraph
+               * explaining a visible button is both redundant and the half most
+               * likely to be left describing an interaction that has moved on
+               * — which is exactly what it was doing.
+               */}
               {fleetLookback ? (
                 <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
               ) : (
