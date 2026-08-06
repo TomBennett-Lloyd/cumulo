@@ -69,10 +69,10 @@
    a strip around it that looks pressable and is not. Its user-agent bold is
    dropped here so that weight is left free to mean "selected".
 
-   Selected by its class rather than by `tbody th`, so that every cell type in
-   this table is addressed the same way its neighbours are (`.site-table-number`
-   is the other) and the class the markup carries is one something actually
-   reads. */
+   Selected by its class rather than by `tbody th`, so that both body cell
+   types are addressed the same way (`.site-table-number` is the other; the
+   header row keeps its element selector) and the class the markup carries is
+   one something actually reads. */
 .site-table-name {
   padding: 0;
   font-weight: var(--font-weight-regular);
