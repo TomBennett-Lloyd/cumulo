@@ -241,28 +241,39 @@ describe('App shell', () => {
     );
   });
 
-  it('names the product and what it does, once', async () => {
+  it('names the product always, and says what it does when asked', async () => {
     await renderApp(StandInMapRegion);
 
     expect(screen.getByRole('heading', { name: 'Cumulo', level: 1 })).toBeDefined();
-    // The constant the header renders, not a fragment of it. Spelling any part
-    // of the sentence out here would make this file a second place the tagline
-    // is written down, which is the thing `header/header-copy.ts` exists to
+
+    // The sentence is behind the (i) beside the brand since #265, so this is
+    // both halves of that: absent until pressed, present after. The first half
+    // is what stops the tip quietly becoming a paragraph again — the bar's
+    // height is the whole reason the sentence moved (`info/InfoTip.tsx`).
+    expect(screen.queryByText(PRODUCT_TAGLINE)).toBe(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'About this product' }));
+
+    // The constant the tip renders, not a fragment of it. Spelling any part of
+    // the sentence out here would make this file a second place the tagline is
+    // written down, which is the thing `header/header-copy.ts` exists to
     // prevent — and would leave this passing against the old words after an
     // edit in its one home (`architecture.md` rule 9).
     expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
   });
 
-  it('leaves the header bar with the search and one disclosure, and the rest behind it', async () => {
+  it('leaves the header bar with the search and two disclosures, and the rest behind them', async () => {
     await renderApp(StandInMapRegion);
 
     // The bar is height the map does not get, so what sits on it is a design
-    // decision rather than an accident of where a component was added. Two
-    // things earn it: finding a site, which a reader does repeatedly, and the
-    // disclosure everything done once a session hides behind. The theme toggle
-    // used to be bare here, and this is the assertion that notices if something
-    // bare comes back.
+    // decision rather than an accident of where a component was added. Three
+    // things earn it: finding a site, which a reader does repeatedly; the
+    // disclosure everything done once a session hides behind; and the (i) that
+    // holds the product's own line, which is a press rather than the paragraph
+    // it used to be (#265). The theme toggle used to be bare here, and this is
+    // the assertion that notices if something bare comes back.
     expect(screen.getByRole('combobox', { name: 'Search sites by name' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'About this product' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
 
     openHeaderMenu();

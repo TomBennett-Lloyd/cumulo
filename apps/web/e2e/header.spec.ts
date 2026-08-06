@@ -143,11 +143,16 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
    */
   await expect(page.locator('.site-table-summary')).toBeVisible();
 
-  // The header is the first thing in the document and carries two controls, in
-  // this order: the site search, then the menu. So two Tabs from a fresh page
-  // land here, and the first of them lands on the field. That both are ahead of
-  // everything else is the design (`App.test.tsx` pins the bar's contents); this
-  // is the half that needs a real focus order to be true at all.
+  // The header is the first thing in the document and carries three controls, in
+  // this order: the (i) that explains the product, the site search, then the
+  // menu. So three Tabs from a fresh page reach the menu, and each of the first
+  // two lands on the control named here. That all three are ahead of everything
+  // else is the design (`App.test.tsx` pins the bar's contents); this is the half
+  // that needs a real focus order to be true at all — and the tip joining the bar
+  // (#265) is exactly the change that would silently shift a hard-coded count.
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.app-header .info-tip-button')).toBeFocused();
+
   await page.keyboard.press('Tab');
   await expect(page.locator('.site-search-input')).toBeFocused();
 

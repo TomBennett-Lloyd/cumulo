@@ -12,6 +12,7 @@ import { ForecastChart } from '../charts/ForecastChart';
 import type { ChartOverlaySeries, ForecastChartPoint } from '../charts/ForecastChart';
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
+import { InfoTip } from '../info/InfoTip';
 import { joinFleetSeries, minimumContributingSites } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker, rangeLabel } from './range-picker';
@@ -80,8 +81,19 @@ import {
  *
  * When `fleetLookback` is false the range is pinned to 24 by construction: the
  * picker is the only thing that ever calls `setRange`, so no picker means no
- * second value, and the caption states the horizon the reader is actually
- * looking at.
+ * second value, and a tip beside the chart states the horizon the reader is
+ * actually looking at for anyone who asks.
+ *
+ * ## Description behind a press, state on the page
+ *
+ * Two of this panel's sentences are descriptions — what the chart is a sum of,
+ * and which window it covers — and both sit behind an (i) now
+ * (`info/InfoTip.tsx`, #265). They were read once and then occupied a line each
+ * on every render, above a chart that is the reason anyone is here. What did
+ * *not* move is everything the panel says about its current state: the
+ * completeness note, and the notice that a selected site's line failed. A reader
+ * cannot press for news they do not know has happened, so state stays where it
+ * can be seen and description is one press away.
  *
  * ## Attribution
  *
@@ -460,13 +472,29 @@ export const FleetPanel = ({
   return (
     <section className="fleet-panel" aria-labelledby={headingId}>
       <header className="fleet-panel-header">
-        <h2 className="fleet-panel-title" id={headingId}>
-          Fleet
-        </h2>
+        <div className="fleet-panel-titles">
+          <h2 className="fleet-panel-title" id={headingId}>
+            Fleet
+          </h2>
+          {/*
+           * The subtitle, behind an (i) since #265. It was a paragraph under the
+           * heading that every reader read once and then scrolled past on every
+           * render — description rather than state, which is the line this page
+           * now draws: what the panel *is* goes behind a press, what the panel
+           * currently *says* (the completeness note, an overlay that failed)
+           * stays inline, because a reader cannot ask for news they do not know
+           * has happened.
+           *
+           * The capability arms are untouched by the move and stay whole:
+           * `fleetActuals` still chooses between two complete sentences rather
+           * than assembling a clause, so "measured output" is still readable as
+           * belonging to exactly one arm.
+           */}
+          <InfoTip label="About this chart">
+            {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
+          </InfoTip>
+        </div>
         <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
-        <p className="fleet-panel-subtitle">
-          {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
-        </p>
       </header>
       {sites.length === 0 ? (
         // The empty fleet is the demo's invitation, so it gets the panel to
@@ -482,10 +510,19 @@ export const FleetPanel = ({
            * likely to be left describing an interaction that has moved on
            * — which is exactly what it was doing.
            */}
+          {/*
+           * A control on one arm, a description on the other — and only the
+           * description moved behind an (i). The picker stays inline because it
+           * is something the reader *does*: an affordance nobody can see is an
+           * affordance nobody uses, which is the whole reason the add-a-site
+           * hint above became a labelled control on the map rather than more
+           * prose. The horizon caption is the opposite — it answers "which hours
+           * am I looking at" for a reader who thought to ask.
+           */}
           {fleetLookback ? (
             <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
           ) : (
-            <p className="panel-caption">{HORIZON_CAPTION}</p>
+            <InfoTip label="About this window">{HORIZON_CAPTION}</InfoTip>
           )}
           {fleetBody(
             combineFleetQueries(forecasts, actuals),

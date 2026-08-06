@@ -38,6 +38,19 @@ import { EMPTY_FLEET_MESSAGE } from './state-copy';
 // itself — every render has to be torn down explicitly or later queries match two panels.
 afterEach(cleanup);
 
+/**
+ * Press an (i), the way a reader asks a surface to explain itself.
+ *
+ * The panel's descriptions live behind toggletips since #265
+ * (`info/InfoTip.tsx`), and their content is mounted only while one is open — so
+ * a case about what the panel *says* has to ask first. Named by the button's
+ * accessible name rather than by a class, because that name is the contract a
+ * reader has with the control.
+ */
+const openTip = (label: string): void => {
+  fireEvent.click(screen.getByRole('button', { name: label }));
+};
+
 const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site[]> => {
   const listed = await dataSource.listSites();
   if (listed.kind === 'error') {
@@ -53,6 +66,9 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     const container = await renderSettled(dataSource, sites);
 
     expect(screen.getByRole('group', { name: 'Aggregation range' })).toBeDefined();
+
+    openTip('About this chart');
+
     expect(screen.getByText(/summed hour by hour/u).textContent).toContain('measured output');
     // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
     // value, because restating the sum here would only prove that two copies of it agree.
@@ -137,17 +153,30 @@ describe('FleetPanel against a source that can only see the horizon', () => {
   const horizonSource = (canned: StubFleet = FULL_FLEET): CountingFleetSource =>
     new CountingFleetSource(canned, HORIZON_ONLY_CAPABILITIES);
 
-  it('withholds the range control and names the horizon instead', async () => {
+  it('withholds the range control and names the horizon when asked', async () => {
     const container = await renderSettled(horizonSource());
 
     expect(screen.queryByRole('group', { name: 'Aggregation range' })).toBeNull();
-    expect(container.querySelector('.panel-caption')?.textContent).toBe(
+
+    // The caption is a description, so it sits behind an (i) like the panel's
+    // other prose (#265); the control on the other arm of the same conditional
+    // stays inline, because an affordance nobody can see is one nobody uses.
+    openTip('About this window');
+
+    expect(container.querySelector('.info-tip-panel')?.textContent).toBe(
       'Forecast horizon: next 24 hours',
     );
   });
 
   it('never says the word "measured" — not in prose, not in the chart\'s accessible name', async () => {
     const container = await renderSettled(horizonSource());
+
+    // Both tips opened first, and that is what keeps this assertion biting: the
+    // sentences they carry are not in the document while they are shut, so a
+    // sweep of `innerHTML` over a closed panel would pass without having looked
+    // at the copy this case is about.
+    openTip('About this chart');
+    openTip('About this window');
 
     // innerHTML rather than textContent on purpose: an aria-label is copy too, and it is the copy
     // most easily left promising data the source cannot produce.
