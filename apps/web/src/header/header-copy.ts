@@ -23,8 +23,8 @@
  * `AboutDialog.test.tsx`) — where the shell's assertion presses the tip open
  * first, because a description behind a press is not on the page until somebody
  * asks for it. All four import it; none spells any part of it out, so editing
- * the sentence
- * here cannot leave a test passing against the old words — which is the failure
+ * the sentence here cannot leave a test passing against the old words — which is
+ * the failure
  * a restatement ledger exists to catch, avoided here by there being nothing to
  * ledger (`architecture.md` rule 9).
  */

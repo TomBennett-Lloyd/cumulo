@@ -81,9 +81,11 @@
   text-decoration: underline;
 }
 
-/* The quiet footnote under a chart: what window is shown, how complete it is.
-   Smaller than a state line because it accompanies content rather than
-   standing in for it. */
+/* The quiet footnote under a chart: how complete the aggregate behind it is.
+   Smaller than a state line because it accompanies content rather than standing
+   in for it. It used to carry the window as well; that sentence is a description
+   rather than a state and moved behind the fleet panel's (i) in #265
+   (`info/info.css`), leaving the completeness line as this class's one caller. */
 .panel-caption {
   margin: 0;
   color: var(--color-text-muted);

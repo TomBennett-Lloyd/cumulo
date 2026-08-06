@@ -39,8 +39,9 @@ export interface AppHeaderProps {
  * which is the part that is a licence obligation rather than chrome.
  *
  * Layout is `app.css`'s `.app-header` — one wrapping flex row, no breakpoint, in
- * a shell that has none anywhere (#265). The search takes the space the brand
- * and the menu leave and wraps to its own line when there is not enough of it,
+ * a shell that has none anywhere (#265). The search takes the space the brand,
+ * the product's (i) and the menu leave, and wraps to its own line when there is
+ * not enough of it,
  * which is the same thing the tagline used to do when it was a line of prose on
  * the bar rather than the (i) beside the brand it is now (`info/InfoTip.tsx`).
  */

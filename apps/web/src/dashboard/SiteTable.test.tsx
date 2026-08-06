@@ -83,6 +83,25 @@ describe('SiteTable', () => {
     expect(rows[1]?.textContent).toContain('6.0 kW');
   });
 
+  /*
+   * The name cell is its row's *header*, and the three cells above are the
+   * columns'. Both are `scope` on a `<th>` and nothing else, so a name cell
+   * rebuilt as a plain `<td>` looks identical, renders identically, and passes
+   * every other case in this file — while a screen reader reading across the
+   * row stops being told which site the numbers belong to. The docblock calls
+   * the semantics load-bearing; this is what makes that claim cost something.
+   */
+  it('makes each site name its row’s header, under three column headers', () => {
+    render(<SiteTable sites={twoSites} selectedSiteId={null} onSelectSite={vi.fn()} />);
+
+    expect(screen.getAllByRole('rowheader')).toHaveLength(2);
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+      'Name',
+      'Capacity',
+      'Coordinates',
+    ]);
+  });
+
   it("reports the clicked row's site id", () => {
     const onSelectSite = vi.fn<(siteId: string) => void>();
     render(<SiteTable sites={twoSites} selectedSiteId={null} onSelectSite={onSelectSite} />);

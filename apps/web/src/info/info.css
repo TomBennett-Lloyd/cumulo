@@ -1,12 +1,15 @@
 /*
  * The (i) toggletip: a round button, and the panel it reveals.
  *
- * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css. The two
- * raw lengths here — the button's box and the panel's measure — reach the page
- * through `width`/`height`/`max-width`, which the CSS gate's property list
- * deliberately omits because the token set has no layout-size or measure scale
- * (stylelint.config.mjs documents that residual). They are written here rather
- * than spread through the components that mount tips.
+ * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css. There
+ * is exactly one raw length here — the panel's measure, `max-width: 22rem` —
+ * and it reaches the page through a property the CSS gate's list deliberately
+ * omits, because the token set has no measure scale (stylelint.config.mjs
+ * documents that residual; `.brand-mark`'s box in header.css is the same shape
+ * of exception). The button's box is not a second one: it is `--space-6` on both
+ * axes, a spacing token doing a sizing job, which the scale can express. Nor are
+ * the panel's `top: 100%` and `left: 0`, which anchor rather than size — one is
+ * a percentage of the tip's own box, the other the zero the gate ignores.
  *
  * Its own sheet rather than a corner of `header.css` or `dashboard.css`, because
  * the component is neither surface's: the header opens one beside the brand and

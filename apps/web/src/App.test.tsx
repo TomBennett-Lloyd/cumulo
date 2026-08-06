@@ -267,11 +267,13 @@ describe('App shell', () => {
 
     // The bar is height the map does not get, so what sits on it is a design
     // decision rather than an accident of where a component was added. Three
-    // things earn it: finding a site, which a reader does repeatedly; the
-    // disclosure everything done once a session hides behind; and the (i) that
-    // holds the product's own line, which is a press rather than the paragraph
-    // it used to be (#265). The theme toggle used to be bare here, and this is
-    // the assertion that notices if something bare comes back.
+    // things earn it, and on the same test rather than three different ones:
+    // each answers where it stands, for one round button or one field of width.
+    // Finding a site, the product's own line behind an (i) — a press rather than
+    // the paragraph it used to be (#265) — and the disclosure over everything
+    // that acts somewhere else (`header/HeaderMenu.tsx` states the rule). The
+    // theme toggle used to be bare here, and this is the assertion that notices
+    // if something bare comes back.
     expect(screen.getByRole('combobox', { name: 'Search sites by name' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'About this product' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
