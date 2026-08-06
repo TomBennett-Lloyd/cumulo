@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { openSiteTable } from './site-table';
 
 /*
  * Who gets the focus when a site opens, driven by a real keyboard and a real
@@ -19,10 +20,18 @@ import { routeBasemap } from './hermetic-basemap';
  * substitute for one.
  *
  * So the first case is one interaction performed the way a keyboard user
- * performs it: Tab until a row has focus, press Enter, and measure what the
- * browser then decided to paint. Every step is a real key event —
- * `Locator.press` on the row would reach the same handler while telling us
- * nothing about whether the row is reachable by tabbing at all.
+ * performs it: Tab to the fleet table's summary, open it with Enter, Tab until a
+ * row has focus, press Enter again, and measure what the browser then decided to
+ * paint. Every step is a real key event — `Locator.press` on the row would reach
+ * the same handler while telling us nothing about whether the row is reachable
+ * by tabbing at all.
+ *
+ * The disclosure is part of that claim rather than a preamble to it. The rows
+ * are folded away by default since #265, so a `<details>` that could not be
+ * opened from the keyboard would put the entire table view — the relief
+ * `map-treatment.md` requires for a marker palette that cannot carry state by
+ * colour alone — out of a keyboard reader's reach, with every other assertion
+ * here unable to see it.
  *
  * The second case is the other half of the same rule, and it is the reason #260
  * was routed to this lane at all. A `?site=` link is *not* a reader asking for
@@ -39,7 +48,7 @@ import { routeBasemap } from './hermetic-basemap';
  * dashboard and the column follows it down the page (#265) — and their number
  * moves with the clustering, so pinning an exact count would make this case
  * fail on a camera change rather than on a defect. Generous enough to cross
- * every marker, small enough that a site list nothing can tab into fails loudly
+ * every marker, small enough that a site table nothing can tab into fails loudly
  * here rather than as an unexplained Playwright timeout.
  */
 const MAX_TAB_PRESSES = 100;
@@ -56,11 +65,49 @@ const focusedSiteId = async (page: Page): Promise<string | null> =>
   page.evaluate(() => document.activeElement?.getAttribute('data-site-id') ?? null);
 
 /**
+ * Tab to the fleet table's summary and open it with Enter.
+ *
+ * The first half of a keyboard reader's route to a row, and an assertion in its
+ * own right: the disclosure is shut when the page loads, so every row below it
+ * is unreachable unless a keystroke on the summary opens it. Visibility is what
+ * says it opened — a closed `<details>` keeps its children in the DOM, so a
+ * count would pass against a table nobody can see.
+ *
+ * Throws rather than returning quietly when the summary never takes focus: the
+ * message names the element that failed, where a bare timeout on the row below
+ * would blame the wrong one.
+ */
+const openSiteTableFromKeyboard = async (page: Page): Promise<void> => {
+  const summary = page.locator('.site-table-summary');
+
+  await expect(summary).toBeVisible();
+
+  for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
+    if (await summary.evaluate((element) => element === document.activeElement)) {
+      await page.keyboard.press('Enter');
+      await expect(page.locator('[data-site-id]').first()).toBeVisible();
+
+      return;
+    }
+
+    await page.keyboard.press('Tab');
+  }
+
+  throw new Error(
+    `The fleet table's summary took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
+  );
+};
+
+/**
  * Tab until a site row holds focus, and hand back which site it is.
  *
- * Throws rather than returning null when the site list is never reached: a caller
- * has nothing to do with "no row", and the message names the reason where a
- * bare timeout would not.
+ * Called with the disclosure already open, so the Tab that leaves the summary
+ * lands on the first row's button: the column headers are not focusable and
+ * nothing else sits between the two.
+ *
+ * Throws rather than returning null when no row is ever reached: a caller has
+ * nothing to do with "no row", and the message names the reason where a bare
+ * timeout would not.
  */
 const tabToSiteRow = async (page: Page): Promise<string> => {
   for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
@@ -97,13 +144,16 @@ test.beforeEach(async ({ page }) => {
 
 test('hands a keyboard selection to the card heading, ring and all', async ({ page }) => {
   /*
-   * Both halves of the page first. The rows are what this tabs to; the map is
+   * Both halves of the page first. The table is what this tabs to; the map is
    * what it tabs *through*, and starting before its markers have mounted would
    * mean tabbing through a document that is still growing in front of the
-   * cursor.
+   * cursor. The summary rather than a row, because a row is not on screen yet —
+   * opening the disclosure is the next step and is this case's to perform.
    */
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
-  await expect(page.locator('[data-site-id]').first()).toBeVisible();
+  await expect(page.locator('.site-table-summary')).toBeVisible();
+
+  await openSiteTableFromKeyboard(page);
 
   const siteId = await tabToSiteRow(page);
 
@@ -161,11 +211,12 @@ test('takes no focus at all when ?site= opens the card (issue 260)', async ({ pa
    * An id read off the running page rather than a constant, for the reason
    * `dashboard-test-fixture.ts` gives about the same thing: a link's id comes
    * from a real fleet, and one derived the way the demo fleet derives its own
-   * would still pass if both drifted together.
+   * would still pass if both drifted together. Opening the table to read it is
+   * a pointer gesture here and nothing is being claimed about it — the keyboard
+   * route to the same rows is the case above.
    */
-  await expect(page.locator('[data-site-id]').first()).toBeVisible();
-
-  const siteId = await page.locator('[data-site-id]').first().getAttribute('data-site-id');
+  const row = await openSiteTable(page);
+  const siteId = await row.getAttribute('data-site-id');
 
   if (siteId === null) {
     throw new Error('The first site row carries no data-site-id to deep-link with.');

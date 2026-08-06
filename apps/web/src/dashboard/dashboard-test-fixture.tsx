@@ -1,5 +1,5 @@
 import type { Site } from '@cumulo/shared';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 
@@ -191,8 +191,24 @@ export const sitePopover = (root: HTMLElement): Element | null =>
 export const fleetChartTable = (): HTMLElement =>
   screen.getByRole('table', { name: /^Table view — fleet forecast/u });
 
-/** The fleet as rows — the map's table view, and where a closing panel returns focus. */
-export const fleetList = (): HTMLElement => screen.getByRole('list', { name: 'Fleet sites' });
+/** The fleet as rows — the map's table view, and where a closing card returns focus. */
+export const fleetTable = (): HTMLElement => screen.getByRole('table', { name: 'Fleet sites' });
+
+/**
+ * One selection button per listed site, in site order.
+ *
+ * The rows are counted through their buttons rather than through `role="row"`,
+ * which would also count the header row and leave every fleet-size assertion in
+ * the suites one out from the fleet it is about. A button per site is also the
+ * claim worth making: a row a reader cannot press is not a table view of
+ * anything (`map-treatment.md`).
+ *
+ * The disclosure is deliberately not opened first: jsdom omits the `<details>`
+ * shadow-tree styles, so its contents are queryable whether it is open or shut,
+ * and what a reader can *see* through a closed one is the browser lane's
+ * (`testing.md` rule 10).
+ */
+export const fleetRows = (): readonly HTMLElement[] => within(fleetTable()).getAllByRole('button');
 
 /** Presses the map's add-site toggle, the control that decides what a click means. */
 export const armAddSite = (): void => {

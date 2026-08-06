@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
@@ -10,8 +10,8 @@ import {
   clickMap,
   CREATED_SITE_NAME,
   firstListedSite,
-  fleetList,
   fleetPanel,
+  fleetRows,
   renderDashboard,
   settle,
   submitDraft,
@@ -96,7 +96,7 @@ describe('Dashboard draft dialog', () => {
      * would pass on a panel that had been unmounted outright and prove nothing.
      */
     expect(fleetPanel(container)).not.toBeNull();
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
+    expect(fleetRows()).toHaveLength(60);
   });
 
   it('cancels back to no draft without clearing the selection', async () => {
@@ -149,6 +149,6 @@ describe('Dashboard draft dialog', () => {
     expect(created.name).toBe(CREATED_SITE_NAME);
     expect(window.location.search).toBe(`?site=${created.id}`);
     expect(screen.getByRole('heading', { name: CREATED_SITE_NAME })).toBeDefined();
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(61);
+    expect(fleetRows()).toHaveLength(61);
   });
 });

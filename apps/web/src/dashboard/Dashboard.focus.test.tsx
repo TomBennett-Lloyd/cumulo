@@ -11,7 +11,7 @@ import {
   clickMap,
   CREATED_SITE_NAME,
   firstListedSite,
-  fleetList,
+  fleetTable,
   renderDashboard,
   settle,
   visit,
@@ -193,7 +193,7 @@ describe('Dashboard focus on a reader-initiated selection', () => {
 
     press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
 
-    const row = within(fleetList()).getByRole('button', {
+    const row = within(fleetTable()).getByRole('button', {
       name: (name) => name.startsWith(site.name),
     });
     // The reader tabs away and dismisses from somewhere else. Escape is fired on
@@ -214,7 +214,7 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     renderDashboard(dataSource);
     await settle();
 
-    const row = within(fleetList()).getByRole('button', {
+    const row = within(fleetTable()).getByRole('button', {
       name: (name) => name.startsWith(site.name),
     });
     press(row);
@@ -327,7 +327,7 @@ describe('Dashboard focus on a deep link', () => {
     renderDashboard(dataSource);
     await settle();
 
-    const row = within(fleetList()).getByRole('button', {
+    const row = within(fleetTable()).getByRole('button', {
       name: (name) => name.startsWith(site.name),
     });
     row.focus();

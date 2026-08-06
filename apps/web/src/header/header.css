@@ -118,7 +118,7 @@
  * A row per match: the name, and the capacity pushed to the far end.
  *
  * The left border is reserved on every option and painted only on the active
- * one, exactly as `.site-row` reserves it in the list below the map — the
+ * one, exactly as `.site-table-select` reserves it in the table below the map — the
  * highlight must not nudge the text sideways as it moves down the list.
  */
 .site-search-option {

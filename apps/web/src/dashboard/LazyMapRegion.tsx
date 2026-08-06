@@ -10,7 +10,7 @@ import { LOADING_MAP_LABEL, MAP_LOAD_FAILURE_MESSAGE } from './state-copy';
  *
  * Below this boundary sits maplibre: ~949 kB of minified WebGL renderer plus its
  * own stylesheet, none of which the first paint needs — the fleet chart and the
- * site list are both reachable before a tile is drawn. (A selected site's own
+ * site table are both reachable before a tile is drawn. (A selected site's own
  * card is *not*, since #265 anchored it to the site's marker; that is the price
  * of the card being on the map, and it is paid only by a `?site=` link that
  * arrives while the chunk is still in flight.)
@@ -78,7 +78,7 @@ interface MapRegionBoundaryState {
  *
  * Without it a rejected `import()` throws during render with no boundary
  * anywhere above it, and React answers an uncaught render error by unmounting
- * the whole root: the fleet chart, the site list, the theme toggle and the
+ * the whole root: the fleet chart, the site table, the theme toggle and the
  * attribution strip all disappear because one 949 kB fetch blipped. That is
  * reachable in production without any bug of ours — an `index.html` cached from
  * before a redeploy points at a hashed chunk that no longer exists, and every

@@ -3,7 +3,7 @@ import type { Site } from '@cumulo/shared';
 /**
  * How the dashboard spells the domain's numbers.
  *
- * One module rather than a formatter beside each component: the site list, the
+ * One module rather than a formatter beside each component: the site table, the
  * site's card on the map and the header's search results display the same
  * capacity for the same site to the same reader, so a capacity that gained a
  * decimal place in one and not the others would be a defect, not a variation

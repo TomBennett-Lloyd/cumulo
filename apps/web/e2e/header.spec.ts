@@ -136,8 +136,12 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
    * after the fleet resolves and they come after the header in DOM order, so
    * tabbing into a document that is still growing would be tabbing through a
    * moving target.
+   *
+   * The fleet table's summary is the thing waited on rather than a row: the
+   * table renders only once the listing has answered, and its rows are folded
+   * away behind that summary until somebody opens it (#265).
    */
-  await expect(page.locator('[data-site-id]').first()).toBeVisible();
+  await expect(page.locator('.site-table-summary')).toBeVisible();
 
   // The header is the first thing in the document and carries two controls, in
   // this order: the site search, then the menu. So two Tabs from a fresh page
@@ -235,12 +239,20 @@ test('finds a site by name and brings the camera to it when it is off screen', a
    * type. Read off the running page rather than restated from the seed, for the
    * reason `keyboard-focus.spec.ts` gives about the same thing — a name derived
    * the way the demo fleet derives its own would still pass if both drifted.
+   *
+   * Read through the closed disclosure rather than by opening it (#265). Both
+   * reads are DOM reads — an attribute and a text node — which Playwright
+   * performs on any attached element, and neither of them presses anything. The
+   * alternative costs this case its precondition: opening the table means
+   * clicking a summary below the fold, Playwright scrolls it into view to click
+   * it, and the pan below then drags at a `boundingBox` the map has scrolled out
+   * of. That is a real red, seen here rather than reasoned about.
    */
   const row = page.locator('[data-site-id]').first();
-  await expect(row).toBeVisible();
+  await expect(row).toBeAttached();
 
   const siteId = await row.getAttribute('data-site-id');
-  const siteName = await row.locator('.site-row-name').textContent();
+  const siteName = await row.textContent();
 
   if (siteId === null || siteName === null) {
     throw new Error('The first site row names neither a site nor an id to search for.');
