@@ -1,6 +1,7 @@
 import type { Site } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
+import { InfoTip } from '../info/InfoTip';
 import type { Theme } from '../theme';
 import { Brand } from './Brand';
 import { PRODUCT_TAGLINE } from './header-copy';
@@ -38,9 +39,11 @@ export interface AppHeaderProps {
  * which is the part that is a licence obligation rather than chrome.
  *
  * Layout is `app.css`'s `.app-header` — one wrapping flex row, no breakpoint, in
- * a shell that has none anywhere (#265). The search takes the space the brand
- * and the menu leave and wraps to its own line when there is not enough of it,
- * which is the same thing the tagline beside it already did.
+ * a shell that has none anywhere (#265). The search takes the space the brand,
+ * the product's (i) and the menu leave, and wraps to its own line when there
+ * is not enough of it — the same thing the tagline used to do when it was a
+ * line of prose on the bar rather than the (i) beside the brand it is now
+ * (`info/InfoTip.tsx`).
  */
 export const AppHeader = ({
   theme,
@@ -50,7 +53,15 @@ export const AppHeader = ({
 }: AppHeaderProps): ReactElement => (
   <header className="app-header">
     <Brand />
-    <p className="app-tagline">{PRODUCT_TAGLINE}</p>
+    {/*
+     * What the product is, one press away rather than always on the bar (#265).
+     * The bar is height the map does not get, and a sentence every reader has
+     * read by their second visit was spending that height on every render. The
+     * words are still `header-copy.ts`'s — this moved where they are shown, not
+     * what they say, and the About dialog behind the menu still quotes the same
+     * constant for the reader who wants more than a tip.
+     */}
+    <InfoTip label="About this product">{PRODUCT_TAGLINE}</InfoTip>
     <SiteSearch sites={sites} onSelectSite={onSelectSite} />
     <HeaderMenu theme={theme} onToggleTheme={onToggleTheme} />
   </header>

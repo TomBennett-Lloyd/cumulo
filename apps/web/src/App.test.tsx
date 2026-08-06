@@ -84,14 +84,17 @@ const stubSystemPrefersDark = (prefersDark: boolean): void => {
 /**
  * Render the app and wait until its one surface is on screen.
  *
- * The dashboard's "Sites" heading is the marker: it is the first thing the
- * dashboard renders that belongs to the dashboard rather than the shell, so
- * finding it proves the shell mounted the surface — and awaiting it settles the
- * fleet listing the dashboard kicks off, so nothing resolves after the test.
+ * The fleet's own table is the marker: it belongs to the dashboard rather than
+ * to the shell, so finding it proves the shell mounted the surface — and it is
+ * rendered only once the fleet listing has answered, so awaiting it settles the
+ * request the dashboard kicks off and nothing resolves after the test. It
+ * replaced the `Sites` heading that used to serve here, which the disclosure's
+ * own summary took over from (#265); the summary would have done as well, and
+ * the table is picked because it is the half that waits on the listing.
  */
 const renderApp = async (mapRegion: MapRegionComponent): Promise<void> => {
   render(<App mapRegion={mapRegion} />);
-  await screen.findByRole('heading', { name: 'Sites' });
+  await screen.findByRole('table', { name: 'Fleet sites' });
 };
 
 /**
@@ -114,8 +117,8 @@ const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark 
 /**
  * The name of the first site the page listed, read off the page itself.
  *
- * The search and the site list are fed by one fleet — that is the whole point of
- * the bar being rendered by `Dashboard` — so a name the list is showing is a
+ * The search and the site table are fed by one fleet — that is the whole point
+ * of the bar being rendered by `Dashboard` — so a name the table is showing is a
  * name the search must be able to find. Reading it here rather than importing
  * the demo fleet's generator keeps the two from agreeing by construction, which
  * is the same reason `dashboard-test-fixture.tsx` asks the *source* for a site
@@ -123,8 +126,8 @@ const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark 
  */
 const firstListedSiteName = (): string => {
   const name = screen
-    .getByRole('list', { name: 'Fleet sites' })
-    .querySelector('.site-row-name')?.textContent;
+    .getByRole('table', { name: 'Fleet sites' })
+    .querySelector('.site-table-select')?.textContent;
 
   if (name === undefined || name === '') {
     throw new Error('The fleet listed no site for the search to find.');
@@ -238,28 +241,41 @@ describe('App shell', () => {
     );
   });
 
-  it('names the product and what it does, once', async () => {
+  it('names the product always, and says what it does when asked', async () => {
     await renderApp(StandInMapRegion);
 
     expect(screen.getByRole('heading', { name: 'Cumulo', level: 1 })).toBeDefined();
-    // The constant the header renders, not a fragment of it. Spelling any part
-    // of the sentence out here would make this file a second place the tagline
-    // is written down, which is the thing `header/header-copy.ts` exists to
+
+    // The sentence is behind the (i) beside the brand since #265, so this is
+    // both halves of that: absent until pressed, present after. The first half
+    // is what stops the tip quietly becoming a paragraph again — the bar's
+    // height is the whole reason the sentence moved (`info/InfoTip.tsx`).
+    expect(screen.queryByText(PRODUCT_TAGLINE)).toBe(null);
+
+    fireEvent.click(screen.getByRole('button', { name: 'About this product' }));
+
+    // The constant the tip renders, not a fragment of it. Spelling any part of
+    // the sentence out here would make this file a second place the tagline is
+    // written down, which is the thing `header/header-copy.ts` exists to
     // prevent — and would leave this passing against the old words after an
     // edit in its one home (`architecture.md` rule 9).
     expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
   });
 
-  it('leaves the header bar with the search and one disclosure, and the rest behind it', async () => {
+  it('leaves the header bar with the search and two disclosures, and the rest behind them', async () => {
     await renderApp(StandInMapRegion);
 
     // The bar is height the map does not get, so what sits on it is a design
-    // decision rather than an accident of where a component was added. Two
-    // things earn it: finding a site, which a reader does repeatedly, and the
-    // disclosure everything done once a session hides behind. The theme toggle
-    // used to be bare here, and this is the assertion that notices if something
-    // bare comes back.
+    // decision rather than an accident of where a component was added. Three
+    // things earn it, and on the same test rather than three different ones:
+    // each answers where it stands, for one round button or one field of width.
+    // Finding a site, the product's own line behind an (i) — a press rather than
+    // the paragraph it used to be (#265) — and the disclosure over everything
+    // that acts somewhere else (`header/HeaderMenu.tsx` states the rule). The
+    // theme toggle used to be bare here, and this is the assertion that notices
+    // if something bare comes back.
     expect(screen.getByRole('combobox', { name: 'Search sites by name' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'About this product' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
 
     openHeaderMenu();

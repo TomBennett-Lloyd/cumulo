@@ -198,7 +198,7 @@
  *    itself. Every painted state is smaller than the area that responds to it.
  * 2. No state is carried by hue alone. Hover and selection each change the
  *    diameter as well as the fill, hover and focus both name the site in a
- *    tooltip, and the site list under the map is the table view of the same
+ *    tooltip, and the site table under the map is the table view of the same
  *    states — the relief the light palette's contrast warning on slot 3
  *    requires.
  * 3. Crowding is answered by clustering, never by fading: there is deliberately

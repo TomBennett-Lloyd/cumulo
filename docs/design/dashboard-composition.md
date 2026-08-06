@@ -35,7 +35,14 @@ breakpoint, because the stacked arrangement a narrow screen already got is now t
 ## A selection changes what is drawn, not what is on screen
 
 **Nothing under the map swaps.** The reading is a plain flow, top to bottom: the fleet's chart,
-the site list, the page footer. All three are present in every state the page can be in.
+the site table, the page footer. All three are present in every state the page can be in.
+
+The table is folded away behind a `<details>` disclosure whose summary counts the fleet
+(`apps/web/src/dashboard/SiteTable.tsx`). Sixty rows open under the chart are the tallest thing
+this page can hold, and they were carrying a job the header's search took over — finding one site
+by name. What the rows are still for is the equivalence
+[`map-treatment.md`](map-treatment.md) requires, every marker state having a row that says the
+same thing, and a closed disclosure keeps that a keystroke away rather than removing it.
 
 That is the second answer this composition has given. #148's answer was a **context region** —
 one box under the map showing either a selected site's panel or the fleet's, whichever the state

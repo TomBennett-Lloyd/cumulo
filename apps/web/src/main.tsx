@@ -11,12 +11,13 @@
  */
 import '@cumulo/ui/styles.css';
 import './app.css';
+import './info/info.css';
 import './header/header.css';
 import './dashboard/dashboard.css';
 import './map/map.css';
 import './map/site-popover.css';
 import './add-site/add-site.css';
-import './dashboard/site-list.css';
+import './dashboard/site-table.css';
 import './dashboard/panel-states.css';
 import './dashboard/fleet-panel.css';
 import './dashboard/range-picker.css';

@@ -81,8 +81,12 @@ slots 3, 4 and 5 against the light surface — slot 3 is the hover fill — so t
 applies here directly: hover always brings a labelled tooltip naming the site, selection always
 opens the site's own card above the marker (`apps/web/src/map/SitePopover.tsx`), and both change
 the marker's size. A reader who cannot separate the hues still gets the state from the label and
-the geometry. The site list under the map is the table view: every marker state has a row
-equivalent, and the map is never the only way to reach a site.
+the geometry. The site table under the map is the table view: every marker state has a row
+equivalent, and the map is never the only way to reach a site. Since #265 that table is folded
+away behind a disclosure rather than open by default — the relief is a keystroke away instead of
+already on screen, which is what a page carrying a full-width map and a chart can afford, and the
+`<details>` is operable from the keyboard like anything else here. Reaching a site _by name_ is
+the header's search, which needs nothing opened at all.
 
 **A selected site gets a card, anchored to its marker.** It carries the site's name, its physical
 configuration, and the state of its first forecast — and no chart, because the forecast itself is
@@ -94,7 +98,7 @@ a click on the basemap. It sits **above** the marker rather than over it: a card
 coordinate would cover the mark that says which site it is about.
 
 **A selection the camera cannot see brings the camera to it, and nothing else does.** A site
-selected anywhere but on the map itself — the list below it, the header's search, a link, a
+selected anywhere but on the map itself — the table below it, the header's search, a link, a
 creation — may be well outside the current view, so `SelectionCamera` eases to it — at the
 current zoom, and only when it is outside
 `map.getBounds()`. Re-centring on a marker the reader just pressed would move the one thing they

@@ -1,0 +1,94 @@
+/*
+ * The (i) toggletip: a round button, and the panel it reveals.
+ *
+ * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css. There
+ * is exactly one raw length here — the panel's measure, `max-width: 22rem` —
+ * and it reaches the page through a property the CSS gate's list deliberately
+ * omits, because the token set has no measure scale (stylelint.config.mjs
+ * documents that residual; `.brand-mark`'s box in header.css is the same shape
+ * of exception). The button's box is not a second one: it is `--space-6` on both
+ * axes, a spacing token doing a sizing job, which the scale can express. Nor are
+ * the panel's `top: 100%` and `left: 0`, which anchor rather than size — one is
+ * a percentage of the tip's own box, the other the zero the gate ignores.
+ *
+ * Its own sheet rather than a corner of `header.css` or `dashboard.css`, because
+ * the component is neither surface's: the header opens one beside the brand and
+ * the fleet panel opens one beside its heading, and a sheet living in either
+ * place would make the other a borrower. Loaded from `main.tsx` with every other
+ * sheet, in cascade order — components do not import their own CSS in this app.
+ */
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Small, quiet and round: this sits beside a heading or a brand and must not
+   compete with it. The muted ink is the resting state and full ink is the
+   pressed one, alongside the border colour — two channels rather than one,
+   because a control whose only state cue is a hue is a control some readers
+   never see change. The platform focus ring is @cumulo/ui's and is not
+   suppressed here. */
+.info-tip-button {
+  display: inline-flex;
+  width: var(--space-6);
+  height: var(--space-6);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+
+.info-tip-button:hover,
+.info-tip-button[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+/*
+ * The panel hangs under its button, over whatever is below.
+ *
+ * `z-index` for the reason header.css states over its own two values, which this
+ * is now the third of: the header is above the dashboard in DOM order but is not
+ * a positioned ancestor, so a tip opened on the bar would otherwise paint under
+ * maplibre's positioned controls. The same value as those two, and for the same
+ * reason they match each other — these popups never overlap, so nothing depends
+ * on which would win. The tips inside the fleet panel do not need it (they clear
+ * static content on document order alone) and are not given a second value for
+ * being in a different place: one component, one treatment.
+ *
+ * `width: max-content` capped by a measure, so a short sentence gets a small
+ * panel and a long one wraps at a readable width instead of stretching to the
+ * container.
+ */
+.info-tip-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  display: block;
+  width: max-content;
+  max-width: 22rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--leading-normal);
+}

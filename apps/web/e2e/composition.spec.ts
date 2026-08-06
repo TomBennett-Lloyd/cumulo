@@ -142,6 +142,14 @@ test('lists the whole demo fleet, so the built app resolved the demo data source
    * and this row count is what proves the empty value actually reached
    * `selectFleetDataSource` through the bundle. An HTTP source pointed at
    * nothing would render an error state with no rows at all.
+   *
+   * Counted through the fleet table's closed disclosure, deliberately and
+   * without opening it (#265): a closed `<details>` hides its children from
+   * layout but keeps them in the document, so `toHaveCount` — which matches
+   * elements rather than visible ones — reads the whole fleet either way. What
+   * is under test here is which data source the bundle resolved, and a gesture
+   * to reveal the rows would add a way for this case to fail that has nothing to
+   * do with that.
    */
   await expect(page.locator('[data-site-id]')).toHaveCount(DEMO_FLEET_SIZE);
 });

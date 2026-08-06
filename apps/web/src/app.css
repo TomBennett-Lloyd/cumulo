@@ -19,10 +19,11 @@
  * Shared surface, worth knowing before editing: the design-token gallery
  * (`preview/TokensHarness.tsx`, served only from `tokens.html`) wears this same
  * frame — `.app`, `.app-header`, `.app-title`, `.app-subtitle` — around its own
- * body. `.app-subtitle` therefore stays in this file even though the shipped
- * header now uses `.app-tagline`: they are two different measures of prose in
- * two different headers, and the gallery's long explanatory paragraph is not
- * the product's one-line tagline.
+ * body. `.app-subtitle` is the gallery's alone and stays in this file for that
+ * reason: the shipped header carried a class of its own for the product's line
+ * until #265 moved that line behind an (i), and the gallery's long explanatory
+ * paragraph was never the same thing as a one-line tagline — which is why one of
+ * the two classes went and the other did not.
  */
 
 body {
@@ -40,17 +41,19 @@ body {
 }
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
- * does not get, so the brand, the tagline, the site search and the menu button
- * sit on one baseline and wrap to a second line only when the width forces it —
- * which is the only narrow-width mechanism the shell has, here as everywhere
- * else in it (there is no breakpoint in this app).
+ * does not get, so the brand, the (i) that carries the product's line, the site
+ * search and the menu button sit on one baseline and wrap to a second line only
+ * when the width forces it — which is the only narrow-width mechanism the shell
+ * has, here as everywhere else in it (there is no breakpoint in this app).
  *
- * The bar carries two controls: the search that finds a site by name, and the
- * disclosure everything else hides behind. The theme toggle was once bare here
- * and is inside that disclosure now (`header/HeaderMenu.tsx`); the search earned
- * its place on the bar rather than in the menu because a control hidden behind a
- * press is not a shortcut. `header/header.css` owns both of their treatments —
- * this rule is only the row they sit in, and the token gallery wears it too. */
+ * The bar carries three controls: the (i) holding the product's own line, the
+ * search that finds a site by name, and the disclosure everything else hides
+ * behind. The theme toggle was once bare here and is inside that disclosure now
+ * (`header/HeaderMenu.tsx`), which is also where the rule for what earns a place
+ * out here rather than behind a press is written down. Their treatments are
+ * `header/header.css`'s, except the tip's — that component belongs to neither
+ * the shell nor the header, so its own sheet carries it (`info/info.css`). This
+ * rule is only the row they sit in, and the token gallery wears it too. */
 .app-header {
   display: flex;
   flex-wrap: wrap;
@@ -69,11 +72,12 @@ body {
   line-height: var(--leading-tight);
 }
 
-.app-tagline {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
+/* The product's one-line description has no rule here any more, and no class
+ * either. It was a paragraph on the bar until #265 put it behind the (i) beside
+ * the brand (`header/AppHeader.tsx`), which wears `info/info.css`'s panel
+ * treatment; a rule kept for markup nothing renders is a claim about a header the
+ * app does not have. `.app-subtitle` below is the gallery's and is a different
+ * thing — see the file header. */
 
 /* The gallery's header prose (see the file header). Its own measure, because it
  * is a paragraph explaining a page rather than a line naming a product. */

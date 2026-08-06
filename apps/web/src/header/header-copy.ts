@@ -8,20 +8,24 @@
  * and the shell's voice is neither a panel's nor a chart's.
  *
  * There is exactly one string here rather than a copy deck, and it is here for
- * a reason `architecture.md` rule 9 states: the tagline now has two carriers —
- * the header line and the About dialog — and a sentence spelled out twice is a
- * sentence that will be edited once.
+ * a reason `architecture.md` rule 9 states: the tagline has two carriers — the
+ * header's (i) tip and the About dialog — and a sentence spelled out twice is a
+ * sentence that will be edited once. The first carrier changed shape in #265,
+ * from a line of prose on the bar to a toggletip beside the brand, without
+ * changing that count — which is what reading it from here is for.
  */
 
 /**
  * What Cumulo is, in one line.
  *
- * Rendered by the header (`App.tsx`) and quoted by `AboutDialog.tsx`, and
- * asserted by both of their test files (`App.test.tsx`, `AboutDialog.test.tsx`).
- * All four import it; none spells any part of it out, so editing the sentence
- * here cannot leave a test passing against the old words — which is the failure
- * a restatement ledger exists to catch, avoided here by there being nothing to
- * ledger (`architecture.md` rule 9).
+ * Handed to the header's toggletip (`AppHeader.tsx`) and quoted by
+ * `AboutDialog.tsx`, and asserted by a test file for each (`App.test.tsx`,
+ * `AboutDialog.test.tsx`) — where the shell's assertion presses the tip open
+ * first, because a description behind a press is not on the page until somebody
+ * asks for it. All four import it; none spells any part of it out, so editing
+ * the sentence here cannot leave a test passing against the old words — which
+ * is the failure a restatement ledger exists to catch, avoided here by there
+ * being nothing to ledger (`architecture.md` rule 9).
  */
 export const PRODUCT_TAGLINE =
   'Residential solar fleet forecasting — per-site forecasts with uncertainty, summed across a fleet you can add to.';

@@ -1,0 +1,124 @@
+/*
+ * The site table — the map's table view, folded away under the map.
+ *
+ * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css: the
+ * gate in stylelint.config.mjs is what enforces it, and a missing token is a
+ * design-system signal rather than a licence to write a literal (react.md
+ * rule 5).
+ *
+ * The row states deliberately reuse the *map marker* tokens rather than a
+ * generic highlight. map-treatment.md makes this the map's table view: hovering
+ * a row and hovering its marker are the same state, so they wear the same
+ * colour, and a reader moving between the two views is never asked to learn a
+ * second vocabulary. Selection and hover additionally change weight and border,
+ * because colour never carries a state alone.
+ *
+ * The disclosure is the card the reading's other sections are — the same
+ * surface, radius and padding as `.fleet-panel` above it — so a folded table
+ * reads as a panel that is closed rather than as a stray line of text. It is
+ * also the whole box: there is no wrapper section around it any more, because a
+ * `<summary>` names the disclosure the way a heading named the section it
+ * replaced (dashboard.css says what went with it).
+ */
+
+.site-table {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* The affordance and the section's name in one. It takes the heading's own type
+   scale, because that is what it replaced — the reading below the map is a flow
+   of peers, and a summary set smaller than the panel title above it would read
+   as a footnote to that panel rather than as the next thing. `cursor: pointer`
+   and the platform focus ring (@cumulo/ui's styles.css, which lists `summary`
+   among the elements it rings) are the whole of its interaction treatment: the
+   marker triangle, the open/closed state and the keyboard operation are the
+   element's own. */
+.site-table-summary {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+
+.site-table-grid {
+  width: 100%;
+  margin-top: var(--space-3);
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+/* Column headers in muted ink at the small step: they name the columns and are
+   read once, while the values under them are what a reader scans. */
+.site-table-grid thead th {
+  padding: var(--space-1) var(--space-3);
+  border-bottom-style: solid;
+  border-bottom-width: calc(var(--space-1) / 4);
+  border-bottom-color: var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+}
+
+/* The name cell carries no padding of its own: the button inside it is the
+   whole cell, so the padding belongs to the thing being pressed rather than to
+   a strip around it that looks pressable and is not. Its user-agent bold is
+   dropped here so that weight is left free to mean "selected".
+
+   Selected by its class rather than by `tbody th`, so that both body cell
+   types are addressed the same way (`.site-table-number` is the other; the
+   header row keeps its element selector) and the class the markup carries is
+   one something actually reads. */
+.site-table-name {
+  padding: 0;
+  font-weight: var(--font-weight-regular);
+  text-align: left;
+}
+
+.site-table-number {
+  padding: var(--space-1) var(--space-3);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.site-table-select {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-style: solid;
+  /* Left edge only: the selected/hover cue is the bar, and reserving its width
+     on every row is what stops selection from nudging the text sideways. */
+  border-width: 0 0 0 var(--space-1);
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.site-table-select:hover {
+  border-color: var(--color-map-marker-hover);
+  background: var(--color-bg);
+}
+
+/* Keyboard focus gets the selected treatment *plus* the app-wide focus ring —
+   the `:focus-visible` rule in `@cumulo/ui`'s styles.css, painted in
+   `--color-focus-ring` (issue #93). That ring is deliberately not suppressed
+   here (map-treatment.md: everything reachable by pointer is reachable without
+   one); this rule only layers the row's own colour on top of it, which the
+   zero-specificity `:where()` in that rule is what makes possible. */
+.site-table-select:focus-visible {
+  border-color: var(--color-map-marker-selected);
+}
+
+.site-table-select-selected {
+  border-color: var(--color-map-marker-selected);
+  font-weight: var(--font-weight-semibold);
+}

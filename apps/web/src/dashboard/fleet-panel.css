@@ -1,11 +1,15 @@
 /*
  * The fleet panel: the first thing under the map, and the page's one chart.
  *
- * Chrome borrowed from `.dashboard-slot` deliberately — surface, `--radius-md`,
- * `--space-4` of padding — because this panel is one of the column's cards and
- * should not announce itself as a different kind of thing from the site list
- * beside it. What is its own is the internal rhythm: a tight heading block, then
- * the hint, the control and the chart at the column's normal gap.
+ * The same chrome as the site table below it, deliberately — surface,
+ * `--radius-md`, `--space-4` of padding — because this panel is one of the
+ * reading's cards and should not announce itself as a different kind of thing
+ * from its neighbour. (Until #265 both took it from a `.dashboard-slot` wrapper
+ * in dashboard.css; the section that wrapper existed for became a disclosure
+ * that carries its own card, so the two panels now state the shared chrome
+ * rather than inherit it from a box neither of them is in.) What is its own is
+ * the internal rhythm: a tight heading block, then the hint, the control and the
+ * chart at the column's normal gap.
  *
  * These `.fleet-panel*` classes are this panel's and nothing else's. The async
  * states it renders wear `panel-states.css`'s `.panel-*` classes, which are the
@@ -32,11 +36,21 @@
    displaces this panel, it is never handed `hidden`, and a rule for a state that
    cannot occur is a rule nobody can tell has stopped working. */
 
-/* Title, size and promise read as one block, so they sit closer together than
-   the panel's own rhythm. */
+/* Title and size read as one block, so they sit closer together than the
+   panel's own rhythm. The promise used to be a third line here and is an (i)
+   beside the title now (#265) — description behind a press, the panel's own
+   numbers still on the page. */
 .fleet-panel-header {
   display: grid;
   gap: var(--space-1);
+}
+
+/* The heading and its tip on one baseline: the tip is *about* the heading, and a
+   grid row of its own would read as a second item rather than an annotation. */
+.fleet-panel-titles {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
 }
 
 .fleet-panel-title {
@@ -55,11 +69,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.fleet-panel-subtitle {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
+/* There is no `.fleet-panel-subtitle` rule any more. The sentence it styled
+   moved inside an `InfoTip`, which brings its own panel treatment (info.css), so
+   a rule left here would be styling a class nothing renders. */
 
 /* The completeness line and the chart are one statement — how complete the
    aggregate is, and the aggregate — so they sit tighter than the panel's gap. */

@@ -14,11 +14,15 @@ export interface HeaderMenuProps {
 /**
  * The header's catch-all: a disclosure button over the shell's odds and ends.
  *
- * It was the bar's only control until the site search landed beside it
- * (`AppHeader.tsx`). The split between the two is what each is for rather than
- * how important it is: finding a site is the thing a reader does repeatedly and
- * is on the bar, and everything that is done once a session is behind this
- * button.
+ * It was the bar's only control until the site search landed beside it, and the
+ * product's (i) after that (`AppHeader.tsx`). What decides which side of this
+ * button a thing sits on is not importance, and it is not frequency either — the
+ * tip is read about once a session and is out on the bar. It is what a thing
+ * costs the bar weighed against what it gives back there: the search is its own
+ * affordance, and the tip is one round button over a sentence that folds away
+ * again, so both answer where they stand. What is behind this button acts
+ * somewhere else — the theme toggle repaints the whole page, About opens a
+ * dialog over it — and neither is made worse by costing a press first.
  *
  * ## A disclosure, not a menu
  *

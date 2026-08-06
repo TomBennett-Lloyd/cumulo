@@ -2,6 +2,7 @@ import type { Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { openSiteTable } from './site-table';
 
 /*
  * Chart geometry, which is the one question jsdom answers with a shrug.
@@ -159,10 +160,11 @@ test('keeps the fleet chart laid out once a selected site is drawn over it', asy
    * The same contract in the other state of the same chart. A seeded row, so the
    * site's forecast is answered on the first poll; the first-forecast delay
    * named above belongs to sites this session creates, and nothing here creates
-   * one.
+   * one. The row is behind the fleet table's disclosure since #265, so reaching
+   * it means opening that first — `site-table.ts` is where that gesture lives.
    */
-  const row = page.locator('[data-site-id]').first();
-  const siteName = await row.locator('.site-row-name').textContent();
+  const row = await openSiteTable(page);
+  const siteName = await row.textContent();
 
   if (siteName === null) {
     throw new Error('The first site row has no name in it.');

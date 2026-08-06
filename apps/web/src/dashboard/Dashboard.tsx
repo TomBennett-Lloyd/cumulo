@@ -18,7 +18,7 @@ import type { MapRegionComponent } from './MapRegion';
 import { PanelError, PanelPending } from './panel-states';
 import type { SelectionOrigin } from './selection-origin';
 import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
-import { SiteList } from './SiteList';
+import { SiteTable } from './SiteTable';
 import { fleetListFailureMessage, LOADING_FLEET_LABEL } from './state-copy';
 
 /**
@@ -83,10 +83,10 @@ interface FleetSectionProps {
 }
 
 /**
- * The Sites section's contents: the list, or an honest account of why there is
- * no list.
+ * The fleet's own section: the table, or an honest account of why there is no
+ * table.
  *
- * A failed listing shows the reason and a retry rather than an empty list
+ * A failed listing shows the reason and a retry rather than an empty table
  * (`error-handling.md` rule 5) — and still lists any site created since, because
  * that site exists, and hiding it would be the dishonest half of the same rule.
  *
@@ -120,7 +120,7 @@ const FleetSection = ({
       )}
 
       {sites.length > 0 && (
-        <SiteList sites={sites} selectedSiteId={selectedSiteId} onSelectSite={onSelectSite} />
+        <SiteTable sites={sites} selectedSiteId={selectedSiteId} onSelectSite={onSelectSite} />
       )}
     </>
   );
@@ -159,9 +159,9 @@ export interface DashboardProps {
  * including what it costs when the tree below throws).
  *
  * This is where the pieces meet, and it owns exactly the state they share.
- * `selectedSiteId` is the clearest case — the markers, the list rows, the card
+ * `selectedSiteId` is the clearest case — the markers, the table rows, the card
  * on the map and the chart's overlay all render from that one value, which is
- * what makes selecting a site on the map and selecting it in the list the same
+ * what makes selecting a site on the map and selecting it in the table the same
  * act rather than views that agree by luck. That one value is also what `?site=`
  * addresses: `selection-url.ts` is the whole of the deep link, and the dashboard
  * reads it once at mount and writes it whenever the selection moves.
@@ -173,7 +173,7 @@ export interface DashboardProps {
  * Nothing under the map swaps any more. One region alternating between a site's
  * panel and the fleet's was the shape the reading had until #265; a site's
  * detail is now a card anchored to its own marker, so the reading below is a
- * plain flow — the fleet's chart, the site list, the credit — and a selection
+ * plain flow — the fleet's chart, the site table, the credit — and a selection
  * changes what is *drawn on* those surfaces rather than which of them is there.
  * Placing a site is a modal over the whole page
  * (`add-site/AddSiteDialog.tsx`). `docs/design/dashboard-composition.md` records
@@ -529,22 +529,31 @@ export const Dashboard = ({
               refreshToken={createdSites.length}
             />
 
-            <section className="dashboard-slot" aria-labelledby="dashboard-sites-heading">
-              <h2 className="dashboard-slot-heading" id="dashboard-sites-heading">
-                Sites
-              </h2>
-              <div className="dashboard-fleet">
-                <FleetSection
-                  load={load}
-                  sites={sites}
-                  selectedSiteId={selectedSiteId}
-                  onSelectSite={selectSiteForReader}
-                  onRetryLoad={() => {
-                    setListAttempt((attempt) => attempt + 1);
-                  }}
-                />
-              </div>
-            </section>
+            {/*
+             * The fleet as a table, folded away (#265). It used to be a section
+             * with a `Sites` heading and sixty rows open under it, which is the
+             * tallest thing this page could hold and the reason everything below
+             * it was off screen. Looking a site up by name is the header
+             * search's job now, so the table keeps the role
+             * `map-treatment.md` gives it — the map's table view, every marker
+             * state with a row equivalent — from behind its own summary, which
+             * names the section the way the heading did.
+             *
+             * No wrapper section, and none needed: the disclosure is its own
+             * labelled box, and a `<section>` whose heading had gone would have
+             * been a landmark with nothing to name it.
+             */}
+            <div className="dashboard-fleet">
+              <FleetSection
+                load={load}
+                sites={sites}
+                selectedSiteId={selectedSiteId}
+                onSelectSite={selectSiteForReader}
+                onRetryLoad={() => {
+                  setListAttempt((attempt) => attempt + 1);
+                }}
+              />
+            </div>
 
             {/*
              * The page's one weather credit, at the foot of the content rather than

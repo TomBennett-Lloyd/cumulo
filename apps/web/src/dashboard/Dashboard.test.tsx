@@ -16,7 +16,8 @@ import {
   clickMap,
   CREATED_SITE_NAME,
   fleetChartTable,
-  fleetList,
+  fleetRows,
+  fleetTable,
   fleetPanel,
   renderDashboard,
   settle,
@@ -163,7 +164,7 @@ describe('Dashboard', () => {
 
     await settle();
 
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
+    expect(fleetRows()).toHaveLength(60);
 
     // The fan-out rule from ADR 0002's review of this ticket: the fleet is read
     // once. A dashboard that re-listed on a cadence would show up here as a
@@ -189,7 +190,7 @@ describe('Dashboard', () => {
     // fleet rather than instead of it (#265).
     expect(fleetPanel(container)).not.toBeNull();
     expect(
-      within(fleetList())
+      within(fleetTable())
         .getByRole('button', { name: (name) => name.startsWith(site.name) })
         .getAttribute('aria-current'),
     ).toBe('true');
@@ -201,7 +202,7 @@ describe('Dashboard', () => {
     await settle();
 
     fireEvent.click(
-      within(fleetList()).getByRole('button', { name: (name) => name.startsWith(site.name) }),
+      within(fleetTable()).getByRole('button', { name: (name) => name.startsWith(site.name) }),
     );
 
     expect(
@@ -276,7 +277,7 @@ describe('Dashboard', () => {
     // and would wait out the whole deadline on it.
     expect(created.name).toBe(CREATED_SITE_NAME);
     expect(getSiteForecast).toHaveBeenCalledWith(created.id);
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(61);
+    expect(fleetRows()).toHaveLength(61);
   });
 
   it('refuses a fourth site inside the minute and does not send it', async () => {
@@ -300,7 +301,7 @@ describe('Dashboard', () => {
     // can only be re-counted by pressing it again (see the recovery test below).
     expect(screen.getByText(/wait \d+s before adding another site/)).toBeDefined();
     expect(createSite).toHaveBeenCalledTimes(3);
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(63);
+    expect(fleetRows()).toHaveLength(63);
   });
 
   it('lets a refused visitor through once the window has slid, from the same open form', async () => {
@@ -328,7 +329,7 @@ describe('Dashboard', () => {
     await settle();
 
     expect(createSite).toHaveBeenCalledTimes(4);
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(64);
+    expect(fleetRows()).toHaveLength(64);
   });
 
   it('gives up on a first forecast that never arrives, and can be asked again', async () => {
@@ -356,18 +357,18 @@ describe('Dashboard', () => {
     expect(screen.getByText(/Generating first forecast/u)).toBeDefined();
   });
 
-  it('says why the fleet is missing rather than showing an empty list', async () => {
+  it('says why the fleet is missing rather than showing an empty table', async () => {
     renderDashboard(new FlakyFleetSource());
     await settle();
 
     expect(screen.getByRole('alert').textContent).toContain('Fleet unavailable');
-    expect(screen.queryByRole('list', { name: 'Fleet sites' })).toBeNull();
+    expect(screen.queryByRole('table', { name: 'Fleet sites' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
 
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
+    expect(fleetRows()).toHaveLength(60);
   });
 });
 
@@ -509,7 +510,7 @@ describe('Dashboard attribution', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
 
-    expect(within(fleetList()).getAllByRole('listitem')).toHaveLength(60);
+    expect(fleetRows()).toHaveLength(60);
     expect(attributionLinks()).toHaveLength(1);
   });
 });
