@@ -28,7 +28,10 @@ export interface SelectionCameraProps {
  * Renders nothing: the camera *is* the output. It synchronizes React's selection
  * with an external system that no render owns (`react.md` rule 1), which is why
  * it is an effect and not a line in each of the handlers that can select a site
- * — there are four of them and they do not all involve a click.
+ * — there are several of them, they do not all involve a click, and their number
+ * grows with the surface (the header's search was the most recent). Every one of
+ * them goes through `Dashboard`'s own selection state, which is what this watches
+ * instead of counting them.
  *
  * Adapter code, and deliberately not unit-tested: jsdom gives maplibre no WebGL,
  * so there is no camera here to have bounds (`testing.md` rule 3). The browser

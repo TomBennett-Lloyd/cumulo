@@ -7,10 +7,14 @@ import { capacityLabel } from '../dashboard/site-format';
 /**
  * How many matches the popup offers at once.
  *
- * A ceiling on the *list*, not on the search: a query that matches thirty sites
- * shows the first eight, because a popup taller than the map it hangs over stops
- * being a shortcut and starts being a second site list. Narrowing the query is
- * the affordance for the rest, and it is one more keystroke.
+ * A ceiling on the *list*, not on the search: a query that matches most of the
+ * fleet still shows only this many, because a popup taller than the map it hangs
+ * over stops being a shortcut and starts being a second site list. Narrowing the
+ * query is the affordance for the rest, and it is one more keystroke.
+ *
+ * That the cap is silent — nothing says how many matched — is recorded in
+ * `docs/tech-debt.md` rather than answered here, because the count it wants is
+ * copy with an owner (`dashboard/state-copy.ts`).
  */
 const MAX_VISIBLE_MATCHES = 8;
 
@@ -66,8 +70,8 @@ const matchingSites = (sites: readonly Site[], query: string): readonly Site[] =
  *
  * It clamps rather than wraps. Wrapping is optional in the WAI-ARIA combobox
  * pattern, and clamping is the half that cannot surprise: a reader holding
- * ArrowDown to reach the end of eight matches never finds themselves back at the
- * top wondering whether they missed one.
+ * ArrowDown to the end of the list never finds themselves back at the top
+ * wondering whether they missed one.
  */
 const stepActiveIndex = (current: number, step: number, count: number): number =>
   Math.max(0, Math.min(current + step, count - 1));
@@ -90,9 +94,10 @@ export interface SiteSearchProps {
  *
  * ## The ARIA semantics, stated because nothing lints them
  *
- * This is the app's first combobox, and the repo has no a11y linter
- * (`docs/tech-debt.md`), so review attention is the only gate on the pattern
- * below. Every choice, explicitly:
+ * This is the app's first combobox, and the repo has no a11y linter — it is a
+ * member of `docs/tech-debt.md`'s "No a11y linting" entry, which names this
+ * file in return — so review attention is the only gate on the pattern below.
+ * Every choice, explicitly:
  *
  * - The **input** carries `role="combobox"`, `aria-expanded`, `aria-controls`
  *   naming the popup, and `aria-autocomplete="list"` — the value is never
@@ -113,7 +118,10 @@ export interface SiteSearchProps {
  * - **`aria-controls` names an id that only exists while the popup is open.**
  *   That is the APG's own shape for a collapsed combobox; the alternative —
  *   rendering an empty listbox permanently — announces a list with nothing in it
- *   on every page load.
+ *   on every page load. `aria-activedescendant` is the opposite case and is
+ *   dropped entirely while the popup is closed: `aria-controls` may name a
+ *   popup that is not currently rendered, but an active descendant that
+ *   resolves to no element is simply an invalid value.
  * - **No matches is a disabled option, not an empty list or silence.** A listbox
  *   may contain only options, so the message is one `role="option"` marked
  *   `aria-disabled` — it is announced with the popup, it is never the active
@@ -142,6 +150,17 @@ export const SiteSearch = ({ sites, onSelectSite }: SiteSearchProps): ReactEleme
   // when it was set. `-1` on an empty list, which reads out as no highlight.
   const activeIndexInRange = Math.min(activeIndex, matches.length - 1);
   const activeSite = matches[activeIndexInRange] ?? null;
+  /*
+   * The highlighted option's id — and only while the popup is on screen.
+   *
+   * `aria-activedescendant` names an element, so an id that resolves to nothing
+   * is an invalid value rather than a harmless leftover, and the states it would
+   * dangle in are the ones this control spends most of its life in: first paint
+   * (an empty query matches the whole fleet, so there is a match without a list
+   * to hold it), after Escape with text still in the field, after a blur, and in
+   * the instant after a selection clears the query.
+   */
+  const activeOptionId = expanded && activeSite !== null ? optionId(activeIndexInRange) : undefined;
 
   const select = (site: Site): void => {
     onSelectSite(site.id);
@@ -154,6 +173,22 @@ export const SiteSearch = ({ sites, onSelectSite }: SiteSearchProps): ReactEleme
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    /*
+     * An input method's candidate window owns all three of these keys while it
+     * is up: the arrows move through the candidates it is offering, and Enter
+     * commits the one the reader has settled on. Acting on them here would
+     * select a site with the very press that finishes a Japanese or Chinese
+     * word, and would `preventDefault` the navigation the candidate list needs
+     * — so the composition is left entirely alone and the keys mean what they
+     * mean again once it ends.
+     *
+     * Read off the native event because that is where the flag lives; React's
+     * synthetic event wraps it rather than restating it.
+     */
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       // Otherwise the browser's own meaning for these keys — jump the caret to
       // either end of the text — fires as well as the highlight moving.
@@ -190,7 +225,7 @@ export const SiteSearch = ({ sites, onSelectSite }: SiteSearchProps): ReactEleme
         aria-expanded={expanded}
         aria-controls={listboxId}
         aria-autocomplete="list"
-        aria-activedescendant={activeSite === null ? undefined : optionId(activeIndexInRange)}
+        aria-activedescendant={activeOptionId}
         autoComplete="off"
         placeholder={SEARCH_PLACEHOLDER}
         value={query}

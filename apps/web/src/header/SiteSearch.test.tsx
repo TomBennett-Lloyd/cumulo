@@ -74,6 +74,16 @@ describe('SiteSearch before anything is typed', () => {
 
     expect(searchInput().getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('listbox')).toBe(null);
+    /*
+     * And points at nothing, which is the half that is easy to get wrong. An
+     * empty query matches every site, so there *is* a highlighted match at first
+     * paint — it simply has no list to sit in, and an
+     * `aria-activedescendant` naming an element that is not in the document is
+     * an invalid value rather than a leftover nobody reads. This is the state
+     * the app is in on every page load, so it is pinned where the closed state
+     * is described rather than in a case of its own.
+     */
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe(null);
   });
 });
 
@@ -210,6 +220,25 @@ describe('SiteSearch selecting a match', () => {
     expect(screen.queryByRole('listbox')).toBe(null);
   });
 
+  it('leaves the keys alone while an input method is composing a candidate', () => {
+    const onSelectSite = vi.fn();
+    renderSearch(onSelectSite);
+    typeQuery('Dublin');
+
+    fireEvent.keyDown(searchInput(), { key: 'ArrowDown', isComposing: true });
+    fireEvent.keyDown(searchInput(), { key: 'Enter', isComposing: true });
+
+    /*
+     * The candidate window owns all three keys while it is up: Enter commits the
+     * word being composed and the arrows walk the candidate list. A control that
+     * also acted on them would answer one keystroke twice — selecting a site with
+     * the press that finishes a Japanese or Chinese word — and would swallow the
+     * navigation the candidate list needs.
+     */
+    expect(onSelectSite).not.toHaveBeenCalled();
+    expect(activeOption()?.textContent).toBe('Dublin rooftop 14.2 kW');
+  });
+
   it('does nothing on Enter when nothing matches', () => {
     const onSelectSite = vi.fn();
     renderSearch(onSelectSite);
@@ -242,6 +271,9 @@ describe('SiteSearch dismissal', () => {
 
     expect(searchInput().getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('listbox')).toBe(null);
+    // The second closed state, and the same rule: a dismissed popup leaves no
+    // active descendant behind pointing at an option that has gone.
+    expect(searchInput().getAttribute('aria-activedescendant')).toBe(null);
     // Escape dismisses the popup, not the reader's work: clearing the field here
     // would make a mistyped last character cost the whole query.
     expect(searchInput().value).toBe('Dublin');

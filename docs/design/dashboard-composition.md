@@ -76,8 +76,8 @@ and is recorded there — [`map-treatment.md`](map-treatment.md)'s "Map chrome" 
 `apps/web/src/map/MapControls.tsx`.
 
 **The one thing that can still be out of view is the site**, not the reading. A selection can
-arrive from a row, a link or a creation, and the camera has no reason to be pointing anywhere near
-what those name. `apps/web/src/map/SelectionCamera.tsx` eases the camera to a selected site that
+arrive from anywhere but the map — a row, the header's search, a link, a creation — and the camera
+has no reason to be pointing anywhere near what those name. `apps/web/src/map/SelectionCamera.tsx` eases the camera to a selected site that
 is outside the current bounds, and does nothing at all when it is already inside them — moving the
 map for a marker the reader just pressed would shove the one thing they were looking at. It keeps
 the zoom, because the framing is the reader's choice and not the selection's.
@@ -90,8 +90,10 @@ with the region it chased.
 A page that changes above the reader's focus point owes them a landing, and a page that changes
 for no reason of theirs owes them the opposite. The settled rule:
 
-- **A reader-initiated selection focuses the card's own heading** — a marker press, a row press, a
-  creation. `tabIndex={-1}`, so it is a target without joining the tab order.
+- **A reader-initiated selection focuses the card's own heading** — every opener that is a reader
+  doing something qualifies: a marker press, a row press, a search hit, a creation. `tabIndex={-1}`,
+  so it is a target without joining the tab order. The test is who acted, not which opener it was,
+  which is why a new one inherits the rule instead of extending a list.
 - **A `?site=` selection moves focus nowhere.** This is the settlement of
   [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and the asymmetry is the point
   rather than an exception for page load: the card mounts when the fleet listing _resolves_, which
@@ -103,8 +105,8 @@ for no reason of theirs owes them the opposite. The settled rule:
 - **Closing returns focus to whatever held it when the card opened**, captured on the way in. The
   panel this replaced reconstructed the landing instead — it searched the site list for the row
   naming its site — which was the right answer only for the one opener it knew about. Capturing
-  covers a marker, a row and a creation with no case analysis, and an opener that has since left
-  the document is simply not chased.
+  covers every opener with no case analysis — a marker, a row, a search hit, a creation, and
+  whatever is added next — and an opener that has since left the document is simply not chased.
 - **A dismissed draft returns focus to the map's add-site control**, the control the reader opened
   it with.
 

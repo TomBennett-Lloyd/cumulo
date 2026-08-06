@@ -42,12 +42,16 @@ const PAN_STEP_PX = 500;
 /**
  * Drags needed to put every marker outside the map's bounds.
  *
- * At the opening camera (`src/map/framing.ts`: zoom 4.6) a CSS pixel is roughly
- * 0.03° of longitude, so one drag is ~15° against a fleet that spans ~9° inside
- * a ~37° viewport: two clear it and this is three. A count rather than a loop
- * that stops when the map is empty, because the emptiness is then still an
- * assertion — a version that panned "until clear" would report success by
- * exiting its own loop.
+ * A margin over what the opening camera (`src/map/framing.ts`) and a drag of
+ * {@link PAN_STEP_PX} actually need, which is fewer — the fleet occupies well
+ * under half the opening viewport, so it clears the edge before this many. The
+ * numbers themselves are `framing.ts`'s and the fleet generator's and are not
+ * restated here; if either changes enough to matter, the `toHaveCount(0)` below
+ * is what says so, by name.
+ *
+ * A count rather than a loop that stops when the map is empty, because the
+ * emptiness is then still an assertion — a version that panned "until clear"
+ * would report success by exiting its own loop.
  */
 const PANS_TO_CLEAR_THE_FLEET = 3;
 

@@ -111,6 +111,28 @@ const openHeaderMenu = (): void => {
 /** The theme toggle, reached where a visitor reaches it. */
 const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark theme' });
 
+/**
+ * The name of the first site the page listed, read off the page itself.
+ *
+ * The search and the site list are fed by one fleet — that is the whole point of
+ * the bar being rendered by `Dashboard` — so a name the list is showing is a
+ * name the search must be able to find. Reading it here rather than importing
+ * the demo fleet's generator keeps the two from agreeing by construction, which
+ * is the same reason `dashboard-test-fixture.tsx` asks the *source* for a site
+ * rather than deriving one from the seed.
+ */
+const firstListedSiteName = (): string => {
+  const name = screen
+    .getByRole('list', { name: 'Fleet sites' })
+    .querySelector('.site-row-name')?.textContent;
+
+  if (name === undefined || name === '') {
+    throw new Error('The fleet listed no site for the search to find.');
+  }
+
+  return name;
+};
+
 beforeEach(() => {
   stubSystemPrefersDark(false);
 });
@@ -249,18 +271,28 @@ describe('App shell', () => {
   it('searches the fleet the dashboard loaded, not an empty list', async () => {
     await renderApp(StandInMapRegion);
 
+    /*
+     * A name taken off the fleet the page actually listed, rather than one
+     * spelled out here or regenerated from the seed. Both alternatives would
+     * still pass if the app and the test drifted together, which is the failure
+     * this case is the only guard against.
+     */
+    const siteName = firstListedSiteName();
+
     fireEvent.change(screen.getByRole('combobox', { name: 'Search sites by name' }), {
-      target: { value: 'rooftop' },
+      target: { value: siteName },
     });
 
     /*
      * The wiring this file exists for, at its newest seam. The bar is rendered
      * by `Dashboard` precisely so the search can see the fleet, and a header
      * handed an empty array would look identical on screen at rest — the field
-     * is there, it takes text, and it answers every query with "no matching
-     * sites". Asserting that a real site comes back is what tells the two apart.
+     * is there, it takes text, and it opens a popup. What it would *not* have is
+     * this: the site the page is listing, offered back by name. Counting options
+     * would not tell the two apart, because the no-match message is itself an
+     * option.
      */
-    expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
+    expect(screen.getByRole('option', { name: (name) => name.startsWith(siteName) })).toBeDefined();
   });
 });
 

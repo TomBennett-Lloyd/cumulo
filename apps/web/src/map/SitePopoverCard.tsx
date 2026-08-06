@@ -148,7 +148,8 @@ export interface SitePopoverCardProps {
  * The rule this card implements is the settlement of
  * [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and
  * `react.md`'s focus paragraph is where it is written down. When the selection
- * came from a reader — a marker, a row, a creation — the card announces itself
+ * came from a reader — a marker, a row, the header's search, a creation — the
+ * card announces itself
  * by focusing its own heading, which is `tabIndex={-1}` so it is a focus target
  * without joining the tab order. When the selection came from `?site=`, focus
  * does not move at all.

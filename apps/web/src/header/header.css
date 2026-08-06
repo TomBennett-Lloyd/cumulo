@@ -91,9 +91,10 @@
  * cannot overlap each other, so their order between themselves is not a
  * question anything has to answer.
  *
- * Bounded and scrollable rather than trusted to stay short: the list is capped
- * at eight matches in `SiteSearch.tsx`, and this is the belt for the day that
- * cap changes on a narrow window.
+ * Bounded and scrollable rather than trusted to stay short: `SiteSearch.tsx`'s
+ * `MAX_VISIBLE_MATCHES` is what caps the list, and this is the belt for the day
+ * that cap changes, or the day a short window makes even the capped list too
+ * tall for the space under the bar.
  */
 .site-search-listbox {
   position: absolute;

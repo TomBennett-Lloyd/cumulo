@@ -225,11 +225,13 @@ export const Dashboard = ({
   /**
    * Selecting a site, the way everything but the address bar does it.
    *
-   * One helper rather than the pair of `set` calls written out at each of the
-   * three call sites: "which site" and "who asked" are one fact about one event,
-   * and a call site that set the first without the second would silently reuse
-   * the previous origin — which is the deep-link bug this exists to prevent,
-   * reintroduced from the other end.
+   * One helper rather than the pair of `set` calls written out at every call
+   * site: "which site" and "who asked" are one fact about one event, and a call
+   * site that set the first without the second would silently reuse the previous
+   * origin — which is the deep-link bug this exists to prevent, reintroduced from
+   * the other end. The number of call sites is deliberately not stated here; it
+   * has grown twice already, and a helper is what makes each new one correct by
+   * default rather than by being counted.
    */
   const selectSiteForReader = (siteId: Site['id']): void => {
     setSelectedSiteId(siteId);
@@ -352,8 +354,10 @@ export const Dashboard = ({
    * list* for the row naming its site, which was right only because a row was
    * the only way to open one that this dashboard could see. The card on the map
    * remembers the element that actually held focus when it opened and hands it
-   * back on close (`map/SitePopoverCard.tsx`), which is the same answer for a
-   * marker, a row and a creation without the dashboard knowing which happened.
+   * back on close (`map/SitePopoverCard.tsx`), which is the same answer for
+   * every opener — a marker, a row, the header's search, a creation — without
+   * the dashboard knowing which happened, and without needing an answer of its
+   * own the next time one is added.
    */
 
   /**
