@@ -111,6 +111,28 @@ const openHeaderMenu = (): void => {
 /** The theme toggle, reached where a visitor reaches it. */
 const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark theme' });
 
+/**
+ * The name of the first site the page listed, read off the page itself.
+ *
+ * The search and the site list are fed by one fleet — that is the whole point of
+ * the bar being rendered by `Dashboard` — so a name the list is showing is a
+ * name the search must be able to find. Reading it here rather than importing
+ * the demo fleet's generator keeps the two from agreeing by construction, which
+ * is the same reason `dashboard-test-fixture.tsx` asks the *source* for a site
+ * rather than deriving one from the seed.
+ */
+const firstListedSiteName = (): string => {
+  const name = screen
+    .getByRole('list', { name: 'Fleet sites' })
+    .querySelector('.site-row-name')?.textContent;
+
+  if (name === undefined || name === '') {
+    throw new Error('The fleet listed no site for the search to find.');
+  }
+
+  return name;
+};
+
 beforeEach(() => {
   stubSystemPrefersDark(false);
 });
@@ -228,19 +250,49 @@ describe('App shell', () => {
     expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
   });
 
-  it('leaves the header bar with one control on it, and the rest behind it', async () => {
+  it('leaves the header bar with the search and one disclosure, and the rest behind it', async () => {
     await renderApp(StandInMapRegion);
 
     // The bar is height the map does not get, so what sits on it is a design
-    // decision rather than an accident of where a component was added. The
-    // theme toggle used to be bare here; it is behind the disclosure now, and
-    // this is the assertion that notices if something bare comes back.
+    // decision rather than an accident of where a component was added. Two
+    // things earn it: finding a site, which a reader does repeatedly, and the
+    // disclosure everything done once a session hides behind. The theme toggle
+    // used to be bare here, and this is the assertion that notices if something
+    // bare comes back.
+    expect(screen.getByRole('combobox', { name: 'Search sites by name' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
 
     openHeaderMenu();
 
     expect(screen.getByRole('button', { name: 'Dark theme' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'About Cumulo' })).toBeDefined();
+  });
+
+  it('searches the fleet the dashboard loaded, not an empty list', async () => {
+    await renderApp(StandInMapRegion);
+
+    /*
+     * A name taken off the fleet the page actually listed, rather than one
+     * spelled out here or regenerated from the seed. Both alternatives would
+     * still pass if the app and the test drifted together, which is the failure
+     * this case is the only guard against.
+     */
+    const siteName = firstListedSiteName();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search sites by name' }), {
+      target: { value: siteName },
+    });
+
+    /*
+     * The wiring this file exists for, at its newest seam. The bar is rendered
+     * by `Dashboard` precisely so the search can see the fleet, and a header
+     * handed an empty array would look identical on screen at rest — the field
+     * is there, it takes text, and it opens a popup. What it would *not* have is
+     * this: the site the page is listing, offered back by name. Counting options
+     * would not tell the two apart, because the no-match message is itself an
+     * option.
+     */
+    expect(screen.getByRole('option', { name: (name) => name.startsWith(siteName) })).toBeDefined();
   });
 });
 
@@ -292,8 +344,25 @@ describe('App when the surface below the shell throws', () => {
     const failure = screen.getByRole('alert');
 
     expect(failure.textContent).toContain('The dashboard hit an unexpected error');
-    // The header lives above the boundary, so the page still says what it is.
-    expect(screen.getByRole('heading', { name: 'Cumulo', level: 1 })).toBeDefined();
+  });
+
+  it('takes the header down with the surface, because the bar is part of it', () => {
+    render(<App mapRegion={ThrowingMapRegion} />);
+    screen.getByRole('alert');
+
+    /*
+     * Pinned rather than left to be discovered. The header used to sit above the
+     * boundary and survive a crash, and it stopped when its search needed the
+     * fleet: the bar is rendered by `Dashboard` now, inside the boundary
+     * (`header/AppHeader.tsx`). So a render failure costs the brand, the theme
+     * toggle and About as well as the surface — which is a real trade, and the
+     * assertion below is where anyone reversing it will find out that this file
+     * knows.
+     *
+     * What must not be lost is on the next case: the credit is a licence
+     * obligation and the boundary discharges it itself.
+     */
+    expect(screen.queryByRole('heading', { name: 'Cumulo', level: 1 })).toBe(null);
   });
 
   it('still credits Open-Meteo when the surface has crashed', () => {

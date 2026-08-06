@@ -94,8 +94,9 @@ a click on the basemap. It sits **above** the marker rather than over it: a card
 coordinate would cover the mark that says which site it is about.
 
 **A selection the camera cannot see brings the camera to it, and nothing else does.** A site
-selected from the list, a link or a creation may be well outside the current view, so
-`SelectionCamera` eases to it — at the current zoom, and only when it is outside
+selected anywhere but on the map itself — the list below it, the header's search, a link, a
+creation — may be well outside the current view, so `SelectionCamera` eases to it — at the
+current zoom, and only when it is outside
 `map.getBounds()`. Re-centring on a marker the reader just pressed would move the one thing they
 were looking at, and changing the zoom would undo a framing they chose.
 

@@ -40,10 +40,17 @@ body {
 }
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
- * does not get, so the brand, the tagline and the menu button sit on one
- * baseline and wrap to a second line only when the width forces it. The third
- * item used to be the theme toggle; it is behind the disclosure now
- * (`header/HeaderMenu.tsx`), and the bar still carries exactly one control. */
+ * does not get, so the brand, the tagline, the site search and the menu button
+ * sit on one baseline and wrap to a second line only when the width forces it —
+ * which is the only narrow-width mechanism the shell has, here as everywhere
+ * else in it (there is no breakpoint in this app).
+ *
+ * The bar carries two controls: the search that finds a site by name, and the
+ * disclosure everything else hides behind. The theme toggle was once bare here
+ * and is inside that disclosure now (`header/HeaderMenu.tsx`); the search earned
+ * its place on the bar rather than in the menu because a control hidden behind a
+ * press is not a shortcut. `header/header.css` owns both of their treatments —
+ * this rule is only the row they sit in, and the token gallery wears it too. */
 .app-header {
   display: flex;
   flex-wrap: wrap;
@@ -77,20 +84,31 @@ body {
   font-size: var(--text-sm);
 }
 
-/* Everything that is not the header. `flex: 1` is what puts the app failure
- * card in the middle of the screen on a page with nothing else on it — it
- * claims the space the header left, and `.app-failure`'s `margin: auto`
- * centres in that. It no longer carries `min-height: 0`: that existed to let
- * this box be *shorter* than its content while the dashboard scrolled a column
- * inside itself, and the document is the scroller now (#265). */
+/* Everything that is not the header — and rendered by `Dashboard` rather than by
+ * the shell since the header moved down there (`header/AppHeader.tsx`), which is
+ * why this box and `.app-header` are siblings in the DOM but come from one
+ * component. `flex: 1` is what makes it claim the height the header leaves, so a
+ * short page still fills the window.
+ *
+ * It has nothing to do with the failure card any more, and did not for as long
+ * as this comment claimed: `AppErrorBoundary` replaces its *children*, so a
+ * crashed page has no `.app-main` at all. The card centres on its own
+ * `margin: auto` as the only flex item of `.app`, which has the viewport height
+ * to centre in — see that rule below.
+ *
+ * It no longer carries `min-height: 0` either: that existed to let this box be
+ * *shorter* than its content while the dashboard scrolled a column inside
+ * itself, and the document is the scroller now (#265). */
 .app-main {
   flex: 1;
 }
 
-/* `margin: auto` on a flex item centres it on both axes in the space the header
- * left. The danger border is the same treatment `.panel-error` uses — this is
- * that idiom at whole-page scale, and the measure keeps the sentence readable
- * on a wide screen. */
+/* `margin: auto` on a flex item centres it on both axes in whatever free space
+ * its container has. Here that container is `.app` itself: a crashed page is the
+ * boundary's card and nothing else, and `.app`'s `min-height: 100dvh` is what
+ * gives the margin something to absorb. The danger border is the same treatment
+ * `.panel-error` uses — this is that idiom at whole-page scale, and the measure
+ * keeps the sentence readable on a wide screen. */
 .app-failure {
   display: grid;
   gap: var(--space-4);
