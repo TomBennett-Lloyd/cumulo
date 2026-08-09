@@ -184,3 +184,10 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "287 looks good to me happy to proceed there" — owner approval in chat for the billing-mode flip and its ADR 0002 Amendments entry.
 - **Why**: `docs/adr/**` is a humanAlways path; the amendment records that no table draws on the free 25/25 pool any more, a fact the ADR's own body predates.
 - **How applied**: merged on the approval; `terraform apply` on infra/storage follows immediately to stop the live twice-hourly throttle alarms.
+
+## 2026-08-09 — PR #294 (attribution constraint amendment)
+
+- **Category**: approved-no-changes
+- **Feedback**: "294 looks good you can merge when ready" — owner approval in chat for the CLAUDE.md hard-constraint amendment (compact Open-Meteo attribution form at narrow widths).
+- **Why**: CLAUDE.md is a humanAlways path; the amendment relaxes mandated wording while keeping the visible link non-negotiable, and the owner had pre-approved the concept in the #284 D18 discussion.
+- **How applied**: merged on the approval; #284 D18 builds on it.
