@@ -17,7 +17,7 @@ import { routeBasemap } from './hermetic-basemap';
  * (`src/header/*.test.tsx`): what is in the document, in which state, and what
  * each control means.
  *
- * Two cases, one per thing only this lane can see.
+ * Three cases, one per thing only this lane can see.
  *
  * The first is the menu, as one continuous interaction rather than a case per
  * step, because the sequence is the behaviour: a reader arrives, finds the menu
@@ -34,6 +34,12 @@ import { routeBasemap } from './hermetic-basemap';
  * is *measured* against the viewport. A unit test could assert that the camera
  * was asked to move; only a browser can say the reader can see what they asked
  * for.
+ *
+ * The third is where the bar's three things sit relative to each other, which is
+ * a claim about a flex line's cross-axis and so exists only once a browser has
+ * laid the row out and resolved every font in it. jsdom computes no such
+ * geometry: under it `align-items: baseline` and `align-items: center` are the
+ * same string in a stylesheet nobody measured (`testing.md` rule 10).
  */
 
 /** How far one drag moves the camera, in CSS pixels. */
@@ -79,6 +85,56 @@ const isWithinViewport = async (page: Page, locator: Locator): Promise<boolean> 
     box.x + box.width <= viewport.width &&
     box.y + box.height <= viewport.height
   );
+};
+
+/**
+ * How far apart two boxes' vertical centres may sit and still count as aligned,
+ * in CSS pixels.
+ *
+ * The same two pixels, for the same reason, that `composition.spec.ts`'s
+ * `EDGE_TOLERANCE_PX` allows: these are `getBoundingClientRect` reads of a
+ * laid-out page, and sub-pixel layout plus the browser's own rounding land in
+ * the last pixel or so. A separate constant rather than a shared one because the
+ * two specs measure different things and are free to diverge (`structure.md`
+ * rule 7) — that one is a box meeting an edge, this one is a row of boxes
+ * agreeing on a centreline.
+ *
+ * Two is far below the misalignment this case exists to catch: the bar's
+ * controls are `--text-sm` and the wordmark beside the mark is `--text-xl`, so
+ * hanging them off a shared text baseline puts the mark several pixels above the
+ * centreline of everything else — which is what the owner saw (#284 D1).
+ */
+const CENTRE_TOLERANCE_PX = 2;
+
+/**
+ * The widest gap between any two of these elements' vertical centres, in CSS
+ * pixels — `Infinity` while any one of them is still without a layout box.
+ *
+ * Infinity rather than a throw for the reason {@link isWithinViewport} returns
+ * `false`: every caller polls this, an element with no box yet is a "not yet",
+ * and the poll's own timeout is what turns a permanent one into a failure. It
+ * also fails the comparison every caller makes, so a box that never arrives can
+ * never be mistaken for an aligned one.
+ *
+ * The locators are a parameter rather than reached in from the case
+ * (`structure.md` rule 1), and pairwise-max rather than a comparison against one
+ * chosen reference: no element on the bar is the authority the others answer to,
+ * and picking one would hide a pair that agrees with it while disagreeing with
+ * each other.
+ */
+const maxCentreMisalignment = async (elements: readonly Locator[]): Promise<number> => {
+  const boxes = await Promise.all(elements.map(async (element) => element.boundingBox()));
+  const centres: number[] = [];
+
+  for (const box of boxes) {
+    if (box === null) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    centres.push(box.y + box.height / 2);
+  }
+
+  return Math.max(...centres) - Math.min(...centres);
 };
 
 /**
@@ -232,6 +288,42 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
   await expect(popover).toBeHidden();
   await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
   await expect(menuButton).toBeFocused();
+});
+
+test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
+  /*
+   * The live map, not merely a map-shaped box. `.map-canvas` is worn by the
+   * pending shell as well as the running map (`MapSurface`), and the swap
+   * between them is a layout change directly above nothing and directly below
+   * the header — so measuring the bar while it is still in flight would be
+   * measuring a page mid-assembly. `.maplibregl-canvas` exists only on the far
+   * side of that swap.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  /*
+   * The three things a reader sees on the bar, and the whole of the claim: they
+   * share a centreline. Written as the three elements rather than as a rule in a
+   * stylesheet because the defect this catches is not a wrong declaration — it
+   * is a right-sounding one (`align-items: baseline`) meeting a mark that has no
+   * text baseline to hang from, so the mark rides above controls set two type
+   * sizes smaller. Only the resolved geometry can tell those apart.
+   *
+   * Polled, because these are geometry reads on a page that has just finished
+   * assembling itself and fonts settle after first paint.
+   */
+  const misalignment = async (): Promise<number> =>
+    maxCentreMisalignment([
+      page.locator('.brand-mark'),
+      page.locator('.site-search-input'),
+      page.locator('.header-menu-button'),
+    ]);
+
+  await expect
+    .poll(misalignment, {
+      message: 'The brand mark, the search and the menu do not share a centreline.',
+    })
+    .toBeLessThanOrEqual(CENTRE_TOLERANCE_PX);
 });
 
 test('finds a site by name and brings the camera to it when it is off screen', async ({ page }) => {
