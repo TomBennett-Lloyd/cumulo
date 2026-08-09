@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { IpLimiter } from './abuse/ip-limiter';
 import { checkWriteOrigin } from './abuse/origin-check';
+import { getFleetActuals } from './forecast/get-fleet-actuals';
 import { getSiteForecast } from './forecast/get-site-forecast';
 import { getSiteSeries } from './forecast/get-site-series';
 import { parseGatewayEvent } from './http/gateway-event';
@@ -115,12 +116,13 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter: `querySeriesRange`, for the two read routes and
+ * The `cumulo-series` adapter: `querySeriesRange`, for the three read routes and
  * nothing else.
  *
  * This function neither writes a series point nor deletes one — forecasts are
- * #12's, actuals are #16's, and a departed site's rows expire on the table's
- * own 90-day TTL rather than being deleted from a request (ADR 0007). So the
+ * #12's, the simulated actuals are written by the forecast service's own
+ * producer (#264), and a departed site's rows expire on the table's own 90-day
+ * TTL rather than being deleted from a request (ADR 0007). So the
  * IAM policy it runs under grants `Query` on this table and no other action
  * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps type
  * is the compile-time half of the same statement.
@@ -193,9 +195,10 @@ const webOrigins = parseWebOrigins(env.CUMULO_WEB_ORIGINS);
  * The per-IP limiter in front of one route (ADR 0006 layer 1).
  *
  * Applied per route rather than as a blanket middleware, because *which* routes
- * are limited is a deliberate list and not a default. The three writes and the
- * span-capped series read are limited: each one either changes state or reads a
- * range whose cost a caller chooses. `GET /v1/sites`, `GET …/forecast`,
+ * are limited is a deliberate list and not a default. The three writes, the
+ * span-capped series read and the fleet-actuals fan-out are limited: each one
+ * either changes state, reads a range whose cost a caller chooses, or issues one
+ * Query per fleet site. `GET /v1/sites`, `GET …/forecast`,
  * `/openapi.json` and the two `/docs` routes are not: they are the pages a
  * reviewer clicks through, their cost per request is fixed and small, and the
  * stage throttle already bounds them. A limiter that made reading the docs
@@ -284,7 +287,7 @@ const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', imp
  *
  * The `guardedWrite`/`rateLimited` wrappers are the abuse protections, and this
  * table is the only place that says which routes carry them. Reading down the
- * `handle` column is how a reviewer answers "what is limited?" — the four
+ * `handle` column is how a reviewer answers "what is limited?" — the five
  * wrapped routes and no others. The route keys the gateway throttles separately
  * (`infra/api/gateway.tf`, ADR 0006 layer 2) are the three `guardedWrite` ones,
  * and those two lists have to be edited together.
@@ -329,6 +332,22 @@ export const routes: readonly Route[] = [
     // their pagination and the caller got a 500 instead of a truncated window.
     handle: (request) =>
       rateLimited(request, () => getSiteSeries({ sites, series, log: jsonLineLog }, request)),
+  },
+  {
+    method: 'GET',
+    segments: ['v1', 'fleet', 'actuals'],
+    // Three segments, and the second is `fleet` rather than `sites`, so this
+    // cannot shadow or be shadowed by `GET /v1/sites/{siteId}`.
+    //
+    // Limited, and for the opposite reason to the route above: the caller picks
+    // nothing about its cost, but the *fleet* does — one Query per site, on
+    // every dashboard load. The alternative it replaces is worse on both counts,
+    // a per-site fan-out from the browser that would spend one limited request
+    // per site (`forecast/get-fleet-actuals.ts` has the arithmetic).
+    handle: (request) =>
+      rateLimited(request, () =>
+        getFleetActuals({ sites, series, now, log: jsonLineLog }, request),
+      ),
   },
   // The self-documenting half of the API (ADR 0005): the document, the page
   // that renders it, and the page's assets, all from this function and this
