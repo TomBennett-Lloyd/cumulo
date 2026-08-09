@@ -58,12 +58,22 @@
  * The search's box, and the popup's containing block.
  *
  * `flex: 1 1 …` is what makes it the item that gives way. The bar is one
- * wrapping row with no breakpoint (`app.css`), so the brand and the menu keep
- * their intrinsic widths and the search absorbs whatever is left, down to a
- * basis wide enough to read a site name in and up to a
- * measure past which a search field starts looking like a form. When even the
- * basis will not fit, the row wraps — which is the narrow-width behaviour the
- * bar already had.
+ * wrapping row (`app.css`), so the brand and the menu keep their intrinsic
+ * widths and the search absorbs whatever is left, down to a basis wide enough to
+ * read a site name in and up to a measure past which a search field starts
+ * looking like a form.
+ *
+ * The 14rem basis is also what the breakpoint below is derived from: the width
+ * at which the row can no longer hold the brand, this basis and the menu is
+ * exactly the width at which this box stops being shown at all (#284 D17). So
+ * the two numbers are one decision read from either end, and changing this basis
+ * moves the measurement that one is written from — which is why they sit in the
+ * same file, and why that comment points back at this declaration instead of
+ * spelling the basis out a second time.
+ *
+ * This rule keeps applying below the breakpoint, to the copy inside the search
+ * bar: what is hidden there is the *direct child* of `.app-header`, not every
+ * `.site-search` on the page.
  */
 .site-search {
   position: relative;
@@ -162,6 +172,130 @@
   white-space: nowrap;
 }
 
+/* ---- The search where the bar runs out ---------------------------------- */
+
+/*
+ * The toggle that stands in for the field, and the bar it opens.
+ *
+ * Both are drawn at every width and shown at one range of them: this stylesheet
+ * is the only thing in the app that knows the breakpoint, and `AppHeader.tsx`
+ * says why it is the right owner. Hidden by `display` rather than by not being
+ * rendered, so the swap is a paint and never a remount.
+ *
+ * The toggle has no treatment of its own. It wears the menu button's, by joining
+ * that rule's selector list below rather than by restating its declarations —
+ * the two sit side by side on the same bar at exactly the widths where both are
+ * on screen, so any divergence between them would read as a mistake rather than
+ * as a difference. That is one treatment in one place, not `structure.md` rule
+ * 7's two surfaces free to diverge.
+ */
+.header-search-toggle {
+  display: none;
+}
+
+/*
+ * The bar the toggle opens: a full line under the header row, and part of the
+ * header rather than a band beneath it.
+ *
+ * `flex-basis: 100%` is the whole of the placement. `.app-header` is already a
+ * wrapping flex row (`app.css`), so an item that asks for the full width takes
+ * the next line and the row's own `gap` sets it off — no second container, no
+ * duplicated padding, and the header's bottom border stays under everything the
+ * header is showing.
+ */
+.header-search-bar {
+  display: none;
+  flex-basis: 100%;
+}
+
+/*
+ * A media query that exists because a row runs out of width rather than because
+ * a device was named — which is `map/map.css`'s reason for its own, and the two
+ * are counted and argued as a set in `stylelint.config.mjs`'s residual
+ * paragraph rather than by either of them keeping a tally of the other.
+ *
+ * 27.4375rem is measured, not picked. At this bar's own content — the brand
+ * lockup at 113.625px, the search at its flex basis above, the menu button at
+ * 38px, two `--space-4` gaps and the bar's own padding — 440px is the narrowest
+ * viewport that holds all three on one line, and at 439px the menu wraps and the
+ * bar goes from 63px tall to 114px. So the breakpoint sits exactly at the wrap:
+ * 439px, which is 27.4375rem at the default root size. Below it the field is
+ * replaced by the toggle, and the bar it opens costs a line only while it is up.
+ *
+ * The number is derived from this header's content and belongs to this file
+ * alone. It is deliberately not shared with the other one: each answers its own
+ * row's arithmetic — that band's two credits, this bar's brand and controls — so
+ * a single "mobile" width standing for both would be a number neither of them
+ * measured.
+ *
+ * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
+ * derived from the measurement above, each needing re-deriving if this bar's
+ * content or typography moves it:
+ *
+ * - `apps/web/e2e/header.spec.ts`, `PHONE_VIEWPORT` — names this width and the
+ *   clearance 390px has under it, to justify a viewport provably inside the
+ *   folded range. A width derived from the stylesheet would assert nothing, so
+ *   it spells it out: the asserting carrier rule 9 ledgers rather than forbids.
+ * - `apps/web/src/header/AppHeader.tsx`, the docblock section on the fold —
+ *   carries the 63px-to-114px height it costs the bar, which is the measurement
+ *   this breakpoint was chosen from and the reason the fold exists at all.
+ *
+ * Where a platform's fonts run wider than the measurement, this under-fires —
+ * the wordmark is set in the system stack, so a stack with a wider face wraps
+ * the row a few pixels above 439px and the reader sees the two-line bar for that
+ * sliver of widths, which is exactly the behaviour this rule replaced rather
+ * than a new failure. A container query would measure the bar instead of
+ * inferring it from the viewport and would need no number at all; declined here
+ * for `map.css`'s reason, and it is the escalation the moment a third surface
+ * wants one.
+ *
+ * Gate residual: the width is a raw length, and there is no breakpoint scale to
+ * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
+ * features are the part of the frontend gate's open half no declaration-scoped
+ * rule can ever reach — so this is a pointer rather than a second copy of it.
+ */
+@media (max-width: 27.4375rem) {
+  /*
+   * The direct child only. The bar's copy of the search is nested inside
+   * `.header-search-bar` and is the one thing on this bar that must stay
+   * visible here — hiding both would leave the toggle opening an empty bar.
+   */
+  .app-header > .site-search {
+    display: none;
+  }
+
+  /*
+   * The two icon buttons travel together at the end of the row. With the field
+   * gone there is free space between the brand and them, and `margin-left: auto`
+   * on the *first* of the pair is what absorbs it: two auto margins split that
+   * space in half and strand the toggle in the middle of the bar, 84px short of
+   * the menu, which is what shipped in review cycle 1 and what
+   * `e2e/header.spec.ts` measures now.
+   *
+   * So the menu's own auto margin (below) has to be switched off here, and the
+   * selector is `.app-header > .header-menu` rather than the bare class for a
+   * cascade reason worth stating plainly: a media query contributes nothing to
+   * specificity, so a bare `.header-menu` in this block merely ties with the base
+   * rule — which sits further down this file and therefore wins on source order,
+   * at every width, silently. The descendant form outranks it wherever this query
+   * applies, and it is the more honest selector besides: this margin is the
+   * menu's placement *in the header row*, and the row is the only place the class
+   * appears.
+   */
+  .header-search-toggle {
+    display: block;
+    margin-left: auto;
+  }
+
+  .app-header > .header-menu {
+    margin-left: 0;
+  }
+
+  .header-search-bar {
+    display: block;
+  }
+}
+
 /* ---- Menu disclosure ---------------------------------------------------- */
 
 /*
@@ -169,14 +303,34 @@
  * — the position the theme toggle used to claim for itself before it moved in
  * here. `position: relative` makes this the popover's containing block, so the
  * popover hangs off the button rather than off the page.
+ *
+ * The margin is handed to the search toggle below the breakpoint, where the
+ * toggle is the item immediately before this one and the free space has to be
+ * absorbed once rather than twice — see that media query for the whole of it,
+ * including why the rule that switches this one off has to out-specify it rather
+ * than merely come earlier. The menu ends up in the same place either way; what
+ * changes is which item pushed it there.
  */
 .header-menu {
   position: relative;
   margin-left: auto;
 }
 
-.header-menu-button {
-  padding: var(--space-2) var(--space-4);
+/*
+ * Padding is one value on all four sides since the label became a glyph (#284
+ * D16). The word `Menu` was wider than it was tall and wanted the wider
+ * horizontal pad to sit in; a square mark in an oblong box reads as an icon
+ * that has been shoved sideways. The type properties stay because the button
+ * still owns a `font-size` its inline content would use — and because
+ * `color` here is what the mark is drawn in (below).
+ *
+ * The search toggle (#284 D17) shares the rule rather than copying it, for the
+ * reason its own section above gives: at the widths where the toggle exists the
+ * two are adjacent on the same bar, so they are one treatment and not two.
+ */
+.header-menu-button,
+.header-search-toggle {
+  padding: var(--space-2);
   border-width: calc(var(--space-1) / 4);
   border-style: solid;
   border-color: var(--color-border);
@@ -189,8 +343,47 @@
   cursor: pointer;
 }
 
-.header-menu-button[aria-expanded='true'] {
+/* Open says so on the button, for both disclosures on this bar: the menu's
+ * popover hangs directly off it, and the search bar is a line further down where
+ * a reader glancing back at the row would otherwise see nothing pressed. */
+.header-menu-button[aria-expanded='true'],
+.header-search-toggle[aria-expanded='true'] {
   border-color: var(--color-accent);
+}
+
+/*
+ * The burger. Three strokes in the button's own ink: `currentColor` inherits
+ * `.header-menu-button`'s `color`, so the mark follows the button through both
+ * themes and any future hover or focus treatment without a second colour
+ * decision to keep in step. The gate allows it by `ignoreValues` for the reason
+ * it allows `var(--token)` — it is a reference to a decided colour rather than
+ * a spelled one.
+ *
+ * `fill: none` because a stroked path left at the default fill would ink the
+ * region the lines bound. `display: block` because an inline `<svg>` sits on
+ * the text baseline and leaves descender space beneath it, which in a button
+ * whose only child it is would show up as padding that is square in this file
+ * and not square on screen.
+ *
+ * The box is sized in `width`/`height` for `.brand-mark`'s reason above: the
+ * residual the CSS gate documents in stylelint.config.mjs, not a value slipping
+ * past it. `stroke-width` is deliberately unitless — user units of the 20-unit
+ * `viewBox`, so the weight scales with the box rather than having to be
+ * restated if the box changes, and at the default root size the box is 20px, so
+ * the units land 1:1 and the strokes fall on whole pixels.
+ *
+ * The magnifier in the search toggle is drawn on exactly these terms and in the
+ * same 20-unit box, so it shares the rule: two marks of visibly different weight
+ * on two adjacent buttons is the failure this prevents.
+ */
+.header-menu-icon,
+.header-search-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
 /*

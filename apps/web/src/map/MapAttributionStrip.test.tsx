@@ -47,6 +47,35 @@ describe('MapAttributionStrip', () => {
     expect(links).toContain('Open-Meteo.com');
   });
 
+  it('wraps the droppable tile prefix in the compact-form class', () => {
+    // `map.css` hides exactly this element below the width at which the band's
+    // row stops fitting on one line. The last assertion is what keeps that safe:
+    // the OSM tile credit is a licence condition like the weather one, so a
+    // wrapper that had swallowed either anchor would drop a credit at narrow
+    // widths rather than shortening a sentence.
+    render(<MapAttributionStrip />);
+
+    const prefix = screen.getByText('basemap tiles by');
+
+    expect(prefix.tagName).toBe('SPAN');
+    expect(prefix.className).toBe('map-attribution-prefix');
+    expect(prefix.querySelector('a')).toBeNull();
+  });
+
+  it('reads as one sentence with the prefix in place, separator and spacing intact', () => {
+    // The compact form is computed visibility and nothing else, so this text is
+    // what the DOM says at every width — what a reader with stylesheets off, or
+    // anything honouring the licence by parsing rather than painting, receives.
+    // Pinning it makes "only the painting changes" a checked claim instead of a
+    // comment, and it is what catches the prefix span landing with the spaces
+    // around it in the wrong place.
+    const { container } = render(<MapAttributionStrip />);
+
+    expect(container.querySelector('.map-attribution-tiles')?.textContent).toBe(
+      '© OpenStreetMap contributors · basemap tiles by OpenFreeMap',
+    );
+  });
+
   it('reads the tile credit before the weather credit', () => {
     // Reading order matches what the reader is looking at: the map, then the
     // data drawn on it.

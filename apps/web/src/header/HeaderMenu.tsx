@@ -15,7 +15,9 @@ export interface HeaderMenuProps {
  * The header's catch-all: a disclosure button over the shell's odds and ends.
  *
  * It was the bar's only control until the site search landed beside it
- * (`AppHeader.tsx`), and those two are what the bar carries.
+ * (`AppHeader.tsx`), and those two are what the bar carries — the search wearing
+ * one of two forms, the field or the icon that stands in for it below
+ * `header.css`'s breakpoint, rather than being a third thing on the row.
  *
  * What decides which side of this button a thing sits on is not importance, and
  * it is not frequency either. It is what a thing costs the bar weighed against
@@ -33,6 +35,34 @@ export interface HeaderMenuProps {
  * loses. `app.css`'s `.app-header` rule and `App.test.tsx`'s "leaves the header
  * bar with the search and one disclosure" both point here for that reasoning;
  * the assertion that notices if something bare comes back is the test's.
+ *
+ * ## The button is a burger, and its name is still a word
+ *
+ * The word `Menu` became three lines in #284 D16, which is the same weighing
+ * applied to the disclosure itself rather than to what sits beside it: the bar
+ * is width the map does not get, and a glyph readers already parse as "the rest
+ * of it" gives back the width the word was spending without giving back what
+ * the word was *for*. So the name is unchanged — `aria-label="Menu"`, exactly
+ * the string that used to be the button's text — and the `<svg>` under it is
+ * `aria-hidden`, for `Brand.tsx`'s reason: a mark that says nothing its name
+ * does not already say should not be in the accessibility tree twice. A screen
+ * reader, a voice-control user saying "click Menu", and every
+ * `getByRole('button', { name: 'Menu' })` in the suite are all still reaching
+ * the control they were reaching before.
+ *
+ * That trade has an edge worth naming. This is the app's first control whose
+ * accessible name lives *only* in an attribute: the (i) tips carry an
+ * `aria-label` too, but over a visible `i`, so losing the attribute leaves one
+ * of those badly named rather than unnamed — losing this one leaves a button
+ * announced as "button". Nothing on screen would look wrong and no gate would
+ * fire, which is why `docs/tech-debt.md`'s a11y-linting entry carries this
+ * button as a named member, and why `HeaderMenu.test.tsx` asserts the name and
+ * the absence of a text node in the same case.
+ *
+ * The three strokes are drawn here rather than fetched, on `Brand.tsx`'s terms:
+ * no test asserts their geometry and nothing outside this file imports them, so
+ * a designed glyph replaces this `<svg>` and reaches nothing else. Their colour
+ * is `header.css`'s, because the frontend gate is a stylesheet gate.
  *
  * ## A disclosure, not a menu
  *
@@ -124,12 +154,15 @@ export const HeaderMenu = ({ theme, onToggleTheme }: HeaderMenuProps): ReactElem
           type="button"
           className="header-menu-button"
           ref={buttonRef}
+          aria-label="Menu"
           aria-expanded={menuOpen}
           onClick={() => {
             setMenuOpen((wasOpen) => !wasOpen);
           }}
         >
-          Menu
+          <svg className="header-menu-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M3 5h14M3 10h14M3 15h14" />
+          </svg>
         </button>
 
         {menuOpen ? (
