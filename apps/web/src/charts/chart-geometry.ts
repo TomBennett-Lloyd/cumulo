@@ -23,6 +23,64 @@ export interface PlotRect {
 }
 
 /**
+ * The chart's height, in SVG user units — and therefore in rendered pixels,
+ * because the chart is drawn 1:1 with the width it is measured at (`chartPlot`
+ * below, and `docs/design/chart-treatment.md`). It is a constant while the width
+ * is not: a chart owes its reader a stable vertical scale as the window changes,
+ * and a height that tracked the width would make every resize a rescaling of the
+ * kW axis.
+ *
+ * Owned here, and consumed by the component's view box and by the e2e case that
+ * measures the 1:1 claim on a rendered page. Anything wanting the chart's height
+ * imports this rather than restating it (`architecture.md` rule 9).
+ *
+ * **The value is what fits, measured rather than chosen.** #284 D15 asks that a
+ * desktop viewport hold the map, the panel's heading row and the whole plot
+ * without scrolling, and the chart gets whatever the stack above it leaves. On
+ * the demo fleet at the viewport that case pins, that stack — the header bar,
+ * the map band (`dashboard.css`'s `.dashboard-map`) and the fleet panel's own
+ * chrome and gaps (`dashboard/fleet-panel.css`) — puts the chart's top at 702px
+ * and leaves 198px. 200 overflowed the fold by 6px; this leaves 14px of slack,
+ * which is the margin an image whose `system-ui` sets those text-driven boxes a
+ * little taller needs. The arithmetic here is the reasoning;
+ * `e2e/chart-surfaces.spec.ts` measuring a rendered page is the evidence, and it
+ * imports this constant rather than restating it.
+ */
+export const CHART_VIEW_BOX_HEIGHT = 184;
+
+/**
+ * The band under the plot that belongs to the time axis: its tick labels, and
+ * the axis title beneath them. Sized for that whole stack rather than for the
+ * one tier drawn today, so a second tier of labels lands in space the plot has
+ * already given up instead of over the last gridline.
+ */
+const X_AXIS_BAND = 44;
+/** Room to the left of the plot for a kW tick label and its gap. */
+const PLOT_LEFT = 48;
+/**
+ * Room to the right of the plot for half of the last time-axis label, which is
+ * centred on `plot.right` rather than tucked inside it.
+ *
+ * Half a label and not a whole one, which is why this is narrower than
+ * `PLOT_LEFT` — the kW labels hang entirely to the left of the plot, the time
+ * labels straddle their sample. The number is measured rather than derived from
+ * a character count: at `--text-xs` a weekday-prefixed tick (`Wed 12:00`, the
+ * widest form the axis produces) renders about 52px, so 26 is the bare
+ * requirement and this carries ~6px over it for an image whose `system-ui` is
+ * wider than this one's.
+ *
+ * It matters now in a way it did not before #284 D15. The chart used to be drawn
+ * in a fixed view box and scaled up, so a margin of 12 user units became ~28
+ * rendered pixels in a wide panel and the label fitted by accident of the scale;
+ * at 1:1 a user unit is a pixel and 12 clipped the last label by 13.8px —
+ * measured on the demo fleet, and the exact defect `e2e/chart-surfaces.spec.ts`
+ * exists to catch.
+ */
+const PLOT_RIGHT_MARGIN = 32;
+/** The chrome band above the plot, which the two axis titles sit in. */
+const PLOT_TOP = 12;
+
+/**
  * Mantissas a "nice" axis maximum may take, ascending within a decade. 3, 6, 7
  * and 9 are excluded: they produce quarter-steps nobody reads off a gridline.
  */
@@ -54,6 +112,30 @@ const decadeAtOrBelow = (value: number): number => {
 };
 
 const padded = (value: number): string => value.toString().padStart(2, '0');
+
+/**
+ * The plot rect for a chart rendered `width` pixels wide.
+ *
+ * **One user unit is one rendered pixel.** The chart used to be drawn in a fixed
+ * view box and scaled to whatever width its column gave it, which scaled the
+ * *text* with it: the same axis label was 12 units everywhere and 27px in a wide
+ * panel, 14px in a narrow one, so the chrome grew and shrank with the window
+ * while nothing else on the page did. Measuring the width and drawing at 1:1 is
+ * what fixes that, and it makes the margins below real distances rather than
+ * ratios — `PLOT_LEFT` is 48px of room for a tick label at every viewport.
+ *
+ * A function rather than a constant for the same reason: there is no one plot
+ * any more, only the plot at the width the chart currently has. Callers that
+ * need a plot without a measurement — tests, fixtures — ask for the one at
+ * `DEFAULT_CHART_WIDTH` (`use-chart-width.ts`) rather than keeping a rect of
+ * their own.
+ */
+export const chartPlot = (width: number): PlotRect => ({
+  left: PLOT_LEFT,
+  right: width - PLOT_RIGHT_MARGIN,
+  top: PLOT_TOP,
+  bottom: CHART_VIEW_BOX_HEIGHT - X_AXIS_BAND,
+});
 
 /**
  * Horizontal position of sample `index` of `count`. A lone sample has no extent

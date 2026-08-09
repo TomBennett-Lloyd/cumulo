@@ -3,11 +3,11 @@
 import { act, cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { xForIndex } from './chart-geometry';
-import { CHART_PLOT } from './ForecastChart';
 import {
   banded,
   bare,
   clientXFor,
+  JSDOM_PLOT,
   isoHour,
   renderChart,
   renderChartWithOverlay,
@@ -28,7 +28,7 @@ afterEach(cleanup);
 
 /** Client x that lands the pointer exactly on a sample of the rendered chart. */
 const clientXForIndex = (index: number, count: number): number =>
-  clientXFor(xForIndex(index, count, CHART_PLOT));
+  clientXFor(xForIndex(index, count, JSDOM_PLOT));
 
 const hoverSample = (container: HTMLElement, index: number, count: number): void => {
   fireEvent.pointerMove(requireMark(container, '.forecast-chart-pointer-target'), {
@@ -154,7 +154,7 @@ describe('ForecastChart hover layer', () => {
     hoverSample(container, 2, SERIES.length);
     const crosshair = requireMark(container, '.forecast-chart-crosshair');
 
-    expect(crosshair.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, CHART_PLOT)));
+    expect(crosshair.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, JSDOM_PLOT)));
     expect(crosshair.getAttribute('x1')).toBe(crosshair.getAttribute('x2'));
     expect(tooltipText(container)).toBe(READOUT[2]);
   });
@@ -241,8 +241,8 @@ describe('ForecastChart hover layer', () => {
 
     fireEvent.keyDown(svg, { key: 'End' });
 
-    expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(CHART_PLOT.left);
-    expect(tooltipAnchor(container)).toBeLessThan(xForIndex(4, SERIES.length, CHART_PLOT));
+    expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(JSDOM_PLOT.left);
+    expect(tooltipAnchor(container)).toBeLessThan(xForIndex(4, SERIES.length, JSDOM_PLOT));
   });
 
   it('gives every tooltip row a key of its own when an overlay shares a row’s name', () => {

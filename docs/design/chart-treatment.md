@@ -187,6 +187,18 @@ rule.
   Two measures of different scale become two charts, small multiples, or both series indexed to a
   common base on one axis.
 
+**A chart is drawn 1:1 with the width it is rendered at, and text never scales with the panel.**
+The plot measures its own column and takes that width as its drawing space, so one unit of chart
+geometry is one pixel on screen. The alternative — a fixed drawing space stretched to fill the
+column, which is how these charts were drawn until #284 D15 — scales the _chrome_ along with the
+marks: the same axis label is set at one size in a wide panel and another in a narrow one, so a
+chart's type drifts away from every other size on the page, and the margins that keep a label
+inside the canvas stop meaning a fixed distance. Height does not follow width. It is the owned
+constant `CHART_VIEW_BOX_HEIGHT` (`apps/web/src/charts/chart-geometry.ts`, which carries the
+reasoning for the value), because a kW axis rescaling on every resize would make one series a
+different chart at every window size — and because the height is what decides whether the whole
+plot clears the fold under the map, which is what D15 is actually about.
+
 ## The time axis
 
 **The time axis runs on UTC.** Tick labels are UTC wall time — `HH:mm`, gaining a short weekday

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   axisTicks,
+  CHART_VIEW_BOX_HEIGHT,
+  chartPlot,
   horizonLabelAnchor,
   niceAxisMax,
   snapToNearestIndex,
@@ -14,6 +16,40 @@ import {
 } from './chart-geometry';
 
 const PLOT: PlotRect = { left: 40, right: 440, top: 20, bottom: 160 };
+
+describe('chartPlot', () => {
+  /*
+   * The margins, pinned as numbers. Every other assertion in this file works in
+   * the abstract `PLOT` above, which is right for arithmetic that holds at any
+   * rect — but these four are the chart's actual measurements in actual pixels
+   * since #284 D15, and "the plot's left margin is 48px" is the claim, not an
+   * incidental of one. Written out rather than recomputed from the module's own
+   * private constants, which would assert nothing.
+   */
+  it('leaves a whole kW label to the left of the plot and half a time label to the right', () => {
+    const plot = chartPlot(1000);
+
+    expect(plot.left).toBe(48);
+    expect(plot.right).toBe(968);
+    expect(plot.top).toBe(12);
+  });
+
+  it('gives the time axis a fixed band under the plot, whatever the width', () => {
+    // The floor is measured up from the chart's own height, so it does not move
+    // with the width — which is what lets the axis keep one tier of labels (and,
+    // later, two) in space the plot has already given up.
+    expect(chartPlot(400).bottom).toBe(chartPlot(1600).bottom);
+    expect(CHART_VIEW_BOX_HEIGHT - chartPlot(400).bottom).toBe(44);
+  });
+
+  it('widens only rightwards, so the plot grows with the column it is drawn in', () => {
+    const narrow = chartPlot(400);
+    const wide = chartPlot(1600);
+
+    expect(wide.left).toBe(narrow.left);
+    expect(wide.right - narrow.right).toBe(1200);
+  });
+});
 
 describe('xForIndex', () => {
   it('puts the first sample on the left plot edge and the last on the right', () => {

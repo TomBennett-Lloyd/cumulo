@@ -3,9 +3,10 @@
 import { act, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex } from './chart-geometry';
-import { CHART_PLOT, type ForecastChartPoint } from './ForecastChart';
+import type { ForecastChartPoint } from './ForecastChart';
 import {
   banded,
+  JSDOM_PLOT,
   isoHour,
   marks,
   renderChart,
@@ -69,7 +70,7 @@ describe('ForecastChart over hours that carry an actual and no forecast', () => 
     // Index 1 is the last measured hour. On the demo's overlapping windows the horizon lands late
     // in the series; here it lands in the middle, with the forecast entirely to its right.
     expect(horizon.getAttribute('x1')).toBe(
-      String(xForIndex(1, DISJOINT_SERIES.length, CHART_PLOT)),
+      String(xForIndex(1, DISJOINT_SERIES.length, JSDOM_PLOT)),
     );
   });
 

@@ -2,11 +2,11 @@
 
 import { act, cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CHART_PLOT } from './ForecastChart';
 import {
   attributeNumber,
   bare,
   clientXFor,
+  JSDOM_PLOT,
   isoHour,
   renderChart,
   renderChartWithOverlay,
@@ -81,7 +81,7 @@ const panelAttribute = (container: HTMLElement, name: string): number =>
   attributeNumber(requireTooltipPart(container, '.forecast-chart-tooltip-panel'), name);
 
 /** The ceiling `tooltipPanelWidth` is capped at: the plot the panel floats over. */
-const PLOT_WIDTH = CHART_PLOT.right - CHART_PLOT.left;
+const PLOT_WIDTH = JSDOM_PLOT.right - JSDOM_PLOT.left;
 
 /** The centre line of each drawn series row, in the tooltip group's own space. */
 const rowCentreLines = (container: HTMLElement): readonly number[] =>
@@ -181,8 +181,8 @@ describe('ForecastChart tooltip shape', () => {
     // Which puts the whole panel inside the plot, at both edges. The text still
     // overflows its own panel — truncation is #284 D12 — and one row spilling
     // past an edge is the bounded failure this cap chooses over the other one.
-    expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(CHART_PLOT.left);
-    expect(tooltipAnchor(container) + PLOT_WIDTH).toBeLessThanOrEqual(CHART_PLOT.right);
+    expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(JSDOM_PLOT.left);
+    expect(tooltipAnchor(container) + PLOT_WIDTH).toBeLessThanOrEqual(JSDOM_PLOT.right);
   });
 
   it('pads the panel equally above the time and below the last visible row', () => {
@@ -217,15 +217,15 @@ describe('ForecastChart tooltip shape', () => {
 });
 
 /**
- * View-box positions inside sample 2's span. The five samples sit 101.5 units
- * apart from `CHART_PLOT.left`, so sample 2 is at 249 and the midpoint it shares
- * with sample 3 is at 299.75 — every value below but the last is on sample 2's
- * side of it, and the last is over the line.
+ * View-box positions inside sample 2's span. The five samples sit 140 units
+ * apart from `JSDOM_PLOT.left` (48), so sample 2 is at 328 and the midpoint it
+ * shares with sample 3 is at 398 — every value below but the last is on sample
+ * 2's side of it, and the last is over the line.
  */
-const ON_SAMPLE_2 = 249;
-const NEAR_SAMPLE_2 = 270;
-const STILL_SAMPLE_2 = 290;
-const PAST_THE_MIDPOINT = 310;
+const ON_SAMPLE_2 = 328;
+const NEAR_SAMPLE_2 = 355;
+const STILL_SAMPLE_2 = 385;
+const PAST_THE_MIDPOINT = 405;
 /**
  * Two waits, chosen to fall either side of `POINTER_FRAME_MS` — the frame the
  * panel is allowed one move in (`chart-hover-input.ts`, which ledgers these two
@@ -335,11 +335,11 @@ describe('ForecastChart tooltip motion', () => {
     // Seven units short of the right plot edge: following the pointer here
     // would hang most of the panel off the canvas.
     fireEvent.pointerMove(requireMark(container, '.forecast-chart-pointer-target'), {
-      clientX: clientXFor(CHART_PLOT.right - 7),
+      clientX: clientXFor(JSDOM_PLOT.right - 7),
     });
 
     const anchor = tooltipAnchor(container);
-    expect(anchor).toBeGreaterThanOrEqual(CHART_PLOT.left);
-    expect(anchor + panelAttribute(container, 'width')).toBeLessThanOrEqual(CHART_PLOT.right);
+    expect(anchor).toBeGreaterThanOrEqual(JSDOM_PLOT.left);
+    expect(anchor + panelAttribute(container, 'width')).toBeLessThanOrEqual(JSDOM_PLOT.right);
   });
 });

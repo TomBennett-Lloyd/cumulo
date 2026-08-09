@@ -1,22 +1,29 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
+import { CHART_VIEW_BOX_HEIGHT } from '../src/charts/chart-geometry';
 import { routeBasemap } from './hermetic-basemap';
 import { openSiteTable } from './site-table';
 
 /*
  * Chart geometry, which is the one question jsdom answers with a shrug.
  *
- * `ForecastChart` is drawn in view-box units and scaled to whatever width its
- * panel gives it, so every fact about where a mark actually landed is a fact
- * about layout: a plot's rendered box, and whether the text hung off its axes
- * still fits inside that box once the browser has shaped the glyphs. jsdom has
+ * `ForecastChart` is drawn 1:1 with the width its panel gives it — one view-box
+ * unit is one rendered pixel since #284 D15, where it used to be a fixed view
+ * box scaled up to fill the column. That makes the *width* a thing the chart
+ * has to be told, and every fact about where a mark actually landed is still a
+ * fact about layout: a plot's rendered box, and whether the text hung off its
+ * axes fits inside that box once the browser has shaped the glyphs. jsdom has
  * no layout — `getBoundingClientRect` there is zeros all the way down, which is
- * why `HORIZON_LABEL_WIDTH` in `ForecastChart.tsx` is an estimated constant
- * rather than a measurement — so the chart's own suite under `src/` can assert
- * the attributes the component wrote and never the pixels they turned into.
- * That is exactly the class of defect #19 kept producing: labels clipped at the
- * canvas edge, and elements that mounted at zero height.
+ * why `HORIZON_LABEL_WIDTH` in `forecast-chart-axes.tsx` is an estimated
+ * constant rather than a measurement, and why jsdom never measures the chart at
+ * all and draws every suite at `DEFAULT_CHART_WIDTH` (`use-chart-width.ts`). So
+ * the chart's own suite under `src/` can assert the attributes the component
+ * wrote and never the pixels they turned into. That is exactly the class of
+ * defect #19 kept producing: labels clipped at the canvas edge, and elements
+ * that mounted at zero height. D15 produced one more of them on its way in — at
+ * 1:1 the plot's right margin stopped scaling up with the panel, and the last
+ * time-axis label, centred on that edge, hung 13.8px past the canvas.
  *
  * One chart, in two states, because that is what the page has since #265: a
  * selected site is a second series *on* the fleet chart rather than a chart of
@@ -47,12 +54,17 @@ import { openSiteTable } from './site-table';
  * screenshot shows "kW" and "Times in UTC" drawn whole. A one-pixel budget would
  * therefore fail on the shipping chart for a band of empty space.
  *
- * Stated as a share it is scale-invariant, which a pixel count is not: the view
- * box scales to its column, and the slack scales with the text inside it. A
- * quarter leaves room over the ~0.13–0.15 measured above for a CI image whose
- * `system-ui` resolves to a font with a taller ascent, and is still far below
- * what any genuinely cut label loses — the #19 horizon label ran off the plot by
- * most of its width.
+ * Stated as a share it is font-invariant, which a pixel count is not: the slack
+ * this budget exists to absorb is a band of empty space inside the glyph box, so
+ * it scales with the text and a share of the box is the thing that stays
+ * constant. That used to be a statement about the view box scaling to its
+ * column; since #284 D15 the chart is drawn 1:1 and the labels are the same
+ * size at every width, so the share is now doing the simpler job of surviving a
+ * different typeface rather than a different scale. A quarter leaves room over
+ * the ~0.13–0.15 measured above for a CI image whose `system-ui` resolves to a
+ * font with a taller ascent, and is still far below what any genuinely cut label
+ * loses — the #19 horizon label ran off the plot by most of its width, and D15's
+ * own clipped tick label by 0.98 of its height.
  */
 const LABEL_CONTAINMENT_TOLERANCE = 0.25;
 
@@ -247,6 +259,108 @@ test('fills the panel and folds the raw data away', async ({ page }) => {
   await summary.press('Enter');
 
   await expect(table).toBeVisible();
+});
+
+/**
+ * The viewport D15 is a claim about: an ordinary desktop window.
+ *
+ * The height is the number the case is really about — everything above the
+ * chart is measured against it — so it is read off this object rather than
+ * written out again in the assertions.
+ */
+const D15_VIEWPORT = { width: 1280, height: 900 } as const;
+
+/** How far the rendered plot may differ from the height it was drawn at. */
+const ONE_TO_ONE_TOLERANCE = 2;
+
+/**
+ * What the reading below says when all three claims hold.
+ *
+ * The issue number stays out of these strings and lives in the comments: the
+ * frontend gate reads `#284` in a string literal as a hex colour, which is the
+ * gate doing its job on a shape it cannot tell apart from `#284fa1`.
+ */
+const FITS_FIRST_VIEWPORT = 'fits the first viewport';
+
+test.describe('the first viewport', () => {
+  test.use({ viewport: D15_VIEWPORT });
+
+  /*
+   * #284 D15: the map, the panel's heading row and the whole plot on one screen.
+   *
+   * The reason this is a *layout* case and not an arithmetic one is that the
+   * stack above the chart is made of text boxes — a header bar, a heading row, a
+   * completeness line — whose heights are the font's to decide. The chart's
+   * height is the one part of that stack anybody chose (`CHART_VIEW_BOX_HEIGHT`,
+   * `src/charts/chart-geometry.ts`), and it was chosen by subtracting the rest
+   * from this viewport, which is a sum only a rendered page can check.
+   *
+   * Nothing here scrolls, deliberately: `boundingBox` is relative to the
+   * viewport's own origin, so a case that scrolled first would be asserting that
+   * the chart fits on *some* screenful rather than on the first one.
+   */
+  test('fits the map, the heading row and the whole chart in one desktop viewport (D15)', async ({
+    page,
+  }) => {
+    const chart = page.locator(`.fleet-panel ${PLOT_SVG}`);
+
+    // Both, and polled: the map's canvas is the thing above the chart that
+    // arrives late, and a chart measured before the map has taken its band would
+    // be measured in a column that is about to move down the page.
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+    await expect(chart).toBeVisible();
+
+    /*
+     * Polled as one reading rather than asserted as three, for the reason
+     * `escapedLabels` is: the failure is the diagnosis. A message naming which
+     * of the three claims broke, and by how much, is the difference between "the
+     * chart moved" and knowing whether it grew, the map grew, or the heading row
+     * wrapped to a second line.
+     */
+    await expect
+      .poll(
+        async () => {
+          const chartBox = await chart.boundingBox();
+          const headerBox = await page.locator('.fleet-panel-header').boundingBox();
+
+          if (chartBox === null || headerBox === null) {
+            return 'the chart or the panel heading row has no layout box';
+          }
+
+          const overhang = chartBox.y + chartBox.height - D15_VIEWPORT.height;
+          const scaleError = Math.abs(chartBox.height - CHART_VIEW_BOX_HEIGHT);
+          const problems = [
+            overhang > 0 ? `the chart runs ${overhang.toFixed(1)}px past the fold` : null,
+            headerBox.y + headerBox.height > chartBox.y
+              ? 'the panel heading row is not wholly above the chart'
+              : null,
+            // The 1:1 claim, measured. A chart drawn in a fixed view box and
+            // scaled to its column renders at whatever height the aspect ratio
+            // dictates, which at this width would be several times this — so this
+            // is what tells a 1:1 chart from a scaled one, and it is also what
+            // makes the fit above reproducible rather than lucky.
+            scaleError > ONE_TO_ONE_TOLERANCE
+              ? `the chart rendered ${chartBox.height.toFixed(1)}px tall, ${scaleError.toFixed(1)}px off the height it is drawn at`
+              : null,
+          ].filter((problem) => problem !== null);
+
+          return problems.length === 0 ? FITS_FIRST_VIEWPORT : problems.join('; ');
+        },
+        { message: 'The fleet chart does not fit the first desktop viewport (D15).' },
+      )
+      .toBe(FITS_FIRST_VIEWPORT);
+  });
+
+  /*
+   * The containment contract again, at this viewport. It is asserted at the
+   * default viewport by the resting-state case above; a chart whose labels fit
+   * at one width and are clipped at another is the #19 defect arriving through a
+   * door neither viewport alone can see, and D15 changed the width the plot's
+   * margins have to hold a label in.
+   */
+  test('keeps its labels inside the plot at the desktop viewport too', async ({ page }) => {
+    await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
+  });
 });
 
 test('keeps the fleet chart laid out once a selected site is drawn over it', async ({ page }) => {

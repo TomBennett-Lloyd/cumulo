@@ -26,7 +26,16 @@
    `preview.css` keeps a measure of its own, and the value stays there rather
    than being quoted here (architecture.md rule 9): the token preview is a
    different surface sizing a swatch of this treatment, and the two are free to
-   diverge (structure.md rule 7). */
+   diverge (structure.md rule 7).
+
+   `width: 100%` is doing a second job since #284 D15, and it is the load-bearing
+   one: this is the box the chart *measures* to draw itself 1:1
+   (`use-chart-width.ts` watches the figure around it, which this fills), so the
+   declaration is what closes the loop between the column's width and the view
+   box. The height is deliberately not here — it is the owned constant
+   `CHART_VIEW_BOX_HEIGHT` (`chart-geometry.ts`), written onto the element as an
+   attribute because it is geometry rather than styling, and the token scale has
+   no length that means "how tall a chart is". */
 .forecast-chart {
   display: block;
   width: 100%;

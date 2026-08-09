@@ -1,10 +1,7 @@
 import { render } from '@testing-library/react';
-import {
-  CHART_VIEW_BOX_WIDTH,
-  ForecastChart,
-  type ChartOverlaySeries,
-  type ForecastChartPoint,
-} from './ForecastChart';
+import { chartPlot, type PlotRect } from './chart-geometry';
+import { ForecastChart, type ChartOverlaySeries, type ForecastChartPoint } from './ForecastChart';
+import { DEFAULT_CHART_WIDTH } from './use-chart-width';
 
 /**
  * Shared fixtures and DOM lookups for the `ForecastChart` suites. The static
@@ -80,15 +77,27 @@ export const renderChartWithOverlay = (
   return container;
 };
 
+/**
+ * The plot every jsdom suite's coordinates are in.
+ *
+ * jsdom has no `ResizeObserver` (`use-chart-width.ts` documents the check), so
+ * every chart rendered under `src/` draws at `DEFAULT_CHART_WIDTH` and this is
+ * the rect it draws into. Derived rather than written out: the plot is the
+ * component's own arithmetic at a known width, and a copy of the four numbers
+ * here would be a second definition to keep true.
+ */
+export const JSDOM_PLOT: PlotRect = chartPlot(DEFAULT_CHART_WIDTH);
+
 /** Deliberately not 1:1 with the view box — see `stubRenderedSize`. */
-export const RENDERED_BOUNDS = { left: 100, top: 50, width: 960, height: 388 };
+export const RENDERED_BOUNDS = { left: 100, top: 50, width: 1280, height: 400 };
 
 /**
- * The chart scales to its container, so the hover layer must divide client
- * pixels by the rendered width before it can talk about samples. jsdom lays
- * everything out at zero, so the size comes from here — at 2x the view box,
- * which is what makes the scaling step provable rather than accidentally right
- * at 1:1.
+ * The rendered box the hover layer divides by. jsdom lays everything out at
+ * zero, so the size comes from here — at 2x the view box the chart draws at
+ * under jsdom, which is what keeps the conversion in `pointerSample` provable
+ * rather than accidentally right at 1:1. The chart itself is 1:1 with its
+ * *measured* width in a browser (#284 D15); this stub is a rendered box that was
+ * never measured, which is exactly the case that conversion still has to handle.
  */
 export const stubRenderedSize = (svg: SVGSVGElement): void => {
   const bounds: DOMRect = {
@@ -107,7 +116,7 @@ export const stubRenderedSize = (svg: SVGSVGElement): void => {
 
 /** The client x that puts the pointer at `viewBoxX` of the rendered chart. */
 export const clientXFor = (viewBoxX: number): number =>
-  RENDERED_BOUNDS.left + viewBoxX * (RENDERED_BOUNDS.width / CHART_VIEW_BOX_WIDTH);
+  RENDERED_BOUNDS.left + viewBoxX * (RENDERED_BOUNDS.width / DEFAULT_CHART_WIDTH);
 
 /** Scoped to the plot, so legend swatches wearing the same classes stay out. */
 export const marks = (container: HTMLElement, selector: string): readonly Element[] => [

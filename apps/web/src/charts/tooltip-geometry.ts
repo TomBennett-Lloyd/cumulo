@@ -31,7 +31,7 @@ export const FIRST_SERIES_ROW = 1;
 /**
  * Mean advance width of one character of tooltip text at `--text-xs`. The panel
  * is sized by a character *count* rather than by asking the browser, for the
- * reason `HORIZON_LABEL_WIDTH` is estimated in `ForecastChart.tsx`:
+ * reason `HORIZON_LABEL_WIDTH` is estimated in `forecast-chart-axes.tsx`:
  * `getComputedTextLength` needs a laid-out DOM, which would make a pure render
  * depend on the browser and report zero under jsdom. Erring wide only leaves a
  * little air at the right-hand edge; erring narrow clips an overlay's name,
