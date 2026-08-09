@@ -170,6 +170,31 @@ export const requireTooltipPart = (container: HTMLElement, selector: string): El
 export const attributeNumber = (element: Element, name: string): number =>
   Number(element.getAttribute(name));
 
+/**
+ * How many samples a mark is drawn over.
+ *
+ * The marks are monotone curves since #284 D8, so a path carries two control
+ * points beside every anchor it visits (`chart-series.ts`) — counting
+ * coordinate pairs would be counting curvature. Every `M`, `L` and `C` command
+ * lands on exactly one anchor and `Z` lands on none, so the commands are the
+ * count. A run of n samples is one `M` and n-1 segments either way, which is
+ * what makes this the same number the `points` attribute used to give.
+ */
+export const anchorCount = (mark: Element): number =>
+  (mark.getAttribute('d') ?? '').replaceAll(/[^MLC]/gu, '').length;
+
+/**
+ * Every coordinate the mark's path names, control points included — so an
+ * assertion about where the ink goes covers the curve between the samples and
+ * not only the samples. Monotone interpolation keeps a segment's control points
+ * inside the box its two anchors span, which is why this is a fair bound.
+ */
+export const pathCoordinates = (mark: Element): readonly { x: number; y: number }[] =>
+  [...(mark.getAttribute('d') ?? '').matchAll(/(?<x>-?[\d.]+),(?<y>-?[\d.]+)/gu)].map((match) => ({
+    x: Number(match.groups?.x),
+    y: Number(match.groups?.y),
+  }));
+
 export const tableCells = (
   container: HTMLElement,
   rowIndex: number,

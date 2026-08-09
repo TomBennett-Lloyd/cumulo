@@ -4,8 +4,13 @@ import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CHART_VIEW_BOX_HEIGHT } from './chart-geometry';
 import {
+  anchorCount,
   attributeNumber,
+  banded,
+  bare,
   JSDOM_PLOT,
+  marks,
+  pathCoordinates,
   renderChart,
   requireMark,
   requireSvg,
@@ -14,7 +19,8 @@ import {
 import { DEFAULT_CHART_WIDTH } from './use-chart-width';
 
 /**
- * The table twin's disclosure (#284 D3), and the chart's own view box (D15).
+ * The table twin's disclosure (#284 D3), the chart's own view box (D15), and
+ * what the curved marks (D8) do at a gap.
  *
  * Its own file rather than more cases in `ForecastChart.test.tsx`, which is at
  * `structure.md` rule 4's ceiling — the same split
@@ -144,5 +150,62 @@ describe('forecast chart drawing space', () => {
     expect(attributeNumber(target, 'y') + attributeNumber(target, 'height')).toBe(
       JSDOM_PLOT.bottom,
     );
+  });
+});
+
+/*
+ * What smoothing the marks did and did not change (#284 D8).
+ *
+ * Here for the same reason the cases above are: `ForecastChart.test.tsx` sits on
+ * `structure.md` rule 4's ceiling. That suite owns what a gap does to the run
+ * machinery — a lone hour becomes a marker, a partial run keeps its own path;
+ * these two own the properties interpolation could have quietly taken away.
+ */
+describe('forecast chart curved marks', () => {
+  it('never bridges a gap with a curve', () => {
+    // Two measured hours, a hole, two more. Both sides carry enough samples to
+    // be stroked, so a builder that smoothed the *series* rather than each run
+    // would answer with one path — sweeping through an hour nobody measured,
+    // and doing it smoothly enough to look like data.
+    const container = renderChart([
+      banded(6, 1, 0.9),
+      banded(9, 4, 3.8),
+      banded(12, 6, null),
+      banded(15, 5, 4.9),
+      banded(18, 2, 2.1),
+    ]);
+    const actuals = marks(container, '.forecast-chart-actuals');
+
+    expect(actuals).toHaveLength(2);
+    // Two hours each, and neither reaching over the hole between them.
+    expect(actuals.map(anchorCount)).toStrictEqual([2, 2]);
+  });
+
+  it('never dips a smoothed line below the zero it ramps up from', () => {
+    // A flat dawn and then a ramp is the case that separates monotone
+    // interpolation from the alternatives: a Catmull-Rom or natural cubic
+    // through these same five hours pulls the curve under the axis on the way
+    // up, drawing generation the fleet could not have made
+    // (chart-treatment.md, "Median forecast and actuals"). Measured against
+    // 3.2.0 of `d3-shape`, both overshoot here and monotone does not.
+    const container = renderChart([
+      bare(4, 0, null),
+      bare(5, 0, null),
+      bare(6, 4, null),
+      bare(7, 9, null),
+      bare(8, 12, null),
+    ]);
+    const ys = pathCoordinates(requireMark(container, '.forecast-chart-median')).map(
+      (vertex) => vertex.y,
+    );
+
+    // Control points included, which is what makes this a claim about the whole
+    // curve rather than about the samples: a cubic segment stays inside the hull
+    // of its four coordinates, so all of them on or above the zero line puts
+    // every pixel of ink there too. y grows downwards, hence the direction.
+    expect(ys).not.toStrictEqual([]);
+    for (const y of ys) {
+      expect(y).toBeLessThanOrEqual(JSDOM_PLOT.bottom);
+    }
   });
 });

@@ -1,10 +1,19 @@
+import { area, curveMonotoneX, line } from 'd3-shape';
 import { spanHoursBetween, xForIndex, yForKw, type PlotRect } from './chart-geometry';
 
 /**
  * The chart's data model and the string-and-number layer beneath its JSX: point
- * lookups, contiguous-run detection, and the SVG `points` attributes that carry
- * a series. Pure — no React, no DOM — so the arithmetic that decides what gets
+ * lookups, contiguous-run detection, and the SVG `d` attributes that carry a
+ * series. Pure — no React, no DOM — so the arithmetic that decides what gets
  * drawn is separable from the elements that draw it (`structure.md` rule 4).
+ *
+ * **The path strings are d3-shape's, the gaps are ours.** `d3-shape` is asked
+ * for one thing — the curve through a run of points — and nothing else: it never
+ * sees the series, the nulls, or the runs, because `contiguousRuns` below has
+ * already cut the series into pieces that are all ink. Each run becomes its own
+ * path, so `line.defined()` has no gap left to be told about and the rule that a
+ * gap is never bridged stays where it was rather than moving into a library
+ * callback (`docs/design/chart-treatment.md`).
  */
 
 export interface ForecastChartBand {
@@ -75,11 +84,7 @@ export interface ChartRun {
 
 const VALUE_DECIMALS = 1;
 const AXIS_LABEL_DECIMALS = 2;
-const COORDINATE_DECIMALS = 1;
 const MISSING_VALUE = '—';
-
-const svgPoint = (x: number, y: number): string =>
-  `${x.toFixed(COORDINATE_DECIMALS)},${y.toFixed(COORDINATE_DECIMALS)}`;
 
 export const medianAt = (points: readonly ForecastChartPoint[], index: number): number =>
   points[index]?.medianKw ?? 0;
@@ -179,35 +184,80 @@ export const seriesSpanHours = (points: readonly ForecastChartPoint[]): number =
     : spanHoursBetween(first.validTimeIso, last.validTimeIso);
 };
 
-export const polylinePoints = (
+/** One plotted sample in SVG user units — the space `PlotRect` is expressed in. */
+interface PlotVertex {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Where a band's two edges sit at one sample, in those same units. */
+interface BandColumn {
+  readonly x: number;
+  /** P90: the top edge, which the area sweeps out along first. */
+  readonly upperY: number;
+  /** P10: the bottom edge, swept back along in reverse and then closed. */
+  readonly lowerY: number;
+}
+
+/**
+ * The one curve every mark on the plot is drawn with. Why it is monotone rather
+ * than any other smoothing — and what that buys a reader — is the treatment's
+ * ("Median forecast and actuals", `docs/design/chart-treatment.md`); what
+ * matters here is that there is exactly one of it, which is what makes the
+ * band's edges and the stroked bounds coincide by construction rather than by
+ * two builders agreeing.
+ *
+ * Coordinates are rounded by d3-path's own default rather than by anything here
+ * — a precision this module has no basis to pick better than the library that
+ * emits the string.
+ */
+const curvedLine = line<PlotVertex>()
+  .x((vertex) => vertex.x)
+  .y((vertex) => vertex.y)
+  .curve(curveMonotoneX);
+
+/**
+ * One closed shape per run: the P90 edge left to right, the P10 edge back again,
+ * and a `Z`. Filled and never stroked, so the vertical closing edges — plot
+ * boundaries, not data — stay invisible while the two bounds get their own
+ * stroked paths.
+ */
+const curvedBand = area<BandColumn>()
+  .x((column) => column.x)
+  .y0((column) => column.lowerY)
+  .y1((column) => column.upperY)
+  .curve(curveMonotoneX);
+
+/**
+ * The `d` for one run of a series. An empty run has no path at all rather than a
+ * degenerate one — d3 answers `null` for it, and `''` is how SVG spells the same
+ * thing.
+ */
+export const curvedLinePath = (
   indices: readonly number[],
   valueAt: (index: number) => number,
   scale: ChartScale,
 ): string =>
-  indices
-    .map((index) =>
-      svgPoint(
-        xForIndex(index, scale.pointCount, scale.plot),
-        yForKw(valueAt(index), scale.axisMaxKw, scale.plot),
-      ),
-    )
-    .join(' ');
+  curvedLine(
+    indices.map((index) => ({
+      x: xForIndex(index, scale.pointCount, scale.plot),
+      y: yForKw(valueAt(index), scale.axisMaxKw, scale.plot),
+    })),
+  ) ?? '';
 
-/**
- * One closed shape per run: the P90 bounds left to right, then the P10 bounds
- * back again. Filled and never stroked, so the vertical closing edges — plot
- * boundaries, not data — stay invisible while the two bounds get their own
- * stroked polylines.
- */
-export const bandPolygonPoints = (
+/** The `d` for one run of the band, between the two edges `curvedBand` names. */
+export const curvedBandPath = (
   points: readonly ForecastChartPoint[],
   run: ChartRun,
   scale: ChartScale,
-): string => {
-  const upper = polylinePoints(run.indices, (index) => p90At(points, index), scale);
-  const lower = polylinePoints([...run.indices].reverse(), (index) => p10At(points, index), scale);
-  return `${upper} ${lower}`;
-};
+): string =>
+  curvedBand(
+    run.indices.map((index) => ({
+      x: xForIndex(index, scale.pointCount, scale.plot),
+      upperY: yForKw(p90At(points, index), scale.axisMaxKw, scale.plot),
+      lowerY: yForKw(p10At(points, index), scale.axisMaxKw, scale.plot),
+    })),
+  ) ?? '';
 
 /** Trailing zeros make a gridline label look like a precision it does not have. */
 export const axisTickText = (kilowatts: number): string =>

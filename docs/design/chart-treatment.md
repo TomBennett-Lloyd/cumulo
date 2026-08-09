@@ -36,7 +36,7 @@ path:
   (1px, solid)** in the same hue at 35% alpha. The stroke exists because the bounds are _data_ —
   they are quantiles the reader is entitled to trace — not because the fill needs an outline. The
   closing left and right edges of the path are plot boundaries rather than data and carry no
-  stroke, so the band is never drawn as an outlined polygon.
+  stroke, so the band is never drawn as an outlined shape.
 - **Nested bands compose by alpha.** If an inner band (P25–P75) is shown as well, it uses the _same
   two tokens_, not a second colour: two overlapping 10% washes read as a denser core, which is
   exactly the right visual for "more likely here". Only the outermost bounds are stroked, so the
@@ -54,6 +54,24 @@ categorical slot. That is a deliberate choice of direction B: the measured serie
 on the chart that is not a model output, it reads as ink on the page, and it never competes with
 the forecast hue for attention. It also means actuals cost nothing from the categorical budget —
 slots 1–6 stay available for identity work.
+
+**Both are drawn as monotone curves, never as a chain of straight segments.** Hourly generation is
+a smooth physical quantity, and joining its samples with corners draws a fleet that changes
+direction on the hour. The interpolation is **monotone cubic, in x**, and that is a requirement
+rather than a preference — a library that cannot produce it fails this document on the same terms
+as one that cannot produce the band. Every other smoothing family in common use — Catmull-Rom,
+natural and cardinal cubics — overshoots between samples, and on a morning ramp from zero the
+overshoot goes _below_ the axis, which is a chart drawing generation the fleet could not have made.
+Monotone interpolation cannot: the curve's extrema are its own data points, so the ink between two
+samples stays inside the range those two samples span, and a smoothed line never implies a value
+nobody produced. This holds for the median, the actuals, an overlay and the band's two edges alike.
+
+**Smoothing is ink, never data.** The hover readout, the spoken announcement and the table twin all
+stay keyed to the real samples — the crosshair still snaps to an hour, and no cell ever holds a
+number the curve passed through on its way between two. What the interpolation changes is where the
+stroke goes between the marks, and nothing else. That also settles what the band is: an _area_
+between two monotone edges rather than a shape of its own, so the P10 and P90 hairlines and the
+edges of the wash are the same curve over the same points and cannot drift apart.
 
 Composition rules that keep both legible where they overlap:
 
@@ -79,7 +97,7 @@ Composition rules that keep both legible where they overlap:
   null actual ends the run and the line restarts after the gap, so the actuals series is drawn once
   per contiguous run of measured samples rather than as one path through the hole. The same holds
   for the band: an hour whose forecast carries no P10–P90 is a point estimate, and the band's
-  polygon and bound hairlines are drawn once per contiguous run of banded samples. **And for the
+  area and bound hairlines are drawn once per contiguous run of banded samples. **And for the
   median**, which was the one series exempt from this until #264, because until then a sample
   existed only where a forecast did. It does not any more: the fleet chart's x-domain is the union
   of the forecast's hours and the actuals' hours, and in live mode those two windows are disjoint —

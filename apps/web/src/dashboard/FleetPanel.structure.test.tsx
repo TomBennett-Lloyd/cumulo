@@ -253,7 +253,7 @@ describe('FleetPanel’s chart', () => {
     expectPanelFurniture(container);
     expect(screen.queryByText(NO_FLEET_FORECAST_MESSAGE)).toBeNull();
     // Genuinely drawn, not merely tabulated: the two measured hours are one
-    // contiguous run, so they are one polyline on the plot.
+    // contiguous run, so they are one path on the plot.
     expect(container.querySelectorAll('.forecast-chart > .forecast-chart-actuals')).toHaveLength(1);
 
     const table = screen.getByRole('table', { name: /Table view/u });

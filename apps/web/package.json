@@ -14,6 +14,7 @@
   "dependencies": {
     "@cumulo/shared": "workspace:*",
     "@cumulo/ui": "workspace:*",
+    "d3-shape": "^3.2.0",
     "maplibre-gl": "^6.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@testing-library/react": "^16.3.2",
+    "@types/d3-shape": "^3.1.8",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/supercluster": "^7.1.3",

@@ -58,7 +58,7 @@
   stroke-width: 1;
 }
 
-/* A lone banded hour has no run to sweep a polygon across, so its P90–P10
+/* A lone banded hour has no run to sweep an area across, so its P90–P10
  * interval is the band (chart-treatment.md). Full data-line weight, not the
  * bounds' hairline: a 1px stroke at 35% alpha in a single column is invisible,
  * which is the disappearance this mark exists to prevent. */

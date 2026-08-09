@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex } from './chart-geometry';
 import type { ForecastChartPoint } from './ForecastChart';
 import {
+  anchorCount,
   banded,
   JSDOM_PLOT,
   isoHour,
@@ -48,9 +49,6 @@ const DISJOINT_SERIES: readonly ForecastChartPoint[] = [
   banded(15, 5, null),
 ];
 
-const vertexCount = (mark: Element): number =>
-  (mark.getAttribute('points') ?? '').split(' ').length;
-
 describe('ForecastChart over hours that carry an actual and no forecast', () => {
   it('draws both series over the hours each one has, and neither over the other’s', () => {
     const container = renderChart(DISJOINT_SERIES);
@@ -58,9 +56,9 @@ describe('ForecastChart over hours that carry an actual and no forecast', () => 
     // One run each, two hours each — and crucially the median does not span the whole domain,
     // which is what it would do if a missing forecast were read as a zero or bridged across.
     expect(marks(container, '.forecast-chart-actuals')).toHaveLength(1);
-    expect(vertexCount(requireMark(container, '.forecast-chart-actuals'))).toBe(2);
+    expect(anchorCount(requireMark(container, '.forecast-chart-actuals'))).toBe(2);
     expect(marks(container, '.forecast-chart-median')).toHaveLength(1);
-    expect(vertexCount(requireMark(container, '.forecast-chart-median'))).toBe(2);
+    expect(anchorCount(requireMark(container, '.forecast-chart-median'))).toBe(2);
   });
 
   it('rules the horizon where the measurements stop, mid-series rather than at the end', () => {
@@ -74,7 +72,7 @@ describe('ForecastChart over hours that carry an actual and no forecast', () => 
     );
   });
 
-  it('draws a lone forecast hour as a marker, not a polyline that paints nothing', () => {
+  it('draws a lone forecast hour as a marker, not a path that paints nothing', () => {
     // The same rule the actuals and the overlay already obey: a run of one sample has no second
     // vertex to stroke towards, so SVG would paint nothing at all and the hour would vanish.
     const container = renderChart([measuredOnly(6, 1), banded(9, 4, null), measuredOnly(12, 2)]);

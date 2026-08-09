@@ -2,13 +2,13 @@ import type { ReactElement } from 'react';
 import { xForIndex, yForKw } from './chart-geometry';
 import {
   actualAt,
-  bandPolygonPoints,
   contiguousRuns,
+  curvedBandPath,
+  curvedLinePath,
   medianAt,
   overlayAt,
   p10At,
   p90At,
-  polylinePoints,
   type ChartRun,
   type ChartScale,
   type ForecastChartPoint,
@@ -21,13 +21,19 @@ import {
  * so every element here is a direct child of the plot and draw order is the
  * order the arrays are composed in.
  *
- * **A run of one sample is a mark, not a path.** A `<polyline>` with a single
- * vertex and a band polygon whose two edges coincide are both degenerate — SVG
- * paints neither — so an isolated measured hour or a lone banded hour would
- * simply vanish and the chart would understate how much was measured. Those
- * runs render in the chart's existing marker vocabulary instead: the ringed dot
- * for a measurement, a vertical P90→P10 interval for a band
+ * **A run of one sample is a mark, not a path.** A `<path>` with a single vertex
+ * and a band area whose two edges coincide are both degenerate — SVG paints
+ * neither — so an isolated measured hour or a lone banded hour would simply
+ * vanish and the chart would understate how much was measured. Those runs render
+ * in the chart's existing marker vocabulary instead: the ringed dot for a
+ * measurement, a vertical P90→P10 interval for a band
  * (`docs/design/chart-treatment.md`, "Median forecast and actuals").
+ *
+ * **Every line here is one monotone curve, never a chain of segments.** The
+ * `d` strings come from `chart-series.ts`, which carries why monotone is the one
+ * interpolation this data can take; what it buys the elements below is that the
+ * band's two edges and the two stroked bounds are the same curve over the same
+ * points, so a hairline can never drift off the wash it is supposed to edge.
  */
 
 /** Below this a stroked path has no extent, so nothing is painted. */
@@ -69,10 +75,10 @@ export const bandElements = (
 ): readonly ReactElement[] =>
   runs.map((run) =>
     spansMultipleSamples(run) ? (
-      <polygon
+      <path
         key={run.startIndex}
         className="forecast-chart-band"
-        points={bandPolygonPoints(points, run, scale)}
+        d={curvedBandPath(points, run, scale)}
       />
     ) : (
       bandInterval(points, run, scale)
@@ -88,15 +94,15 @@ export const boundElements = (
   runs
     .filter(spansMultipleSamples)
     .flatMap((run) => [
-      <polyline
+      <path
         key={`p90-${String(run.startIndex)}`}
         className="forecast-chart-band-bound"
-        points={polylinePoints(run.indices, (index) => p90At(points, index), scale)}
+        d={curvedLinePath(run.indices, (index) => p90At(points, index), scale)}
       />,
-      <polyline
+      <path
         key={`p10-${String(run.startIndex)}`}
         className="forecast-chart-band-bound"
-        points={polylinePoints(run.indices, (index) => p10At(points, index), scale)}
+        d={curvedLinePath(run.indices, (index) => p10At(points, index), scale)}
       />,
     ]);
 
@@ -131,10 +137,10 @@ export const actualsElements = (
   ...runs
     .filter(spansMultipleSamples)
     .map((run) => (
-      <polyline
+      <path
         key={run.startIndex}
         className="forecast-chart-actuals"
-        points={polylinePoints(run.indices, (index) => actualAt(points, index), scale)}
+        d={curvedLinePath(run.indices, (index) => actualAt(points, index), scale)}
       />
     )),
   ...runs
@@ -156,7 +162,7 @@ export const actualsElements = (
  * never forecast. So the median obeys the same two rules the actuals and the
  * overlay obey, for the same reasons: a gap is never bridged, because a segment
  * drawn across it is a forecast nobody made, and a run left holding one sample
- * becomes a ringed dot rather than the one-vertex polyline SVG declines to paint.
+ * becomes a ringed dot rather than the one-vertex path SVG declines to paint.
  */
 export const medianElements = (
   points: readonly ForecastChartPoint[],
@@ -166,10 +172,10 @@ export const medianElements = (
   ...runs
     .filter(spansMultipleSamples)
     .map((run) => (
-      <polyline
+      <path
         key={run.startIndex}
         className="forecast-chart-median"
-        points={polylinePoints(run.indices, (index) => medianAt(points, index), scale)}
+        d={curvedLinePath(run.indices, (index) => medianAt(points, index), scale)}
       />
     )),
   ...runs
@@ -193,7 +199,7 @@ export const medianElements = (
  *
  * It obeys the two rules the actuals obey, for the same reasons: a `null` hour
  * breaks the line rather than being bridged, and a run left holding one sample
- * becomes a marker rather than the one-vertex polyline SVG declines to paint.
+ * becomes a marker rather than the one-vertex path SVG declines to paint.
  * The runs are derived here rather than passed in because nothing outside this
  * builder needs them — the overlay has no horizon and no end dot.
  */
@@ -206,10 +212,10 @@ export const overlayElements = (
     ...runs
       .filter(spansMultipleSamples)
       .map((run) => (
-        <polyline
+        <path
           key={run.startIndex}
           className="forecast-chart-overlay"
-          points={polylinePoints(run.indices, (index) => overlayAt(values, index), scale)}
+          d={curvedLinePath(run.indices, (index) => overlayAt(values, index), scale)}
         />
       )),
     ...runs

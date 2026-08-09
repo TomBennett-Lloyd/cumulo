@@ -6,11 +6,13 @@ import { xForIndex, yForKw } from './chart-geometry';
 import type { ChartOverlaySeries, ForecastChartPoint } from './chart-series';
 import { HORIZON_LABEL_WIDTH } from './forecast-chart-axes';
 import {
+  anchorCount,
   banded,
   bare,
   JSDOM_PLOT,
   isoHour,
   marks,
+  pathCoordinates,
   renderChart,
   renderChartWithOverlay,
   requireMark,
@@ -22,9 +24,6 @@ import {
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
 // never registers itself.
 afterEach(cleanup);
-
-const vertexCount = (mark: Element): number =>
-  (mark.getAttribute('points') ?? '').split(' ').length;
 
 /**
  * The axis the lone-band fixture below produces. Its tallest mark is that hour's
@@ -69,14 +68,16 @@ describe('ForecastChart', () => {
     // The 10% alpha is baked into the token; a fill-opacity would double-dip
     // and produce a band nobody can see (chart-treatment.md).
     expect(band.hasAttribute('fill-opacity')).toBe(false);
-    expect(band.tagName.toLowerCase()).toBe('polygon');
+    expect(band.tagName.toLowerCase()).toBe('path');
   });
 
   it('closes the band over every sample, out along P90 and back along P10', () => {
     const container = renderChart(SERIES);
     const band = requireMark(container, '.forecast-chart-band');
 
-    expect(vertexCount(band)).toBe(SERIES.length * 2);
+    // Anchors, not coordinate pairs: the edges are curves and carry control
+    // points too. `curvedBandPath`'s own suite owns the closing `Z`.
+    expect(anchorCount(band)).toBe(SERIES.length * 2);
   });
 
   it('strokes both bounds of every band run', () => {
@@ -108,15 +109,15 @@ describe('ForecastChart', () => {
   it('draws the median across every sample and actuals across measured ones only', () => {
     const container = renderChart(SERIES);
 
-    expect(vertexCount(requireMark(container, '.forecast-chart-median'))).toBe(SERIES.length);
-    expect(vertexCount(requireMark(container, '.forecast-chart-actuals'))).toBe(3);
+    expect(anchorCount(requireMark(container, '.forecast-chart-median'))).toBe(SERIES.length);
+    expect(anchorCount(requireMark(container, '.forecast-chart-actuals'))).toBe(3);
   });
 
   it('breaks the actuals line at a gap rather than bridging a missing measurement', () => {
     // A mid-series null is a partial result and must read as one: bridging it
     // would draw a measurement nobody took (docs/tech-debt.md, 2026-07-31).
     // The first measurement is left alone by the gap after it, so it is a dot
-    // rather than the one-vertex polyline SVG would decline to paint.
+    // rather than the one-vertex path SVG would decline to paint.
     const container = renderChart([
       banded(6, 1, 0.9),
       banded(9, 4, null),
@@ -127,7 +128,7 @@ describe('ForecastChart', () => {
     const markers = marks(container, '.forecast-chart-actuals-marker');
 
     expect(actuals).toHaveLength(1);
-    expect(actuals.map(vertexCount)).toStrictEqual([2]);
+    expect(actuals.map(anchorCount)).toStrictEqual([2]);
     // The isolated hour, then the end dot at the horizon.
     expect(markers).toHaveLength(2);
     expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, 4, JSDOM_PLOT)));
@@ -146,7 +147,7 @@ describe('ForecastChart', () => {
 
     expect(marks(container, '.forecast-chart-band')).toHaveLength(1);
     expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(2);
-    // The trailing banded hour stands alone: a polygon over one sample is two
+    // The trailing banded hour stands alone: an area over one sample is two
     // coincident edges and paints nothing, so it draws its bounds as an
     // interval instead (chart-treatment.md).
     expect(marks(container, '.forecast-chart-band-interval')).toHaveLength(1);
@@ -314,7 +315,7 @@ describe('ForecastChart', () => {
     const overlay = marks(container, '.forecast-chart-overlay');
 
     expect(overlay).toHaveLength(1);
-    expect(vertexCount(requireMark(container, '.forecast-chart-overlay'))).toBe(3);
+    expect(anchorCount(requireMark(container, '.forecast-chart-overlay'))).toBe(3);
     expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(0);
   });
 
@@ -332,7 +333,7 @@ describe('ForecastChart', () => {
     const markers = marks(container, '.forecast-chart-overlay-marker');
 
     expect(marks(container, '.forecast-chart-overlay')).toHaveLength(1);
-    expect(vertexCount(requireMark(container, '.forecast-chart-overlay'))).toBe(2);
+    expect(anchorCount(requireMark(container, '.forecast-chart-overlay'))).toBe(2);
     expect(markers).toHaveLength(1);
     expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, SERIES.length, JSDOM_PLOT)));
   });
@@ -391,9 +392,11 @@ describe('ForecastChart', () => {
       label: 'Baseline',
       points: SERIES.map((point) => ({ validTimeIso: point.validTimeIso, kw: 20 })),
     });
-    const ys = (requireMark(container, '.forecast-chart-overlay').getAttribute('points') ?? '')
-      .split(' ')
-      .map((pair) => Number(pair.split(',')[1]));
+    // Every coordinate the path names, control points included — a curve can
+    // reach above its anchors in a way a straight segment cannot.
+    const ys = pathCoordinates(requireMark(container, '.forecast-chart-overlay')).map(
+      (vertex) => vertex.y,
+    );
 
     expect(ys).not.toStrictEqual([]);
     for (const y of ys) {
