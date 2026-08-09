@@ -1,5 +1,5 @@
 import type { Forecast, SitePhysics, UtcIsoTimestamp } from '@cumulo/shared';
-import type { BatchWriteOutcome } from '@cumulo/storage';
+import type { BatchWriteOutcome, SeriesRangeResult } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import type { ConsumeMessageDeps } from './consume-message';
@@ -35,6 +35,13 @@ const handlerDeps = (input: HandlerDepsInput): ConsumeMessageDeps => ({
       input.recorder.written.push([...forecasts]);
       return Promise.resolve(input.storeOutcome ?? { status: 'complete' });
     },
+    // The simulated-actuals producer's two calls (#264), answering with an empty trailing window.
+    // The handler's question is which records Lambda must redeliver, and that answer does not
+    // depend on the producer — `consume-message.test.ts` is where that independence is proved.
+    querySeriesRange: (): Promise<SeriesRangeResult> =>
+      Promise.resolve({ points: [], complete: true }),
+    putGenerationReadings: (): Promise<BatchWriteOutcome> =>
+      Promise.resolve({ status: 'complete' }),
   },
   log: (entry) => {
     input.recorder.entries.push(entry);
