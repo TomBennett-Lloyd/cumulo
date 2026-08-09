@@ -6,7 +6,9 @@ import { utcIsoTimestampSchema } from './timestamp';
 /**
  * An observed generation actual for one site and one hour — or a simulated one,
  * since the fleet has no real telemetry feed (see #19); the schema is identical
- * either way.
+ * either way. Live mode serves simulated readings: `simulatedActualFromForecast`
+ * (`simulated-actual.ts`) derives them from the stored physics forecast for the
+ * same hour, so nothing measured is ever claimed (#264).
  *
  * Conventions:
  * - validTime: hour-ending — `14:00:00Z` labels the hour from 13:00 to 14:00

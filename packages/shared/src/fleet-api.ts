@@ -57,3 +57,18 @@ export const siteSeriesResponseSchema = z.object({
 });
 
 export type SiteSeriesResponse = z.infer<typeof siteSeriesResponseSchema>;
+
+/**
+ * Fleet-wide actuals over one window, carrying the same peer `attribution` as the schemas above.
+ *
+ * Actuals alone rather than forecasts beside them: the web app already reads the fleet forecast
+ * on its own route, and pairing the two here would make one slow read of two independent ones.
+ * The readings are simulated (`simulated-actual.ts`, #264) — the wire shape is identical either
+ * way, and the "simulated" claim is the UI's to make, not a field on every point.
+ */
+export const fleetActualsResponseSchema = z.object({
+  actuals: z.array(generationReadingSchema),
+  attribution: attributionSchema,
+});
+
+export type FleetActualsResponse = z.infer<typeof fleetActualsResponseSchema>;
