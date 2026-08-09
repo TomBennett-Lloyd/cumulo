@@ -16,16 +16,51 @@
  * `SitePanel` in #265.
  */
 
+/* The card's own marker, told to outrank the fleet's.
+ *
+ * maplibre gives markers no stacking order: they are siblings in one pane and
+ * every one of them is `z-index: auto`, so they paint in DOM order. (Verified
+ * against maplibre-gl 6.1.0 — its `.maplibregl-marker` rule sets position and
+ * transform hints and nothing that stacks, and `zIndex` does not appear in its
+ * JS at all.) Zooming back out reclusters the fleet, and reclustering mounts
+ * fresh marker elements *after* this card's, so without a value here the new
+ * bubbles paint over a card the reader has open — the #284 defect.
+ *
+ * `1` is enough because the only competition is those siblings. It stays far
+ * below the `10` the header's overlays and the info tip share (the census is in
+ * header/header.css) deliberately: those hang over the whole map, and this card
+ * belongs to the map rather than above it.
+ *
+ * It leans on maplibre for the `position: absolute` that makes a stacking value
+ * apply at all. Nothing else here can supply it — the element is maplibre's to
+ * place, and this rule only borrows it. */
+.site-popover-anchor {
+  z-index: 1;
+}
+
 /* Anchored above the marker, not over it. The element maplibre wraps is
    zero-sized and sits exactly on the coordinate, so `left: 50%` is the site and
    the translate centres the card on it; `bottom` lifts the card clear of the
    mark it belongs to, which would otherwise be underneath it and unreadable.
 
-   `--color-border` at hairline weight rather than a drop shadow: the token set
-   has no elevation category, and `box-shadow` is on the CSS gate's strict-value
-   list, so a shadow here would have to be a raw value. The border does the same
-   job the marker tooltip's does — separate the card from whatever tile is under
-   it — and `--color-surface` behind it is fully opaque, unlike the credits
+   `--color-border` at hairline weight rather than a drop shadow, and now by
+   choice rather than for want of a token: `--color-shadow` is elevation ink in
+   the scale as of #284, so a shadow here is expressible — though not on the
+   terms the chart tooltip's is. `box-shadow` is on the CSS gate's strict-value
+   property list and that plugin judges every sub-value, so a card shadow's
+   offset and blur would each have to be a bare `var()` or `0`; the quarter-step
+   offset the tooltip uses, `calc(var(--space-1) / 4)`, is refused here
+   ("Expected variable or keyword"). The tooltip escapes that because its shadow
+   is a `filter: drop-shadow(…)` (`../charts/charts.css`), and `filter` is not on
+   the strict-value rule's property list in `stylelint.config.mjs` — so that
+   rule never looks at its sub-values at all. Identical sub-values, one refused
+   and one never judged; `packages/ui/src/styles.css` writes the same trap up for
+   `outline`. The card keeps the border anyway. A shadow marks a thing that floats
+   over what it is reading — the tooltip is over its own marks and moves with
+   the pointer — where this card is anchored to one marker and stays put, and
+   the border does the job that actually needs doing: separating the card from
+   whatever tile is under it, the same job the marker tooltip's border does.
+   `--color-surface` behind it is fully opaque, unlike the credits
    band's veil, because this card carries text a reader has to read rather than
    a credit that has to stay legible over a continuous map. */
 .site-popover {

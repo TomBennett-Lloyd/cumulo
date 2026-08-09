@@ -66,6 +66,29 @@
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
 
+  /* Elevation ink: the colour a panel floated over data casts beneath itself —
+     a chart tooltip over its own marks, and anything else that has to read as
+     lifted rather than drawn in. Alpha rather than a flat grey, because the
+     shadow lands on whatever the panel is covering. It is ink, not a length: the
+     offset and blur belong to the rule that spends it (spacing tokens), and only
+     the colour is here.
+
+     The hue is the base ink's, so it is taken from --color-text by reference
+     rather than by restating that literal (`architecture.md` rule 9 — consume
+     the owner; --color-surface-veil below refuses the same restatement for the
+     same reason). Mixing a colour with `transparent` in srgb keeps the colour
+     and takes the alpha from the percentage, so this paints exactly what the
+     `rgba()` it replaces painted — only the serialisation differs (Chromium
+     reports it as `color(srgb …)`). The point is that re-tinting the base ink
+     now re-tints the shadow with it, instead of leaving a copy behind that
+     agreed with it only on the day it was written.
+
+     The dark block below deliberately does NOT mix: its shadow is pure black,
+     darker and heavier than any share of dark mode's near-white ink, because a
+     translucent black over a near-black surface has almost no range to work
+     with. That value is an independent decision and carries its own literal. */
+  --color-shadow: color-mix(in srgb, var(--color-text) 18%, transparent);
+
   /* Translucent surface for text panels floated over imagery — map tiles, a
      photographic hero — where an opaque panel would crop the picture but plain
      text on it would be unreadable.
@@ -171,6 +194,10 @@
   --color-border: #2a2f34;
   --color-accent: #3987e5;
   --color-accent-contrast: #0d0f10;
+
+  /* A literal, not a mix of this block's ink — the light block above says why
+     dark's elevation ink is its own decision rather than a share of --color-text. */
+  --color-shadow: rgba(0, 0, 0, 0.55);
 
   /* Identical text to the light block on purpose — `var(--color-surface)`
      resolves to this block's surface at use time. It is re-declared only to

@@ -1,5 +1,10 @@
 import { render } from '@testing-library/react';
-import { ForecastChart, type ChartOverlaySeries, type ForecastChartPoint } from './ForecastChart';
+import {
+  CHART_VIEW_BOX_WIDTH,
+  ForecastChart,
+  type ChartOverlaySeries,
+  type ForecastChartPoint,
+} from './ForecastChart';
 
 /**
  * Shared fixtures and DOM lookups for the `ForecastChart` suites. The static
@@ -75,6 +80,35 @@ export const renderChartWithOverlay = (
   return container;
 };
 
+/** Deliberately not 1:1 with the view box — see `stubRenderedSize`. */
+export const RENDERED_BOUNDS = { left: 100, top: 50, width: 960, height: 388 };
+
+/**
+ * The chart scales to its container, so the hover layer must divide client
+ * pixels by the rendered width before it can talk about samples. jsdom lays
+ * everything out at zero, so the size comes from here — at 2x the view box,
+ * which is what makes the scaling step provable rather than accidentally right
+ * at 1:1.
+ */
+export const stubRenderedSize = (svg: SVGSVGElement): void => {
+  const bounds: DOMRect = {
+    x: RENDERED_BOUNDS.left,
+    y: RENDERED_BOUNDS.top,
+    left: RENDERED_BOUNDS.left,
+    top: RENDERED_BOUNDS.top,
+    width: RENDERED_BOUNDS.width,
+    height: RENDERED_BOUNDS.height,
+    right: RENDERED_BOUNDS.left + RENDERED_BOUNDS.width,
+    bottom: RENDERED_BOUNDS.top + RENDERED_BOUNDS.height,
+    toJSON: () => ({}),
+  };
+  Object.defineProperty(svg, 'getBoundingClientRect', { value: () => bounds });
+};
+
+/** The client x that puts the pointer at `viewBoxX` of the rendered chart. */
+export const clientXFor = (viewBoxX: number): number =>
+  RENDERED_BOUNDS.left + viewBoxX * (RENDERED_BOUNDS.width / CHART_VIEW_BOX_WIDTH);
+
 /** Scoped to the plot, so legend swatches wearing the same classes stay out. */
 export const marks = (container: HTMLElement, selector: string): readonly Element[] => [
   ...container.querySelectorAll(`.forecast-chart > ${selector}`),
@@ -103,6 +137,29 @@ export const requireSvg = (container: HTMLElement): SVGSVGElement => {
  */
 export const tooltipValues = (container: HTMLElement): readonly (string | null)[] =>
   [...container.querySelectorAll('.forecast-chart-tooltip-value')].map((cell) => cell.textContent);
+
+/** Everything the tooltip is saying, flattened — `null` where it is not drawn. */
+export const tooltipText = (container: HTMLElement): string | null =>
+  container.querySelector('.forecast-chart-tooltip')?.textContent ?? null;
+
+/** The panel's left edge, read back out of the group's `translate`. */
+export const tooltipAnchor = (container: HTMLElement): number => {
+  const transform = container.querySelector('.forecast-chart-tooltip')?.getAttribute('transform');
+  const anchor = /translate\((?<x>[-\d.]+)/u.exec(transform ?? '')?.groups?.x;
+  return anchor === undefined ? Number.NaN : Number(anchor);
+};
+
+/** One part of the drawn panel, by selector inside the tooltip group. */
+export const requireTooltipPart = (container: HTMLElement, selector: string): Element => {
+  const part = container.querySelector(`.forecast-chart-tooltip ${selector}`);
+  if (part === null) {
+    throw new Error(`no tooltip part matching ${selector}`);
+  }
+  return part;
+};
+
+export const attributeNumber = (element: Element, name: string): number =>
+  Number(element.getAttribute(name));
 
 export const tableCells = (
   container: HTMLElement,

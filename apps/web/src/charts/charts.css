@@ -127,10 +127,29 @@
   pointer-events: none;
 }
 
+/* The one panel in the product that is genuinely floated over live data, so it
+ * is the one that earns elevation: the rounded corner and the shadow say the
+ * readout is lifted above the marks rather than drawn among them, which matters
+ * here because the marks under it are the same ink and the same weights.
+ *
+ * `rx` is the CSS geometry property, not the SVG attribute, so the radius comes
+ * from `--radius-sm` like every other corner in the app instead of being a
+ * number in the component. The shadow's colour is `--color-shadow` (#284 D6 put
+ * elevation ink in the scale); its offset and blur are spacing tokens, a quarter
+ * step down and a full step of blur — small enough to read as lift rather than
+ * as a second, blurrier panel. The quarter step is a *distance* here, which is
+ * what a spacing token means, and so is not the borrowing the table's header
+ * rule below objects to: that one used `--space-1 / 4` to express a border
+ * thickness, which the spacing scale has no opinion about. Border and shadow
+ * together, not either
+ * alone: the border is what separates the panel from a mark of the same tone
+ * directly beneath it, and the shadow is what puts it above the plot. */
 .forecast-chart-tooltip-panel {
+  rx: var(--radius-sm);
   fill: var(--color-surface);
   stroke: var(--color-border);
   stroke-width: 1;
+  filter: drop-shadow(0 calc(var(--space-1) / 4) var(--space-1) var(--color-shadow));
 }
 
 .forecast-chart-tooltip-text {
