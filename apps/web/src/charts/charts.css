@@ -18,10 +18,18 @@
   margin: 0;
 }
 
+/* No `max-width` here any more (#284 D3). The plot used to be held to a measure
+   narrower than the panel around it, which left it floating in white space with
+   the table twin filling the gap below; the twin is folded away now, and the
+   chart takes the whole column. The measure that bounds it is the reading
+   column's own (`dashboard.css`), not a second one restated per chart.
+   `preview.css` keeps a measure of its own, and the value stays there rather
+   than being quoted here (architecture.md rule 9): the token preview is a
+   different surface sizing a swatch of this treatment, and the two are free to
+   diverge (structure.md rule 7). */
 .forecast-chart {
   display: block;
   width: 100%;
-  max-width: 46rem;
 }
 
 .forecast-chart-grid,
@@ -223,8 +231,32 @@
   flex: none;
 }
 
+/* The disclosure the table twin sits behind (#284 D3). It is a sub-section of
+   the panel the chart is in, not a peer of it, so unlike `.site-table` it wears
+   no surface, radius or padding of its own — it is a line under the legend that
+   opens. */
+.forecast-chart-details {
+  margin-top: var(--space-4);
+}
+
+/* One step down from `.site-table-summary`, and deliberately: that summary names
+   a whole card in the reading's flow of peers and takes the heading scale, while
+   this one names a section *inside* a panel that already has a title, so it sits
+   at the small step in medium weight. `cursor: pointer` and the platform focus
+   ring (@cumulo/ui's styles.css rings `summary`) are the whole of its
+   interaction treatment; the marker, the state and the keyboard operation are
+   the element's own. */
+.forecast-chart-summary {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+/* Tight to the summary above it, which is now what introduces the table — the
+   step that used to separate the table from the legend belongs to the
+   disclosure. */
 .forecast-chart-table {
-  margin: var(--space-6) 0 0;
+  margin: var(--space-3) 0 0;
   border-collapse: collapse;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;

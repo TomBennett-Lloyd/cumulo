@@ -335,6 +335,21 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 - **Tooltips enhance, they never gate.** Every value in the tooltip is also reachable without a
   pointer, through direct labels or the table view. Every chart has a table-view twin — the
   WCAG-clean equivalent — reachable from the chart container.
+- **The twin is folded away, behind a `Raw data` disclosure.** Settled in
+  [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D3). A 193-hour window is 193 rows,
+  and open by default they were the tallest thing on the page — while the plot above them was held
+  to a measure narrower than its own panel to leave them somewhere to sit. Closed, the chart fills
+  the panel it is in and the twin is one keystroke away. The disclosure is a native
+  `<details>`/`<summary>`, the same element the fleet's table uses (`dashboard/SiteTable.tsx`), so
+  the open/closed semantics, the keyboard operation and the announcement are the platform's.
+  **This does not weaken the bullet above**: a closed `<details>` keeps its children in the
+  document, so the table is still in the accessibility tree, still resolves by role and accessible
+  name, and is still reachable from the chart container — `dashboard/dashboard-test-fixture.tsx`
+  finds it that way without opening anything. What a closed disclosure withholds is a rendered box:
+  visibility, clicks, tabbing, and nothing else. The light-mode contrast WARN's relief channel is
+  undiminished for the same reason: what that rule refuses is a chart with **no** text route to its
+  values, and a route one press away is a route. The `<caption>` stays on the table, because it
+  names the table — which window, which units — while a summary names the disclosure.
 - **The table twin carries a column per plotted value, and grows one for an overlay.** The time
   column heads each row; the forecast's three quantities and the measurement take one each; an
   overlay takes a sixth, headed by the series' own name. `forecast-chart-table.tsx` owns the
