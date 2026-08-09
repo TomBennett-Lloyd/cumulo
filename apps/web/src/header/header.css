@@ -175,8 +175,16 @@
   margin-left: auto;
 }
 
+/*
+ * Padding is one value on all four sides since the label became a glyph (#284
+ * D16). The word `Menu` was wider than it was tall and wanted the wider
+ * horizontal pad to sit in; a square mark in an oblong box reads as an icon
+ * that has been shoved sideways. The type properties stay because the button
+ * still owns a `font-size` its inline content would use — and because
+ * `color` here is what the mark is drawn in (below).
+ */
 .header-menu-button {
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2);
   border-width: calc(var(--space-1) / 4);
   border-style: solid;
   border-color: var(--color-border);
@@ -191,6 +199,36 @@
 
 .header-menu-button[aria-expanded='true'] {
   border-color: var(--color-accent);
+}
+
+/*
+ * The burger. Three strokes in the button's own ink: `currentColor` inherits
+ * `.header-menu-button`'s `color`, so the mark follows the button through both
+ * themes and any future hover or focus treatment without a second colour
+ * decision to keep in step. The gate allows it by `ignoreValues` for the reason
+ * it allows `var(--token)` — it is a reference to a decided colour rather than
+ * a spelled one.
+ *
+ * `fill: none` because a stroked path left at the default fill would ink the
+ * region the lines bound. `display: block` because an inline `<svg>` sits on
+ * the text baseline and leaves descender space beneath it, which in a button
+ * whose only child it is would show up as padding that is square in this file
+ * and not square on screen.
+ *
+ * The box is sized in `width`/`height` for `.brand-mark`'s reason above: the
+ * residual the CSS gate documents in stylelint.config.mjs, not a value slipping
+ * past it. `stroke-width` is deliberately unitless — user units of the 20-unit
+ * `viewBox`, so the weight scales with the box rather than having to be
+ * restated if the box changes, and at the default root size the box is 20px, so
+ * the units land 1:1 and the strokes fall on whole pixels.
+ */
+.header-menu-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
 /*
