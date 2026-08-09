@@ -29,16 +29,35 @@ export const KEY_TEXT_GAP = 6;
 /** The time label occupies row 0; series rows start below it. */
 export const FIRST_SERIES_ROW = 1;
 /**
- * Advance width of one character of tooltip text at `--text-xs`, estimated
- * rather than measured, for the reason `HORIZON_LABEL_WIDTH` is estimated in
- * `ForecastChart.tsx`: `getComputedTextLength` needs a laid-out DOM, which would
- * make a pure render depend on the browser and report zero under jsdom. Erring
- * wide only leaves a little air at the right-hand edge; erring narrow clips an
- * overlay's name, which is the failure this sizing exists to prevent — so the
- * estimate is taken at the widest digits and lower-case letters the system sans
- * draws at 12px, not at its average.
+ * Mean advance width of one character of tooltip text at `--text-xs`. The panel
+ * is sized by a character *count* rather than by asking the browser, for the
+ * reason `HORIZON_LABEL_WIDTH` is estimated in `ForecastChart.tsx`:
+ * `getComputedTextLength` needs a laid-out DOM, which would make a pure render
+ * depend on the browser and report zero under jsdom. Erring wide only leaves a
+ * little air at the right-hand edge; erring narrow clips an overlay's name,
+ * which is the failure this sizing exists to prevent.
+ *
+ * **Trued against a rendered measurement, not guessed.** #284 D6 shipped this at
+ * 5.6, and the browser smoke on the demo data caught the clip it caused: with
+ * "Manchester rooftop 1" selected as the overlay, the row `2.8 Manchester
+ * rooftop 1` (24 characters) drew a right edge at 170.63 user units inside a
+ * panel 168.4 wide — 2.23 units of overhang. Text starts at
+ * `TOOLTIP_PADDING + KEY_STROKE_LENGTH + KEY_TEXT_GAP` = 26, so that row's real
+ * drawn width was 144.63 and its mean advance 6.026 — which also confirms the
+ * model itself was sound and only this number was wrong, since 5.6 predicts the
+ * observed 168.4 exactly.
+ *
+ * 6.3 is that measurement plus about 4.5%. The margin is kept rather than
+ * rounded away because a mean is not a bound: the font is proportional, so a row
+ * of capitals and digits averages wider than the string this was measured on,
+ * and a mean-advance model has no way to know which row it is being asked about.
+ * At 6.3 the measured row sizes a 185.2-unit panel, ~14.6 units clear.
+ *
+ * The whole model is provisional. Laying the panel out as real columns —
+ * measuring per row instead of multiplying a mean — is #284 D12, and it replaces
+ * this constant rather than retuning it.
  */
-export const TOOLTIP_CHAR_WIDTH = 5.6;
+export const TOOLTIP_CHAR_WIDTH = 6.3;
 
 /** One line of the readout: a colour key, a value, and the series it belongs to. */
 export interface TooltipRow {
