@@ -1,7 +1,10 @@
 # The function's execution role. ADR 0002 reduced least privilege to a list of
 # table ARNs, and this stack's sentence is the narrowest of the four: *forecast
-# reads sites through one index, writes `series`, and consumes one queue.*
-# This file is that sentence, plus the log group it writes.
+# reads sites through one index, writes `series` and reads back the tail of what
+# it wrote, and consumes one queue.* This file is that sentence, plus the log
+# group it writes. The read half of the `series` clause is #264's; until then
+# the sentence stopped at "writes `series`", and the statement below that now
+# carries the `Query` says what changed.
 #
 # Nothing here is a managed policy. Neither `AWSLambdaBasicExecutionRole` nor
 # `AWSLambdaSQSQueueExecutionRole` — the second is the tempting one, because it
@@ -78,15 +81,45 @@ data "aws_iam_policy_document" "forecast" {
     resources = [local.sites_by_location_index_arn]
   }
 
-  # Write the forecasts. BatchWriteItem and nothing else: this function produces
-  # series rows and never reads them back — reading `series` is the fleet API's
-  # job (infra/api/iam.tf carries that `Query`), and ADR 0002 sized this table's
-  # provisioned read capacity (owned by infra/storage/tables.tf) on that
-  # division. No `dynamodb:Query` on `series` here, so a read path appearing on
-  # this side has to be argued in a diff rather than inherited from a wildcard.
+  # Write the series rows. BatchWriteItem and nothing else, but since #264 that
+  # one action covers two kinds of row rather than one: the forecasts this
+  # function computes, and the simulated generation readings
+  # `apps/forecast/src/simulate-actuals.ts` synthesises from them until real
+  # metering exists. The two differ in the sort key the series adapter builds,
+  # not in the call that writes them, so carrying the second producer here cost
+  # no widening of this statement — which is a large part of why it lives in
+  # this function rather than in a deployable of its own.
   statement {
     sid       = "WriteForecastSeries"
     actions   = ["dynamodb:BatchWriteItem"]
+    resources = [local.series_table_arn]
+  }
+
+  # Read the series back — the grant this file spent #12 arguing against. The
+  # sentence here used to be that this function produces series rows and never
+  # reads them back, that reading `series` was the fleet API's job (infra/api/
+  # iam.tf still carries its own `Query`), and that a read path appearing on
+  # this side would have to be argued in a diff rather than inherited from a
+  # wildcard. This is that diff, and the argument is that the simulated-actuals
+  # producer is a reader of *this function's own output*: having stored a
+  # cycle's forecasts it queries the trailing window of each site's series
+  # (`querySeriesRange` in @cumulo/storage's series adapter) and derives the
+  # readings from what it finds.
+  #
+  # `Query` alone. No `GetItem`, because the access is a range over one site's
+  # partition rather than a point read — the same reason there is no `GetItem`
+  # anywhere else in this file. No index ARN either: the series table has no
+  # GSI (infra/storage/tables.tf), so the table ARN is the whole of its read
+  # surface, and this statement is as narrow as a read of `series` can be
+  # written.
+  #
+  # It does put a second consumer on read capacity that infra/storage/tables.tf
+  # sized for the dashboard fan-out — that file owns the number and the
+  # reasoning, and infra/storage/alarms.tf's read-throttle alarm is what would
+  # report the sizing wrong rather than this comment predicting it.
+  statement {
+    sid       = "ReadSeriesForSimulatedActuals"
+    actions   = ["dynamodb:Query"]
     resources = [local.series_table_arn]
   }
 
