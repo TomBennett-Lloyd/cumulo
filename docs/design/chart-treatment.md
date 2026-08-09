@@ -280,7 +280,13 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 - **The panel sizes to its content and floats above the plot.** Width is the widest row it actually
   holds, floored at a minimum so short samples do not read as a different component — an overlay's
   name is a site name a visitor typed, so the widest row is routinely one nobody could have sized
-  for. Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
+  for. **And capped at the plot's own width**, which is the floor's opposite number and matters for
+  the same reason: a site name may run to 120 characters, and somewhere past about 56 of them an
+  uncapped panel is wider than the chart it is reading, so the readout blankets the marks it exists
+  to explain. Capped, a name that long overflows its panel instead — text past one edge is a defect
+  a reader can see around, a panel over the whole plot is not. Eliding the row that overflows is
+  still open ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12); the cap bounds
+  what it costs until then. Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
   small drop shadow in `--color-shadow`: it is the one surface in the product genuinely floated
   over live data, and the marks beneath it are the same ink and weights it is drawn in. The
   hairline border in `--color-border` stays under the shadow rather than being replaced by it.
