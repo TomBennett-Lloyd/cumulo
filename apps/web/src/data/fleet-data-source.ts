@@ -98,15 +98,21 @@ export type FleetSourceResult<T> =
  * value, and adding a window should fail to compile everywhere it is switched
  * on rather than silently return nothing.
  *
- * Per-site reads honour the look-back. **Fleet-level reads cannot.** The only
- * fleet-wide read an HTTP source may fan out over without tripping the API's
- * per-IP limiter is the per-site `/forecast` route, and that route returns
- * *future* hours — so the HTTP source's fleet-level implementation necessarily
- * reinterprets this window as a forward horizon (see
+ * Per-site reads honour the look-back. **Fleet-level _forecasts_ cannot.** The
+ * only fleet-wide read of forecasts an HTTP source may fan out over without
+ * tripping the API's per-IP limiter is the per-site `/forecast` route, and that
+ * route returns *future* hours — so the HTTP source's fleet-level forecast
+ * necessarily reinterprets this window as a forward horizon (see
  * {@link FleetDataSource.fleetForecasts}). Fleet-level range selection is
  * therefore horizon-capped in live mode: it selects how far *ahead* the
- * aggregate reaches, it shows no history, and any two ranges past the deployed
- * pipeline's write depth render identically.
+ * aggregate reaches, and any two ranges past the deployed pipeline's write
+ * depth render identically.
+ *
+ * Fleet-level *actuals* are the other half, and they do honour this window even
+ * in live mode: `GET /v1/fleet/actuals` takes the look-back and answers for the
+ * whole fleet in one request (#264), so a live aggregate reaches behind now
+ * without any picker existing. That is why the two flags below move
+ * independently.
  */
 export type RangeHours = 24 | 48 | 168;
 
@@ -117,12 +123,18 @@ export type RangeHours = 24 | 48 | 168;
  * The two flags exist because {@link RangeHours} already documents that
  * fleet-level reads may reinterpret the window and that an implementation is
  * free to serve the look-back but not required to — which leaves a view unable
- * to tell which kind of source it holds. Copy and controls that promise history
- * or measured output are only honest against a source that says so here, so
- * they read these instead of assuming.
+ * to tell which kind of source it holds. Copy and controls that promise a
+ * chosen history, or actuals of any kind, are only honest against a source that
+ * says so here, so they read these instead of assuming.
  */
 export interface FleetSourceCapabilities {
-  /** Fleet-level reads honour {@link RangeHours} as a look-back. False ⇒ forward horizon only. */
+  /**
+   * Fleet-level *forecasts* honour {@link RangeHours} as a look-back. False ⇒
+   * forward horizon only, and therefore no window worth offering — including
+   * where {@link FleetDataSource.fleetActuals} honours the window on its own
+   * route, because a
+   * picker would move one half of the plot and not the other.
+   */
   readonly fleetLookback: boolean;
   /** Fleet-level actuals can ever be non-empty. */
   readonly fleetActuals: boolean;
@@ -267,7 +279,13 @@ export interface FleetDataSource {
     range: RangeHours,
   ) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
-  /** One site's measured generation over the same window, for the same chart. */
+  /**
+   * One site's generation actuals over the same window, for the same chart —
+   * simulated in live mode (the forecast service synthesises them from the
+   * stored physics forecast, #264) and fixture-generated in the demo. The wire
+   * shape is what a real meter would fill either way, so "simulated" is a claim
+   * the UI's copy makes rather than a field on every reading.
+   */
   readonly siteActuals: (
     siteId: Site['id'],
     range: RangeHours,
@@ -290,7 +308,15 @@ export interface FleetDataSource {
    */
   readonly fleetForecasts: (range: RangeHours) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
-  /** Every site's measured generation over the window, unaggregated. */
+  /**
+   * Every site's generation actuals over the window, unaggregated — simulated
+   * in live mode as {@link siteActuals} describes (#264).
+   *
+   * Unlike {@link fleetForecasts} this need not be a fan-out: the HTTP source
+   * reads `GET /v1/fleet/actuals`, one request for the whole fleet, so it
+   * honours `range` as the look-back {@link RangeHours} describes even where
+   * `fleetLookback` is false.
+   */
   readonly fleetActuals: (
     range: RangeHours,
   ) => Promise<FleetSourceResult<readonly GenerationReading[]>>;
