@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { pressedRangeButton } from './range-picker';
 
 /*
  * The header, driven by a keyboard and a pointer, in a browser that has a top
@@ -402,11 +403,12 @@ test('finds a site by name and brings the camera to it when it is off screen', a
     })
     .toBe(true);
 
-  // And the reader is on it. A search hit is reader-initiated like a marker or a
-  // row press, so the card takes the focus by the rule the dashboard already had
-  // (`docs/standards/react.md`) — asserted here because a field that kept the
-  // focus would leave a keyboard reader typing at their own answer.
-  await expect(page.locator('.site-popover-title')).toBeFocused();
+  // And the reader has been moved on. A search hit is reader-initiated like a
+  // marker or a row press, so the focus follows it to the fleet panel's range
+  // picker by the rule the dashboard already had (`docs/standards/react.md`,
+  // revised by #284 D14) — asserted here because a field that kept the focus
+  // would leave a keyboard reader typing at their own answer.
+  await expect(pressedRangeButton(page)).toBeFocused();
 });
 
 test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
