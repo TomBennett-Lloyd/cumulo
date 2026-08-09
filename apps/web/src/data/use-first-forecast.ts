@@ -15,14 +15,18 @@ const MS_PER_SECOND = 1_000;
  * pipeline does not get. Five seconds on top of the demo pipeline's 45 leaves
  * the promise intact with room to spare.
  *
- * The other constraint is read capacity. Each poll reads one site's own
- * partition (~0.5 read units, per ADR 0002's review of this ticket); a
- * fleet-wide read such as `listSites` costs ~25, so a loop that re-listed the
- * fleet every five seconds would have a handful of open tabs spending the
- * fleet's read units over and over between them. Since #258 these tables are
- * on-demand, so what that exhausts is the budget rather than a provisioned
- * ceiling: it arrives as a bill, not as a throttle. This loop therefore calls
- * `getSiteForecast` and nothing else.
+ * The other constraint is read capacity, and ADR 0002's review of this ticket
+ * priced both sides of it. Each poll reads the watched site's own partition —
+ * one Query, ~0.5 read units on `series`. The reads to stay away from are the
+ * fleet-level ones: `fleetForecasts` and `fleetActuals` each fan out over every
+ * site's partition, ~25 read units on `series` a call, so a handful of tabs
+ * re-polling one of those every five seconds saturates what this poll barely
+ * touches. Re-listing is not the expensive part — `listSites` is one Query over
+ * the `FLEET` partition, ~2 units on `sites` — it is simply not this loop's
+ * business either. Since #258 these tables are on-demand, so what the expensive
+ * version exhausts is the budget rather than a provisioned ceiling: it arrives
+ * as a bill, not as a throttle, which ADR 0002 notes is the harder failure to
+ * spot. This loop therefore calls `getSiteForecast` and nothing else.
  */
 const POLL_INTERVAL_MS = 5_000;
 

@@ -186,9 +186,10 @@ describe('useFirstForecast', () => {
     expect(source.calls).toHaveLength(2);
   });
 
-  // ADR 0002's review of this ticket: a per-site read is ~0.5 read units, a
-  // fleet-wide read ~25. A loop that re-listed the fleet would let three open
-  // tabs exhaust the table's capacity between them.
+  // ADR 0002's review of this ticket: this poll is one Query on the watched
+  // site's own partition, ~0.5 read units on `series`, while either fleet route
+  // covers every site's partition at ~25. A handful of tabs polling one of
+  // those every few seconds is the cost this loop exists not to incur.
   it('reads only the watched site’s own partition, never a fleet-wide read', async () => {
     const source = new ScriptedFleetDataSource(forecastAfterMs(48_000, SITE_ID));
     renderHook(() => useFirstForecast(source, SITE_ID));

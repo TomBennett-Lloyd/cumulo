@@ -102,15 +102,13 @@ export class HttpFleetDataSource implements FleetDataSource {
    * `${siteId}|${range}` → the series request currently in flight for it.
    *
    * The detail view asks for that pair's forecasts and actuals concurrently,
-   * and both are halves of one `/series` payload. `/series` is one of the six
-   * routes the API's per-IP limiter meters (30 requests per 60 seconds, then a
-   * one-hour block) — the three writes, this read, and both fleet reads, per
-   * the route table in `apps/api/src/main.ts` — so sharing the promise is the
-   * difference between one metered request per selection and two. Even
-   * unshared this is far from the limiter —
-   * a human would need more than 30 distinct (site, range) selections inside a
-   * minute — but the halving is free and it is the frugality posture CLAUDE.md
-   * asks for.
+   * and both are halves of one `/series` payload. `/series` is metered by the
+   * API's per-IP limiter (30 requests per 60 seconds, then a one-hour block;
+   * the route table in `apps/api/src/main.ts` owns which routes are), so
+   * sharing the promise is the difference between one metered request per
+   * selection and two. Even unshared this is far from the limiter — a human
+   * would need more than 30 distinct (site, range) selections inside a minute —
+   * but the halving is free and it is the frugality posture CLAUDE.md asks for.
    */
   private readonly seriesInFlight = new Map<
     string,

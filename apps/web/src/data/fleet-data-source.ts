@@ -245,12 +245,16 @@ export interface FleetDataSource {
   readonly capabilities: FleetSourceCapabilities;
 
   /**
-   * The whole fleet, once. Callers load this on mount and never poll it: a
-   * repeated read across every site's partition is the read-capacity mistake
-   * ADR 0002's review called out (a per-site forecast poll costs ~0.5 read
-   * units; a fleet-wide read costs ~25). Since #296 the fleet reads spend that
-   * inside one request rather than a fan-out, which moved where the Queries
-   * are issued and not how many.
+   * The whole fleet, once. Callers load this on mount and never poll it.
+   *
+   * This read is the cheap one: a single Query over the `FLEET` partition, ~2
+   * read units on `sites` (ADR 0002). The read-capacity mistake that ADR's
+   * review called out belongs to the fleet-level *series* reads it usually
+   * precedes — {@link fleetForecasts} and {@link fleetActuals} each cover every
+   * site's partition, ~25 read units on `series` a call, against a per-site
+   * poll's ~0.5. Since #296 those Queries are issued server-side inside one
+   * request rather than by a browser fan-out, which moved where they are spent
+   * and not how many, so polling either of them would still be that mistake.
    */
   readonly listSites: () => Promise<FleetSourceResult<readonly Site[]>>;
 
