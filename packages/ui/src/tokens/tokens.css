@@ -66,6 +66,15 @@
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
 
+  /* Elevation ink: the colour a panel floated over data casts beneath itself —
+     a chart tooltip over its own marks, and anything else that has to read as
+     lifted rather than drawn in. Alpha rather than a flat grey, because the
+     shadow lands on whatever the panel is covering; darker and heavier in dark
+     mode, where a translucent black over a near-black surface has almost no
+     range to work with. It is ink, not a length: the offset and blur belong to
+     the rule that spends it (spacing tokens), and only the colour is here. */
+  --color-shadow: rgba(15, 20, 25, 0.18);
+
   /* Translucent surface for text panels floated over imagery — map tiles, a
      photographic hero — where an opaque panel would crop the picture but plain
      text on it would be unreadable.
@@ -171,6 +180,8 @@
   --color-border: #2a2f34;
   --color-accent: #3987e5;
   --color-accent-contrast: #0d0f10;
+
+  --color-shadow: rgba(0, 0, 0, 0.55);
 
   /* Identical text to the light block on purpose — `var(--color-surface)`
      resolves to this block's surface at use time. It is re-declared only to

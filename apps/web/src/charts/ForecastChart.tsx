@@ -1,6 +1,6 @@
 import {
+  useMemo,
   useRef,
-  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
@@ -25,16 +25,13 @@ import {
   overlayValuesByIndex,
   seriesSpanHours,
   type ChartOverlayColumn,
+  type ChartOverlayReading,
   type ChartOverlaySeries,
   type ChartScale,
   type ForecastChartPoint,
 } from './chart-series';
-import {
-  ForecastChartHoverLayer,
-  hoverKeyAction,
-  pointerIndex,
-  readoutText,
-} from './forecast-chart-hover';
+import { hoverKeyAction, pointerSample, useChartHover } from './chart-hover-input';
+import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
 import { forecastChartLegend } from './forecast-chart-legend';
 import {
   actualsElements,
@@ -74,11 +71,15 @@ import { forecastChartTable } from './forecast-chart-table';
  * onto this series' x-domain once and then flows to the mark, the legend row,
  * the table column and the readout from that one join.
  *
- * **The readout has one source of truth.** Pointer and keyboard both do exactly
- * one thing — set `activeIndex` — and `forecast-chart-hover.tsx` draws whatever
- * that index says. There is no separate keyboard rendering path to drift from
- * the hover one, which is what the treatment's "keyboard focus shows exactly
- * what hover shows" costs when it is designed in rather than retrofitted.
+ * **The readout has one source of truth.** Pointer and keyboard both settle on
+ * an `activeIndex`, and `forecast-chart-hover.tsx` draws whatever that index
+ * says. There is no separate keyboard rendering path to drift from the hover
+ * one, which is what the treatment's "keyboard focus shows exactly what hover
+ * shows" costs when it is designed in rather than retrofitted. The pointer
+ * carries one thing the keyboard cannot — a continuous position, which the
+ * panel follows and the crosshair ignores (#284 D7) — and it is a second field
+ * beside the index rather than a second selection, so neither route can end up
+ * reading a different sample.
  *
  * This file is composition plus the plot's chrome — grid, horizon, axes. The
  * data marks, the hover layer and the figure's furniture sit beside it —
@@ -218,13 +219,24 @@ const xLabelElements = (
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const { points } = props;
   const svgRef = useRef<SVGSVGElement>(null);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const hover = useChartHover();
+  const { activeIndex } = hover;
   // Joined once and read by every consumer below, so the mark, the table column
   // and the readout can never disagree about what the overlay says at an hour.
-  const overlay: ChartOverlayColumn | undefined =
-    props.overlay === undefined
-      ? undefined
-      : { label: props.overlay.label, values: overlayValuesByIndex(points, props.overlay) };
+  //
+  // Memoised for identity rather than for speed. The tooltip panel follows the
+  // pointer at up to thirty frames a second (#284 D7) and its content is
+  // memoised against those frames — so a column, and the reading taken from it,
+  // rebuilt on every render would hand that memo a new object every frame and
+  // defeat it. The dependencies are the honest ones: a new series, or a new
+  // x-domain to join it onto, really is a new join.
+  const overlay = useMemo<ChartOverlayColumn | undefined>(
+    () =>
+      props.overlay === undefined
+        ? undefined
+        : { label: props.overlay.label, values: overlayValuesByIndex(points, props.overlay) },
+    [props.overlay, points],
+  );
   // An overlay running above the forecast would otherwise be drawn off the top
   // of the plot. With no overlay this is `highestValueKw` unchanged, which is
   // seeded at 0 and so cannot be lowered by the second argument.
@@ -239,18 +251,21 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   };
   const spanHours = seriesSpanHours(points);
   const activePoint = activeIndex === null ? undefined : points[activeIndex];
-  const overlayReading = activeIndex === null ? undefined : overlayReadingAt(overlay, activeIndex);
+  const overlayReading = useMemo<ChartOverlayReading | undefined>(
+    () => (activeIndex === null ? undefined : overlayReadingAt(overlay, activeIndex)),
+    [overlay, activeIndex],
+  );
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
 
   const clearReadout = (): void => {
-    setActiveIndex(null);
+    hover.selectSample(null);
   };
 
   const readAtPointer = (event: ReactPointerEvent<SVGRectElement>): void => {
-    setActiveIndex(
-      pointerIndex({
+    hover.trackPointer(
+      pointerSample({
         clientX: event.clientX,
         svg: svgRef.current,
         viewBoxWidth: CHART_VIEW_BOX_WIDTH,
@@ -261,7 +276,9 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
 
   /** Focus opens the readout on the first sample; a live pointer readout stands. */
   const readAtFocus = (): void => {
-    setActiveIndex((current) => current ?? 0);
+    if (activeIndex === null) {
+      hover.selectSample(0);
+    }
   };
 
   const readAtKey = (event: ReactKeyboardEvent<SVGSVGElement>): void => {
@@ -272,7 +289,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     // Only keys the chart actually acts on lose their default — arrows must not
     // scroll the page out from under a focused chart, and Tab must still tab.
     event.preventDefault();
-    setActiveIndex(action.kind === 'cleared' ? null : action.activeIndex);
+    hover.selectSample(action.kind === 'cleared' ? null : action.activeIndex);
   };
 
   return (
@@ -316,6 +333,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         <ForecastChartHoverLayer
           points={points}
           activeIndex={activeIndex}
+          pointerX={hover.pointerX}
           scale={scale}
           spanHours={spanHours}
           overlay={overlayReading}

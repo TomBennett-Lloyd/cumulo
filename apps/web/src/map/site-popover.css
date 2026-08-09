@@ -43,11 +43,16 @@
    the translate centres the card on it; `bottom` lifts the card clear of the
    mark it belongs to, which would otherwise be underneath it and unreadable.
 
-   `--color-border` at hairline weight rather than a drop shadow: the token set
-   has no elevation category, and `box-shadow` is on the CSS gate's strict-value
-   list, so a shadow here would have to be a raw value. The border does the same
-   job the marker tooltip's does — separate the card from whatever tile is under
-   it — and `--color-surface` behind it is fully opaque, unlike the credits
+   `--color-border` at hairline weight rather than a drop shadow, and now by
+   choice rather than for want of a token: `--color-shadow` is elevation ink in
+   the scale as of #284, so `box-shadow: … var(--color-shadow)` would pass the
+   CSS gate's strict-value list here exactly as the chart tooltip's drop shadow
+   does. The card keeps the border anyway. A shadow marks a thing that floats
+   over what it is reading — the tooltip is over its own marks and moves with
+   the pointer — where this card is anchored to one marker and stays put, and
+   the border does the job that actually needs doing: separating the card from
+   whatever tile is under it, the same job the marker tooltip's border does.
+   `--color-surface` behind it is fully opaque, unlike the credits
    band's veil, because this card carries text a reader has to read rather than
    a credit that has to stay legible over a continuous map. */
 .site-popover {

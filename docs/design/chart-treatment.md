@@ -262,19 +262,40 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 
 - **A crosshair finds the X.** A vertical hairline tracks the pointer and snaps to the nearest
   timestamp — readers aim at a time, not at a 2px line.
-- **One tooltip, every series.** The readout lists the actual, the median, the P10–P90 range and
-  an overlay if the chart carries one, at that timestamp — so the pointer never has to land on a
-  line or inside the fill to get a number. The value leads and is high-contrast; the series name
-  follows in `--color-text-muted`. Series are keyed with a short stroke of their colour, not a
-  filled box. **The band row is omitted rather than dashed out** where a point carries no modelled
-  uncertainty: an absent row says "not modelled", an em-dashed one would imply a range of nothing.
-  The other rows keep their place and carry an em dash when that series has nothing at the sample —
-  a measurement past the horizon, an hour an overlay does not cover — because a value that is
-  merely missing is a different statement from one that was never modelled, and a row vanishing
-  under the pointer would make the readout change height as the reader moves along the series.
-  **Speech drops every absent row instead**, including the dashes: screen readers at default
-  punctuation verbosity say nothing for an em dash, so an unmeasured hour would otherwise announce
-  a labelled series with no value at all.
+- **One tooltip, every series present at that timestamp.** The readout lists the actual, the
+  median, the P10–P90 range and an overlay if the chart carries one — so the pointer never has to
+  land on a line or inside the fill to get a number. The value leads and is high-contrast; the
+  series name follows in `--color-text-muted`. Series are keyed with a short stroke of their
+  colour, not a filled box. **A series with nothing at the sample gets no row**, drawn or spoken:
+  the band where a point carries no modelled uncertainty, the measurement past the horizon, the
+  hour an overlay does not cover. An absent row says "there is nothing here"; the em dash that used
+  to hold those places said the same thing more quietly, and said it to nobody at all in speech —
+  screen readers at default punctuation verbosity voice an em dash as silence, so a dashed row
+  announced a labelled series with no value. Settled in
+  [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D6): the drawn tooltip now drops
+  the same rows speech always dropped, and the readout changing height as the reader moves along
+  the series is the accepted cost of the two saying one thing. **The table twin keeps the em
+  dash** — it is a grid, its columns are fixed by the header, and a cell cannot be absent the way
+  a list item can.
+- **The panel sizes to its content and floats above the plot.** Width is the widest row it actually
+  holds, floored at a minimum so short samples do not read as a different component — an overlay's
+  name is a site name a visitor typed, so the widest row is routinely one nobody could have sized
+  for. Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
+  small drop shadow in `--color-shadow`: it is the one surface in the product genuinely floated
+  over live data, and the marks beneath it are the same ink and weights it is drawn in. The
+  hairline border in `--color-border` stays under the shadow rather than being replaced by it.
+- **The panel follows the pointer; the data snaps.** The crosshair and the rows belong to the
+  nearest sample and change only at the midpoint between two samples — that is how often the data
+  actually changes, and a landmark that slides between hours would be lying about which hour it is
+  naming. The panel itself tracks the pointer continuously, clamped inside the plot by the same
+  edge rule as any direct label, so the readout stays under the reader's eye instead of jumping a
+  step behind it. Position updates are rate-limited to **30 a second**, with the last move always
+  applied so the panel never freezes short of where the pointer came to rest; and the panel's
+  **content is memoised against those frames**, so moving it re-renders nothing inside it. Motion
+  comes from the pointer, never from a transition — there is no animation for
+  `prefers-reduced-motion` to reduce. Settled in
+  [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D7); a keyboard selection has no
+  pointer, so the panel sits at the sample and steps with the arrow keys.
 - **Keyboard focus shows exactly what hover shows — and says so out loud.** The plot's `<svg>`
   keeps `role="img"` with one `aria-label`: a reader arriving at the chart should hear its name,
   not wade through every text node inside it. That is also why the tooltip cannot carry the
@@ -328,7 +349,10 @@ Every token this treatment uses. Values, and the reasoning behind each value, ar
 | `--color-chart-actuals`                                  | measured actuals line (near-ink, not a categorical slot)     |
 | `--color-chart-grid`                                     | gridlines, forecast-horizon rule                             |
 | `--color-chart-axis-label`                               | axis ticks, axis labels, horizon label                       |
-| `--color-surface`                                        | 2px marker rings, chart card background                      |
+| `--color-surface`                                        | 2px marker rings, chart card background, tooltip panel fill  |
+| `--color-border`                                         | tooltip panel hairline                                       |
+| `--color-shadow`                                         | tooltip panel drop shadow (elevation ink)                    |
+| `--radius-sm`                                            | tooltip panel corner                                         |
 | `--color-text`                                           | legend labels, tooltip values                                |
 | `--color-text-muted`                                     | axis titles, tooltip series names, secondary legend text     |
 | `--color-danger` / `--color-warning` / `--color-success` | reserved status states, never series identity                |
