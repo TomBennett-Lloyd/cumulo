@@ -144,8 +144,9 @@
  * clickable, and this band is over the tiles, not over anything a reader
  * needs to reach.
  *
- * Wrapping to two lines is still the narrow-width behaviour, in place of
- * collapsing either credit behind a control. */
+ * `flex-wrap: wrap` is still the last resort below the compact row's own width
+ * (see the compact-form rule further down); what it is no longer is the *first*
+ * answer to a narrow window. */
 .map-attribution {
   position: absolute;
   inset: auto 0 0 0;
@@ -185,6 +186,54 @@
 .map-attribution-tiles a:hover,
 .map-attribution-tiles a:focus-visible {
   color: var(--color-text);
+}
+
+/* The compact credit row.
+ *
+ * Below the width at which the full row stops fitting on one line, both credits
+ * drop their leading prose and the band stays a single line: `© OpenStreetMap
+ * contributors · OpenFreeMap` and `Open-Meteo.com`. Both links, the `©` and the
+ * `·` are outside the wrappers, so nothing a licence requires is hidden here —
+ * the DOM text is identical either way and only the painting changes, which is
+ * also why `MapAttributionStrip`'s wording tests never had to learn about this.
+ * The Open-Meteo half is the compact form CLAUDE.md sanctions for a row that
+ * cannot hold the full phrase (owner-amended 2026-08-09).
+ *
+ * The rule lives here, scoped to `.map-attribution`, rather than beside
+ * `.cumulo-attribution-prefix`'s own component in `@cumulo/ui`. Whether the
+ * phrase fits is a fact about the row, not about the credit, and this band is
+ * the only row in the app that runs out: it is the only one carrying two credits
+ * side by side. The four other surfaces composing `OpenMeteoAttribution` — the
+ * dashboard footer, the About dialog, the error boundary, the tokens preview —
+ * each give it a row to itself and keep the full phrase at every width, which is
+ * the condition the constraint attaches to the compact form.
+ *
+ * 37.25rem is measured rather than picked. At this band's own typography the
+ * full row needs 597px and the compact row 402px, so the full form wraps at
+ * 596px and below, and the breakpoint sits exactly there. It sits *at* the wrap
+ * point rather than comfortably above it because the two errors are not
+ * symmetric: dropping the phrase on a row that could have held it is outside
+ * what the constraint sanctions, while carrying it on a row that wraps is just
+ * the behaviour this rule replaced. So where a platform's fonts run wider than
+ * the measurement, this under-fires by design.
+ *
+ * Note what it cannot do: the compact row's own 402px is licence-mandated string
+ * and nothing here can shorten it, so below roughly 25rem the band wraps in the
+ * compact form too. Narrower is fewer lines, never one.
+ *
+ * A container query would measure the row instead of inferring it from the
+ * viewport, and would need no number at all. Declined while this is a
+ * one-surface problem; it is the escalation the moment a second surface starts
+ * wrapping, or this band gains a third credit.
+ *
+ * Gate residual: the width is a raw length. `stylelint.config.mjs`'s value rules
+ * reach declarations, not media features, and there is no breakpoint scale to
+ * reach for — the same open half of the frontend gate that config documents. */
+@media (max-width: 37.25rem) {
+  .map-attribution .map-attribution-prefix,
+  .map-attribution .cumulo-attribution-prefix {
+    display: none;
+  }
 }
 
 /* ── Site markers ────────────────────────────────────────────────────────────

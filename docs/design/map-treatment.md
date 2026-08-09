@@ -230,9 +230,35 @@ Placement:
   the map on every screen.
 
 - **Both are visible without interaction.** No "i" toggle, no hover-to-reveal, no collapsing the
-  credits behind a control at narrow widths — the band wraps to two lines instead. Overlaying
-  does not weaken this: the band is opaque enough to read at rest, and it is never faded,
-  animated in, or suppressed while the reader is panning.
+  credits behind a control at narrow widths. Overlaying does not weaken this: the band is opaque
+  enough to read at rest, and it is never faded, animated in, or suppressed while the reader is
+  panning.
+
+- **What narrowing drops is prose, never a credit.** Below the width at which the full row stops
+  fitting on one line, the band sheds its two leading phrases — `basemap tiles by` and
+  `Weather data by` — and reads `© OpenStreetMap contributors · OpenFreeMap` and
+  `Open-Meteo.com`. Both links, the `©` and the `·` survive at every width, and the shortened
+  weather credit is the compact form CLAUDE.md sanctions for a row that cannot hold the full
+  phrase (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
+
+  This is computed visibility and nothing else: the DOM carries the identical text in both forms,
+  so anything reading the page rather than painting it — a reader with stylesheets off, a scraper
+  honouring the licence — always gets the full phrase. That is what makes the collapse safe to do
+  in a stylesheet at all, and it is asserted rather than asserted-about, in
+  `MapAttributionStrip.test.tsx` (the text) and `e2e/composition.spec.ts` (the two forms).
+
+  The rule belongs to **this band**, not to the credit component. Whether the phrase fits is a
+  fact about the row, and this is the only row in the app carrying two credits side by side; the
+  dashboard footer, the About dialog, the error boundary and the tokens preview each give the
+  weather credit a row of its own and keep the full phrase at every width, which is the condition
+  the amended constraint attaches to the compact form. [`map.css`](../../apps/web/src/map/map.css)
+  holds the rule, the measured breakpoint and the argument for placing it there; this document
+  names the decision and does not restate the number.
+
+  It buys a single row over a range, not at every width. The compact row is still made of
+  licence-mandated strings, so below roughly 25rem the band wraps again — with less text in it.
+  Wrapping remains the honest last resort, and is still preferred to hiding a credit.
+
 - **Both stay clickable.** The band takes pointer events like any other content; a credit whose
   link cannot be followed is not a credit, and `pointer-events: none` on an overlay is the
   obvious way to lose one by accident.

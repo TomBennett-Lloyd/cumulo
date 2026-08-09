@@ -104,6 +104,25 @@ const DEMO_FLEET_SIZE = 60;
 /** The map overlay and the page footer each owe one. More surfaces may owe more. */
 const MINIMUM_WEATHER_CREDITS = 2;
 
+/**
+ * A viewport inside the range where the credits band compacts, with margin at
+ * both ends of it.
+ *
+ * `map.css` drops the two prefixes at 37.25rem and below, because 596px is where
+ * the full row stops fitting on one line; the compact row needs 402px of its
+ * own. 480 sits clear of both bounds, so the full form provably would have
+ * wrapped at this width and the compact form provably does not — with room to
+ * spare for a classic scrollbar taking its share out of the layout viewport
+ * first.
+ *
+ * A phone-width viewport would not do, and that is a fact about the strings
+ * rather than about the rule: `© OpenStreetMap contributors`, the separator and
+ * `Open-Meteo.com` come to 402px of licence-mandated text at this type size, so
+ * at 390px the band wraps whatever any stylesheet does. Compaction buys the
+ * single row from 402px upward, not all the way down.
+ */
+const COMPACT_VIEWPORT = { width: 480, height: 900 };
+
 test.beforeEach(async ({ page }) => {
   await routeBasemap(page);
   await page.goto('/');
@@ -235,6 +254,108 @@ test('runs the map edge to edge, with its credits overlaid on its own bottom edg
 
   await expect(credit).toBeVisible();
   await credit.click({ trial: true });
+});
+
+test('drops the credits’ prose to keep the band one row when the window narrows', async ({
+  page,
+}) => {
+  /*
+   * The compact attribution form, which only a real browser can see: it is
+   * produced entirely by a media query and computed visibility, so jsdom — which
+   * applies no stylesheet — reads the identical DOM in both states and could
+   * assert nothing about either.
+   *
+   * The case runs at two widths on purpose. The default one is the vacuity
+   * guard: it proves the prefix locators match something and carry the full
+   * phrase, so the `toBeHidden` assertions after the resize are measuring a
+   * change rather than a selector that never matched. Without it, a typo in
+   * either class name would produce exactly the same green.
+   */
+  const attribution = page.locator('.map-attribution');
+  const tilePrefix = attribution.locator('.map-attribution-prefix');
+  const weatherPrefix = attribution.locator('.cumulo-attribution-prefix');
+
+  await expect(attribution).toBeVisible();
+  await expect(weatherPrefix).toBeVisible();
+  await expect(weatherPrefix).toHaveText('Weather data by');
+  await expect(tilePrefix).toBeVisible();
+  await expect(tilePrefix).toHaveText('basemap tiles by');
+
+  /*
+   * The band's height with everything on screen, which is one row at this width.
+   * Measured rather than written down: it is the reference the narrow reading is
+   * compared against, and taking it from the page keeps this free of the band's
+   * padding and line-height tokens, either of which could change without the
+   * single-row claim becoming false.
+   */
+  const oneRow = await layoutBoxOf(attribution, 'The map attribution');
+
+  await page.setViewportSize(COMPACT_VIEWPORT);
+
+  await expect(weatherPrefix).toBeHidden();
+  await expect(tilePrefix).toBeHidden();
+
+  /*
+   * Polled, because the reading has to wait for layout after the resize rather
+   * than for an element to appear, and a box read straight after
+   * `setViewportSize` can still be the pre-reflow one. No box at all answers
+   * `Infinity` so that the absence fails loudly here instead of comparing
+   * `undefined` and passing.
+   */
+  await expect
+    .poll(async () => (await attribution.boundingBox())?.height ?? Number.POSITIVE_INFINITY, {
+      message: 'The credits band never settled to a single row after the window narrowed.',
+    })
+    .toBeLessThanOrEqual(oneRow.height + EDGE_TOLERANCE_PX);
+
+  /*
+   * Height alone would still pass if one credit had wrapped inside itself while
+   * the band happened to stay short, so the two credits are also asserted onto
+   * the same row. The two catch different wraps: this one fails when the weather
+   * credit is pushed onto a second line, the height fails when either credit
+   * folds internally.
+   */
+  const tileCredit = await layoutBoxOf(
+    attribution.locator('.map-attribution-tiles'),
+    'The tile credit',
+  );
+  const weatherCredit = await layoutBoxOf(
+    attribution.locator('.cumulo-attribution'),
+    'The weather credit',
+  );
+
+  expect(Math.abs(tileCredit.y - weatherCredit.y)).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+
+  /* Still the map's own bottom edge, not a band that escaped it as it shrank. */
+  const mapBox = await layoutBoxOf(page.locator('.map-canvas'), 'The map canvas');
+  const stripBox = await layoutBoxOf(attribution, 'The map attribution');
+
+  expect(stripBox.x).toBeGreaterThanOrEqual(mapBox.x - EDGE_TOLERANCE_PX);
+  expect(stripBox.x + stripBox.width).toBeLessThanOrEqual(
+    mapBox.x + mapBox.width + EDGE_TOLERANCE_PX,
+  );
+
+  /*
+   * And the licence hit-test again, in the compact state. `toBeVisible` passes
+   * on a link with something painted over it, so the trial click is what
+   * actually proves the credit is still followable — the same check this spec
+   * makes at the default width, repeated here because hiding a sibling element
+   * re-flows the row the link sits in and is exactly the kind of change that
+   * could leave it overlapped.
+   */
+  const credit = attribution.getByRole('link', { name: 'Open-Meteo.com' });
+
+  await expect(credit).toBeVisible();
+  await credit.click({ trial: true });
+
+  /*
+   * The rule is the map band's alone. The footer gives the credit a row to
+   * itself and can hold the full phrase at this width, so it keeps it — which is
+   * the condition CLAUDE.md attaches to the compact form, and the reason the
+   * media query lives in `map.css` rather than beside the component in
+   * `@cumulo/ui`. A rule that leaked to every surface would fail right here.
+   */
+  await expect(page.locator('.dashboard-footer .cumulo-attribution-prefix')).toBeVisible();
 });
 
 test('stacks the fleet chart under the map rather than beside it', async ({ page }) => {
