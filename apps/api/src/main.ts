@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { IpLimiter } from './abuse/ip-limiter';
 import { checkWriteOrigin } from './abuse/origin-check';
 import { getFleetActuals } from './forecast/get-fleet-actuals';
+import { getFleetForecast } from './forecast/get-fleet-forecast';
 import { getSiteForecast } from './forecast/get-site-forecast';
 import { getSiteSeries } from './forecast/get-site-series';
 import { parseGatewayEvent } from './http/gateway-event';
@@ -116,7 +117,7 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter: `querySeriesRange`, for the three read routes and
+ * The `cumulo-series` adapter: `querySeriesRange`, for the four read routes and
  * nothing else.
  *
  * This function neither writes a series point nor deletes one — forecasts are
@@ -196,9 +197,9 @@ const webOrigins = parseWebOrigins(env.CUMULO_WEB_ORIGINS);
  *
  * Applied per route rather than as a blanket middleware, because *which* routes
  * are limited is a deliberate list and not a default. The three writes, the
- * span-capped series read and the fleet-actuals fan-out are limited: each one
+ * span-capped series read and the two fleet fan-outs are limited: each one
  * either changes state, reads a range whose cost a caller chooses, or issues one
- * Query per fleet site. `GET /v1/sites`, `GET …/forecast`,
+ * Query per fleet site. `GET /v1/sites`, `GET /v1/sites/{siteId}/forecast`,
  * `/openapi.json` and the two `/docs` routes are not: they are the pages a
  * reviewer clicks through, their cost per request is fixed and small, and the
  * stage throttle already bounds them. A limiter that made reading the docs
@@ -287,7 +288,7 @@ const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', imp
  *
  * The `guardedWrite`/`rateLimited` wrappers are the abuse protections, and this
  * table is the only place that says which routes carry them. Reading down the
- * `handle` column is how a reviewer answers "what is limited?" — the five
+ * `handle` column is how a reviewer answers "what is limited?" — the six
  * wrapped routes and no others. The route keys the gateway throttles separately
  * (`infra/api/gateway.tf`, ADR 0006 layer 2) are the three `guardedWrite` ones,
  * and those two lists have to be edited together.
@@ -347,6 +348,18 @@ export const routes: readonly Route[] = [
     handle: (request) =>
       rateLimited(request, () =>
         getFleetActuals({ sites, series, now, log: jsonLineLog }, request),
+      ),
+  },
+  {
+    method: 'GET',
+    segments: ['v1', 'fleet', 'forecast'],
+    // Limited for the reason the route above is: the caller picks nothing about
+    // its cost and the *fleet* picks all of it, one Query per site on every
+    // dashboard load. The two fleet routes are one page view's pair, so a
+    // limiter on one of them only would be a bound on half the load.
+    handle: (request) =>
+      rateLimited(request, () =>
+        getFleetForecast({ sites, series, now, log: jsonLineLog }, request),
       ),
   },
   // The self-documenting half of the API (ADR 0005): the document, the page
