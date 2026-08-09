@@ -1,5 +1,5 @@
 import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
-import { useId, useState, type ReactElement } from 'react';
+import { useId, useMemo, useState, type ReactElement } from 'react';
 
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
@@ -19,6 +19,11 @@ import {
   SUBTITLE_WITH_ACTUALS,
   windowLabel,
 } from './fleet-panel-copy';
+import {
+  EMPTY_FLEET_AGGREGATE,
+  fleetChartAggregate,
+  type FleetChartAggregate,
+} from './fleet-series';
 import { RangePicker } from './range-picker';
 import { siteOverlaySeries } from './site-overlay';
 
@@ -143,6 +148,23 @@ const combineFleetQueries = (
 
   return { status: 'ready', data: { forecasts: forecasts.data, actuals: actualsState } };
 };
+
+/** No readings is what a failed actuals read leaves the chart: a forecast, and no second series. */
+const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
+  actuals.kind === 'readings' ? actuals.readings : [];
+
+/**
+ * What the chart draws, for whichever state the two reads are in.
+ *
+ * The non-ready arms answer with the one shared empty aggregate rather than a
+ * fresh one, so the chart is handed the same points array on every render of a
+ * panel that is loading or has failed, exactly as the ready arm is handed the
+ * same one by the memo below.
+ */
+const chartAggregateOf = (state: QueryState<FleetSeries>): FleetChartAggregate =>
+  state.status === 'ready'
+    ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals))
+    : EMPTY_FLEET_AGGREGATE;
 
 /**
  * The selected site's forecasts, or an empty answer when nothing is selected.
@@ -277,6 +299,28 @@ export const FleetPanel = ({
     { enabled: selectionReady },
   );
 
+  /*
+   * The fleet's answer, and the sum drawn from it — both memoized, and both on
+   * the two query states' identities.
+   *
+   * `useFleetQuery` holds its state in `useState`, so each of these values is
+   * one object per state transition and unchanged in between; a render caused by
+   * anything else — the range picker, a retry counter, the dashboard's
+   * once-a-second poll during add-a-site — leaves both dependencies untouched
+   * and both memos intact. That poll is why this is measured rather than
+   * decorative (`react.md` rule 2 asks for exactly that before a `useMemo`):
+   * without it, a 60-site fan-out was re-summed and re-joined every second while
+   * a reader watched their new site generate (#293).
+   *
+   * The first memo is not about cost — combining two query states is three
+   * comparisons — but about being an honest dependency for the second. Its
+   * result is a fresh object per render otherwise, which would defeat the memo
+   * that reads it; stabilizing it at its source is what `react.md` rule 2 asks
+   * for instead of trimming a dependency array.
+   */
+  const fleet = useMemo(() => combineFleetQueries(forecasts, actuals), [forecasts, actuals]);
+  const aggregate = useMemo(() => chartAggregateOf(fleet), [fleet]);
+
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
   const retryFleet = (): void => {
     setFleetAttempt((previous) => previous + 1);
@@ -344,7 +388,7 @@ export const FleetPanel = ({
       </header>
       {sites.length === 0
         ? emptyFleetBody(context)
-        : fleetBody(combineFleetQueries(forecasts, actuals), context, retryFleet)}
+        : fleetBody(fleet, aggregate, context, retryFleet)}
     </section>
   );
 };

@@ -1,16 +1,11 @@
-import {
-  aggregateFleetActuals,
-  aggregateFleetForecast,
-  type Forecast,
-  type GenerationReading,
-} from '@cumulo/shared';
+import type { Forecast, GenerationReading } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
 import type { ChartOverlaySeries, ForecastChartPoint } from '../charts/ForecastChart';
 import type { QueryState } from '../data/use-fleet-query';
 import type { ChartCopy } from './fleet-panel-copy';
-import { joinFleetSeries, minimumContributingSites } from './fleet-series';
+import { EMPTY_FLEET_AGGREGATE, type FleetChartAggregate } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import {
   aggregatedFromCaption,
@@ -195,10 +190,6 @@ const overlayNote = (overlay: OverlayState, onRetry: () => void): ReactElement |
 const actualsNote = (actuals: FleetActualsState, onRetry: () => void): ReactElement | null =>
   actuals.kind === 'failed' ? partialSeriesNote(FLEET_ACTUALS_FAILURE_NOTICE, onRetry) : null;
 
-/** No readings is what a failed actuals read leaves the chart: a forecast, and no second series. */
-const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
-  actuals.kind === 'readings' ? actuals.readings : [];
-
 /**
  * The one arrangement every state renders: what the panel says, then the chart.
  *
@@ -226,7 +217,7 @@ const bodyLayout = (
  * never spent.
  */
 export const emptyFleetBody = (context: FleetChartContext): ReactElement =>
-  bodyLayout(<PanelEmpty message={EMPTY_FLEET_MESSAGE} />, [], context);
+  bodyLayout(<PanelEmpty message={EMPTY_FLEET_MESSAGE} />, EMPTY_FLEET_AGGREGATE.points, context);
 
 /** What a state says, and what it leaves the chart to draw — the only two things that vary. */
 interface FleetBodyContent {
@@ -234,13 +225,16 @@ interface FleetBodyContent {
   readonly points: readonly ForecastChartPoint[];
 }
 
-const readyContent = (data: FleetSeries, context: FleetChartContext): FleetBodyContent => {
-  const forecastPoints = aggregateFleetForecast(data.forecasts);
-  // Joined before anything is decided: what the chart would draw is the union of
-  // both series' hours (`fleet-series.ts`), and it is that union — not the
-  // forecast alone — that "nothing to show" has to be a statement about.
-  const points = joinFleetSeries(forecastPoints, aggregateFleetActuals(readingsOf(data.actuals)));
-
+const readyContent = (
+  data: FleetSeries,
+  { points, minContributingSites }: FleetChartAggregate,
+  context: FleetChartContext,
+): FleetBodyContent => {
+  // The join is asked about before anything is decided: what the chart would
+  // draw is the union of both series' hours (`fleet-series.ts`), and it is that
+  // union — not the forecast alone — that "nothing to show" has to be a
+  // statement about. It happened before this function was called, in the
+  // panel's memo, which is the only thing #293 moved about it.
   if (points.length === 0) {
     return { notice: <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />, points };
   }
@@ -248,7 +242,7 @@ const readyContent = (data: FleetSeries, context: FleetChartContext): FleetBodyC
   return {
     notice: (
       <>
-        {completenessNote(minimumContributingSites(forecastPoints), context.siteCount)}
+        {completenessNote(minContributingSites, context.siteCount)}
         {actualsNote(data.actuals, context.onRetryActuals)}
         {overlayNote(context.overlay, context.onRetryOverlay)}
       </>
@@ -259,11 +253,19 @@ const readyContent = (data: FleetSeries, context: FleetChartContext): FleetBodyC
 
 const stateContent = (
   state: QueryState<FleetSeries>,
+  aggregate: FleetChartAggregate,
   context: FleetChartContext,
   onRetry: () => void,
 ): FleetBodyContent => {
+  // A state with no answer in it draws no points, and takes them from the
+  // aggregate anyway: what a non-ready state is handed is
+  // `EMPTY_FLEET_AGGREGATE` by construction, so the chart gets the same array
+  // every render here too rather than a fresh empty literal per state.
   if (state.status === 'loading') {
-    return { notice: <PanelPending label={LOADING_FLEET_FORECAST_LABEL} />, points: [] };
+    return {
+      notice: <PanelPending label={LOADING_FLEET_FORECAST_LABEL} />,
+      points: aggregate.points,
+    };
   }
   if (state.status === 'failed') {
     // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
@@ -273,18 +275,30 @@ const stateContent = (
       notice: (
         <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
       ),
-      points: [],
+      points: aggregate.points,
     };
   }
-  return readyContent(state.data, context);
+  return readyContent(state.data, aggregate, context);
 };
 
+/**
+ * The body, over an aggregate the caller has already computed.
+ *
+ * The aggregate arrives as a parameter rather than being summed here, and the
+ * two arguments are not a redundancy: `state` is the two source reads and what
+ * the panel has to *say* about them, `aggregate` is what a chart draws, and the
+ * second is memoized by `FleetPanel` because a `useMemo` cannot live in a plain
+ * builder (#293). A caller that passes an aggregate not derived from this
+ * `state` would draw one answer under another's notice, so the pairing is the
+ * component's to keep — which is exactly where the hook that keeps it lives.
+ */
 export const fleetBody = (
   state: QueryState<FleetSeries>,
+  aggregate: FleetChartAggregate,
   context: FleetChartContext,
   onRetry: () => void,
 ): ReactElement => {
-  const { notice, points } = stateContent(state, context, onRetry);
+  const { notice, points } = stateContent(state, aggregate, context, onRetry);
 
   return bodyLayout(notice, points, context);
 };
