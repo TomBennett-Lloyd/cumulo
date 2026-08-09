@@ -41,7 +41,8 @@ export const openApiDocument: OpenApiDocument = {
     version: '1.0.0',
     description: [
       'Read and manage the sites in a small residential solar fleet, and read the',
-      'stored per-site forecasts and measured actuals.',
+      'stored per-site forecasts and simulated actuals (the demo fleet has no real',
+      'telemetry).',
       '',
       '**Attribution.** Forecast data is derived from weather published by Open-Meteo',
       'under CC BY 4.0. Every response carrying forecast data carries an `attribution`',

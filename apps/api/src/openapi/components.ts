@@ -2,6 +2,7 @@ import {
   apiErrorSchema,
   attributionSchema,
   createSiteInputSchema,
+  fleetActualsResponseSchema,
   fleetSiteSchema,
   forecastSchema,
   generationReadingSchema,
@@ -36,8 +37,8 @@ import type { SchemaObject } from './openapi-types';
  */
 
 /**
- * The named map `components.schemas` is built from nine schemas in
- * `@cumulo/shared`: six domain schemas, and the three response wrappers composed
+ * The named map `components.schemas` is built from ten schemas in
+ * `@cumulo/shared`: six domain schemas, and the four response wrappers composed
  * from them.
  *
  * The wrappers live in the shared package rather than here because they are a
@@ -88,6 +89,19 @@ const componentSources = [
     ].join(' '),
   },
   {
+    name: 'FleetActualsResponse',
+    schema: fleetActualsResponseSchema,
+    description: [
+      'Every fleet site’s actuals over one look-back window, in one array rather than',
+      'one per site — the point of the endpoint is that a dashboard reads the whole',
+      'fleet in a single request. **These readings are simulated**: the demo fleet has',
+      'no inverters, so they are synthesized from the stored physics forecast. The shape',
+      'is the shape a real meter would fill, which is why the simulation is stated here',
+      'and not encoded as a field. Carries the Open-Meteo attribution that must be',
+      'displayed alongside them.',
+    ].join(' '),
+  },
+  {
     name: 'FleetSite',
     schema: fleetSiteSchema,
     description:
@@ -109,8 +123,13 @@ const componentSources = [
   {
     name: 'GenerationReading',
     schema: generationReadingSchema,
-    description:
-      'One measured AC power reading for one site at one valid time — the "actual" a forecast is scored against.',
+    description: [
+      'One AC power reading for one site at one valid time — the "actual" a forecast is',
+      'scored against. **Simulated in this deployment**, and there is deliberately no',
+      'field saying so: the demo fleet has no telemetry, so every reading is synthesized',
+      'from the stored physics forecast for the same hour, and the shape is the one a',
+      'real meter would fill either way.',
+    ].join(' '),
   },
   {
     name: 'ListSitesResponse',
@@ -134,7 +153,7 @@ const componentSources = [
     name: 'SiteSeriesResponse',
     schema: siteSeriesResponseSchema,
     description: [
-      'Forecasts and measured actuals over one window, split from a single stored',
+      'Forecasts and actuals over one window, split from a single stored',
       'series so the two can be plotted against each other, with the Open-Meteo',
       'attribution that must be displayed alongside them.',
     ].join(' '),

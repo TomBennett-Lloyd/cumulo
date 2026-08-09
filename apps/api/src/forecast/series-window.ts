@@ -1,11 +1,12 @@
 import { utcIsoTimestampSchema, type UtcIsoTimestamp } from '@cumulo/shared';
 
 /**
- * Arithmetic on the read windows the two series routes query over.
+ * Arithmetic on the read windows this folder's routes query over.
  *
- * Extracted from the handlers because both need it and both would be wrong
- * together if it changed (`docs/standards/structure.md` rule 7): one turns a
- * horizon in hours into the far end of a window, the other measures a
+ * Extracted from the handlers because they all need it and would be wrong
+ * together if it changed (`docs/standards/structure.md` rule 7): two turn a
+ * horizon in hours into the far end of a window — forward for the forecast
+ * route, backward for the fleet look-back — and the third measures a
  * caller-supplied window to decide whether it is affordable to read.
  */
 
@@ -29,6 +30,19 @@ export const hoursAfter = (from: UtcIsoTimestamp, hours: number): UtcIsoTimestam
   utcIsoTimestampSchema.parse(
     new Date(Date.parse(from) + hours * MS_PER_HOUR).toISOString().replace(/\.\d{3}Z$/, 'Z'),
   );
+
+/**
+ * `from` shifted *backwards* by `hours` — the look-back the fleet-actuals route
+ * opens its window at, where the forecast route opens one forward.
+ *
+ * Defined in terms of {@link hoursAfter} rather than beside it, because the two
+ * are one piece of arithmetic read in two directions: the normalization that
+ * makes the result a legal sort-key prefix is the part that would be wrong in
+ * both if it were wrong in either (`docs/standards/structure.md` rule 7). A
+ * second copy of the `.replace` would be a second chance to drop it.
+ */
+export const hoursBefore = (from: UtcIsoTimestamp, hours: number): UtcIsoTimestamp =>
+  hoursAfter(from, -hours);
 
 /**
  * The width of the window `from`…`to` in hours, fractional and signed.

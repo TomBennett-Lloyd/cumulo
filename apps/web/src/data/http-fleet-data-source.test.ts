@@ -277,24 +277,48 @@ describe('HttpFleetDataSource fleet fan-out', () => {
     expect(expectFailure(await source.fleetForecasts(24)).code).toBe('forbidden');
     expect(recorder.calls).toHaveLength(1);
   });
+});
 
-  it('answers fleet actuals with an empty series and spends no request at all', async () => {
-    const { source, recorder } = sourceAnswering(() => jsonResponse({ sites: [] }, 200));
+describe('HttpFleetDataSource fleet actuals', () => {
+  const actualsBody = {
+    actuals: [{ siteId: SITE_A, validTime: '2026-08-01T11:00:00Z', acPowerKw: 2.2 }],
+    attribution: openMeteoAttribution,
+  };
 
-    expect(expectValue(await source.fleetActuals(168))).toEqual([]);
-    expect(recorder.calls).toHaveLength(0);
+  it('fleetActuals unwraps the actuals array from the fleet endpoint', async () => {
+    const { source, recorder } = sourceAnswering(() => jsonResponse(actualsBody, 200));
+
+    const actuals = expectValue(await source.fleetActuals(24));
+
+    expect(actuals).toEqual(actualsBody.actuals);
+    // One request, and the fleet route rather than a per-site fan-out: this is
+    // the read the API's per-IP limiter meters, so its count is the behaviour.
+    expect(recorder.calls.map((call) => call.url)).toEqual([
+      `${BASE_URL}/v1/fleet/actuals?hours=24`,
+    ]);
+    expect(recorder.calls[0]?.init?.method).toBe('GET');
+  });
+
+  it('maps a 429 from the metered fleet route to rate-limited', async () => {
+    const { source } = sourceAnswering(() =>
+      jsonResponse({ code: 'rate_limited', message: 'slow down' }, 429),
+    );
+
+    expect(expectFailure(await source.fleetActuals(168)).code).toBe('rate-limited');
   });
 
   /**
    * Pinned as a whole object rather than field by field: a source that grows a
-   * third capability, or quietly flips one to `true` without the endpoint that
-   * would justify it, fails here rather than letting the views promise history
-   * and measured output this transport cannot supply.
+   * third capability, or quietly flips one without the endpoint that would
+   * justify it, fails here rather than letting the views promise something this
+   * transport cannot supply. Both halves are earned above — actuals by the
+   * fleet route in this block, the disclaimed look-back by the horizon-only
+   * fan-out in the block before it.
    */
-  it('disclaims both fleet-level capabilities, matching the horizon-only fan-out and empty actuals above', () => {
-    const { source } = sourceAnswering(() => jsonResponse({ sites: [] }, 200));
+  it('claims fleet actuals and disclaims the fleet look-back', () => {
+    const { source } = sourceAnswering(() => jsonResponse(actualsBody, 200));
 
-    expect(source.capabilities).toEqual({ fleetLookback: false, fleetActuals: false });
+    expect(source.capabilities).toEqual({ fleetLookback: false, fleetActuals: true });
   });
 });
 

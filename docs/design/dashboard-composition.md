@@ -164,21 +164,27 @@ announce. Both were answers to a state the page can no longer be in.
 
 ## Capability honesty is structural
 
-The fleet panel renders a look-back picker, and says the words "measured output", **only when the
+The fleet panel renders a look-back picker, and says the words "simulated actuals", **only when the
 source it holds can actually answer for them** — `dataSource.capabilities.fleetLookback` and
 `.fleetActuals`, declared per implementation on `FleetDataSource`.
 
-This settles a review finding from #150. The demo source has genuine history and genuine measured
-output; the HTTP source has neither — its fan-out reaches forward only, and no actuals producer
-exists (#16/#18 territory). Copy that promised history was therefore right half the time, and a
-range control that rendered identical charts in live mode was worse than absent.
+This settles a review finding from #150. The demo source has genuine history and its own actuals;
+the HTTP source's fan-out reaches forward only, and its actuals come from the forecast service's
+own producer (#264), which synthesises the fleet's past hours rather than metering an inverter.
+That is why the copy says "simulated" and never "measured": the numbers are real output of a real
+model, and nothing on the page should let them be read as a reading. Copy that promised history
+was right half the time, and a range control that rendered identical charts in live mode was worse
+than absent.
 
 The fix is structural rather than editorial because the editorial version does not hold: prose
 gets rewritten by someone who only ever ran the demo. Two whole copy arms sit side by side in
-`FleetPanel.tsx` so the rule is auditable by reading them — the phrase "measured output" appears
+`FleetPanel.tsx` so the rule is auditable by reading them — the phrase "simulated actuals" appears
 only in the arm a capable source reaches, _including in the chart's accessible name_, which is
-the copy easiest to leave promising something the data cannot show. When either capability
-becomes true for the HTTP source, one boolean flips and the honest surface follows.
+the copy easiest to leave promising something the data cannot show. The two flags move
+independently, and #264 puts a source in the combination that previously had none — actuals
+without a look-back — so the window the chart names has a third answer beside "24 h range" and
+"next 24 h": "past 24 h and next 24 h", because a plot carrying past hours reaches behind the
+horizon whether or not a picker exists.
 
 ## Two credits, and why that is not one too many
 

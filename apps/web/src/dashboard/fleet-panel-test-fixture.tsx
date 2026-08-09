@@ -151,9 +151,54 @@ export const FAILED_FLEET: StubFleet = {
   },
 };
 
+/**
+ * The forecast fan-out answers; the one metered actuals request does not.
+ *
+ * The half of the panel's failure surface that had no fixture until #264's review, which is a
+ * large part of why the panel answered it by withdrawing the whole chart under the forecast's
+ * name. The two reads are two requests over two windows, so this is an ordinary state and not a
+ * contrived one.
+ */
+export const ACTUALS_FAILED_FLEET: StubFleet = {
+  ...FULL_FLEET,
+  actuals: {
+    kind: 'error',
+    error: { code: 'network', message: 'fleetActuals range=24: upstream timed out' },
+  },
+};
+
+/**
+ * Forecasts strictly after the actuals, sharing no hour with them — the shape the deployed source
+ * produces and the demo source never has.
+ *
+ * Live, `fleetForecasts` fans out over `/v1/sites/{id}/forecast`, which serves hours *ahead* of the
+ * clock, while `fleetActuals` reads `[now−24h, now)`. The two windows are disjoint for every value
+ * of the clock, so a fixture whose forecasts and actuals share hours — {@link FULL_FLEET}, and
+ * every fixture here before this one — cannot tell a chart that keeps the actuals from one that
+ * silently drops every last one of them (#264).
+ *
+ * The two halves are deliberately different sizes of number as well as different hours, so a row
+ * from one window cannot be mistaken for a row from the other in an assertion.
+ */
+export const DISJOINT_WINDOW_FLEET: StubFleet = {
+  forecasts: ready([
+    forecastAt(SITE_A_ID, 12, 2, band(1, 3)),
+    forecastAt(SITE_B_ID, 12, 4, band(3, 6)),
+    forecastAt(SITE_A_ID, 13, 3, band(2, 4)),
+    forecastAt(SITE_B_ID, 13, 5, band(4, 7)),
+  ]),
+  actuals: ready([
+    readingAt(SITE_A_ID, 10, 1.5),
+    readingAt(SITE_B_ID, 10, 3.5),
+    readingAt(SITE_A_ID, 11, 2),
+    readingAt(SITE_B_ID, 11, 4),
+  ]),
+  siteForecastError: null,
+};
+
 const FULL_CAPABILITIES: FleetSourceCapabilities = { fleetLookback: true, fleetActuals: true };
 
-/** What the deployed HTTP source can answer: a forward horizon, and no measurements at all. */
+/** Neither fleet-level capability: a forward horizon only, and no actuals at all. */
 export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
   fleetLookback: false,
   fleetActuals: false,
@@ -240,8 +285,8 @@ export class CountingFleetSource implements FleetDataSource {
     );
   };
 
-  // The overlay is the site's median and nothing else, so measured output is never asked for. A
-  // throw rather than an empty answer: it is a bug worth a loud crash, not a state to render.
+  // The overlay is the site's median and nothing else, so the site's actuals are never asked for.
+  // A throw rather than an empty answer: it is a bug worth a loud crash, not a state to render.
   readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
     throw new Error('CountingFleetSource: the fleet panel must not call siteActuals');
   };

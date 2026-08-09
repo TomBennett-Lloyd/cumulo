@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { openMeteoAttribution } from './attribution';
 import {
+  fleetActualsResponseSchema,
   listSitesResponseSchema,
   siteForecastResponseSchema,
   siteSeriesResponseSchema,
@@ -103,5 +104,29 @@ describe('siteSeriesResponseSchema', () => {
         attribution: openMeteoAttribution,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('fleetActualsResponseSchema', () => {
+  it('accepts fleet-wide actuals carrying the attribution as a peer of the data it credits', () => {
+    const result = fleetActualsResponseSchema.safeParse({
+      actuals: [generationReading],
+      attribution: openMeteoAttribution,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an empty actuals array — a fleet whose window holds no readings is a 200', () => {
+    expect(
+      fleetActualsResponseSchema.safeParse({ actuals: [], attribution: openMeteoAttribution })
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects a body missing attribution', () => {
+    expect(fleetActualsResponseSchema.safeParse({ actuals: [generationReading] }).success).toBe(
+      false,
+    );
   });
 });

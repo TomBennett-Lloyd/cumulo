@@ -1,4 +1,5 @@
 import {
+  fleetActualsResponseSchema,
   fleetSiteSchema,
   listSitesResponseSchema,
   siteForecastResponseSchema,
@@ -274,16 +275,21 @@ export class HttpFleetDataSource implements FleetDataSource {
   };
 
   /**
-   * Both false, and neither is a shortcut this source could choose to undo:
-   * `fleetForecasts` below spends the range as a forward horizon because the
-   * only unmetered fleet-wide route serves future hours (see the comment there),
-   * and `fleetActuals` is structurally empty because nothing in the deployed
-   * pipeline writes readings (see the comment there). Closing either needs a
-   * fleet-aggregate endpoint or an actuals producer, not a change here.
+   * One false, one true, and the false one is not a shortcut this source could
+   * choose to undo: `fleetForecasts` below spends the range as a forward
+   * horizon because the only unmetered fleet-wide read of forecasts is a
+   * per-site fan-out over future hours (see the comment there), so offering a
+   * look-back picker would move the actuals' window and leave the forecast half
+   * where it was. Closing that needs a fleet-aggregate forecast endpoint, not a
+   * change here.
+   *
+   * `fleetActuals` is true because the fleet's readings now both exist and
+   * arrive in one request: the forecast service writes them and
+   * `GET /v1/fleet/actuals` serves them (#264, see the comment there).
    */
   readonly capabilities: FleetSourceCapabilities = {
     fleetLookback: false,
-    fleetActuals: false,
+    fleetActuals: true,
   };
 
   readonly listSites = async (): Promise<FleetSourceResult<readonly Site[]>> =>
@@ -349,8 +355,8 @@ export class HttpFleetDataSource implements FleetDataSource {
     // per site against a 30-per-60-seconds budget), and it serves future hours
     // only. So the fleet aggregate shows no history, and it is capped by how
     // far ahead the deployed pipeline has written — ~48 h — which means every
-    // range beyond that renders identically. Closing the gap needs either a
-    // fleet-aggregate endpoint or an actuals producer, not a change here (#148).
+    // range beyond that renders identically. Closing that gap needs a
+    // fleet-aggregate *forecast* endpoint, not a change here (#148).
     const sites = await this.listSites();
     if (sites.kind === 'error') {
       return sites;
@@ -375,20 +381,31 @@ export class HttpFleetDataSource implements FleetDataSource {
   };
 
   /**
-   * Always empty, and deliberately without a request.
+   * The whole fleet's readings, in one request — never a fan-out.
    *
-   * Nothing in the deployed pipeline writes generation readings — the API's
-   * IAM policy does not even grant `PutItem` on `cumulo-series` — so every
-   * site's actuals are `[]` today. Fanning out to discover that would spend
-   * one metered `/series` request per site (the only route that carries
-   * actuals) to learn nothing, and on a 60-site fleet that alone would trip the
-   * per-IP limiter's 30-per-60-seconds block.
+   * The forecast service's simulated-actuals producer writes generation
+   * readings from each site's stored physics forecast (#264), and
+   * `GET /v1/fleet/actuals` serves every site's readings over the look-back in
+   * a single response. So unlike {@link fleetForecasts} above, this member
+   * spends `range` as the look-back {@link RangeHours} describes.
    *
-   * Typed as the interface's member and implemented with no parameter at all:
-   * callers still pass a range (the contract is unchanged), and the body has no
-   * ignored binding to explain away. The window cannot matter when there is
-   * nothing to window.
+   * That route *is* metered by the API's per-IP limiter, and one request per
+   * range selection is the point of it: assembling the same answer in the
+   * browser would spend one metered `/series` request per site (the only
+   * per-site route that carries actuals), and on a 60-site fleet that alone
+   * would trip the limiter's 30-per-60-seconds block. Which is why the fleet's
+   * actuals are read here and must never be re-pointed at `/series`.
    */
-  readonly fleetActuals: FleetDataSource['fleetActuals'] = () =>
-    Promise.resolve({ kind: 'ok', value: [] });
+  readonly fleetActuals = async (
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
+    mapOk(
+      await this.requestJson(
+        `fleetActuals (${String(range)}h)`,
+        `${this.baseUrl}/v1/fleet/actuals?hours=${String(range)}`,
+        fleetActualsResponseSchema,
+        GET_INIT,
+      ),
+      (payload) => payload.actuals,
+    );
 }
