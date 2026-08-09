@@ -289,14 +289,19 @@ export const SitePopoverCard = ({
        * Only give focus back if this card still has it to give.
        *
        * A leaving card is not entitled to move a focus that is no longer its
-       * own. Two cases make that concrete and both are ordinary. A reader who
-       * tabs out of the card and then dismisses it from somewhere else is
-       * exactly where they chose to be, and a restore would yank them back to a
-       * control they had already left. And pressing marker B while site A's card
-       * is open moves focus to marker B *before* the commit — so A's cleanup, if
-       * it restored unconditionally, would put focus back on marker A, B's mount
-       * effect would then capture marker A as its opener, and closing B would
-       * strand the reader on the marker of a site they stopped looking at two
+       * own. Three cases make that concrete, and since #284 D14 the first is the
+       * ordinary one rather than an edge. **The reader was never inside this
+       * card at all**: their landing was the picker, so every dismissal that
+       * does not go through a control in here — another marker, a row, the
+       * search — finds the focus somewhere this card never held it, and a
+       * restore would drag them back to the map from a live control. **The
+       * reader left of their own accord**, tabbing or clicking away and then
+       * dismissing from there, which is the same answer for the same reason.
+       * And **pressing marker B while site A's card is open** moves focus to
+       * marker B *before* the commit — so A's cleanup, if it restored
+       * unconditionally, would put focus back on marker A, B's mount effect
+       * would then capture marker A as its opener, and closing B would strand
+       * the reader on the marker of a site they stopped looking at two
        * interactions ago.
        *
        * "Still has it" is `body` or inside this card. `body` is the usual answer

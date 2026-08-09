@@ -141,10 +141,14 @@ what makes a creation land correctly without a special case anywhere: the dialog
 focus on the add-site control, and the new site's card — mounting in the same commit — captures
 _that_ as its opener before moving the reader on to the picker.
 
-`react.md`'s focus paragraphs own the rule — two of them since #284 D14, one for _whether_ focus
-moves and one for _where_ it lands. `Dashboard.focus.test.tsx` and
-`map/SitePopoverCard.test.tsx` pin it as far as `document.activeElement` goes; the ring a reader
-actually sees, and a deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.
+`react.md`'s focus paragraphs own the rule, four of them for the four bullets above — "focus
+follows the reader" owns the second bullet (_whether_ focus moves), "where the focus lands" owns
+the first (_which_ element, and what the revision costs), and the third bullet is owned by two
+together: "a surface that leaves owes a landing" for the capture-and-restore, and "a surface that
+never took the focus returns none" for the guard that has answered most dismissals since #284 D14.
+The fourth bullet is the modal's own paragraph, "a modal owes its own landing". `Dashboard.focus.test.tsx` and
+`map/SitePopoverCard.test.tsx` pin all of it as far as `document.activeElement` goes; the ring a
+reader actually sees, and a deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.
 
 ## The fleet panel is never hidden, and always paid for
 

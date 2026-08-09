@@ -257,7 +257,7 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     expect(document.activeElement).toBe(markerB);
   });
 
-  it('leaves focus alone when the reader moved it out of the card before closing', async () => {
+  it('leaves focus where the reader themselves moved it, rather than on the opener', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
     renderDashboard(dataSource);
