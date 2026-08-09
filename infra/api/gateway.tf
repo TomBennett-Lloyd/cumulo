@@ -21,8 +21,12 @@ resource "aws_apigatewayv2_api" "api" {
   cors_configuration {
     # Wide open, deliberately and temporarily. There is no real web origin to
     # allow yet: #21 owns the domain, and until it lands the demo is served from
-    # whatever host the operator or a reviewer happens to use. **Tightening this
-    # to the real origin is #21's, and per-route/per-IP limiting is #29's** —
+    # whatever host the operator or a reviewer happens to use — with one
+    # exception that changes nothing here, since it is admitted through
+    # `web_origins` in variables.tf and not through this list:
+    # .github/workflows/deploy-pages.yml's header owns #285's interim hosting
+    # arrangement and its teardown. **Tightening this to the real origin is
+    # #21's, and per-route/per-IP limiting is #29's** —
     # ADR 0005 draws that boundary explicitly and this comment is the marker it
     # asked for. `allow_credentials` stays false, which is not optional
     # alongside `*`: the two together are rejected by every browser, and the API

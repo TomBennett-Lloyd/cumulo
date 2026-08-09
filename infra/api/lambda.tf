@@ -106,7 +106,9 @@ resource "aws_lambda_function" "api" {
       # computed per request from the gateway's domain name, so the Swagger UI
       # this function serves needs no entry. variables.tf carries the rest: what
       # this defends against, what it deliberately does not, and why #144's and
-      # #21's origins arrive as tfvars rather than as edits to this file.
+      # #21's origins arrive as tfvars rather than as edits to this file — as
+      # does the one that arrives before both of them, whose arrangement and
+      # teardown .github/workflows/deploy-pages.yml's header owns (#285).
       #
       # An empty string rather than an absent variable: the value is always
       # present and always this variable, so "not configured" is one shape at

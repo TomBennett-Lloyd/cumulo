@@ -1,0 +1,202 @@
+name: Deploy Pages (interim)
+
+# INTERIM HOSTING — this whole file is temporary (#285).
+#
+# #144's web stack is the hosting plan of record: an S3 origin behind a
+# CloudFront distribution, deployed by `deploy-web.yml`, with `infra/web/`
+# owning every setting of the edge. That stack cannot be applied yet — the AWS
+# account is awaiting verification — and a demo nobody can open is not a demo,
+# so until it ships the same `apps/web` build is published to GitHub Pages from
+# here. Nothing about this file argues that Pages is the right home; it argues
+# that a URL today is worth more than an empty one, and that the cost of undoing
+# it is the steps below.
+#
+# TEARDOWN — run these when #144's distribution is live, and this arrangement is
+# gone in full:
+#   1. Delete this file.
+#   2. Remove the Pages origin from `web_origins` in the operator's gitignored
+#      `infra/api/api.auto.tfvars`, and re-apply the `infra/api` stack.
+#   3. Delete the #285 paragraph from the `web_origins` comment block in
+#      `infra/api/api.auto.tfvars.example`. That file is committed, and its
+#      paragraph points at this header — step 1 leaves it pointing at nothing.
+#   4. Delete the five one-line interim hedges under "pointer sites" below —
+#      the step 4 group. They only exist to stop a reader taking the
+#      surrounding paragraph as current, and they cite this file, so step 1
+#      dangles every one of them.
+#   5. Point the README's Status demo link at the CloudFront URL — the web
+#      stack's "Phase B — apply, publish, and prove the edge" runbook in
+#      infra/README.md prints it.
+#   6. Disable Pages on the repository:
+#      `gh api -X DELETE repos/TomBennett-Lloyd/cumulo/pages`
+#
+# RESTATEMENT LEDGER (architecture.md rule 9). This header owns the interim
+# hosting story, and every other site that a teardown step has to visit is one
+# of two kinds — both listed here, because a step is only as complete as the
+# list it works from.
+#
+# Sites carrying the URL/origin literal. It is server-assigned by GitHub, so
+# nothing predicts it — it is read back and written down in exactly two places,
+# which is what steps 2 and 5 have to find: `README.md`'s Status demo link, and
+# the operator's gitignored `infra/api/api.auto.tfvars`.
+#
+# Pointer sites — six committed paragraphs whose claim about who populates
+# `web_origins`, or about where the demo is served from, this interim makes
+# false. None carries a copy of the URL; each names this file instead, and they
+# split by how much of the paragraph comes out:
+#
+#   Step 3, the whole paragraph: the #285 block in the `web_origins` comment of
+#   `infra/api/api.auto.tfvars.example`. It carries the `gh api … --jq
+#   .html_url` read-back command rather than the value — which is why it is
+#   here and not in the list above — and that command is meaningless once Pages
+#   is gone.
+#
+#   Step 4, a one-line hedge each: `infra/api/variables.tf` (the `web_origins`
+#   description), the `cors_configuration` comment in `infra/api/gateway.tf`,
+#   the `CUMULO_WEB_ORIGINS` comment in `infra/api/lambda.tf`, the
+#   `CUMULO_WEB_ORIGINS` paragraph in `apps/api/README.md`'s Configuration
+#   section, and the `web` stack paragraph in `infra/README.md`.
+#
+# Two files are deliberately absent from both lists, because neither is a
+# teardown site. `docs/adr/0006-demo-abuse-protection.md` makes the same kind of
+# claim about origins without citing this file: ADRs are immutable, and rule 9
+# exempts them.
+# The setup-block entry in `docs/tech-debt.md` counts this workflow among the
+# copies of a duplicated block, but writes that count as of the day it was
+# logged and quotes `deploy-web.yml` rather than this file, so deleting this one
+# leaves it true — and `/triage` empties that log on its own schedule anyway.
+#
+# The one literal this file does carry is the `/cumulo/` base path on the build
+# step below, and it dies with this file.
+#
+# NO AWS, AT ALL. `deploy-web.yml` is keyless because OIDC buys it an AWS role;
+# this workflow is keyless because it never talks to AWS in the first place —
+# no credential-configuring action, no role, no region. That absence was
+# verified the only way it currently can be — a grep for the AWS credentials
+# action's name over this file, run once on this PR's review and finding
+# nothing. No standing gate greps workflow text, so nothing re-checks it if a
+# later edit adds one; the next check is whoever next runs the grep, which is
+# why this sentence still declines to spell the name.
+#
+# The `id-token: write` permission below is GitHub Pages' own OIDC: `deploy-pages`
+# mints a token that attests to the artefact's origin for the Pages service.
+# Same permission name, a different service entirely, and no bearing on the AWS
+# trust policy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # deploy-web.yml's filter list, for its reasons — the same `apps/web`
+      # build, inlining the same workspace packages, off the same lockfile.
+      - apps/web/**
+      - packages/shared/**
+      - packages/ui/**
+      - pnpm-lock.yaml
+      - .github/workflows/deploy-pages.yml
+
+  # Needed twice over, for deploy-web.yml's two reasons (see the comment on its
+  # own `workflow_dispatch`): the first deploy after Pages is enabled has no
+  # push to ride, and a repo-variable change edits no file while changing the
+  # bundle that bakes it in. What a dispatch could do here is not borrow a
+  # credential — there is none to borrow — it is to build *another ref* and
+  # publish it to the live public demo URL. The control for that is the
+  # `github-pages` environment's deployment-branch policy, which is repository
+  # state and not anything this file can set or assert: restricted to `main`,
+  # the environment gate refuses this job on any other ref before a step of it
+  # runs. #285's Pages enablement step reads that policy back once Pages is on,
+  # which is the point at which it is known rather than assumed.
+  workflow_dispatch:
+
+# `pages: write` and `id-token: write` are what actions/deploy-pages requires;
+# `contents: read` is the checkout. Nothing here writes to the repository.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# deploy-web.yml's reasoning for serialising, unchanged by the change of host:
+# it makes the last *started* run the last to deploy, so two pushes minutes
+# apart cannot leave the site serving the older of the two.
+#
+# Still not `cancel-in-progress`, but for a Pages-shaped reason rather than
+# deploy-web's: there is no half-published state to leave behind here, because
+# Pages swaps one artefact atomically where an S3 sync uploads file by file.
+# The risk is later in the run — once `actions/deploy-pages` has handed the
+# deployment to the Pages service, cancelling the *run* does not cancel the
+# *deployment*, so an older one can still land after a newer one has published
+# and quietly win. A slow queue is the cheaper failure.
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Provisioning marker and hard requirement in one variable, which is why a
+    # job-level skip suffices here where deploy-web.yml needs a preflight step
+    # as well: that workflow gates on a *different* variable than the dangerous
+    # one, so a partially configured repo has to fail loudly inside the job.
+    # Here the dangerous variable is the gate. An empty `VITE_API_BASE_URL`
+    # builds the in-memory demo fleet — `apps/web/src/data/fleet-source-selection.ts`
+    # reads empty as "use the invented sites", right for local dev and every
+    # test, and catastrophic on a hosted page that then looks like it works.
+    # Unset means not-yet, and not-yet skips rather than publishing that.
+    if: vars.VITE_API_BASE_URL != ''
+    steps:
+      # Setup mirrors ci.yml and deploy-web.yml exactly — same actions, same
+      # versions, same .nvmrc-driven Node and pnpm store cache. What CI verified
+      # and what this workflow ships must be built by the same toolchain.
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `exec vite build`, not `pnpm --filter @cumulo/web build`, and the
+      # difference is not cosmetic: `pnpm run build -- --base=/cumulo/` passes
+      # the `--` through to the script, so vite receives `-- --base=/cumulo/`
+      # and treats the flag as a positional after its own separator. It exits 0
+      # and emits root-absolute `/assets/…` URLs — every one of which 404s under
+      # a project Pages path. Verified both ways locally before this line was
+      # written. `exec` hands the flag straight to the binary.
+      #
+      # What that costs is the package's own `build` script: `exec` runs the
+      # binary, so anything `@cumulo/web`'s script does around `vite build` is
+      # skipped here. Free today, because the script is exactly `vite build` and
+      # nothing else. The day it gains a step — a `tsc -b`, a codegen, an asset
+      # copy — this line silently stops running it and ships an artefact built
+      # differently from the one CI verified, which is the failure the setup
+      # comment above says must not happen. Whoever adds that step adds it here
+      # too, or replaces this line with a script that takes the base path as an
+      # argument rather than after a `--`.
+      #
+      # `/cumulo/` is this repository's project-Pages path (owner site + repo
+      # name). It is the one literal this file carries, and it dies with the
+      # file — CloudFront serves the SPA from the root, so #144 needs no base at
+      # all and `deploy-web.yml` passes none.
+      #
+      # No `pnpm verify` step, for deploy-web.yml's reason: every commit on main
+      # arrived through a PR whose CI ran the composite over this same tree.
+      - name: Build web (production, Pages base path)
+        run: pnpm --filter @cumulo/web exec vite build --base=/cumulo/
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      # Gates the artefact actually being shipped, not a near-identical one, for
+      # deploy-web.yml's reason: ci.yml runs this same script over a demo-mode
+      # build, and this is the copy a visitor downloads. The entry budget is a
+      # byte count over `dist/assets/`, independent of the base path.
+      - name: Assert bundle properties
+        run: bash .claude/scripts/check-web-bundle.sh
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/web/dist
+
+      - uses: actions/deploy-pages@v5
+        id: deployment
