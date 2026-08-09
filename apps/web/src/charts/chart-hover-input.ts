@@ -15,6 +15,16 @@ export interface PointerSampleParams {
   readonly clientX: number;
   /** The chart's `<svg>`, or `null` before it mounts. */
   readonly svg: SVGSVGElement | null;
+  /**
+   * The width of the space the marks are drawn in. Since #284 D15 the chart is
+   * drawn 1:1 with its measured width (`use-chart-width.ts`), so in the settled
+   * state this equals the rendered width and the conversion below is the
+   * identity — but only in the settled state, which is why it stays a parameter
+   * rather than becoming an assumption. On the frame before the first
+   * measurement, and wherever there is no `ResizeObserver` to measure with, the
+   * view box is `DEFAULT_CHART_WIDTH` inside a box of some other width, and this
+   * is what keeps the crosshair under the pointer there too.
+   */
   readonly viewBoxWidth: number;
   readonly scale: ChartScale;
 }
@@ -28,11 +38,12 @@ export interface PointerSample {
 }
 
 /**
- * Where the pointer is and which sample it is over. The chart scales to its
- * container, so a client-space x means nothing until it is divided by the
- * rendered width and multiplied back into view-box units — the space every mark
- * is drawn in. Nothing measurable to divide by (unmounted, or laid out at zero
- * width) is a `null` readout rather than a NaN crosshair.
+ * Where the pointer is and which sample it is over. A client-space x means
+ * nothing until it is divided by the rendered width and multiplied back into
+ * view-box units — the space every mark is drawn in — which the chart's own
+ * width makes a 1:1 conversion in the settled state and does not on the frames
+ * `viewBoxWidth` above describes. Nothing measurable to divide by (unmounted, or
+ * laid out at zero width) is a `null` readout rather than a NaN crosshair.
  *
  * Both halves come out of the one conversion, which is the point: the snapped
  * index and the continuous position are two readings of the same pointer, and

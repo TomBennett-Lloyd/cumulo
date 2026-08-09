@@ -48,10 +48,10 @@ describe('ForecastChart readout', () => {
     const svg = requireSvg(container);
 
     fireEvent.focus(svg);
-    expect(readout(container).textContent).toBe('06:00 — 0.9 Actual, 1.0 Median, 0.0–2.0 P10–P90');
+    expect(readout(container).textContent).toBe('06:00 — Actual 0.9, Median 1.0, P10–P90 0.0–2.0');
 
     fireEvent.keyDown(svg, { key: 'ArrowRight' });
-    expect(readout(container).textContent).toBe('09:00 — 3.8 Actual, 4.0 Median, 3.0–5.0 P10–P90');
+    expect(readout(container).textContent).toBe('09:00 — Actual 3.8, Median 4.0, P10–P90 3.0–5.0');
 
     fireEvent.keyDown(svg, { key: 'Escape' });
     expect(readout(container).textContent).toBe('');
@@ -80,7 +80,7 @@ describe('ForecastChart readout', () => {
     fireEvent.focus(requireSvg(container));
 
     // An absent row says "not modelled", spoken as well as drawn.
-    expect(readout(container).textContent).toBe('06:00 — 0.9 Actual, 1.0 Median');
+    expect(readout(container).textContent).toBe('06:00 — Actual 0.9, Median 1.0');
   });
 
   it('an unmeasured hour announces without a measured row, not as bare punctuation', () => {
@@ -95,7 +95,7 @@ describe('ForecastChart readout', () => {
 
     const announced = readout(container).textContent;
 
-    expect(announced).toBe('18:00 — 2.0 Median, 1.0–3.0 P10–P90');
+    expect(announced).toBe('18:00 — Median 2.0, P10–P90 1.0–3.0');
     expect(announced).not.toContain('— —');
     expect(announced).not.toContain('Actual');
   });

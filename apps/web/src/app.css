@@ -21,9 +21,10 @@
  * frame — `.app`, `.app-header`, `.app-title`, `.app-subtitle` — around its own
  * body. `.app-subtitle` is the gallery's alone and stays in this file for that
  * reason: the shipped header carried a class of its own for the product's line
- * until #265 moved that line behind an (i), and the gallery's long explanatory
- * paragraph was never the same thing as a one-line tagline — which is why one of
- * the two classes went and the other did not.
+ * until #265 moved that line behind an (i) — and #284 D13 removed the (i) too,
+ * so the shipped bar now names the product and nothing else. The gallery's long
+ * explanatory paragraph was never the same thing as a one-line tagline, which is
+ * why one of the two classes went and the other did not.
  */
 
 body {
@@ -41,11 +42,21 @@ body {
 }
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
- * does not get, so the brand, the (i) that carries the product's line, the site
- * search and the menu button sit on one centreline and wrap to a second line
- * only when the width forces it — which is the only narrow-width mechanism the
- * shell has, here as everywhere else in it (there is no breakpoint in this app).
+ * does not get, so the brand, the site search and the menu button sit on one
+ * centreline and wrap to a second line only when the width forces it.
  * The wrapping is unchanged; only what the row agrees on within a line is.
+ *
+ * Wrapping was this shell's whole answer to a narrow window until #284 D17.
+ * Below the width where those three stop fitting on one line, the search now
+ * folds behind an icon rather than costing the bar a permanent second line, and
+ * the breakpoint that decides it — with the measurement behind the number — is
+ * `header/header.css`'s, next to the rules it switches. This rule is untouched
+ * by that and still describes the row: what changed is how often the row has
+ * reason to wrap. Each breakpoint in this app is owned by the surface that
+ * measured its own content, and they are counted in one place —
+ * `stylelint.config.mjs`'s residual paragraph, which owns why their widths are
+ * raw lengths at all. There is still no shared breakpoint scale, and nothing
+ * here to inherit one from.
  *
  * A centreline rather than a baseline, and that is the fix rather than a taste
  * (#284 D1). `baseline` is the right-sounding value for a row of text and the
@@ -80,14 +91,16 @@ body {
  * observes the gallery's layout either way: `preview/TokensPreview.test.tsx`
  * reads token names, not boxes.
  *
- * The bar carries three controls: the (i) holding the product's own line, the
- * search that finds a site by name, and the disclosure everything else hides
- * behind. The theme toggle was once bare here and is inside that disclosure now
- * (`header/HeaderMenu.tsx`), which is also where the rule for what earns a place
- * out here rather than behind a press is written down. Their treatments are
- * `header/header.css`'s, except the tip's — that component belongs to neither
- * the shell nor the header, so its own sheet carries it (`info/info.css`). This
- * rule is only the row they sit in. */
+ * The bar carries two controls: the search that finds a site by name, and the
+ * disclosure everything else hides behind — with an icon standing in for the
+ * first of them below the breakpoint above, which is one control in two forms
+ * rather than a third thing earning a place on the row. The theme toggle was once bare here
+ * and is inside that disclosure now (`header/HeaderMenu.tsx`), which is also
+ * where the rule for what earns a place out here rather than behind a press is
+ * written down — and that rule is what took the third control off this row in
+ * #284 D13: an (i) repeating the About dialog's own first sentence was a
+ * permanent control paying for a description, not for an action. Both remaining
+ * treatments are `header/header.css`'s. This rule is only the row they sit in. */
 .app-header {
   display: flex;
   flex-wrap: wrap;
@@ -107,11 +120,12 @@ body {
 }
 
 /* The product's one-line description has no rule here any more, and no class
- * either. It was a paragraph on the bar until #265 put it behind the (i) beside
- * the brand (`header/AppHeader.tsx`), which wears `info/info.css`'s panel
- * treatment; a rule kept for markup nothing renders is a claim about a header the
- * app does not have. `.app-subtitle` below is the gallery's and is a different
- * thing — see the file header. */
+ * either. It was a paragraph on the bar until #265 put it behind an (i) beside
+ * the brand, and #284 D13 took that (i) off the bar as well, leaving the About
+ * dialog (`header/AboutDialog.tsx`) as its one carrier and this rule with
+ * nothing at all to style; a rule kept for markup nothing renders is a claim
+ * about a header the app does not have. `.app-subtitle` below is the gallery's
+ * and is a different thing — see the file header. */
 
 /* The gallery's header prose (see the file header). Its own measure, because it
  * is a paragraph explaining a page rather than a line naming a product. */

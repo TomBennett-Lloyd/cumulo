@@ -18,6 +18,27 @@ import { formatKw, type ChartOverlayColumn, type ForecastChartPoint } from './ch
  * the threshold, so the column is not yet carrying that obligation; it is here
  * so that the next series added does not have to invent the relief, which is
  * exactly the shipping-without-it failure the treatment writes the rule against.
+ *
+ * **Folded away by default** (#284 D3). Every row of a 193-hour window under the
+ * plot pushed the rest of the page out of sight, and the chart itself was held
+ * to a measure narrower than its panel to leave the table somewhere to sit. So
+ * the twin lives behind a closed `<details>`, the same native disclosure the
+ * fleet's own table uses (`dashboard/SiteTable.tsx`): the platform owns the
+ * open/closed semantics, the keyboard operation and the announcement, and none
+ * of it is ours to get wrong. A closed `<details>` keeps its children in the
+ * *document* but not in the *accessibility tree* — a browser does not render
+ * them, and unrendered content is excluded — so a screen reader meets the
+ * collapsed disclosure, not the table behind it. The treatment's "reachable from
+ * the chart container" is discharged by reachability rather than by presence:
+ * the twin is one press on a named, keyboard-operable control away, and a route
+ * one press away is a route. (`dashboard/dashboard-test-fixture.tsx` queries the
+ * table without opening anything, which works because jsdom omits the
+ * `<details>` shadow-tree styles — a fact about that environment, not a claim
+ * about readers.)
+ *
+ * The `<caption>` stays inside the table rather than being folded into the
+ * summary: it is the table's accessible name, it says which window and which
+ * units the numbers are in, and a summary is a name for the *disclosure*.
  */
 
 export interface ForecastChartTableParams {
@@ -35,31 +56,37 @@ export const forecastChartTable = ({
   caption,
   overlay,
 }: ForecastChartTableParams): ReactElement => (
-  <table className="forecast-chart-table">
-    <caption>{caption}</caption>
-    <thead>
-      <tr>
-        <th scope="col">{TIME_COLUMN_HEADER}</th>
-        <th scope="col">P10</th>
-        <th scope="col">Median</th>
-        <th scope="col">P90</th>
-        <th scope="col">Actual</th>
-        {overlay === undefined ? null : <th scope="col">{overlay.label}</th>}
-      </tr>
-    </thead>
-    <tbody>
-      {points.map((point, index) => (
-        <tr key={point.validTimeIso}>
-          <th scope="row">
-            <time dateTime={point.validTimeIso}>{tickLabelFor(point.validTimeIso, spanHours)}</time>
-          </th>
-          <td>{formatKw(point.band?.p10Kw)}</td>
-          <td>{formatKw(point.medianKw)}</td>
-          <td>{formatKw(point.band?.p90Kw)}</td>
-          <td>{formatKw(point.actualKw)}</td>
-          {overlay === undefined ? null : <td>{formatKw(overlay.values[index])}</td>}
+  <details className="forecast-chart-details">
+    <summary className="forecast-chart-summary">Raw data</summary>
+
+    <table className="forecast-chart-table">
+      <caption>{caption}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{TIME_COLUMN_HEADER}</th>
+          <th scope="col">P10</th>
+          <th scope="col">Median</th>
+          <th scope="col">P90</th>
+          <th scope="col">Actual</th>
+          {overlay === undefined ? null : <th scope="col">{overlay.label}</th>}
         </tr>
-      ))}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {points.map((point, index) => (
+          <tr key={point.validTimeIso}>
+            <th scope="row">
+              <time dateTime={point.validTimeIso}>
+                {tickLabelFor(point.validTimeIso, spanHours)}
+              </time>
+            </th>
+            <td>{formatKw(point.band?.p10Kw)}</td>
+            <td>{formatKw(point.medianKw)}</td>
+            <td>{formatKw(point.band?.p90Kw)}</td>
+            <td>{formatKw(point.actualKw)}</td>
+            {overlay === undefined ? null : <td>{formatKw(overlay.values[index])}</td>}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </details>
 );

@@ -116,7 +116,18 @@ export default {
      * property the list omits — `width`, `height`, `max-width`, `inset`,
      * `flex-basis`, `border-width`, `letter-spacing`, `stroke-width`,
      * `grid-template-columns`, among others. Committed CSS already relies on
-     * this (e.g. `max-width: 44rem` in apps/web/src/app.css). There
+     * this (e.g. `max-width: 44rem` in apps/web/src/app.css). The same open half
+     * covers *media features*, which every rule here misses for a stronger
+     * reason: a media feature is not a declaration at all, so no
+     * declaration-scoped rule can see one however the property list grows. The
+     * app's two breakpoints — `apps/web/src/map/map.css` and
+     * `apps/web/src/header/header.css` — are therefore raw lengths by
+     * construction; each is measured and argued where it is written, which is
+     * the whole of what stands in for a gate there. This paragraph is also where
+     * that census is kept: the stylesheets point here rather than counting each
+     * other, so a third breakpoint is added to this list and to nothing else. And
+     * a third is a signal in its own right — one shared scale becomes worth
+     * having at about the point a third surface needs a width. There
      * is no property-agnostic mirror for lengths because a length is legal
      * syntax everywhere, and adding these properties to the list above would
      * demand tokens that do not exist: the set has spacing, type, and radii

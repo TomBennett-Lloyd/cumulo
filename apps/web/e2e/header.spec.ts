@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { pressedRangeButton } from './range-picker';
 
 /*
  * The header, driven by a keyboard and a pointer, in a browser that has a top
@@ -17,7 +18,7 @@ import { routeBasemap } from './hermetic-basemap';
  * (`src/header/*.test.tsx`): what is in the document, in which state, and what
  * each control means.
  *
- * Three cases, one per thing only this lane can see.
+ * Five cases, one per thing only this lane can see.
  *
  * The first is the menu, as one continuous interaction rather than a case per
  * step, because the sequence is the behaviour: a reader arrives, finds the menu
@@ -35,11 +36,31 @@ import { routeBasemap } from './hermetic-basemap';
  * was asked to move; only a browser can say the reader can see what they asked
  * for.
  *
- * The third is where the bar's three things sit relative to each other, which is
- * a claim about a flex line's cross-axis and so exists only once a browser has
+ * The third is where the bar's things sit relative to each other, which is a
+ * claim about a flex line's cross-axis and so exists only once a browser has
  * laid the row out and resolved every font in it. jsdom computes no such
  * geometry: under it `align-items: baseline` and `align-items: center` are the
  * same string in a stylesheet nobody measured (`testing.md` rule 10).
+ *
+ * The fourth is that the menu's popover is painted *over* the map rather than
+ * under it, which is the claim this file inherited when #284 D13 removed the
+ * header's (i) and with it `info-tips.spec.ts`'s stacking case. It belongs to
+ * whatever on-bar overlay exists rather than to that one, and the popover is the
+ * app's only one whose stacking any spec measures — `.site-search-listbox` is
+ * the other, equally stacked over the same canvas and untested. The popover
+ * carries the same stacking value (`header/header.css` argues both of the bar's
+ * at once), hangs off the same bar, and has the same maplibre canvas beneath it. Playwright's `toBeVisible` cannot make the claim —
+ * it is a box and a computed style, not an occlusion test, so a popover painted
+ * under the canvas passes it while being unreadable in fact.
+ *
+ * The fifth is the search folding behind an icon on a bar too narrow to hold it
+ * (#284 D17), which is a media query and therefore invisible to jsdom in the
+ * most literal way available: `AppHeader` renders the field and the icon at
+ * every width, and which of them a reader is looking at is a computed `display`
+ * nothing under `src/` can read. The case drives the whole transition rather
+ * than the two ends of it, because what is worth catching is a search that
+ * survives the fold — the combobox still selecting, and the field coming back
+ * when the width does.
  */
 
 /** How far one drag moves the camera, in CSS pixels. */
@@ -138,6 +159,29 @@ const maxCentreMisalignment = async (elements: readonly Locator[]): Promise<numb
 };
 
 /**
+ * Whether the overlay is the thing a reader's pointer would actually land on at
+ * its own centre.
+ *
+ * `document.elementFromPoint` resolves the topmost painted element at a point,
+ * which is exactly the question a stacking value answers and exactly the one
+ * `toBeVisible` does not ask. `contains` rather than identity, because the
+ * topmost thing at the centre of an overlay is whatever child sits there — a
+ * button, a label — rather than the overlay's own box.
+ *
+ * Moved here from `info-tips.spec.ts` rather than copied: the on-bar tip it used
+ * to measure is gone (#284 D13) and this file's popover is the overlay that
+ * inherited the claim, so there is one copy of the idiom now as there was
+ * before.
+ */
+const panelIsOnTop = async (panel: Locator): Promise<boolean> =>
+  panel.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+
+    return topmost !== null && element.contains(topmost);
+  });
+
+/**
  * Pan the map until the whole fleet is outside its bounds.
  *
  * The drag starts at the centre of the map's own box and moves sideways, which
@@ -199,16 +243,21 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
    */
   await expect(page.locator('.site-table-summary')).toBeVisible();
 
-  // The header is the first thing in the document and carries three controls, in
-  // this order: the (i) that explains the product, the site search, then the
-  // menu. So three Tabs from a fresh page reach the menu, and each of the first
-  // two lands on the control named here. That all three are ahead of everything
-  // else is the design (`App.test.tsx` pins the bar's contents); this is the half
-  // that needs a real focus order to be true at all — and the tip joining the bar
-  // (#265) is exactly the change that would silently shift a hard-coded count.
-  await page.keyboard.press('Tab');
-  await expect(page.locator('.app-header .info-tip-button')).toBeFocused();
-
+  // The header is the first thing in the document and carries two controls, in
+  // this order: the site search, then the menu. So two Tabs from a fresh page
+  // reach the menu, and the first lands on the control named here. That both are
+  // ahead of everything else is the design (`App.test.tsx` pins the bar's
+  // contents); this is the half that needs a real focus order to be true at all
+  // — and the count is hard-coded precisely because a control joining or leaving
+  // the bar shifts it silently, which is what #265 did by adding the product's
+  // (i) here and #284 D13 undid by taking it away again.
+  //
+  // The search toggle #284 D17 added is a third control on this bar and is
+  // deliberately not in this count: it is `display: none` above
+  // `header/header.css`'s breakpoint, which this file's default viewport is well
+  // clear of, and a hidden control is not focusable. So the order here is
+  // unchanged at this width and different at a phone's — which is the last case
+  // in this file, at 390px, rather than an assumption made in this one.
   await page.keyboard.press('Tab');
   await expect(page.locator('.site-search-input')).toBeFocused();
 
@@ -354,11 +403,12 @@ test('finds a site by name and brings the camera to it when it is off screen', a
     })
     .toBe(true);
 
-  // And the reader is on it. A search hit is reader-initiated like a marker or a
-  // row press, so the card takes the focus by the rule the dashboard already had
-  // (`docs/standards/react.md`) — asserted here because a field that kept the
-  // focus would leave a keyboard reader typing at their own answer.
-  await expect(page.locator('.site-popover-title')).toBeFocused();
+  // And the reader has been moved on. A search hit is reader-initiated like a
+  // marker or a row press, so the focus follows it to the fleet panel's range
+  // picker by the rule the dashboard already had (`docs/standards/react.md`,
+  // revised by #284 D14) — asserted here because a field that kept the focus
+  // would leave a keyboard reader typing at their own answer.
+  await expect(pressedRangeButton(page)).toBeFocused();
 });
 
 test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
@@ -395,4 +445,281 @@ test('centres the brand mark on the same line as the search and the menu', async
       message: 'The brand mark, the search and the menu do not share a centreline.',
     })
     .toBeLessThanOrEqual(CENTRE_TOLERANCE_PX);
+});
+
+test('hangs the menu over the map rather than under it', async ({ page }) => {
+  const popover = page.locator('.header-menu-popover');
+
+  /*
+   * The map first, and not as politeness: maplibre's canvas is the positioned
+   * element this popover has to out-rank, and it does not exist until the lazy
+   * chunk has resolved and mounted. Opening the menu over an empty box would
+   * measure a page where nothing could have occluded anything.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  await page.locator('.header-menu-button').click();
+
+  await expect(popover).toBeVisible();
+
+  /*
+   * A box worth hit-testing, before the hit test. `elementFromPoint` at the
+   * centre of a zero-sized box is a question about a point that is not inside
+   * anything, so the measurement below would be reporting on a popover no reader
+   * could press either way — and a collapsed popover is exactly the failure a
+   * stacking regression could arrive alongside.
+   */
+  const box = await popover.boundingBox();
+
+  if (box === null) {
+    throw new Error('The header menu popover is visible but has no layout box.');
+  }
+
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.height).toBeGreaterThan(0);
+
+  /*
+   * The assertion this case exists for. The header sits above the dashboard in
+   * DOM order but is not a positioned ancestor of it, so an overlay with no
+   * stacking value of its own paints *under* every positioned thing the
+   * dashboard puts below — maplibre's canvas among them — while remaining
+   * visible, boxed and correctly sized to every other measure available here.
+   */
+  expect(await panelIsOnTop(popover)).toBe(true);
+});
+
+/**
+ * A phone, and specifically one below `header/header.css`'s 27.4375rem — the
+ * width that file measured as the point where the brand, the field and the menu
+ * stop fitting on one line.
+ *
+ * 390x844 rather than a width picked just under the breakpoint: it is a real
+ * device size, it is 49px clear of the fold, and the clearance is what keeps
+ * this case from turning red over a platform whose fonts lay the bar out a few
+ * pixels wider than the measurement.
+ */
+const PHONE_VIEWPORT = { width: 390, height: 844 };
+
+/** A desktop window, well above the fold — where the field is the bar's own. */
+const WIDE_VIEWPORT = { width: 1280, height: 800 };
+
+/**
+ * How far the two icon buttons' gap may sit from the row's own gap and still
+ * count as adjacent, in CSS pixels.
+ *
+ * Two, for {@link CENTRE_TOLERANCE_PX}'s reason rather than by sharing it —
+ * these are `getBoundingClientRect` reads of a laid-out page and sub-pixel
+ * layout lands in the last pixel or so. It is far below what the case is here to
+ * catch: the shipped defect was 84px of dead space between the two buttons,
+ * because an auto margin on each of them split the row's free space in two
+ * instead of one of them absorbing all of it.
+ */
+const ICON_GAP_TOLERANCE_PX = 2;
+
+/**
+ * How far the gap between the bar's two icon buttons is from the gap the row
+ * asked for, in CSS pixels — `Infinity` while either is without a box.
+ *
+ * The expected gap is read off `.app-header`'s own computed `column-gap` rather
+ * than written down here. The row owns that value (it is `--space-4`), and a
+ * number copied into this spec would be a second home for it that agrees today
+ * and drifts silently later (`architecture.md` rule 9). What the case asserts is
+ * therefore a relationship — the icons are one ordinary row gap apart — rather
+ * than a measurement of a particular token.
+ *
+ * Infinity on a missing box or an unresolvable gap, for
+ * {@link maxCentreMisalignment}'s reason: every caller polls this, and a
+ * reading that never arrives must never be mistaken for a passing one.
+ */
+const iconPairGapError = async (page: Page): Promise<number> => {
+  const toggleBox = await page.locator('.header-search-toggle').boundingBox();
+  const menuBox = await page.locator('.header-menu').boundingBox();
+  const rowGap = await page
+    .locator('.app-header')
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).columnGap));
+
+  if (toggleBox === null || menuBox === null || Number.isNaN(rowGap)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.abs(menuBox.x - (toggleBox.x + toggleBox.width) - rowGap);
+};
+
+/**
+ * How far the menu's right edge sits from the end of the header's content box,
+ * in CSS pixels — `Infinity` while it has no box.
+ *
+ * The other half of "at the end of the row", and it is a separate reading rather
+ * than a stricter version of the one above because the two fail to different
+ * bugs. {@link iconPairGapError} says the buttons are next to each other;
+ * deleting the toggle's `margin-left: auto` packs `[brand][toggle][menu]` hard
+ * against the left edge and leaves that assertion perfectly green. This one says
+ * where the pair ended up.
+ *
+ * Measured against the content box — the border box less the header's own
+ * `padding-right` — so it asks whether the menu is flush with the row's end
+ * rather than with the window's, and stays true if the bar's padding changes.
+ */
+const menuRowEndGap = async (page: Page): Promise<number> => {
+  const menuBox = await page.locator('.header-menu').boundingBox();
+  const contentRight = await page.locator('.app-header').evaluate((element) => {
+    const styles = getComputedStyle(element);
+
+    return element.getBoundingClientRect().right - Number.parseFloat(styles.paddingRight);
+  });
+
+  if (menuBox === null || Number.isNaN(contentRight)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.abs(contentRight - (menuBox.x + menuBox.width));
+};
+
+test.describe('the search on a bar too narrow to hold it', () => {
+  test.use({ viewport: PHONE_VIEWPORT });
+
+  test('folds the field behind an icon, opens it focused, and hands it back when the width returns', async ({
+    page,
+  }) => {
+    const inlineSearch = page.locator('.app-header > .site-search');
+    const toggle = page.locator('.header-search-toggle');
+    const bar = page.locator('.header-search-bar');
+    const barInput = bar.locator('.site-search-input');
+
+    /*
+     * The listing first, for the reason the menu case waits on it: the fleet
+     * resolves after first paint and everything read below comes off a row.
+     */
+    await expect(page.locator('.site-table-summary')).toBeVisible();
+
+    /*
+     * The fold itself. `toBeHidden` on the field is a computed-style read, which
+     * is the whole reason this case is in this lane — the element is in the
+     * document at every width and jsdom would find it either way.
+     */
+    await expect(inlineSearch).toBeHidden();
+    await expect(toggle).toBeVisible();
+    // Closed is absent rather than merely hidden, so the bar's own field is not
+    // a second combobox sitting in the accessibility tree behind the icon.
+    await expect(bar).toHaveCount(0);
+
+    /*
+     * And the icon sits *beside the menu*, at the end of the row, rather than
+     * merely existing somewhere on it.
+     *
+     * This is the assertion the first version of this case was missing, and the
+     * omission is what let a dead `margin-left` override ship green: with the
+     * field gone the row has free space to hand out, `header.css` gives it to the
+     * toggle so the pair travels together, and a cascade mistake that leaves both
+     * buttons claiming it splits the space and strands the toggle 84px short of
+     * the menu. Every other assertion in this case passes in that state — the
+     * icon is visible, it opens the bar, the bar searches — which is exactly why
+     * position needs an assertion of its own rather than a screenshot nobody
+     * takes.
+     *
+     * Polled because it is a geometry read on a page whose fonts settle after
+     * first paint, like the centreline case above.
+     */
+    await expect
+      .poll(async () => iconPairGapError(page), {
+        message: 'The search icon and the menu are not one row gap apart.',
+      })
+      .toBeLessThanOrEqual(ICON_GAP_TOLERANCE_PX);
+
+    /*
+     * And the pair is at the *end* of the row, which the gap alone cannot say:
+     * two buttons packed against the brand on the left are exactly one row gap
+     * apart as well. The reading that separates those two arrangements is the
+     * menu against the end of the header's content box — see
+     * {@link menuRowEndGap}, and the mutant that proves it bites: deleting the
+     * toggle's `margin-left: auto` leaves the gap assertion above green and this
+     * one 100px+ out.
+     */
+    await expect
+      .poll(async () => menuRowEndGap(page), {
+        message: 'The bar’s controls are not flush with the end of the header row.',
+      })
+      .toBeLessThanOrEqual(ICON_GAP_TOLERANCE_PX);
+
+    /*
+     * The site to look for, read off the page before anything is pressed and
+     * through the closed disclosure, exactly as the search case above reads it
+     * and for the same two reasons: a name regenerated from the seed would still
+     * pass if the app and the test drifted together, and opening the table would
+     * scroll the surface this case is about out from under itself.
+     */
+    const row = page.locator('[data-site-id]').first();
+    await expect(row).toBeAttached();
+
+    const siteId = await row.getAttribute('data-site-id');
+    const siteName = await row.textContent();
+
+    if (siteId === null || siteName === null) {
+      throw new Error('The first site row names neither a site nor an id to search for.');
+    }
+
+    await toggle.click();
+
+    await expect(bar).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    /*
+     * The caret is in the field the press opened. On a phone this is the whole
+     * difference between a search bar and a search bar with a keyboard under it,
+     * because a mobile browser raises its keyboard only for a focus made inside
+     * the gesture that asked for one — which is what `AppHeader`'s `flushSync`
+     * buys, and what `AppHeader.test.tsx` pins in the lane that can see
+     * `document.activeElement` at all.
+     */
+    await expect(barInput).toBeFocused();
+
+    /*
+     * And it opened *under* the row rather than inside it. A bar that squeezed
+     * onto the header's own line would satisfy every assertion above while
+     * leaving a field narrower than the icon that opened it, so the claim is
+     * made against the brand's box: the bar starts below where the brand ends.
+     */
+    const brandBox = await page.locator('.brand').boundingBox();
+    const barBox = await bar.boundingBox();
+
+    if (brandBox === null || barBox === null) {
+      throw new Error('The header bar is visible but something on it has no layout box.');
+    }
+
+    expect(barBox.y).toBeGreaterThanOrEqual(brandBox.y + brandBox.height);
+
+    await barInput.fill(siteName);
+
+    // The popup answered before the keys that act on it, for the reason the
+    // search case above waits: otherwise Enter is pressed against whatever the
+    // list happens to hold.
+    await expect(bar.locator('.site-search-option').first()).toHaveText(new RegExp(siteName));
+
+    /*
+     * The combobox's own keys, driven inside the bar. A full site name matches
+     * exactly one site in the demo fleet — the names run `<place> rooftop 1..5`
+     * — so ArrowDown here is the clamp rather than a step, and what Enter proves
+     * is that the highlight, the selection and the URL still work from a control
+     * that has moved to a different parent.
+     */
+    await barInput.press('ArrowDown');
+    await barInput.press('Enter');
+
+    // The right site, not merely a site: an off-by-one in the highlight would
+    // open a neighbour's card with every other assertion here still green.
+    // Polled because the selection reaches the URL through the dashboard.
+    await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
+
+    await page.setViewportSize(WIDE_VIEWPORT);
+
+    /*
+     * The far end of the transition, and the guard that keeps the two ends from
+     * both being vacuous: the icon is *not* visible at a desktop width, so the
+     * `toBeVisible` at the top of this case is a fact about 390px rather than
+     * about an icon that is simply always there. It sits here rather than before
+     * the resize because `test.use` opens this case at the phone width; it is
+     * the same claim either way round.
+     */
+    await expect(inlineSearch).toBeVisible();
+    await expect(toggle).toBeHidden();
+  });
 });

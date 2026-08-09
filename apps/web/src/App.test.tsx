@@ -246,37 +246,46 @@ describe('App shell', () => {
 
     expect(screen.getByRole('heading', { name: 'Cumulo', level: 1 })).toBeDefined();
 
-    // The sentence is behind the (i) beside the brand since #265, so this is
-    // both halves of that: absent until pressed, present after. The first half
-    // is what stops the tip quietly becoming a paragraph again — the bar's
-    // height is the whole reason the sentence moved (`info/InfoTip.tsx`).
+    // Not on the bar in any form. It was a paragraph there until #265 put it
+    // behind an (i), and #284 D13 took the (i) too — so this half now says the
+    // bar names the product and stops, rather than that a tip is closed.
     expect(screen.queryByText(PRODUCT_TAGLINE)).toBe(null);
 
-    fireEvent.click(screen.getByRole('button', { name: 'About this product' }));
+    openHeaderMenu();
+    fireEvent.click(screen.getByRole('button', { name: 'About Cumulo' }));
 
-    // The constant the tip renders, not a fragment of it. Spelling any part of
-    // the sentence out here would make this file a second place the tagline is
-    // written down, which is the thing `header/header-copy.ts` exists to
-    // prevent — and would leave this passing against the old words after an
-    // edit in its one home (`architecture.md` rule 9).
+    // And the one carrier left is reachable from the shell, by the route a
+    // visitor takes. What the dialog contains is `header/AboutDialog.test.tsx`'s
+    // to assert; what is only true here is the wiring between the menu the shell
+    // renders and the sentence behind it. The constant rather than a fragment of
+    // it: spelling any part of the sentence out would make this file a second
+    // place the tagline is written down, which is the thing
+    // `header/header-copy.ts` exists to prevent — and would leave this passing
+    // against the old words after an edit in its one home (`architecture.md`
+    // rule 9).
     expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
   });
 
-  it('leaves the header bar with the search and two disclosures, and the rest behind them', async () => {
+  it('leaves the header bar with the search and one disclosure, and the rest behind it', async () => {
     await renderApp(StandInMapRegion);
 
     // The bar is height the map does not get, so what sits on it is a design
-    // decision rather than an accident of where a component was added. Three
-    // things earn it, and on the same test rather than three different ones:
-    // each answers where it stands, for one round button or one field of width.
-    // Finding a site, the product's own line behind an (i) — a press rather than
-    // the paragraph it used to be (#265) — and the disclosure over everything
-    // that acts somewhere else (`header/HeaderMenu.tsx` states the rule). The
-    // theme toggle used to be bare here, and this is the assertion that notices
-    // if something bare comes back.
+    // decision rather than an accident of where a component was added. Two
+    // things earn it, and on the same test rather than two different ones: each
+    // answers where it stands, for one field of width or one round button.
+    // Finding a site, and the disclosure over everything that acts somewhere
+    // else (`header/HeaderMenu.tsx` states the rule). The theme toggle used to
+    // be bare here, and this is the assertion that notices if something bare
+    // comes back.
     expect(screen.getByRole('combobox', { name: 'Search sites by name' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'About this product' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
+
+    // And nothing on the bar is a toggletip. Asserted as the absence of the
+    // component's own class rather than of the name it used to carry, because a
+    // renamed (i) is the same control: what #284 D13 decided is that a
+    // description does not earn a permanent place on this row, not that one
+    // wording of it did not (`info/InfoTip.tsx`).
+    expect(document.querySelector('.app-header .info-tip-button')).toBe(null);
 
     openHeaderMenu();
 

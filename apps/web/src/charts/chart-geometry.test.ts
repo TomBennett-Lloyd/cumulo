@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   axisTicks,
+  CHART_VIEW_BOX_HEIGHT,
+  chartPlot,
   horizonLabelAnchor,
   niceAxisMax,
   snapToNearestIndex,
@@ -8,12 +10,49 @@ import {
   tickLabelFor,
   tooltipAnchorX,
   xForIndex,
-  xTickIndices,
   yForKw,
   type PlotRect,
 } from './chart-geometry';
 
 const PLOT: PlotRect = { left: 40, right: 440, top: 20, bottom: 160 };
+
+describe('chartPlot', () => {
+  /*
+   * The margins, pinned as numbers. Every other assertion in this file works in
+   * the abstract `PLOT` above, which is right for arithmetic that holds at any
+   * rect — but these four are the chart's actual measurements in actual pixels
+   * since #284 D15, and "the plot's left margin is 56px" is the claim, not an
+   * incidental of one. Written out rather than recomputed from the module's own
+   * private constants, which would assert nothing.
+   */
+  it('leaves the rotated title and a whole kW label to the left, half a time label to the right', () => {
+    const plot = chartPlot(1000);
+
+    // 56 and not the 48 D15 measured: since D10 the left gutter holds the
+    // `Power (kW)` title running up the canvas edge as well as the widest kW
+    // tick label, and 48 left the two touching.
+    expect(plot.left).toBe(56);
+    expect(plot.right).toBe(968);
+    expect(plot.top).toBe(12);
+  });
+
+  it('gives the time axis a fixed band under the plot, whatever the width', () => {
+    // The floor is measured up from the chart's own height, so it does not move
+    // with the width — which is what lets the axis keep one tier of labels (and,
+    // later, two) in space the plot has already given up.
+    expect(chartPlot(400).bottom).toBe(chartPlot(1600).bottom);
+    // Two tiers of labels and the axis title under them, descenders included.
+    expect(CHART_VIEW_BOX_HEIGHT - chartPlot(400).bottom).toBe(48);
+  });
+
+  it('widens only rightwards, so the plot grows with the column it is drawn in', () => {
+    const narrow = chartPlot(400);
+    const wide = chartPlot(1600);
+
+    expect(wide.left).toBe(narrow.left);
+    expect(wide.right - narrow.right).toBe(1200);
+  });
+});
 
 describe('xForIndex', () => {
   it('puts the first sample on the left plot edge and the last on the right', () => {
@@ -78,36 +117,16 @@ describe('axisTicks', () => {
   });
 });
 
-describe('xTickIndices', () => {
-  it('labels every sample when the series is shorter than the label budget', () => {
-    expect(xTickIndices(5)).toStrictEqual([0, 1, 2, 3, 4]);
-  });
-
-  it('labels the only sample of a single-point series', () => {
-    expect(xTickIndices(1)).toStrictEqual([0]);
-  });
-
-  it('has nothing to label in an empty series', () => {
-    expect(xTickIndices(0)).toStrictEqual([]);
-  });
-
-  it('thins a long series to the budget, keeping the first and last samples', () => {
-    const indices = xTickIndices(49);
-
-    expect(indices.length).toBeLessThanOrEqual(8);
-    expect(indices[0]).toBe(0);
-    expect(indices.at(-1)).toBe(48);
-    expect(indices).toStrictEqual([0, 7, 14, 21, 28, 35, 42, 48]);
-  });
-
-  it('keeps the first and last samples at any budget', () => {
-    const indices = xTickIndices(100, 3);
-
-    expect(indices[0]).toBe(0);
-    expect(indices.at(-1)).toBe(99);
-    expect(indices.length).toBeLessThanOrEqual(4);
-  });
-});
+/*
+ * `xTickIndices` and its fixed label budget were deleted by #284 D9, and the
+ * cases that pinned the budget went with them rather than moving. They asserted
+ * "at most eight labels, first and last kept", which is a count — and a count is
+ * precisely what could not tell a legible axis from an overlapping one, since
+ * eight labels fit at some widths and collided at others. What replaced it is
+ * `chart-axis-ticks.ts`'s overlap invariant, swept over widths and spans in
+ * `chart-axis-ticks.test.ts`; deleting these rather than porting them is the
+ * point, not an omission.
+ */
 
 describe('tickLabelFor', () => {
   it('labels an instant in UTC wall time, not the reader local zone', () => {

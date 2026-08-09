@@ -35,6 +35,16 @@ export interface InfoTipProps {
  * This is where they went — reachable in one press, and costing nothing while
  * nobody is asking.
  *
+ * One of the three is left, and the other two went for the same reason in
+ * different words: a tip is the right home for a description, and no home at all
+ * is the right one for a description something else on the page already gives.
+ * The window sentence went first (#284 D5) — it rendered only on the arm of the
+ * fleet panel that had no range picker, and that arm now has one, so it had
+ * become a description of a control standing beside it. The product's line went
+ * with the bar's (i) (#284 D13), because the About dialog behind the header menu
+ * opens with that same sentence in full. What is left is the fleet chart's: what
+ * the chart is a sum of, which nothing else on the page says.
+ *
  * ## A disclosure, and deliberately not a live region
  *
  * The canonical toggletip is a persistent `role="status"` container that the
@@ -43,7 +53,11 @@ export interface InfoTipProps {
  * the fleet panel's one is the chart's own readout — the announcement a reader
  * asked for by moving the chart's selection. Two of these in that panel would
  * make three regions competing to be heard, and the reader would get whichever
- * won. So the change is announced the way a disclosure announces it: the button
+ * won. The budget is also already at its limit there in one state: `react.md`
+ * sanctions `PanelError`'s `role="alert"` mounting beside that readout when the
+ * fan-out fails, on the grounds that a failed chart has no sample to speak and
+ * so cannot compete with it. A live-region tip would be the one that genuinely
+ * does. So the change is announced the way a disclosure announces it: the button
  * carries `aria-expanded`, which is state on the control the reader just pressed
  * rather than an interruption. (A `role="status"` mounted with its text already
  * inside it announces nothing anyway — it has no change to report, #161 — so the

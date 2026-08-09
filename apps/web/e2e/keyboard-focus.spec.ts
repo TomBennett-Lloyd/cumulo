@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { PRESSED_RANGE_BUTTON, pressedRangeButton } from './range-picker';
 import { openSiteTable } from './site-table';
 
 /*
@@ -9,15 +10,16 @@ import { openSiteTable } from './site-table';
  * address bar.
  *
  * The dashboard's answer to a *reader-initiated* selection is a focus move: the
- * site's card focuses its own heading on mount so the new surface announces
- * itself rather than leaving a reader's focus on a control that is about to
- * unmount (#93). Under jsdom that is provable only as far as
- * `document.activeElement` — the assertion `Dashboard.focus.test.tsx` already
- * makes. What it cannot show is the half a reader actually experiences: whether
- * the ring `@cumulo/ui` paints on `:focus-visible` is on the heading afterwards.
- * `:focus-visible` is a browser heuristic over *how* focus arrived, jsdom
- * implements no heuristic and paints nothing, and no amount of unit testing can
- * substitute for one.
+ * reader is put on the fleet panel's range picker, under the map, so the page
+ * hands them a live control on the answer they just asked for rather than
+ * leaving their focus on something about to unmount (#93, revised by #284 D14 —
+ * the landing was the card's own heading until then). Under jsdom that is
+ * provable only as far as `document.activeElement` — the assertion
+ * `Dashboard.focus.test.tsx` already makes. What it cannot show is the half a
+ * reader actually experiences: whether the ring `@cumulo/ui` paints on
+ * `:focus-visible` is on that button afterwards. `:focus-visible` is a browser
+ * heuristic over *how* focus arrived, jsdom implements no heuristic and paints
+ * nothing, and no amount of unit testing can substitute for one.
  *
  * So the first case is one interaction performed the way a keyboard user
  * performs it: Tab to the fleet table's summary, open it with Enter, Tab until a
@@ -25,6 +27,20 @@ import { openSiteTable } from './site-table';
  * paint. Every step is a real key event — `Locator.press` on the row would reach
  * the same handler while telling us nothing about whether the row is reachable
  * by tabbing at all.
+ *
+ * It stops at the landing, and what that leaves uncovered is worth naming here
+ * rather than leaving to be inferred. The card's hand-back on the way out is
+ * owed only to a reader who has come *into* the card, which since D14 is no
+ * longer where a selection leaves them — that path is `document.activeElement`
+ * again, so `map/SitePopoverCard.test.tsx` and `Dashboard.focus.test.tsx` keep
+ * it in the lane that can see it rather than this one re-proving it slowly. But
+ * the *journey* into the card is exactly this lane's kind of question and no
+ * case here asks it: the map precedes the reading column, so the route from the
+ * landing is backwards past six stops — the (i) tip, the credits band's three
+ * links, and the map's two controls — and then through maplibre's marker
+ * overlay, which is where the card is portaled. Only a real tab order can say
+ * whether it arrives. `docs/tech-debt.md` carries that gap; this comment is not a claim
+ * that it is covered.
  *
  * The disclosure is part of that claim rather than a preamble to it. The rows
  * are folded away by default since #265, so a `<details>` that could not be
@@ -142,7 +158,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('hands a keyboard selection to the card heading, ring and all', async ({ page }) => {
+test('hands a keyboard selection to the range picker, ring and all', async ({ page }) => {
   /*
    * Both halves of the page first. The table is what this tabs to; the map is
    * what it tabs *through*, and starting before its markers have mounted would
@@ -162,37 +178,35 @@ test('hands a keyboard selection to the card heading, ring and all', async ({ pa
   /*
    * The row answered, and answered for the site whose row it was. Without this
    * the case would still pass if Enter had selected some other site — the
-   * heading would be focused either way, and the reader would be looking at a
-   * site they did not ask for.
+   * landing is the same picker button whichever site was chosen, so everything
+   * asserted below would be green while the reader looked at a site they never
+   * asked for. Checked on the URL because the id is what the row and the address
+   * bar have in common; the card names the site but not the id.
    */
   await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
 
-  await expect(page.locator('.site-popover-title')).toBeFocused();
+  /*
+   * The card really opened, asserted before anything about focus: a selection
+   * that drew no card would leave the picker sitting there unfocused, and the
+   * landing assertion below would then be about a page with no answer on it.
+   */
+  await expect(page.locator('.site-popover')).toBeVisible();
+
+  await expect(pressedRangeButton(page)).toBeFocused();
 
   /*
-   * And the ring is on it. The heading is `tabIndex={-1}` and takes focus
-   * programmatically, so this measures the browser's `:focus-visible` heuristic
-   * as much as the stylesheet: Chromium carries focus-visible across a
-   * programmatic move when the interaction that triggered it was a keystroke,
-   * which is the whole reason the card is allowed to move focus silently. If
-   * this ever reads `none`, a keyboard reader is being moved to a heading with
-   * no visible sign of where they landed.
+   * And the ring is on it. The button takes focus programmatically — nobody
+   * tabbed to it — so this measures the browser's `:focus-visible` heuristic as
+   * much as the stylesheet: Chromium carries focus-visible across a programmatic
+   * move when the interaction that triggered it was a keystroke, which is the
+   * whole reason the page is allowed to move focus silently. If this ever reads
+   * `none`, a keyboard reader is being moved across the page with no visible
+   * sign of where they landed.
    */
-  const ring = await focusRing(page, '.site-popover-title');
+  const ring = await focusRing(page, PRESSED_RANGE_BUTTON);
 
   expect(ring.style).toBe('solid');
   expect(ring.widthPx).toBeGreaterThan(0);
-
-  await page.keyboard.press('Escape');
-
-  /*
-   * And back where they came from. Escape closes from inside the card, which
-   * unmounts the Close button focus would otherwise fall off — so the landing is
-   * the row that opened it, matched by the id this case already holds rather
-   * than by position in the list.
-   */
-  await expect(page.locator('.site-popover')).toHaveCount(0);
-  await expect.poll(async () => focusedSiteId(page)).toBe(siteId);
 });
 
 // The issue number is spelled out rather than written with a hash: the frontend
