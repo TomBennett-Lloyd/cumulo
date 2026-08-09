@@ -100,9 +100,9 @@ export type FleetSourceResult<T> =
  *
  * Per-site reads honour the look-back. **Fleet-level _forecasts_ cannot.** The
  * fleet-wide read of forecasts an HTTP source has is `GET /v1/fleet/forecast`,
- * one request for the whole fleet (#296), and its window opens at the clock and runs
- * *ahead* — so the HTTP source's fleet-level forecast reinterprets this window
- * as a forward horizon (see {@link FleetDataSource.fleetForecasts}).
+ * one request for the whole fleet (#296), and its window opens at the clock
+ * and runs *ahead* — so the HTTP source's fleet-level forecast reinterprets
+ * this window as a forward horizon (see {@link FleetDataSource.fleetForecasts}).
  * Fleet-level range selection is therefore horizon-capped in live mode: it
  * selects how far *ahead* the aggregate reaches, and any two ranges past the
  * deployed pipeline's write depth render identically.
@@ -252,9 +252,10 @@ export interface FleetDataSource {
    * review called out belongs to the fleet-level *series* reads it usually
    * precedes — {@link fleetForecasts} and {@link fleetActuals} each cover every
    * site's partition, ~25 read units on `series` a call, against a per-site
-   * poll's ~0.5. Since #296 those Queries are issued server-side inside one
-   * request rather than by a browser fan-out, which moved where they are spent
-   * and not how many, so polling either of them would still be that mistake.
+   * poll's ~0.5. Since #264 (actuals) and #296 (forecasts) those Queries are
+   * issued server-side inside one request each rather than by a browser
+   * fan-out, which moved where they are spent and not how many, so polling
+   * either of them would still be that mistake.
    */
   readonly listSites: () => Promise<FleetSourceResult<readonly Site[]>>;
 
