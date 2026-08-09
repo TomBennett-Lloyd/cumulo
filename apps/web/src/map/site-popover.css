@@ -16,6 +16,28 @@
  * `SitePanel` in #265.
  */
 
+/* The card's own marker, told to outrank the fleet's.
+ *
+ * maplibre gives markers no stacking order: they are siblings in one pane and
+ * every one of them is `z-index: auto`, so they paint in DOM order. (Verified
+ * against maplibre-gl 6.1.0 — its `.maplibregl-marker` rule sets position and
+ * transform hints and nothing that stacks, and `zIndex` does not appear in its
+ * JS at all.) Zooming back out reclusters the fleet, and reclustering mounts
+ * fresh marker elements *after* this card's, so without a value here the new
+ * bubbles paint over a card the reader has open — the #284 defect.
+ *
+ * `1` is enough because the only competition is those siblings. It stays far
+ * below the `10` the header's overlays and the info tip share (the census is in
+ * header/header.css) deliberately: those hang over the whole map, and this card
+ * belongs to the map rather than above it.
+ *
+ * It leans on maplibre for the `position: absolute` that makes a stacking value
+ * apply at all. Nothing else here can supply it — the element is maplibre's to
+ * place, and this rule only borrows it. */
+.site-popover-anchor {
+  z-index: 1;
+}
+
 /* Anchored above the marker, not over it. The element maplibre wraps is
    zero-sized and sits exactly on the coordinate, so `left: 50%` is the site and
    the translate centres the card on it; `bottom` lifts the card clear of the
