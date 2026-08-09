@@ -35,6 +35,13 @@ export interface InfoTipProps {
  * This is where they went — reachable in one press, and costing nothing while
  * nobody is asking.
  *
+ * Two of the three are left. The window sentence was deleted rather than moved
+ * again (#284 D5): it only ever rendered on the arm of the fleet panel that had
+ * no range picker, and that arm now has one, so the sentence was a description
+ * of a control standing beside it. Which is the shape worth noticing — a tip is
+ * the right home for a description, and no home at all is the right one for a
+ * description the interface has since made redundant.
+ *
  * ## A disclosure, and deliberately not a live region
  *
  * The canonical toggletip is a persistent `role="status"` container that the

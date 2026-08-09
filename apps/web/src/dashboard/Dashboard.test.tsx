@@ -133,15 +133,25 @@ afterEach(() => {
 });
 
 describe('Dashboard', () => {
-  it('first paint mounts zero live regions', async () => {
+  it('first paint mounts no live region carrying text', async () => {
     // `react.md`'s async surface convention as a property of the whole
     // composition rather than of one panel: a wait is `aria-busy`, and an alert
     // reaches a reader only by arriving as a change to a tree already on screen.
     // Asserted *before* `settle()`, because first paint is the one moment at
     // which nothing has resolved and every panel is still waiting.
     //
+    // It counted regions until #284 D3 made the fleet chart structural — the
+    // panel renders one figure in every state now, first paint's included, so
+    // the chart's readout is on screen from the first frame. What that changed
+    // is the assertion and not the property: the readout mounts *empty* and is
+    // filled only when a reader moves the chart's selection, which is what makes
+    // its every announcement a change rather than text that was already there
+    // (#161). So the sweep below is unchanged in what it matches and asks the
+    // narrower question — a region may exist, and none may have anything to say
+    // yet. A region that mounted with its text in it still fails here.
+    //
     // The known limit: the stub map region stands in for the real placeholder,
-    // whose own zero-live-region property is `MapSurface.test.tsx`'s. Nothing
+    // whose own version of this property is `MapSurface.test.tsx`'s. Nothing
     // asserts the property on the shipping composition, real map shell
     // included. That is the browser lane's kind of work and the lane now exists
     // — `apps/web/e2e/` (`testing.md` rule 10) — but no spec in it queries
@@ -149,9 +159,14 @@ describe('Dashboard', () => {
     // halves above are the whole of the coverage this property has.
     const container = renderDashboard(new DemoFleetDataSource());
 
-    expect(container.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).toHaveLength(
-      0,
+    const liveRegions = container.querySelectorAll('[role="status"], [role="alert"], [aria-live]');
+    // Collected rather than counted, so a failure names the sentence a reader
+    // would have been told at first paint instead of reporting a number.
+    const speaking = Array.from(liveRegions, (region) => region.textContent).filter(
+      (text) => text.trim() !== '',
     );
+
+    expect(speaking).toEqual([]);
 
     // Settled here so the listing this mount started resolves inside the test.
     await settle();

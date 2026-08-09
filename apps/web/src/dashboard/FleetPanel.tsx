@@ -1,42 +1,26 @@
-import {
-  aggregateFleetActuals,
-  aggregateFleetForecast,
-  type Forecast,
-  type GenerationReading,
-  type Site,
-} from '@cumulo/shared';
+import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
 import { useId, useState, type ReactElement } from 'react';
 
-import { ForecastChart } from '../charts/ForecastChart';
-import type { ChartOverlaySeries, ForecastChartPoint } from '../charts/ForecastChart';
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { InfoTip } from '../info/InfoTip';
 import {
+  emptyFleetBody,
+  fleetBody,
+  type FleetActualsState,
+  type FleetChartContext,
+  type FleetSeries,
+  type OverlayState,
+} from './fleet-panel-body';
+import {
   chartCopy,
   fleetStatsLine,
-  HORIZON_CAPTION,
   SUBTITLE_FORECAST_ONLY,
   SUBTITLE_WITH_ACTUALS,
   windowLabel,
-  WINDOW_CAPTION_WITH_ACTUALS,
-  type ChartCopy,
 } from './fleet-panel-copy';
-import { joinFleetSeries, minimumContributingSites } from './fleet-series';
-import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import { RangePicker } from './range-picker';
 import { siteOverlaySeries } from './site-overlay';
-import {
-  aggregatedFromCaption,
-  EMPTY_FLEET_MESSAGE,
-  FLEET_ACTUALS_FAILURE_NOTICE,
-  fleetForecastFailureMessage,
-  LOADING_FLEET_FORECAST_LABEL,
-  NO_FLEET_FORECAST_MESSAGE,
-  partialAggregateNotice,
-  RETRY_ACTION_LABEL,
-  siteOverlayFailureNotice,
-} from './state-copy';
 
 /*
  * The fleet's story, and — while a site is selected — that site's line over it.
@@ -57,6 +41,11 @@ import {
  * never looks at the fleet is exactly who no longer exists — the fleet chart is
  * on screen from first paint in every state of the page. Deferring a request for
  * a chart the reader is already looking at would buy nothing and cost a spinner.
+ *
+ * "In every state" is now structural rather than merely usual: the body renders
+ * one `.forecast-chart-figure` whether the fleet is loading, failed, empty,
+ * forecastless or ready, and the states differ only in what is said above it
+ * (#284 D3). `fleet-panel-body.tsx` holds that arrangement and the reasoning.
  *
  * ## The selected site is one more series, not a second chart
  *
@@ -83,28 +72,30 @@ import {
  * actuals do have a producer now — the forecast service synthesises them (#264)
  * — but synthesised is not measured, so the arm that mentions them says
  * "simulated actuals" and no arm claims a metered reading. Rather than carrying
- * copy that is right half the time, the control and the clause are both gated on
- * the flags: `fleetLookback` decides whether a window can be chosen at all,
- * `fleetActuals` decides whether actuals are mentioned anywhere, including in
- * the chart's accessible name. That was #150's review finding, and the fix it
- * asked for was structural rather than a rewording.
+ * copy that is right half the time, the clause is gated on `fleetActuals`, which
+ * decides whether actuals are mentioned anywhere, including in the chart's
+ * accessible name. That was #150's review finding, and the fix it asked for was
+ * structural rather than a rewording.
  *
- * The two flags move independently, and #264 makes the combination that had no
- * source in it — no look-back, but actuals — the live source's own state. When
- * `fleetLookback` is false the range is pinned to 24 by construction: the picker
- * is the only thing that ever calls `setRange`, so no picker means no second
- * value, and a tip beside the chart states the window the reader is actually
- * looking at for anyone who asks — a bare forward horizon without actuals, and
- * the past 24 hours plus the next 24 with them, because a plot carrying actuals
- * reaches behind the horizon whether or not a picker exists.
+ * What the *control* is gated on is a wider question than what the copy is, and
+ * #284 D5 separated the two. A window is worth choosing wherever a wider one
+ * would show the reader more hours, and that is true of both flags: with
+ * `fleetLookback` the picker widens a look-back, and with `fleetActuals` alone
+ * it widens the horizon the fan-out asks for *and* the span of simulated actuals
+ * behind it. So the picker renders on `fleetLookback || fleetActuals` and only a
+ * source with neither — a bare forward horizon, pinned to
+ * {@link DEFAULT_RANGE} because nothing can call `setRange` — goes without one.
+ * That pin is what lets `windowLabel`'s no-capability arm name 24 hours outright.
  *
  * ## Description behind a press, state on the page
  *
- * Two of this panel's sentences are descriptions — what the chart is a sum of,
- * and which window it covers — and both sit behind an (i) now
- * (`info/InfoTip.tsx`, #265). They were read once and then occupied a line each
- * on every render, above a chart that is the reason anyone is here. What did
- * *not* move is everything the panel says about its current state: the
+ * One of this panel's sentences is a description — what the chart is a sum of —
+ * and it sits behind an (i) (`info/InfoTip.tsx`, #265). It was read once and
+ * then occupied a line on every render, above a chart that is the reason anyone
+ * is here. There was a second (i) beside it, naming the window for the arm with
+ * no picker; #284 D5 deleted it rather than moving it, because the picker now
+ * renders on that arm and states the window as a control the reader can act on.
+ * What has never moved is everything the panel says about its current state: the
  * completeness note, and the notice that a selected site's line failed. A reader
  * cannot press for news they do not know has happened, so state stays where it
  * can be seen and description is one press away.
@@ -117,26 +108,8 @@ import {
  * discharged twice on the same flow.
  */
 
-/** Both fleet reads open on the nearest window, and stay there without a picker. */
+/** Both fleet reads open on the nearest window, whether or not a picker can move it. */
 const DEFAULT_RANGE: RangeHours = 24;
-
-/**
- * What the fleet's second read contributed, once the first one has answered.
- *
- * A union rather than a list plus a boolean (`typing.md` rule 4): "some readings
- * and also a failure" is not a state this panel has — the actuals arrive whole
- * or not at all — and the failed arm carries nothing because the notice it
- * produces names no detail.
- */
-type FleetActualsState =
-  | { readonly kind: 'readings'; readonly readings: readonly GenerationReading[] }
-  | { readonly kind: 'failed' };
-
-/** The two source calls this panel makes, once the forecast has answered. */
-interface FleetSeries {
-  readonly forecasts: readonly Forecast[];
-  readonly actuals: FleetActualsState;
-}
 
 /**
  * Collapse the two queries into the one state the panel renders.
@@ -149,7 +122,7 @@ interface FleetSeries {
  * under the forecast's name, blaming a party that had not failed
  * (`error-handling.md` rule 1's blame tiebreak) and discarding a complete answer
  * to say so (rule 5). A failed actuals read is now a `ready` state carrying a
- * `failed` actuals arm, which `readyBody` draws as the chart plus a notice.
+ * `failed` actuals arm, which the body draws as the chart plus a notice.
  *
  * Loading still waits for both. A chart that painted the forecast and then grew
  * a past half a moment later would be the panel reflowing under a reader who is
@@ -165,171 +138,10 @@ const combineFleetQueries = (
   if (forecasts.status === 'loading' || actuals.status === 'loading') {
     return { status: 'loading' };
   }
-  return {
-    status: 'ready',
-    data: {
-      forecasts: forecasts.data,
-      actuals:
-        actuals.status === 'failed'
-          ? { kind: 'failed' }
-          : { kind: 'readings', readings: actuals.data },
-    },
-  };
-};
+  const actualsState: FleetActualsState =
+    actuals.status === 'failed' ? { kind: 'failed' } : { kind: 'readings', readings: actuals.data };
 
-/**
- * The completeness line, stated in both directions.
- *
- * `minContributing` and `siteCount` are both rendered because "partial" without
- * the two numbers is a shrug: the reader needs to know whether one site is
- * missing or fifty.
- */
-const completenessNote = (minContributing: number, siteCount: number): ReactElement =>
-  minContributing < siteCount ? (
-    <p className="panel-notice">{partialAggregateNotice(minContributing, siteCount)}</p>
-  ) : (
-    <p className="panel-caption">{aggregatedFromCaption(siteCount)}</p>
-  );
-
-/**
- * Everything the body needs that is not the fleet's own numbers, as one value.
- *
- * Threaded rather than passed as four more parameters: `readyBody` and
- * `fleetBody` are top-level functions precisely so they can be read without the
- * component around them (`structure.md` rule 1), and a signature that grows a
- * parameter per surface stops being readable at about this point.
- */
-/**
- * What the selected site contributes to the chart right now.
- *
- * A union rather than an optional series plus a loose error flag (`typing.md`
- * rule 4): "a series and a failure" and "neither, but a site name to apologise
- * about" are not states this panel has. `none` covers every reason there is
- * nothing to draw and nothing to say — no selection, a selection whose first
- * forecast has not arrived, a read still in flight — because the reader is owed
- * the same thing in all three: the fleet's chart, unannotated.
- */
-type OverlayState =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'series'; readonly series: ChartOverlaySeries }
-  | { readonly kind: 'failed'; readonly siteName: string };
-
-interface FleetChartContext {
-  readonly siteCount: number;
-  readonly chart: ChartCopy;
-  readonly overlay: OverlayState;
-  /** Re-asks for the selected site's hours, and only those. */
-  readonly onRetryOverlay: () => void;
-  /** Re-asks for the fleet's readings, and only those — never the forecast fan-out. */
-  readonly onRetryActuals: () => void;
-}
-
-/**
- * The chart, with the overlay prop present only when there is an overlay.
- *
- * Two calls rather than `overlay={overlay}` with a possibly-`undefined` value:
- * under `exactOptionalPropertyTypes` an absent optional prop and one explicitly
- * set to `undefined` are different values, and `ForecastChart`'s contract is
- * that an *absent* overlay renders exactly what it rendered before overlays
- * existed — no mark, no legend row, no table column. Spreading the shared props
- * keeps the two arms from drifting (`structure.md` rule 7).
- */
-const fleetChart = (
-  points: readonly ForecastChartPoint[],
-  { chart, overlay }: FleetChartContext,
-): ReactElement => {
-  const common = { points, ariaLabel: chart.ariaLabel, tableCaption: chart.tableCaption };
-
-  return overlay.kind === 'series' ? (
-    <ForecastChart {...common} overlay={overlay.series} />
-  ) : (
-    <ForecastChart {...common} />
-  );
-};
-
-/**
- * A chart that arrived, with one of its series missing and a way to re-ask.
- *
- * Both of this panel's partial states render through here, because they are one
- * intent in two subjects (`structure.md` rule 7): a complete answer stands, the
- * missing part is named, and the recourse is the single cheap request that could
- * supply it. What differs is only the sentence and which counter the button
- * bumps, so those are the parameters and nothing else is.
- *
- * Partial results are labelled partial (`error-handling.md` rule 5), and a
- * series that failed silently is the exact shape that rule refuses: nothing on
- * screen distinguishes "this site tracks the fleet closely" from "this site's
- * line never arrived", or a fleet with no simulated actuals from a fleet whose
- * actuals did not load.
- *
- * Deliberately **not** a live region. `react.md` budgets one per panel and this
- * panel's is the chart's own readout, which is the announcement a reader asked
- * for by moving the selection; a second region here would mean whichever won.
- * It is the same non-live treatment the completeness note above uses, for the
- * same reason — an incomplete answer is a caption on the answer, not an event.
- *
- * The retry is offered because re-asking genuinely can work *and* is cheap: one
- * site's hours, or the fleet's one metered actuals request. Neither re-spends
- * the paced per-site forecast fan-out, which is the test `react.md` sets for
- * offering a retry at all.
- */
-const partialSeriesNote = (message: string, onRetry: () => void): ReactElement => (
-  <p className="panel-notice">
-    {message}{' '}
-    <button type="button" className="panel-retry" onClick={onRetry}>
-      {RETRY_ACTION_LABEL}
-    </button>
-  </p>
-);
-
-const overlayNote = (overlay: OverlayState, onRetry: () => void): ReactElement | null =>
-  overlay.kind === 'failed'
-    ? partialSeriesNote(siteOverlayFailureNotice(overlay.siteName), onRetry)
-    : null;
-
-const actualsNote = (actuals: FleetActualsState, onRetry: () => void): ReactElement | null =>
-  actuals.kind === 'failed' ? partialSeriesNote(FLEET_ACTUALS_FAILURE_NOTICE, onRetry) : null;
-
-/** No readings is what a failed actuals read leaves the chart: a forecast, and no second series. */
-const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
-  actuals.kind === 'readings' ? actuals.readings : [];
-
-const readyBody = (data: FleetSeries, context: FleetChartContext): ReactElement => {
-  const forecastPoints = aggregateFleetForecast(data.forecasts);
-  if (forecastPoints.length === 0) {
-    return <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />;
-  }
-
-  return (
-    <div className="fleet-panel-body">
-      {completenessNote(minimumContributingSites(forecastPoints), context.siteCount)}
-      {actualsNote(data.actuals, context.onRetryActuals)}
-      {overlayNote(context.overlay, context.onRetryOverlay)}
-      {fleetChart(
-        joinFleetSeries(forecastPoints, aggregateFleetActuals(readingsOf(data.actuals))),
-        context,
-      )}
-    </div>
-  );
-};
-
-const fleetBody = (
-  state: QueryState<FleetSeries>,
-  context: FleetChartContext,
-  onRetry: () => void,
-): ReactElement => {
-  if (state.status === 'loading') {
-    return <PanelPending label={LOADING_FLEET_FORECAST_LABEL} />;
-  }
-  if (state.status === 'failed') {
-    // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
-    // which is offered because the fan-out is the one request a transient
-    // failure genuinely can outlive.
-    return (
-      <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
-    );
-  }
-  return readyBody(state.data, context);
+  return { status: 'ready', data: { forecasts: forecasts.data, actuals: actualsState } };
 };
 
 /**
@@ -475,81 +287,64 @@ export const FleetPanel = ({
   const retryOverlay = (): void => {
     setOverlayAttempt((previous) => previous + 1);
   };
-  // Derived during render: what the selection contributes is exactly a function
-  // of the site and the answer about it, and mirroring that into state would be
-  // a second copy of a fact the two values already carry (`react.md` rule 1).
-  const overlay = overlayState(selectedSite, overlayForecasts);
+  // Derived during render: what the body draws is exactly a function of the
+  // props and the answers about them, and mirroring any of it into state would
+  // be a second copy of a fact those values already carry (`react.md` rule 1).
+  const context: FleetChartContext = {
+    siteCount: sites.length,
+    chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals),
+    overlay: overlayState(selectedSite, overlayForecasts),
+    onRetryOverlay: retryOverlay,
+    onRetryActuals: retryActuals,
+  };
 
   return (
     <section className="fleet-panel" aria-labelledby={headingId}>
+      {/*
+       * One row, and everything the panel knows about itself is in it: what it
+       * is, how big the fleet is, the description behind an (i), and the window
+       * control. Four stacked lines used to sit between the top of the panel and
+       * the chart; a wrapping flex row spends one (#284 D4), and `flex-wrap` is
+       * what makes that safe — at a width that cannot hold all four the picker
+       * drops to its own line instead of crushing the numbers.
+       */}
       <header className="fleet-panel-header">
-        <div className="fleet-panel-titles">
-          <h2 className="fleet-panel-title" id={headingId}>
-            Fleet
-          </h2>
-          {/*
-           * The subtitle, behind an (i) since #265. It was a paragraph under the
-           * heading that every reader read once and then scrolled past on every
-           * render — description rather than state, which is the line this page
-           * now draws: what the panel *is* goes behind a press, what the panel
-           * currently *says* (the completeness note, an overlay that failed)
-           * stays inline, because a reader cannot ask for news they do not know
-           * has happened.
-           *
-           * The capability arms are untouched by the move and stay whole:
-           * `fleetActuals` still chooses between two complete sentences rather
-           * than assembling a clause, so "simulated actuals" is still readable
-           * as belonging to exactly one arm.
-           */}
-          <InfoTip label="About this chart">
-            {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
-          </InfoTip>
-        </div>
+        <h2 className="fleet-panel-title" id={headingId}>
+          Fleet forecast
+        </h2>
         <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
+        {/*
+         * The subtitle, behind an (i) since #265. It was a paragraph under the
+         * heading that every reader read once and then scrolled past on every
+         * render — description rather than state, which is the line this page
+         * now draws: what the panel *is* goes behind a press, what the panel
+         * currently *says* (the completeness note, an overlay that failed)
+         * stays inline, because a reader cannot ask for news they do not know
+         * has happened.
+         *
+         * The capability arms are untouched by the move and stay whole:
+         * `fleetActuals` still chooses between two complete sentences rather
+         * than assembling a clause, so "simulated actuals" is still readable
+         * as belonging to exactly one arm.
+         */}
+        <InfoTip label="About this chart">
+          {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
+        </InfoTip>
+        {/*
+         * A control rather than a caption, on both arms that have a window to
+         * choose. It stays visible for an empty fleet too: it is part of the
+         * panel's furniture, and furniture that appears when the first site
+         * lands is the reading rearranging itself under a reader who was
+         * looking at it. An empty fleet asks the source nothing whatever the
+         * picker says, because `enabled` gates the queries and not this.
+         */}
+        {fleetLookback || fleetActuals ? (
+          <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
+        ) : null}
       </header>
-      {sites.length === 0 ? (
-        // The empty fleet is the demo's invitation, so it gets the panel to
-        // itself: no picker over nothing, and no failed query reported for a
-        // sum the reader never asked for.
-        <PanelEmpty message={EMPTY_FLEET_MESSAGE} />
-      ) : (
-        <>
-          {/*
-           * No add-a-site hint here any more. The map carries a labelled
-           * control for that now (`map/MapControls.tsx`), and a paragraph
-           * explaining a visible button is both redundant and the half most
-           * likely to be left describing an interaction that has moved on
-           * — which is exactly what it was doing.
-           */}
-          {/*
-           * A control on one arm, a description on the other — and only the
-           * description moved behind an (i). The picker stays inline because it
-           * is something the reader *does*: an affordance nobody can see is an
-           * affordance nobody uses, which is the whole reason the add-a-site
-           * hint above became a labelled control on the map rather than more
-           * prose. The horizon caption is the opposite — it answers "which hours
-           * am I looking at" for a reader who thought to ask.
-           */}
-          {fleetLookback ? (
-            <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
-          ) : (
-            <InfoTip label="About this window">
-              {fleetActuals ? WINDOW_CAPTION_WITH_ACTUALS : HORIZON_CAPTION}
-            </InfoTip>
-          )}
-          {fleetBody(
-            combineFleetQueries(forecasts, actuals),
-            {
-              siteCount: sites.length,
-              chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals),
-              overlay,
-              onRetryOverlay: retryOverlay,
-              onRetryActuals: retryActuals,
-            },
-            retryFleet,
-          )}
-        </>
-      )}
+      {sites.length === 0
+        ? emptyFleetBody(context)
+        : fleetBody(combineFleetQueries(forecasts, actuals), context, retryFleet)}
     </section>
   );
 };

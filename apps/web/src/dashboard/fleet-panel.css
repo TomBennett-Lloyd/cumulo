@@ -8,8 +8,9 @@
  * in dashboard.css; the section that wrapper existed for became a disclosure
  * that carries its own card, so the two panels now state the shared chrome
  * rather than inherit it from a box neither of them is in.) What is its own is
- * the internal rhythm: a tight heading block, then the hint, the control and the
- * chart at the column's normal gap.
+ * the internal rhythm: one header row carrying everything the panel says about
+ * itself, then the body — whatever the panel's current state has to say, and the
+ * chart — at the column's normal gap.
  *
  * These `.fleet-panel*` classes are this panel's and nothing else's. The async
  * states it renders wear `panel-states.css`'s `.panel-*` classes, which are the
@@ -36,22 +37,24 @@
    displaces this panel, it is never handed `hidden`, and a rule for a state that
    cannot occur is a rule nobody can tell has stopped working. */
 
-/* Title and size read as one block, so they sit closer together than the
-   panel's own rhythm. The promise used to be a third line here and is an (i)
-   beside the title now (#265) — description behind a press, the panel's own
-   numbers still on the page. */
+/* Everything the panel says about itself, on one baseline: the heading, the
+   fleet's own numbers, the (i) carrying the description, and the window picker
+   (#284 D4). They were a stack of rows, which spent four lines above the chart
+   that is the reason anyone is here — and each of the four is short enough that
+   a row holds them all at the measures this reading is set in. `flex-wrap` is
+   what keeps that honest where it does not: the picker drops to a line of its
+   own rather than squeezing the numbers out of shape. */
 .fleet-panel-header {
-  display: grid;
-  gap: var(--space-1);
-}
-
-/* The heading and its tip on one baseline: the tip is *about* the heading, and a
-   grid row of its own would read as a second item rather than an annotation. */
-.fleet-panel-titles {
   display: flex;
-  gap: var(--space-2);
+  flex-wrap: wrap;
+  gap: var(--space-3);
   align-items: center;
 }
+
+/* There is no `.fleet-panel-titles` rule any more. It existed to keep the
+   heading and its tip on one baseline inside a stacked header; the header is
+   that baseline now, so a wrapper around two of its four items would only be a
+   box that stops the other two from wrapping past them. */
 
 .fleet-panel-title {
   margin: 0;

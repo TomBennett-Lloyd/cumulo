@@ -164,9 +164,18 @@ announce. Both were answers to a state the page can no longer be in.
 
 ## Capability honesty is structural
 
-The fleet panel renders a look-back picker, and says the words "simulated actuals", **only when the
+The fleet panel says the words "simulated actuals", and offers a window to choose, **only when the
 source it holds can actually answer for them** — `dataSource.capabilities.fleetLookback` and
 `.fleetActuals`, declared per implementation on `FleetDataSource`.
+
+The two gates are not the same gate, and #284 D5 is where they separated. The **copy** is gated on
+`fleetActuals` alone, because that flag is exactly the question "are there measured hours to speak
+of". The **control** is gated on `fleetLookback || fleetActuals`, because a window is worth
+choosing wherever a wider one shows the reader more: with a look-back it widens the past, and with
+simulated actuals alone it widens both the span of measured hours and the horizon the fan-out is
+asked for. Only a source with neither — a bare forward horizon — goes without a picker, and that
+arm is pinned to 24 hours by construction, since the picker is the only thing that ever calls
+`setRange`.
 
 This settles a review finding from #150. The demo source has genuine history and its own actuals;
 the HTTP source's fan-out reaches forward only, and its actuals come from the forecast service's
@@ -174,17 +183,25 @@ own producer (#264), which synthesises the fleet's past hours rather than meteri
 That is why the copy says "simulated" and never "measured": the numbers are real output of a real
 model, and nothing on the page should let them be read as a reading. Copy that promised history
 was right half the time, and a range control that rendered identical charts in live mode was worse
-than absent.
+than absent — which it was until #264 gave the live source actuals for the control to widen.
 
 The fix is structural rather than editorial because the editorial version does not hold: prose
 gets rewritten by someone who only ever ran the demo. Two whole copy arms sit side by side in
-`FleetPanel.tsx` so the rule is auditable by reading them — the phrase "simulated actuals" appears
-only in the arm a capable source reaches, _including in the chart's accessible name_, which is
-the copy easiest to leave promising something the data cannot show. The two flags move
+`fleet-panel-copy.ts` so the rule is auditable by reading them — the phrase "simulated actuals"
+appears only in the arm a capable source reaches, _including in the chart's accessible name_, which
+is the copy easiest to leave promising something the data cannot show. The two flags move
 independently, and #264 puts a source in the combination that previously had none — actuals
 without a look-back — so the window the chart names has a third answer beside "24 h range" and
-"next 24 h": "past 24 h and next 24 h", because a plot carrying past hours reaches behind the
-horizon whether or not a picker exists.
+"next 24 h": "past 24 h and the forecast ahead", because a plot carrying past hours reaches behind
+the horizon whether or not the source can look back. The past half carries the chosen number of
+hours and the forecast half deliberately carries none: the fan-out is asked for the same window
+but serves only the hours ahead of the clock, so naming a count there would describe a window the
+chart was never given.
+
+The window used to be stated a second time, in a sentence behind an (i) beside the chart. That tip
+is gone (#284 D5). It existed only on the arm with no picker, and once the picker reached that arm
+the caption was a description of a control standing next to it — so the panel now has exactly one
+(i), carrying the one description it has left: what the chart is a sum of.
 
 ## Two credits, and why that is not one too many
 

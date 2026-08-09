@@ -278,10 +278,15 @@ export class HttpFleetDataSource implements FleetDataSource {
    * One false, one true, and the false one is not a shortcut this source could
    * choose to undo: `fleetForecasts` below spends the range as a forward
    * horizon because the only unmetered fleet-wide read of forecasts is a
-   * per-site fan-out over future hours (see the comment there), so offering a
-   * look-back picker would move the actuals' window and leave the forecast half
-   * where it was. Closing that needs a fleet-aggregate forecast endpoint, not a
-   * change here.
+   * per-site fan-out over future hours (see the comment there). Closing that
+   * needs a fleet-aggregate forecast endpoint, not a change here.
+   *
+   * What the false one no longer means is "no window control". It used to: a
+   * picker here moves the actuals' window and leaves the forecast half roughly
+   * where it was, and that asymmetry was once read as a reason to withhold the
+   * control. #284 D5 keeps the control and pays for the asymmetry in the copy
+   * instead — more measured hours is a real thing to offer a reader, and the
+   * chart's own name declines to claim the forecast half moved with them.
    *
    * `fleetActuals` is true because the fleet's readings now both exist and
    * arrive in one request: the forecast service writes them and

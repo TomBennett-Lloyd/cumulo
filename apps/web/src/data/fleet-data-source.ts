@@ -130,10 +130,20 @@ export type RangeHours = 24 | 48 | 168;
 export interface FleetSourceCapabilities {
   /**
    * Fleet-level *forecasts* honour {@link RangeHours} as a look-back. False ⇒
-   * forward horizon only, and therefore no window worth offering — including
-   * where {@link FleetDataSource.fleetActuals} honours the window on its own
-   * route, because a
-   * picker would move one half of the plot and not the other.
+   * forward horizon only.
+   *
+   * That used to be read here as "and therefore no window worth offering", on
+   * the grounds that a picker would move one half of the plot and not the
+   * other. #284 D5 overruled it for the case where
+   * {@link FleetSourceCapabilities.fleetActuals} is true: a wider window then
+   * buys the reader genuinely more measured hours behind the horizon, which is
+   * worth a control even though the forecast half only reaches as far as the
+   * pipeline has written. What that costs is a naming obligation rather than a
+   * missing control, and `dashboard/fleet-panel-copy.ts` discharges it — the
+   * chart names the past half with the chosen number of hours and the forecast
+   * half with none. This flag therefore decides what the panel may *say* about
+   * a look-back, and no longer decides on its own whether a window can be
+   * chosen; `dashboard/FleetPanel.tsx` owns that gate and states it.
    */
   readonly fleetLookback: boolean;
   /** Fleet-level actuals can ever be non-empty. */

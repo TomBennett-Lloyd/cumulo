@@ -30,10 +30,17 @@ import { routeBasemap } from './hermetic-basemap';
  * The hit test below is what tells the two apart, borrowing the idiom
  * `composition.spec.ts` uses on the credits band for the same reason.
  *
- * The third tip — the horizon caption's — is never driven here because it never
- * renders here: the demo source can look back, so the fleet panel shows its
- * range picker instead. Its own arm is the unit lane's
- * (`FleetPanel.test.tsx`, against a horizon-only source).
+ * Two is now also the whole count. There used to be a third tip — the fleet
+ * panel's window caption, on the arm that rendered no range picker — and this
+ * comment used to explain why the demo build never showed it. #284 D5 deleted
+ * it outright: the picker renders wherever there is a window to choose now, and
+ * on the one arm left without one the window is pinned, so the chart's own name
+ * states it. That makes "About this chart" the fleet panel's only (i) in every
+ * mode, which is a fact this spec depends on rather than merely records —
+ * `FLEET_TIP_BUTTON` is a class selector, so a second tip growing back in that
+ * panel would make every locator below ambiguous. The count is asserted for
+ * that reason; which tip is which is the unit lane's
+ * (`FleetPanel.structure.test.tsx`).
  */
 
 /**
@@ -99,6 +106,10 @@ test('opens the fleet chart’s description from the keyboard, and closes it bac
 }) => {
   const button = page.locator(FLEET_TIP_BUTTON);
   const panel = page.locator(FLEET_TIP_PANEL);
+
+  // One (i) in this panel, which is what makes the selectors above name a single
+  // control rather than whichever of two matched first.
+  await expect(page.locator(FLEET_TIP_BUTTON)).toHaveCount(1);
 
   await tabToFleetTip(page);
 
