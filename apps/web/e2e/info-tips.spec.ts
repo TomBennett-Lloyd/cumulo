@@ -30,11 +30,12 @@ import { routeBasemap } from './hermetic-basemap';
  * tab order ahead of the search.
  *
  * That second departure took something with it that is not about tips at all,
- * and it went somewhere rather than away: the header's panel was the app's one
- * overlay hanging *over the map*, so this file carried the stacking half —
- * whether an overlay is painted above maplibre's canvas or under it, which
- * `toBeVisible` cannot tell, Playwright's visibility being a box and a computed
- * style rather than an occlusion test. `header.spec.ts` makes that measurement
+ * and it went somewhere rather than away: the header's panel was the one overlay
+ * hanging *over the map* that anything measured (`.site-search-listbox` hangs
+ * there too, equally stacked and measured by nothing), so this file carried the
+ * stacking half — whether an overlay is painted above maplibre's canvas or under
+ * it, which `toBeVisible` cannot tell, Playwright's visibility being a box and a
+ * computed style rather than an occlusion test. `header.spec.ts` makes that measurement
  * on `.header-menu-popover` now: same `z-index`, same bar, same canvas beneath.
  *
  * So what is left here is the reachability half, on the tip a reader reaches by

@@ -205,8 +205,10 @@
  * it is measured in `e2e/header.spec.ts`, by a hit test rather than a visibility
  * check — the two are not the same question, and only the first can tell an
  * overlay a reader can read from one the map is painted on top of. That case
- * inherited the claim from the header's (i), which was the app's other on-bar
- * overlay until #284 D13 removed it.
+ * inherited the claim from the header's (i), which was another on-bar overlay
+ * until #284 D13 removed it — though not the last one standing beside this
+ * popover: `.site-search-listbox` above is equally stacked over the same canvas,
+ * and no spec measures it (`docs/tech-debt.md`).
  *
  * There are two such values in this file, this one and `.site-search-listbox`'s,
  * and one more of the same kind outside it: `.info-tip-panel` in `info/info.css`,

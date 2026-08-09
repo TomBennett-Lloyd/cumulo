@@ -166,6 +166,11 @@ describe('Dashboard', () => {
       (text) => text.trim() !== '',
     );
 
+    // The positive control D3 made available: the readout is on screen at first
+    // paint by construction, so a sweep that matched nothing would be a broken
+    // query passing as a clean bill of health (the discipline
+    // `FleetPanel.structure.test.tsx` applies to the figure it counts).
+    expect(liveRegions.length).toBeGreaterThan(0);
     expect(speaking).toEqual([]);
 
     // Settled here so the listing this mount started resolves inside the test.

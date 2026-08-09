@@ -44,10 +44,11 @@ import { routeBasemap } from './hermetic-basemap';
  * The fourth is that the menu's popover is painted *over* the map rather than
  * under it, which is the claim this file inherited when #284 D13 removed the
  * header's (i) and with it `info-tips.spec.ts`'s stacking case. It belongs to
- * whatever on-bar overlay exists rather than to that one, and the popover is now
- * the app's only one: it carries the same stacking value (`header/header.css`
- * argues both of the bar's at once), hangs off the same bar, and has the same
- * maplibre canvas beneath it. Playwright's `toBeVisible` cannot make the claim —
+ * whatever on-bar overlay exists rather than to that one, and the popover is the
+ * app's only one whose stacking any spec measures — `.site-search-listbox` is
+ * the other, equally stacked over the same canvas and untested. The popover
+ * carries the same stacking value (`header/header.css` argues both of the bar's
+ * at once), hangs off the same bar, and has the same maplibre canvas beneath it. Playwright's `toBeVisible` cannot make the claim —
  * it is a box and a computed style, not an occlusion test, so a popover painted
  * under the canvas passes it while being unreadable in fact.
  */
