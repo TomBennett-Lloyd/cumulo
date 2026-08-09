@@ -18,9 +18,11 @@ const MS_PER_SECOND = 1_000;
  * The other constraint is read capacity. Each poll reads one site's own
  * partition (~0.5 read units, per ADR 0002's review of this ticket); a
  * fleet-wide read such as `listSites` costs ~25, so a loop that re-listed the
- * fleet every five seconds would let three open tabs saturate the provisioned
- * on their own — and would arrive as a bill rather than a throttle under
- * on-demand. This loop therefore calls `getSiteForecast` and nothing else.
+ * fleet every five seconds would have a handful of open tabs spending the
+ * fleet's read units over and over between them. Since #258 these tables are
+ * on-demand, so what that exhausts is the budget rather than a provisioned
+ * ceiling: it arrives as a bill, not as a throttle. This loop therefore calls
+ * `getSiteForecast` and nothing else.
  */
 const POLL_INTERVAL_MS = 5_000;
 

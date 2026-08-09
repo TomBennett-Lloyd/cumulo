@@ -102,10 +102,12 @@ export class HttpFleetDataSource implements FleetDataSource {
    * `${siteId}|${range}` → the series request currently in flight for it.
    *
    * The detail view asks for that pair's forecasts and actuals concurrently,
-   * and both are halves of one `/series` payload. `/series` is the one read the
-   * API's per-IP limiter meters (30 requests per 60 seconds, then a one-hour
-   * block), so sharing the promise is the difference between one metered
-   * request per selection and two. Even unshared this is far from the limiter —
+   * and both are halves of one `/series` payload. `/series` is one of the six
+   * routes the API's per-IP limiter meters (30 requests per 60 seconds, then a
+   * one-hour block) — the three writes, this read, and both fleet reads, per
+   * the route table in `apps/api/src/main.ts` — so sharing the promise is the
+   * difference between one metered request per selection and two. Even
+   * unshared this is far from the limiter —
    * a human would need more than 30 distinct (site, range) selections inside a
    * minute — but the halving is free and it is the frugality posture CLAUDE.md
    * asks for.
@@ -309,11 +311,14 @@ export class HttpFleetDataSource implements FleetDataSource {
    * **All-or-nothing, and that is a deliberate change of semantics.** The
    * fan-out returned the union of whichever sites answered; one request either
    * answers for the fleet or fails for it, which is the posture `fleetActuals`
-   * has always had. Nothing is quietly dropped on the way — labelling an
-   * incomplete fleet as incomplete (`error-handling.md` rule 5) is now the
-   * server's obligation, discharged in
-   * `apps/api/src/forecast/get-fleet-forecast.ts`, rather than something this
-   * client reassembles from a pile of partial results.
+   * has always had. There is no partial for this client to label because the
+   * route does not serve one: a fleet short of a site's points is summed hour
+   * by hour into a fleet that merely looks like it generates less, so the read
+   * refuses rather than truncating (`error-handling.md` rule 5). That decision
+   * is `apps/api/src/forecast/fleet-series-read.ts`'s and its reasoning lives
+   * there; labelling a response partial is the richer answer that module names
+   * as still open — the same contract change #165 holds for the per-site
+   * routes.
    */
   readonly fleetForecasts = async (
     range: RangeHours,

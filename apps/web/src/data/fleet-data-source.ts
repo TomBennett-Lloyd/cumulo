@@ -100,7 +100,7 @@ export type FleetSourceResult<T> =
  *
  * Per-site reads honour the look-back. **Fleet-level _forecasts_ cannot.** The
  * fleet-wide read of forecasts an HTTP source has is `GET /v1/fleet/forecast`,
- * one request for every site (#296), and its window opens at the clock and runs
+ * one request for the whole fleet (#296), and its window opens at the clock and runs
  * *ahead* — so the HTTP source's fleet-level forecast reinterprets this window
  * as a forward horizon (see {@link FleetDataSource.fleetForecasts}).
  * Fleet-level range selection is therefore horizon-capped in live mode: it
@@ -323,10 +323,11 @@ export interface FleetDataSource {
    * Every site's generation actuals over the window, unaggregated — simulated
    * in live mode as {@link siteActuals} describes (#264).
    *
-   * Unlike {@link fleetForecasts} this need not be a fan-out: the HTTP source
-   * reads `GET /v1/fleet/actuals`, one request for the whole fleet, so it
-   * honours `range` as the look-back {@link RangeHours} describes even where
-   * `fleetLookback` is false.
+   * Like {@link fleetForecasts} this is one request for the whole fleet — the
+   * HTTP source reads `GET /v1/fleet/actuals`. What differs is the direction:
+   * that route reads *backwards* from now, so this member honours `range` as
+   * the look-back {@link RangeHours} describes even where `fleetLookback` is
+   * false.
    */
   readonly fleetActuals: (
     range: RangeHours,
