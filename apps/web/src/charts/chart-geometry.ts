@@ -163,29 +163,36 @@ export const snapToNearestIndex = ({ pointerX, plot, count }: SnapToIndexParams)
 };
 
 export interface TooltipAnchorParams {
-  /** Crosshair position in SVG user units. */
-  readonly snappedX: number;
+  /**
+   * The x the panel is placed beside, in SVG user units — **not** a snapped
+   * one. Its only caller passes the continuous pointer position while a pointer
+   * is hovering and the crosshair's x only for a keyboard selection, which has
+   * no pointer (#284 D7): the panel follows the pointer, the data snaps. So this
+   * takes any x in the plot's space, and nothing here rounds it to a sample.
+   */
+  readonly followX: number;
   readonly tooltipWidth: number;
   readonly plot: PlotRect;
 }
 
-/** SVG user units between the crosshair and the panel it labels. */
+/** SVG user units between the point the panel follows and the panel itself. */
 const TOOLTIP_GAP = 8;
 
 /**
- * Left edge of the tooltip panel. It sits to the right of the crosshair until
- * that would push it past the right plot edge, then flips to the left side —
- * the readout follows the pointer without ever running off the canvas.
+ * Left edge of the tooltip panel. It sits to the right of the point it follows
+ * until that would push it past the right plot edge, then flips to the left side
+ * — the readout follows the pointer without ever running off the canvas.
  *
  * If the panel fits on neither side it pins to the left plot edge: a readout
- * overlapping its own crosshair is still readable, one half off the chart is
- * not.
+ * overlapping the point it labels is still readable, one half off the chart is
+ * not. `tooltipPanelWidth` caps the panel at the plot's width, so that arm is
+ * the defensive one rather than a state the chart reaches.
  */
-export const tooltipAnchorX = ({ snappedX, tooltipWidth, plot }: TooltipAnchorParams): number => {
-  const rightAnchor = snappedX + TOOLTIP_GAP;
+export const tooltipAnchorX = ({ followX, tooltipWidth, plot }: TooltipAnchorParams): number => {
+  const rightAnchor = followX + TOOLTIP_GAP;
   return rightAnchor + tooltipWidth <= plot.right
     ? rightAnchor
-    : Math.max(plot.left, snappedX - TOOLTIP_GAP - tooltipWidth);
+    : Math.max(plot.left, followX - TOOLTIP_GAP - tooltipWidth);
 };
 
 /** SVG user units between the horizon rule and the words naming it. */

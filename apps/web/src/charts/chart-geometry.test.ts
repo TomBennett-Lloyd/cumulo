@@ -189,23 +189,26 @@ describe('snapToNearestIndex', () => {
 describe('tooltipAnchorX', () => {
   const TOOLTIP_WIDTH = 100;
 
-  it('sits to the right of the crosshair while the panel fits there', () => {
-    const anchor = tooltipAnchorX({ snappedX: 300, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
+  it('sits to the right of the point it follows while the panel fits there', () => {
+    const anchor = tooltipAnchorX({ followX: 300, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
 
     expect(anchor).toBeGreaterThan(300);
     expect(anchor + TOOLTIP_WIDTH).toBeLessThanOrEqual(PLOT.right);
   });
 
-  it('flips to the left of the crosshair rather than overflow the right edge', () => {
-    const anchor = tooltipAnchorX({ snappedX: 430, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
+  it('flips to the left of the point it follows rather than overflow the right edge', () => {
+    const anchor = tooltipAnchorX({ followX: 430, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
 
     expect(anchor + TOOLTIP_WIDTH).toBeLessThanOrEqual(430);
     expect(anchor).toBeGreaterThanOrEqual(PLOT.left);
   });
 
-  it('keeps the panel inside the plot at every position the crosshair can take', () => {
-    for (let snappedX = PLOT.left; snappedX <= PLOT.right; snappedX += 1) {
-      const anchor = tooltipAnchorX({ snappedX, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
+  // Every position, not every sample: the pointer this follows is continuous,
+  // so a version that only held at the five snapped x's would be a weaker claim
+  // than the one the chart needs.
+  it('keeps the panel inside the plot at every position it can be asked to follow', () => {
+    for (let followX = PLOT.left; followX <= PLOT.right; followX += 1) {
+      const anchor = tooltipAnchorX({ followX, tooltipWidth: TOOLTIP_WIDTH, plot: PLOT });
 
       expect(anchor).toBeGreaterThanOrEqual(PLOT.left);
       expect(anchor + TOOLTIP_WIDTH).toBeLessThanOrEqual(PLOT.right);
@@ -215,7 +218,7 @@ describe('tooltipAnchorX', () => {
   it('pins to the left plot edge when the panel fits on neither side', () => {
     const overwide = PLOT.right - PLOT.left + 1;
 
-    expect(tooltipAnchorX({ snappedX: 100, tooltipWidth: overwide, plot: PLOT })).toBe(PLOT.left);
+    expect(tooltipAnchorX({ followX: 100, tooltipWidth: overwide, plot: PLOT })).toBe(PLOT.left);
   });
 });
 

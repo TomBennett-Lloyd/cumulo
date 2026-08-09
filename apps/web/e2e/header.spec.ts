@@ -290,42 +290,6 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
   await expect(menuButton).toBeFocused();
 });
 
-test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
-  /*
-   * The live map, not merely a map-shaped box. `.map-canvas` is worn by the
-   * pending shell as well as the running map (`MapSurface`), and the swap
-   * between them is a layout change directly above nothing and directly below
-   * the header — so measuring the bar while it is still in flight would be
-   * measuring a page mid-assembly. `.maplibregl-canvas` exists only on the far
-   * side of that swap.
-   */
-  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
-
-  /*
-   * The three things a reader sees on the bar, and the whole of the claim: they
-   * share a centreline. Written as the three elements rather than as a rule in a
-   * stylesheet because the defect this catches is not a wrong declaration — it
-   * is a right-sounding one (`align-items: baseline`) meeting a mark that has no
-   * text baseline to hang from, so the mark rides above controls set two type
-   * sizes smaller. Only the resolved geometry can tell those apart.
-   *
-   * Polled, because these are geometry reads on a page that has just finished
-   * assembling itself and fonts settle after first paint.
-   */
-  const misalignment = async (): Promise<number> =>
-    maxCentreMisalignment([
-      page.locator('.brand-mark'),
-      page.locator('.site-search-input'),
-      page.locator('.header-menu-button'),
-    ]);
-
-  await expect
-    .poll(misalignment, {
-      message: 'The brand mark, the search and the menu do not share a centreline.',
-    })
-    .toBeLessThanOrEqual(CENTRE_TOLERANCE_PX);
-});
-
 test('finds a site by name and brings the camera to it when it is off screen', async ({ page }) => {
   const searchInput = page.locator('.site-search-input');
   const popover = page.locator('.site-popover');
@@ -395,4 +359,40 @@ test('finds a site by name and brings the camera to it when it is off screen', a
   // (`docs/standards/react.md`) — asserted here because a field that kept the
   // focus would leave a keyboard reader typing at their own answer.
   await expect(page.locator('.site-popover-title')).toBeFocused();
+});
+
+test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
+  /*
+   * The live map, not merely a map-shaped box. `.map-canvas` is worn by the
+   * pending shell as well as the running map (`MapSurface`), and the swap
+   * between them is a layout change directly above nothing and directly below
+   * the header — so measuring the bar while it is still in flight would be
+   * measuring a page mid-assembly. `.maplibregl-canvas` exists only on the far
+   * side of that swap.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  /*
+   * The three things a reader sees on the bar, and the whole of the claim: they
+   * share a centreline. Written as the three elements rather than as a rule in a
+   * stylesheet because the defect this catches is not a wrong declaration — it
+   * is a right-sounding one (`align-items: baseline`) meeting a mark that has no
+   * text baseline to hang from, so the mark rides above controls set two type
+   * sizes smaller. Only the resolved geometry can tell those apart.
+   *
+   * Polled, because these are geometry reads on a page that has just finished
+   * assembling itself and fonts settle after first paint.
+   */
+  const misalignment = async (): Promise<number> =>
+    maxCentreMisalignment([
+      page.locator('.brand-mark'),
+      page.locator('.site-search-input'),
+      page.locator('.header-menu-button'),
+    ]);
+
+  await expect
+    .poll(misalignment, {
+      message: 'The brand mark, the search and the menu do not share a centreline.',
+    })
+    .toBeLessThanOrEqual(CENTRE_TOLERANCE_PX);
 });

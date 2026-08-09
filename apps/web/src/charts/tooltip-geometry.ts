@@ -77,22 +77,45 @@ export interface TooltipRow {
 const textWidth = (text: string): number => text.length * TOOLTIP_CHAR_WIDTH;
 
 /**
- * The panel sizes to its content, floored at `TOOLTIP_MIN_WIDTH`. A row is a key
- * stroke, a gap, and `value name` as one run of text; the time label starts at
- * the same left padding but carries no key. An overlay's name is a *site* name —
- * free text a visitor types — so the widest row is routinely the one nobody
- * could have guessed at design time, and a fixed width would clip it.
+ * The panel sizes to its content, floored at `TOOLTIP_MIN_WIDTH` and capped at
+ * the width of the plot it floats over. A row is a key stroke, a gap, and
+ * `value name` as one run of text; the time label starts at the same left
+ * padding but carries no key. An overlay's name is a *site* name — free text a
+ * visitor types — so the widest row is routinely the one nobody could have
+ * guessed at design time, and a fixed width would clip it.
+ *
+ * **The ceiling is the point of the pair.** `siteSchema` accepts 120 characters
+ * of name (`packages/shared/src/site.ts`), and an uncapped panel passes the
+ * plot's own width somewhere around 56 of them: the readout would then be wider
+ * than the chart it is reading, blanketing the marks it exists to explain, and
+ * `tooltipAnchorX` could only pin it to the left plot edge and let the rest hang
+ * off the canvas. Capped, a name that long overflows its own panel instead —
+ * text spilling past one edge is a legible defect confined to one row, where a
+ * panel over the whole plot hides the data. Deliberately bounding the damage
+ * rather than fixing it: laying the rows out as measured columns, and eliding
+ * what still does not fit, is #284 D12.
+ *
+ * The ceiling outranks the floor where the two disagree, which is a plot
+ * narrower than `TOOLTIP_MIN_WIDTH` — a panel that cannot be placed inside the
+ * plot at all is worse than one below its minimum shape.
  */
-export const tooltipPanelWidth = (timeLabel: string, rows: readonly TooltipRow[]): number =>
-  Math.max(
-    TOOLTIP_MIN_WIDTH,
-    TOOLTIP_PADDING * 2 + textWidth(timeLabel),
-    ...rows.map(
-      (row) =>
-        TOOLTIP_PADDING * 2 +
-        KEY_STROKE_LENGTH +
-        KEY_TEXT_GAP +
-        textWidth(`${row.value} ${row.name}`),
+export const tooltipPanelWidth = (
+  timeLabel: string,
+  rows: readonly TooltipRow[],
+  plotWidth: number,
+): number =>
+  Math.min(
+    plotWidth,
+    Math.max(
+      TOOLTIP_MIN_WIDTH,
+      TOOLTIP_PADDING * 2 + textWidth(timeLabel),
+      ...rows.map(
+        (row) =>
+          TOOLTIP_PADDING * 2 +
+          KEY_STROKE_LENGTH +
+          KEY_TEXT_GAP +
+          textWidth(`${row.value} ${row.name}`),
+      ),
     ),
   );
 
@@ -101,6 +124,16 @@ export const tooltipPanelWidth = (timeLabel: string, rows: readonly TooltipRow[]
  * Symmetry is the whole point: with the time label's centre one padding plus
  * half a row below the ceiling, this puts the last row's centre exactly that far
  * above the floor.
+ *
+ * **Warning — this export is a test seam, and a second caller silently breaks
+ * it.** `forecast-chart-tooltip.test.tsx` proves that moving the tooltip does
+ * not re-render its content by counting calls to this function, which works only
+ * because the memoised panel is the one thing that calls it: "one call" means
+ * "the content rendered once". Anything else calling it — the layer wanting the
+ * panel's height to place it, a table, a second panel — keeps every assertion
+ * green while the probe quietly starts counting something else. Adding a caller
+ * is fine; adding one without moving that probe to a seam the new caller does
+ * not share is not.
  */
 export const tooltipPanelHeight = (visibleRowCount: number): number =>
   TOOLTIP_PADDING * 2 + TOOLTIP_ROW_HEIGHT * (visibleRowCount + FIRST_SERIES_ROW);

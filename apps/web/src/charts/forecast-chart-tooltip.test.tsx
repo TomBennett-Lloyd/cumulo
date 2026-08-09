@@ -80,6 +80,9 @@ const sizedRow = (value: string, name: string): TooltipRow => ({
 const panelAttribute = (container: HTMLElement, name: string): number =>
   attributeNumber(requireTooltipPart(container, '.forecast-chart-tooltip-panel'), name);
 
+/** The ceiling `tooltipPanelWidth` is capped at: the plot the panel floats over. */
+const PLOT_WIDTH = CHART_PLOT.right - CHART_PLOT.left;
+
 /** The centre line of each drawn series row, in the tooltip group's own space. */
 const rowCentreLines = (container: HTMLElement): readonly number[] =>
   [...container.querySelectorAll('.forecast-chart-tooltip g line')].map((line) =>
@@ -127,14 +130,21 @@ describe('ForecastChart tooltip shape', () => {
 
     const width = panelAttribute(container, 'width');
     expect(width).toBe(
-      tooltipPanelWidth('06:00', [
-        sizedRow('0.9', 'Actual'),
-        sizedRow('1.0', 'Median'),
-        sizedRow('0.0–2.0', 'P10–P90'),
-        sizedRow('2.5', longLabel),
-      ]),
+      tooltipPanelWidth(
+        '06:00',
+        [
+          sizedRow('0.9', 'Actual'),
+          sizedRow('1.0', 'Median'),
+          sizedRow('0.0–2.0', 'P10–P90'),
+          sizedRow('2.5', longLabel),
+        ],
+        PLOT_WIDTH,
+      ),
     );
     expect(width).toBeGreaterThan(TOOLTIP_MIN_WIDTH);
+    // Sized by its content and not by the ceiling — otherwise the assertion
+    // above would hold for a panel that had simply been clamped.
+    expect(width).toBeLessThan(PLOT_WIDTH);
 
     // The floor still binds where the content falls under it: a point estimate
     // with two short rows would otherwise draw a noticeably smaller panel.
@@ -143,6 +153,36 @@ describe('ForecastChart tooltip shape', () => {
       requireSvg(narrow).focus();
     });
     expect(panelAttribute(narrow, 'width')).toBe(TOOLTIP_MIN_WIDTH);
+  });
+
+  it('caps the panel at the plot width rather than blanket the chart with a long name', () => {
+    // The longest name `siteSchema` accepts (`packages/shared/src/site.ts`:
+    // `.min(1).max(120)`) — free text a visitor types, so this is a shape the
+    // product can really be handed rather than a stress value invented here.
+    const longestAllowedLabel = 'S'.repeat(120);
+    const container = renderChartWithOverlay(SERIES, {
+      label: longestAllowedLabel,
+      points: [{ validTimeIso: isoHour(6), kw: 2.5 }],
+    });
+    act(() => {
+      requireSvg(container).focus();
+    });
+
+    // What the content asks for, taken from the sizer itself under a ceiling
+    // that cannot bind: around twice the plot's width. Without the cap the
+    // readout would cover the marks it exists to explain, and the anchor could
+    // only pin it left and let the rest hang off the canvas — so this is the
+    // number the assertion below proves is not what gets drawn.
+    expect(
+      tooltipPanelWidth('06:00', [sizedRow('2.5', longestAllowedLabel)], Number.POSITIVE_INFINITY),
+    ).toBeGreaterThan(PLOT_WIDTH);
+
+    expect(panelAttribute(container, 'width')).toBe(PLOT_WIDTH);
+    // Which puts the whole panel inside the plot, at both edges. The text still
+    // overflows its own panel — truncation is #284 D12 — and one row spilling
+    // past an edge is the bounded failure this cap chooses over the other one.
+    expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(CHART_PLOT.left);
+    expect(tooltipAnchor(container) + PLOT_WIDTH).toBeLessThanOrEqual(CHART_PLOT.right);
   });
 
   it('pads the panel equally above the time and below the last visible row', () => {
@@ -189,6 +229,8 @@ const PAST_THE_MIDPOINT = 310;
 /** Two waits, named against the 33 ms the panel is allowed one move in. */
 const INSIDE_ONE_FRAME_MS = 10;
 const PAST_ONE_FRAME_MS = 40;
+/** Short enough that the panel it widens still sits well inside the plot. */
+const OVERLAY_LABEL = 'Sunnyside Farm';
 
 describe('ForecastChart tooltip motion', () => {
   beforeEach(() => {
@@ -200,8 +242,27 @@ describe('ForecastChart tooltip motion', () => {
     vi.useRealTimers();
   });
 
+  /*
+   * Through the overlay path deliberately, and it is the overlay that gives the
+   * case its teeth.
+   *
+   * With no overlay every prop this panel is memoised on is a primitive or a
+   * value taken straight from `points`, so `ForecastChart`'s two `useMemo`s are
+   * both returning `undefined` and the shallow compare passes whether or not
+   * they exist — the case held while the memoisation it exists to prove was
+   * deleted. An overlay makes the join and the reading real objects, rebuilt per
+   * render unless something holds their identity: with either `useMemo` removed
+   * the three pointer moves below render the content three times instead of
+   * once, which is the failure this case is for.
+   */
   it('re-renders the tooltip content only when the snapped sample changes', () => {
-    const container = renderChart(SERIES);
+    const container = renderChartWithOverlay(SERIES, {
+      label: OVERLAY_LABEL,
+      points: [
+        { validTimeIso: isoHour(12), kw: 3.3 },
+        { validTimeIso: isoHour(15), kw: 2.2 },
+      ],
+    });
     stubRenderedSize(requireSvg(container));
     const target = requireMark(container, '.forecast-chart-pointer-target');
     const movePointerTo = (viewBoxX: number): void => {
@@ -223,14 +284,16 @@ describe('ForecastChart tooltip motion', () => {
     // …and nothing inside it was rebuilt to do it. The sample never changed, so
     // the rows never changed, so there was nothing to say a second time.
     expect(probe.contentRenders).toBe(1);
-    expect(tooltipText(container)).toBe('12:005.9 Actual6.0 Median5.0–7.0 P10–P90');
+    expect(tooltipText(container)).toBe(
+      `12:005.9 Actual6.0 Median5.0–7.0 P10–P903.3 ${OVERLAY_LABEL}`,
+    );
 
     movePointerTo(PAST_THE_MIDPOINT);
 
     // Crossing the midpoint is the one thing that is a data change, and it
     // costs exactly one render of the content.
     expect(probe.contentRenders).toBe(2);
-    expect(tooltipText(container)).toBe('15:005.0 Median4.0–6.0 P10–P90');
+    expect(tooltipText(container)).toBe(`15:005.0 Median4.0–6.0 P10–P902.2 ${OVERLAY_LABEL}`);
   });
 
   it('applies one pointer position per frame, and never drops the last one', () => {

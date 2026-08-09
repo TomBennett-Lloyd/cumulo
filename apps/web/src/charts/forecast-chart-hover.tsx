@@ -205,11 +205,14 @@ interface TooltipPanelProps {
  * What the tooltip says, with no idea where it is. Memoised on purpose and not
  * as an optimisation reflex: a pointer sweeping one sample's span moves this
  * panel up to thirty times a second, and every one of those frames would
- * otherwise re-run `tooltipRows` and rebuild four rows to draw exactly the text
- * already on screen (#284 D7). Its props are the snapped sample and numbers
- * derived from it, so the shallow compare bites for as long as the sample does
- * — which is why the caller hands it a stable `overlay` reading rather than one
- * rebuilt per render.
+ * otherwise rebuild four rows' worth of elements and hand React a fresh tree to
+ * reconcile against the identical text already on screen (#284 D7). What it does
+ * **not** save is `tooltipRows` itself — the layer below runs `visibleTooltipRows`
+ * every frame regardless, because sizing the panel needs the rows before there
+ * is anything to memoise. Element construction and reconciliation are the whole
+ * saving. Its props are the snapped sample and numbers derived from it, so the
+ * shallow compare bites for as long as the sample does — which is why the caller
+ * hands it a stable `overlay` reading rather than one rebuilt per render.
  */
 const TooltipPanel = memo(
   ({ overlay, panelWidth, point, spanHours }: TooltipPanelProps): ReactElement => {
@@ -280,9 +283,10 @@ export const ForecastChartHoverLayer = (
   const panelWidth = tooltipPanelWidth(
     tickLabelFor(point.validTimeIso, spanHours),
     visibleTooltipRows(point, overlay),
+    scale.plot.right - scale.plot.left,
   );
   const anchorX = tooltipAnchorX({
-    snappedX: pointerX ?? crosshairX,
+    followX: pointerX ?? crosshairX,
     tooltipWidth: panelWidth,
     plot: scale.plot,
   });

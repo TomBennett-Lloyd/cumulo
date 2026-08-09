@@ -171,9 +171,17 @@ export const useChartHover = (): ChartHover => {
   // A timer is an external system, which is the one thing an effect is for
   // (`react.md` rule 1) — this one exists only to stop the frame outliving the
   // chart. Refs are stable, so the empty dependency list is the honest one.
+  //
+  // The handle is cleared *and* forgotten. Cancelling alone leaves `frameRef`
+  // holding a dead timer id, which every writer here reads as "a frame is
+  // open" — harmless today, because nothing calls back into a hook whose
+  // component has gone, and a freeze-forever the moment anything does (every
+  // later move held, no timer left alive to flush it). Two lines that agree
+  // beat one line that relies on the caller never arriving.
   useEffect(
     () => () => {
       clearTimeout(frameRef.current ?? undefined);
+      frameRef.current = null;
     },
     [],
   );
