@@ -177,3 +177,10 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "227 and 245 look good" — owner approval for widening the architecture trigger pair (CLAUDE.md standards index row + `docs/standards/architecture.md`'s own Trigger line) to fire on restating an owned value in code **or prose**, keeping the two phrasings in step.
 - **Why**: CLAUDE.md is a humanAlways path; the trigger is what routes agents to rule 9, and #231's review showed the narrow phrasing under-firing on prose restatements.
 - **How applied**: PR #245 merged on the approval.
+
+## 2026-08-09 — PR #287 (#258 cumulo-series on-demand flip)
+
+- **Category**: approved-no-changes
+- **Feedback**: "287 looks good to me happy to proceed there" — owner approval in chat for the billing-mode flip and its ADR 0002 Amendments entry.
+- **Why**: `docs/adr/**` is a humanAlways path; the amendment records that no table draws on the free 25/25 pool any more, a fact the ADR's own body predates.
+- **How applied**: merged on the approval; `terraform apply` on infra/storage follows immediately to stop the live twice-hourly throttle alarms.
