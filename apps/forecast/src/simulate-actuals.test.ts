@@ -32,7 +32,7 @@ import {
  * not take its siblings with it.
  */
 
-/** The run's clock. Every window in this file is the three hours ending here. */
+/** The run's clock. Every window in this file is the `TRAILING_ACTUALS_HOURS` ending here. */
 const NOW: UtcIsoTimestamp = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
 
 const at = (hour: string): UtcIsoTimestamp => utcIsoTimestampSchema.parse(`2026-07-31T${hour}Z`);

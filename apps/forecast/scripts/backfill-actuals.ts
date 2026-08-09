@@ -30,10 +30,11 @@
  *     backfill-actuals -- --hours 336
  *
  * **Run it off-peak.** Every site's window is one batched write against
- * `cumulo-series`, and that table's write capacity is #258's territory: an
- * on-demand flip is in flight on another branch, and until it merges the table
- * is provisioned at 14 WCU and the throttle alarm will fire if this run collides
- * with an ingestion cycle. A site reported `partial` is safely re-runnable —
+ * `cumulo-series`, and how much of a collision that table absorbs is a property
+ * of its billing posture, which `infra/storage/tables.tf` §2 owns and #258 is in
+ * the middle of changing (an on-demand flip in flight on another branch). While
+ * it is provisioned, a run colliding with an ingestion cycle will fire the
+ * throttle alarm. A site reported `partial` is safely re-runnable —
  * every Put is deterministic in `(siteId, validTime)` and idempotent, so a
  * second pass rewrites exactly the rows it wrote before and fills the rest.
  *

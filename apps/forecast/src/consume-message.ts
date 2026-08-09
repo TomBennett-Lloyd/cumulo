@@ -299,8 +299,8 @@ export const consumeMessage = async (
   // Its outcome deliberately does not reach `MessageOutcome`. `simulateTrailingActuals` reports
   // each site's result to the log and never rejects, and a simulation failure must not fail this
   // record: the forecasts — the message's actual work — are already written, the trailing window
-  // is three hours wide so the next hour's run repairs whatever this one missed, and failing the
-  // record would redeliver 48 forecast rows to retry a cosmetic write.
+  // is `TRAILING_ACTUALS_HOURS` wide so the next hour's run repairs whatever this one missed, and
+  // failing the record would redeliver the whole location's horizon to retry a cosmetic write.
   await simulateTrailingActuals(
     { series: deps.series, log: deps.log, now: () => issuedAt },
     sites.map((site) => site.id),

@@ -414,8 +414,8 @@ describe('consuming one weather message', () => {
 
   it('still reports the message stored when the simulation fails', async () => {
     // The forecasts — the message's actual work — are already written, and the trailing window is
-    // three hours wide, so the next hour's run repairs what this one missed. Failing the record
-    // would redeliver the whole horizon to retry a cosmetic write.
+    // `TRAILING_ACTUALS_HOURS` wide, so the next hour's run repairs what this one missed.
+    // Failing the record would redeliver the whole horizon to retry a cosmetic write.
     const outcome = await consumeMessage(
       deps({
         recorder: emptyRecorder(),
