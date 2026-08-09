@@ -8,13 +8,14 @@ import {
 } from './chart-series';
 import {
   KEY_STROKE_LENGTH,
-  KEY_TEXT_GAP,
   TOOLTIP_PADDING,
   TOOLTIP_TIME_Y,
   TOOLTIP_TOP_GAP,
+  tooltipColumns,
   tooltipPanelHeight,
   tooltipPanelWidth,
   tooltipRowY,
+  type TooltipColumns,
   type TooltipRow,
 } from './tooltip-geometry';
 
@@ -28,11 +29,12 @@ import {
  * separate piece below. The crosshair **snaps to the nearest timestamp**, so
  * the reader aims at a time rather than at a 2px line. **One tooltip lists
  * every series present at that timestamp**, so the pointer never has to land on
- * a line or inside the fill to get a number — value first in full contrast,
- * series name after it in muted text, keyed by a short stroke of the series'
- * own colour rather than a filled box. And **keyboard focus shows exactly what
- * hover shows**: both routes end at the same `activeIndex`, so there is one
- * readout, not two implementations that drift.
+ * a line or inside the fill to get a number — the series' name in muted text
+ * and its value in full contrast beside it, in two columns (#284 D12), keyed by
+ * a short stroke of the series' own colour rather than a filled box. And
+ * **keyboard focus shows exactly what hover shows**: both routes end at the
+ * same `activeIndex`, so there is one readout, not two implementations that
+ * drift.
  *
  * **The panel follows the pointer; the data snaps.** The crosshair and the rows
  * belong to the nearest sample — a landmark that moves in steps, because that is
@@ -126,12 +128,22 @@ const visibleTooltipRows = (
 
 /**
  * The same rows, spoken rather than drawn: the time, then each series as its
- * value and the name that value belongs to. The `role="img"` chart collapses to
- * its `aria-label`, so this string is what a screen reader gets when a reader
- * moves the selection — and it comes from the same producer as the tooltip, so
- * the announcement and the drawn panel cannot say different things about one
- * sample. Every word here names data, which `chart-copy.ts` leaves to the
- * component that owns it.
+ * name and the value that name is carrying.
+ *
+ * **Name before value since #284 D12**, following the drawn panel's columns
+ * rather than the run of text they replaced. The order is not free to differ:
+ * `chart-treatment.md` asks the announcement and the tooltip to be composed
+ * from the same rows so the two cannot say different things about one sample,
+ * and two orderings of the same words are two statements — a reader comparing
+ * what they hear with what a sighted colleague is reading should not have to
+ * transpose. Spoken, it is also the better half of the bargain: "Median 6.0"
+ * names the thing before the number, which is how a label reads aloud.
+ *
+ * The `role="img"` chart collapses to its `aria-label`, so this string is what
+ * a screen reader gets when a reader moves the selection — and it comes from
+ * the same producer as the tooltip, so the announcement and the drawn panel
+ * cannot say different things about one sample. Every word here names data,
+ * which `chart-copy.ts` leaves to the component that owns it.
  *
  * The en dashes inside `0.0–2.0` and `P10–P90` stay — both ends of those are
  * present, so a dropped dash still reads ("0.0 2.0 P10 P90"), and respelling a
@@ -144,11 +156,19 @@ export const readoutText = (
   overlay: ChartOverlayReading | undefined,
 ): string =>
   `${tickLabelFor(point.validTimeIso, spanHours)} — ${visibleTooltipRows(point, overlay)
-    .map((row) => `${row.value} ${row.name}`)
+    .map((row) => `${row.name} ${row.value}`)
     .join(', ')}`;
 
 /**
  * Row coordinates are local to the tooltip group, which carries the translate.
+ *
+ * Two sibling texts rather than one with two `tspan`s (#284 D12): a `tspan`
+ * flows after its predecessor, which is exactly the packing a column is not, so
+ * a column position has to be an `x` on a text of its own. Both are anchored at
+ * their start and take their x from `columns`, measured once per content render
+ * over the same rows being drawn — so every name in a panel begins at one x and
+ * every value at another, whatever the rows happen to say. `-text` carries the
+ * font both need; `-name` and `-value` carry only their contrast.
  *
  * Keyed by `seriesClassName` rather than by `name`, because a name is not unique
  * and never was: an overlay's name is a *site* name, which is free text a visitor
@@ -168,7 +188,11 @@ export const readoutText = (
  * `forecast-chart-hover.test.tsx` asserts it rather than a dropped row, for
  * exactly that reason.
  */
-const tooltipRowElement = (row: TooltipRow, rowIndex: number): ReactElement => {
+const tooltipRowElement = (
+  row: TooltipRow,
+  rowIndex: number,
+  columns: TooltipColumns,
+): ReactElement => {
   const y = tooltipRowY(rowIndex);
   return (
     <g key={row.seriesClassName}>
@@ -180,13 +204,20 @@ const tooltipRowElement = (row: TooltipRow, rowIndex: number): ReactElement => {
         y2={y}
       />
       <text
-        className="forecast-chart-tooltip-text"
-        x={TOOLTIP_PADDING + KEY_STROKE_LENGTH + KEY_TEXT_GAP}
+        className="forecast-chart-tooltip-text forecast-chart-tooltip-name"
+        x={columns.nameX}
         y={y}
         dominantBaseline="middle"
       >
-        <tspan className="forecast-chart-tooltip-value">{row.value}</tspan>{' '}
-        <tspan className="forecast-chart-tooltip-name">{row.name}</tspan>
+        {row.name}
+      </text>
+      <text
+        className="forecast-chart-tooltip-text forecast-chart-tooltip-value"
+        x={columns.valueX}
+        y={y}
+        dominantBaseline="middle"
+      >
+        {row.value}
       </text>
     </g>
   );
@@ -221,6 +252,7 @@ interface TooltipPanelProps {
 const TooltipPanel = memo(
   ({ overlay, panelWidth, point, spanHours }: TooltipPanelProps): ReactElement => {
     const rows = visibleTooltipRows(point, overlay);
+    const columns = tooltipColumns(rows);
     return (
       <>
         <rect
@@ -238,7 +270,7 @@ const TooltipPanel = memo(
         >
           {tickLabelFor(point.validTimeIso, spanHours)}
         </text>
-        {rows.map(tooltipRowElement)}
+        {rows.map((row, rowIndex) => tooltipRowElement(row, rowIndex, columns))}
       </>
     );
   },

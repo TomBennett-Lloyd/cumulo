@@ -368,9 +368,17 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   in it inherits a measurement rather than owing one.
 - **One tooltip, every series present at that timestamp.** The readout lists the actual, the
   median, the P10–P90 range and an overlay if the chart carries one — so the pointer never has to
-  land on a line or inside the fill to get a number. The value leads and is high-contrast; the
-  series name follows in `--color-text-muted`. Series are keyed with a short stroke of their
-  colour, not a filled box. **A series with nothing at the sample gets no row**, drawn or spoken:
+  land on a line or inside the fill to get a number. **The rows are two columns**
+  ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12): the series name in
+  `--color-text-muted`, then its value high-contrast in a column of its own, every name starting at
+  one x and every value at another. Packed instead — each value beginning wherever the text to its
+  left ended — comparing two numbers was an eye-movement rather than a glance; the panel is a small
+  table and now reads as one. The **name leads**, because a column of labels is what a reader scans
+  down, and because the spoken readout is composed from the same rows and "Median 6.0" is how a
+  label reads aloud. Series are keyed with a short stroke of their
+  colour, not a filled box — shorter since D12, since a key beside a name column is read as a
+  colour rather than as the start of a line of text. **A series with nothing at the sample gets no
+  row**, drawn or spoken:
   the band where a point carries no modelled uncertainty, the measurement past the horizon, the
   hour an overlay does not cover. An absent row says "there is nothing here"; the em dash that used
   to hold those places said the same thing more quietly, and said it to nobody at all in speech —
@@ -381,16 +389,19 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   the series is the accepted cost of the two saying one thing. **The table twin keeps the em
   dash** — it is a grid, its columns are fixed by the header, and a cell cannot be absent the way
   a list item can.
-- **The panel sizes to its content and floats above the plot.** Width is the widest row it actually
-  holds, floored at a minimum so short samples do not read as a different component — an overlay's
-  name is a site name a visitor typed, so the widest row is routinely one nobody could have sized
-  for. **And capped at the plot's own width**, which is the floor's opposite number and matters for
-  the same reason: a site name may run to 120 characters, and somewhere past about 56 of them an
+- **The panel sizes to its content and floats above the plot.** Width is its two columns measured
+  over the rows they hold — the widest name, the widest value, and the air between them — floored
+  at a minimum so short samples do not read as a different component. An overlay's name is a site
+  name a visitor typed, so the widest name is routinely one nobody could have sized for. **And
+  capped at the plot's own width**, which is the floor's opposite number and matters for
+  the same reason: a site name may run to 120 characters, and somewhere past about 50 of them an
   uncapped panel is wider than the chart it is reading, so the readout blankets the marks it exists
   to explain. Capped, a name that long overflows its panel instead — text past one edge is a defect
-  a reader can see around, a panel over the whole plot is not. Eliding the row that overflows is
-  still open ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12); the cap bounds
-  what it costs until then. Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
+  a reader can see around, a panel over the whole plot is not. Columns were the first half of
+  [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12 and they do not retire this
+  cap: no arrangement of two columns fits 120 characters into a panel narrower than they are.
+  **Eliding the name that overflows is the half still open**, and the cap bounds what it costs
+  until then. Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
   small drop shadow in `--color-shadow`: it is the one surface in the product genuinely floated
   over live data, and the marks beneath it are the same ink and weights it is drawn in. The
   hairline border in `--color-border` stays under the shadow rather than being replaced by it.

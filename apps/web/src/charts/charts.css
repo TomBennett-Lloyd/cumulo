@@ -217,9 +217,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The value leads in full contrast and the series name follows muted
+/* The name column is muted and the value column beside it is full contrast
  * (chart-treatment.md): the number is what the reader came for, and identity
- * comes from the key stroke beside it rather than from colouring the text. */
+ * comes from the key stroke and the label rather than from colouring the text.
+ * Contrast only — where the two columns sit is geometry, and lives in
+ * `tooltip-geometry.ts` with the rest of the panel's arithmetic. */
 .forecast-chart-tooltip-value {
   fill: var(--color-text);
 }

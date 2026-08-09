@@ -36,14 +36,20 @@ const hoverSample = (container: HTMLElement, index: number, count: number): void
   });
 };
 
-/** The readout for each sample of SERIES, as the tooltip's flattened text. */
+/**
+ * The readout for each sample of SERIES, as the tooltip's flattened text.
+ *
+ * Word-run rather than sentence since #284 D12: a row is a name text and a
+ * value text side by side in their own columns, so flattening the panel butts
+ * them together with no separator to insert. The time still leads.
+ */
 const READOUT: readonly string[] = [
-  '06:000.9 Actual1.0 Median0.0–2.0 P10–P90',
-  '09:003.8 Actual4.0 Median3.0–5.0 P10–P90',
-  '12:005.9 Actual6.0 Median5.0–7.0 P10–P90',
+  '06:00Actual0.9Median1.0P10–P900.0–2.0',
+  '09:00Actual3.8Median4.0P10–P903.0–5.0',
+  '12:00Actual5.9Median6.0P10–P905.0–7.0',
   // Past the horizon: no measurement, so no measured row at all (#284 D6).
-  '15:005.0 Median4.0–6.0 P10–P90',
-  '18:002.0 Median1.0–3.0 P10–P90',
+  '15:00Median5.0P10–P904.0–6.0',
+  '18:00Median2.0P10–P901.0–3.0',
 ];
 
 describe('ForecastChart hover layer', () => {
@@ -228,7 +234,7 @@ describe('ForecastChart hover layer', () => {
     });
 
     // An absent row says "not modelled"; an em-dashed one would imply a range.
-    expect(tooltipText(container)).toBe('06:000.9 Actual1.0 Median');
+    expect(tooltipText(container)).toBe('06:00Actual0.9Median1.0');
     expect(tooltipValues(container)).toStrictEqual(['0.9', '1.0']);
   });
 
