@@ -4,19 +4,22 @@
 # ADR 0002 accepts throttling as the failure mode of taking the free
 # provisioned allowance, which makes an *unobserved* throttle the failure mode
 # it does not accept. These four alarms are the tripwire for revisit trigger 8,
-# and the tripwire has already been paid for: the write alarm on
-# `cumulo-weather` fired in earnest (296 events, #156), which is how that table
-# came to be on-demand.
+# and the tripwire has been paid for twice over: the write alarm fired in
+# earnest on `cumulo-weather` (296 events, #156) and then on `cumulo-series`
+# (~650 events across two colliding cycles, #258), and each fire is how that
+# table came to be on-demand.
 #
-# The pair survives the flip because both modes throttle, for different reasons,
-# and the alarm cannot tell which table it is watching. On `cumulo-series` a
-# throttle means the provisioned allocation has met real traffic, and the answer
-# is to flip `billing_mode` to PAY_PER_REQUEST — one attribute, no migration —
-# rather than to add auto-scaling (see tables.tf) or argue about RCU. On
-# `cumulo-weather`, which has already taken that answer, a throttle means one of
-# DynamoDB's own request limits — per partition, or per table — which is a hot
-# key or a traffic shape to go and read the ingestion logs about, not a number
-# to raise.
+# The pair survives both flips because both modes throttle, and the alarm cannot
+# tell which table it is watching. What changed is the reading. While a table
+# was provisioned, a throttle meant the allocation had met real traffic and the
+# answer was to flip `billing_mode` to PAY_PER_REQUEST — one attribute, no
+# migration — rather than to add auto-scaling (see tables.tf) or argue about
+# RCU. Both tables have now taken that answer, so on either of them a throttle
+# means one of DynamoDB's own request limits — per partition, or per table —
+# which is a hot key or a traffic shape to go and read the service logs about,
+# not a number to raise. That reading is strictly harder to act on than the one
+# it replaces, which is the honest cost of having spent the escape hatch on
+# both tables: there is no second flip behind it.
 #
 # Threshold 0 with a 60-second Sum and one evaluation period: any throttled
 # request at all, within a minute. There is deliberately no hysteresis. These

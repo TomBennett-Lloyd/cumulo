@@ -9,9 +9,9 @@
 # APPLICATION AUTO SCALING IS DELIBERATELY ABSENT. THIS IS A NON-RESOURCE.
 # ---------------------------------------------------------------------------
 # This stack contains no Application Auto Scaling scalable target and no
-# scaling policy (`appautoscaling_target`, `appautoscaling_policy`) on either
-# provisioned table, and adding one is the single quietest way this project's
-# cost ceiling fails.
+# scaling policy (`appautoscaling_target`, `appautoscaling_policy`) on any
+# table in it, and adding one is the single quietest way this project's cost
+# ceiling fails.
 #
 # The two resource types are named above without their provider prefix on
 # purpose. A grep for the prefixed form across this directory is an acceptance
@@ -19,38 +19,54 @@
 # check nobody can read; a real resource block always carries the prefix, so
 # the grep stays a detector rather than a false positive generator.
 #
-# `series` (14 WCU / 21 RCU) is the only table left drawing on the pool, and it
-# sits inside DynamoDB's *permanently free* 25 WCU / 25 RCU per Region with 11
-# WCU / 4 RCU unclaimed. That allowance is a hard edge, not a discount: an
-# auto-scaling policy would raise capacity above 25 units the first time real
-# load arrived and start billing without anyone deciding to — no alarm, no plan
-# diff, no review.
+# Since #258 (2026-08-09) **no table in this stack draws on the pool**: every
+# one of the five is on-demand, and DynamoDB's *permanently free* 25 WCU /
+# 25 RCU per Region sits entirely unclaimed. There is no capacity arithmetic
+# here any more — the figures that used to live in this paragraph are gone
+# rather than moved, because there is no allocation left to state.
+#
+# The non-resource outlives the allocation it was written against, for two
+# reasons. The allowance is a hard edge rather than a discount: an auto-scaling
+# policy would raise capacity above 25 units the first time real load arrived
+# and start billing without anyone deciding to — no alarm, no plan diff, no
+# review. And the pool is one apply away from being claimed again — the
+# standing rule below admits a future batch-shaped table, and *that* is the
+# ticket at which a scalable target looks like the obvious fix. Nothing can
+# attach to this stack as it stands (Application Auto Scaling manages
+# provisioned capacity, and there is none), which makes the absence cheap to
+# keep and expensive to notice missing later.
 #
 # The escape hatch for load an allocation cannot absorb is a `billing_mode`
 # flip to PAY_PER_REQUEST — one attribute, no migration, no downtime, allowed up
 # to 4 times per 24-hour rolling window, and a table's first switch instantly
 # sustains at least 4,000 WCU / 12,000 RCU. That, not auto-scaling, is the
 # answer when the throttle alarms in alarms.tf fire (ADR 0002 revisit trigger
-# 8) — and `weather` has already taken it (#156, 2026-08-03), which is why the
-# arithmetic above is one table's rather than two.
+# 8), and both tables that were ever provisioned have now taken it, for the
+# same reason: `weather` (#156, 2026-08-03) and `series` (#258, 2026-08-09).
 #
 # The standing rule that keeps the shared regional pool from being renegotiated
 # per ticket: **a new table defaults to on-demand unless its load is
 # batch-shaped** — driven by a clock, with a volume the ADR can compute. Only a
 # ticket adding another clock-driven batch table touches the 25/25 pool, and it
 # arrives with an arithmetic argument rather than an estimate — an argument
-# about burst as well as rate, since what unseated `weather` was the size of one
-# `BatchWriteItem` page against the retry patience behind it, not the units per
-# cycle (see 3 below).
+# about burst as well as rate, since what unseated both tables that ever took
+# the rule up was the size of one `BatchWriteItem` page against the retry
+# patience behind it, not the units per cycle (see 2 and 3 below). Two for two
+# is not yet a repeal of the rule, but a third batch-shaped table has to answer
+# it: a computable per-cycle volume is necessary and, on this evidence, not
+# sufficient.
 # ---------------------------------------------------------------------------
 #
-# RESTATEMENT LEDGER. This header is the pool arithmetic's one owner. Two
-# infra/README.md sites restate its figures on purpose and move with it: the
-# `Runbook: the storage stack` section's B3 readback (`expect: W 14, R 21`) and
-# the whole `### Storage stack` section under `Cost` — its capacity table row
-# and the notes below it both carry figures. Change a capacity attribute and
-# those two move in the same commit; every other mention in the repo points
-# here without a number (ADRs excepted).
+# RESTATEMENT LEDGER. This header owns the stack's capacity posture — since
+# #258, nothing here draws on the Region's 25/25 — and each table's section
+# below owns that table's own metered arithmetic. Two infra/README.md sites
+# restate those on purpose and move with them: the `Runbook: the storage stack`
+# section's B3 readback (now one `BillingModeSummary` query per batch-written
+# table, both expecting `PAY_PER_REQUEST`) and the whole `### Storage stack`
+# section under `Cost` — its capacity rows and the notes below them both carry
+# figures. Change a billing mode or a metered estimate and those two move in
+# the same commit; every other mention in the repo points here without a number
+# (ADRs excepted).
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
@@ -195,19 +211,52 @@ resource "aws_dynamodb_table" "sites" {
 #    actuals, interleaved by valid time so "forecast and actual over a range"
 #    (A4) is one Query.
 #
-#    PROVISIONED at 14 WCU / 21 RCU. Batch-shaped load with a volume ADR 0002
-#    computes: 4,850 write units per hourly cycle, draining in ~347 s of a
-#    3,600 s cycle with zero burst assumed. The 21 RCU carries the dashboard
-#    fan-out — ~25 read units per load, so ~50 loads/minute sustained, with the
-#    300-second burst reserve absorbing ~250 instantly.
+#    ON-DEMAND since #258 (ADR 0002, Amendments 2026-08-09); provisioned at
+#    14 WCU / 21 RCU before that. The load is still batch-shaped and the ADR's
+#    sustained arithmetic still holds — 4,850 write units per cycle, draining in
+#    ~347 s of 3,600 at the old allocation — but what moved this table is burst
+#    shape, not rate: the same cause as 3 below, arriving on the other side of
+#    the queue. The forecast consumer turns one location message into every site
+#    at that location's whole 48-hour horizon, written as `BatchWriteItem` pages
+#    of ≤25 items — one 48-point series per site per model, so ~50 write units
+#    arrive at once per `putForecasts` call and several such calls arrive per
+#    message — while 14 WCU/s accumulates them and the bounded retry budget
+#    behind them (`drainBatches` 3 sends, SDK 2 attempts) spends itself in
+#    seconds. Once the burst credit is
+#    gone the page cannot be funded before patience runs out, and no WCU number
+#    the free pool could have afforded closes that gap — it only moves the fleet
+#    size at which the cliff appears. Confirmed live on 2026-08-05, minutes
+#    after #156 removed the upstream pacing that had been masking it: ~650
+#    WriteThrottleEvents across two colliding cycles (300 of them in the one
+#    minute that tripped the alarm), 12 of 24 forecast messages failing on first
+#    delivery. Nothing was lost — SQS redelivered every one of them, and the
+#    last landed on its third receive — but the thing absorbing the cliff was
+#    redelivery patience rather than capacity, and the alarm mailed on every
+#    occurrence (#258).
+#
+#    Cost is activity-shaped rather than standing: ~2.10 M write units/month at
+#    the canonical 12-location fleet (~2,880 items per cycle, the figure the
+#    forecast stack's cost table carries) ≈ $1.48/month, ≈ $2.50 at ADR 0002's
+#    ~50-site planning envelope of 4,850 units per cycle, ≈ $4.99 at #29's
+#    100-site cap, and $0 while the schedule is idle. Reads are activity-shaped
+#    for the same reason and stay negligible: the dashboard fan-out the 21 RCU
+#    was sized for is ~25 read units per load at $0.1415/M, so the loads it
+#    takes to spend a cent number in the thousands, and the bound on a
+#    determined caller is ADR 0005's gateway throttle rather than a read
+#    allocation — which is what the 21 RCU had become in practice anyway.
+#
+#    There is deliberately no `on_demand_throughput` block, for the same reason
+#    3 below states: a `max_write_request_units` ceiling is a per-second cap, so
+#    a 25-item page can outrun it exactly as it outran 14 WCU/s, and the ceiling
+#    would reintroduce the throttle class this flip exists to remove on a table
+#    whose whole month costs a dollar or two. The backstop against runaway spend
+#    is the account-wide budget alarm in infra/bootstrap/budget.tf, which watches
+#    money rather than throughput and therefore cannot drop a write.
 #    (Restatement ledger: this file's header.)
 resource "aws_dynamodb_table" "series" {
   name         = "cumulo-series-${var.environment}"
-  billing_mode = "PROVISIONED"
+  billing_mode = "PAY_PER_REQUEST"
   table_class  = "STANDARD"
-
-  write_capacity = 14
-  read_capacity  = 21
 
   hash_key  = "siteId"
   range_key = "sk"
@@ -369,11 +418,11 @@ resource "aws_dynamodb_table" "metrics" {
 #
 #    ON-DEMAND, by the standing rule at the top of this file: its load is
 #    request-shaped — one write per limited request from whoever is knocking —
-#    so there is no volume to size a provisioned number against, and none of it
-#    may come out of the shared free 25/25 pool that `series` — the one
-#    batch-shaped table still drawing on it (#156) — depends on. Under abuse
-#    the request rate is bounded by the gateway throttles
-#    in `infra/api/gateway.tf` rather than by anything here.
+#    so there is no volume to size a provisioned number against. It was the
+#    rule working from the start rather than in hindsight: it never drew on the
+#    shared free 25/25 pool, which since #258 no table in this stack does.
+#    Under abuse the request rate is bounded by the gateway throttles in
+#    `infra/api/gateway.tf` rather than by anything here.
 #
 #    Every row carries `expiresAt`, so stored size stays at roughly "addresses
 #    seen in the last few minutes" and storage is free. TTL deletion is
