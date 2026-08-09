@@ -181,19 +181,32 @@ export interface SitePopoverCardProps {
  *
  * The landing no longer says the site's name. A screen reader arriving on the
  * picker hears "24 h, pressed" rather than "Rathmines rooftop" — the announced
- * fact is the window, not the site. The site is still named around the reader
- * twice: this card is `aria-labelledby` its own heading, and the chart's readout
- * below names the site whose series has just been drawn. The reviewed
+ * fact is the window, not the site. What is left naming the site is this card,
+ * which is `aria-labelledby` its own heading, and the fleet chart's *legend*,
+ * which grows a row under the site's name as soon as that site's line is drawn
+ * (`dashboard/site-overlay.ts` supplies the label; the legend is on screen in
+ * every state of the panel). Not the chart's readout: that region mounts empty
+ * and fills only when a reader moves the chart's own selection, so at the moment
+ * of landing it names nothing at all (`react.md`'s live-region bullet). The
+ * reviewed
  * alternative was keeping the landing on the heading with a quieter ring on it,
  * which announces the site and then leaves the reader on a heading there is
  * nothing to do from; landing on a control puts them where the next act is
  * (owner's decision, #284 D14).
  *
- * The second cost is Escape. It closes from anywhere *inside* the card, so a
- * reader whose landing is the picker has to reach the card before Escape means
- * anything — Close is a Tab away, and moving the selection on the map is the
- * other way out. Accepted rather than answered with a document-level key
- * handler, which would claim a key the map itself is free to want.
+ * The second cost is Escape, and it is larger than it first sounds. Escape
+ * closes from anywhere *inside* the card, so a reader whose landing is the
+ * picker has to get into the card before Escape means anything — and the card is
+ * *behind* them in the tab order rather than ahead of it. The map is the first
+ * thing in the dashboard and the reading column follows it down the page, so
+ * tabbing forward from the picker walks away from the card and on through the
+ * rest of the reading; Close is reached backwards, Shift-Tab past the (i) tip
+ * and the map's own two controls. A pointer reader pays none of that — Close is
+ * on the card in front of them — which is exactly what makes it a keyboard cost
+ * and not a general one. Accepted rather than answered with a document-level key
+ * handler, which would claim a key the map itself is free to want; that
+ * backwards route is asserted by nothing today, which `docs/tech-debt.md`
+ * records rather than this comment implying otherwise.
  *
  * ## The landing on the way out, which this card now rarely owes
  *
@@ -308,12 +321,19 @@ export const SitePopoverCard = ({
    * Escape closes, from anywhere inside the card.
    *
    * On the container rather than on the close button, so that every control the
-   * reader can reach inside the card dismisses it — the Close button, and the
-   * heading a reader who tabbed in lands on. It rides the React event, so every
-   * child is covered without any of them knowing. What it deliberately does not
-   * cover is a reader still standing on their landing: since #284 D14 that is
-   * the range picker, outside this subtree, and the docblock above says why no
-   * document-level handler was added to reach them there.
+   * reader can reach inside the card dismisses it. There are two of those and
+   * the second is the reason this is not just a handler on Close: the failed
+   * arms of {@link SiteForecastRegion} carry a `Try again`, so a reader who has
+   * moved on to the retry would otherwise be holding a control Escape does not
+   * answer from. The heading is covered too, but only as the *programmatic*
+   * fallback landing — it is `tabIndex={-1}`, so no reader ever tabs onto it.
+   * The handler rides the React event, so every child is covered without any of
+   * them knowing.
+   *
+   * What it deliberately does not cover is a reader still standing on their
+   * landing: since #284 D14 that is the range picker, outside this subtree, and
+   * the docblock above says why no document-level handler was added to reach
+   * them there.
    */
   const closeOnEscape = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') {

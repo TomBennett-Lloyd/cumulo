@@ -100,10 +100,13 @@ describe('SitePopoverCard', () => {
   it('closes on Escape from anywhere inside it', () => {
     const { onClose } = renderCard(READY);
 
-    // From the heading, which a reader who tabs into the card lands on and
-    // which a handler bound to the close button alone would never hear from.
-    // Where the reader's focus *starts* is the picker under the map since #284
-    // D14, and outside this subtree Escape is deliberately not this card's.
+    // From the heading, which a handler bound to the close button alone would
+    // never hear from. Nobody *tabs* onto it — it is `tabIndex={-1}`, which
+    // `keeps the heading out of the tab order` below pins — so this stands for
+    // the programmatic fallback landing; the reachable control the container
+    // handler is really there for is the `Try again` on a failed first forecast.
+    // Since #284 D14 a reader's focus starts outside this subtree, on the picker
+    // under the map, where Escape is deliberately not this card's.
     fireEvent.keyDown(screen.getByRole('heading', { name: 'Rathmines rooftop' }), {
       key: 'Escape',
     });

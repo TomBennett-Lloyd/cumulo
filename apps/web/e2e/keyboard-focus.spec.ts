@@ -27,11 +27,18 @@ import { openSiteTable } from './site-table';
  * the same handler while telling us nothing about whether the row is reachable
  * by tabbing at all.
  *
- * It stops at the landing. The card's hand-back on the way out is owed only to a
- * reader who has come *into* the card, which since D14 is no longer where a
- * selection leaves them — and that path is `document.activeElement` again, so
- * `map/SitePopoverCard.test.tsx` and `Dashboard.focus.test.tsx` keep it in the
- * lane that can see it, rather than this one re-proving it slowly.
+ * It stops at the landing, and what that leaves uncovered is worth naming here
+ * rather than leaving to be inferred. The card's hand-back on the way out is
+ * owed only to a reader who has come *into* the card, which since D14 is no
+ * longer where a selection leaves them — that path is `document.activeElement`
+ * again, so `map/SitePopoverCard.test.tsx` and `Dashboard.focus.test.tsx` keep
+ * it in the lane that can see it rather than this one re-proving it slowly. But
+ * the *journey* into the card is exactly this lane's kind of question and no
+ * case here asks it: the map precedes the reading column, so the route from the
+ * landing is backwards past the (i) tip and the map's controls, through
+ * maplibre's marker overlay, and only a real tab order can say whether it
+ * arrives. `docs/tech-debt.md` carries that gap; this comment is not a claim
+ * that it is covered.
  *
  * The disclosure is part of that claim rather than a preamble to it. The rows
  * are folded away by default since #265, so a `<details>` that could not be
@@ -181,8 +188,10 @@ test('hands a keyboard selection to the range picker, ring and all', async ({ pa
   /*
    * The row answered, and answered for the site whose row it was. Without this
    * the case would still pass if Enter had selected some other site — the
-   * heading would be focused either way, and the reader would be looking at a
-   * site they did not ask for.
+   * landing is the same picker button whichever site was chosen, so everything
+   * asserted below would be green while the reader looked at a site they never
+   * asked for. Checked on the URL because the id is what the row and the address
+   * bar have in common; the card names the site but not the id.
    */
   await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
 

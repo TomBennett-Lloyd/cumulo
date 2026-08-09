@@ -106,7 +106,12 @@ for no reason of theirs owes them the opposite. The settled rule:
   being shown, is on screen in every state of the page, and is where the next act is. The heading
   remains the fallback where a source renders no picker. What it costs is the announcement — the
   picker says "24 h, pressed" rather than the site's name, which the card's `aria-labelledby` and
-  the chart's readout still carry.
+  the chart legend's row for that site still carry (the chart's _readout_ does not: it mounts empty
+  and fills only when a reader moves the chart's selection, so it names nothing at the moment of
+  landing). It costs a keyboard reader one more thing, and it is worth naming here because the
+  layout is what causes it: the map precedes the reading column, so the card sits _above_ the
+  landing and Escape — which only works from inside the card — is reached by tabbing backwards past
+  the (i) tip and the map's controls.
 - **A `?site=` selection moves focus nowhere.** This is the settlement of
   [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and the asymmetry is the point
   rather than an exception for page load: the card mounts when the fleet listing _resolves_, which
@@ -136,7 +141,8 @@ what makes a creation land correctly without a special case anywhere: the dialog
 focus on the add-site control, and the new site's card — mounting in the same commit — captures
 _that_ as its opener before moving the reader on to the picker.
 
-`react.md`'s focus paragraph owns the rule. `Dashboard.focus.test.tsx` and
+`react.md`'s focus paragraphs own the rule — two of them since #284 D14, one for _whether_ focus
+moves and one for _where_ it lands. `Dashboard.focus.test.tsx` and
 `map/SitePopoverCard.test.tsx` pin it as far as `document.activeElement` goes; the ring a reader
 actually sees, and a deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.
 

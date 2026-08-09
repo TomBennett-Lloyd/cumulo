@@ -158,6 +158,32 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
   });
 
+  it('lands on the window the reader chose, not the one the picker opened on', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const site = await firstListedSite(dataSource);
+    renderDashboard(dataSource);
+    await settle();
+
+    // A reader who has already widened the window, which is the state the
+    // landing has to survive: the ref follows `aria-pressed` from button to
+    // button, so what it points at is whichever window is current rather than
+    // whichever one the panel opened on.
+    fireEvent.click(screen.getByRole('button', { name: '7 d' }));
+    await settle();
+
+    press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+
+    /*
+     * Both halves, because the query alone cannot fail this: `pressedRangeButton`
+     * finds whatever is pressed, so a ref pinned to the first option would leave
+     * the reader on `24 h` while this looked for `7 d` — the first assertion is
+     * what catches that, and the second is what stops the pair from passing over
+     * a picker whose pressed state never moved either.
+     */
+    expect(document.activeElement).toBe(pressedRangeButton());
+    expect(pressedRangeButton().textContent).toBe('7 d');
+  });
+
   it('leaves the reader on the picker when the card is dismissed from outside it', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
@@ -287,11 +313,16 @@ describe('Dashboard focus on a reader-initiated selection', () => {
 
     /*
      * Fired from the Close button with the focus on it, which is a reader who
-     * has tabbed in from their landing on the picker: Escape is handled on the
-     * card's container, so it works from every control inside the card and from
-     * none outside it. That last half is the cost #284 D14 accepted — a reader
-     * still standing on the picker has to reach the card before Escape means
-     * anything, which `map/SitePopoverCard.tsx` states beside the handler.
+     * has come into the card from their landing on the picker: Escape is handled
+     * on the card's container, so it works from every control inside the card
+     * and from none outside it. That last half is the cost #284 D14 accepted,
+     * and the journey is *backwards* rather than a Tab — the map precedes the
+     * reading column, so from the picker the card is behind the reader, past the
+     * (i) tip and the map's own controls (`map/SitePopoverCard.tsx` states it
+     * beside the handler). This case puts the focus there directly. What the
+     * route itself costs a keyboard reader needs a real tab order and a real
+     * key modality, which is the browser lane's (`testing.md` rule 10) and is
+     * owned by no spec today — `docs/tech-debt.md` carries that gap.
      */
     const close = screen.getByRole('button', { name: 'Close' });
     close.focus();
