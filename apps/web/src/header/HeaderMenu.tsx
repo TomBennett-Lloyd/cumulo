@@ -15,7 +15,9 @@ export interface HeaderMenuProps {
  * The header's catch-all: a disclosure button over the shell's odds and ends.
  *
  * It was the bar's only control until the site search landed beside it
- * (`AppHeader.tsx`), and those two are what the bar carries.
+ * (`AppHeader.tsx`), and those two are what the bar carries — the search wearing
+ * one of two forms, the field or the icon that stands in for it below
+ * `header.css`'s breakpoint, rather than being a third thing on the row.
  *
  * What decides which side of this button a thing sits on is not importance, and
  * it is not frequency either. It is what a thing costs the bar weighed against

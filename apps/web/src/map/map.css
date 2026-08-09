@@ -226,9 +226,10 @@
  * one-surface problem; it is the escalation the moment a second surface starts
  * wrapping, or this band gains a third credit.
  *
- * Gate residual: the width is a raw length. `stylelint.config.mjs`'s value rules
- * reach declarations, not media features, and there is no breakpoint scale to
- * reach for — the same open half of the frontend gate that config documents. */
+ * Gate residual: the width is a raw length, and there is no breakpoint scale to
+ * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
+ * features are the part of the frontend gate's open half no declaration-scoped
+ * rule can ever reach — so this is a pointer rather than a second copy of it. */
 @media (max-width: 37.25rem) {
   .map-attribution .map-attribution-prefix,
   .map-attribution .cumulo-attribution-prefix {

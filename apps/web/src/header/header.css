@@ -233,9 +233,10 @@
  * for `map.css`'s reason, and it is the escalation the moment a third surface
  * wants one.
  *
- * Gate residual: the width is a raw length. `stylelint.config.mjs`'s value rules
- * reach declarations, not media features, and there is no breakpoint scale to
- * reach for — the same open half of the frontend gate that config documents.
+ * Gate residual: the width is a raw length, and there is no breakpoint scale to
+ * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
+ * features are the part of the frontend gate's open half no declaration-scoped
+ * rule can ever reach — so this is a pointer rather than a second copy of it.
  */
 @media (max-width: 27.4375rem) {
   /*
@@ -250,16 +251,27 @@
   /*
    * The two icon buttons travel together at the end of the row. With the field
    * gone there is free space between the brand and them, and `margin-left: auto`
-   * on the *first* of the pair is what absorbs it — the menu's own auto margin
-   * (below) would otherwise split that space between the two and leave the
-   * toggle stranded in the middle of the bar.
+   * on the *first* of the pair is what absorbs it: two auto margins split that
+   * space in half and strand the toggle in the middle of the bar, 84px short of
+   * the menu, which is what shipped in review cycle 1 and what
+   * `e2e/header.spec.ts` measures now.
+   *
+   * So the menu's own auto margin (below) has to be switched off here, and the
+   * selector is `.app-header > .header-menu` rather than the bare class for a
+   * cascade reason worth stating plainly: a media query contributes nothing to
+   * specificity, so a bare `.header-menu` in this block merely ties with the base
+   * rule — which sits further down this file and therefore wins on source order,
+   * at every width, silently. The descendant form outranks it wherever this query
+   * applies, and it is the more honest selector besides: this margin is the
+   * menu's placement *in the header row*, and the row is the only place the class
+   * appears.
    */
   .header-search-toggle {
     display: block;
     margin-left: auto;
   }
 
-  .header-menu {
+  .app-header > .header-menu {
     margin-left: 0;
   }
 
@@ -278,9 +290,10 @@
  *
  * The margin is handed to the search toggle below the breakpoint, where the
  * toggle is the item immediately before this one and the free space has to be
- * absorbed once rather than twice — see that media query for the whole of it.
- * The menu ends up in the same place either way; what changes is which item
- * pushed it there.
+ * absorbed once rather than twice — see that media query for the whole of it,
+ * including why the rule that switches this one off has to out-specify it rather
+ * than merely come earlier. The menu ends up in the same place either way; what
+ * changes is which item pushed it there.
  */
 .header-menu {
   position: relative;

@@ -501,6 +501,48 @@ const PHONE_VIEWPORT = { width: 390, height: 844 };
 /** A desktop window, well above the fold — where the field is the bar's own. */
 const WIDE_VIEWPORT = { width: 1280, height: 800 };
 
+/**
+ * How far the two icon buttons' gap may sit from the row's own gap and still
+ * count as adjacent, in CSS pixels.
+ *
+ * Two, for {@link CENTRE_TOLERANCE_PX}'s reason rather than by sharing it —
+ * these are `getBoundingClientRect` reads of a laid-out page and sub-pixel
+ * layout lands in the last pixel or so. It is far below what the case is here to
+ * catch: the shipped defect was 84px of dead space between the two buttons,
+ * because an auto margin on each of them split the row's free space in two
+ * instead of one of them absorbing all of it.
+ */
+const ICON_GAP_TOLERANCE_PX = 2;
+
+/**
+ * How far the gap between the bar's two icon buttons is from the gap the row
+ * asked for, in CSS pixels — `Infinity` while either is without a box.
+ *
+ * The expected gap is read off `.app-header`'s own computed `column-gap` rather
+ * than written down here. The row owns that value (it is `--space-4`), and a
+ * number copied into this spec would be a second home for it that agrees today
+ * and drifts silently later (`architecture.md` rule 9). What the case asserts is
+ * therefore a relationship — the icons are one ordinary row gap apart — rather
+ * than a measurement of a particular token.
+ *
+ * Infinity on a missing box or an unresolvable gap, for
+ * {@link maxCentreMisalignment}'s reason: every caller polls this, and a
+ * reading that never arrives must never be mistaken for a passing one.
+ */
+const iconPairGapError = async (page: Page): Promise<number> => {
+  const toggleBox = await page.locator('.header-search-toggle').boundingBox();
+  const menuBox = await page.locator('.header-menu').boundingBox();
+  const rowGap = await page
+    .locator('.app-header')
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).columnGap));
+
+  if (toggleBox === null || menuBox === null || Number.isNaN(rowGap)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.abs(menuBox.x - (toggleBox.x + toggleBox.width) - rowGap);
+};
+
 test.describe('the search on a bar too narrow to hold it', () => {
   test.use({ viewport: PHONE_VIEWPORT });
 
@@ -528,6 +570,29 @@ test.describe('the search on a bar too narrow to hold it', () => {
     // Closed is absent rather than merely hidden, so the bar's own field is not
     // a second combobox sitting in the accessibility tree behind the icon.
     await expect(bar).toHaveCount(0);
+
+    /*
+     * And the icon sits *beside the menu*, at the end of the row, rather than
+     * merely existing somewhere on it.
+     *
+     * This is the assertion the first version of this case was missing, and the
+     * omission is what let a dead `margin-left` override ship green: with the
+     * field gone the row has free space to hand out, `header.css` gives it to the
+     * toggle so the pair travels together, and a cascade mistake that leaves both
+     * buttons claiming it splits the space and strands the toggle 84px short of
+     * the menu. Every other assertion in this case passes in that state — the
+     * icon is visible, it opens the bar, the bar searches — which is exactly why
+     * position needs an assertion of its own rather than a screenshot nobody
+     * takes.
+     *
+     * Polled because it is a geometry read on a page whose fonts settle after
+     * first paint, like the centreline case above.
+     */
+    await expect
+      .poll(async () => iconPairGapError(page), {
+        message: 'The search icon and the menu are not one row gap apart at the end of the bar.',
+      })
+      .toBeLessThanOrEqual(ICON_GAP_TOLERANCE_PX);
 
     /*
      * The site to look for, read off the page before anything is pressed and

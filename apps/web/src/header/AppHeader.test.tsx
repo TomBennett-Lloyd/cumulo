@@ -134,6 +134,24 @@ describe('AppHeader search toggle', () => {
     expect(document.activeElement).toBe(searchToggle());
   });
 
+  it('leaves the bar standing when Escape ends a composition rather than the search', () => {
+    renderHeader();
+    fireEvent.click(searchToggle());
+
+    fireEvent.keyDown(barInput(), { key: 'Escape', isComposing: true });
+
+    /*
+     * Escape abandons the candidate an input method is composing, and that press
+     * belongs to the composition: the reader is dropping a half-typed word, not
+     * the search they opened. This wrapper is a second listener on the same press
+     * — the field's keydown bubbles to it — so it has to decline the key for the
+     * reason `SiteSearch` declines it, and a bar that closed here would cost a
+     * Japanese or Chinese reader the whole surface on a routine correction.
+     */
+    expect(searchBar()).not.toBe(null);
+    expect(document.activeElement).toBe(barInput());
+  });
+
   it('closes when focus leaves the field', () => {
     renderHeader();
     fireEvent.click(searchToggle());

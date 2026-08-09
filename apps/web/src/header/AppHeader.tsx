@@ -31,7 +31,9 @@ export interface AppHeaderProps {
 
 /**
  * The header bar: the product's name on the left, the fleet's index in the
- * middle, and everything else behind one control on the right.
+ * middle, and everything else behind one control on the right — the middle item
+ * being a field only while the row is wide enough to hold one, and an icon
+ * beside that control below the breakpoint (the section on it below).
  *
  * A component of its own, and rendered by `Dashboard` rather than by `App`,
  * because of the middle item. `SiteSearch` needs the fleet and it selects into
@@ -108,6 +110,13 @@ export interface AppHeaderProps {
  * Blur closes the bar too — a search bar left standing over the map after the
  * reader has gone elsewhere is chrome nobody asked to keep.
  *
+ * That blur arm takes any focus-out at all, which is right only while the bar
+ * holds one focusable thing, and the reasons it does are `SiteSearch`'s
+ * internals rather than anything visible from here. `docs/tech-debt.md` carries
+ * that dependency, and the shared `relatedTarget` rule three components now want,
+ * as its own entry; the pointer is bidirectional, so neither end can be edited
+ * in ignorance of the other.
+ *
  * Escape dismisses the whole bar in one press even when the combobox's own popup
  * is open under it, and that is deliberately unlike the menu's dialog-then-
  * popover pair. There, two surfaces sat one inside the other and each had
@@ -132,6 +141,19 @@ export const AppHeader = ({
   const barInputRef = useRef<HTMLInputElement>(null);
 
   const handleBarKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    /*
+     * The same guard, on the same key, that `SiteSearch.tsx` documents at the
+     * top of its own keydown handler — and it is owed twice because this is a
+     * second listener on one press: the field's keydown bubbles up to this
+     * wrapper, so an Escape abandoning a composition arrives here after the
+     * search itself has correctly ignored it, and would take the whole bar away
+     * from a reader who was mid-word. Why the composition owns the key is that
+     * file's argument; this is the second listener obeying it.
+     */
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
     if (event.key === 'Escape') {
       setSearchOpen(false);
       toggleRef.current?.focus();
