@@ -5,9 +5,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
+import type { FleetSourceCapabilities } from '../data/fleet-data-source';
 import { FleetPanel } from './FleetPanel';
 import {
+  ACTUALS_FAILED_FLEET,
   CountingFleetSource,
+  DISJOINT_WINDOW_FLEET,
   FAILED_FLEET,
   FORECASTLESS_FLEET,
   FULL_FLEET,
@@ -60,7 +63,7 @@ const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site
 };
 
 describe('FleetPanel against a source with the full fleet-level capabilities', () => {
-  it('offers the aggregation range and promises measured output, against the demo source', async () => {
+  it('offers the aggregation range and promises simulated actuals, against the demo source', async () => {
     const dataSource = new DemoFleetDataSource();
     const sites = await demoFleet(dataSource);
     const container = await renderSettled(dataSource, sites);
@@ -69,7 +72,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     openTip('About this chart');
 
-    expect(screen.getByText(/summed hour by hour/u).textContent).toContain('measured output');
+    expect(screen.getByText(/summed hour by hour/u).textContent).toContain('simulated actuals');
     // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
     // value, because restating the sum here would only prove that two copies of it agree.
     expect(container.querySelector('.fleet-panel-stats')?.textContent).toMatch(
@@ -115,11 +118,11 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     expect(container.querySelector('svg')).not.toBeNull();
   });
 
-  it('sums the fleet into the chart, hour by hour: median, band bounds and measurement', async () => {
+  it('sums the fleet into the chart, hour by hour: median, band bounds and actuals', async () => {
     await renderSettled(new CountingFleetSource(FULL_FLEET));
 
     const table = screen.getByRole('table', {
-      name: 'Table view — fleet forecast and measured output, 24 h range, kW',
+      name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
     });
 
     /*
@@ -129,8 +132,8 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
      *
      * Every figure below is the fixture's own arithmetic, stated rather than computed: at 06:00
      * the two sites forecast 2 and 4 kW (median 6), their bands are 1–3 and 3–6 (P10 4, P90 9 —
-     * comonotonic addition, `@cumulo/shared`'s rule, not this panel's), and they measured 1.5 and
-     * 3.5 (5). 07:00 has no readings at all, so its measurement cell is the em dash a gap reads
+     * comonotonic addition, `@cumulo/shared`'s rule, not this panel's), and their actuals are 1.5
+     * and 3.5 (5). 07:00 has no readings at all, so its actuals cell is the em dash a gap reads
      * as — which is what stops a suite from passing on an actuals series that silently went
      * missing.
      */
@@ -168,7 +171,7 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     );
   });
 
-  it('never says the word "measured" — not in prose, not in the chart\'s accessible name', async () => {
+  it('never says "simulated actuals" — not in prose, not in the chart\'s accessible name', async () => {
     const container = await renderSettled(horizonSource());
 
     // Both tips opened first, and that is what keeps this assertion biting: the
@@ -179,8 +182,10 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     openTip('About this window');
 
     // innerHTML rather than textContent on purpose: an aria-label is copy too, and it is the copy
-    // most easily left promising data the source cannot produce.
-    expect(container.innerHTML.toLowerCase()).not.toContain('measured');
+    // most easily left promising data the source cannot produce. The phrase's positive control is
+    // the suite below, which finds it with the capability on — so an empty match here is the
+    // gating working rather than a phrase nothing ever says.
+    expect(container.innerHTML.toLowerCase()).not.toContain('simulated actuals');
     expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
       'Fleet forecast, next 24 h',
     );
@@ -191,6 +196,133 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     await renderSettled(dataSource);
 
     expect(dataSource.forecastRanges).toEqual([24]);
+  });
+});
+
+/*
+ * The combination #264 makes reachable, and the reason this suite exists at all.
+ * The forecast service synthesises fleet actuals now, so the live source carries
+ * them — but its fan-out still reaches forward only, so there is no picker. No
+ * source was ever in that state before, and the copy that covered it named "next
+ * 24 h" over a plot that now also carries the hours behind the horizon.
+ */
+describe('FleetPanel against a source with simulated actuals but no look-back', () => {
+  const SIMULATED_ACTUALS_CAPABILITIES: FleetSourceCapabilities = {
+    fleetLookback: false,
+    fleetActuals: true,
+  };
+
+  /*
+   * Over the *live* shape, always. This suite's whole subject is the combination
+   * only the deployed source is in, and against a fixture whose two windows
+   * overlap it would prove nothing about that source: the defect #264's review
+   * found — every simulated actual dropped, because the join made the forecast
+   * the x-domain — is invisible unless the two windows are disjoint.
+   */
+  const liveSource = (): CountingFleetSource =>
+    new CountingFleetSource(DISJOINT_WINDOW_FLEET, SIMULATED_ACTUALS_CAPABILITIES);
+
+  it('keeps disjoint-window actuals on the chart, past hours before the forecast’s', async () => {
+    const container = await renderSettled(liveSource());
+
+    const table = screen.getByRole('table', {
+      name: 'Table view — fleet forecast and simulated actuals, past 24 h and next 24 h, kW',
+    });
+
+    /*
+     * The fixture's own arithmetic, stated rather than computed. 10:00 and 11:00 were measured and
+     * never forecast (1.5+3.5, then 2+4); 12:00 and 13:00 were forecast and not yet measured
+     * (medians 2+4 and 3+5, bands added comonotonically by `@cumulo/shared`). Every row therefore
+     * has an em dash on exactly one side, and the two measured rows existing *at all* is the
+     * assertion the pre-fix join fails — it returned the last two rows and nothing else.
+     */
+    expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
+      ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual'],
+      ['10:00', '—', '—', '—', '5.0'],
+      ['11:00', '—', '—', '—', '6.0'],
+      ['12:00', '4.0', '6.0', '9.0', '—'],
+      ['13:00', '6.0', '8.0', '11.0', '—'],
+    ]);
+    // And both series are genuinely drawn, not merely tabulated: each is one run of two hours, so
+    // each is one polyline. A chart that dropped the actuals would still render the table above if
+    // the drop happened downstream of the join.
+    expect(container.querySelectorAll('.forecast-chart > .forecast-chart-actuals')).toHaveLength(1);
+    expect(container.querySelectorAll('.forecast-chart > .forecast-chart-median')).toHaveLength(1);
+  });
+
+  it('names both halves of the window it draws, in the chart’s name and in its tip', async () => {
+    const container = await renderSettled(liveSource());
+
+    // Written out rather than imported from `FleetPanel.tsx`: a test that reads
+    // the constant it checks asserts nothing about the wording, and would follow
+    // a silent rewrite straight past the reader the words are for.
+    expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
+      'Fleet forecast and simulated actuals, past 24 h and next 24 h',
+    );
+    expect(screen.queryByRole('group', { name: 'Aggregation range' })).toBeNull();
+
+    openTip('About this window');
+
+    expect(container.querySelector('.info-tip-panel')?.textContent).toBe(
+      'Simulated actuals for the past 24 hours; forecast for the next 24.',
+    );
+  });
+});
+
+/*
+ * Two reads, two windows, two requests — so either can fail alone, and what the panel does about
+ * it is not symmetrical. The forecast is the answer; the actuals are an addition to it, and one
+ * that costs a single metered request rather than a paced fan-out over every site. Before #264's
+ * review both failures came out of one `combineFleetQueries` arm: a failed actuals read withdrew
+ * a fleet sum that had arrived and reported it as "Could not load the fleet forecast", and its
+ * "Try again" re-spent the 60-site fan-out to re-ask one request that had never been the fleet's.
+ */
+describe('FleetPanel when the fleet’s actuals fail on their own', () => {
+  const actualsFailurePattern = /simulated actuals could not be loaded/u;
+
+  it('keeps the forecast chart and names the actuals, rather than blaming the forecast', async () => {
+    const container = await renderSettled(new CountingFleetSource(ACTUALS_FAILED_FLEET));
+
+    // The chart the reader already had is still on screen, and the forecast — which did not fail —
+    // is not named as the thing that did.
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.textContent).not.toContain('Could not load the fleet forecast');
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    const notice = screen.getByText(actualsFailurePattern);
+
+    // A notice, not an alert, for the reason the overlay's is: this panel's one live-region budget
+    // belongs to the chart's readout, and a partial answer is a caption on the answer.
+    expect(notice.className).toBe('panel-notice');
+  });
+
+  it('re-asks only the metered actuals request, never the per-site forecast fan-out', async () => {
+    const dataSource = new CountingFleetSource(ACTUALS_FAILED_FLEET);
+    await renderSettled(dataSource);
+    await screen.findByText(actualsFailurePattern);
+
+    expect(dataSource.forecastCallCount).toBe(1);
+    expect(dataSource.actualsCallCount).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => {
+      expect(dataSource.actualsCallCount).toBe(2);
+    });
+    // The assertion that catches a shared attempt counter: the cheapest recourse on the panel must
+    // not silently buy the most expensive request the panel makes.
+    expect(dataSource.forecastCallCount).toBe(1);
+  });
+
+  it('still withdraws the chart when it is the forecast that failed', async () => {
+    // The other half of the asymmetry, stated here beside it rather than left to be inferred from
+    // the failure suite below: an actuals failure is a caption, a forecast failure is the answer
+    // being missing, and only the second one takes the chart away.
+    const container = await renderSettled(new CountingFleetSource(FAILED_FLEET));
+
+    expect(container.querySelector('svg')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toContain('Could not load the fleet forecast');
+    expect(screen.queryByText(actualsFailurePattern)).toBeNull();
   });
 });
 

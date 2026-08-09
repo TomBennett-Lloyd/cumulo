@@ -14,6 +14,8 @@ export {
   type SiteForecastResponse,
   siteSeriesResponseSchema,
   type SiteSeriesResponse,
+  fleetActualsResponseSchema,
+  type FleetActualsResponse,
 } from './fleet-api';
 export {
   forecastModelSchema,
@@ -24,6 +26,11 @@ export {
   type UncertaintyBand,
 } from './forecast';
 export { generationReadingSchema, type GenerationReading } from './generation-reading';
+export {
+  simulatedActualFromForecast,
+  SIMULATED_ACTUAL_FACTOR_MIN,
+  SIMULATED_ACTUAL_FACTOR_MAX,
+} from './simulated-actual';
 export { locationId, type GeoCoordinates } from './location';
 export {
   baselineSchema,

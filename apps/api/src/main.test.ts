@@ -94,6 +94,7 @@ describe('the api composition root', () => {
       'DELETE /v1/sites/{siteId}',
       'GET /v1/sites/{siteId}/forecast',
       'GET /v1/sites/{siteId}/series',
+      'GET /v1/fleet/actuals',
       'GET /openapi.json',
       'GET /docs',
       'GET /docs/{asset}',

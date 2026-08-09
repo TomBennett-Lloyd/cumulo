@@ -190,7 +190,7 @@ export class DemoFleetDataSource implements FleetDataSource {
   /**
    * Both true, and both earned below: `fleetForecasts` and `fleetActuals` build
    * fixture series that span the requested window backwards, so the demo fleet
-   * genuinely has history and genuinely has measured output.
+   * genuinely has history and genuinely has actuals to draw.
    */
   readonly capabilities: FleetSourceCapabilities = {
     fleetLookback: true,

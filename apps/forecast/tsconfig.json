@@ -8,9 +8,13 @@
     // keeps browser globals out of a service that has no DOM.
     "types": ["node"]
   },
-  // `vitest.config.ts` joins the compiled surface for the same reason
+  // `scripts` joins the compiled surface so the operator CLI — which is absent
+  // from `pnpm test` because it needs an AWS session and writes to real tables —
+  // cannot rot silently against the adapters it wires together. Same reasoning,
+  // and the same include line, as `packages/hindcast/tsconfig.json`.
+  // `vitest.config.ts` joins them for a different reason, the same one
   // `packages/storage/tsconfig.json` includes its own: the root eslint
   // `projectService` type-checks every file it lints, and a config left outside
   // the program is a parse error rather than a lint pass.
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "scripts", "vitest.config.ts"]
 }

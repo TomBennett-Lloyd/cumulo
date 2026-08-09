@@ -92,9 +92,12 @@ const now = (): UtcIsoTimestamp =>
  * function handler string `infra/forecast/lambda.tf` configures.
  *
  * `sites` and `series` are the full adapters; `ConsumeMessageDeps` narrows each to
- * the one method a message may use, so this service's least-privilege posture
- * (ADR 0002: reads `sites`, writes `series`) is a compile-time fact as well as an
- * IAM policy.
+ * the methods a message may use, so this service's least-privilege posture (ADR
+ * 0002: reads `sites`, writes `series`, and since #264 reads back the trailing
+ * window of `series` to simulate the actuals for the hours that have settled) is a
+ * compile-time fact as well as an IAM policy. The full `SeriesAdapter` satisfies
+ * the widened `Pick` unchanged — the narrowing is the type's job, and widening it
+ * costs nothing here.
  *
  * The adapters are passed as whole objects, never as `adapter.putForecasts`: they
  * hold their client and table name on `this` (#77), so a detached method would
