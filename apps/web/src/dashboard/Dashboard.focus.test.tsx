@@ -26,7 +26,7 @@ import {
  * split off the same mount (`structure.md` rule 4), through the same fixture.
  *
  * The rule it proves is #260's settlement as revised by #284 D14, and it has
- * three halves that only make sense together. **A reader-initiated selection
+ * three clauses that only make sense together. **A reader-initiated selection
  * lands the reader on the fleet panel's range picker** — the page changed
  * because they pressed something, and leaving focus on the pressed control would
  * make a keyboard or screen-reader user find the answer by tabbing; the picker
@@ -317,9 +317,10 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * on the card's container, so it works from every control inside the card
      * and from none outside it. That last half is the cost #284 D14 accepted,
      * and the journey is *backwards* rather than a Tab — the map precedes the
-     * reading column, so from the picker the card is behind the reader, past the
-     * (i) tip and the map's own controls (`map/SitePopoverCard.tsx` states it
-     * beside the handler). This case puts the focus there directly. What the
+     * reading column, so from the picker the card is behind the reader — six
+     * stops back, past the (i) tip, the credits band's three links and the map's
+     * two controls (`map/SitePopoverCard.tsx` states it beside the handler).
+     * This case puts the focus there directly. What the
      * route itself costs a keyboard reader needs a real tab order and a real
      * key modality, which is the browser lane's (`testing.md` rule 10) and is
      * owned by no spec today — `docs/tech-debt.md` carries that gap.

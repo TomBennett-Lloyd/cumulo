@@ -111,7 +111,9 @@ for no reason of theirs owes them the opposite. The settled rule:
   landing). It costs a keyboard reader one more thing, and it is worth naming here because the
   layout is what causes it: the map precedes the reading column, so the card sits _above_ the
   landing and Escape — which only works from inside the card — is reached by tabbing backwards past
-  the (i) tip and the map's controls.
+  six stops: the (i) tip, the credits band's three links (the band is rendered after the controls,
+  and the Open-Meteo credit is in it by licence in every state), and the map's two controls. More
+  when the pressed window is not the picker's first button.
 - **A `?site=` selection moves focus nowhere.** This is the settlement of
   [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and the asymmetry is the point
   rather than an exception for page load: the card mounts when the fleet listing _resolves_, which
@@ -141,7 +143,7 @@ what makes a creation land correctly without a special case anywhere: the dialog
 focus on the add-site control, and the new site's card — mounting in the same commit — captures
 _that_ as its opener before moving the reader on to the picker.
 
-`react.md`'s focus paragraphs own the rule, four of them for the four bullets above — "focus
+`react.md`'s focus paragraphs own the rule, five of them for the four bullets above — "focus
 follows the reader" owns the second bullet (_whether_ focus moves), "where the focus lands" owns
 the first (_which_ element, and what the revision costs), and the third bullet is owned by two
 together: "a surface that leaves owes a landing" for the capture-and-restore, and "a surface that

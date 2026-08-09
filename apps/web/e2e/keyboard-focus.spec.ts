@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { PRESSED_RANGE_BUTTON, pressedRangeButton } from './range-picker';
 import { openSiteTable } from './site-table';
 
 /*
@@ -35,9 +36,10 @@ import { openSiteTable } from './site-table';
  * it in the lane that can see it rather than this one re-proving it slowly. But
  * the *journey* into the card is exactly this lane's kind of question and no
  * case here asks it: the map precedes the reading column, so the route from the
- * landing is backwards past the (i) tip and the map's controls, through
- * maplibre's marker overlay, and only a real tab order can say whether it
- * arrives. `docs/tech-debt.md` carries that gap; this comment is not a claim
+ * landing is backwards past six stops — the (i) tip, the credits band's three
+ * links, and the map's two controls — and then through maplibre's marker
+ * overlay, which is where the card is portaled. Only a real tab order can say
+ * whether it arrives. `docs/tech-debt.md` carries that gap; this comment is not a claim
  * that it is covered.
  *
  * The disclosure is part of that claim rather than a preamble to it. The rows
@@ -156,18 +158,6 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-/**
- * The window picker's pressed button, which is where a reader-initiated
- * selection lands (#284 D14).
- *
- * Selected by `aria-pressed` rather than by its label, for the reason the jsdom
- * fixture gives about the same control: the rule names whichever window is
- * current, and pinning `24 h` here would make a change of default window read
- * as a focus regression. One picker is on the page, so this resolves to one
- * element.
- */
-const PRESSED_RANGE_BUTTON = '.range-picker-button[aria-pressed="true"]';
-
 test('hands a keyboard selection to the range picker, ring and all', async ({ page }) => {
   /*
    * Both halves of the page first. The table is what this tabs to; the map is
@@ -202,7 +192,7 @@ test('hands a keyboard selection to the range picker, ring and all', async ({ pa
    */
   await expect(page.locator('.site-popover')).toBeVisible();
 
-  await expect(page.locator(PRESSED_RANGE_BUTTON)).toBeFocused();
+  await expect(pressedRangeButton(page)).toBeFocused();
 
   /*
    * And the ring is on it. The button takes focus programmatically — nobody

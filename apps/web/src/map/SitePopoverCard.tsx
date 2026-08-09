@@ -200,8 +200,11 @@ export interface SitePopoverCardProps {
  * *behind* them in the tab order rather than ahead of it. The map is the first
  * thing in the dashboard and the reading column follows it down the page, so
  * tabbing forward from the picker walks away from the card and on through the
- * rest of the reading; Close is reached backwards, Shift-Tab past the (i) tip
- * and the map's own two controls. A pointer reader pays none of that — Close is
+ * rest of the reading; Close is reached backwards, Shift-Tab past the (i) tip,
+ * the credits band's three links (`MapSurface` renders it after the controls,
+ * and the Open-Meteo one is there by licence in every state) and the map's own
+ * two controls — six stops, and more when the pressed window is not the picker's
+ * first button. A pointer reader pays none of that — Close is
  * on the card in front of them — which is exactly what makes it a keyboard cost
  * and not a general one. Accepted rather than answered with a document-level key
  * handler, which would claim a key the map itself is free to want; that

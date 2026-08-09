@@ -262,11 +262,13 @@ describe('SitePopoverCard focus', () => {
   };
 
   it('falls back to its own heading when it is given no landing to point at', () => {
-    // The fallback arm, reached in the app by a source that renders no range
-    // picker — a bare forward horizon, with neither a look-back nor actuals
-    // (`dashboard/FleetPanel.tsx`). Without a control to land on, announcing the
-    // surface by its own name is still better than leaving the reader on a
-    // marker.
+    // The fallback arm: a source that renders no range picker, which is one
+    // with neither a look-back nor actuals (`dashboard/FleetPanel.tsx`). No
+    // shipped source is in that state today — the demo fleet has both and the
+    // HTTP one has actuals — so this is the arm the card keeps *available*
+    // rather than one the app currently reaches. It is not dead either way:
+    // without a control to land on, announcing the surface by its own name is
+    // still better than leaving the reader on a marker.
     renderCard(READY);
 
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Rathmines rooftop' }));

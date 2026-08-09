@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { pressedRangeButton } from './range-picker';
 
 /*
  * The header, driven by a keyboard and a pointer, in a browser that has a top
@@ -407,7 +408,7 @@ test('finds a site by name and brings the camera to it when it is off screen', a
   // picker by the rule the dashboard already had (`docs/standards/react.md`,
   // revised by #284 D14) — asserted here because a field that kept the focus
   // would leave a keyboard reader typing at their own answer.
-  await expect(page.locator('.range-picker-button[aria-pressed="true"]')).toBeFocused();
+  await expect(pressedRangeButton(page)).toBeFocused();
 });
 
 test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
