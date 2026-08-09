@@ -62,6 +62,7 @@ export const StubMapRegion = ({
   onToggleAddSite,
   selectedSite,
   selectionOrigin,
+  selectionFocusRef,
   firstForecast,
   onRetryFirstForecast,
   onDeselectSite,
@@ -116,12 +117,20 @@ export const StubMapRegion = ({
      * focus when it opened, so moving from one site to another has to remount
      * it, and a stand-in that dropped the key would let the dashboard's focus
      * suites pass over a card still holding the previous site's opener.
+     *
+     * `selectionFocusRef` is forwarded for the same reason and it is the whole
+     * of what makes the landing assertions mean anything: the ref is filled by
+     * the fleet panel's picker, which the *dashboard* renders below this
+     * stand-in, so a stub that swallowed it would leave every case in
+     * `Dashboard.focus.test.tsx` quietly asserting the fallback arm instead of
+     * the rule (#284 D14).
      */}
     {selectedSite !== null && (
       <SitePopoverCard
         key={selectedSite.id}
         site={selectedSite}
         selectionOrigin={selectionOrigin}
+        selectionFocusRef={selectionFocusRef}
         firstForecast={firstForecast}
         onRetryFirstForecast={onRetryFirstForecast}
         onClose={onDeselectSite}
@@ -193,6 +202,21 @@ export const fleetChartTable = (): HTMLElement =>
 
 /** The fleet as rows — the map's table view, and where a closing card returns focus. */
 export const fleetTable = (): HTMLElement => screen.getByRole('table', { name: 'Fleet sites' });
+
+/**
+ * The range picker's pressed button — where a reader-initiated selection lands
+ * (#284 D14).
+ *
+ * Asked for by `aria-pressed`, inside the picker's own group, rather than by its
+ * label: the rule names *whichever* window is current, so pinning `24 h` here
+ * would turn a change of default window into a focus regression. The group
+ * narrows it because pressed-ness is not unique on this page — the map's
+ * add-site control states its armed mode the same way.
+ */
+export const pressedRangeButton = (): HTMLElement =>
+  within(screen.getByRole('group', { name: 'Aggregation range' })).getByRole('button', {
+    pressed: true,
+  });
 
 /**
  * One selection button per listed site, in site order.
