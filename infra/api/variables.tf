@@ -63,6 +63,11 @@ variable "web_origins" {
     the deployment it was true for, and this stack's whole naming convention is
     that environment-specific strings come in as variables.
 
+    One origin arrives before either of those, and it is why the paragraph above
+    is a default rather than a description of the deployed value:
+    .github/workflows/deploy-pages.yml's header owns #285's interim hosting
+    arrangement and its teardown.
+
     This is friction, not authentication. It stops a drive-by script and a
     cross-site page in a browser, both of which cannot choose their Origin
     header; it stops nothing that sets the header itself, and it is not meant

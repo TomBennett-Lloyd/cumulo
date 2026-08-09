@@ -178,7 +178,9 @@ during initialization rather than mid-request.
 deployment: the API's own origin is always allowed, and this variable only ever adds. `infra/api`
 defaults it to `""`, which parses to no extra origins rather than to a misconfiguration. #144
 populates it with the CloudFront URL and #21 with the custom domain — neither is hard-coded here or
-there, because both are server-assigned.
+there, because both are server-assigned. One origin populates it before either of those, on the same
+terms; `.github/workflows/deploy-pages.yml`'s header owns #285's interim hosting arrangement and its
+teardown.
 
 ## Build
 
