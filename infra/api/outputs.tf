@@ -33,10 +33,10 @@
 #     census, and reading it is what a count restated here cannot substitute for,
 #     because the count is wrong from the next route onwards. So the unit
 #     CloudWatch bills is Lambda's own START, END and REPORT, **three lines per
-#     invocation** (a cold start adds an INIT_START), and the write-path lines
+#     invocation** (a cold start adds an INIT_START), and the failure-path lines
 #     ride on top of it. That is sound at demo volume rather than merely
 #     convenient: the traffic is dominated by reads and Swagger UI assets, so the
-#     handful of write-path lines is a rounding error against 10,000 requests.
+#     handful of failure-path lines is a rounding error against 10,000 requests.
 #     Those three platform lines are exactly what ADR 0005's ~250 bytes per
 #     *invocation* measures; it was never a per-application-record figure. At
 #     demo volume (order 10,000 requests/month)
