@@ -279,6 +279,23 @@ export const Dashboard = ({
   createdSitesRef.current = createdSites;
   /** The map's box, searched for the add-site control a closing draft returns focus to. */
   const mapRegionRef = useRef<HTMLDivElement>(null);
+  /**
+   * Where a reader-initiated selection lands: the fleet panel's pressed range
+   * button (#284 D14).
+   *
+   * Held here because the rule's two ends are in two halves of the page — the
+   * card that moves the focus is drawn on the map, the control it moves the
+   * focus to is in the reading below — and this is the one component that can
+   * see both. A ref rather than a query like `returnFocusFromDraft`'s below,
+   * because the target is a React element this tree renders: the picker itself
+   * says which of its buttons is pressed, and a class query here would be a
+   * second, weaker answer to a question `range-picker.tsx` already answers with
+   * `aria-pressed`.
+   *
+   * It is `null` whenever no picker is rendered — a source with neither a
+   * look-back nor actuals — and the card's own heading is the landing then.
+   */
+  const selectionFocusRef = useRef<HTMLButtonElement>(null);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -365,7 +382,10 @@ export const Dashboard = ({
    * back on close (`map/SitePopoverCard.tsx`), which is the same answer for
    * every opener — a marker, a row, the header's search, a creation — without
    * the dashboard knowing which happened, and without needing an answer of its
-   * own the next time one is added.
+   * own the next time one is added. Since #284 D14 a selection lands the reader
+   * on the range picker instead of inside the card, so that hand-back is owed
+   * only to a reader who came into the card afterwards; {@link
+   * selectionFocusRef} is the half of the rule this component does hold.
    */
 
   /**
@@ -388,11 +408,12 @@ export const Dashboard = ({
    * says it without a guard here. React flushes every unmount cleanup in a
    * commit before any mount effect in that same commit, so this runs first and
    * the new site's card — mounting in the same commit, and reader-initiated —
-   * focuses its own heading last. That ordering is also what makes the card's
-   * captured opener the add-site control rather than the submit button that just
-   * left the document, so closing the card afterwards lands somewhere real.
-   * `Dashboard.focus.test.tsx`'s creation case is what holds it honest rather
-   * than a comment claiming it.
+   * moves the focus on to the range picker last (#284 D14). That ordering is
+   * also what makes the card's captured opener the add-site control rather than
+   * the submit button that just left the document, so a reader who then comes
+   * into the card and closes it lands somewhere real.
+   * `Dashboard.focus.test.tsx`'s creation cases are what hold both halves honest
+   * rather than a comment claiming them.
    *
    * The target is the control the reader opened the draft with, matched inside
    * the map's own box rather than across the document: it is the map's control,
@@ -425,7 +446,7 @@ export const Dashboard = ({
     // than re-listed: one fan-out avoided, and the site is already in hand.
     setCreatedSites((current) => [...current, result.value]);
     // A creation is a reader-initiated selection like any other: they placed the
-    // site, so its card announces itself and takes the focus.
+    // site, so the focus follows it to the range picker under the map.
     selectSiteForReader(result.value.id);
     setDraft(null);
     setCreation({ status: 'editing' });
@@ -450,7 +471,7 @@ export const Dashboard = ({
        * reads `sites` and selects through `selectSiteForReader`, which is the
        * same selection a marker press and a row press make
        * (`header/AppHeader.tsx`). A search hit is reader-initiated by
-       * construction, so the card it opens focuses its own heading and
+       * construction, so the focus follows it to the range picker and
        * `SelectionCamera` brings a site that is off screen into frame — neither
        * of which this component had to be told anything new to do.
        *
@@ -495,6 +516,7 @@ export const Dashboard = ({
               }}
               selectedSite={selectedSite}
               selectionOrigin={selectionOrigin}
+              selectionFocusRef={selectionFocusRef}
               firstForecast={forecast}
               onRetryFirstForecast={retryForecast}
               onDeselectSite={() => {
@@ -535,6 +557,7 @@ export const Dashboard = ({
               selectedSite={selectedSite}
               selectionReady={forecast.status === 'ready'}
               refreshToken={createdSites.length}
+              rangePickerRef={selectionFocusRef}
             />
 
             {/*

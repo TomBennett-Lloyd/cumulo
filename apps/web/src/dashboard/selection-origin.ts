@@ -2,9 +2,14 @@
  * How the current selection came to be — the fact the focus rule turns on.
  *
  * - `reader` — somebody did something: pressed a marker, pressed a row, added a
- *   site. Focus is theirs to move, because they moved it.
+ *   site. Focus is theirs to move, because they moved it: it goes to the fleet
+ *   panel's range picker, the control that decides what the selection they just
+ *   made is drawn over (#284 D14).
  * - `deep-link` — the selection arrived in the address bar (`selection-url.ts`).
  *   Nobody asked for it *now*, so focus is never moved for it.
+ *
+ * This type is about *whether* focus moves and says nothing about where it goes;
+ * D14 revised the second question and left this one exactly as #260 settled it.
  *
  * The distinction exists because "when did the site's surface mount" is not the
  * same question as "when did the reader arrive". On a `?site=` link the surface

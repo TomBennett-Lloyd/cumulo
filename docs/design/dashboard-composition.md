@@ -97,10 +97,16 @@ with the region it chased.
 A page that changes above the reader's focus point owes them a landing, and a page that changes
 for no reason of theirs owes them the opposite. The settled rule:
 
-- **A reader-initiated selection focuses the card's own heading** — every opener that is a reader
-  doing something qualifies: a marker press, a row press, a search hit, a creation. `tabIndex={-1}`,
-  so it is a target without joining the tab order. The test is who acted, not which opener it was,
-  which is why a new one inherits the rule instead of extending a list.
+- **A reader-initiated selection lands the reader on the fleet panel's range picker** — every
+  opener that is a reader doing something qualifies: a marker press, a row press, a search hit, a
+  creation. The test is who acted, not which opener it was, which is why a new one inherits the
+  rule instead of extending a list. The landing was the card's own heading (`tabIndex={-1}`, a
+  target without joining the tab order) until #284 D14 moved it: the card is facts about a site
+  with nothing to do from it, while the picker is the control that decides what the reader is now
+  being shown, is on screen in every state of the page, and is where the next act is. The heading
+  remains the fallback where a source renders no picker. What it costs is the announcement — the
+  picker says "24 h, pressed" rather than the site's name, which the card's `aria-labelledby` and
+  the chart's readout still carry.
 - **A `?site=` selection moves focus nowhere.** This is the settlement of
   [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and the asymmetry is the point
   rather than an exception for page load: the card mounts when the fleet listing _resolves_, which
@@ -109,11 +115,14 @@ for no reason of theirs owes them the opposite. The settled rule:
   beside the selection itself (`apps/web/src/dashboard/selection-origin.ts`); the alternative fix
   considered and rejected was skipping the effect's first run, which is a rule about run counts
   rather than about who acted, and says nothing about the second late arrival.
-- **Closing returns focus to whatever held it when the card opened**, captured on the way in. The
-  panel this replaced reconstructed the landing instead — it searched the site list for the row
-  naming its site — which was the right answer only for the one opener it knew about. Capturing
-  covers every opener with no case analysis — a marker, a row, a search hit, a creation, and
-  whatever is added next — and an opener that has since left the document is simply not chased.
+- **Closing returns focus to whatever held it when the card opened, if the card is holding it**,
+  captured on the way in. The panel this replaced reconstructed the landing instead — it searched
+  the site list for the row naming its site — which was the right answer only for the one opener it
+  knew about. Capturing covers every opener with no case analysis — a marker, a row, a search hit,
+  a creation, and whatever is added next — and an opener that has since left the document is simply
+  not chased. Since the landing moved to the picker, the guard is what usually answers: a card the
+  reader was never inside stands aside and leaves them on the control they were left on. The
+  hand-back still fires for a reader who came into the card, which pressing Close does.
 - **A dismissed draft returns focus to the map's add-site control**, the control the reader opened
   it with.
 
@@ -125,7 +134,7 @@ browser's own restoration is still running while `cancel` is being dispatched, a
 a focus set there. React flushes a commit's unmount cleanups before its mount effects, which is
 what makes a creation land correctly without a special case anywhere: the dialog's cleanup puts
 focus on the add-site control, and the new site's card — mounting in the same commit — captures
-_that_ as its opener and then takes the focus for its own heading.
+_that_ as its opener before moving the reader on to the picker.
 
 `react.md`'s focus paragraph owns the rule. `Dashboard.focus.test.tsx` and
 `map/SitePopoverCard.test.tsx` pin it as far as `document.activeElement` goes; the ring a reader
