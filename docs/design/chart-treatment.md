@@ -314,9 +314,12 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   of which would remove it from the accessibility tree it exists to reach.
   **The announcement and the tooltip are composed from the same rows**, so the spoken readout
   cannot drift from the drawn one; and pointer and keyboard both feed that single region, because
-  both do nothing but set the active sample — forking the source per input device would recreate
-  exactly the drift this rule exists to prevent, and `polite` coalescing bounds the chatter a
-  moving pointer produces.
+  both settle on the same active sample. The pointer carries one thing the keyboard does not — the
+  continuous position the panel tracks, per the D7 bullet above — but that rides beside the sample
+  rather than being a second selection, and nothing spoken reads it: a frame that only moves the
+  panel leaves the announcement's text exactly as it was. Forking the source per input device would
+  recreate exactly the drift this rule exists to prevent, and `polite` coalescing bounds the chatter
+  a moving pointer produces.
   The live region is the focus-mode and VoiceOver enhancement, not the accessible surface: a
   screen reader in browse mode consumes arrow keys before the chart ever sees them, so **the table
   twin below remains the canonical route** to every value.
