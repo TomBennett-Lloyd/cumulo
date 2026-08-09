@@ -84,9 +84,9 @@ resource "aws_apigatewayv2_integration" "api" {
 # `$default` — the catch-all, and still the route that serves the API. The route
 # table is in apps/api/src/main.ts (matched by apps/api/src/http/router.ts),
 # where it is unit-tested and where an unknown path returns the same
-# `apiErrorSchema`-shaped 404 as an unknown site does. Declaring all ten routes
-# here as well would put the same list in two places with nothing checking they
-# agree, and would hand unmatched paths to the gateway's own untyped 404
+# `apiErrorSchema`-shaped 404 as an unknown site does. Declaring that table's
+# routes here as well would put the same list in two places with nothing checking
+# they agree, and would hand unmatched paths to the gateway's own untyped 404
 # instead.
 #
 # The three writes below are the deliberate exception, and they are declared for

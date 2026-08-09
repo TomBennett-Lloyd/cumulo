@@ -248,7 +248,7 @@ const guardedWrite = (
  * the series table: what a departing site leaves there is the TTL's (ADR 0007).
  * Named constants rather than object literals in the route table below: both are
  * built once per container, and a reader looking for what a write route can
- * reach finds it here rather than inline among ten routes.
+ * reach finds it here rather than inline among that table's entries.
  */
 const createSiteDeps: CreateSiteDeps = {
   sites,

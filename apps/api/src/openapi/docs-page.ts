@@ -19,7 +19,7 @@ import { docsAssetParamName, docsAssets, type DocsAsset } from './docs-assets';
  *
  * The assets are read from disk at request time rather than bundled into the
  * JavaScript, because 1.5 MB of Swagger UI inlined as a string is 1.5 MB parsed
- * on every cold start of a service whose other nine routes never touch it.
+ * on every cold start of a service whose other routes never touch it.
  */
 
 /**

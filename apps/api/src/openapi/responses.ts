@@ -36,7 +36,7 @@ export const componentResponse = (
 
 /**
  * What each error code means to a caller, once, since the same sentences would
- * otherwise be retyped on ten operations.
+ * otherwise be retyped on every documented operation.
  *
  * Exhaustive by type (`Record<ApiErrorCode, string>`), which is the mechanism
  * that keeps it honest: a code added to `apiErrorCodeSchema` in `@cumulo/shared`
