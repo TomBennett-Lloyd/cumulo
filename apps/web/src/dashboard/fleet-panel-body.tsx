@@ -168,6 +168,13 @@ const fleetChart = (
  * It is the same non-live treatment the completeness note above uses, for the
  * same reason — an incomplete answer is a caption on the answer, not an event.
  *
+ * The single co-occurrence that budget sanctions lives in this file: the failed
+ * arm's `PanelError` mounts a `role="alert"` beside that readout, which #284 D3
+ * made possible by keeping the chart on screen through a failure rather than
+ * returning in place of it. It is allowed because it cannot compete — a failed
+ * fan-out leaves no points, so the readout renders empty for exactly as long as
+ * the alert is up — and it is not licence for a third region here.
+ *
  * The retry is offered because re-asking genuinely can work *and* is cheap: one
  * site's hours, or the fleet's one metered actuals request. Neither re-spends
  * the paced per-site forecast fan-out, which is the test `react.md` sets for

@@ -53,7 +53,11 @@ export interface InfoTipProps {
  * the fleet panel's one is the chart's own readout — the announcement a reader
  * asked for by moving the chart's selection. Two of these in that panel would
  * make three regions competing to be heard, and the reader would get whichever
- * won. So the change is announced the way a disclosure announces it: the button
+ * won. The budget is also already at its limit there in one state: `react.md`
+ * sanctions `PanelError`'s `role="alert"` mounting beside that readout when the
+ * fan-out fails, on the grounds that a failed chart has no sample to speak and
+ * so cannot compete with it. A live-region tip would be the one that genuinely
+ * does. So the change is announced the way a disclosure announces it: the button
  * carries `aria-expanded`, which is state on the control the reader just pressed
  * rather than an interruption. (A `role="status"` mounted with its text already
  * inside it announces nothing anyway — it has no change to report, #161 — so the
