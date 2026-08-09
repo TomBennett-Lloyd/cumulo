@@ -63,6 +63,34 @@ const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site
   return listed.value;
 };
 
+/**
+ * The forecast is *plotted* — not merely a figure on screen.
+ *
+ * `container.querySelector('svg')` stood at each of these sites, and since #284
+ * D3 it proves nothing: the figure is rendered in every state the panel has,
+ * loading and failed included, so the query is true by construction and passes
+ * over exactly the defect it was written to catch. The median polyline is the
+ * part that exists only once the fan-out has summed to hours worth stroking,
+ * which is what each of these cases means when it says the chart survived. The
+ * figure's mere presence has an owner — `FleetPanel.structure.test.tsx`, whose
+ * whole subject it is — so restating it here bought a second copy of a weaker
+ * claim.
+ *
+ * One helper rather than the same line three times: the three sites have one
+ * intent, so a change to what counts as "plotted" must reach all of them
+ * (`structure.md` rule 7).
+ *
+ * Scoped to the plot's own children, because the legend draws a swatch in the
+ * same class and an unscoped sweep would find the key rather than the line —
+ * the same scoping the forecast-failure case relies on to assert the *absence*,
+ * which is this assertion's positive control and its mirror image.
+ */
+const expectForecastPlotted = (container: HTMLElement): void => {
+  expect(container.querySelectorAll('.forecast-chart > .forecast-chart-median')).not.toHaveLength(
+    0,
+  );
+};
+
 describe('FleetPanel against a source with the full fleet-level capabilities', () => {
   it('offers the aggregation range and promises simulated actuals, against the demo source', async () => {
     const dataSource = new DemoFleetDataSource();
@@ -79,7 +107,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     expect(container.querySelector('.fleet-panel-stats')?.textContent).toMatch(
       /^60 sites · \d+(\.\d)? kW installed$/u,
     );
-    expect(container.querySelector('svg')).not.toBeNull();
+    expectForecastPlotted(container);
   });
 
   it('says "site" once and "sites" otherwise', async () => {
@@ -116,7 +144,10 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     expect(container.querySelector('.panel-notice')?.textContent).toBe(
       'Partial aggregate: some hours include only 1 of 2 sites.',
     );
-    expect(container.querySelector('svg')).not.toBeNull();
+    // "Partial" is a caption on an aggregate that arrived, so the hours it is
+    // short of a site are still drawn — which is the half a bare figure check
+    // could not tell from a fan-out that returned nothing at all.
+    expectForecastPlotted(container);
   });
 
   it('sums the fleet into the chart, hour by hour: median, band bounds and actuals', async () => {
@@ -187,9 +218,17 @@ describe('FleetPanel against a source that can only see the horizon', () => {
 /*
  * The combination #264 makes reachable, and the reason this suite exists at all.
  * The forecast service synthesises fleet actuals now, so the live source carries
- * them — but its fan-out still reaches forward only, so there is no picker. No
- * source was ever in that state before, and the copy that covered it named "next
- * 24 h" over a plot that now also carries the hours behind the horizon.
+ * them while its fan-out still reaches forward only. No source was ever in that
+ * state before, and the copy that covered it named "next 24 h" over a plot that
+ * now also carries the hours behind the horizon.
+ *
+ * This arm *does* carry a range picker, which is what #284 D5 changed and what
+ * this docblock used to deny: the control is gated on `fleetLookback ||
+ * fleetActuals` rather than on look-back alone, because with simulated actuals a
+ * wider window buys both more measured hours behind the horizon and more
+ * forecast hours ahead of it. `FleetPanel.tsx`'s docblock owns that reasoning
+ * and `FleetPanel.structure.test.tsx` asserts the picker and the re-ask pressing
+ * it triggers; what this suite owns is the copy that combination produces.
  */
 describe('FleetPanel against a source with simulated actuals but no look-back', () => {
   /*
@@ -261,9 +300,11 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
   it('keeps the forecast chart and names the actuals, rather than blaming the forecast', async () => {
     const container = await renderSettled(new CountingFleetSource(ACTUALS_FAILED_FLEET));
 
-    // The chart the reader already had is still on screen, and the forecast — which did not fail —
-    // is not named as the thing that did.
-    expect(container.querySelector('svg')).not.toBeNull();
+    // The chart the reader already had is still on screen *with its numbers on it*, and the
+    // forecast — which did not fail — is not named as the thing that did. The plotted median is
+    // the load-bearing half: it is exactly what the forecast-failure case below asserts the
+    // absence of, so the two cases now differ in the plot rather than in a figure both states have.
+    expectForecastPlotted(container);
     expect(container.textContent).not.toContain('Could not load the fleet forecast');
     expect(screen.queryByRole('alert')).toBeNull();
 

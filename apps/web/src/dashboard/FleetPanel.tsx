@@ -119,8 +119,15 @@ const DEFAULT_RANGE: RangeHours = 24;
 /**
  * Collapse the two queries into the one state the panel renders.
  *
- * **Only the forecast can take the panel down, and that asymmetry is the whole
- * of this function.** These are two requests over two windows — a per-site
+ * **The two failures are not symmetrical, and that asymmetry is the whole of
+ * this function.** Nothing takes the panel down any more: since #284 D3 the
+ * heading row, the figure and its legend are on screen in every state, so a
+ * failure changes what the panel *says* and what the plot *has on it*, never
+ * whether there is a chart. What survives is the difference in weight — a failed
+ * forecast is the answer itself not arriving, so it is an `alert` over a plot
+ * with nothing drawn on it; a failed actuals read is an addition to an answer
+ * that did arrive, so it is a `panel-notice` over a plot still carrying every
+ * forecast hour. These are two requests over two windows — a per-site
  * forecast fan-out and one metered `/v1/fleet/actuals` call — so either can fail
  * alone, and a failed actuals read used to be returned here as *the* failure:
  * the panel then withdrew a fleet sum that had already arrived and reported it

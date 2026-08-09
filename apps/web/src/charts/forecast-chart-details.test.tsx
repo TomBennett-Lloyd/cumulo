@@ -60,10 +60,14 @@ describe('forecast chart table disclosure', () => {
     expect(details.open).toBe(false);
     expect(summary?.textContent).toBe('Raw data');
 
-    // The treatment's "reachable from the chart container" is discharged by a
-    // *closed* disclosure or not at all: a closed `<details>` keeps its children
-    // in the document, so the twin is still in the accessibility tree and still
-    // carries the caption as its accessible name.
+    // A DOM-and-name fact, and deliberately only that: through a *closed*
+    // disclosure the twin is still in the document and still carries its caption
+    // as its accessible name, so a rename of either fails here. It is not
+    // evidence about the accessibility tree — a browser excludes content it does
+    // not render, so a real screen reader meets the collapsed disclosure and
+    // reaches the table by pressing it. This query can see through the fold at
+    // all only because jsdom omits the `<details>` shadow-tree styles and hides
+    // nothing; what a reader reaches by pressing is `e2e/chart-surfaces.spec.ts`'s.
     expect(screen.getByRole('table', { name: TABLE_NAME })).toBe(
       container.querySelector('.forecast-chart-table'),
     );

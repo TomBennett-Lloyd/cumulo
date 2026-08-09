@@ -233,7 +233,18 @@ test('fills the panel and folds the raw data away', async ({ page }) => {
   await expect(summary).toBeVisible();
   await expect(table).not.toBeVisible();
 
-  await summary.click();
+  /*
+   * Opened with a *keystroke*, because "one keystroke away" is what the
+   * treatment promises and a click would prove only the pointer half of it. This
+   * is the argument `keyboard-focus.spec.ts` makes for the fleet table's
+   * identical fold — a `<details>` that cannot be opened from the keyboard puts
+   * the entire table view out of a keyboard reader's reach, with every other
+   * assertion unable to see it — applied to the chart's twin, which carries the
+   * same relief obligation (`docs/design/chart-treatment.md`). `press` focuses
+   * the summary before pressing, so a summary that stopped being
+   * keyboard-operable fails here rather than being activated anyway.
+   */
+  await summary.press('Enter');
 
   await expect(table).toBeVisible();
 });

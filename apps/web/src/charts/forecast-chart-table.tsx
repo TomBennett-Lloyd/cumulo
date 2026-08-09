@@ -26,9 +26,15 @@ import { formatKw, type ChartOverlayColumn, type ForecastChartPoint } from './ch
  * fleet's own table uses (`dashboard/SiteTable.tsx`): the platform owns the
  * open/closed semantics, the keyboard operation and the announcement, and none
  * of it is ours to get wrong. A closed `<details>` keeps its children in the
- * *document*, so "reachable from the chart container" is undiminished — the
- * accessible table still resolves by role and name, which is exactly what
- * `dashboard/dashboard-test-fixture.tsx` relies on.
+ * *document* but not in the *accessibility tree* — a browser does not render
+ * them, and unrendered content is excluded — so a screen reader meets the
+ * collapsed disclosure, not the table behind it. The treatment's "reachable from
+ * the chart container" is discharged by reachability rather than by presence:
+ * the twin is one press on a named, keyboard-operable control away, and a route
+ * one press away is a route. (`dashboard/dashboard-test-fixture.tsx` queries the
+ * table without opening anything, which works because jsdom omits the
+ * `<details>` shadow-tree styles — a fact about that environment, not a claim
+ * about readers.)
  *
  * The `<caption>` stays inside the table rather than being folded into the
  * summary: it is the table's accessible name, it says which window and which
