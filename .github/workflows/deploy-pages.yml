@@ -19,9 +19,10 @@ name: Deploy Pages (interim)
 #   3. Delete the #285 paragraph from the `web_origins` comment block in
 #      `infra/api/api.auto.tfvars.example`. That file is committed, and its
 #      paragraph points at this header — step 1 leaves it pointing at nothing.
-#   4. Delete the one-line interim hedges listed under "pointer sites" below.
-#      They only exist to stop a reader taking the surrounding paragraph as
-#      current, and they cite this file, so step 1 dangles every one of them.
+#   4. Delete the five one-line interim hedges under "pointer sites" below —
+#      the step 4 group. They only exist to stop a reader taking the
+#      surrounding paragraph as current, and they cite this file, so step 1
+#      dangles every one of them.
 #   5. Point the README's Status demo link at the CloudFront URL — the web
 #      stack's "Phase B — apply, publish, and prove the edge" runbook in
 #      infra/README.md prints it.
@@ -29,25 +30,40 @@ name: Deploy Pages (interim)
 #      `gh api -X DELETE repos/TomBennett-Lloyd/cumulo/pages`
 #
 # RESTATEMENT LEDGER (architecture.md rule 9). This header owns the interim
-# hosting story, and every other site is one of two kinds — both listed here,
-# because a teardown step is only as complete as the list it works from.
+# hosting story, and every other site that a teardown step has to visit is one
+# of two kinds — both listed here, because a step is only as complete as the
+# list it works from.
 #
-# Sites that carry the URL/origin itself. It is server-assigned by GitHub, so no
-# file here predicts it — it is read back and restated in exactly three places,
-# which is what steps 2, 3 and 5 have to find: `README.md`'s Status demo link,
-# the `web_origins` comment in `infra/api/api.auto.tfvars.example`, and the
-# operator's gitignored `infra/api/api.auto.tfvars`.
+# Sites carrying the URL/origin literal. It is server-assigned by GitHub, so
+# nothing predicts it — it is read back and written down in exactly two places,
+# which is what steps 2 and 5 have to find: `README.md`'s Status demo link, and
+# the operator's gitignored `infra/api/api.auto.tfvars`.
 #
-# Pointer sites, for step 4 — five committed paragraphs whose claim about who
-# populates `web_origins`, or about where the demo is served from, this interim
-# makes false. Each carries a one-line hedge naming this file and no copy of the
-# story: `infra/api/variables.tf` (the `web_origins` description), the
-# `cors_configuration` comment in `infra/api/gateway.tf`, the
-# `CUMULO_WEB_ORIGINS` comment in `infra/api/lambda.tf`, the `CUMULO_WEB_ORIGINS`
-# paragraph in `apps/api/README.md`'s Configuration section, and the `web` stack
-# paragraph in `infra/README.md`. (`docs/adr/0006-demo-abuse-protection.md` says
-# the same kind of thing and is deliberately absent: ADRs are immutable, and
-# rule 9 exempts them.)
+# Pointer sites — six committed paragraphs whose claim about who populates
+# `web_origins`, or about where the demo is served from, this interim makes
+# false. None carries a copy of the URL; each names this file instead, and they
+# split by how much of the paragraph comes out:
+#
+#   Step 3, the whole paragraph: the #285 block in the `web_origins` comment of
+#   `infra/api/api.auto.tfvars.example`. It carries the `gh api … --jq
+#   .html_url` read-back command rather than the value — which is why it is
+#   here and not in the list above — and that command is meaningless once Pages
+#   is gone.
+#
+#   Step 4, a one-line hedge each: `infra/api/variables.tf` (the `web_origins`
+#   description), the `cors_configuration` comment in `infra/api/gateway.tf`,
+#   the `CUMULO_WEB_ORIGINS` comment in `infra/api/lambda.tf`, the
+#   `CUMULO_WEB_ORIGINS` paragraph in `apps/api/README.md`'s Configuration
+#   section, and the `web` stack paragraph in `infra/README.md`.
+#
+# Two files are deliberately absent from both lists, because neither is a
+# teardown site. `docs/adr/0006-demo-abuse-protection.md` makes the same kind of
+# claim about origins without citing this file: ADRs are immutable, and rule 9
+# exempts them.
+# The setup-block entry in `docs/tech-debt.md` counts this workflow among the
+# copies of a duplicated block, but writes that count as of the day it was
+# logged and quotes `deploy-web.yml` rather than this file, so deleting this one
+# leaves it true — and `/triage` empties that log on its own schedule anyway.
 #
 # The one literal this file does carry is the `/cumulo/` base path on the build
 # step below, and it dies with this file.
@@ -148,6 +164,16 @@ jobs:
       # and emits root-absolute `/assets/…` URLs — every one of which 404s under
       # a project Pages path. Verified both ways locally before this line was
       # written. `exec` hands the flag straight to the binary.
+      #
+      # What that costs is the package's own `build` script: `exec` runs the
+      # binary, so anything `@cumulo/web`'s script does around `vite build` is
+      # skipped here. Free today, because the script is exactly `vite build` and
+      # nothing else. The day it gains a step — a `tsc -b`, a codegen, an asset
+      # copy — this line silently stops running it and ships an artefact built
+      # differently from the one CI verified, which is the failure the setup
+      # comment above says must not happen. Whoever adds that step adds it here
+      # too, or replaces this line with a script that takes the base path as an
+      # argument rather than after a `--`.
       #
       # `/cumulo/` is this repository's project-Pages path (owner site + repo
       # name). It is the one literal this file carries, and it dies with the
