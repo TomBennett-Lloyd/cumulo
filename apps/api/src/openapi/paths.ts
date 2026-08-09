@@ -9,8 +9,8 @@ import { MAX_SERIES_SPAN_HOURS } from '../forecast/get-site-series';
 import { siteIdParamName } from '../sites/site-id-param';
 
 import { componentRef } from './components';
-import { docsAssetParamName, docsAssetContentTypes } from './docs-assets';
-import type { ContentObject, ParameterObject, PathsObject } from './openapi-types';
+import type { ParameterObject, PathsObject } from './openapi-types';
+import { docsPaths } from './paths-docs';
 import { commonFailures, componentResponse, errorResponses, jsonContent } from './responses';
 
 /**
@@ -18,7 +18,10 @@ import { commonFailures, componentResponse, errorResponses, jsonContent } from '
  *
  * What each response *is* lives in `responses.ts` — the error vocabulary, the
  * two failures every operation shares, and the reason a 429 cannot promise one
- * body shape. This file says which operations exist and what they mean.
+ * body shape. This file says which operations exist and what they mean. The
+ * three operations by which the API documents *itself* live in `paths-docs.ts`
+ * and are spread in at the end, which is where they were before the file
+ * outgrew its ceiling.
  *
  * **Names are checked.** Path parameters take their names from the router's own
  * constants (`siteIdParamName`, `docsAssetParamName`) and every schema position
@@ -75,6 +78,32 @@ const fleetLookbackHoursParameter: ParameterObject = {
   },
 };
 
+/**
+ * The horizon of the fleet forecast read: {@link forecastHoursParameter}'s enum
+ * and default — `get-site-forecast.ts` owns both, and this route offers exactly
+ * them, because the two forecast routes serve the same picker in the web app.
+ *
+ * A parameter of its own rather than a reuse, for the reason
+ * {@link fleetLookbackHoursParameter} is one: what a caller needs told is *why*
+ * the set is closed, and the answer differs. On the per-site route the cost of
+ * a horizon is one read; here it is one read per fleet site.
+ */
+const fleetForecastHoursParameter: ParameterObject = {
+  name: 'hours',
+  in: 'query',
+  required: false,
+  description: [
+    'How far forward to read, from the current time. A closed set rather than a free',
+    'integer, because this endpoint issues one query per fleet site and the cost of each',
+    'admitted value is therefore known in advance.',
+  ].join(' '),
+  schema: {
+    type: 'string',
+    enum: [...FORECAST_HORIZON_HOURS],
+    default: DEFAULT_FORECAST_HORIZON_HOURS,
+  },
+};
+
 const seriesBoundParameter = (name: 'from' | 'to', bound: string): ParameterObject => ({
   name,
   in: 'query',
@@ -92,11 +121,6 @@ const createSiteBody = {
   required: true,
   content: jsonContent(componentRef('CreateSiteInput')),
 };
-
-/** `text/css` and friends, as the 200 of the asset route. */
-const docsAssetContent: ContentObject = Object.fromEntries(
-  docsAssetContentTypes.map((contentType) => [contentType, { schema: { type: 'string' } }]),
-);
 
 export const apiPaths: PathsObject = {
   '/v1/sites': {
@@ -261,61 +285,35 @@ export const apiPaths: PathsObject = {
       },
     },
   },
-  '/openapi.json': {
+  '/v1/fleet/forecast': {
     get: {
-      operationId: 'getOpenApiDocument',
-      summary: 'This document',
+      operationId: 'getFleetForecast',
+      summary: 'Forecast for every fleet site, from now forward',
       description: [
-        'The OpenAPI 3.0 document, generated at start-up from the same zod schemas the',
-        'handlers validate against. There is no spec file in the repository to drift.',
+        'Every site’s stored forecast points from the current time forward, merged into',
+        'one array, so a fleet dashboard reads the whole fleet in one request rather than',
+        'one per site. The mirror of `GET /v1/fleet/actuals` — the same fleet over the',
+        'same kind of window, read the other way; points already past belong to',
+        '`GET /v1/sites/{siteId}/series` and its explicit bounds. **An empty fleet, and a',
+        'fleet whose sites hold no points yet, are both a 200 with an empty `forecasts`',
+        'array**: a fleet with nothing forecast for it yet is a fact about the forecast',
+        'schedule rather than about whether the fleet exists, which is the distinction',
+        '`GET /v1/sites/{siteId}/forecast` draws for one site. The response is all or',
+        'nothing: a fan-out that could not finish is a 500 rather than a fleet total',
+        'quietly short a site. Carries the Open-Meteo attribution that must be displayed',
+        'with the data; like every endpoint here it makes no upstream weather calls.',
+        'Rate-limited per address, because its cost grows with the fleet.',
       ].join(' '),
+      parameters: [fleetForecastHoursParameter],
       responses: {
-        '200': { description: 'The OpenAPI document.', content: jsonContent({ type: 'object' }) },
+        '200': componentResponse(
+          'Forecast points for the whole fleet over the requested horizon, possibly empty, with attribution.',
+          'FleetForecastResponse',
+        ),
+        ...errorResponses('validation_failed'),
         ...commonFailures,
       },
     },
   },
-  '/docs': {
-    get: {
-      operationId: 'getDocsPage',
-      summary: 'Swagger UI',
-      description: [
-        'The API reference, served from this same Lambda with version-pinned assets',
-        'bundled into its deployment artifact (ADR 0005). Same origin as the API, so',
-        '"try it out" issues real requests with no CORS negotiation.',
-      ].join(' '),
-      responses: {
-        '200': {
-          description: 'The Swagger UI page.',
-          content: { 'text/html': { schema: { type: 'string' } } },
-        },
-        ...commonFailures,
-      },
-    },
-  },
-  '/docs/{asset}': {
-    get: {
-      operationId: 'getDocsAsset',
-      summary: 'A Swagger UI asset',
-      description: [
-        'Serves one file from a fixed allowlist of bundled Swagger UI assets. The name',
-        'is matched against that allowlist and never used to build a path, so there is no',
-        'traversal to defend against; anything not on the list is a 404.',
-      ].join(' '),
-      parameters: [
-        {
-          name: docsAssetParamName,
-          in: 'path',
-          required: true,
-          description: 'The exact file name of an allowlisted asset.',
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        '200': { description: 'The asset.', content: docsAssetContent },
-        ...errorResponses('not_found'),
-        ...commonFailures,
-      },
-    },
-  },
+  ...docsPaths,
 };

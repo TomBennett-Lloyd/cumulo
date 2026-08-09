@@ -159,7 +159,12 @@ describe('the contracts the document exists to publish', () => {
     // weather-derived wrapper that forgets it must fail here rather than ship. Fleet actuals
     // are on the list because a simulated reading is still derived from a weather-driven
     // forecast (`simulated-actual.ts`, #264).
-    for (const name of ['SiteForecastResponse', 'SiteSeriesResponse', 'FleetActualsResponse']) {
+    for (const name of [
+      'SiteForecastResponse',
+      'SiteSeriesResponse',
+      'FleetActualsResponse',
+      'FleetForecastResponse',
+    ]) {
       const schema = openApiDocument.components.schemas[name];
 
       expect(schema?.required, name).toContain('attribution');

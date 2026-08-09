@@ -3,6 +3,7 @@ import {
   attributionSchema,
   createSiteInputSchema,
   fleetActualsResponseSchema,
+  fleetForecastResponseSchema,
   fleetSiteSchema,
   forecastSchema,
   generationReadingSchema,
@@ -99,6 +100,18 @@ const componentSources = [
       'is the shape a real meter would fill, which is why the simulation is stated here',
       'and not encoded as a field. Carries the Open-Meteo attribution that must be',
       'displayed alongside them.',
+    ].join(' '),
+  },
+  {
+    name: 'FleetForecastResponse',
+    schema: fleetForecastResponseSchema,
+    description: [
+      'Every fleet site’s forecast points over one forward horizon, in one array rather',
+      'than one per site — the point of the endpoint, as with the actuals above, is that',
+      'a dashboard reads the whole fleet in a single request. An empty `forecasts` array',
+      'is a normal 200 for `SiteForecastResponse`’s reason applied to a whole fleet: the',
+      'points appear when the next forecast cycle writes them. Carries the Open-Meteo',
+      'attribution that must be displayed alongside them.',
     ].join(' '),
   },
   {

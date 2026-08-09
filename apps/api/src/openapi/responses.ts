@@ -93,11 +93,11 @@ const throttledResponse: ResponsesObject = {
       'requests/second (burst 20) across the API, and 2/second (burst 4) on the three',
       'write routes — and its 429 carries the gateway’s own `{ "message": … }` body.',
       'Past that, this service’s per-IP limiter refuses more than 30 requests per',
-      '60-second window to the write routes, `GET /v1/sites/{siteId}/series` and',
-      '`GET /v1/fleet/actuals`, and',
-      'blocks the address for an hour; that 429 is an ApiError with code',
-      '`rate_limited` and a `retry-after` header naming the wait in seconds. Branch on',
-      'the status, never on the body.',
+      '60-second window to the write routes, `GET /v1/sites/{siteId}/series` and both',
+      'fleet routes — `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast`, whose cost',
+      'grows with the fleet — and blocks the address for an hour; that 429 is an ApiError',
+      'with code `rate_limited` and a `retry-after` header naming the wait in seconds.',
+      'Branch on the status, never on the body.',
     ].join(' '),
     content: jsonContent({
       oneOf: [
