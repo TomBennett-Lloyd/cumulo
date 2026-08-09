@@ -543,6 +543,36 @@ const iconPairGapError = async (page: Page): Promise<number> => {
   return Math.abs(menuBox.x - (toggleBox.x + toggleBox.width) - rowGap);
 };
 
+/**
+ * How far the menu's right edge sits from the end of the header's content box,
+ * in CSS pixels — `Infinity` while it has no box.
+ *
+ * The other half of "at the end of the row", and it is a separate reading rather
+ * than a stricter version of the one above because the two fail to different
+ * bugs. {@link iconPairGapError} says the buttons are next to each other;
+ * deleting the toggle's `margin-left: auto` packs `[brand][toggle][menu]` hard
+ * against the left edge and leaves that assertion perfectly green. This one says
+ * where the pair ended up.
+ *
+ * Measured against the content box — the border box less the header's own
+ * `padding-right` — so it asks whether the menu is flush with the row's end
+ * rather than with the window's, and stays true if the bar's padding changes.
+ */
+const menuRowEndGap = async (page: Page): Promise<number> => {
+  const menuBox = await page.locator('.header-menu').boundingBox();
+  const contentRight = await page.locator('.app-header').evaluate((element) => {
+    const styles = getComputedStyle(element);
+
+    return element.getBoundingClientRect().right - Number.parseFloat(styles.paddingRight);
+  });
+
+  if (menuBox === null || Number.isNaN(contentRight)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.abs(contentRight - (menuBox.x + menuBox.width));
+};
+
 test.describe('the search on a bar too narrow to hold it', () => {
   test.use({ viewport: PHONE_VIEWPORT });
 
@@ -590,7 +620,22 @@ test.describe('the search on a bar too narrow to hold it', () => {
      */
     await expect
       .poll(async () => iconPairGapError(page), {
-        message: 'The search icon and the menu are not one row gap apart at the end of the bar.',
+        message: 'The search icon and the menu are not one row gap apart.',
+      })
+      .toBeLessThanOrEqual(ICON_GAP_TOLERANCE_PX);
+
+    /*
+     * And the pair is at the *end* of the row, which the gap alone cannot say:
+     * two buttons packed against the brand on the left are exactly one row gap
+     * apart as well. The reading that separates those two arrangements is the
+     * menu against the end of the header's content box — see
+     * {@link menuRowEndGap}, and the mutant that proves it bites: deleting the
+     * toggle's `margin-left: auto` leaves the gap assertion above green and this
+     * one 100px+ out.
+     */
+    await expect
+      .poll(async () => menuRowEndGap(page), {
+        message: 'The bar’s controls are not flush with the end of the header row.',
       })
       .toBeLessThanOrEqual(ICON_GAP_TOLERANCE_PX);
 

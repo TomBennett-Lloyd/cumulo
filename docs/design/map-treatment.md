@@ -256,8 +256,10 @@ Placement:
   names the decision and does not restate the number.
 
   It buys a single row over a range, not at every width. The compact row is still made of
-  licence-mandated strings, so below roughly 25rem the band wraps again — with less text in it.
-  Wrapping remains the honest last resort, and is still preferred to hiding a credit.
+  licence-mandated strings, so below the width at which even that row stops fitting — which
+  `map.css` states beside the rule, and this document still does not restate — the band wraps
+  again, with less text in it. Wrapping remains the honest last resort, and is still preferred to
+  hiding a credit.
 
 - **Both stay clickable.** The band takes pointer events like any other content; a credit whose
   link cannot be followed is not a credit, and `pointer-events: none` on an overlay is the

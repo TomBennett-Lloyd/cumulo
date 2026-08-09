@@ -68,7 +68,8 @@
  * exactly the width at which this box stops being shown at all (#284 D17). So
  * the two numbers are one decision read from either end, and changing this basis
  * moves the measurement that one is written from — which is why they sit in the
- * same file and why that comment names this value rather than restating it.
+ * same file, and why that comment points back at this declaration instead of
+ * spelling the basis out a second time.
  *
  * This rule keeps applying below the breakpoint, to the copy inside the search
  * bar: what is hidden there is the *direct child* of `.app-header`, not every
@@ -208,21 +209,36 @@
 }
 
 /*
- * The app's second media query, and like the first (`map/map.css`) it exists
- * because a row runs out of width rather than because a device was named.
+ * A media query that exists because a row runs out of width rather than because
+ * a device was named — which is `map/map.css`'s reason for its own, and the two
+ * are counted and argued as a set in `stylelint.config.mjs`'s residual
+ * paragraph rather than by either of them keeping a tally of the other.
  *
  * 27.4375rem is measured, not picked. At this bar's own content — the brand
- * lockup at 113.625px, the search's 14rem basis, the menu button at 38px, two
- * `--space-4` gaps and the bar's own padding — 440px is the narrowest viewport
- * that holds all three on one line, and at 439px the menu wraps and the bar goes
- * from 63px tall to 114px. So the breakpoint sits exactly at the wrap: 439px,
- * which is 27.4375rem at the default root size. Below it the field is replaced
- * by the toggle, and the bar it opens costs a line only while it is up.
+ * lockup at 113.625px, the search at its flex basis above, the menu button at
+ * 38px, two `--space-4` gaps and the bar's own padding — 440px is the narrowest
+ * viewport that holds all three on one line, and at 439px the menu wraps and the
+ * bar goes from 63px tall to 114px. So the breakpoint sits exactly at the wrap:
+ * 439px, which is 27.4375rem at the default root size. Below it the field is
+ * replaced by the toggle, and the bar it opens costs a line only while it is up.
  *
  * The number is derived from this header's content and belongs to this file
- * alone. It is deliberately not a shared breakpoint: nothing else in the app has
- * one, `map.css`'s value answers a different row's arithmetic, and a single
- * "mobile" width for both would be a number neither of them measured.
+ * alone. It is deliberately not shared with the other one: each answers its own
+ * row's arithmetic — that band's two credits, this bar's brand and controls — so
+ * a single "mobile" width standing for both would be a number neither of them
+ * measured.
+ *
+ * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
+ * derived from the measurement above, each needing re-deriving if this bar's
+ * content or typography moves it:
+ *
+ * - `apps/web/e2e/header.spec.ts`, `PHONE_VIEWPORT` — names this width and the
+ *   clearance 390px has under it, to justify a viewport provably inside the
+ *   folded range. A width derived from the stylesheet would assert nothing, so
+ *   it spells it out: the asserting carrier rule 9 ledgers rather than forbids.
+ * - `apps/web/src/header/AppHeader.tsx`, the docblock section on the fold —
+ *   carries the 63px-to-114px height it costs the bar, which is the measurement
+ *   this breakpoint was chosen from and the reason the fold exists at all.
  *
  * Where a platform's fonts run wider than the measurement, this under-fires —
  * the wordmark is set in the system stack, so a stack with a wider face wraps

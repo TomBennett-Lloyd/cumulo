@@ -123,7 +123,11 @@ export default {
      * app's two breakpoints — `apps/web/src/map/map.css` and
      * `apps/web/src/header/header.css` — are therefore raw lengths by
      * construction; each is measured and argued where it is written, which is
-     * the whole of what stands in for a gate there. There
+     * the whole of what stands in for a gate there. This paragraph is also where
+     * that census is kept: the stylesheets point here rather than counting each
+     * other, so a third breakpoint is added to this list and to nothing else. And
+     * a third is a signal in its own right — one shared scale becomes worth
+     * having at about the point a third surface needs a width. There
      * is no property-agnostic mirror for lengths because a length is legal
      * syntax everywhere, and adding these properties to the list above would
      * demand tokens that do not exist: the set has spacing, type, and radii

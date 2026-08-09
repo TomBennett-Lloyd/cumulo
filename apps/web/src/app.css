@@ -52,9 +52,11 @@ body {
  * the breakpoint that decides it — with the measurement behind the number — is
  * `header/header.css`'s, next to the rules it switches. This rule is untouched
  * by that and still describes the row: what changed is how often the row has
- * reason to wrap. Two media queries exist in the app now, that one and
- * `map/map.css`'s, each owned by the surface that measured its own content;
- * there is still no shared breakpoint scale and nothing here to inherit one.
+ * reason to wrap. Each breakpoint in this app is owned by the surface that
+ * measured its own content, and they are counted in one place —
+ * `stylelint.config.mjs`'s residual paragraph, which owns why their widths are
+ * raw lengths at all. There is still no shared breakpoint scale, and nothing
+ * here to inherit one from.
  *
  * A centreline rather than a baseline, and that is the fix rather than a taste
  * (#284 D1). `baseline` is the right-sounding value for a row of text and the

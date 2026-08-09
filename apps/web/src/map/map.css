@@ -221,10 +221,34 @@
  * and nothing here can shorten it, so below roughly 25rem the band wraps in the
  * compact form too. Narrower is fewer lines, never one.
  *
+ * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
+ * derived from this measurement, every one of which needs re-deriving if this
+ * band's typography moves it:
+ *
+ * - `apps/web/e2e/composition.spec.ts`, `COMPACT_VIEWPORT` — computes with
+ *   37.25rem, 597/596 and 402 to choose a viewport provably inside the
+ *   compacted range and provably clear of the floor below it. A width derived
+ *   from the stylesheet would assert nothing, so it spells them out: the
+ *   asserting carrier rule 9 ledgers rather than forbids.
+ * - `docs/tech-debt.md`, "The credits band occludes markers across the map's
+ *   full width" (its #284 C12 update) — restates this width and the ~25rem
+ *   floor, to say how far the occluded strip was narrowed and what is left.
+ * - `docs/design/map-treatment.md`, the Attribution section — deliberately
+ *   carries no number: it names the decision and points here for the width.
+ *   Ledgered so it stays that way, since a number is the tempting thing to add
+ *   to a paragraph describing a range.
+ *
  * A container query would measure the row instead of inferring it from the
  * viewport, and would need no number at all. Declined while this is a
  * one-surface problem; it is the escalation the moment a second surface starts
  * wrapping, or this band gains a third credit.
+ *
+ * A second surface has since arrived — `header/header.css` (#284 D17) — and the
+ * escalation was weighed rather than triggered: a container query serves one
+ * container, so adopting it for both is two independent rewrites sharing no
+ * value, and each width is still measured from the content of its own row.
+ * Where that judgement is recorded, with the count it depends on, is
+ * `stylelint.config.mjs`'s residual paragraph.
  *
  * Gate residual: the width is a raw length, and there is no breakpoint scale to
  * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
