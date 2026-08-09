@@ -60,13 +60,24 @@
 # RESTATEMENT LEDGER. This header owns the stack's capacity posture — since
 # #258, nothing here draws on the Region's 25/25 — and each table's section
 # below owns that table's own metered arithmetic. Two infra/README.md sites
-# restate those on purpose and move with them: the `Runbook: the storage stack`
+# restate those wholesale and move with them: the `Runbook: the storage stack`
 # section's B3 readback (now one `BillingModeSummary` query per batch-written
 # table, both expecting `PAY_PER_REQUEST`) and the whole `### Storage stack`
 # section under `Cost` — its capacity rows and the notes below them both carry
-# figures. Change a billing mode or a metered estimate and those two move in
-# the same commit; every other mention in the repo points here without a number
-# (ADRs excepted).
+# figures.
+#
+# A third class of carrier is deliberately **not** enumerated here: driver rows.
+# infra/README.md's cost convention 3 already requires every stack that drives
+# another stack's meter to carry the driven figure on its own row (`$0.00/mo
+# here; drives ≈ $X/mo under storage`), and the idle-cost censuses in
+# infra/forecast/outputs.tf and infra/ingestion/outputs.tf say the same thing in
+# Terraform for the same reason. Those carriers are owned by that convention,
+# which finds them all by rule; a list here would name whichever ones existed
+# the day it was written and go stale the first time a stack is added — the
+# precise failure a ledger exists to prevent. So: change a billing mode or a
+# metered estimate, and the two sites above move in the same commit, together
+# with every driver row convention 3 requires. Every remaining mention in the
+# repo points here without a number (ADRs excepted).
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
@@ -216,23 +227,25 @@ resource "aws_dynamodb_table" "sites" {
 #    sustained arithmetic still holds — 4,850 write units per cycle, draining in
 #    ~347 s of 3,600 at the old allocation — but what moved this table is burst
 #    shape, not rate: the same cause as 3 below, arriving on the other side of
-#    the queue. The forecast consumer turns one location message into every site
-#    at that location's whole 48-hour horizon, written as `BatchWriteItem` pages
-#    of ≤25 items — one 48-point series per site per model, so ~50 write units
-#    arrive at once per `putForecasts` call and several such calls arrive per
-#    message — while 14 WCU/s accumulates them and the bounded retry budget
-#    behind them (`drainBatches` 3 sends, SDK 2 attempts) spends itself in
-#    seconds. Once the burst credit is
-#    gone the page cannot be funded before patience runs out, and no WCU number
-#    the free pool could have afforded closes that gap — it only moves the fleet
-#    size at which the cliff appears. Confirmed live on 2026-08-05, minutes
+#    the queue. One message is one `putForecasts` call (`batch_size = 1`, so a
+#    record is a batch) carrying every site at that location across the whole
+#    48-hour horizon — **~240 items, ~240 write units, from a single message** —
+#    which `drainBatches` drains as ~10 *sequential* `BatchWriteItem` pages of
+#    25. At 14 WCU/s that one message is ~17 s of accumulation arriving in under
+#    a second, and `maximum_concurrency = 2` puts two of them there at once.
+#    The retry budget behind each page is bounded and small (`drainBatches`
+#    3 sends, SDK 2 attempts, jittered), so once the burst credit is gone a page
+#    cannot be funded before patience runs out — and no WCU number the free pool
+#    could have afforded closes that gap, it only moves the fleet size at which
+#    the cliff appears. Confirmed live on 2026-08-05, minutes
 #    after #156 removed the upstream pacing that had been masking it: ~650
 #    WriteThrottleEvents across two colliding cycles (300 of them in the one
 #    minute that tripped the alarm), 12 of 24 forecast messages failing on first
-#    delivery. Nothing was lost — SQS redelivered every one of them, and the
-#    last landed on its third receive — but the thing absorbing the cliff was
-#    redelivery patience rather than capacity, and the alarm mailed on every
-#    occurrence (#258).
+#    delivery — and that at *half* the item count above, since only the physics
+#    producer exists today and the ~240 prices both model variants. Nothing was
+#    lost — SQS redelivered every one of them, and the last landed on its third
+#    receive — but the thing absorbing the cliff was redelivery patience rather
+#    than capacity, and the alarm mailed on every occurrence (#258).
 #
 #    Cost is activity-shaped rather than standing: ~2.10 M write units/month at
 #    the canonical 12-location fleet (~2,880 items per cycle, the figure the

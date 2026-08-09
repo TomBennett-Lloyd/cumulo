@@ -47,15 +47,26 @@
 #     ~675,000 against the always-free 1,000,000. No new cost line, only the
 #     resource that realises the one already budgeted. A queue holding messages
 #     has no storage charge either — SQS bills requests, not bytes at rest.
+#   * DynamoDB — this stack owns no table, but it is the writer of
+#     `cumulo-series`, and since #258 that table is on-demand: its write units
+#     are metered rather than drawn from a free allocation. So this is a driver
+#     row under infra/README.md's cost convention 3 — the line lives in the
+#     **storage** stack's cost table, because storage owns the resource, and
+#     this stack says so here: **$0.00/month here, driving ≈ $1.48/month under
+#     storage** at the canonical fleet (~2,880 items/hour). It is $0 whenever
+#     ingestion's schedule is off, because there are then no messages to drain.
 #   * IAM — the execution role, its inline policy, and the deploy grant are all
 #     free. So is the event source mapping resource itself.
 #
 # `terraform destroy` takes all of it to $0 with no ordered dependencies: the
 # event source mapping is deleted before the function it targets, and the queue
 # it reads survives because another stack owns it. A forgotten forecast stack
-# costs a fraction of a cent — bounded, because retention is — but, unlike the
-# api stack, it is not inert: it keeps draining ingestion's queue, which is
-# usually the behaviour you want.
+# costs a fraction of a cent *within its own boundary* — bounded, because
+# retention is — but, unlike the api stack, it is not inert, and since #258 that
+# is no longer free either: it keeps draining ingestion's queue, and every
+# message it drains meters series write units on the storage stack's bill. That
+# is still usually the behaviour you want — an undrained queue is worse — but it
+# is ≈ $1.48/month of somebody's meter rather than nothing at all.
 
 output "function_name" {
   description = "Name of the forecast function, for `aws lambda invoke` and for `aws logs tail /aws/lambda/<name>`. Echoes the cumulo-forecast-<environment> convention so an operator reads the value Terraform actually applied instead of retyping it — the deploy workflow hardcodes the same name."

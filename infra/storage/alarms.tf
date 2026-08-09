@@ -102,7 +102,7 @@ resource "aws_cloudwatch_metric_alarm" "read_throttle" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "Read requests were throttled on ${each.value}. Reads have met a limit (ADR 0002): a read allocation if the table is provisioned, a per-partition or per-table request limit if it is on-demand. On a provisioned table the sanctioned response is to flip billing_mode to PAY_PER_REQUEST, not to add auto-scaling; on an on-demand one it is a hot key or a traffic shape to investigate."
+  alarm_description = "Read requests were throttled on ${each.value}. Every table in this stack is on-demand (ADR 0002 Amendments; #156, #258), so this is one of DynamoDB's own request limits — per partition or per table — not an allocation to raise: there is no billing_mode flip left to take. Investigate the read shape, starting with a hot partition key, in the logs of whatever service reads this table."
 }
 
 resource "aws_cloudwatch_metric_alarm" "write_throttle" {
@@ -129,5 +129,5 @@ resource "aws_cloudwatch_metric_alarm" "write_throttle" {
   # carrying UnprocessedItems, so a caller that ignores that field reports a
   # clean run while dropping data. The adapters retry and return a typed partial
   # result (ADR 0002 consequence 4); this alarm is what says it happened at all.
-  alarm_description = "Write requests were throttled on ${each.value}. Check for BatchWriteItem partial results (UnprocessedItems) in the ingestion logs — writes have met a limit (ADR 0002): a write allocation if the table is provisioned, a per-partition or per-table request limit if it is on-demand."
+  alarm_description = "Write requests were throttled on ${each.value}. Check for BatchWriteItem partial results (UnprocessedItems) in the logs of the service that writes this table — ingestion for cumulo-weather, the forecast consumer for cumulo-series. Every table in this stack is on-demand (ADR 0002 Amendments; #156, #258), so this is one of DynamoDB's own per-partition or per-table request limits rather than an allocation to raise, and no billing_mode flip is left to take."
 }
