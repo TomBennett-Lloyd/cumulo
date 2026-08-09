@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
@@ -20,26 +20,29 @@ import { routeBasemap } from './hermetic-basemap';
  * collapsed to nothing looks identical there to one a reader can read
  * (`testing.md` rule 10).
  *
- * Two tips are driven, and the pair is the point. The fleet panel's is the one
- * a reader reaches by tabbing through the whole page, so it carries the
- * reachability half. The header's is the one whose panel hangs *over the map*,
- * so it carries the stacking half — the reason `.info-tip-panel` has a
- * `z-index` at all — and `toBeVisible` cannot see that: Playwright's visibility
- * is a box and a computed style, not an occlusion test, so a panel painted
- * under maplibre's canvas is visible by that measure and unreadable in fact.
- * The hit test below is what tells the two apart, borrowing the idiom
- * `composition.spec.ts` uses on the credits band for the same reason.
+ * One tip is driven, because one is the whole count. There were three when this
+ * file was written and both departures were deletions rather than moves. #284 D5
+ * removed the fleet panel's window caption — it rendered only on the arm with no
+ * range picker, the picker renders wherever there is a window to choose now, and
+ * on the one arm left without one the window is pinned and the chart's own name
+ * states it. #284 D13 removed the header's, whose sentence the About dialog
+ * behind the menu already opens with, and which was a control on the bar in the
+ * tab order ahead of the search.
  *
- * Two is now also the whole count. There used to be a third tip — the fleet
- * panel's window caption, on the arm that rendered no range picker — and this
- * comment used to explain why the demo build never showed it. #284 D5 deleted
- * it outright: the picker renders wherever there is a window to choose now, and
- * on the one arm left without one the window is pinned, so the chart's own name
- * states it. That makes "About this chart" the fleet panel's only (i) in every
- * mode, which is a fact this spec depends on rather than merely records —
- * `FLEET_TIP_BUTTON` is a class selector, so a second tip growing back in that
- * panel would make every locator below ambiguous. The count is asserted for
- * that reason; which tip is which is the unit lane's
+ * That second departure took something with it that is not about tips at all,
+ * and it went somewhere rather than away: the header's panel was the app's one
+ * overlay hanging *over the map*, so this file carried the stacking half —
+ * whether an overlay is painted above maplibre's canvas or under it, which
+ * `toBeVisible` cannot tell, Playwright's visibility being a box and a computed
+ * style rather than an occlusion test. `header.spec.ts` makes that measurement
+ * on `.header-menu-popover` now: same `z-index`, same bar, same canvas beneath.
+ *
+ * So what is left here is the reachability half, on the tip a reader reaches by
+ * tabbing through the whole page. That "About this chart" is the fleet panel's
+ * only (i) in every mode is a fact this spec depends on rather than merely
+ * records — `FLEET_TIP_BUTTON` is a class selector, so a second tip growing back
+ * in that panel would make every locator below ambiguous. The count is asserted
+ * for that reason; which tip is which is the unit lane's
  * (`FleetPanel.structure.test.tsx`).
  */
 
@@ -56,26 +59,6 @@ const MAX_TAB_PRESSES = 100;
 
 const FLEET_TIP_BUTTON = '.fleet-panel .info-tip-button';
 const FLEET_TIP_PANEL = '.fleet-panel .info-tip-panel';
-const HEADER_TIP_BUTTON = '.app-header .info-tip-button';
-const HEADER_TIP_PANEL = '.app-header .info-tip-panel';
-
-/**
- * Whether the panel is the thing a reader's pointer would actually land on at
- * its own centre.
- *
- * `document.elementFromPoint` resolves the topmost painted element at a point,
- * which is exactly the question a stacking value answers and exactly the one
- * `toBeVisible` does not ask. `contains` rather than identity, because the
- * topmost thing inside the panel is whatever text node's element sits at the
- * centre rather than the panel box itself.
- */
-const panelIsOnTop = async (panel: Locator): Promise<boolean> =>
-  panel.evaluate((element) => {
-    const box = element.getBoundingClientRect();
-    const topmost = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-
-    return topmost !== null && element.contains(topmost);
-  });
 
 /** Tab until the fleet panel's (i) holds focus, or say which element never did. */
 const tabToFleetTip = async (page: Page): Promise<void> => {
@@ -147,37 +130,6 @@ test('opens the fleet chart’s description from the keyboard, and closes it bac
    * and strand a keyboard reader at the top of the document — which is the whole
    * reason the component refocuses rather than trusting that focus never moved.
    */
-  await expect(panel).toHaveCount(0);
-  await expect(button).toBeFocused();
-});
-
-test('opens the product’s description over the map rather than under it', async ({ page }) => {
-  const button = page.locator(HEADER_TIP_BUTTON);
-  const panel = page.locator(HEADER_TIP_PANEL);
-
-  /*
-   * The map first, and not as politeness: maplibre's canvas is the positioned
-   * element this panel has to out-rank, and it does not exist until the lazy
-   * chunk has resolved and mounted. Opening the tip over an empty box would
-   * measure a page where nothing could have occluded anything.
-   */
-  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
-
-  await button.click();
-
-  await expect(panel).toBeVisible();
-
-  /*
-   * The assertion this case exists for. The header sits above the dashboard in
-   * DOM order but is not a positioned ancestor of it, so a panel with no
-   * stacking value of its own paints *under* every positioned thing the
-   * dashboard puts below — maplibre's canvas among them — while remaining
-   * visible, boxed and correctly sized to every other measure available here.
-   */
-  expect(await panelIsOnTop(panel)).toBe(true);
-
-  await page.keyboard.press('Escape');
-
   await expect(panel).toHaveCount(0);
   await expect(button).toBeFocused();
 });

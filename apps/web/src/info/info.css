@@ -12,9 +12,13 @@
  * a percentage of the tip's own box, the other the zero the gate ignores.
  *
  * Its own sheet rather than a corner of `header.css` or `dashboard.css`, because
- * the component is neither surface's: the header opens one beside the brand and
+ * the component is neither surface's: the header opened one beside the brand and
  * the fleet panel opens one beside its heading, and a sheet living in either
- * place would make the other a borrower. Loaded from `main.tsx` with every other
+ * place would make the other a borrower. The header's went in #284 D13, so the
+ * fleet panel is the only opener today — which changes who borrows nothing:
+ * `InfoTip` is still a component two surfaces may use rather than a part of the
+ * one that currently does, and folding this into `dashboard.css` would have to
+ * be undone by whoever adds the next tip. Loaded from `main.tsx` with every other
  * sheet, in cascade order — components do not import their own CSS in this app.
  */
 
@@ -59,13 +63,17 @@
  * The panel hangs under its button, over whatever is below.
  *
  * `z-index` for the reason header.css states over its own two values, which this
- * is now the third of: the header is above the dashboard in DOM order but is not
- * a positioned ancestor, so a tip opened on the bar would otherwise paint under
- * maplibre's positioned controls. The same value as those two, and for the same
- * reason they match each other — these popups never overlap, so nothing depends
- * on which would win. The tips inside the fleet panel do not need it (they clear
- * static content on document order alone) and are not given a second value for
- * being in a different place: one component, one treatment.
+ * is the third of: the header is above the dashboard in DOM order but is not a
+ * positioned ancestor, so a tip opened on the bar painted under maplibre's
+ * positioned controls without one. The tip that needed that is gone — #284 D13
+ * took the (i) off the bar — and the fleet panel's, the only one left, does not
+ * need it: it clears static content on document order alone. The value stays
+ * because it belongs to the component rather than to a placement, which is the
+ * same rule that declined a second value for the panel's tip when there were
+ * two; where the next tip opens is not something this sheet gets told, and a
+ * value that has to be added back at the point of use is one that will not be.
+ * Stated plainly so nobody has to rediscover it: no spec observes this value
+ * now, because the case that did was the on-bar tip's.
  *
  * `width: max-content` capped by a measure, so a short sentence gets a small
  * panel and a long one wraps at a readable width instead of stretching to the

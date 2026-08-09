@@ -22,11 +22,11 @@ const MAX_VISIBLE_MATCHES = 8;
  * The control's accessible name, and the hint inside it.
  *
  * Both live here rather than in `header-copy.ts`: that module owns what the
- * *product* says about itself (its one tagline, which the About dialog quotes
- * too), and these are a control's name and placeholder with a single carrier
- * apiece. `dashboard/state-copy.ts` is not their home either — it owns the
- * app's pending, failure and empty-fleet vocabulary, and this is none of the
- * three.
+ * *product* says about itself (its one tagline, which the About dialog is now
+ * the only carrier of), and these are a control's name and placeholder with a
+ * single carrier apiece. `dashboard/state-copy.ts` is not their home either —
+ * it owns the app's pending, failure and empty-fleet vocabulary, and this is
+ * none of the three.
  */
 const SEARCH_LABEL = 'Search sites by name';
 const SEARCH_PLACEHOLDER = 'Search sites';

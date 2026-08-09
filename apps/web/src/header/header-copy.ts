@@ -8,21 +8,24 @@
  * and the shell's voice is neither a panel's nor a chart's.
  *
  * There is exactly one string here rather than a copy deck, and it is here for
- * a reason `architecture.md` rule 9 states: the tagline has two carriers — the
- * header's (i) tip and the About dialog — and a sentence spelled out twice is a
- * sentence that will be edited once. The first carrier changed shape in #265,
- * from a line of prose on the bar to a toggletip beside the brand, without
- * changing that count — which is what reading it from here is for.
+ * a reason `architecture.md` rule 9 states: a sentence spelled out twice is a
+ * sentence that will be edited once. The tagline had two carriers when this
+ * module was written — a line on the bar, which #265 turned into a toggletip
+ * beside the brand — and #284 D13 removed that one, leaving the About dialog
+ * alone with it. Owned here anyway, and not inlined back into the dialog: two
+ * test files read this export rather than spelling the sentence out, so inlining
+ * would put the words in three places to save them being in one — and the
+ * carrier that just went is evidence the count moves.
  */
 
 /**
  * What Cumulo is, in one line.
  *
- * Handed to the header's toggletip (`AppHeader.tsx`) and quoted by
- * `AboutDialog.tsx`, and asserted by a test file for each (`App.test.tsx`,
- * `AboutDialog.test.tsx`) — where the shell's assertion presses the tip open
- * first, because a description behind a press is not on the page until somebody
- * asks for it. All four import it; none spells any part of it out, so editing
+ * Rendered in one place, `AboutDialog.tsx`, and asserted from two
+ * (`AboutDialog.test.tsx` against the dialog alone, `App.test.tsx` through the
+ * shell) — where the shell's assertion opens the menu and presses About first,
+ * because a description behind two presses is not on the page until somebody
+ * asks for it. All three import it; none spells any part of it out, so editing
  * the sentence here cannot leave a test passing against the old words — which
  * is the failure a restatement ledger exists to catch, avoided here by there
  * being nothing to ledger (`architecture.md` rule 9).

@@ -35,12 +35,15 @@ export interface InfoTipProps {
  * This is where they went — reachable in one press, and costing nothing while
  * nobody is asking.
  *
- * Two of the three are left. The window sentence was deleted rather than moved
- * again (#284 D5): it only ever rendered on the arm of the fleet panel that had
- * no range picker, and that arm now has one, so the sentence was a description
- * of a control standing beside it. Which is the shape worth noticing — a tip is
- * the right home for a description, and no home at all is the right one for a
- * description the interface has since made redundant.
+ * One of the three is left, and the other two went for the same reason in
+ * different words: a tip is the right home for a description, and no home at all
+ * is the right one for a description something else on the page already gives.
+ * The window sentence went first (#284 D5) — it rendered only on the arm of the
+ * fleet panel that had no range picker, and that arm now has one, so it had
+ * become a description of a control standing beside it. The product's line went
+ * with the bar's (i) (#284 D13), because the About dialog behind the header menu
+ * opens with that same sentence in full. What is left is the fleet chart's: what
+ * the chart is a sum of, which nothing else on the page says.
  *
  * ## A disclosure, and deliberately not a live region
  *
