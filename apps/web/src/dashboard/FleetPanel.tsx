@@ -70,19 +70,24 @@ import {
  *
  * This panel says only what the source it holds can actually answer
  * (`dataSource.capabilities`). A fleet-level read in live mode is a fan-out over
- * the per-site `/forecast` route, which serves *future* hours only, and fleet
- * actuals have no producer at all — so a range control and the words "measured
- * output" are true of the demo source and false of the HTTP one. Rather than
- * carrying copy that is right half the time, the control and the clause are both
- * gated on the flags: `fleetLookback` decides whether a window can be chosen at
- * all, `fleetActuals` decides whether measurement is mentioned anywhere,
- * including in the chart's accessible name. That was #150's review finding, and
- * the fix it asked for was structural rather than a rewording.
+ * the per-site `/forecast` route, which serves *future* hours only; fleet
+ * actuals do have a producer now — the forecast service synthesises them (#264)
+ * — but synthesised is not measured, so the arm that mentions them says
+ * "simulated actuals" and no arm claims a metered reading. Rather than carrying
+ * copy that is right half the time, the control and the clause are both gated on
+ * the flags: `fleetLookback` decides whether a window can be chosen at all,
+ * `fleetActuals` decides whether actuals are mentioned anywhere, including in
+ * the chart's accessible name. That was #150's review finding, and the fix it
+ * asked for was structural rather than a rewording.
  *
- * When `fleetLookback` is false the range is pinned to 24 by construction: the
- * picker is the only thing that ever calls `setRange`, so no picker means no
- * second value, and a tip beside the chart states the horizon the reader is
- * actually looking at for anyone who asks.
+ * The two flags move independently, and #264 makes the combination that had no
+ * source in it — no look-back, but actuals — the live source's own state. When
+ * `fleetLookback` is false the range is pinned to 24 by construction: the picker
+ * is the only thing that ever calls `setRange`, so no picker means no second
+ * value, and a tip beside the chart states the window the reader is actually
+ * looking at for anyone who asks — a bare forward horizon without actuals, and
+ * the past 24 hours plus the next 24 with them, because a plot carrying actuals
+ * reaches behind the horizon whether or not a picker exists.
  *
  * ## Description behind a press, state on the page
  *
@@ -115,11 +120,22 @@ const DEFAULT_RANGE: RangeHours = 24;
  */
 const HORIZON_CAPTION = 'Forecast horizon: next 24 hours';
 
+/**
+ * The same sentence for a source that carries actuals without a look-back
+ * picker: the plot then reaches behind the horizon as well, and a caption
+ * naming only the next 24 hours would describe half of what is drawn.
+ */
+const WINDOW_CAPTION_WITH_ACTUALS =
+  'Simulated actuals for the past 24 hours; forecast for the next 24.';
+
 /** How the chart's labels name that same horizon, in the terser register a label wants. */
 const HORIZON_WINDOW_LABEL = 'next 24 h';
 
+/** And how they name the two-sided window the caption above describes. */
+const PAST_AND_HORIZON_WINDOW_LABEL = 'past 24 h and next 24 h';
+
 const SUBTITLE_WITH_ACTUALS =
-  'Every site’s forecast, summed hour by hour, with the fleet’s P10–P90 band and measured output.';
+  'Every site’s forecast, summed hour by hour, with the fleet’s P10–P90 band and simulated actuals (the demo fleet has no real inverters).';
 
 const SUBTITLE_FORECAST_ONLY =
   'Every site’s forecast for the hours ahead, summed hour by hour, with the fleet’s P10–P90 band.';
@@ -138,9 +154,23 @@ const siteCountLabel = (count: number): string =>
 const fleetStatsLine = (sites: readonly Site[]): string =>
   `${siteCountLabel(sites.length)} · ${capacityLabel(fleetCapacityKw(sites))} installed`;
 
-/** The window the chart's labels name — a chosen look-back, or the fixed horizon. */
-const windowLabel = (range: RangeHours, canLookBack: boolean): string =>
-  canLookBack ? `${rangeLabel(range)} range` : HORIZON_WINDOW_LABEL;
+/**
+ * The window the chart's labels name.
+ *
+ * Three answers rather than two, because the flags move independently and #264
+ * made the third combination real: a chosen look-back names itself, and without
+ * a picker the window is the bare horizon or — once the source carries actuals —
+ * the horizon with the actuals' hours behind it. Named from what is *drawn*, not
+ * from what was asked for: a source with actuals plots hours before now whether
+ * or not a picker exists, and "next 24 h" over those hours is the chart
+ * misdescribing itself.
+ */
+const windowLabel = (range: RangeHours, canLookBack: boolean, hasActuals: boolean): string => {
+  if (canLookBack) {
+    return `${rangeLabel(range)} range`;
+  }
+  return hasActuals ? PAST_AND_HORIZON_WINDOW_LABEL : HORIZON_WINDOW_LABEL;
+};
 
 /** The chart is named twice — for assistive technology, and above its table twin. */
 interface ChartCopy {
@@ -153,15 +183,17 @@ interface ChartCopy {
  * from a conditional clause.
  *
  * Two whole arms so the honesty rule is auditable by reading them side by side:
- * the words "measured output" appear only in the arm a source with
+ * the words "simulated actuals" appear only in the arm a source with
  * `fleetActuals` reaches. An accessible name is copy like any other, and it is
- * the copy easiest to leave promising something the data cannot show.
+ * the copy easiest to leave promising something the data cannot show — and
+ * "simulated" is load-bearing in it, because these hours are synthesised by the
+ * forecast service (#264) rather than metered off an inverter.
  */
 const chartCopy = (windowText: string, hasActuals: boolean): ChartCopy =>
   hasActuals
     ? {
-        ariaLabel: `Fleet forecast and measured output, ${windowText}`,
-        tableCaption: `Table view — fleet forecast and measured output, ${windowText}, kW`,
+        ariaLabel: `Fleet forecast and simulated actuals, ${windowText}`,
+        tableCaption: `Table view — fleet forecast and simulated actuals, ${windowText}, kW`,
       }
     : {
         ariaLabel: `Fleet forecast, ${windowText}`,
@@ -487,8 +519,8 @@ export const FleetPanel = ({
            *
            * The capability arms are untouched by the move and stay whole:
            * `fleetActuals` still chooses between two complete sentences rather
-           * than assembling a clause, so "measured output" is still readable as
-           * belonging to exactly one arm.
+           * than assembling a clause, so "simulated actuals" is still readable
+           * as belonging to exactly one arm.
            */}
           <InfoTip label="About this chart">
             {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
@@ -522,13 +554,15 @@ export const FleetPanel = ({
           {fleetLookback ? (
             <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
           ) : (
-            <InfoTip label="About this window">{HORIZON_CAPTION}</InfoTip>
+            <InfoTip label="About this window">
+              {fleetActuals ? WINDOW_CAPTION_WITH_ACTUALS : HORIZON_CAPTION}
+            </InfoTip>
           )}
           {fleetBody(
             combineFleetQueries(forecasts, actuals),
             {
               siteCount: sites.length,
-              chart: chartCopy(windowLabel(range, fleetLookback), fleetActuals),
+              chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals),
               overlay,
               onRetryOverlay: retryOverlay,
             },

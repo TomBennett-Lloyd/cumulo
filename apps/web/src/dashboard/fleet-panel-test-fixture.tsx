@@ -153,7 +153,7 @@ export const FAILED_FLEET: StubFleet = {
 
 const FULL_CAPABILITIES: FleetSourceCapabilities = { fleetLookback: true, fleetActuals: true };
 
-/** What the deployed HTTP source can answer: a forward horizon, and no measurements at all. */
+/** Neither fleet-level capability: a forward horizon only, and no actuals at all. */
 export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
   fleetLookback: false,
   fleetActuals: false,
@@ -240,8 +240,8 @@ export class CountingFleetSource implements FleetDataSource {
     );
   };
 
-  // The overlay is the site's median and nothing else, so measured output is never asked for. A
-  // throw rather than an empty answer: it is a bug worth a loud crash, not a state to render.
+  // The overlay is the site's median and nothing else, so the site's actuals are never asked for.
+  // A throw rather than an empty answer: it is a bug worth a loud crash, not a state to render.
   readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
     throw new Error('CountingFleetSource: the fleet panel must not call siteActuals');
   };

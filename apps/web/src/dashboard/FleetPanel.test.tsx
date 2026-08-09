@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
+import type { FleetSourceCapabilities } from '../data/fleet-data-source';
 import { FleetPanel } from './FleetPanel';
 import {
   CountingFleetSource,
@@ -60,7 +61,7 @@ const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site
 };
 
 describe('FleetPanel against a source with the full fleet-level capabilities', () => {
-  it('offers the aggregation range and promises measured output, against the demo source', async () => {
+  it('offers the aggregation range and promises simulated actuals, against the demo source', async () => {
     const dataSource = new DemoFleetDataSource();
     const sites = await demoFleet(dataSource);
     const container = await renderSettled(dataSource, sites);
@@ -69,7 +70,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     openTip('About this chart');
 
-    expect(screen.getByText(/summed hour by hour/u).textContent).toContain('measured output');
+    expect(screen.getByText(/summed hour by hour/u).textContent).toContain('simulated actuals');
     // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
     // value, because restating the sum here would only prove that two copies of it agree.
     expect(container.querySelector('.fleet-panel-stats')?.textContent).toMatch(
@@ -115,11 +116,11 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     expect(container.querySelector('svg')).not.toBeNull();
   });
 
-  it('sums the fleet into the chart, hour by hour: median, band bounds and measurement', async () => {
+  it('sums the fleet into the chart, hour by hour: median, band bounds and actuals', async () => {
     await renderSettled(new CountingFleetSource(FULL_FLEET));
 
     const table = screen.getByRole('table', {
-      name: 'Table view — fleet forecast and measured output, 24 h range, kW',
+      name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
     });
 
     /*
@@ -129,8 +130,8 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
      *
      * Every figure below is the fixture's own arithmetic, stated rather than computed: at 06:00
      * the two sites forecast 2 and 4 kW (median 6), their bands are 1–3 and 3–6 (P10 4, P90 9 —
-     * comonotonic addition, `@cumulo/shared`'s rule, not this panel's), and they measured 1.5 and
-     * 3.5 (5). 07:00 has no readings at all, so its measurement cell is the em dash a gap reads
+     * comonotonic addition, `@cumulo/shared`'s rule, not this panel's), and their actuals are 1.5
+     * and 3.5 (5). 07:00 has no readings at all, so its actuals cell is the em dash a gap reads
      * as — which is what stops a suite from passing on an actuals series that silently went
      * missing.
      */
@@ -168,7 +169,7 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     );
   });
 
-  it('never says the word "measured" — not in prose, not in the chart\'s accessible name', async () => {
+  it('never says "simulated actuals" — not in prose, not in the chart\'s accessible name', async () => {
     const container = await renderSettled(horizonSource());
 
     // Both tips opened first, and that is what keeps this assertion biting: the
@@ -179,8 +180,10 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     openTip('About this window');
 
     // innerHTML rather than textContent on purpose: an aria-label is copy too, and it is the copy
-    // most easily left promising data the source cannot produce.
-    expect(container.innerHTML.toLowerCase()).not.toContain('measured');
+    // most easily left promising data the source cannot produce. The phrase's positive control is
+    // the suite below, which finds it with the capability on — so an empty match here is the
+    // gating working rather than a phrase nothing ever says.
+    expect(container.innerHTML.toLowerCase()).not.toContain('simulated actuals');
     expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
       'Fleet forecast, next 24 h',
     );
@@ -191,6 +194,40 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     await renderSettled(dataSource);
 
     expect(dataSource.forecastRanges).toEqual([24]);
+  });
+});
+
+/*
+ * The combination #264 makes reachable, and the reason this suite exists at all.
+ * The forecast service synthesises fleet actuals now, so the live source carries
+ * them — but its fan-out still reaches forward only, so there is no picker. No
+ * source was ever in that state before, and the copy that covered it named "next
+ * 24 h" over a plot that now also carries the hours behind the horizon.
+ */
+describe('FleetPanel against a source with simulated actuals but no look-back', () => {
+  const SIMULATED_ACTUALS_CAPABILITIES: FleetSourceCapabilities = {
+    fleetLookback: false,
+    fleetActuals: true,
+  };
+
+  it('names both halves of the window it draws, in the chart’s name and in its tip', async () => {
+    const container = await renderSettled(
+      new CountingFleetSource(FULL_FLEET, SIMULATED_ACTUALS_CAPABILITIES),
+    );
+
+    // Written out rather than imported from `FleetPanel.tsx`: a test that reads
+    // the constant it checks asserts nothing about the wording, and would follow
+    // a silent rewrite straight past the reader the words are for.
+    expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
+      'Fleet forecast and simulated actuals, past 24 h and next 24 h',
+    );
+    expect(screen.queryByRole('group', { name: 'Aggregation range' })).toBeNull();
+
+    openTip('About this window');
+
+    expect(container.querySelector('.info-tip-panel')?.textContent).toBe(
+      'Simulated actuals for the past 24 hours; forecast for the next 24.',
+    );
   });
 });
 

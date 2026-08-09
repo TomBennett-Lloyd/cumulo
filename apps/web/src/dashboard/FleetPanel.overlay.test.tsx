@@ -63,7 +63,7 @@ describe('FleetPanel with a site selected', () => {
     await settle();
 
     const table = await screen.findByRole('table', {
-      name: 'Table view — fleet forecast and measured output, 24 h range, kW',
+      name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
     });
 
     /*
@@ -129,7 +129,7 @@ describe('FleetPanel with a site selected', () => {
     expect(overlayHeader()).toBeNull();
     expect(
       screen.getByRole('table', {
-        name: 'Table view — fleet forecast and measured output, 24 h range, kW',
+        name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
       }),
     ).toBeDefined();
   });
@@ -189,7 +189,7 @@ describe('FleetPanel with a site selected', () => {
     // columns are unchanged, which is the other half of "a selection redraws one line, not the
     // chart".
     const table = screen.getByRole('table', {
-      name: 'Table view — fleet forecast and measured output, 24 h range, kW',
+      name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
     });
 
     await waitFor(() => {
