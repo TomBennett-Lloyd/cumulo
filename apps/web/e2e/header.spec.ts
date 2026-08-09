@@ -17,7 +17,7 @@ import { routeBasemap } from './hermetic-basemap';
  * (`src/header/*.test.tsx`): what is in the document, in which state, and what
  * each control means.
  *
- * Four cases, one per thing only this lane can see.
+ * Five cases, one per thing only this lane can see.
  *
  * The first is the menu, as one continuous interaction rather than a case per
  * step, because the sequence is the behaviour: a reader arrives, finds the menu
@@ -51,6 +51,15 @@ import { routeBasemap } from './hermetic-basemap';
  * at once), hangs off the same bar, and has the same maplibre canvas beneath it. Playwright's `toBeVisible` cannot make the claim —
  * it is a box and a computed style, not an occlusion test, so a popover painted
  * under the canvas passes it while being unreadable in fact.
+ *
+ * The fifth is the search folding behind an icon on a bar too narrow to hold it
+ * (#284 D17), which is a media query and therefore invisible to jsdom in the
+ * most literal way available: `AppHeader` renders the field and the icon at
+ * every width, and which of them a reader is looking at is a computed `display`
+ * nothing under `src/` can read. The case drives the whole transition rather
+ * than the two ends of it, because what is worth catching is a search that
+ * survives the fold — the combobox still selecting, and the field coming back
+ * when the width does.
  */
 
 /** How far one drag moves the camera, in CSS pixels. */
@@ -241,6 +250,13 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
   // — and the count is hard-coded precisely because a control joining or leaving
   // the bar shifts it silently, which is what #265 did by adding the product's
   // (i) here and #284 D13 undid by taking it away again.
+  //
+  // The search toggle #284 D17 added is a third control on this bar and is
+  // deliberately not in this count: it is `display: none` above
+  // `header/header.css`'s breakpoint, which this file's default viewport is well
+  // clear of, and a hidden control is not focusable. So the order here is
+  // unchanged at this width and different at a phone's — which is the last case
+  // in this file, at 390px, rather than an assumption made in this one.
   await page.keyboard.press('Tab');
   await expect(page.locator('.site-search-input')).toBeFocused();
 
@@ -468,4 +484,130 @@ test('hangs the menu over the map rather than under it', async ({ page }) => {
    * visible, boxed and correctly sized to every other measure available here.
    */
   expect(await panelIsOnTop(popover)).toBe(true);
+});
+
+/**
+ * A phone, and specifically one below `header/header.css`'s 27.4375rem — the
+ * width that file measured as the point where the brand, the field and the menu
+ * stop fitting on one line.
+ *
+ * 390x844 rather than a width picked just under the breakpoint: it is a real
+ * device size, it is 49px clear of the fold, and the clearance is what keeps
+ * this case from turning red over a platform whose fonts lay the bar out a few
+ * pixels wider than the measurement.
+ */
+const PHONE_VIEWPORT = { width: 390, height: 844 };
+
+/** A desktop window, well above the fold — where the field is the bar's own. */
+const WIDE_VIEWPORT = { width: 1280, height: 800 };
+
+test.describe('the search on a bar too narrow to hold it', () => {
+  test.use({ viewport: PHONE_VIEWPORT });
+
+  test('folds the field behind an icon, opens it focused, and hands it back when the width returns', async ({
+    page,
+  }) => {
+    const inlineSearch = page.locator('.app-header > .site-search');
+    const toggle = page.locator('.header-search-toggle');
+    const bar = page.locator('.header-search-bar');
+    const barInput = bar.locator('.site-search-input');
+
+    /*
+     * The listing first, for the reason the menu case waits on it: the fleet
+     * resolves after first paint and everything read below comes off a row.
+     */
+    await expect(page.locator('.site-table-summary')).toBeVisible();
+
+    /*
+     * The fold itself. `toBeHidden` on the field is a computed-style read, which
+     * is the whole reason this case is in this lane — the element is in the
+     * document at every width and jsdom would find it either way.
+     */
+    await expect(inlineSearch).toBeHidden();
+    await expect(toggle).toBeVisible();
+    // Closed is absent rather than merely hidden, so the bar's own field is not
+    // a second combobox sitting in the accessibility tree behind the icon.
+    await expect(bar).toHaveCount(0);
+
+    /*
+     * The site to look for, read off the page before anything is pressed and
+     * through the closed disclosure, exactly as the search case above reads it
+     * and for the same two reasons: a name regenerated from the seed would still
+     * pass if the app and the test drifted together, and opening the table would
+     * scroll the surface this case is about out from under itself.
+     */
+    const row = page.locator('[data-site-id]').first();
+    await expect(row).toBeAttached();
+
+    const siteId = await row.getAttribute('data-site-id');
+    const siteName = await row.textContent();
+
+    if (siteId === null || siteName === null) {
+      throw new Error('The first site row names neither a site nor an id to search for.');
+    }
+
+    await toggle.click();
+
+    await expect(bar).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    /*
+     * The caret is in the field the press opened. On a phone this is the whole
+     * difference between a search bar and a search bar with a keyboard under it,
+     * because a mobile browser raises its keyboard only for a focus made inside
+     * the gesture that asked for one — which is what `AppHeader`'s `flushSync`
+     * buys, and what `AppHeader.test.tsx` pins in the lane that can see
+     * `document.activeElement` at all.
+     */
+    await expect(barInput).toBeFocused();
+
+    /*
+     * And it opened *under* the row rather than inside it. A bar that squeezed
+     * onto the header's own line would satisfy every assertion above while
+     * leaving a field narrower than the icon that opened it, so the claim is
+     * made against the brand's box: the bar starts below where the brand ends.
+     */
+    const brandBox = await page.locator('.brand').boundingBox();
+    const barBox = await bar.boundingBox();
+
+    if (brandBox === null || barBox === null) {
+      throw new Error('The header bar is visible but something on it has no layout box.');
+    }
+
+    expect(barBox.y).toBeGreaterThanOrEqual(brandBox.y + brandBox.height);
+
+    await barInput.fill(siteName);
+
+    // The popup answered before the keys that act on it, for the reason the
+    // search case above waits: otherwise Enter is pressed against whatever the
+    // list happens to hold.
+    await expect(bar.locator('.site-search-option').first()).toHaveText(new RegExp(siteName));
+
+    /*
+     * The combobox's own keys, driven inside the bar. A full site name matches
+     * exactly one site in the demo fleet — the names run `<place> rooftop 1..5`
+     * — so ArrowDown here is the clamp rather than a step, and what Enter proves
+     * is that the highlight, the selection and the URL still work from a control
+     * that has moved to a different parent.
+     */
+    await barInput.press('ArrowDown');
+    await barInput.press('Enter');
+
+    // The right site, not merely a site: an off-by-one in the highlight would
+    // open a neighbour's card with every other assertion here still green.
+    // Polled because the selection reaches the URL through the dashboard.
+    await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
+
+    await page.setViewportSize(WIDE_VIEWPORT);
+
+    /*
+     * The far end of the transition, and the guard that keeps the two ends from
+     * both being vacuous: the icon is *not* visible at a desktop width, so the
+     * `toBeVisible` at the top of this case is a fact about 390px rather than
+     * about an icon that is simply always there. It sits here rather than before
+     * the resize because `test.use` opens this case at the phone width; it is
+     * the same claim either way round.
+     */
+    await expect(inlineSearch).toBeVisible();
+    await expect(toggle).toBeHidden();
+  });
 });

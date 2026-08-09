@@ -1,5 +1,5 @@
 import type { Site } from '@cumulo/shared';
-import type { KeyboardEvent, ReactElement } from 'react';
+import type { KeyboardEvent, ReactElement, RefObject } from 'react';
 import { useId, useState } from 'react';
 
 import { capacityLabel } from '../dashboard/site-format';
@@ -81,6 +81,21 @@ export interface SiteSearchProps {
   readonly sites: readonly Site[];
   /** Selecting a match — the dashboard's own reader-initiated selection. */
   readonly onSelectSite: (siteId: Site['id']) => void;
+  /**
+   * A handle on the field, for a caller that has to focus it itself.
+   *
+   * Optional, and unset on the copy that sits on the bar: nothing focuses that
+   * one but the reader. `AppHeader` passes one to the copy inside the collapsed
+   * search bar because opening that bar and putting the caret in it are one
+   * gesture, and a mobile browser only raises its keyboard for a `focus()` made
+   * inside the press that asked for it — so the focus cannot wait for an effect
+   * a render later (`AppHeader.tsx` states the whole of it).
+   *
+   * A ref rather than an `autoFocus` prop, because `autoFocus` fires on mount
+   * and this control is also mounted permanently on the wide bar, where taking
+   * the focus on arrival would steal it from a reader who did nothing to ask.
+   */
+  readonly inputRef?: RefObject<HTMLInputElement | null>;
 }
 
 /**
@@ -131,7 +146,7 @@ export interface SiteSearchProps {
  * are this control's own, and nothing else. Which site is selected belongs to the
  * dashboard, because the markers, the rows and the chart all read it.
  */
-export const SiteSearch = ({ sites, onSelectSite }: SiteSearchProps): ReactElement => {
+export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): ReactElement => {
   const [query, setQuery] = useState('');
   const [listOpen, setListOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -220,6 +235,7 @@ export const SiteSearch = ({ sites, onSelectSite }: SiteSearchProps): ReactEleme
       <input
         type="text"
         className="site-search-input"
+        ref={inputRef}
         role="combobox"
         aria-label={SEARCH_LABEL}
         aria-expanded={expanded}

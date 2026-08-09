@@ -2,6 +2,7 @@
 
 import type { Site } from '@cumulo/shared';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SiteSearch } from './SiteSearch';
@@ -259,6 +260,25 @@ describe('SiteSearch selecting a match', () => {
     // `mousedown` is the whole point: the field's blur closes the popup, so a
     // handler on `click` would fire on an option that had already unmounted.
     expect(onSelectSite.mock.calls).toEqual([['id-dublin-rooftop-2']]);
+  });
+});
+
+describe('SiteSearch handle', () => {
+  it('points an offered ref at the field itself, not at the box around it', () => {
+    const inputRef = createRef<HTMLInputElement>();
+
+    render(<SiteSearch sites={FLEET} onSelectSite={() => undefined} inputRef={inputRef} />);
+
+    /*
+     * The prop's whole contract, asserted where the prop lives. A handle on the
+     * wrapper — or on nothing — would still let a caller write `focus()` and
+     * would still leave the caret nowhere.
+     *
+     * `AppHeader.test.tsx` asserts something different rather than this again:
+     * *when* the focus happens, which is inside the press that opens the
+     * collapsed search bar and is the reason this prop exists at all.
+     */
+    expect(inputRef.current).toBe(searchInput());
   });
 });
 
