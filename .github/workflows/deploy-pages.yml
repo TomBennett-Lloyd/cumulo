@@ -9,33 +9,58 @@ name: Deploy Pages (interim)
 # so until it ships the same `apps/web` build is published to GitHub Pages from
 # here. Nothing about this file argues that Pages is the right home; it argues
 # that a URL today is worth more than an empty one, and that the cost of undoing
-# it is the four steps below.
+# it is the steps below.
 #
 # TEARDOWN — run these when #144's distribution is live, and this arrangement is
 # gone in full:
 #   1. Delete this file.
 #   2. Remove the Pages origin from `web_origins` in the operator's gitignored
 #      `infra/api/api.auto.tfvars`, and re-apply the `infra/api` stack.
-#   3. Point the README's Status demo link at the CloudFront URL — the web
+#   3. Delete the #285 paragraph from the `web_origins` comment block in
+#      `infra/api/api.auto.tfvars.example`. That file is committed, and its
+#      paragraph points at this header — step 1 leaves it pointing at nothing.
+#   4. Delete the one-line interim hedges listed under "pointer sites" below.
+#      They only exist to stop a reader taking the surrounding paragraph as
+#      current, and they cite this file, so step 1 dangles every one of them.
+#   5. Point the README's Status demo link at the CloudFront URL — the web
 #      stack's "Phase B — apply, publish, and prove the edge" runbook in
 #      infra/README.md prints it.
-#   4. Disable Pages on the repository:
+#   6. Disable Pages on the repository:
 #      `gh api -X DELETE repos/TomBennett-Lloyd/cumulo/pages`
 #
 # RESTATEMENT LEDGER (architecture.md rule 9). This header owns the interim
-# hosting story; the Pages URL/origin itself is server-assigned by GitHub, so
-# no file here predicts it — it is read back and restated in exactly three
-# places, which is what step 2 and step 3 above have to find: `README.md`'s
-# Status demo link, the `web_origins` comment in
-# `infra/api/api.auto.tfvars.example`, and the operator's gitignored
-# `infra/api/api.auto.tfvars`. The one literal this file does carry is the
-# `/cumulo/` base path on the build step below, and it dies with this file.
+# hosting story, and every other site is one of two kinds — both listed here,
+# because a teardown step is only as complete as the list it works from.
+#
+# Sites that carry the URL/origin itself. It is server-assigned by GitHub, so no
+# file here predicts it — it is read back and restated in exactly three places,
+# which is what steps 2, 3 and 5 have to find: `README.md`'s Status demo link,
+# the `web_origins` comment in `infra/api/api.auto.tfvars.example`, and the
+# operator's gitignored `infra/api/api.auto.tfvars`.
+#
+# Pointer sites, for step 4 — five committed paragraphs whose claim about who
+# populates `web_origins`, or about where the demo is served from, this interim
+# makes false. Each carries a one-line hedge naming this file and no copy of the
+# story: `infra/api/variables.tf` (the `web_origins` description), the
+# `cors_configuration` comment in `infra/api/gateway.tf`, the
+# `CUMULO_WEB_ORIGINS` comment in `infra/api/lambda.tf`, the `CUMULO_WEB_ORIGINS`
+# paragraph in `apps/api/README.md`'s Configuration section, and the `web` stack
+# paragraph in `infra/README.md`. (`docs/adr/0006-demo-abuse-protection.md` says
+# the same kind of thing and is deliberately absent: ADRs are immutable, and
+# rule 9 exempts them.)
+#
+# The one literal this file does carry is the `/cumulo/` base path on the build
+# step below, and it dies with this file.
 #
 # NO AWS, AT ALL. `deploy-web.yml` is keyless because OIDC buys it an AWS role;
 # this workflow is keyless because it never talks to AWS in the first place —
-# no credential-configuring action, no role, no region. That absence is checked
-# rather than asserted: a grep for the AWS credentials action's name over this
-# file must find nothing, which is also why this sentence declines to spell it.
+# no credential-configuring action, no role, no region. That absence was
+# verified the only way it currently can be — a grep for the AWS credentials
+# action's name over this file, run once on this PR's review and finding
+# nothing. No standing gate greps workflow text, so nothing re-checks it if a
+# later edit adds one; the next check is whoever next runs the grep, which is
+# why this sentence still declines to spell the name.
+#
 # The `id-token: write` permission below is GitHub Pages' own OIDC: `deploy-pages`
 # mints a token that attests to the artefact's origin for the Pages service.
 # Same permission name, a different service entirely, and no bearing on the AWS
@@ -56,8 +81,14 @@ on:
   # Needed twice over, for deploy-web.yml's two reasons (see the comment on its
   # own `workflow_dispatch`): the first deploy after Pages is enabled has no
   # push to ride, and a repo-variable change edits no file while changing the
-  # bundle that bakes it in. Nothing is exposed by allowing it — this workflow
-  # holds no credential a dispatch from another ref could borrow.
+  # bundle that bakes it in. What a dispatch could do here is not borrow a
+  # credential — there is none to borrow — it is to build *another ref* and
+  # publish it to the live public demo URL. The control for that is the
+  # `github-pages` environment's deployment-branch policy, which is repository
+  # state and not anything this file can set or assert: restricted to `main`,
+  # the environment gate refuses this job on any other ref before a step of it
+  # runs. #285's Pages enablement step reads that policy back once Pages is on,
+  # which is the point at which it is known rather than assumed.
   workflow_dispatch:
 
 # `pages: write` and `id-token: write` are what actions/deploy-pages requires;
@@ -67,11 +98,17 @@ permissions:
   pages: write
   id-token: write
 
-# deploy-web.yml's reasoning, unchanged by the change of host: serialising makes
-# the last *started* run the last to deploy, so two pushes minutes apart cannot
-# leave the site serving the older of the two. Not `cancel-in-progress` — a
-# cancelled run can leave a half-published deployment live, and a slow queue is
-# the cheaper failure.
+# deploy-web.yml's reasoning for serialising, unchanged by the change of host:
+# it makes the last *started* run the last to deploy, so two pushes minutes
+# apart cannot leave the site serving the older of the two.
+#
+# Still not `cancel-in-progress`, but for a Pages-shaped reason rather than
+# deploy-web's: there is no half-published state to leave behind here, because
+# Pages swaps one artefact atomically where an S3 sync uploads file by file.
+# The risk is later in the run — once `actions/deploy-pages` has handed the
+# deployment to the Pages service, cancelling the *run* does not cancel the
+# *deployment*, so an older one can still land after a newer one has published
+# and quietly win. A slow queue is the cheaper failure.
 concurrency:
   group: deploy-pages
   cancel-in-progress: false

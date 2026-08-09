@@ -45,6 +45,8 @@ aws_region = "eu-west-1"
 #
 #   gh api repos/TomBennett-Lloyd/cumulo/pages --jq .html_url
 #
-# It comes out of the list again at #144's teardown — see the header of
-# .github/workflows/deploy-pages.yml for the full teardown list.
+# It comes out of the list again at #144's teardown, and so does this paragraph:
+# the header of .github/workflows/deploy-pages.yml carries the full teardown
+# list, and deleting these lines is a step on it — that file is deleted first,
+# so nothing here may be left pointing at it.
 # web_origins = "http://localhost:5173"
