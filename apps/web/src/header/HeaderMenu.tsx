@@ -14,15 +14,25 @@ export interface HeaderMenuProps {
 /**
  * The header's catch-all: a disclosure button over the shell's odds and ends.
  *
- * It was the bar's only control until the site search landed beside it, and the
- * product's (i) after that (`AppHeader.tsx`). What decides which side of this
- * button a thing sits on is not importance, and it is not frequency either — the
- * tip is read about once a session and is out on the bar. It is what a thing
- * costs the bar weighed against what it gives back there: the search is its own
- * affordance, and the tip is one round button over a sentence that folds away
- * again, so both answer where they stand. What is behind this button acts
- * somewhere else — the theme toggle repaints the whole page, About opens a
- * dialog over it — and neither is made worse by costing a press first.
+ * It was the bar's only control until the site search landed beside it
+ * (`AppHeader.tsx`), and those two are what the bar carries.
+ *
+ * What decides which side of this button a thing sits on is not importance, and
+ * it is not frequency either. It is what a thing costs the bar weighed against
+ * what it gives back out there — the bar is height the map does not get, so a
+ * permanent control has to earn its width by being an affordance a reader *acts
+ * through*. The search earns it: one field, and finding a site by name has
+ * nowhere else to live. What is behind this button acts somewhere else — the
+ * theme toggle repaints the whole page, About opens a dialog over it — and
+ * neither is made worse by costing a press first.
+ *
+ * The rule has settled a removal as well as those placements. The product's (i)
+ * sat out on the bar until #284 D13 took it off: it was a permanent control
+ * paying for a *description* — one that repeated the About dialog's own opening
+ * sentence — rather than for an action, which is the side of the weighing that
+ * loses. `app.css`'s `.app-header` rule and `App.test.tsx`'s "leaves the header
+ * bar with the search and one disclosure" both point here for that reasoning;
+ * the assertion that notices if something bare comes back is the test's.
  *
  * ## A disclosure, not a menu
  *

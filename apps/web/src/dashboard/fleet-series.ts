@@ -1,4 +1,12 @@
-import type { FleetActualsPoint, FleetForecastPoint, UtcIsoTimestamp } from '@cumulo/shared';
+import {
+  aggregateFleetActuals,
+  aggregateFleetForecast,
+  type FleetActualsPoint,
+  type FleetForecastPoint,
+  type Forecast,
+  type GenerationReading,
+  type UtcIsoTimestamp,
+} from '@cumulo/shared';
 
 import type { ForecastChartPoint } from '../charts/ForecastChart';
 
@@ -9,16 +17,21 @@ import type { ForecastChartPoint } from '../charts/ForecastChart';
  * #148) so the content column can render the fleet
  * without importing a whole view (`structure.md` rule 1: these were always
  * standalone functions over explicit inputs, and only their file said
- * otherwise). Both are pure and take what they read, so they are unit-testable
- * without a DOM.
+ * otherwise). Everything here is pure and takes what it reads, so it is
+ * unit-testable without a DOM.
  *
  * The summing is not here. `aggregateFleetForecast` / `aggregateFleetActuals`
  * in `@cumulo/shared` own every kilowatt of arithmetic (`architecture.md`
  * rule 3), including the comonotonic band addition whose statistical position
- * is stated in that module; this file joins their output to the chart's shape
- * and counts what went into it. There is deliberately no `+` over a power value
- * below — if one appears, a second definition of "the fleet total" has been
- * created.
+ * is stated in that module; this file *calls* them, joins their output to the
+ * chart's shape and counts what went into it. There is deliberately no `+` over
+ * a power value below — if one appears, a second definition of "the fleet
+ * total" has been created.
+ *
+ * `fleetChartAggregate` at the bottom is the whole pipeline under one name, and
+ * that is what makes it memoizable by the panel: two aggregations and a join
+ * that used to run from scratch on every render of a component whose sibling
+ * poll re-renders it once a second during add-a-site (#293).
  */
 
 /**
@@ -54,6 +67,13 @@ export const minimumContributingSites = (points: readonly FleetForecastPoint[]):
  * Ordered by instant rather than by string: both inputs arrive sorted from `@cumulo/shared`'s
  * aggregation, but a merge of two sorted sequences still has to compare across them, and comparing
  * the parsed instants keeps the ordering rule out of the timestamp's spelling.
+ *
+ * Each hour is parsed **once**, before the sort, rather than twice per comparison — the change
+ * #293 asked for, and it is a change of cost and shape only. These keys are same-format UTC ISO
+ * strings, so their lexicographic and chronological orders coincide: no input distinguishes this
+ * comparator from a string one, and no test can. What the epoch keys buy is O(n) parses instead of
+ * O(n log n), while keeping the *stated* rule "by instant" true of the code rather than true by
+ * luck of the spelling — which is why the parse stays at all.
  */
 export const joinFleetSeries = (
   points: readonly FleetForecastPoint[],
@@ -65,9 +85,10 @@ export const joinFleetSeries = (
   const measuredByHour = new Map<UtcIsoTimestamp, number>(
     actuals.map((actual) => [actual.validTime, actual.acPowerKw]),
   );
-  const hours = [...new Set([...forecastByHour.keys(), ...measuredByHour.keys()])].sort(
-    (left, right) => Date.parse(left) - Date.parse(right),
-  );
+  const hours = [...new Set([...forecastByHour.keys(), ...measuredByHour.keys()])]
+    .map((validTime) => ({ validTime, epochMs: Date.parse(validTime) }))
+    .sort((left, right) => left.epochMs - right.epochMs)
+    .map((hour) => hour.validTime);
 
   return hours.map((validTime) => {
     const forecast = forecastByHour.get(validTime);
@@ -87,4 +108,52 @@ export const joinFleetSeries = (
           band: { p10Kw: uncertainty.p10AcPowerKw, p90Kw: uncertainty.p90AcPowerKw },
         };
   });
+};
+
+/**
+ * Everything the panel's body draws from the fleet's two reads, as one value.
+ *
+ * The two travel together because they come out of the same aggregation pass:
+ * the completeness line quotes the thinnest hour of the *forecast* aggregate, which is the same
+ * array the points were joined from. Returned as a pair rather than recomputed at each use so the
+ * fleet is summed once per answer rather than once per reader (#293) — the reason it is a value at
+ * all, and not two exported functions the body calls in turn.
+ *
+ * Not to be confused with `FleetSeries` in `fleet-panel-body.tsx`: that one is the two *source*
+ * reads, this one is what the chart draws from them.
+ */
+export interface FleetChartAggregate {
+  readonly points: readonly ForecastChartPoint[];
+  /** The thinnest hour on display, from the same forecast aggregate the points were joined from. */
+  readonly minContributingSites: number;
+}
+
+/**
+ * The answer for a fleet with nothing summed: no hours, and no site count to be short of.
+ *
+ * One shared value rather than a fresh `{ points: [] }` per call, so a panel that is loading,
+ * failed or empty hands its chart the same array every render — the identity the ready arm gets
+ * from the panel's memo, extended to the arms that have nothing to memoize.
+ */
+export const EMPTY_FLEET_AGGREGATE: FleetChartAggregate = { points: [], minContributingSites: 0 };
+
+/**
+ * The fleet's two reads, summed and joined into what the chart draws — the pipeline under one name.
+ *
+ * One function rather than three calls at the use site, because the three are one intent and
+ * because a caller memoizing them is memoizing this and nothing else. `aggregateFleetForecast`'s
+ * output is used twice and computed once, which is why the completeness count travels with the
+ * points rather than being asked for separately: split across two calls, memoizing the points
+ * would have left the count re-summing the whole fleet on every render.
+ */
+export const fleetChartAggregate = (
+  forecasts: readonly Forecast[],
+  readings: readonly GenerationReading[],
+): FleetChartAggregate => {
+  const forecastPoints = aggregateFleetForecast(forecasts);
+
+  return {
+    points: joinFleetSeries(forecastPoints, aggregateFleetActuals(readings)),
+    minContributingSites: minimumContributingSites(forecastPoints),
+  };
 };

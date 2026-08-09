@@ -141,7 +141,19 @@ export const PARTIAL_FLEET: StubFleet = {
   ),
 };
 
-export const FORECASTLESS_FLEET: StubFleet = { ...FULL_FLEET, forecasts: ready([]) };
+/**
+ * Neither read has an hour in it — the only state in which the panel has genuinely nothing to plot.
+ *
+ * The actuals are emptied as well as the forecasts, and that is the whole point of this fixture
+ * since #290: "no forecast" and "nothing to show" stopped being the same question when the chart's
+ * x-domain became the union of both series. {@link ACTUALS_ONLY_FLEET} is the other half of that
+ * split, and the two are only distinguishable because this one is empty on both sides.
+ */
+export const FORECASTLESS_FLEET: StubFleet = {
+  ...FULL_FLEET,
+  forecasts: ready([]),
+  actuals: ready([]),
+};
 
 export const FAILED_FLEET: StubFleet = {
   ...FULL_FLEET,
@@ -196,12 +208,39 @@ export const DISJOINT_WINDOW_FLEET: StubFleet = {
   siteForecastError: null,
 };
 
+/**
+ * The forecast fan-out summed to nothing; the actuals arrived — #290's second finding.
+ *
+ * A real state rather than a contrived one: the two reads are two requests over two windows, and a
+ * forecast pipeline that has not produced yet leaves the measured hours untouched. The panel used
+ * to answer it by returning "no fleet forecast" in place of the chart, throwing away hours it had
+ * been handed. {@link DISJOINT_WINDOW_FLEET}'s actuals are borrowed because they span *two* hours,
+ * so the measured series is a run a chart can stroke rather than a lone marker.
+ */
+export const ACTUALS_ONLY_FLEET: StubFleet = {
+  ...DISJOINT_WINDOW_FLEET,
+  forecasts: ready([]),
+};
+
 const FULL_CAPABILITIES: FleetSourceCapabilities = { fleetLookback: true, fleetActuals: true };
 
 /** Neither fleet-level capability: a forward horizon only, and no actuals at all. */
 export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
   fleetLookback: false,
   fleetActuals: false,
+};
+
+/**
+ * The combination #264 made real and the deployed source is in: simulated actuals over a fan-out
+ * that still reaches forward only.
+ *
+ * Here rather than in one suite because both of them need it now — the window copy is
+ * `FleetPanel.test.tsx`'s subject and the panel's furniture is `FleetPanel.structure.test.tsx`'s,
+ * and a second copy of the flags would be a second thing to keep in step with the live source.
+ */
+export const SIMULATED_ACTUALS_CAPABILITIES: FleetSourceCapabilities = {
+  fleetLookback: false,
+  fleetActuals: true,
 };
 
 /**

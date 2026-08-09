@@ -1,4 +1,4 @@
-import type { Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
@@ -101,6 +101,48 @@ const escapedLabels = async (figure: Locator): Promise<readonly string[]> =>
   }, LABEL_CONTAINMENT_TOLERANCE);
 
 /**
+ * How far the plot's right edge may sit from its panel's before the chart is not
+ * filling the panel, in pixels.
+ *
+ * The panel pads itself by one `--space-4` step (`dashboard/fleet-panel.css`
+ * owns that, and the token owns the length), so a chart filling its column still
+ * stops that step short of the panel's *border* box — which is the box
+ * `boundingBox` reports. The budget is that one step at the default root size
+ * plus a little sub-pixel slack, and nothing more. What it has to catch is the
+ * chart being held to a *measure* narrower than its column, which before #284 D3
+ * left it short by most of the panel's width at the default viewport; a budget
+ * loose enough to admit that would be measuring nothing.
+ */
+const PANEL_FILL_TOLERANCE = 18;
+
+/** What `panelFit` says when the plot is filling its panel. */
+const FILLS_PANEL = 'fills its panel';
+
+/**
+ * Whether the plot fills the panel it is in, described.
+ *
+ * A description rather than a number for the same reason `escapedLabels` above
+ * returns descriptions: the reading is the diagnosis. Signed, so both failures
+ * are one measurement — a chart short of its panel (the D3 defect) and a chart
+ * overhanging it (a plot spilling out of the card it lives in) are equally wrong
+ * and read differently in the message.
+ */
+const panelFit = async (page: Page): Promise<string> => {
+  const panel = await page.locator('.fleet-panel').boundingBox();
+  const plot = await page.locator(`.fleet-panel ${PLOT_SVG}`).boundingBox();
+
+  if (panel === null || plot === null) {
+    return 'the fleet panel or its plot has no layout box';
+  }
+
+  const shortfall = panel.x + panel.width - (plot.x + plot.width);
+
+  return Math.abs(shortfall) <= PANEL_FILL_TOLERANCE
+    ? FILLS_PANEL
+    : `the plot's right edge is ${shortfall.toFixed(1)}px from its panel's (budget ${String(PANEL_FILL_TOLERANCE)}px; positive is short, negative overhangs)`;
+};
+
+/**
  * The whole geometric contract one chart owes, asserted where it is drawn.
  *
  * The same assertions for both charts because they are the same intent: a chart
@@ -153,6 +195,58 @@ test('draws the fleet chart at a real size, with its labels inside it', async ({
    * every visitor gets and the one no jsdom test can measure.
    */
   await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
+});
+
+/*
+ * The other half of #284 D3, and the half jsdom cannot see either way: the chart
+ * is only as wide as its layout makes it, and a `<details>` only hides anything
+ * where the user agent's own stylesheet is applied. `forecast-chart-details.test.tsx`
+ * owns the semantics — `open`, the summary's words, the table still resolving by
+ * accessible name through a closed disclosure — and stops exactly where a
+ * rendered box starts (`testing.md` rule 10).
+ */
+test('fills the panel and folds the raw data away', async ({ page }) => {
+  const figure = page.locator('.fleet-panel .forecast-chart-figure');
+
+  await expect(figure).toBeVisible();
+
+  /*
+   * Polled, like every geometry read in this file: the column is laid out again
+   * as the map above it settles and as the fonts resolve, so a single read taken
+   * on arrival can be taken mid-reflow.
+   */
+  await expect
+    .poll(async () => panelFit(page), {
+      message: 'The fleet chart is not filling the panel it is drawn in.',
+    })
+    .toBe(FILLS_PANEL);
+
+  const summary = figure.locator('.forecast-chart-summary');
+  const table = figure.locator('.forecast-chart-table');
+
+  /*
+   * Closed means closed *to a reader*, which is the claim jsdom cannot make: a
+   * closed `<details>` keeps its rows in the document, so a DOM count passes
+   * either way and only a rendered box tells the two states apart. Playwright's
+   * visibility assertions retry, so both directions of the toggle are polled.
+   */
+  await expect(summary).toBeVisible();
+  await expect(table).not.toBeVisible();
+
+  /*
+   * Opened with a *keystroke*, because "one keystroke away" is what the
+   * treatment promises and a click would prove only the pointer half of it. This
+   * is the argument `keyboard-focus.spec.ts` makes for the fleet table's
+   * identical fold — a `<details>` that cannot be opened from the keyboard puts
+   * the entire table view out of a keyboard reader's reach, with every other
+   * assertion unable to see it — applied to the chart's twin, which carries the
+   * same relief obligation (`docs/design/chart-treatment.md`). `press` focuses
+   * the summary before pressing, so a summary that stopped being
+   * keyboard-operable fails here rather than being activated anyway.
+   */
+  await summary.press('Enter');
+
+  await expect(table).toBeVisible();
 });
 
 test('keeps the fleet chart laid out once a selected site is drawn over it', async ({ page }) => {

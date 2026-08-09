@@ -1,10 +1,8 @@
 import type { Site } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
-import { InfoTip } from '../info/InfoTip';
 import type { Theme } from '../theme';
 import { Brand } from './Brand';
-import { PRODUCT_TAGLINE } from './header-copy';
 import { HeaderMenu } from './HeaderMenu';
 import { SiteSearch } from './SiteSearch';
 
@@ -20,7 +18,7 @@ export interface AppHeaderProps {
 }
 
 /**
- * The header bar: what the product is on the left, the fleet's index in the
+ * The header bar: the product's name on the left, the fleet's index in the
  * middle, and everything else behind one control on the right.
  *
  * A component of its own, and rendered by `Dashboard` rather than by `App`,
@@ -39,11 +37,16 @@ export interface AppHeaderProps {
  * which is the part that is a licence obligation rather than chrome.
  *
  * Layout is `app.css`'s `.app-header` — one wrapping flex row, no breakpoint, in
- * a shell that has none anywhere (#265). The search takes the space the brand,
- * the product's (i) and the menu leave, and wraps to its own line when there
- * is not enough of it — the same thing the tagline used to do when it was a
- * line of prose on the bar rather than the (i) beside the brand it is now
- * (`info/InfoTip.tsx`).
+ * a shell that has none anywhere (#265). The search takes the space the brand
+ * and the menu leave, and wraps to its own line when there is not enough of it.
+ *
+ * What the product is has left the bar entirely (#284 D13). It was a line of
+ * prose here, then a toggletip beside the brand once #265 decided the bar's
+ * height was the map's to have — and the toggletip kept the cost the prose had
+ * only reduced: a control on the bar, in the tab order ahead of the search,
+ * saying a sentence the About dialog two presses away already says in full.
+ * `PRODUCT_TAGLINE` stays where it was (`header-copy.ts`) because that dialog
+ * still quotes it; what went is the second carrier, not the words.
  */
 export const AppHeader = ({
   theme,
@@ -53,15 +56,6 @@ export const AppHeader = ({
 }: AppHeaderProps): ReactElement => (
   <header className="app-header">
     <Brand />
-    {/*
-     * What the product is, one press away rather than always on the bar (#265).
-     * The bar is height the map does not get, and a sentence every reader has
-     * read by their second visit was spending that height on every render. The
-     * words are still `header-copy.ts`'s — this moved where they are shown, not
-     * what they say, and the About dialog behind the menu still quotes the same
-     * constant for the reader who wants more than a tip.
-     */}
-    <InfoTip label="About this product">{PRODUCT_TAGLINE}</InfoTip>
     <SiteSearch sites={sites} onSelectSite={onSelectSite} />
     <HeaderMenu theme={theme} onToggleTheme={onToggleTheme} />
   </header>

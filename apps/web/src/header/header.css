@@ -58,9 +58,9 @@
  * The search's box, and the popup's containing block.
  *
  * `flex: 1 1 …` is what makes it the item that gives way. The bar is one
- * wrapping row with no breakpoint (`app.css`), so the brand, the product's (i)
- * tip and the menu keep their intrinsic widths and the search absorbs whatever
- * is left, down to a basis wide enough to read a site name in and up to a
+ * wrapping row with no breakpoint (`app.css`), so the brand and the menu keep
+ * their intrinsic widths and the search absorbs whatever is left, down to a
+ * basis wide enough to read a site name in and up to a
  * measure past which a search field starts looking like a form. When even the
  * basis will not fit, the row wraps — which is the narrow-width behaviour the
  * bar already had.
@@ -201,11 +201,21 @@
  * below it — maplibre's controls among them. A single value, well clear of
  * them, is cheaper than a layer scale nothing else in the app would use.
  *
+ * That this popover really is painted over maplibre's canvas rather than under
+ * it is measured in `e2e/header.spec.ts`, by a hit test rather than a visibility
+ * check — the two are not the same question, and only the first can tell an
+ * overlay a reader can read from one the map is painted on top of. That case
+ * inherited the claim from the header's (i), which was another on-bar overlay
+ * until #284 D13 removed it — though not the last one standing beside this
+ * popover: `.site-search-listbox` above is equally stacked over the same canvas,
+ * and no spec measures it (`docs/tech-debt.md`).
+ *
  * There are two such values in this file, this one and `.site-search-listbox`'s,
  * and one more of the same kind outside it: `.info-tip-panel` in `info/info.css`,
- * whose tip on the bar hangs over the map for exactly the same reason. All three
- * are deliberately equal — the popups hang off different parts of one bar and
- * never overlap, so nothing depends on which of them would win.
+ * which is deliberately equal to them although the tip that needed it — the one
+ * on this bar — is gone, leaving only the fleet panel's, which clears static
+ * content on document order alone. That file carries the argument for keeping
+ * one value per component rather than one per placement.
  * One further value exists and is deliberately unlike them: `.site-popover-anchor`
  * in `map/site-popover.css` is `1`, because the selected site's card rides a
  * maplibre marker and its only competition is the sibling markers in that pane,

@@ -17,7 +17,7 @@ import { routeBasemap } from './hermetic-basemap';
  * (`src/header/*.test.tsx`): what is in the document, in which state, and what
  * each control means.
  *
- * Three cases, one per thing only this lane can see.
+ * Four cases, one per thing only this lane can see.
  *
  * The first is the menu, as one continuous interaction rather than a case per
  * step, because the sequence is the behaviour: a reader arrives, finds the menu
@@ -35,11 +35,22 @@ import { routeBasemap } from './hermetic-basemap';
  * was asked to move; only a browser can say the reader can see what they asked
  * for.
  *
- * The third is where the bar's three things sit relative to each other, which is
- * a claim about a flex line's cross-axis and so exists only once a browser has
+ * The third is where the bar's things sit relative to each other, which is a
+ * claim about a flex line's cross-axis and so exists only once a browser has
  * laid the row out and resolved every font in it. jsdom computes no such
  * geometry: under it `align-items: baseline` and `align-items: center` are the
  * same string in a stylesheet nobody measured (`testing.md` rule 10).
+ *
+ * The fourth is that the menu's popover is painted *over* the map rather than
+ * under it, which is the claim this file inherited when #284 D13 removed the
+ * header's (i) and with it `info-tips.spec.ts`'s stacking case. It belongs to
+ * whatever on-bar overlay exists rather than to that one, and the popover is the
+ * app's only one whose stacking any spec measures — `.site-search-listbox` is
+ * the other, equally stacked over the same canvas and untested. The popover
+ * carries the same stacking value (`header/header.css` argues both of the bar's
+ * at once), hangs off the same bar, and has the same maplibre canvas beneath it. Playwright's `toBeVisible` cannot make the claim —
+ * it is a box and a computed style, not an occlusion test, so a popover painted
+ * under the canvas passes it while being unreadable in fact.
  */
 
 /** How far one drag moves the camera, in CSS pixels. */
@@ -138,6 +149,29 @@ const maxCentreMisalignment = async (elements: readonly Locator[]): Promise<numb
 };
 
 /**
+ * Whether the overlay is the thing a reader's pointer would actually land on at
+ * its own centre.
+ *
+ * `document.elementFromPoint` resolves the topmost painted element at a point,
+ * which is exactly the question a stacking value answers and exactly the one
+ * `toBeVisible` does not ask. `contains` rather than identity, because the
+ * topmost thing at the centre of an overlay is whatever child sits there — a
+ * button, a label — rather than the overlay's own box.
+ *
+ * Moved here from `info-tips.spec.ts` rather than copied: the on-bar tip it used
+ * to measure is gone (#284 D13) and this file's popover is the overlay that
+ * inherited the claim, so there is one copy of the idiom now as there was
+ * before.
+ */
+const panelIsOnTop = async (panel: Locator): Promise<boolean> =>
+  panel.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+
+    return topmost !== null && element.contains(topmost);
+  });
+
+/**
  * Pan the map until the whole fleet is outside its bounds.
  *
  * The drag starts at the centre of the map's own box and moves sideways, which
@@ -199,16 +233,14 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
    */
   await expect(page.locator('.site-table-summary')).toBeVisible();
 
-  // The header is the first thing in the document and carries three controls, in
-  // this order: the (i) that explains the product, the site search, then the
-  // menu. So three Tabs from a fresh page reach the menu, and each of the first
-  // two lands on the control named here. That all three are ahead of everything
-  // else is the design (`App.test.tsx` pins the bar's contents); this is the half
-  // that needs a real focus order to be true at all — and the tip joining the bar
-  // (#265) is exactly the change that would silently shift a hard-coded count.
-  await page.keyboard.press('Tab');
-  await expect(page.locator('.app-header .info-tip-button')).toBeFocused();
-
+  // The header is the first thing in the document and carries two controls, in
+  // this order: the site search, then the menu. So two Tabs from a fresh page
+  // reach the menu, and the first lands on the control named here. That both are
+  // ahead of everything else is the design (`App.test.tsx` pins the bar's
+  // contents); this is the half that needs a real focus order to be true at all
+  // — and the count is hard-coded precisely because a control joining or leaving
+  // the bar shifts it silently, which is what #265 did by adding the product's
+  // (i) here and #284 D13 undid by taking it away again.
   await page.keyboard.press('Tab');
   await expect(page.locator('.site-search-input')).toBeFocused();
 
@@ -395,4 +427,45 @@ test('centres the brand mark on the same line as the search and the menu', async
       message: 'The brand mark, the search and the menu do not share a centreline.',
     })
     .toBeLessThanOrEqual(CENTRE_TOLERANCE_PX);
+});
+
+test('hangs the menu over the map rather than under it', async ({ page }) => {
+  const popover = page.locator('.header-menu-popover');
+
+  /*
+   * The map first, and not as politeness: maplibre's canvas is the positioned
+   * element this popover has to out-rank, and it does not exist until the lazy
+   * chunk has resolved and mounted. Opening the menu over an empty box would
+   * measure a page where nothing could have occluded anything.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  await page.locator('.header-menu-button').click();
+
+  await expect(popover).toBeVisible();
+
+  /*
+   * A box worth hit-testing, before the hit test. `elementFromPoint` at the
+   * centre of a zero-sized box is a question about a point that is not inside
+   * anything, so the measurement below would be reporting on a popover no reader
+   * could press either way — and a collapsed popover is exactly the failure a
+   * stacking regression could arrive alongside.
+   */
+  const box = await popover.boundingBox();
+
+  if (box === null) {
+    throw new Error('The header menu popover is visible but has no layout box.');
+  }
+
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.height).toBeGreaterThan(0);
+
+  /*
+   * The assertion this case exists for. The header sits above the dashboard in
+   * DOM order but is not a positioned ancestor of it, so an overlay with no
+   * stacking value of its own paints *under* every positioned thing the
+   * dashboard puts below — maplibre's canvas among them — while remaining
+   * visible, boxed and correctly sized to every other measure available here.
+   */
+  expect(await panelIsOnTop(popover)).toBe(true);
 });

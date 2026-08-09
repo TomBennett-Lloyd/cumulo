@@ -5,9 +5,9 @@ import { rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 
 /*
- * What the fleet panel says about itself: its subtitle, the window it is
- * showing, the two names its chart carries, and the one line summarising the
- * fleet.
+ * What the fleet panel says about itself: its subtitle, how the chart names the
+ * window it is drawing, the two names its chart carries, and the one line
+ * summarising the fleet.
  *
  * The third copy module in `apps/web`, and the split between the three is by
  * subject rather than by size. `state-copy.ts` owns what the app says while it
@@ -32,28 +32,25 @@ import { capacityLabel } from './site-format';
  * rather than a bag of constants.
  */
 
+/*
+ * Two window *captions* used to head this module, for the arm that rendered no
+ * picker. #284 D5 deleted both along with the (i) that carried them: the picker
+ * renders wherever there is a window to choose now, and a control states its
+ * window better than a sentence a reader has to press for. What is left is the
+ * labels below, which name a window inside the chart's own names.
+ */
+
 /**
- * What the panel says instead of offering a window it cannot serve.
+ * How the chart's labels name a bare forward horizon.
  *
- * The number is spelled out rather than derived from the panel's default range:
- * this is a sentence about what the reader is looking at, and a caption
- * assembled from a constant would silently rewrite itself if the default moved.
+ * The number is spelled out rather than derived from the panel's default range,
+ * and it stays honest for one reason worth stating: this arm is reached only by
+ * a source with neither fleet capability, which renders no picker at all, so
+ * nothing can ever call `setRange` and the window really is the default. A
+ * label assembled from a constant would instead silently rewrite itself if that
+ * default moved.
  */
-export const HORIZON_CAPTION = 'Forecast horizon: next 24 hours';
-
-/**
- * The same sentence for a source that carries actuals without a look-back
- * picker: the plot then reaches behind the horizon as well, and a caption naming
- * only the next 24 hours would describe half of what is drawn.
- */
-export const WINDOW_CAPTION_WITH_ACTUALS =
-  'Simulated actuals for the past 24 hours; forecast for the next 24.';
-
-/** How the chart's labels name that same horizon, in the terser register a label wants. */
 const HORIZON_WINDOW_LABEL = 'next 24 h';
-
-/** And how they name the two-sided window the caption above describes. */
-const PAST_AND_HORIZON_WINDOW_LABEL = 'past 24 h and next 24 h';
 
 export const SUBTITLE_WITH_ACTUALS =
   'Every site’s forecast, summed hour by hour, with the fleet’s P10–P90 band and simulated actuals (the demo fleet has no real inverters).';
@@ -80,11 +77,18 @@ export const fleetStatsLine = (sites: readonly Site[]): string =>
  *
  * Three answers rather than two, because the flags move independently and #264
  * made the third combination real: a chosen look-back names itself, and without
- * a picker the window is the bare horizon or — once the source carries actuals —
- * the horizon with the actuals' hours behind it. Named from what is *drawn*, not
- * from what was asked for: a source with actuals plots hours before now whether
- * or not a picker exists, and "next 24 h" over those hours is the chart
- * misdescribing itself.
+ * one the window is the bare horizon or — once the source carries actuals — the
+ * chosen span of measured hours with the forecast running off the end of it.
+ * Named from what is *drawn*, not from what was asked for: a source with actuals
+ * plots hours before now whether or not it can look back, and "next 24 h" over
+ * those hours is the chart misdescribing itself.
+ *
+ * The middle arm takes the range rather than spelling out 24, because #284 D5
+ * gave that arm a picker: its actuals really do span whatever window the reader
+ * chose. Its forecast half is named without a number on purpose — the fan-out
+ * asks for the same window, but what comes back is only the hours the horizon
+ * actually reaches, so "and the forecast ahead" claims exactly as much as the
+ * chart can show.
  */
 export const windowLabel = (
   range: RangeHours,
@@ -94,7 +98,7 @@ export const windowLabel = (
   if (canLookBack) {
     return `${rangeLabel(range)} range`;
   }
-  return hasActuals ? PAST_AND_HORIZON_WINDOW_LABEL : HORIZON_WINDOW_LABEL;
+  return hasActuals ? `past ${rangeLabel(range)} and the forecast ahead` : HORIZON_WINDOW_LABEL;
 };
 
 /** The chart is named twice — for assistive technology, and above its table twin. */

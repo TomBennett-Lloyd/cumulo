@@ -99,8 +99,16 @@ interface FleetSectionProps {
  * `role="alert"`, which really does arrive as a change. The chart readout that
  * now sits a panel above (`.forecast-chart-readout`, mounted empty with the
  * chart and filled only when a reader moves its selection) is *that* panel's
- * single region rather than a second one here — `react.md`'s live-region bullet
- * budgets per panel, which is exactly why the two stacked in one column compose.
+ * rather than a second one here — `react.md`'s live-region bullet budgets per
+ * panel, which is exactly why the two stacked in one column compose.
+ *
+ * That panel can hold two of its own in one state, and it is the co-occurrence
+ * the same bullet sanctions rather than a breach of it: since #284 D3 the chart
+ * survives a failed fan-out, so `PanelError`'s alert mounts beside the readout
+ * there. It is safe for the reason the bullet gives — a failed fan-out leaves no
+ * points, so the readout is empty for as long as the alert is up — and it does
+ * not change the composition here, because the budget is still per panel and
+ * this section still mounts exactly one.
  */
 const FleetSection = ({
   load,

@@ -331,10 +331,31 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   a moving pointer produces.
   The live region is the focus-mode and VoiceOver enhancement, not the accessible surface: a
   screen reader in browse mode consumes arrow keys before the chart ever sees them, so **the table
-  twin below remains the canonical route** to every value.
+  twin below remains the canonical route** to every value — one press on its disclosure away, per
+  the fold bullet below, which is where what a closed `<details>` does and does not withhold is
+  set out.
 - **Tooltips enhance, they never gate.** Every value in the tooltip is also reachable without a
   pointer, through direct labels or the table view. Every chart has a table-view twin — the
   WCAG-clean equivalent — reachable from the chart container.
+- **The twin is folded away, behind a `Raw data` disclosure.** Settled in
+  [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D3). A 193-hour window is 193 rows,
+  and open by default they were the tallest thing on the page — while the plot above them was held
+  to a measure narrower than its own panel to leave them somewhere to sit. Closed, the chart fills
+  the panel it is in and the twin is one keystroke away. The disclosure is a native
+  `<details>`/`<summary>`, the same element the fleet's table uses (`dashboard/SiteTable.tsx`), so
+  the open/closed semantics, the keyboard operation and the announcement are the platform's.
+  **This does not weaken the bullet above** — but what discharges it is reachability, not
+  presence, and the difference is worth stating precisely. A closed `<details>` keeps its children
+  in the **document**; it does not keep them in the **accessibility tree**, because a browser does
+  not render them and unrendered content is excluded. What a screen reader meets is therefore a
+  collapsed disclosure with a name and a state, not the table behind it. That is enough: the twin
+  is one press on a named, keyboard-operable control away, and **a route one press away is a
+  route** — which is also exactly what the light-mode contrast WARN's relief channel asks for,
+  since what that rule refuses is a chart with **no** text route to its values.
+  `dashboard/dashboard-test-fixture.tsx` does query the table without opening anything, and that is
+  a fact about jsdom rather than a claim about readers: jsdom omits the `<details>` shadow-tree
+  styles, so nothing is hidden there. The `<caption>` stays on the table, because it
+  names the table — which window, which units — while a summary names the disclosure.
 - **The table twin carries a column per plotted value, and grows one for an overlay.** The time
   column heads each row; the forecast's three quantities and the measurement take one each; an
   overlay takes a sixth, headed by the series' own name. `forecast-chart-table.tsx` owns the
