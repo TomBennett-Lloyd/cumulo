@@ -43,10 +43,20 @@ body {
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
  * does not get, so the brand, the site search and the menu button sit on one
- * centreline and wrap to a second line only when the width forces it — which is
- * the only narrow-width mechanism the shell has, here as everywhere else in it
- * (there is no breakpoint in this app).
+ * centreline and wrap to a second line only when the width forces it.
  * The wrapping is unchanged; only what the row agrees on within a line is.
+ *
+ * Wrapping was this shell's whole answer to a narrow window until #284 D17.
+ * Below the width where those three stop fitting on one line, the search now
+ * folds behind an icon rather than costing the bar a permanent second line, and
+ * the breakpoint that decides it — with the measurement behind the number — is
+ * `header/header.css`'s, next to the rules it switches. This rule is untouched
+ * by that and still describes the row: what changed is how often the row has
+ * reason to wrap. Each breakpoint in this app is owned by the surface that
+ * measured its own content, and they are counted in one place —
+ * `stylelint.config.mjs`'s residual paragraph, which owns why their widths are
+ * raw lengths at all. There is still no shared breakpoint scale, and nothing
+ * here to inherit one from.
  *
  * A centreline rather than a baseline, and that is the fix rather than a taste
  * (#284 D1). `baseline` is the right-sounding value for a row of text and the
@@ -82,7 +92,9 @@ body {
  * reads token names, not boxes.
  *
  * The bar carries two controls: the search that finds a site by name, and the
- * disclosure everything else hides behind. The theme toggle was once bare here
+ * disclosure everything else hides behind — with an icon standing in for the
+ * first of them below the breakpoint above, which is one control in two forms
+ * rather than a third thing earning a place on the row. The theme toggle was once bare here
  * and is inside that disclosure now (`header/HeaderMenu.tsx`), which is also
  * where the rule for what earns a place out here rather than behind a press is
  * written down — and that rule is what took the third control off this row in

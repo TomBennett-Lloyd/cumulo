@@ -18,6 +18,14 @@ import { HeaderMenu } from './HeaderMenu';
  * `AboutDialog.test.tsx`). `e2e/header.spec.ts` drives it in a real Chromium,
  * including the part this file could never see — that the dialog's Escape is
  * the dialog's alone and leaves the popover behind it standing.
+ *
+ * One case is not about dismissal at all: the button's name. Since the label
+ * became a burger (#284 D16) nothing on screen spells it, so the accessible
+ * name exists in one attribute and nowhere else. `menuButton` below is what
+ * every case in this file — and every case in `App.test.tsx` — goes through, so
+ * the name is asserted continuously; the case that states it outright is there
+ * so a dropped `aria-label` fails as the one thing it is rather than as a
+ * fileful of unrelated-looking dismissal failures.
  */
 
 /** The menu with the theme wiring a caller supplies, defaulted to a no-op. */
@@ -25,7 +33,9 @@ const renderMenu = (onToggleTheme: () => void = () => undefined): void => {
   render(<HeaderMenu theme="light" onToggleTheme={onToggleTheme} />);
 };
 
-/** The disclosure button, by the name a reader finds it under. */
+/** The disclosure button, by the name a reader finds it under — an
+ * `aria-label` since the label became a glyph, which is what the case below
+ * pins. */
 const menuButton = (): HTMLElement => screen.getByRole('button', { name: 'Menu' });
 
 /** Open the menu the way a reader does, and hand back the button that did it. */
@@ -45,6 +55,23 @@ describe('HeaderMenu at rest', () => {
     expect(menuButton().getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
     expect(screen.queryByRole('button', { name: 'About Cumulo' })).toBe(null);
+  });
+
+  it('is a burger whose name is still the word the label used to be', () => {
+    renderMenu();
+
+    const button = menuButton();
+
+    /*
+     * `menuButton()` finding it at all is half the case: the name is `Menu`,
+     * unchanged, and now supplied entirely by the `aria-label`. The other half
+     * is that nothing on screen says so — a text child would mean the name had
+     * a fallback and this file could not tell the two apart — and that the mark
+     * standing in for it is out of the accessibility tree, so a reader is told
+     * about the control once rather than about the control and its picture.
+     */
+    expect(button.textContent).toBe('');
+    expect(button.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
   });
 });
 
