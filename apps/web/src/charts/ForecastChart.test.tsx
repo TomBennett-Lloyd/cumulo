@@ -3,13 +3,15 @@
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex, yForKw } from './chart-geometry';
-import type { ChartOverlaySeries, ForecastChartPoint } from './chart-series';
-import { CHART_PLOT, HORIZON_LABEL_WIDTH } from './ForecastChart';
+import type { ChartOverlaySeries } from './chart-series';
 import {
+  anchorCount,
   banded,
   bare,
+  JSDOM_PLOT,
   isoHour,
   marks,
+  pathCoordinates,
   renderChart,
   renderChartWithOverlay,
   requireMark,
@@ -22,9 +24,6 @@ import {
 // never registers itself.
 afterEach(cleanup);
 
-const vertexCount = (mark: Element): number =>
-  (mark.getAttribute('points') ?? '').split(' ').length;
-
 /**
  * The axis the lone-band fixture below produces. Its tallest mark is that hour's
  * own P90 of 7 kW, which rounds up to the nice maximum written here — spelled
@@ -33,33 +32,13 @@ const vertexCount = (mark: Element): number =>
  */
 const LONE_BAND_AXIS_MAX_KW = 8;
 
-const MS_PER_HOUR = 3_600_000;
-/** The fixture source's 7-day window: 168 hours back, now, and 24 forward. */
-const WEEK_RANGE_POINT_COUNT = 193;
-const WEEK_RANGE_LAST_MEASURED_INDEX = 168;
-
-/**
- * The series shape the 7-day view actually renders. Its horizon sits seven
- * eighths across the plot, which is where the label ran off the right of the
- * canvas and rendered as "forecast hori…".
+/*
+ * The plot's chrome moved out when #284 D9/D10 gave the time axis a second tier
+ * and both titles a rotation to assert: the horizon rule and its label, the two
+ * tiers, and the axis titles are `forecast-chart-axes.test.tsx`'s, beside the
+ * module that draws them. What is left here is the data — band, bounds, median,
+ * actuals, the gaps none of them bridge, and the table twin.
  */
-const weekRangeSeries = (): readonly ForecastChartPoint[] =>
-  Array.from({ length: WEEK_RANGE_POINT_COUNT }, (_unused, index) => ({
-    validTimeIso: new Date(Date.UTC(2026, 6, 23, 12) + index * MS_PER_HOUR).toISOString(),
-    medianKw: 4,
-    band: { p10Kw: 3, p90Kw: 5 },
-    actualKw: index <= WEEK_RANGE_LAST_MEASURED_INDEX ? 3.5 : null,
-  }));
-
-const horizonLabel = (container: HTMLElement): Element => {
-  const found = [...container.querySelectorAll('.forecast-chart-axis-label')].find(
-    (element) => element.textContent === 'forecast horizon',
-  );
-  if (found === undefined) {
-    throw new Error('no horizon label');
-  }
-  return found;
-};
 
 describe('ForecastChart', () => {
   it('renders the uncertainty band as a fill with no fill-opacity attribute', () => {
@@ -69,14 +48,16 @@ describe('ForecastChart', () => {
     // The 10% alpha is baked into the token; a fill-opacity would double-dip
     // and produce a band nobody can see (chart-treatment.md).
     expect(band.hasAttribute('fill-opacity')).toBe(false);
-    expect(band.tagName.toLowerCase()).toBe('polygon');
+    expect(band.tagName.toLowerCase()).toBe('path');
   });
 
   it('closes the band over every sample, out along P90 and back along P10', () => {
     const container = renderChart(SERIES);
     const band = requireMark(container, '.forecast-chart-band');
 
-    expect(vertexCount(band)).toBe(SERIES.length * 2);
+    // Anchors, not coordinate pairs: the edges are curves and carry control
+    // points too. `curvedBandPath`'s own suite owns the closing `Z`.
+    expect(anchorCount(band)).toBe(SERIES.length * 2);
   });
 
   it('strokes both bounds of every band run', () => {
@@ -108,15 +89,15 @@ describe('ForecastChart', () => {
   it('draws the median across every sample and actuals across measured ones only', () => {
     const container = renderChart(SERIES);
 
-    expect(vertexCount(requireMark(container, '.forecast-chart-median'))).toBe(SERIES.length);
-    expect(vertexCount(requireMark(container, '.forecast-chart-actuals'))).toBe(3);
+    expect(anchorCount(requireMark(container, '.forecast-chart-median'))).toBe(SERIES.length);
+    expect(anchorCount(requireMark(container, '.forecast-chart-actuals'))).toBe(3);
   });
 
   it('breaks the actuals line at a gap rather than bridging a missing measurement', () => {
     // A mid-series null is a partial result and must read as one: bridging it
     // would draw a measurement nobody took (docs/tech-debt.md, 2026-07-31).
     // The first measurement is left alone by the gap after it, so it is a dot
-    // rather than the one-vertex polyline SVG would decline to paint.
+    // rather than the one-vertex path SVG would decline to paint.
     const container = renderChart([
       banded(6, 1, 0.9),
       banded(9, 4, null),
@@ -127,11 +108,11 @@ describe('ForecastChart', () => {
     const markers = marks(container, '.forecast-chart-actuals-marker');
 
     expect(actuals).toHaveLength(1);
-    expect(actuals.map(vertexCount)).toStrictEqual([2]);
+    expect(actuals.map(anchorCount)).toStrictEqual([2]);
     // The isolated hour, then the end dot at the horizon.
     expect(markers).toHaveLength(2);
-    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, 4, CHART_PLOT)));
-    expect(markers[1]?.getAttribute('cx')).toBe(String(xForIndex(3, 4, CHART_PLOT)));
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, 4, JSDOM_PLOT)));
+    expect(markers[1]?.getAttribute('cx')).toBe(String(xForIndex(3, 4, JSDOM_PLOT)));
   });
 
   it('breaks the band at a gap in the modelled uncertainty', () => {
@@ -142,18 +123,18 @@ describe('ForecastChart', () => {
       banded(15, 6, null),
     ]);
     const interval = requireMark(container, '.forecast-chart-band-interval');
-    const intervalX = String(xForIndex(3, 4, CHART_PLOT));
+    const intervalX = String(xForIndex(3, 4, JSDOM_PLOT));
 
     expect(marks(container, '.forecast-chart-band')).toHaveLength(1);
     expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(2);
-    // The trailing banded hour stands alone: a polygon over one sample is two
+    // The trailing banded hour stands alone: an area over one sample is two
     // coincident edges and paints nothing, so it draws its bounds as an
     // interval instead (chart-treatment.md).
     expect(marks(container, '.forecast-chart-band-interval')).toHaveLength(1);
     expect(interval.getAttribute('x1')).toBe(intervalX);
     expect(interval.getAttribute('x2')).toBe(intervalX);
-    expect(interval.getAttribute('y1')).toBe(String(yForKw(7, LONE_BAND_AXIS_MAX_KW, CHART_PLOT)));
-    expect(interval.getAttribute('y2')).toBe(String(yForKw(5, LONE_BAND_AXIS_MAX_KW, CHART_PLOT)));
+    expect(interval.getAttribute('y1')).toBe(String(yForKw(7, LONE_BAND_AXIS_MAX_KW, JSDOM_PLOT)));
+    expect(interval.getAttribute('y2')).toBe(String(yForKw(5, LONE_BAND_AXIS_MAX_KW, JSDOM_PLOT)));
   });
 
   it('renders an isolated measured hour between two gaps as a ring-marked dot', () => {
@@ -167,7 +148,7 @@ describe('ForecastChart', () => {
     const markers = marks(container, '.forecast-chart-actuals-marker');
 
     expect(markers).toHaveLength(2);
-    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(1, 5, CHART_PLOT)));
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(1, 5, JSDOM_PLOT)));
     expect(marks(container, '.forecast-chart-actuals')).toHaveLength(1);
   });
 
@@ -176,61 +157,6 @@ describe('ForecastChart', () => {
 
     expect(marks(container, '.forecast-chart-band')).toHaveLength(0);
     expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(0);
-  });
-
-  it('rules the forecast horizon at the last measured sample', () => {
-    const container = renderChart(SERIES);
-    const horizon = requireMark(container, '.forecast-chart-horizon');
-
-    expect(horizon.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, CHART_PLOT)));
-    expect(horizon.getAttribute('x1')).toBe(horizon.getAttribute('x2'));
-    expect(container.textContent).toContain('forecast horizon');
-  });
-
-  it('labels the horizon to the right of its rule while there is room for it', () => {
-    const container = renderChart(SERIES);
-    const label = horizonLabel(container);
-    const ruleX = Number(requireMark(container, '.forecast-chart-horizon').getAttribute('x1'));
-
-    expect(label.getAttribute('text-anchor')).toBe('start');
-    expect(Number(label.getAttribute('x'))).toBeGreaterThan(ruleX);
-    expect(Number(label.getAttribute('x')) + HORIZON_LABEL_WIDTH).toBeLessThanOrEqual(
-      CHART_PLOT.right,
-    );
-  });
-
-  /*
-   * The 7-day window shipped with this label clipped off the canvas. The
-   * assertion is the whole extent of the text, not just its anchor: an anchor
-   * inside the plot with the words running out of it is the defect.
-   */
-  it('flips the horizon label inwards when the horizon sits late in the window', () => {
-    const container = renderChart(weekRangeSeries());
-    const label = horizonLabel(container);
-    const anchorX = Number(label.getAttribute('x'));
-    const ruleX = xForIndex(WEEK_RANGE_LAST_MEASURED_INDEX, WEEK_RANGE_POINT_COUNT, CHART_PLOT);
-
-    expect(requireMark(container, '.forecast-chart-horizon').getAttribute('x1')).toBe(
-      String(ruleX),
-    );
-    // Where the words actually end, which depends on which end is anchored —
-    // an anchor inside the plot with the text running out of it is the defect.
-    const rightEdge =
-      label.getAttribute('text-anchor') === 'end' ? anchorX : anchorX + HORIZON_LABEL_WIDTH;
-
-    expect(rightEdge).toBeLessThanOrEqual(CHART_PLOT.right);
-    expect(label.getAttribute('text-anchor')).toBe('end');
-    expect(anchorX).toBeLessThan(ruleX);
-    expect(anchorX - HORIZON_LABEL_WIDTH).toBeGreaterThanOrEqual(CHART_PLOT.left);
-  });
-
-  it('omits the horizon and its marker when nothing has been measured', () => {
-    const container = renderChart(SERIES.map((point) => ({ ...point, actualKw: null })));
-
-    expect(marks(container, '.forecast-chart-horizon')).toHaveLength(0);
-    expect(marks(container, '.forecast-chart-actuals-marker')).toHaveLength(0);
-    expect(marks(container, '.forecast-chart-actuals')).toHaveLength(0);
-    expect(container.textContent).not.toContain('forecast horizon');
   });
 
   it('lists all three series in draw order even when nothing is measured', () => {
@@ -262,19 +188,6 @@ describe('ForecastChart', () => {
       'Sunnyside Farm: forecast and actuals',
     );
     expect(container.querySelector('caption')?.textContent).toBe('Table view — Sunnyside Farm, kW');
-  });
-
-  /*
-   * The axis is UTC and never the reader's local zone, which chart-treatment.md
-   * accepts only on condition that the chart says so in its chrome. Both strings
-   * are written out here rather than imported from `chart-copy.ts`: a test that
-   * imports the constant it checks asserts nothing about the wording, and would
-   * follow a silent rename straight past the reader who needs the words.
-   */
-  it('states its clock in the plot chrome', () => {
-    const container = renderChart(SERIES);
-
-    expect(requireSvg(container).textContent).toContain('Times in UTC');
   });
 
   it('heads the table twin’s time column with the clock', () => {
@@ -314,7 +227,7 @@ describe('ForecastChart', () => {
     const overlay = marks(container, '.forecast-chart-overlay');
 
     expect(overlay).toHaveLength(1);
-    expect(vertexCount(requireMark(container, '.forecast-chart-overlay'))).toBe(3);
+    expect(anchorCount(requireMark(container, '.forecast-chart-overlay'))).toBe(3);
     expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(0);
   });
 
@@ -332,9 +245,9 @@ describe('ForecastChart', () => {
     const markers = marks(container, '.forecast-chart-overlay-marker');
 
     expect(marks(container, '.forecast-chart-overlay')).toHaveLength(1);
-    expect(vertexCount(requireMark(container, '.forecast-chart-overlay'))).toBe(2);
+    expect(anchorCount(requireMark(container, '.forecast-chart-overlay'))).toBe(2);
     expect(markers).toHaveLength(1);
-    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, SERIES.length, CHART_PLOT)));
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, SERIES.length, JSDOM_PLOT)));
   });
 
   it('names the overlay in the legend, after the three fixed entries', () => {
@@ -376,12 +289,12 @@ describe('ForecastChart', () => {
     act(() => {
       svg.focus();
     });
-    expect(readout()).toBe('06:00 — 0.9 Actual, 1.0 Median, 0.0–2.0 P10–P90, 2.5 Baseline');
+    expect(readout()).toBe('06:00 — Actual 0.9, Median 1.0, P10–P90 0.0–2.0, Baseline 2.5');
 
     // Past the overlay's last hour: the row is dropped rather than spoken as an
     // em dash, which a screen reader says nothing for.
     fireEvent.keyDown(svg, { key: 'End' });
-    expect(readout()).toBe('18:00 — 2.0 Median, 1.0–3.0 P10–P90');
+    expect(readout()).toBe('18:00 — Median 2.0, P10–P90 1.0–3.0');
   });
 
   it('raises the axis so an overlay above the forecast still lands inside the plot', () => {
@@ -391,13 +304,15 @@ describe('ForecastChart', () => {
       label: 'Baseline',
       points: SERIES.map((point) => ({ validTimeIso: point.validTimeIso, kw: 20 })),
     });
-    const ys = (requireMark(container, '.forecast-chart-overlay').getAttribute('points') ?? '')
-      .split(' ')
-      .map((pair) => Number(pair.split(',')[1]));
+    // Every coordinate the path names, control points included — a curve can
+    // reach above its anchors in a way a straight segment cannot.
+    const ys = pathCoordinates(requireMark(container, '.forecast-chart-overlay')).map(
+      (vertex) => vertex.y,
+    );
 
     expect(ys).not.toStrictEqual([]);
     for (const y of ys) {
-      expect(y).toBeGreaterThanOrEqual(CHART_PLOT.top);
+      expect(y).toBeGreaterThanOrEqual(JSDOM_PLOT.top);
     }
   });
 

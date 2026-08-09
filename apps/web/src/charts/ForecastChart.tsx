@@ -5,19 +5,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react';
-import { CHART_CLOCK_LABEL } from './chart-copy';
+import { CHART_VIEW_BOX_HEIGHT, chartPlot, niceAxisMax } from './chart-geometry';
 import {
-  axisTicks,
-  horizonLabelAnchor,
-  niceAxisMax,
-  tickLabelFor,
-  xForIndex,
-  xTickIndices,
-  yForKw,
-  type PlotRect,
-} from './chart-geometry';
-import {
-  axisTickText,
   contiguousRuns,
   highestOverlayKw,
   highestValueKw,
@@ -31,6 +20,12 @@ import {
   type ForecastChartPoint,
 } from './chart-series';
 import { hoverKeyAction, pointerSample, useChartHover } from './chart-hover-input';
+import {
+  axisTitleElements,
+  gridElements,
+  horizonElements,
+  xAxisElements,
+} from './forecast-chart-axes';
 import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
 import { forecastChartLegend } from './forecast-chart-legend';
 import {
@@ -41,6 +36,7 @@ import {
   overlayElements,
 } from './forecast-chart-marks';
 import { forecastChartTable } from './forecast-chart-table';
+import { useChartWidth } from './use-chart-width';
 
 /**
  * The forecast chart, drawn to `docs/design/chart-treatment.md`: a P10–P90 band
@@ -81,11 +77,18 @@ import { forecastChartTable } from './forecast-chart-table';
  * beside the index rather than a second selection, so neither route can end up
  * reading a different sample.
  *
- * This file is composition plus the plot's chrome — grid, horizon, axes. The
- * data marks, the hover layer and the figure's furniture sit beside it —
- * `forecast-chart-marks.tsx`, `-hover.tsx`, `-legend.tsx`, `-table.tsx` — each
- * a piece of the treatment named after the piece it draws, and each well inside
- * `structure.md` rule 4's ceiling.
+ * **The chart is drawn 1:1 with the width it is rendered at.** `useChartWidth`
+ * measures the figure and the view box takes that width, so one SVG user unit
+ * is one pixel and the chrome stops scaling with the panel — an axis label is
+ * the same size here as everywhere else on the page. The height does not follow:
+ * `CHART_VIEW_BOX_HEIGHT` is an owned constant, because a kW axis that rescaled
+ * on every resize would be a different chart at every window size.
+ *
+ * This file is composition and nothing else. The plot's chrome, its data marks,
+ * the hover layer and the figure's furniture sit beside it —
+ * `forecast-chart-axes.tsx`, `-marks.tsx`, `-hover.tsx`, `-legend.tsx`,
+ * `-table.tsx` — each a piece of the treatment named after the piece it draws,
+ * and each well inside `structure.md` rule 4's ceiling.
  */
 
 export type {
@@ -109,116 +112,14 @@ export interface ForecastChartProps {
   readonly overlay?: ChartOverlaySeries;
 }
 
-/**
- * SVG user units. Geometry is not styling: these are coordinates, not sizes.
- * Exported because anything positioning a mark against this chart — the hover
- * layer, and the tests that check where a rule landed — needs the same rect.
- * The view-box width goes with it: mapping a client pixel into this chart's
- * space is a division by the rendered width and a multiplication by this.
- */
-export const CHART_PLOT: PlotRect = { left: 46, right: 452, top: 16, bottom: 164 };
-export const CHART_VIEW_BOX_WIDTH = 480;
-const VIEW_BOX_HEIGHT = 194;
-const VIEW_BOX = `0 0 ${String(CHART_VIEW_BOX_WIDTH)} ${String(VIEW_BOX_HEIGHT)}`;
-const Y_LABEL_GAP = 10;
-const X_LABEL_GAP = 18;
-const HORIZON_LABEL_BASELINE = 8;
-/**
- * Advance width of "forecast horizon" at `--text-xs`, rounded up. Estimated
- * rather than measured: `getComputedTextLength` needs a laid-out DOM, which
- * would make a pure render depend on the browser and jsdom report zero. Erring
- * wide only flips the label early, which is harmless; erring narrow is the
- * clipping this constant exists to prevent. Exported so a test can assert the
- * label's whole extent, not just its anchor.
- */
-export const HORIZON_LABEL_WIDTH = 84;
-const AXIS_TITLE_BASELINE = 10;
-
-const gridElements = (scale: ChartScale): readonly ReactElement[] =>
-  axisTicks(scale.axisMaxKw).map((kilowatts) => {
-    const y = yForKw(kilowatts, scale.axisMaxKw, scale.plot);
-    return (
-      <g key={kilowatts}>
-        <line
-          className="forecast-chart-grid"
-          x1={scale.plot.left}
-          x2={scale.plot.right}
-          y1={y}
-          y2={y}
-        />
-        <text
-          className="forecast-chart-axis-label"
-          x={scale.plot.left - Y_LABEL_GAP}
-          y={y}
-          textAnchor="end"
-          dominantBaseline="middle"
-        >
-          {axisTickText(kilowatts)}
-        </text>
-      </g>
-    );
-  });
-
-/**
- * Marked once, in chrome — never by dashing the forecast line.
- *
- * The label's side is a decision, not a constant: a horizon late in the window
- * (the 7-day view puts it seven eighths across) would push a right-hand label
- * off the canvas, so `horizonLabelAnchor` flips it to read leftwards instead.
- */
-const horizonElements = (lastMeasuredIndex: number, scale: ChartScale): readonly ReactElement[] => {
-  const x = xForIndex(lastMeasuredIndex, scale.pointCount, scale.plot);
-  const label = horizonLabelAnchor({
-    ruleX: x,
-    labelWidth: HORIZON_LABEL_WIDTH,
-    plot: scale.plot,
-  });
-  return [
-    <line
-      key="rule"
-      className="forecast-chart-horizon"
-      x1={x}
-      x2={x}
-      y1={scale.plot.top}
-      y2={scale.plot.bottom}
-    />,
-    <text
-      key="label"
-      className="forecast-chart-axis-label"
-      x={label.x}
-      y={scale.plot.top + HORIZON_LABEL_BASELINE}
-      textAnchor={label.textAnchor}
-    >
-      forecast horizon
-    </text>,
-  ];
-};
-
-const xLabelElements = (
-  points: readonly ForecastChartPoint[],
-  scale: ChartScale,
-  spanHours: number,
-): readonly ReactElement[] =>
-  xTickIndices(scale.pointCount).flatMap((index) => {
-    const point = points[index];
-    return point === undefined
-      ? []
-      : [
-          <text
-            key={point.validTimeIso}
-            className="forecast-chart-axis-label"
-            x={xForIndex(index, scale.pointCount, scale.plot)}
-            y={scale.plot.bottom + X_LABEL_GAP}
-            textAnchor="middle"
-          >
-            {tickLabelFor(point.validTimeIso, spanHours)}
-          </text>,
-        ];
-  });
-
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const { points } = props;
+  const figureRef = useRef<HTMLElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  // The figure rather than the svg: the svg's own width is `100%` of this box
+  // (`charts.css`), so measuring the container is measuring the chart without
+  // asking an element about a size this render is about to give it.
+  const width = useChartWidth(figureRef);
   const hover = useChartHover();
   const { activeIndex } = hover;
   // Joined once and read by every consumer below, so the mark, the table column
@@ -245,7 +146,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     overlay === undefined ? 0 : highestOverlayKw(overlay.values),
   );
   const scale: ChartScale = {
-    plot: CHART_PLOT,
+    plot: chartPlot(width),
     axisMaxKw: niceAxisMax(peakKw),
     pointCount: points.length,
   };
@@ -272,7 +173,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
       pointerSample({
         clientX: event.clientX,
         svg: svgRef.current,
-        viewBoxWidth: CHART_VIEW_BOX_WIDTH,
+        viewBoxWidth: width,
         scale,
       }),
     );
@@ -297,7 +198,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   };
 
   return (
-    <figure className="forecast-chart-figure">
+    <figure className="forecast-chart-figure" ref={figureRef}>
       {/* Draw order is back to front: grid → band → bounds → horizon → median →
           overlay → actuals → marker. Actuals are drawn last of the data and win
           every overlap — an added series never covers the measurement — and the
@@ -305,7 +206,15 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
       <svg
         ref={svgRef}
         className="forecast-chart"
-        viewBox={VIEW_BOX}
+        viewBox={`0 0 ${String(width)} ${String(CHART_VIEW_BOX_HEIGHT)}`}
+        /* Pinned, and not left to the aspect ratio. Once a measurement lands the
+           two agree — the view box is the rendered width, so `height: auto`
+           would resolve to this anyway — but on the frame before it, the view
+           box is still `DEFAULT_CHART_WIDTH` wide in a wider column, and an
+           unpinned height would draw that first frame tall and then collapse it.
+           Stating the height makes the pre-measurement frame a narrower chart
+           centred in its box rather than a vertical jump. */
+        height={CHART_VIEW_BOX_HEIGHT}
         role="img"
         aria-label={props.ariaLabel}
         tabIndex={0}
@@ -320,20 +229,8 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {medianElements(points, medianRuns, scale)}
         {overlay === undefined ? null : overlayElements(overlay.values, scale)}
         {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
-        {xLabelElements(points, scale, spanHours)}
-        <text className="forecast-chart-axis-title" x={0} y={AXIS_TITLE_BASELINE}>
-          kW
-        </text>
-        {/* The clock the treatment's UTC axis owes its readers, mirroring the
-            kW title across the chrome band above the plot. */}
-        <text
-          className="forecast-chart-axis-title"
-          x={CHART_VIEW_BOX_WIDTH}
-          y={AXIS_TITLE_BASELINE}
-          textAnchor="end"
-        >
-          {CHART_CLOCK_LABEL}
-        </text>
+        {xAxisElements(points, scale)}
+        {axisTitleElements(scale.plot)}
         <ForecastChartHoverLayer
           points={points}
           activeIndex={activeIndex}
@@ -347,10 +244,10 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
             it needs and no fill. */}
         <rect
           className="forecast-chart-pointer-target"
-          x={CHART_PLOT.left}
-          y={CHART_PLOT.top}
-          width={CHART_PLOT.right - CHART_PLOT.left}
-          height={CHART_PLOT.bottom - CHART_PLOT.top}
+          x={scale.plot.left}
+          y={scale.plot.top}
+          width={scale.plot.right - scale.plot.left}
+          height={scale.plot.bottom - scale.plot.top}
           onPointerMove={readAtPointer}
           onPointerLeave={clearReadout}
         />

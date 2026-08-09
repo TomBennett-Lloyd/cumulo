@@ -21,9 +21,17 @@
  * (react.md rule 5).
  */
 
+/* One step tighter than the padding around it (#284 D15). The panel's internal
+   gap and its padding were the same step, which read as one rhythm and cost a
+   full step of height between the header row and the chart — height that decides
+   whether the whole plot clears the fold under a 60svh map. A card's gap need not
+   equal its inset, and here it should not: the header and the body are two parts
+   of one panel, closer to each other than either is to the world outside the
+   card. Not lower than `--space-2` anywhere in this panel — below that the header
+   row stops reading as a row separate from the body. */
 .fleet-panel {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-content: start;
   padding: var(--space-4);
   border-radius: var(--radius-md);
@@ -77,8 +85,12 @@
    a rule left here would be styling a class nothing renders. */
 
 /* The completeness line and the chart are one statement — how complete the
-   aggregate is, and the aggregate — so they sit tighter than the panel's gap. */
+   aggregate is, and the aggregate — so they sit tighter than the panel's gap.
+   That relationship is why this step moved with the panel's in #284 D15 rather
+   than staying put: the panel came down to `--space-3`, which would have left
+   the two equal and the sentence above false. `--space-2` is the floor for both
+   — below it the header row stops reading as a row apart from the body. */
 .fleet-panel-body {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }

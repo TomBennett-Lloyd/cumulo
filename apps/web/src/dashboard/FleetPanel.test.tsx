@@ -69,7 +69,7 @@ const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site
  * `container.querySelector('svg')` stood at each of these sites, and since #284
  * D3 it proves nothing: the figure is rendered in every state the panel has,
  * loading and failed included, so the query is true by construction and passes
- * over exactly the defect it was written to catch. The median polyline is the
+ * over exactly the defect it was written to catch. The median path is the
  * part that exists only once the fan-out has summed to hours worth stroking,
  * which is what each of these cases means when it says the chart survived. The
  * figure's mere presence has an owner — `FleetPanel.structure.test.tsx`, whose
@@ -263,7 +263,7 @@ describe('FleetPanel against a source with simulated actuals but no look-back', 
       ['13:00', '6.0', '8.0', '11.0', '—'],
     ]);
     // And both series are genuinely drawn, not merely tabulated: each is one run of two hours, so
-    // each is one polyline. A chart that dropped the actuals would still render the table above if
+    // each is one path. A chart that dropped the actuals would still render the table above if
     // the drop happened downstream of the join.
     expect(container.querySelectorAll('.forecast-chart > .forecast-chart-actuals')).toHaveLength(1);
     expect(container.querySelectorAll('.forecast-chart > .forecast-chart-median')).toHaveLength(1);
