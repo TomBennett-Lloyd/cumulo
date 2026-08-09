@@ -8,9 +8,9 @@ import { errorResponse, type ApiResponse } from './response';
  * A table rather than a framework. `main.ts`'s route table — a handful of
  * routes, at most one path parameter each, no middleware — does not pay for a
  * dependency, and a framework here would be a dependency whose own types sit
- * between this service and the gateway payload it already parses. What a framework would give us is exactly what this file
- * is: match a method and a path, extract the parameters, and decide what an
- * unmatched request means.
+ * between this service and the gateway payload it already parses. What a
+ * framework would give us is exactly what this file is: match a method and a
+ * path, extract the parameters, and decide what an unmatched request means.
  *
  * Matching is **exact, deliberately**, because this table is not the only thing
  * that matches these paths: API Gateway matches its own declared route keys

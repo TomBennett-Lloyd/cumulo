@@ -23,18 +23,15 @@
 #     archive — and a group Lambda auto-creates instead would never expire (see
 #     the comment on the function's `depends_on`). Unlike ingestion's and
 #     forecast's, this volume is not a constant — it tracks traffic, and the
-#     traffic is unauthenticated. The census is the smallest in the platform, and
-#     it is worth stating because the count is what these estimates get wrong.
-#     **No application line rides on a request that goes well**, read or write.
-#     Seven application sinks exist and every one is a failure path: under
-#     sites/, two exhaustion events (`api.site.create-store-exhausted`,
-#     `api.site.delete-conflict-exhausted`, both contention-only) and two
-#     deadline events (`api.site.create-deadline-reached`,
-#     `api.site.delete-deadline-reached`); on the read routes, two more
-#     deadline events (`api.series.read-deadline-reached`,
-#     `api.forecast.read-deadline-reached`, emitted only when a read is
-#     truncated at the request deadline and answered 500); plus
-#     `api.request.failed` at the boundary in main.ts. So the unit
+#     traffic is unauthenticated. What the application itself writes is the part
+#     a log estimate gets wrong, so what this comment owes you is the property
+#     rather than a tally: **no application line rides on a request that goes
+#     well**, read or write — every sink is a failure path, reached only by a
+#     request that is already going wrong. The sinks themselves are the exported
+#     `*Event` name constants under `apps/api/src`, one beside each handler that
+#     emits it and one at main.ts's error boundary; that declaration set is the
+#     census, and reading it is what a count restated here cannot substitute for,
+#     because the count is wrong from the next route onwards. So the unit
 #     CloudWatch bills is Lambda's own START, END and REPORT, **three lines per
 #     invocation** (a cold start adds an INIT_START), and the write-path lines
 #     ride on top of it. That is sound at demo volume rather than merely
