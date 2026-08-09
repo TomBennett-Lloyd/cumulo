@@ -55,15 +55,58 @@ const fleetHeader = (container: HTMLElement): HTMLElement => {
 };
 
 /**
- * The pair every state owes the reader: whatever it has to say, over the chart.
+ * The chart's figure, as an element the legend query can be scoped to.
  *
- * Exactly one figure, not "at least one" — a state that grew a second chart
- * beside the first would satisfy a presence check while doubling the tallest
- * thing on the page.
+ * Exactly one, not "at least one" — a state that grew a second chart beside the
+ * first would satisfy a presence check while doubling the tallest thing on the
+ * page.
  */
+const chartFigure = (container: HTMLElement): HTMLElement => {
+  const figures = container.querySelectorAll('.forecast-chart-figure');
+
+  expect(figures).toHaveLength(1);
+
+  const [figure] = figures;
+
+  if (!(figure instanceof HTMLElement)) {
+    throw new Error('The fleet panel rendered no chart figure at all.');
+  }
+
+  return figure;
+};
+
+/**
+ * The furniture every state owes the reader, whatever that state has to say.
+ *
+ * #284 D3 asks for three things in every state and not only for the figure: the
+ * panel's heading, the chart, and the chart's legend. The figure alone is the
+ * weakest of the three to assert, because the states that used to return *in
+ * place of* the chart took the heading's siblings and the key down with it — and
+ * a figure that came back without its legend reads as a plot of anonymous lines,
+ * which is the regression this pair exists to catch.
+ *
+ * The heading is queried by role over the whole document rather than by class,
+ * because what the criterion is about is a heading a reader can navigate to.
+ *
+ * The legend's entries are counted rather than read: *which* series it names is
+ * copy, and this suite owns furniture (see the file header), so a rewording must
+ * not fail here. Counting is what keeps an empty `<ul>` from satisfying a bare
+ * presence check. Three is the fixed set with no overlay — the overlay appends a
+ * fourth row, and nothing is selected in any state below.
+ */
+const expectPanelFurniture = (container: HTMLElement): void => {
+  expect(screen.getByRole('heading', { name: 'Fleet forecast', level: 2 })).toBeDefined();
+
+  const legend = within(chartFigure(container)).getByRole('list');
+
+  expect(legend.className).toBe('forecast-chart-legend');
+  expect(within(legend).getAllByRole('listitem')).toHaveLength(3);
+};
+
+/** The pair every state owes the reader: whatever it has to say, over the furniture. */
 const expectChartWith = (container: HTMLElement, message: string | RegExp): void => {
   expect(screen.getByText(message)).toBeDefined();
-  expect(container.querySelectorAll('.forecast-chart-figure')).toHaveLength(1);
+  expectPanelFurniture(container);
 };
 
 describe('FleetPanel’s heading row', () => {
@@ -155,6 +198,15 @@ describe('FleetPanel’s chart', () => {
      * removed. Each arm asserts the state's own sentence beside the figure,
      * because a chart that stayed while the explanation went missing would be
      * the opposite defect.
+     *
+     * D3's two other clauses — every heading exists whether or not there is
+     * data, and the legend renders in every state — are asserted per arm by
+     * `expectPanelFurniture` rather than left implied by the figure count. Both
+     * hold by construction and that is the point of pinning them: the heading
+     * row is rendered outside the state switch in `FleetPanel.tsx` and the
+     * legend unconditionally inside the figure in `ForecastChart.tsx`, so a
+     * future state that returns early past either would be exactly the
+     * regression these clauses were written against.
      */
     const loading = render(panel(new CountingFleetSource(FULL_FLEET))).container;
 
@@ -195,6 +247,10 @@ describe('FleetPanel’s chart', () => {
      */
     const container = await renderSettled(new CountingFleetSource(ACTUALS_ONLY_FLEET));
 
+    // The fifth state D3's clauses cover, and the one arm above cannot reach:
+    // it is the only state whose sentence is an *absence*, so the furniture is
+    // asserted here directly rather than through `expectChartWith`.
+    expectPanelFurniture(container);
     expect(screen.queryByText(NO_FLEET_FORECAST_MESSAGE)).toBeNull();
     // Genuinely drawn, not merely tabulated: the two measured hours are one
     // contiguous run, so they are one polyline on the plot.
