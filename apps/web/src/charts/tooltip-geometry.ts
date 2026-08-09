@@ -167,7 +167,17 @@ export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): 
  *
  * **The ceiling is the point of the pair.** `siteSchema` accepts 120 characters
  * of name (`packages/shared/src/site.ts`), and an uncapped panel passes the
- * plot's own width somewhere around 56 of them: the readout would then be wider
+ * plot's own width at **75 of them, measured at the 552-unit plot a
+ * default-width chart draws, over a forecast tooltip's four rows**. Both
+ * qualifiers carry weight, and leaving them off is how this figure drifted into
+ * two disagreeing numbers in two files: the threshold moves with the plot it is
+ * quoted against, and with the widest *value* in the panel, since the value
+ * column's width comes out of what the names may have. The number is owned by
+ * `tooltip-geometry.test.ts`, which measures it through this function, so a
+ * margin change fails a case rather than ageing a sentence — and this docblock
+ * is the one place it is written down (`architecture.md` rule 9).
+ *
+ * Past that length the readout would be wider
  * than the chart it is reading, blanketing the marks it exists to explain, and
  * `tooltipAnchorX` could only pin it to the left plot edge and let the rest hang
  * off the canvas. Capped, a name that long overflows its own panel instead —

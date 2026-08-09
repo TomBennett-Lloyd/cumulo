@@ -394,9 +394,11 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   at a minimum so short samples do not read as a different component. An overlay's name is a site
   name a visitor typed, so the widest name is routinely one nobody could have sized for. **And
   capped at the plot's own width**, which is the floor's opposite number and matters for
-  the same reason: a site name may run to 120 characters, and somewhere past about 50 of them an
-  uncapped panel is wider than the chart it is reading, so the readout blankets the marks it exists
-  to explain. Capped, a name that long overflows its panel instead — text past one edge is a defect
+  the same reason: a site name may run to 120 characters, and past a length that depends on how
+  wide the plot is an uncapped panel is wider than the chart it is reading, so the readout
+  blankets the marks it exists to explain. That length is arithmetic rather than design, so it is
+  stated once where it is computed — `tooltipPanelWidth` in `apps/web/src/charts/tooltip-geometry.ts`
+  gives the figure and the width it holds at, and a case in `tooltip-geometry.test.ts` measures it. Capped, a name that long overflows its panel instead — text past one edge is a defect
   a reader can see around, a panel over the whole plot is not. Columns were the first half of
   [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12 and they do not retire this
   cap: no arrangement of two columns fits 120 characters into a panel narrower than they are.

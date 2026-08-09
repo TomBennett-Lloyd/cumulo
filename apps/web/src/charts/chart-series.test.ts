@@ -133,22 +133,34 @@ describe('highestOverlayKw', () => {
 /**
  * A width chosen for arithmetic rather than for realism: `chartPlot(608)` puts
  * the plot's edges at 56 and 576, a span of 520, so runs of two and three
- * samples land on whole pixels. d3-path rounds the coordinates it emits, and a
- * fixture whose samples fell on a fractional step would be asserting that
- * rounding instead of the geometry underneath it.
+ * samples land on whole pixels.
+ *
+ * **The rounding these fixtures have to stay clear of applies to both axes.**
+ * `d3-shape`'s generators build their path with `digits = 3` (`withPath` in
+ * `d3-shape/src/path.js`), so `d3-path` writes every coordinate through
+ * `appendRound(3)` — x and y alike. `vertexAt` below composes its expectation
+ * with `String()`, which does not round, so the two agree only where the
+ * coordinate already has three decimals or fewer: at a fractional step
+ * `String(43.333333333333336)` and d3's `"43.333"` are different strings, and
+ * the case would be failing on rounding rather than on the geometry it is for.
  */
 const CURVE_PLOT_WIDTH = 608;
 
 /**
- * High enough that the ramp below sits inside the axis with headroom to curve.
+ * High enough that the ramp below sits inside the axis with headroom to curve —
+ * and, with the plot's height, what keeps every expected **y** clear of the
+ * rounding described above.
  *
- * Deliberately *not* chosen to put kilowatts on whole pixels, which the plot's
- * height no longer allows: it is 124 units tall (`chart-geometry.ts`'s
- * `PLOT_TOP` to `CHART_VIEW_BOX_HEIGHT - X_AXIS_BAND`), so 1 kW is 15.5 units
- * and every odd kilowatt lands on a half. That costs these cases nothing
- * because `vertexAt` recomputes each expected y through `yForKw` instead of
- * writing coordinates out — only the x arithmetic above needs to be whole,
- * because that is the half d3 rounds.
+ * The plot is 124 units tall (`chart-geometry.ts`: `PLOT_TOP` to
+ * `CHART_VIEW_BOX_HEIGHT - X_AXIS_BAND`), so 8 kW across it makes 1 kW 15.5
+ * units. Every kilowatt these cases use is a whole number, so every expected y
+ * is a whole or half unit — two decimals at most, and `appendRound(3)` is a
+ * no-op on it. That safety is **conditional on this constant**, not a property
+ * of `vertexAt` recomputing the value: 124 divided by a maximum that does not
+ * divide it cleanly gives a repeating decimal, and these cases would start
+ * failing on the third decimal place while the geometry they assert stayed
+ * correct. Change it and check the ys, or give `vertexAt` the same rounding d3
+ * uses.
  */
 const CURVE_AXIS_MAX_KW = 8;
 
