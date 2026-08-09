@@ -42,9 +42,43 @@ body {
 
 /* A bar, not a masthead. Everything vertical the header takes is height the map
  * does not get, so the brand, the (i) that carries the product's line, the site
- * search and the menu button sit on one baseline and wrap to a second line only
- * when the width forces it — which is the only narrow-width mechanism the shell
- * has, here as everywhere else in it (there is no breakpoint in this app).
+ * search and the menu button sit on one centreline and wrap to a second line
+ * only when the width forces it — which is the only narrow-width mechanism the
+ * shell has, here as everywhere else in it (there is no breakpoint in this app).
+ * The wrapping is unchanged; only what the row agrees on within a line is.
+ *
+ * A centreline rather than a baseline, and that is the fix rather than a taste
+ * (#284 D1). `baseline` is the right-sounding value for a row of text and the
+ * wrong one for this row, because one item in it is not text. The brand lockup
+ * leads with an SVG mark (`header/Brand.tsx`), which has no baseline to offer,
+ * so the baseline the lockup contributed to this row was the mark's own bottom
+ * edge — measured, not inferred: under `baseline` the lockup's box bottom and
+ * the search input's text baseline came out at the same y, and the mark's centre
+ * therefore sat 8.5px above the centre of the search and the menu beside it. The
+ * two type sizes involved are what turned that into something visible: the
+ * wordmark is `--text-xl`, the controls `--text-sm`.
+ *
+ * `e2e/header.spec.ts` measures the three boxes against each other and is what
+ * would fail if this went back.
+ *
+ * The token gallery (`preview/TokensHarness.tsx`) wears this class too and
+ * inherits the change deliberately rather than forking the rule. Something does
+ * move there, and this is what: that header holds two flex items — one block
+ * carrying the title and the gallery's explanatory paragraph, and `ThemeToggle`
+ * beside it — so the toggle sits on the centre of a block several lines tall
+ * instead of on the h1's baseline. Measured, like the figure above: 23px lower
+ * at a 1280px viewport, and the drop grows with the block's height. It happens
+ * only while the row holds one line; at widths where the header wraps, the
+ * toggle has a line to itself and the two values agree again.
+ *
+ * That is accepted rather than overridden, on the same grounds as the
+ * change itself: the toggle is a control in a row of controls, and D1's argument
+ * is about what a row of them should agree on. An override would buy a
+ * development-only surface (served from `tokens.html`, never shipped) a header
+ * the product does not have — which is the objection `TokensHarness`'s own
+ * docblock makes about copying the theming rather than borrowing it. Nothing
+ * observes the gallery's layout either way: `preview/TokensPreview.test.tsx`
+ * reads token names, not boxes.
  *
  * The bar carries three controls: the (i) holding the product's own line, the
  * search that finds a site by name, and the disclosure everything else hides
@@ -53,12 +87,12 @@ body {
  * out here rather than behind a press is written down. Their treatments are
  * `header/header.css`'s, except the tip's — that component belongs to neither
  * the shell nor the header, so its own sheet carries it (`info/info.css`). This
- * rule is only the row they sit in, and the token gallery wears it too. */
+ * rule is only the row they sit in. */
 .app-header {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  align-items: baseline;
+  align-items: center;
   padding: var(--space-3) var(--space-4);
   border-bottom-style: solid;
   border-bottom-width: calc(var(--space-1) / 4);

@@ -9,6 +9,20 @@ import type { MapPosition } from './clustering';
 export interface MapMarkerAnchorProps {
   readonly map: MapLibreMap;
   readonly position: MapPosition;
+  /**
+   * A class put on the marker's own element, read **once, at mount**.
+   *
+   * Deliberately not reactive: the element is made in a lazy initialiser and
+   * the marker is built around it, so honouring a later change would mean
+   * recreating the marker — the exact teardown this component exists to avoid
+   * (see the note below on why a marker's element has to stay put). The one
+   * caller passes a literal, so there is no later change to honour.
+   *
+   * It survives maplibre: `Marker` reaches the element with `classList.add`
+   * rather than assigning `className`, so its own `maplibregl-marker` joins
+   * this one instead of replacing it.
+   */
+  readonly className?: string;
   readonly children: ReactNode;
 }
 
@@ -38,9 +52,18 @@ export interface MapMarkerAnchorProps {
 export const MapMarkerAnchor = ({
   map,
   position,
+  className,
   children,
 }: MapMarkerAnchorProps): ReactElement => {
-  const [element] = useState(() => document.createElement('div'));
+  const [element] = useState(() => {
+    const created = document.createElement('div');
+
+    if (className !== undefined) {
+      created.classList.add(className);
+    }
+
+    return created;
+  });
 
   /*
    * The marker's lifetime on the map is the external system here (react.md

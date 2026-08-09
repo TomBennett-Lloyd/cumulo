@@ -351,6 +351,15 @@
 .swatch-chip[data-token='--color-accent-contrast'] {
   background: var(--color-accent-contrast);
 }
+/* Elevation ink, painted flat. It is a translucent value, so this chip shows it
+ * composited over the section's own surface — which is what a drop shadow
+ * actually paints, and the chip's border is what keeps the faint result
+ * readable as a swatch rather than as an empty box. The two swatches still
+ * missing from this list, and the ratchet that would stop a third going
+ * unnoticed, are logged in docs/tech-debt.md. */
+.swatch-chip[data-token='--color-shadow'] {
+  background: var(--color-shadow);
+}
 .swatch-chip[data-token='--color-danger'] {
   background: var(--color-danger);
 }

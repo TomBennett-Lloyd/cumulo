@@ -87,8 +87,9 @@
 
 /*
  * The popup, stacked over the surface for the same reason the menu's popover is
- * — see that block below for the whole argument, and for the third value that
- * has since joined these two. One value rather than a layer scale: the bar's
+ * — see that block below for the whole argument, for the third value that has
+ * since joined these two, and for the one elsewhere that deliberately does not
+ * match them. One value rather than a layer scale: the bar's
  * popups hang off different parts of it and cannot overlap each other, so their
  * order between themselves is not a question anything has to answer.
  *
@@ -201,12 +202,19 @@
  * them, is cheaper than a layer scale nothing else in the app would use.
  *
  * There are two such values in this file, this one and `.site-search-listbox`'s,
- * and one more outside it: `.info-tip-panel` in `info/info.css`, whose tip on
- * the bar hangs over the map for exactly the same reason. Grep `z-index` across
- * the app's own stylesheets and those three are the hits (maplibre's vendored
- * sheet has its own, which is what all three have to clear).
- * All three are deliberately equal — the popups hang off different parts of one
- * bar and never overlap, so nothing depends on which of them would win.
+ * and one more of the same kind outside it: `.info-tip-panel` in `info/info.css`,
+ * whose tip on the bar hangs over the map for exactly the same reason. All three
+ * are deliberately equal — the popups hang off different parts of one bar and
+ * never overlap, so nothing depends on which of them would win.
+ * One further value exists and is deliberately unlike them: `.site-popover-anchor`
+ * in `map/site-popover.css` is `1`, because the selected site's card rides a
+ * maplibre marker and its only competition is the sibling markers in that pane,
+ * which carry no value at all. It is not `10` because it must not clear this bar
+ * — the card is a thing on the map, not an overlay over it. That file carries
+ * the argument.
+ * Grep `z-index` across the app's own stylesheets and those four are the hits
+ * (maplibre's vendored sheet has its own, which is what the three above have to
+ * clear).
  * `.map-attribution` (map/map.css) has been positioned over the basemap since
  * #265 and still needs no value at all: it competes with nothing, being the
  * last positioned element in its own container, so it paints above its siblings

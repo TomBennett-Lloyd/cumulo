@@ -264,6 +264,71 @@ const canvasSizeGap = async (page: Page): Promise<number> => {
   );
 };
 
+/**
+ * What the browser paints where the selected site's card and some *other* marker
+ * want the same pixels — or `null` when no marker wants any of the card's.
+ *
+ * The intersection is the whole point. Asking what is on top at the card's own
+ * centre would be answered by the card on a map with no marker near it, which is
+ * the state this is here to distinguish from. So the question is put only where
+ * the two really do compete, at the middle of the largest such region — the
+ * point furthest inside the contested area, and so the one least exposed to
+ * rounding at an edge.
+ *
+ * `contains` rather than identity, the `panelIsOnTop` idiom from
+ * `info-tips.spec.ts`: whatever is topmost there is some descendant of the card —
+ * a heading, the close button, a `<dd>` — never the card element itself.
+ *
+ * The card's own wrapper is excluded by asking which marker *contains* the card,
+ * because that wrapper is a `.maplibregl-marker` too (`map/SitePopover.tsx`
+ * mounts the card through the same anchor the fleet's markers use). A card
+ * cannot be over itself, and counting it would guarantee a region that always
+ * answered "the card".
+ */
+const paintedOverCard = async (page: Page): Promise<string | null> =>
+  page.locator('.maplibregl-marker').evaluateAll((markers) => {
+    const card = document.querySelector('.site-popover');
+
+    if (card === null) {
+      return 'no card is open';
+    }
+
+    const cardBox = card.getBoundingClientRect();
+    const regions = markers
+      .filter((marker) => !marker.contains(card))
+      .map((marker) => {
+        const box = marker.getBoundingClientRect();
+        const left = Math.max(cardBox.left, box.left);
+        const top = Math.max(cardBox.top, box.top);
+        const width = Math.min(cardBox.right, box.right) - left;
+        const height = Math.min(cardBox.bottom, box.bottom) - top;
+
+        // Both axes clamped separately: a marker clear of the card on *both*
+        // has two negative extents, whose product is positive.
+        return {
+          x: left + width / 2,
+          y: top + height / 2,
+          area: Math.max(0, width) * Math.max(0, height),
+        };
+      })
+      .filter((region) => region.area > 0)
+      .sort((left, right) => right.area - left.area);
+
+    const deepest = regions[0];
+
+    if (deepest === undefined) {
+      return null;
+    }
+
+    const top = document.elementFromPoint(deepest.x, deepest.y);
+
+    if (top === null) {
+      return 'nothing';
+    }
+
+    return card.contains(top) ? 'the card' : `${top.tagName.toLowerCase()}.${top.className}`;
+  });
+
 test.beforeEach(async ({ page }) => {
   await routeBasemap(page);
   await page.goto('/');
@@ -519,6 +584,51 @@ test('wraps each marker in one interactive element, not two (#17)', async ({ pag
     );
 
   expect(doubled).toEqual([]);
+});
+
+test("keeps the selected site's card above the markers when the camera zooms back out (issue 284)", async ({
+  page,
+}) => {
+  /*
+   * The card is mounted through a maplibre marker, and maplibre gives markers no
+   * stacking order at all — they are siblings in one pane and paint in DOM
+   * order. Zooming back out reclusters the fleet, which mounts fresh marker
+   * elements *after* the card's, so the bubbles landed on top of the open card
+   * and the reader's answer disappeared under the map (#284, owner feedback D2).
+   *
+   * Only a browser can see it: the defect is what the compositor does with two
+   * overlapping boxes, which needs real layout, a real stacking context and a
+   * real camera — jsdom has none of the three, and `map-css-contract.test.ts`
+   * can only prove a declaration was written, never that it wins.
+   */
+  const marker = await revealSiteMarker(page);
+
+  await marker.click();
+  await expect(page.locator('.site-popover')).toBeVisible();
+
+  await page.locator('.map-control-reset').click();
+
+  /*
+   * One polled reading carries both halves of the question. Polled because
+   * `easeTo` animates and the overlay reclusters on `moveend`, so the stacking
+   * arrives as a state and is never slept on. And vacuity-proof because the
+   * no-overlap case answers `null` rather than "the card": a framing that drew
+   * every marker clear of the card fails here, loudly, instead of passing
+   * without having measured anything.
+   *
+   * That is the whole guard, deliberately — no camera nudge to manufacture an
+   * overlap when the framing has none. One was tried and removed: a wheel
+   * zoom-out is anchored at the cursor, so nudging repeatedly walked the fleet
+   * off screen and left the card beside the last bubble rather than under it,
+   * which is a worse failure than the honest `null` and one nothing would have
+   * exercised on the passing path anyway.
+   */
+  await expect
+    .poll(async () => paintedOverCard(page), {
+      message:
+        'A marker is painting over the selected site’s card — or, on `null`, no marker ever came back over it, so nothing here was measured.',
+    })
+    .toBe('the card');
 });
 
 test.describe('canvas sizing', () => {
