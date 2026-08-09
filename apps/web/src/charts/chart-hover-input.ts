@@ -115,7 +115,21 @@ export const hoverKeyAction = ({
   }
 };
 
-/** ~30 position updates a second — the rate #284 D7 asks the panel to move at. */
+/**
+ * ~30 position updates a second — the rate #284 D7 asks the panel to move at.
+ *
+ * The decision is owned by `docs/design/chart-treatment.md` ("The panel follows
+ * the pointer; the data snaps"); this is the code's one declaration of it, and
+ * every other comment in the charts describes the throttle by this name rather
+ * than by a number.
+ *
+ * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
+ * derived from this one, which would need re-deriving if it moved:
+ *   - `forecast-chart-tooltip.test.tsx`: `INSIDE_ONE_FRAME_MS` and
+ *     `PAST_ONE_FRAME_MS`, chosen to fall either side of this value.
+ *   - `docs/design/chart-treatment.md`: the D7 bullet, which owns the decision
+ *     and states it as a rate rather than as this interval.
+ */
 const POINTER_FRAME_MS = 33;
 
 /** What the hover layer is showing, and where. */

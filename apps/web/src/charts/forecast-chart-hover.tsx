@@ -204,8 +204,9 @@ interface TooltipPanelProps {
 /**
  * What the tooltip says, with no idea where it is. Memoised on purpose and not
  * as an optimisation reflex: a pointer sweeping one sample's span moves this
- * panel up to thirty times a second, and every one of those frames would
- * otherwise rebuild four rows' worth of elements and hand React a fresh tree to
+ * panel once per frame at the rate `POINTER_FRAME_MS` sets
+ * (`chart-hover-input.ts`), and every one of those frames would otherwise
+ * rebuild four rows' worth of elements and hand React a fresh tree to
  * reconcile against the identical text already on screen (#284 D7). What it does
  * **not** save is `tooltipRows` itself — the layer below runs `visibleTooltipRows`
  * every frame regardless, because sizing the panel needs the rows before there

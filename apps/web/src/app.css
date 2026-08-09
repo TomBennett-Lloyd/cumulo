@@ -62,12 +62,23 @@ body {
  * would fail if this went back.
  *
  * The token gallery (`preview/TokensHarness.tsx`) wears this class too and
- * inherits the change deliberately rather than forking the rule. Nothing moves
- * there: its header holds a single flex item (one block carrying the title and
- * the gallery's paragraph), and a line whose cross-size is exactly one item's
- * height aligns that item identically under either value. So the gallery keeps
- * one shared frame instead of gaining an override that would exist only to
- * restate the layout it already has.
+ * inherits the change deliberately rather than forking the rule. Something does
+ * move there, and this is what: that header holds two flex items — one block
+ * carrying the title and the gallery's explanatory paragraph, and `ThemeToggle`
+ * beside it — so the toggle sits on the centre of a block several lines tall
+ * instead of on the h1's baseline. Measured, like the figure above: 23px lower
+ * at a 1280px viewport, and the drop grows with the block's height. It happens
+ * only while the row holds one line; at widths where the header wraps, the
+ * toggle has a line to itself and the two values agree again.
+ *
+ * That is accepted rather than overridden, on the same grounds as the
+ * change itself: the toggle is a control in a row of controls, and D1's argument
+ * is about what a row of them should agree on. An override would buy a
+ * development-only surface (served from `tokens.html`, never shipped) a header
+ * the product does not have — which is the objection `TokensHarness`'s own
+ * docblock makes about copying the theming rather than borrowing it. Nothing
+ * observes the gallery's layout either way: `preview/TokensPreview.test.tsx`
+ * reads token names, not boxes.
  *
  * The bar carries three controls: the (i) holding the product's own line, the
  * search that finds a site by name, and the disclosure everything else hides

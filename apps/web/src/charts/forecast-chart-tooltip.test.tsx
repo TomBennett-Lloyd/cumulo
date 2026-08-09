@@ -226,7 +226,11 @@ const ON_SAMPLE_2 = 249;
 const NEAR_SAMPLE_2 = 270;
 const STILL_SAMPLE_2 = 290;
 const PAST_THE_MIDPOINT = 310;
-/** Two waits, named against the 33 ms the panel is allowed one move in. */
+/**
+ * Two waits, chosen to fall either side of `POINTER_FRAME_MS` — the frame the
+ * panel is allowed one move in (`chart-hover-input.ts`, which ledgers these two
+ * beside the constant). Both are derived from it, so both move if it does.
+ */
 const INSIDE_ONE_FRAME_MS = 10;
 const PAST_ONE_FRAME_MS = 40;
 /** Short enough that the panel it widens still sits well inside the plot. */
@@ -310,8 +314,8 @@ describe('ForecastChart tooltip motion', () => {
     fireEvent.pointerMove(target, { clientX: clientXFor(NEAR_SAMPLE_2) });
 
     // Inside the frame the second move is held rather than drawn: a pointer
-    // fires far more often than thirty times a second, and every one of those
-    // events would otherwise be a commit.
+    // fires far more often than the panel is allowed to move, and every one of
+    // those events would otherwise be a commit.
     expect(tooltipAnchor(container)).toBe(openingAnchor);
 
     act(() => {

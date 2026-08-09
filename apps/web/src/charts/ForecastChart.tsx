@@ -225,11 +225,11 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   // and the readout can never disagree about what the overlay says at an hour.
   //
   // Memoised for identity rather than for speed. The tooltip panel follows the
-  // pointer at up to thirty frames a second (#284 D7) and its content is
-  // memoised against those frames — so a column, and the reading taken from it,
-  // rebuilt on every render would hand that memo a new object every frame and
-  // defeat it. The dependencies are the honest ones: a new series, or a new
-  // x-domain to join it onto, really is a new join.
+  // pointer at the rate `POINTER_FRAME_MS` sets (`chart-hover-input.ts`, #284
+  // D7) and its content is memoised against those frames — so a column, and the
+  // reading taken from it, rebuilt on every render would hand that memo a new
+  // object every frame and defeat it. The dependencies are the honest ones: a
+  // new series, or a new x-domain to join it onto, really is a new join.
   const overlay = useMemo<ChartOverlayColumn | undefined>(
     () =>
       props.overlay === undefined

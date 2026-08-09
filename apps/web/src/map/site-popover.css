@@ -45,9 +45,17 @@
 
    `--color-border` at hairline weight rather than a drop shadow, and now by
    choice rather than for want of a token: `--color-shadow` is elevation ink in
-   the scale as of #284, so `box-shadow: … var(--color-shadow)` would pass the
-   CSS gate's strict-value list here exactly as the chart tooltip's drop shadow
-   does. The card keeps the border anyway. A shadow marks a thing that floats
+   the scale as of #284, so a shadow here is expressible — though not on the
+   terms the chart tooltip's is. `box-shadow` is on the CSS gate's strict-value
+   property list and that plugin judges every sub-value, so a card shadow's
+   offset and blur would each have to be a bare `var()` or `0`; the quarter-step
+   offset the tooltip uses, `calc(var(--space-1) / 4)`, is refused here
+   ("Expected variable or keyword"). The tooltip escapes that because its shadow
+   is a `filter: drop-shadow(…)` (`../charts/charts.css`), and `filter` is not on
+   the strict-value rule's property list in `stylelint.config.mjs` — so that
+   rule never looks at its sub-values at all. Identical sub-values, one refused
+   and one never judged; `packages/ui/src/styles.css` writes the same trap up for
+   `outline`. The card keeps the border anyway. A shadow marks a thing that floats
    over what it is reading — the tooltip is over its own marks and moves with
    the pointer — where this card is anchored to one marker and stays put, and
    the border does the job that actually needs doing: separating the card from
