@@ -49,9 +49,17 @@ export interface PlotRect {
  * the demo fleet at the viewport that case pins, that stack — the header bar,
  * the map band (`dashboard.css`'s `.dashboard-map`) and the fleet panel's own
  * chrome and gaps (`dashboard/fleet-panel.css`) — puts the chart's top at 702px
- * and leaves 198px. 200 overflowed the fold by 6px; this leaves 14px of slack,
- * which is the margin an image whose `system-ui` sets those text-driven boxes a
- * little taller needs. The arithmetic here is the reasoning;
+ * of the 900 that viewport is tall (`e2e/chart-surfaces.spec.ts`'s
+ * `D15_VIEWPORT`, which owns both numbers), leaving 198px. 184 therefore leaves
+ * 14px of slack, which is the margin an image whose `system-ui` sets those
+ * text-driven boxes a little taller needs.
+ *
+ * **The 200 that overflowed was measured on a taller stack**, and saying so is
+ * what makes the arithmetic above close: it overflowed by 6px against a chart
+ * top of 706px, before the gaps above the panel were tightened. Against today's
+ * 702 the same 200 would overflow by 2 — still an overflow, so the choice
+ * stands, but a reader checking 900 − 702 − 200 against "6px" is checking two
+ * different stacks. The arithmetic here is the reasoning;
  * `e2e/chart-surfaces.spec.ts` measuring a rendered page is the evidence, and it
  * imports this constant rather than restating it.
  */
@@ -164,7 +172,9 @@ const padded = (value: number): string => value.toString().padStart(2, '0');
  * panel, 14px in a narrow one, so the chrome grew and shrank with the window
  * while nothing else on the page did. Measuring the width and drawing at 1:1 is
  * what fixes that, and it makes the margins below real distances rather than
- * ratios — `PLOT_LEFT` is 48px of room for a tick label at every viewport.
+ * ratios — `PLOT_LEFT` is 56px of room for the rotated axis title and a tick
+ * label at every viewport, not a fraction of the width that means a different
+ * distance in every panel.
  *
  * A function rather than a constant for the same reason: there is no one plot
  * any more, only the plot at the width the chart currently has. Callers that

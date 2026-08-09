@@ -132,14 +132,24 @@ describe('highestOverlayKw', () => {
 
 /**
  * A width chosen for arithmetic rather than for realism: `chartPlot(608)` puts
- * the plot's edges at 48 and 576, so runs of two and three samples land on whole
- * pixels. d3-path rounds the coordinates it emits, and a fixture whose samples
- * fell on a fractional step would be asserting that rounding instead of the
- * geometry underneath it.
+ * the plot's edges at 56 and 576, a span of 520, so runs of two and three
+ * samples land on whole pixels. d3-path rounds the coordinates it emits, and a
+ * fixture whose samples fell on a fractional step would be asserting that
+ * rounding instead of the geometry underneath it.
  */
 const CURVE_PLOT_WIDTH = 608;
 
-/** 8 kW over a 128-unit plot, so whole kilowatts land on whole pixels too. */
+/**
+ * High enough that the ramp below sits inside the axis with headroom to curve.
+ *
+ * Deliberately *not* chosen to put kilowatts on whole pixels, which the plot's
+ * height no longer allows: it is 124 units tall (`chart-geometry.ts`'s
+ * `PLOT_TOP` to `CHART_VIEW_BOX_HEIGHT - X_AXIS_BAND`), so 1 kW is 15.5 units
+ * and every odd kilowatt lands on a half. That costs these cases nothing
+ * because `vertexAt` recomputes each expected y through `yForKw` instead of
+ * writing coordinates out — only the x arithmetic above needs to be whole,
+ * because that is the half d3 rounds.
+ */
 const CURVE_AXIS_MAX_KW = 8;
 
 const scaleOver = (pointCount: number): ChartScale => ({

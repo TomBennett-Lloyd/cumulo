@@ -21,7 +21,7 @@ describe('chartPlot', () => {
    * The margins, pinned as numbers. Every other assertion in this file works in
    * the abstract `PLOT` above, which is right for arithmetic that holds at any
    * rect — but these four are the chart's actual measurements in actual pixels
-   * since #284 D15, and "the plot's left margin is 48px" is the claim, not an
+   * since #284 D15, and "the plot's left margin is 56px" is the claim, not an
    * incidental of one. Written out rather than recomputed from the module's own
    * private constants, which would assert nothing.
    */

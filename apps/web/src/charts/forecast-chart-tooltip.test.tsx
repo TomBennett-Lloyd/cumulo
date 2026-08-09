@@ -141,7 +141,7 @@ describe('ForecastChart tooltip shape', () => {
       requireSvg(container).focus();
     });
 
-    const columns = tooltipColumns(rows);
+    const columns = tooltipColumns(rows, PLOT_WIDTH);
 
     // The panel really is holding the words the columns above were measured
     // over — otherwise the x assertions would be comparing a model of one set
@@ -244,6 +244,58 @@ describe('ForecastChart tooltip shape', () => {
     expect(tooltipAnchor(container) + PLOT_WIDTH).toBeLessThanOrEqual(JSDOM_PLOT.right);
   });
 
+  it('keeps the value column inside the capped panel and lets the name overflow', () => {
+    // The same schema-ceiling name as the cap test above, because the cap
+    // binding is the precondition for anything here being about the clamp.
+    const longestAllowedLabel = 'S'.repeat(120);
+    const rows = [
+      sizedRow('0.9', 'Actual'),
+      sizedRow('1.0', 'Median'),
+      sizedRow('0.0–2.0', 'P10–P90'),
+      sizedRow('2.5', longestAllowedLabel),
+    ];
+    const container = renderChartWithOverlay(SERIES, {
+      label: longestAllowedLabel,
+      points: [{ validTimeIso: isoHour(6), kw: 2.5 }],
+    });
+    act(() => {
+      requireSvg(container).focus();
+    });
+
+    const panelWidth = tooltipPanelWidth('06:00', rows, PLOT_WIDTH);
+    const columns = tooltipColumns(rows, PLOT_WIDTH);
+    const widestValueWidth = Math.max(...rows.map((row) => row.value.length)) * TOOLTIP_CHAR_WIDTH;
+
+    // Precondition, asserted rather than assumed: the panel is at the ceiling,
+    // so the name column cannot have all the width it asked for.
+    expect(panelWidth).toBe(PLOT_WIDTH);
+
+    // The value column — its ink, not just its left edge — is inside the panel.
+    // Measured against the *widest* value, so this holds for every row at once.
+    expect(columns.valueX + widestValueWidth).toBeLessThanOrEqual(panelWidth);
+
+    // And as drawn, in the plot's own coordinates: the panel is translated to
+    // an anchor, so a value column inside the panel is only worth anything if
+    // the panel it is inside is on the canvas.
+    const anchor = tooltipAnchor(container);
+    const values = column(container, 'forecast-chart-tooltip-value');
+    expect(values).toHaveLength(rows.length);
+    for (const value of values) {
+      expect(attributeNumber(value, 'x')).toBe(columns.valueX);
+      expect(anchor + attributeNumber(value, 'x') + widestValueWidth).toBeLessThanOrEqual(
+        JSDOM_PLOT.right,
+      );
+    }
+
+    // The name is what gives way — which is the arrangement the pre-column
+    // layout had, and what the cap's own docblock claims. Unclamped, the name
+    // column takes the width it asks for and pushes the whole value column off
+    // the panel: the numbers a reader came for would be the half that vanished.
+    expect(columns.nameX + longestAllowedLabel.length * TOOLTIP_CHAR_WIDTH).toBeGreaterThan(
+      panelWidth,
+    );
+  });
+
   it('pads the panel equally above the time and below the last visible row', () => {
     const container = renderChart(SERIES);
     const svg = requireSvg(container);
@@ -276,13 +328,15 @@ describe('ForecastChart tooltip shape', () => {
 });
 
 /**
- * View-box positions inside sample 2's span. The five samples sit 140 units
- * apart from `JSDOM_PLOT.left` (48), so sample 2 is at 328 and the midpoint it
- * shares with sample 3 is at 398 — every value below but the last is on sample
- * 2's side of it, and the last is over the line.
+ * View-box positions inside sample 2's span. The five samples sit 138 units
+ * apart from `JSDOM_PLOT.left` (56, since #284 D10 widened the left gutter), so
+ * sample 2 is at 332 and the midpoint it shares with sample 3 is at 401 — every
+ * value below but the last is on sample 2's side of it, and the last is over
+ * the line by 4 units.
  */
-const ON_SAMPLE_2 = 328;
+const ON_SAMPLE_2 = 332;
 const NEAR_SAMPLE_2 = 355;
+/** 16 units short of the midpoint: still sample 2's, and visibly moved. */
 const STILL_SAMPLE_2 = 385;
 const PAST_THE_MIDPOINT = 405;
 /**

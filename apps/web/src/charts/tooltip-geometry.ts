@@ -97,11 +97,20 @@ const textWidth = (text: string): number => text.length * TOOLTIP_CHAR_WIDTH;
 /** Widest of one column's cells, and zero for a panel with no series rows. */
 const columnWidth = (cells: readonly string[]): number => Math.max(0, ...cells.map(textWidth));
 
+/**
+ * The name column never clamps below this, even where the plot leaves it less.
+ * Four characters is not a readable name; it is the point below which the panel
+ * has stopped being two columns at all, and the floor exists so that a plot too
+ * narrow to hold the pair degrades to both columns overflowing rather than to
+ * the two texts stacking at one x.
+ */
+const MIN_NAME_COLUMN_WIDTH = TOOLTIP_CHAR_WIDTH * 4;
+
 /** Where each of a row's two texts starts, and what the pair asks the panel for. */
 export interface TooltipColumns {
   /** Left edge of the name column: past the key stroke and its gap. */
   readonly nameX: number;
-  /** Left edge of the value column: past the widest name in the panel. */
+  /** Left edge of the value column: past the widest name the panel has room for. */
   readonly valueX: number;
   /** Width the columns need, left padding through right padding. */
   readonly panelContentWidth: number;
@@ -118,18 +127,33 @@ export interface TooltipColumns {
  * between columns and per-row packing: packing puts every number somewhere else
  * and makes comparing two of them an eye-movement rather than a glance.
  *
+ * **`plotWidth` is here because a column has to be laid out inside the panel it
+ * will be drawn in.** `tooltipPanelWidth` caps the panel at the plot, so the
+ * width the names *ask* for is not always the width they get, and a name column
+ * measured without that ceiling puts `valueX` past the panel's right edge — at
+ * the 120 characters `siteSchema` allows, 788 against a 552 cap, which draws the
+ * whole value column outside the panel and off the plot. Clamped, the name
+ * column gives up its width first and the **name** is what overflows, which is
+ * the arrangement `tooltipPanelWidth` below claims and the one the pre-column
+ * layout had: the number a reader came for stays on screen, and the label they
+ * can infer from the key stroke is what runs past the edge. The name then runs
+ * under the value column as well as past the panel — one defect, not two, and
+ * the elision half of D12 is what retires it.
+ *
  * The names decide where the values go, and the values only decide how far the
  * panel reaches — which is why the width returned here is the second column's
  * right edge plus padding, not a maximum over rows.
  */
-export const tooltipColumns = (rows: readonly TooltipRow[]): TooltipColumns => {
+export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): TooltipColumns => {
   const nameX = TOOLTIP_PADDING + KEY_STROKE_LENGTH + KEY_TEXT_GAP;
-  const valueX = nameX + columnWidth(rows.map((row) => row.name)) + COLUMN_GAP;
-  return {
-    nameX,
-    valueX,
-    panelContentWidth: valueX + columnWidth(rows.map((row) => row.value)) + TOOLTIP_PADDING,
-  };
+  const valueWidth = columnWidth(rows.map((row) => row.value));
+  const roomForNames = plotWidth - nameX - COLUMN_GAP - valueWidth - TOOLTIP_PADDING;
+  const nameWidth = Math.min(
+    columnWidth(rows.map((row) => row.name)),
+    Math.max(MIN_NAME_COLUMN_WIDTH, roomForNames),
+  );
+  const valueX = nameX + nameWidth + COLUMN_GAP;
+  return { nameX, valueX, panelContentWidth: valueX + valueWidth + TOOLTIP_PADDING };
 };
 
 /**
@@ -155,6 +179,11 @@ export const tooltipColumns = (rows: readonly TooltipRow[]): TooltipColumns => {
  * the name that overflows is the half still open, and until it lands the cap is
  * what bounds the damage.
  *
+ * **Which half overflows is a choice, and it is made in `tooltipColumns`, not
+ * here.** This function caps the panel; the clamp above is what keeps the value
+ * column inside the capped panel, so "a name that long overflows" stays a
+ * description of what is drawn rather than of what the cap alone would do.
+ *
  * The ceiling outranks the floor where the two disagree, which is a plot
  * narrower than `TOOLTIP_MIN_WIDTH` — a panel that cannot be placed inside the
  * plot at all is worse than one below its minimum shape.
@@ -169,7 +198,7 @@ export const tooltipPanelWidth = (
     Math.max(
       TOOLTIP_MIN_WIDTH,
       TOOLTIP_PADDING * 2 + textWidth(timeLabel),
-      tooltipColumns(rows).panelContentWidth,
+      tooltipColumns(rows, plotWidth).panelContentWidth,
     ),
   );
 

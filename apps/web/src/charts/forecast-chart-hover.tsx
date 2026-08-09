@@ -233,6 +233,14 @@ interface TooltipPanelProps {
    * plot: one measurement, spent on the rect and on the anchor.
    */
   readonly panelWidth: number;
+  /**
+   * The ceiling that measurement was taken under, passed as well as its result
+   * because the columns are laid out against the ceiling rather than against
+   * the panel: `tooltipColumns` needs it to know how much of the name column a
+   * capped panel can actually hold. A number and not the columns themselves —
+   * a fresh object per frame would defeat the memo this panel exists inside.
+   */
+  readonly plotWidth: number;
 }
 
 /**
@@ -250,9 +258,9 @@ interface TooltipPanelProps {
  * hands it a stable `overlay` reading rather than one rebuilt per render.
  */
 const TooltipPanel = memo(
-  ({ overlay, panelWidth, point, spanHours }: TooltipPanelProps): ReactElement => {
+  ({ overlay, panelWidth, plotWidth, point, spanHours }: TooltipPanelProps): ReactElement => {
     const rows = visibleTooltipRows(point, overlay);
-    const columns = tooltipColumns(rows);
+    const columns = tooltipColumns(rows, plotWidth);
     return (
       <>
         <rect
@@ -316,10 +324,11 @@ export const ForecastChartHoverLayer = (
   }
 
   const crosshairX = xForIndex(activeIndex, scale.pointCount, scale.plot);
+  const plotWidth = scale.plot.right - scale.plot.left;
   const panelWidth = tooltipPanelWidth(
     tickLabelFor(point.validTimeIso, spanHours),
     visibleTooltipRows(point, overlay),
-    scale.plot.right - scale.plot.left,
+    plotWidth,
   );
   const anchorX = tooltipAnchorX({
     followX: pointerX ?? crosshairX,
@@ -346,6 +355,7 @@ export const ForecastChartHoverLayer = (
           spanHours={spanHours}
           overlay={overlay}
           panelWidth={panelWidth}
+          plotWidth={plotWidth}
         />
       </g>
     </>
