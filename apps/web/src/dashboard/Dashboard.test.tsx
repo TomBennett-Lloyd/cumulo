@@ -210,6 +210,23 @@ describe('Dashboard', () => {
     ).toBe('true');
   });
 
+  /*
+   * The three poll-driven cases below carry an explicit 15 s timeout, here and
+   * at each of the other two.
+   *
+   * They drive a real render loop across a real polling cadence rather than
+   * asserting one state, so their cost is wall-clock churn rather than
+   * computation: 1.2 s, 1.4 s and 1.6 s respectively when measured in isolation
+   * on a fast machine. CI's shared 2-core runners breached vitest's 5 s default
+   * on the first of them twice in a row (run 31313230979, both attempts) with
+   * the suite running parallel workers — the same box logged 41 s just to stand
+   * up the jsdom environment, so the starvation is contention, not the test
+   * getting slower.
+   *
+   * 15 s is margin, not an expectation: it is roughly ten times the measured
+   * cost, and a test that genuinely hangs still fails inside a window short
+   * enough to be a useful signal rather than a stalled job.
+   */
   it('shows an added site its own forecast within a minute of creating it', async () => {
     renderDashboard(new DemoFleetDataSource());
     await settle();
@@ -250,7 +267,7 @@ describe('Dashboard', () => {
     // Rows, not just a header: a column of nothing would satisfy the wait above
     // while showing the reader no forecast at all.
     expect(within(fleetChartTable()).getAllByRole('row').length).toBeGreaterThan(1);
-  });
+  }, 15_000);
 
   it('watches the site id the fleet assigned, never one of its own making', async () => {
     const dataSource = new DemoFleetDataSource();
@@ -302,7 +319,8 @@ describe('Dashboard', () => {
     expect(screen.getByText(/wait \d+s before adding another site/)).toBeDefined();
     expect(createSite).toHaveBeenCalledTimes(3);
     expect(fleetRows()).toHaveLength(63);
-  });
+    // 15 s for the reason given at the first poll-driven case above.
+  }, 15_000);
 
   it('lets a refused visitor through once the window has slid, from the same open form', async () => {
     const dataSource = new DemoFleetDataSource();
@@ -330,7 +348,8 @@ describe('Dashboard', () => {
 
     expect(createSite).toHaveBeenCalledTimes(4);
     expect(fleetRows()).toHaveLength(64);
-  });
+    // 15 s for the reason given at the first poll-driven case above.
+  }, 15_000);
 
   it('gives up on a first forecast that never arrives, and can be asked again', async () => {
     // A pipeline slower than the deadline — the one knob this test turns, so

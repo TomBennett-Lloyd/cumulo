@@ -56,7 +56,7 @@ describe('joinFleetSeries', () => {
     expect(joined.filter((point) => 'band' in point)).toEqual([]);
   });
 
-  it('drops a measurement whose hour has no forecast point, keeping the forecast x-domain', () => {
+  it('keeps a measurement whose hour has no forecast, and orders it before the forecast hours', () => {
     const joined = joinFleetSeries(
       [{ validTime: timestamp(6), acPowerKw: 6, contributingSiteCount: 2 }],
       [
@@ -65,7 +65,58 @@ describe('joinFleetSeries', () => {
       ],
     );
 
-    expect(joined.map((point) => point.validTimeIso)).toEqual(['2026-07-30T06:00:00Z']);
+    // 05:00 arrives second in the actuals and first in the answer: the union is sorted by instant,
+    // not by the order either input happened to be in.
+    expect(joined.map((point) => point.validTimeIso)).toEqual([
+      '2026-07-30T05:00:00Z',
+      '2026-07-30T06:00:00Z',
+    ]);
+    expect(joined.map((point) => point.medianKw)).toEqual([null, 6]);
+  });
+
+  /*
+   * The live shape, which is the one the old forecast-only x-domain could not draw at all. The
+   * deployed source reads forecasts forward from the clock and actuals back from it, so the two
+   * windows share no hour — every simulated actual was dropped, and the chart rendered a legend
+   * and an accessible name for a series that was never on it (#264).
+   */
+  it('keeps disjoint-window actuals on the chart, past hours before future ones', () => {
+    const joined = joinFleetSeries(
+      [
+        {
+          validTime: timestamp(12),
+          acPowerKw: 9,
+          uncertainty: band(7, 11),
+          contributingSiteCount: 2,
+        },
+        {
+          validTime: timestamp(13),
+          acPowerKw: 7,
+          uncertainty: band(5, 9),
+          contributingSiteCount: 2,
+        },
+      ],
+      [
+        { validTime: timestamp(10), acPowerKw: 4, contributingSiteCount: 2 },
+        { validTime: timestamp(11), acPowerKw: 6, contributingSiteCount: 2 },
+      ],
+    );
+
+    expect(joined.map((point) => point.validTimeIso)).toEqual([
+      '2026-07-30T10:00:00Z',
+      '2026-07-30T11:00:00Z',
+      '2026-07-30T12:00:00Z',
+      '2026-07-30T13:00:00Z',
+    ]);
+    // Every actual survives, which is the assertion the defect fails.
+    expect(joined.map((point) => point.actualKw)).toEqual([4, 6, null, null]);
+    // And nothing is invented on the half of the domain the other series owns: the past hours have
+    // no median and no band, the future hours have no reading.
+    expect(joined.map((point) => point.medianKw)).toEqual([null, null, 9, 7]);
+    expect(joined.filter((point) => 'band' in point).map((point) => point.validTimeIso)).toEqual([
+      '2026-07-30T12:00:00Z',
+      '2026-07-30T13:00:00Z',
+    ]);
   });
 });
 

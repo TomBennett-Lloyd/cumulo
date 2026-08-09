@@ -70,14 +70,23 @@ Composition rules that keep both legible where they overlap:
   mark ever gets a stroke drawn around it to separate it from another mark.
 - **The forecast horizon boundary is a vertical hairline** in `--color-chart-grid` with a small
   direct label in `--color-chart-axis-label`, at the last timestamp with a measurement. Actuals
-  stop there; band and median continue. The boundary is marked once, in chrome, rather than by
-  dashing the forecast line.
+  stop there; band and median continue past it. On the live fleet chart they do not merely continue
+  past it, they _begin_ at it — the two windows are disjoint, so the boundary is where one series
+  hands over to the other rather than where they overlap. The boundary is marked once, in chrome,
+  rather than by dashing the forecast line.
 - **A gap _inside_ a series breaks the line. It is never bridged.** The horizon rule above says
   where the measurements stop; this says what a missing hour before that boundary looks like. A
   null actual ends the run and the line restarts after the gap, so the actuals series is drawn once
   per contiguous run of measured samples rather than as one path through the hole. The same holds
   for the band: an hour whose forecast carries no P10–P90 is a point estimate, and the band's
-  polygon and bound hairlines are drawn once per contiguous run of banded samples. A straight
+  polygon and bound hairlines are drawn once per contiguous run of banded samples. **And for the
+  median**, which was the one series exempt from this until #264, because until then a sample
+  existed only where a forecast did. It does not any more: the fleet chart's x-domain is the union
+  of the forecast's hours and the actuals' hours, and in live mode those two windows are disjoint —
+  the forecast fan-out reaches forward from the clock, the actuals read reaches back from it — so
+  the hours behind the horizon carry a measurement and no forecast at all. The median is drawn once
+  per contiguous run of forecast samples, and an hour with no forecast gets no median mark and an
+  em dash in the table twin, never a zero. A straight
   segment across a gap is a value that was never measured or never modelled, drawn with exactly the
   confidence of the values on either side of it — partial data is labelled partial, in the chart as
   much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted

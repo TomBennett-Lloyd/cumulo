@@ -37,7 +37,7 @@ export const forecastChartLegend = (overlayLabel: string | undefined): ReactElem
       <svg className="forecast-chart-legend-key" viewBox="0 0 28 14" aria-hidden="true">
         <line className="forecast-chart-actuals" x1="0" x2="28" y1="7" y2="7" />
       </svg>
-      Actuals
+      Actuals (simulated)
     </li>
     {overlayLabel === undefined ? null : (
       <li>

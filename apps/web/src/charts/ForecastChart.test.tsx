@@ -240,7 +240,7 @@ describe('ForecastChart', () => {
     expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
       'Forecast (P10–P90)',
       'Forecast (median)',
-      'Actuals',
+      'Actuals (simulated)',
     ]);
   });
 
@@ -344,7 +344,7 @@ describe('ForecastChart', () => {
     expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
       'Forecast (P10–P90)',
       'Forecast (median)',
-      'Actuals',
+      'Actuals (simulated)',
       'Baseline',
     ]);
   });

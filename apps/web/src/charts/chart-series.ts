@@ -14,7 +14,17 @@ export interface ForecastChartBand {
 
 export interface ForecastChartPoint {
   readonly validTimeIso: string;
-  readonly medianKw: number;
+  /**
+   * `null` where the hour carries no forecast at all.
+   *
+   * Nullable since #264, and the reason is a real shape rather than defensive
+   * typing: a chart whose x-domain is the union of forecast hours and actual
+   * hours (`dashboard/fleet-series.ts`) has hours behind the horizon that were
+   * measured and never forecast. The median then breaks at those hours exactly
+   * as the actuals break past the horizon — a gap, never a bridge and never a
+   * zero, because both would draw a forecast nobody made.
+   */
+  readonly medianKw: number | null;
   /** Absent — the key omitted, never `undefined` — for a point-estimate forecast. */
   readonly band?: ForecastChartBand;
   /** `null` where no measurement exists: past the horizon, or a gap inside it. */
@@ -89,12 +99,20 @@ export const overlayAt = (values: readonly (number | null)[], index: number): nu
 /**
  * The overlay's value at each sample of the main series.
  *
- * The main series' `validTimeIso` order is the x-domain, on the same rule as
- * `joinFleetSeries`: an overlay hour with no forecast point is dropped, because
- * the chart has nowhere to put it and inventing a column would imply a forecast
- * that was never made. An hour the overlay does not cover — and an hour it
- * covers with `null` — is `null` here, so the mark breaks at it rather than
- * being drawn at a value nobody supplied.
+ * The main series' `validTimeIso` order is the x-domain, and an overlay hour
+ * outside it is dropped: the chart has nowhere to put a column the series it is
+ * drawn over does not have.
+ *
+ * That used to be stated as the same rule `joinFleetSeries` followed, and it is
+ * deliberately no longer cited that way. #264 gave the fleet's join a *union*
+ * x-domain — the chart's own hours are now the union of what was forecast and
+ * what was measured — so the rule here is the narrower one it always actually
+ * was: an overlay is resolved onto a domain somebody else decided, and it never
+ * widens it. What decides that domain is the caller's business.
+ *
+ * An hour the overlay does not cover — and an hour it covers with `null` — is
+ * `null` here, so the mark breaks at it rather than being drawn at a value
+ * nobody supplied.
  */
 export const overlayValuesByIndex = (
   points: readonly ForecastChartPoint[],
@@ -112,9 +130,6 @@ export const overlayReadingAt = (
   index: number,
 ): ChartOverlayReading | undefined =>
   overlay === undefined ? undefined : { label: overlay.label, kw: overlay.values[index] ?? null };
-
-export const allIndices = (count: number): readonly number[] =>
-  Array.from({ length: count }, (_unused, index) => index);
 
 /**
  * Maximal runs of adjacent indices satisfying `includes`. This is what keeps a
@@ -143,7 +158,7 @@ export const contiguousRuns = (
 export const highestValueKw = (points: readonly ForecastChartPoint[]): number =>
   points.reduce(
     (highest, point) =>
-      Math.max(highest, point.medianKw, point.band?.p90Kw ?? 0, point.actualKw ?? 0),
+      Math.max(highest, point.medianKw ?? 0, point.band?.p90Kw ?? 0, point.actualKw ?? 0),
     0,
   );
 

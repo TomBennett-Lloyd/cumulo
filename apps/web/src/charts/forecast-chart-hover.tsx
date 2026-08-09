@@ -78,7 +78,10 @@ const tooltipRows = (
     seriesClassName: 'forecast-chart-median',
     value: formatKw(point.medianKw),
     name: 'Median',
-    present: true,
+    // Nullable since #264: an hour behind the horizon on a union x-domain was
+    // measured and never forecast, so the spoken readout drops the row rather
+    // than announcing a labelled series with an em dash for a value.
+    present: point.medianKw !== null,
   };
   const forecast: readonly TooltipRow[] =
     band === undefined

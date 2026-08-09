@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import { xForIndex, yForKw } from './chart-geometry';
 import {
   actualAt,
-  allIndices,
   bandPolygonPoints,
   contiguousRuns,
   medianAt,
@@ -147,36 +146,44 @@ export const actualsElements = (
 ];
 
 /**
- * The median runs across every sample and so is never broken by a gap — but a
- * single-sample series still has no line to draw, and gets the same ringed dot
- * treatment in the forecast's own hue.
+ * The median, broken at any hour that carries no forecast.
+ *
+ * It used to run across every sample unbroken, and that was true of every series
+ * this chart had ever been given: a point existed because a forecast existed.
+ * #264 ended it. The fleet chart's x-domain is now the union of forecast hours
+ * and actual hours (`dashboard/fleet-series.ts`), and in live mode those two
+ * windows do not overlap at all — the hours behind the horizon were measured and
+ * never forecast. So the median obeys the same two rules the actuals and the
+ * overlay obey, for the same reasons: a gap is never bridged, because a segment
+ * drawn across it is a forecast nobody made, and a run left holding one sample
+ * becomes a ringed dot rather than the one-vertex polyline SVG declines to paint.
  */
 export const medianElements = (
   points: readonly ForecastChartPoint[],
+  runs: readonly ChartRun[],
   scale: ChartScale,
-): readonly ReactElement[] => {
-  if (points.length === 0) {
-    return [];
-  }
-  if (points.length < MINIMUM_PATH_VERTICES) {
-    return [
+): readonly ReactElement[] => [
+  ...runs
+    .filter(spansMultipleSamples)
+    .map((run) => (
+      <polyline
+        key={run.startIndex}
+        className="forecast-chart-median"
+        points={polylinePoints(run.indices, (index) => medianAt(points, index), scale)}
+      />
+    )),
+  ...runs
+    .filter((run) => !spansMultipleSamples(run))
+    .map((run) => (
       <circle
-        key="median-marker"
+        key={`lone-${String(run.startIndex)}`}
         className="forecast-chart-median-marker"
-        cx={xForIndex(0, scale.pointCount, scale.plot)}
-        cy={yForKw(medianAt(points, 0), scale.axisMaxKw, scale.plot)}
+        cx={xForIndex(run.startIndex, scale.pointCount, scale.plot)}
+        cy={yForKw(medianAt(points, run.startIndex), scale.axisMaxKw, scale.plot)}
         r={MARKER_RADIUS}
-      />,
-    ];
-  }
-  return [
-    <polyline
-      key="median"
-      className="forecast-chart-median"
-      points={polylinePoints(allIndices(points.length), (index) => medianAt(points, index), scale)}
-    />,
-  ];
-};
+      />
+    )),
+];
 
 /**
  * A second series on the same axis, resolved onto the forecast's x-domain

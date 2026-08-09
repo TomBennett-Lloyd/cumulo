@@ -1,5 +1,6 @@
 import { MAX_USER_SITES } from '@cumulo/shared';
 
+import { DEFAULT_FLEET_LOOKBACK_HOURS } from '../forecast/get-fleet-actuals';
 import {
   DEFAULT_FORECAST_HORIZON_HOURS,
   FORECAST_HORIZON_HOURS,
@@ -49,6 +50,28 @@ const forecastHoursParameter: ParameterObject = {
     type: 'string',
     enum: [...FORECAST_HORIZON_HOURS],
     default: DEFAULT_FORECAST_HORIZON_HOURS,
+  },
+};
+
+/**
+ * The same closed set as the forecast horizon, read the other way: this one
+ * names how far *back* the fleet read looks. One list in the code
+ * (`get-site-forecast.ts` owns it) and therefore one enum here, because both
+ * routes serve the same picker in the web app.
+ */
+const fleetLookbackHoursParameter: ParameterObject = {
+  name: 'hours',
+  in: 'query',
+  required: false,
+  description: [
+    'How far back to read. A closed set rather than a free integer, because this',
+    'endpoint issues one query per fleet site and the cost of each admitted value is',
+    'therefore known in advance.',
+  ].join(' '),
+  schema: {
+    type: 'string',
+    enum: [...FORECAST_HORIZON_HOURS],
+    default: DEFAULT_FLEET_LOOKBACK_HOURS,
   },
 };
 
@@ -188,8 +211,9 @@ export const apiPaths: PathsObject = {
       operationId: 'getSiteSeries',
       summary: 'Forecasts and actuals for one site over a window',
       description: [
-        'One read of the stored series, split into the forecasts and the measured',
-        'actuals over the same window, for plotting the two against each other. An empty',
+        'One read of the stored series, split into the forecasts and the actuals over the',
+        'same window, for plotting the two against each other. The actuals are simulated,',
+        'for the reason the `GenerationReading` schema gives. An empty',
         'window is a 200 with empty arrays; only an unknown site id is a 404. Carries the',
         'Open-Meteo attribution that must be displayed with the data.',
       ].join(' '),
@@ -204,6 +228,35 @@ export const apiPaths: PathsObject = {
           'SiteSeriesResponse',
         ),
         ...errorResponses('validation_failed', 'not_found'),
+        ...commonFailures,
+      },
+    },
+  },
+  '/v1/fleet/actuals': {
+    get: {
+      operationId: 'getFleetActuals',
+      summary: 'Simulated actuals for every fleet site over a look-back window',
+      description: [
+        'Every site’s stored actuals over the same window, merged into one array, so a',
+        'fleet dashboard reads the whole fleet in one request rather than one per site.',
+        '**The readings are simulated.** The demo fleet has no inverters and no',
+        'telemetry; each reading is synthesized from the stored physics forecast for that',
+        'site and hour, and carries no marker of its own — the wire shape is the shape a',
+        'real meter would fill, and this sentence is where the difference lives. An empty',
+        'fleet, and a fleet whose sites have no readings yet, are both a 200 with an empty',
+        '`actuals` array. The response is all or nothing: a fan-out that could not finish',
+        'is a 500 rather than a fleet total quietly short a site. Carries the Open-Meteo',
+        'attribution that must be displayed with the data; like every endpoint here it',
+        'makes no upstream weather calls. Rate-limited per address, because its cost',
+        'grows with the fleet.',
+      ].join(' '),
+      parameters: [fleetLookbackHoursParameter],
+      responses: {
+        '200': componentResponse(
+          'Simulated actuals for the whole fleet over the requested window, possibly empty, with attribution.',
+          'FleetActualsResponse',
+        ),
+        ...errorResponses('validation_failed'),
         ...commonFailures,
       },
     },

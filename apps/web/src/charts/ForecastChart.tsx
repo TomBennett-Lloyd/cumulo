@@ -256,6 +256,10 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     [overlay, activeIndex],
   );
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
+  // Three series, one rule: each is drawn once per contiguous run of hours it
+  // actually has a value for. The median joined that rule in #264, when a union
+  // x-domain gave it hours with no forecast on them.
+  const medianRuns = contiguousRuns(points.length, (index) => points[index]?.medianKw != null);
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
 
@@ -313,7 +317,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {bandElements(points, bandRuns, scale)}
         {boundElements(points, bandRuns, scale)}
         {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}
-        {medianElements(points, scale)}
+        {medianElements(points, medianRuns, scale)}
         {overlay === undefined ? null : overlayElements(overlay.values, scale)}
         {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
         {xLabelElements(points, scale, spanHours)}

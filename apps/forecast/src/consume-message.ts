@@ -10,6 +10,7 @@ import {
 import type { BatchWriteOutcome, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 
 import { locationForecasts, type LocationForecastsOutcome } from './location-forecasts';
+import { simulateTrailingActuals } from './simulate-actuals';
 import type { SqsRecord } from './sqs-event';
 
 /**
@@ -26,10 +27,13 @@ import type { SqsRecord } from './sqs-event';
  *
  * There is no separate "already processed?" check, and there is deliberately no
  * place to put one: SQS is at-least-once, and idempotency here is *structural*.
- * Every row is a Put over the sort key `T#<validTime>#FC#physics` (ADR 0002), so
- * a redelivered message rewrites exactly the rows it wrote the first time. That
- * property is what makes the rest of this module's failure policy — fail the
- * record, let the queue redeliver — free rather than merely acceptable.
+ * Every row is a Put over a sort key derived from the row itself — `T#<validTime>#
+ * FC#physics` for a forecast, `T#<validTime>#GEN` for the simulated actual that
+ * follows it (ADR 0002) — so a redelivered message rewrites exactly the rows it
+ * wrote the first time. Both writes are deterministic in their inputs, the draw
+ * behind a simulated actual included (`simulatedActualFromForecast`), which is
+ * what makes the rest of this module's failure policy — fail the record, let the
+ * queue redeliver — free rather than merely acceptable.
  */
 
 /**
@@ -62,20 +66,27 @@ export type MessageOutcome = { readonly messageId: string } & (
 /**
  * The collaborators one message's processing needs.
  *
- * The adapters are narrowed to one method each, so this service's least-privilege
- * posture — reads `sites`, writes `series`, touches nothing else (ADR 0002) — is a
- * compile-time fact as well as an IAM policy. They are passed as whole objects and
- * never as `adapter.putForecasts`: the adapters hold their client and table name
- * on `this`, so a detached method would arrive already broken
- * (`docs/standards/structure.md` rule 3).
+ * Each adapter is narrowed to the methods this path may use, so this service's
+ * least-privilege posture — reads `sites`, writes `series` and, since #264, reads
+ * back the trailing window of `series` it just wrote (ADR 0002; `infra/forecast/
+ * iam.tf` carries the matching grants) — is a compile-time fact as well as an IAM
+ * policy. They are passed as whole objects and never as `adapter.putForecasts`:
+ * the adapters hold their client and table name on `this`, so a detached method
+ * would arrive already broken (`docs/standards/structure.md` rule 3).
  *
  * `log` is declared here rather than only on the handler because this is the type
- * the handler binds once and hands down; `consumeMessage` itself logs nothing, on
- * purpose — it returns its outcome and the boundary decides what to say about it.
+ * the handler binds once and hands down. `consumeMessage` writes no entry of its
+ * own — it returns its outcome and the boundary decides what to say about it — but
+ * it does hand `log` to `simulateTrailingActuals`, whose per-site outcomes are
+ * reported where they happen rather than folded into this message's result
+ * (`runCycle`'s per-location events in `apps/ingestion` are the same shape).
  */
 export interface ConsumeMessageDeps {
   readonly sites: Pick<SiteAdapter, 'listActiveSitePhysicsAtLocation'>;
-  readonly series: Pick<SeriesAdapter, 'putForecasts'>;
+  readonly series: Pick<
+    SeriesAdapter,
+    'putForecasts' | 'querySeriesRange' | 'putGenerationReadings'
+  >;
   /**
    * Structured-logging sink (`docs/standards/error-handling.md` rule 4). Injected
    * rather than reached for, so no module below the composition root holds a
@@ -228,8 +239,13 @@ export const consumeMessage = async (
   }
 
   let fanOut: LocationForecastsOutcome;
+  // The one clock read of a message, named because two things now depend on it: the vintage every
+  // row of this message carries, and the instant the trailing simulation window ends at. Reading
+  // it twice would let those two facts disagree by however long the fan-out took, for no gain.
+  let issuedAt: UtcIsoTimestamp;
   try {
-    fanOut = locationForecasts({ sites, readings: body.readings, issuedAt: deps.now() });
+    issuedAt = deps.now();
+    fanOut = locationForecasts({ sites, readings: body.readings, issuedAt });
   } catch (error: unknown) {
     // The bug arm. `locationForecasts` answers an implausible hour with a value
     // (handled just below), so anything that reaches here is a violated invariant
@@ -274,6 +290,21 @@ export const consumeMessage = async (
     // Put over a deterministic key.
     return { messageId, status: 'store-partial', unprocessedCount: stored.unprocessedCount };
   }
+
+  // The forecasts are stored; now backfill the simulated actuals for the hours that have settled
+  // (#264). This runs *after* the store and only on its success, because an actual is derived from
+  // a forecast row: simulating hours whose forecasts were rejected would invent readings for a
+  // series that has no forecast to compare them against.
+  //
+  // Its outcome deliberately does not reach `MessageOutcome`. `simulateTrailingActuals` reports
+  // each site's result to the log and never rejects, and a simulation failure must not fail this
+  // record: the forecasts — the message's actual work — are already written, the trailing window
+  // is `TRAILING_ACTUALS_HOURS` wide so the next hour's run repairs whatever this one missed, and
+  // failing the record would redeliver the whole location's horizon to retry a cosmetic write.
+  await simulateTrailingActuals(
+    { series: deps.series, log: deps.log, now: () => issuedAt },
+    sites.map((site) => site.id),
+  );
 
   return {
     messageId,

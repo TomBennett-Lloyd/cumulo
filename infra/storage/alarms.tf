@@ -4,19 +4,22 @@
 # ADR 0002 accepts throttling as the failure mode of taking the free
 # provisioned allowance, which makes an *unobserved* throttle the failure mode
 # it does not accept. These four alarms are the tripwire for revisit trigger 8,
-# and the tripwire has already been paid for: the write alarm on
-# `cumulo-weather` fired in earnest (296 events, #156), which is how that table
-# came to be on-demand.
+# and the tripwire has been paid for twice over: the write alarm fired in
+# earnest on `cumulo-weather` (296 events, #156) and then on `cumulo-series`
+# (~650 events across two colliding cycles, #258), and each fire is how that
+# table came to be on-demand.
 #
-# The pair survives the flip because both modes throttle, for different reasons,
-# and the alarm cannot tell which table it is watching. On `cumulo-series` a
-# throttle means the provisioned allocation has met real traffic, and the answer
-# is to flip `billing_mode` to PAY_PER_REQUEST — one attribute, no migration —
-# rather than to add auto-scaling (see tables.tf) or argue about RCU. On
-# `cumulo-weather`, which has already taken that answer, a throttle means one of
-# DynamoDB's own request limits — per partition, or per table — which is a hot
-# key or a traffic shape to go and read the ingestion logs about, not a number
-# to raise.
+# The pair survives both flips because both modes throttle, and the alarm cannot
+# tell which table it is watching. What changed is the reading. While a table
+# was provisioned, a throttle meant the allocation had met real traffic and the
+# answer was to flip `billing_mode` to PAY_PER_REQUEST — one attribute, no
+# migration — rather than to add auto-scaling (see tables.tf) or argue about
+# RCU. Both tables have now taken that answer, so on either of them a throttle
+# means one of DynamoDB's own request limits — per partition, or per table —
+# which is a hot key or a traffic shape to go and read the service logs about,
+# not a number to raise. That reading is strictly harder to act on than the one
+# it replaces, which is the honest cost of having spent the escape hatch on
+# both tables: there is no second flip behind it.
 #
 # Threshold 0 with a 60-second Sum and one evaluation period: any throttled
 # request at all, within a minute. There is deliberately no hysteresis. These
@@ -99,7 +102,7 @@ resource "aws_cloudwatch_metric_alarm" "read_throttle" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "Read requests were throttled on ${each.value}. Reads have met a limit (ADR 0002): a read allocation if the table is provisioned, a per-partition or per-table request limit if it is on-demand. On a provisioned table the sanctioned response is to flip billing_mode to PAY_PER_REQUEST, not to add auto-scaling; on an on-demand one it is a hot key or a traffic shape to investigate."
+  alarm_description = "Read requests were throttled on ${each.value}. Every table in this stack is on-demand (ADR 0002 Amendments; #156, #258), so this is one of DynamoDB's own request limits — per partition or per table — not an allocation to raise: there is no billing_mode flip left to take. Investigate the read shape, starting with a hot partition key, in the logs of whatever service reads this table."
 }
 
 resource "aws_cloudwatch_metric_alarm" "write_throttle" {
@@ -126,5 +129,5 @@ resource "aws_cloudwatch_metric_alarm" "write_throttle" {
   # carrying UnprocessedItems, so a caller that ignores that field reports a
   # clean run while dropping data. The adapters retry and return a typed partial
   # result (ADR 0002 consequence 4); this alarm is what says it happened at all.
-  alarm_description = "Write requests were throttled on ${each.value}. Check for BatchWriteItem partial results (UnprocessedItems) in the ingestion logs — writes have met a limit (ADR 0002): a write allocation if the table is provisioned, a per-partition or per-table request limit if it is on-demand."
+  alarm_description = "Write requests were throttled on ${each.value}. Check for BatchWriteItem partial results (UnprocessedItems) in the logs of the service that writes this table — ingestion for cumulo-weather, the forecast consumer for cumulo-series. Every table in this stack is on-demand (ADR 0002 Amendments; #156, #258), so this is one of DynamoDB's own per-partition or per-table request limits rather than an allocation to raise, and no billing_mode flip is left to take."
 }

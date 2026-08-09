@@ -1,6 +1,6 @@
 import type { Forecast, SitePhysics, UtcIsoTimestamp } from '@cumulo/shared';
 import { StorageError } from '@cumulo/storage';
-import type { BatchWriteOutcome } from '@cumulo/storage';
+import type { BatchWriteOutcome, SeriesRangeResult } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import { consumeMessage, type ConsumeMessageDeps, type MessageOutcome } from './consume-message';
@@ -13,6 +13,7 @@ import {
   rejectedWith,
   sitePhysics,
 } from './forecast-fixtures';
+import { simulatedActualsOutcomeEvent } from './simulate-actuals';
 
 /**
  * One record's processing, exercised through its only public surface: give it a
@@ -29,10 +30,17 @@ import {
 interface Recorder {
   readonly written: Forecast[][];
   readonly locationsQueried: string[];
+  /** Site ids whose trailing window was read — the simulated-actuals producer's first move. */
+  readonly simulatedFor: string[];
   readonly entries: Record<string, unknown>[];
 }
 
-const emptyRecorder = (): Recorder => ({ written: [], locationsQueried: [], entries: [] });
+const emptyRecorder = (): Recorder => ({
+  written: [],
+  locationsQueried: [],
+  simulatedFor: [],
+  entries: [],
+});
 
 interface DepsInput {
   readonly recorder: Recorder;
@@ -44,6 +52,8 @@ interface DepsInput {
   readonly storeOutcome?: BatchWriteOutcome;
   /** Rejected by the series write instead of answering. */
   readonly storeRejectsWith?: unknown;
+  /** Rejected by the trailing-window read instead of answering with an empty window. */
+  readonly trailingRejectsWith?: unknown;
   readonly now?: () => UtcIsoTimestamp;
 }
 
@@ -64,6 +74,18 @@ const deps = (input: DepsInput): ConsumeMessageDeps => ({
       input.recorder.written.push([...forecasts]);
       return Promise.resolve(input.storeOutcome ?? { status: 'complete' });
     },
+    // The simulated-actuals producer's two calls. The window answers empty unless a test rejects
+    // it, so every existing case runs the producer over a site with nothing to simulate — which
+    // is what makes "the message's outcome does not depend on it" the default rather than a
+    // specially wired case.
+    querySeriesRange: (siteId): Promise<SeriesRangeResult> => {
+      input.recorder.simulatedFor.push(siteId);
+      return input.trailingRejectsWith === undefined
+        ? Promise.resolve({ points: [], complete: true })
+        : rejectedWith(input.trailingRejectsWith);
+    },
+    putGenerationReadings: (): Promise<BatchWriteOutcome> =>
+      Promise.resolve({ status: 'complete' }),
   },
   log: (entry) => {
     input.recorder.entries.push(entry);
@@ -335,12 +357,15 @@ describe('consuming one weather message', () => {
     expect(detailOf(outcome)).toContain('non-Error thrown (string)');
   });
 
-  it('logs nothing itself — the record boundary above it decides what to say', async () => {
+  it('writes no log entry of its own — the record boundary above it decides what to say', async () => {
     const recorder = emptyRecorder();
 
     await consumeMessage(deps({ recorder }), recordOf('m-1', [reading()]));
 
-    expect(recorder.entries).toEqual([]);
+    // The only entries are the simulated-actuals producer's, which reports per site where it
+    // happens rather than folding its results into this message's outcome (#264). Nothing here
+    // describes the message.
+    expect(recorder.entries.map((entry) => entry.event)).toEqual([simulatedActualsOutcomeEvent]);
   });
 
   it('writes rows attributed to the site they were forecast for', async () => {
@@ -349,5 +374,56 @@ describe('consuming one weather message', () => {
     await consumeMessage(deps({ recorder }), recordOf('m-1', [reading()]));
 
     expect(recorder.written[0]?.[0]?.siteId).toBe(RANELAGH_ID);
+  });
+
+  it('simulates the trailing actuals for exactly the sites it forecast', async () => {
+    const recorder = emptyRecorder();
+
+    await consumeMessage(
+      deps({ recorder, sites: [sitePhysics(), sitePhysics({ id: RATHMINES_ID })] }),
+      recordOf('m-1', [reading()]),
+    );
+
+    expect(recorder.simulatedFor).toEqual([RANELAGH_ID, RATHMINES_ID]);
+  });
+
+  it('does not simulate actuals when the forecasts did not all land', async () => {
+    // An actual is derived from a forecast row. Simulating hours whose forecasts DynamoDB
+    // declined would invent readings for a series with no forecast to compare them against — and
+    // the record fails anyway, so the redelivery does both writes in order.
+    const recorder = emptyRecorder();
+
+    await consumeMessage(
+      deps({ recorder, storeOutcome: { status: 'partial', unprocessedCount: 7 } }),
+      recordOf('m-1', [reading()]),
+    );
+
+    expect(recorder.simulatedFor).toEqual([]);
+  });
+
+  it('does not simulate actuals when the forecast write threw', async () => {
+    const recorder = emptyRecorder();
+
+    await consumeMessage(
+      deps({ recorder, storeRejectsWith: storageError('putForecasts', 'cumulo-series-test') }),
+      recordOf('m-1', [reading()]),
+    );
+
+    expect(recorder.simulatedFor).toEqual([]);
+  });
+
+  it('still reports the message stored when the simulation fails', async () => {
+    // The forecasts — the message's actual work — are already written, and the trailing window is
+    // `TRAILING_ACTUALS_HOURS` wide, so the next hour's run repairs what this one missed.
+    // Failing the record would redeliver the whole horizon to retry a cosmetic write.
+    const outcome = await consumeMessage(
+      deps({
+        recorder: emptyRecorder(),
+        trailingRejectsWith: storageError('querySeriesRange', 'cumulo-series-test'),
+      }),
+      recordOf('m-1', [reading()]),
+    );
+
+    expect(outcome.status).toBe('stored');
   });
 });
