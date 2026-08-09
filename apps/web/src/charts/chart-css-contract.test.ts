@@ -11,8 +11,11 @@ import { describe, expect, it } from 'vitest';
  * proves the declarations exist, not that they take effect (testing.md rule 10).
  *
  * What that leaves to the browser lane is the thing this file is named for:
- * whether the three verticals on the plot are actually *told apart* by a reader
- * — grid, dashed horizon rule, solid full-ink crosshair. `apps/web/e2e/` owns
+ * whether the plot's two verticals are actually *told apart* by a reader — the
+ * dashed horizon rule and the solid full-ink crosshair, which before #284 D11
+ * were one line drawn twice. The grid was never in that comparison: it is
+ * horizontal only, so a reader separates it by orientation before ink or weight
+ * comes into it. `apps/web/e2e/` owns
  * that criterion and no spec in it asserts it today, so this is what the fast
  * lane can honestly say about #284 D11, and it is deliberately a claim about the
  * declarations rather than about the pixels.

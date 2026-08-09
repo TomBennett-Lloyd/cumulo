@@ -359,10 +359,13 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 - **A crosshair finds the X.** A vertical line tracks the pointer and snaps to the nearest
   timestamp — readers aim at a time, not at a 2px line. It is drawn **solid, at the data weight
   (2px), in `--color-text`** ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11):
-  chrome, but the reader's own chrome rather than part of the frame. At the grid's hairline weight
-  in the grid's ink it was the third of three near-identical verticals — grid, horizon rule,
-  crosshair — and the faintest of them was the only one the reader was moving. Full ink separates it
-  from both at a glance, and it can afford to be the loudest thing in the chrome because it exists
+  chrome, but the reader's own chrome rather than part of the frame. The plot draws exactly two
+  vertical lines — the horizon rule and this — and at the grid's hairline weight in the grid's ink
+  they were the same mark twice over, separated only by the fact that one of them moved. The grid
+  is no part of that: it is horizontal only (see the gridline bullet above), so orientation tells
+  it from both before ink or weight is asked to. Full ink at the data weight is what separates the
+  pair at a glance, with the horizon's dash doing the other half of the work, and the crosshair can
+  afford to be the loudest thing in the chrome because it exists
   only while a pointer is held on the plot and leaves with it. No new token: `--color-text` is the
   strong ink in both modes and already the validated body ink on these surfaces, so a stroke drawn
   in it inherits a measurement rather than owing one.
