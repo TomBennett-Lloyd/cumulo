@@ -6,7 +6,7 @@ This is a portfolio project. The repo's **process** — commit history, PR disci
 
 ## Hard constraints
 
-- **Open-Meteo attribution is mandatory** (CC BY 4.0): a visible "Weather data by [Open-Meteo.com](https://open-meteo.com/)" link wherever weather-derived data is displayed in the UI, plus a data-sources credit in the README. Non-negotiable.
+- **Open-Meteo attribution is mandatory** (CC BY 4.0): a visible attribution link to [Open-Meteo.com](https://open-meteo.com/) wherever weather-derived data is displayed in the UI — the full "Weather data by Open-Meteo.com" phrase at standard widths; at widths where the row cannot hold it, the bare linked name is the sanctioned compact form (CC BY 4.0 §3(a)(2) permits medium-appropriate attribution; owner-amended 2026-08-09) — plus a data-sources credit in the README. The link itself is non-negotiable in every state.
 - **API frugality by design**: Open-Meteo free tier (no key) — 10,000 calls/day, 5,000/hour, 600/minute. Only ever fetch weather for locations where active fleet sites exist.
 - **Cost ceiling**: free-tier-first AWS, hard ceiling ~$100/month. All infra in Terraform, designed for clean spin-up/tear-down.
 - **No long-lived AWS credentials**: GitHub Actions authenticates via OIDC only. Never commit secrets; `.env` is gitignored; gitleaks runs in CI.
