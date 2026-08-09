@@ -34,38 +34,57 @@ export const minimumContributingSites = (points: readonly FleetForecastPoint[]):
   );
 
 /**
- * Zip the two aggregated series into the chart's point shape.
+ * Every hour either series knows about, in time order, as the chart's point shape.
  *
- * The forecast series is the x-domain: an aggregated actual whose hour has no forecast point is
- * dropped, because the chart has nowhere to put it and inventing a column would imply a forecast
- * that was never made. An hour with no measurement carries `actualKw: null`, which the chart draws
- * as a gap rather than a bridged line.
+ * **The x-domain is the union, and that is the whole point of this function.** It used to be the
+ * forecast alone, with an actual whose hour had no forecast simply dropped — which was invisible
+ * against the demo source, whose two windows overlap, and silently fatal against the deployed one.
+ * The live fleet reads its forecasts as a forward horizon (`/v1/sites/{id}/forecast`, future hours
+ * only) and its actuals as a look-back (`/v1/fleet/actuals`, `[now−h, now)`), so the two windows
+ * are disjoint for every value of the clock: under the old rule every simulated actual was dropped
+ * and the live chart could never draw one, under a legend and an accessible name that both
+ * promised otherwise (#264).
+ *
+ * What a row missing half its series does *not* do is invent the missing half. A past hour carries
+ * `medianKw: null` and no band; a future hour carries `actualKw: null`. Both read as gaps, on the
+ * rule the chart already applied to the actuals and the overlay — a bridged line or a zero would
+ * draw a forecast nobody made or a reading nobody took, which is the widening failure this whole
+ * ticket is about (`error-handling.md` rule 5).
+ *
+ * Ordered by instant rather than by string: both inputs arrive sorted from `@cumulo/shared`'s
+ * aggregation, but a merge of two sorted sequences still has to compare across them, and comparing
+ * the parsed instants keeps the ordering rule out of the timestamp's spelling.
  */
 export const joinFleetSeries = (
   points: readonly FleetForecastPoint[],
   actuals: readonly FleetActualsPoint[],
 ): readonly ForecastChartPoint[] => {
+  const forecastByHour = new Map<UtcIsoTimestamp, FleetForecastPoint>(
+    points.map((point) => [point.validTime, point]),
+  );
   const measuredByHour = new Map<UtcIsoTimestamp, number>(
     actuals.map((actual) => [actual.validTime, actual.acPowerKw]),
   );
+  const hours = [...new Set([...forecastByHour.keys(), ...measuredByHour.keys()])].sort(
+    (left, right) => Date.parse(left) - Date.parse(right),
+  );
 
-  return points.map((point) => {
+  return hours.map((validTime) => {
+    const forecast = forecastByHour.get(validTime);
     const joined = {
-      validTimeIso: point.validTime,
-      medianKw: point.acPowerKw,
-      actualKw: measuredByHour.get(point.validTime) ?? null,
+      validTimeIso: validTime,
+      medianKw: forecast?.acPowerKw ?? null,
+      actualKw: measuredByHour.get(validTime) ?? null,
     };
 
     // The key is omitted, never set to `undefined`: under `exactOptionalPropertyTypes` those are
     // different values, and the chart reads absence as "point estimate, draw no band".
-    return point.uncertainty === undefined
+    const uncertainty = forecast?.uncertainty;
+    return uncertainty === undefined
       ? joined
       : {
           ...joined,
-          band: {
-            p10Kw: point.uncertainty.p10AcPowerKw,
-            p90Kw: point.uncertainty.p90AcPowerKw,
-          },
+          band: { p10Kw: uncertainty.p10AcPowerKw, p90Kw: uncertainty.p90AcPowerKw },
         };
   });
 };

@@ -140,6 +140,26 @@ export const siteOverlayFailureNotice = (siteName: string): string =>
   `${siteName}’s own forecast could not be loaded, so the chart shows the fleet only.`;
 
 /**
+ * The fleet's forecast arrived; its simulated actuals did not.
+ *
+ * The third of this family, and it earns its place the same way the second did.
+ * The fleet's two reads are two requests over two windows — a per-site forecast
+ * fan-out and one metered `/v1/fleet/actuals` call (#264) — so either can fail
+ * without the other, and the panel used to answer a failed actuals read by
+ * withdrawing the whole chart under {@link fleetForecastFailureMessage}. That
+ * blamed the forecast for a failure the forecast had nothing to do with, which
+ * is the wrong party named to a reader who might go looking at the wrong thing
+ * (`error-handling.md` rule 1's blame tiebreak), and it threw away a complete
+ * fleet sum that had already arrived (rule 5).
+ *
+ * A constant rather than a function, unlike its sibling above: there is one
+ * fleet, so there is no name to interpolate. The source's own message is left
+ * off for the sibling's reason — the recourse here is a button, not a diagnosis.
+ */
+export const FLEET_ACTUALS_FAILURE_NOTICE =
+  'The fleet’s simulated actuals could not be loaded, so the chart shows the forecast only.';
+
+/**
  * The first-forecast poll gave up before the pipeline answered.
  *
  * The deadline is a parameter rather than baked into the sentence: the number

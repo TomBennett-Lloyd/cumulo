@@ -1,7 +1,6 @@
 import {
   aggregateFleetActuals,
   aggregateFleetForecast,
-  fleetCapacityKw,
   type Forecast,
   type GenerationReading,
   type Site,
@@ -13,14 +12,24 @@ import type { ChartOverlaySeries, ForecastChartPoint } from '../charts/ForecastC
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { InfoTip } from '../info/InfoTip';
+import {
+  chartCopy,
+  fleetStatsLine,
+  HORIZON_CAPTION,
+  SUBTITLE_FORECAST_ONLY,
+  SUBTITLE_WITH_ACTUALS,
+  windowLabel,
+  WINDOW_CAPTION_WITH_ACTUALS,
+  type ChartCopy,
+} from './fleet-panel-copy';
 import { joinFleetSeries, minimumContributingSites } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
-import { RangePicker, rangeLabel } from './range-picker';
-import { capacityLabel } from './site-format';
+import { RangePicker } from './range-picker';
 import { siteOverlaySeries } from './site-overlay';
 import {
   aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
+  FLEET_ACTUALS_FAILURE_NOTICE,
   fleetForecastFailureMessage,
   LOADING_FLEET_FORECAST_LABEL,
   NO_FLEET_FORECAST_MESSAGE,
@@ -112,105 +121,39 @@ import {
 const DEFAULT_RANGE: RangeHours = 24;
 
 /**
- * What the panel says instead of offering a window it cannot serve.
+ * What the fleet's second read contributed, once the first one has answered.
  *
- * The number is spelled out rather than derived from {@link DEFAULT_RANGE}: this
- * is a sentence about what the reader is looking at, and a caption assembled
- * from a constant would silently rewrite itself if the default ever moved.
+ * A union rather than a list plus a boolean (`typing.md` rule 4): "some readings
+ * and also a failure" is not a state this panel has — the actuals arrive whole
+ * or not at all — and the failed arm carries nothing because the notice it
+ * produces names no detail.
  */
-const HORIZON_CAPTION = 'Forecast horizon: next 24 hours';
+type FleetActualsState =
+  | { readonly kind: 'readings'; readonly readings: readonly GenerationReading[] }
+  | { readonly kind: 'failed' };
 
-/**
- * The same sentence for a source that carries actuals without a look-back
- * picker: the plot then reaches behind the horizon as well, and a caption
- * naming only the next 24 hours would describe half of what is drawn.
- */
-const WINDOW_CAPTION_WITH_ACTUALS =
-  'Simulated actuals for the past 24 hours; forecast for the next 24.';
-
-/** How the chart's labels name that same horizon, in the terser register a label wants. */
-const HORIZON_WINDOW_LABEL = 'next 24 h';
-
-/** And how they name the two-sided window the caption above describes. */
-const PAST_AND_HORIZON_WINDOW_LABEL = 'past 24 h and next 24 h';
-
-const SUBTITLE_WITH_ACTUALS =
-  'Every site’s forecast, summed hour by hour, with the fleet’s P10–P90 band and simulated actuals (the demo fleet has no real inverters).';
-
-const SUBTITLE_FORECAST_ONLY =
-  'Every site’s forecast for the hours ahead, summed hour by hour, with the fleet’s P10–P90 band.';
-
-/** Plural is the fleet's usual state; the singular exists so the demo's first site reads right. */
-const siteCountLabel = (count: number): string =>
-  `${String(count)} ${count === 1 ? 'site' : 'sites'}`;
-
-/**
- * The fleet in one line: how many, and how much of it there is.
- *
- * Capacity comes from `@cumulo/shared` rather than a sum written here, because
- * fleet arithmetic lives there (`architecture.md` rule 3) and a second sum would
- * be a second definition of the fleet's size.
- */
-const fleetStatsLine = (sites: readonly Site[]): string =>
-  `${siteCountLabel(sites.length)} · ${capacityLabel(fleetCapacityKw(sites))} installed`;
-
-/**
- * The window the chart's labels name.
- *
- * Three answers rather than two, because the flags move independently and #264
- * made the third combination real: a chosen look-back names itself, and without
- * a picker the window is the bare horizon or — once the source carries actuals —
- * the horizon with the actuals' hours behind it. Named from what is *drawn*, not
- * from what was asked for: a source with actuals plots hours before now whether
- * or not a picker exists, and "next 24 h" over those hours is the chart
- * misdescribing itself.
- */
-const windowLabel = (range: RangeHours, canLookBack: boolean, hasActuals: boolean): string => {
-  if (canLookBack) {
-    return `${rangeLabel(range)} range`;
-  }
-  return hasActuals ? PAST_AND_HORIZON_WINDOW_LABEL : HORIZON_WINDOW_LABEL;
-};
-
-/** The chart is named twice — for assistive technology, and above its table twin. */
-interface ChartCopy {
-  readonly ariaLabel: string;
-  readonly tableCaption: string;
-}
-
-/**
- * Both of the chart's names, written out per capability rather than assembled
- * from a conditional clause.
- *
- * Two whole arms so the honesty rule is auditable by reading them side by side:
- * the words "simulated actuals" appear only in the arm a source with
- * `fleetActuals` reaches. An accessible name is copy like any other, and it is
- * the copy easiest to leave promising something the data cannot show — and
- * "simulated" is load-bearing in it, because these hours are synthesised by the
- * forecast service (#264) rather than metered off an inverter.
- */
-const chartCopy = (windowText: string, hasActuals: boolean): ChartCopy =>
-  hasActuals
-    ? {
-        ariaLabel: `Fleet forecast and simulated actuals, ${windowText}`,
-        tableCaption: `Table view — fleet forecast and simulated actuals, ${windowText}, kW`,
-      }
-    : {
-        ariaLabel: `Fleet forecast, ${windowText}`,
-        tableCaption: `Table view — fleet forecast, ${windowText}, kW`,
-      };
-
-/** The two source calls this panel makes, once both have answered. */
+/** The two source calls this panel makes, once the forecast has answered. */
 interface FleetSeries {
   readonly forecasts: readonly Forecast[];
-  readonly actuals: readonly GenerationReading[];
+  readonly actuals: FleetActualsState;
 }
 
 /**
  * Collapse the two queries into the one state the panel renders.
  *
- * Failure wins over loading: a reader is owed the reason something is missing
- * before they are owed a spinner for the parts still arriving.
+ * **Only the forecast can take the panel down, and that asymmetry is the whole
+ * of this function.** These are two requests over two windows — a per-site
+ * forecast fan-out and one metered `/v1/fleet/actuals` call — so either can fail
+ * alone, and a failed actuals read used to be returned here as *the* failure:
+ * the panel then withdrew a fleet sum that had already arrived and reported it
+ * under the forecast's name, blaming a party that had not failed
+ * (`error-handling.md` rule 1's blame tiebreak) and discarding a complete answer
+ * to say so (rule 5). A failed actuals read is now a `ready` state carrying a
+ * `failed` actuals arm, which `readyBody` draws as the chart plus a notice.
+ *
+ * Loading still waits for both. A chart that painted the forecast and then grew
+ * a past half a moment later would be the panel reflowing under a reader who is
+ * already reading it, which is a worse trade than one spinner.
  */
 const combineFleetQueries = (
   forecasts: QueryState<readonly Forecast[]>,
@@ -219,13 +162,19 @@ const combineFleetQueries = (
   if (forecasts.status === 'failed') {
     return forecasts;
   }
-  if (actuals.status === 'failed') {
-    return actuals;
-  }
   if (forecasts.status === 'loading' || actuals.status === 'loading') {
     return { status: 'loading' };
   }
-  return { status: 'ready', data: { forecasts: forecasts.data, actuals: actuals.data } };
+  return {
+    status: 'ready',
+    data: {
+      forecasts: forecasts.data,
+      actuals:
+        actuals.status === 'failed'
+          ? { kind: 'failed' }
+          : { kind: 'readings', readings: actuals.data },
+    },
+  };
 };
 
 /**
@@ -271,6 +220,8 @@ interface FleetChartContext {
   readonly overlay: OverlayState;
   /** Re-asks for the selected site's hours, and only those. */
   readonly onRetryOverlay: () => void;
+  /** Re-asks for the fleet's readings, and only those — never the forecast fan-out. */
+  readonly onRetryActuals: () => void;
 }
 
 /**
@@ -297,13 +248,19 @@ const fleetChart = (
 };
 
 /**
- * The chart is complete and the line over it is not, said out loud.
+ * A chart that arrived, with one of its series missing and a way to re-ask.
  *
- * Partial results are labelled partial (`error-handling.md` rule 5), and an
- * overlay that failed silently is the exact shape that rule refuses: the reader
- * selected a site, the chart drew a fleet, and nothing on screen distinguished
- * "this site tracks the fleet's shape closely" from "this site's line never
- * arrived".
+ * Both of this panel's partial states render through here, because they are one
+ * intent in two subjects (`structure.md` rule 7): a complete answer stands, the
+ * missing part is named, and the recourse is the single cheap request that could
+ * supply it. What differs is only the sentence and which counter the button
+ * bumps, so those are the parameters and nothing else is.
+ *
+ * Partial results are labelled partial (`error-handling.md` rule 5), and a
+ * series that failed silently is the exact shape that rule refuses: nothing on
+ * screen distinguishes "this site tracks the fleet closely" from "this site's
+ * line never arrived", or a fleet with no simulated actuals from a fleet whose
+ * actuals did not load.
  *
  * Deliberately **not** a live region. `react.md` budgets one per panel and this
  * panel's is the chart's own readout, which is the announcement a reader asked
@@ -311,20 +268,31 @@ const fleetChart = (
  * It is the same non-live treatment the completeness note above uses, for the
  * same reason — an incomplete answer is a caption on the answer, not an event.
  *
- * It carries a retry because re-asking genuinely can work: this is one request
- * for one site, not the fleet's fan-out, so the button spends what a fresh
- * selection would spend and nothing more. That is the test `react.md` sets for
- * offering one at all.
+ * The retry is offered because re-asking genuinely can work *and* is cheap: one
+ * site's hours, or the fleet's one metered actuals request. Neither re-spends
+ * the paced per-site forecast fan-out, which is the test `react.md` sets for
+ * offering a retry at all.
  */
+const partialSeriesNote = (message: string, onRetry: () => void): ReactElement => (
+  <p className="panel-notice">
+    {message}{' '}
+    <button type="button" className="panel-retry" onClick={onRetry}>
+      {RETRY_ACTION_LABEL}
+    </button>
+  </p>
+);
+
 const overlayNote = (overlay: OverlayState, onRetry: () => void): ReactElement | null =>
-  overlay.kind === 'failed' ? (
-    <p className="panel-notice">
-      {siteOverlayFailureNotice(overlay.siteName)}{' '}
-      <button type="button" className="panel-retry" onClick={onRetry}>
-        {RETRY_ACTION_LABEL}
-      </button>
-    </p>
-  ) : null;
+  overlay.kind === 'failed'
+    ? partialSeriesNote(siteOverlayFailureNotice(overlay.siteName), onRetry)
+    : null;
+
+const actualsNote = (actuals: FleetActualsState, onRetry: () => void): ReactElement | null =>
+  actuals.kind === 'failed' ? partialSeriesNote(FLEET_ACTUALS_FAILURE_NOTICE, onRetry) : null;
+
+/** No readings is what a failed actuals read leaves the chart: a forecast, and no second series. */
+const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
+  actuals.kind === 'readings' ? actuals.readings : [];
 
 const readyBody = (data: FleetSeries, context: FleetChartContext): ReactElement => {
   const forecastPoints = aggregateFleetForecast(data.forecasts);
@@ -335,8 +303,12 @@ const readyBody = (data: FleetSeries, context: FleetChartContext): ReactElement 
   return (
     <div className="fleet-panel-body">
       {completenessNote(minimumContributingSites(forecastPoints), context.siteCount)}
+      {actualsNote(data.actuals, context.onRetryActuals)}
       {overlayNote(context.overlay, context.onRetryOverlay)}
-      {fleetChart(joinFleetSeries(forecastPoints, aggregateFleetActuals(data.actuals)), context)}
+      {fleetChart(
+        joinFleetSeries(forecastPoints, aggregateFleetActuals(readingsOf(data.actuals))),
+        context,
+      )}
     </div>
   );
 };
@@ -436,14 +408,18 @@ export const FleetPanel = ({
    * imperative refetch: `useFleetQuery` re-runs on key change and nothing else,
    * and a counter is the smallest honest way to say "ask again".
    *
-   * Two counters, not one, and the split is about cost. The fleet's retry
-   * re-spends a paced per-site fan-out; the overlay's re-asks a single site for
-   * a single window. A shared counter would make the cheap recourse buy the
-   * expensive request as well — a reader pressing "try again" on one missing
-   * line would silently re-sum sixty sites — and would make the expensive one
-   * refetch a line that never failed.
+   * Three counters, not one, and the split is about cost. The forecast's retry
+   * re-spends a paced per-site fan-out; the actuals' re-asks one metered
+   * `/v1/fleet/actuals` request; the overlay's re-asks a single site for a single
+   * window. A shared counter makes every cheap recourse buy the expensive request
+   * too — a reader pressing "try again" on one missing series would silently
+   * re-sum sixty sites — and makes the expensive one refetch series that never
+   * failed. The actuals got their own in #264's review: they had been keyed on
+   * `fleetAttempt` alongside the fan-out, so the one button offered for the
+   * cheapest failure on the panel was spending the most expensive request on it.
    */
   const [fleetAttempt, setFleetAttempt] = useState(0);
+  const [actualsAttempt, setActualsAttempt] = useState(0);
   const [overlayAttempt, setOverlayAttempt] = useState(0);
 
   /*
@@ -467,7 +443,7 @@ export const FleetPanel = ({
   );
   const actuals = useFleetQuery(
     () => dataSource.fleetActuals(range),
-    ['fleet-actuals', range, refreshToken, fleetAttempt],
+    ['fleet-actuals', range, refreshToken, actualsAttempt],
     { enabled },
   );
   /*
@@ -492,6 +468,9 @@ export const FleetPanel = ({
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
   const retryFleet = (): void => {
     setFleetAttempt((previous) => previous + 1);
+  };
+  const retryActuals = (): void => {
+    setActualsAttempt((previous) => previous + 1);
   };
   const retryOverlay = (): void => {
     setOverlayAttempt((previous) => previous + 1);
@@ -565,6 +544,7 @@ export const FleetPanel = ({
               chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals),
               overlay,
               onRetryOverlay: retryOverlay,
+              onRetryActuals: retryActuals,
             },
             retryFleet,
           )}
