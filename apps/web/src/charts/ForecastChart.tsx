@@ -24,7 +24,7 @@ import {
   axisTitleElements,
   gridElements,
   horizonElements,
-  xLabelElements,
+  xAxisElements,
 } from './forecast-chart-axes';
 import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
 import { forecastChartLegend } from './forecast-chart-legend';
@@ -229,8 +229,8 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {medianElements(points, medianRuns, scale)}
         {overlay === undefined ? null : overlayElements(overlay.values, scale)}
         {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
-        {xLabelElements(points, scale, spanHours)}
-        {axisTitleElements(width)}
+        {xAxisElements(points, scale)}
+        {axisTitleElements(scale.plot)}
         <ForecastChartHoverLayer
           points={points}
           activeIndex={activeIndex}

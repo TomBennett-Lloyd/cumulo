@@ -219,13 +219,8 @@ plot clears the fold under the map, which is what D15 is actually about.
 
 ## The time axis
 
-**The time axis runs on UTC.** Tick labels are UTC wall time — `HH:mm`, gaining a short weekday
-prefix (`Thu 14:00`) from a full day of span onwards, which is exactly when a wall-clock time can
-appear twice on one axis and a bare `14:00` stops identifying a point. A day, not two: the default
-24 h window plots 24 hours back and 24 forward, so it carries 48 hours of ticks whose first and
-last read the same hour, and unprefixed they name two different moments identically — in the chart
-and in the table twin's row headers.
-The rendered value is never the reader's local zone, and never a per-site local zone.
+**The time axis runs on UTC.** Every label it prints is UTC wall time. The rendered value is never
+the reader's local zone, and never a per-site local zone.
 Settled in [#19](https://github.com/TomBennett-Lloyd/cumulo/issues/19) rather than left to whoever
 writes the next chart, for two reasons:
 
@@ -244,13 +239,62 @@ in words somewhere in its chrome — an axis title, a caption, or the table twin
 per-site local axis stays open as a product decision, gated on carrying a timezone per site; it is
 not a rendering tweak.
 
-**Settled: every chart states the clock.** The plot prints `Times in UTC` in its chrome, top right,
-mirroring the `kW` axis title at the other end of the same band; the table twin heads its time
-column `Time (UTC)`. Both strings live in `apps/web/src/charts/chart-copy.ts`, and a new chart or
-table twin consumes them rather than inventing its own wording — the obligation above is only
-inheritable if the words are. This closes the chrome half of
+**Settled: every chart states the clock, under the axis the clock applies to.** The time axis is
+titled `Time (UTC)` beneath its labels, and the table twin heads its time column with the same
+words out of the same constant — `TIME_COLUMN_HEADER` in `apps/web/src/charts/chart-copy.ts`, which
+a new chart or table twin consumes rather than inventing its own spelling of "UTC". The obligation
+above is only inheritable if the words are. This closes the chrome half of
 [#104](https://github.com/TomBennett-Lloyd/cumulo/issues/104). The per-site local axis stays open,
 still gated on carrying a timezone per site.
+
+Until #284 D10 a second string discharged the same obligation — `Times in UTC`, floated in the
+plot's top-right corner as a note about the whole chart, beside a `kW` title at the other end of
+that band. One phrase, printed under the ticks it governs, replaced both: an axis title is where a
+reader looks for the units of an axis, and two constants saying "UTC" were two things to keep true.
+
+**Two tiers, and labels that thin rather than shrink** (#284 D9). The axis carries two rows: bare
+two-digit UTC hours (`06`, `12`, `18`) and, beneath them, the day each run of hours falls in
+(`Wed 6` — weekday plus day-of-month, because a week-long window carries each weekday twice).
+Between them they say what one tier needed `Thu 14:00` on every tick to say, in about a third of
+the width, which is what makes the rule below satisfiable on a narrow chart at all.
+
+The rule is that **no label may crowd its neighbour**, stated as an inequality rather than as a
+label budget: for consecutive labels in one tier, the distance between their centres is at least
+half of each label's width plus a fixed gap. An axis that cannot satisfy it labels fewer instants —
+never smaller ones. Text is the one thing on this canvas that does not scale with the panel (see
+the 1:1 rule above), so shrinking is not an available answer, and it would trade a legibility
+problem for a worse one. The invariant, the character-width model behind it and the search for the
+coarsest hour step that satisfies it are `apps/web/src/charts/chart-axis-ticks.ts`'s, swept over
+plot widths and window spans by its colocated suite; `apps/web/e2e/chart-surfaces.spec.ts` is what
+checks the modelled widths against glyphs a browser actually shaped.
+
+What this replaced thinned to a fixed count — at most eight labels, whatever the width — which is a
+guess about how much room eight labels need. It was wrong in the narrow direction: at about 436px
+of chart the `Thu 14:00` ticks ran into each other while every one of them stayed inside the
+canvas, so the containment case that guards the plot edge could not see it. That is the defect
+[#259](https://github.com/TomBennett-Lloyd/cumulo/issues/259) was opened about, and the invariant
+absorbs it.
+
+The day-qualified long form (`Thu 14:00`) did not go away — it moved to the surfaces that show one
+instant with no neighbouring tick to qualify it: the table twin's row headers, the hover tooltip,
+and the spoken readout. There a prefix is the whole of what identifies the sample.
+
+**Axis titles run parallel to the axis they name** (#284 D10). `Power (kW)` is rotated a quarter
+turn and reads up the left gutter beside the values it counts; `Time (UTC)` sits centred under the
+time axis. Both used to sit side by side in the band above the plot, where `kW` was as close to the
+time axis as to the one it belonged to. Position is most of what makes an axis title unambiguous,
+and a rotated title costs nothing but the gutter width it already needed.
+
+**Settled: the axis is index-spaced, and the seam is marked rather than left as a gap**
+([#290](https://github.com/TomBennett-Lloyd/cumulo/issues/290)). Samples are placed at even
+intervals by their position in the series, not by their distance in time. Time-proportional
+placement was considered and declined: the product's series are hourly and regular, so the two
+agree everywhere except across the join between measured hours and forecast ones, where the partial
+current hour is elided by construction rather than drawn as a hole the reader would have to
+interpret. The horizon rule already stands exactly at that join — it is where the measurements stop
+— so the seam is marked by a mark that is there for other reasons, and no second one is drawn for
+the elided hour. Reopen this only if a data source ever produces genuinely irregular sampling,
+which would make the two placements disagree about every point rather than about one.
 
 ## Categorical series order
 

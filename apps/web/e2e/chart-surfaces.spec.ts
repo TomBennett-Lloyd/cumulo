@@ -51,8 +51,11 @@ import { openSiteTable } from './site-table';
  * reports a box that pokes out above it, by the empty band between the ascent
  * and the tallest letter. The chart's two axis titles do exactly that: measured
  * here at 1.7px over a 13px box (1.9px at a 500x600 viewport), while a
- * screenshot shows "kW" and "Times in UTC" drawn whole. A one-pixel budget would
- * therefore fail on the shipping chart for a band of empty space.
+ * screenshot shows both titles — `Power (kW)` up the left gutter and
+ * `Time (UTC)` under the time axis, where #284 D10 put them; the pair they
+ * replaced is `docs/design/chart-treatment.md`'s to remember — drawn whole. A
+ * one-pixel budget would therefore fail on the shipping chart for a band of
+ * empty space.
  *
  * Stated as a share it is font-invariant, which a pixel count is not: the slack
  * this budget exists to absorb is a band of empty space inside the glyph box, so
@@ -111,6 +114,67 @@ const escapedLabels = async (figure: Locator): Promise<readonly string[]> =>
       return escaped.length === 0 ? [] : [`${text} — escapes ${escaped.join(', ')}`];
     });
   }, LABEL_CONTAINMENT_TOLERANCE);
+
+/**
+ * Clear space demanded between two neighbouring labels of one x-axis tier, in
+ * rendered pixels.
+ *
+ * The browser-side half of #284 D9. `chart-axis-ticks.ts` thins each tier until
+ * its labels satisfy an overlap invariant computed from a *modelled* character
+ * width — a mean advance, which is the only thing a pure function can know about
+ * text it will never see laid out. This is the case that checks the model
+ * against the glyphs a real engine actually shaped, and it is the reason the
+ * model is deliberately generous: a mean is not a bound, so a row of wide
+ * characters is modelled a little narrow and the slack is what absorbs it.
+ *
+ * Four pixels rather than the eight user units the model demands, and the gap
+ * measured differently at each end: the model works centre-to-centre with
+ * modelled widths, this works edge-to-edge with real boxes. The two cannot be
+ * compared directly, so this is a floor on the visible outcome — labels that are
+ * plainly two labels — not a restatement of the invariant (`architecture.md`
+ * rule 9). What it has to catch is #259's defect: adjacent ticks touching or
+ * overlapping, which at ~436px of chart the old fixed-count axis did.
+ */
+const MIN_RENDERED_LABEL_GAP = 4;
+
+/** The two rows of the time axis, each of which must not crowd itself. */
+const X_TIER_SELECTORS: readonly string[] = [
+  '.forecast-chart-axis-time',
+  '.forecast-chart-axis-day',
+];
+
+/**
+ * Every pair of neighbouring tick labels that is too close to read as two,
+ * described — the same reading-is-the-diagnosis shape as `escapedLabels`.
+ *
+ * Per tier, never across them: the hours and the days are drawn on separate
+ * rows, so a horizontal gap between an hour and a day a row below it is not a
+ * collision and asserting on it would be measuring nothing. Sorted by position
+ * rather than trusted in document order, so the reading survives a builder that
+ * emits labels in some other sequence.
+ */
+const crowdedTickLabels = async (figure: Locator): Promise<readonly string[]> =>
+  figure.locator(PLOT_SVG).evaluate(
+    (svg, { minGap, selectors }) =>
+      selectors.flatMap((selector) => {
+        const labels = [...svg.querySelectorAll(selector)]
+          .map((label) => ({ text: label.textContent, box: label.getBoundingClientRect() }))
+          .sort((left, right) => left.box.left - right.box.left);
+
+        return labels.flatMap((label, index) => {
+          const next = labels[index + 1];
+          if (next === undefined) {
+            return [];
+          }
+          const gap = next.box.left - label.box.right;
+
+          return gap >= minGap
+            ? []
+            : [`${selector}: "${label.text}" and "${next.text}" are ${gap.toFixed(1)}px apart`];
+        });
+      }),
+    { minGap: MIN_RENDERED_LABEL_GAP, selectors: X_TIER_SELECTORS },
+  );
 
 /**
  * How far the plot's right edge may sit from its panel's before the chart is not
@@ -191,6 +255,31 @@ const expectChartLaidOut = async (figure: Locator): Promise<void> => {
   await expect
     .poll(async () => escapedLabels(figure), {
       message: 'Axis labels are being clipped at the edge of the plot.',
+    })
+    .toEqual([]);
+
+  /*
+   * The second vacuity guard, and the sharper of the two. "No two labels are too
+   * close" is satisfied by an axis carrying one label, or none — which is
+   * exactly what over-eager thinning produces, and exactly the failure the
+   * assertion below cannot see on its own. Two hours is the least that makes the
+   * adjacency claim mean anything.
+   */
+  await expect
+    .poll(async () => figure.locator(`${PLOT_SVG} .forecast-chart-axis-time`).count(), {
+      message: 'The time axis is drawing fewer labels than it takes to have neighbours.',
+    })
+    .toBeGreaterThan(1);
+
+  /*
+   * #259, discharged: neighbouring tick labels do not touch. Polled for the same
+   * reason containment is — the labels are re-laid-out as the column settles and
+   * the font resolves, and a gap read mid-reflow is a gap between boxes that are
+   * still moving.
+   */
+  await expect
+    .poll(async () => crowdedTickLabels(figure), {
+      message: 'Adjacent x-axis tick labels are crowding each other.',
     })
     .toEqual([]);
 };
@@ -359,6 +448,35 @@ test.describe('the first viewport', () => {
    * margins have to hold a label in.
    */
   test('keeps its labels inside the plot at the desktop viewport too', async ({ page }) => {
+    await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
+  });
+});
+
+/**
+ * A narrow window — the width at which the axis has least room to work with.
+ *
+ * 500px is not a phone and is not meant to be: it is the width that makes the
+ * label budget bite hardest among the viewports this lane can hold the whole
+ * dashboard at. The chart's drawing width here is a few hundred pixels for a
+ * window that can be two days or a week long, which is where a fixed label count
+ * produced the collisions #259 was opened about.
+ */
+const NARROW_VIEWPORT = { width: 500, height: 800 } as const;
+
+test.describe('a narrow window', () => {
+  test.use({ viewport: NARROW_VIEWPORT });
+
+  /*
+   * The same contract as the default viewport's resting-state case, at the width
+   * that tests it. Both the containment claim and the crowding claim live in
+   * `expectChartLaidOut`, and both are width-dependent in opposite directions:
+   * a wide plot spreads its labels and clips nothing, a narrow one has to drop
+   * labels to keep the ones it draws apart. A chart asserted at only one of the
+   * two widths is asserted at the easy one.
+   */
+  test('keeps its tick labels apart, and inside the plot, at a narrow viewport', async ({
+    page,
+  }) => {
     await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
   });
 });

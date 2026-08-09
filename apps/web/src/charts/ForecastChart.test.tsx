@@ -3,8 +3,7 @@
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { xForIndex, yForKw } from './chart-geometry';
-import type { ChartOverlaySeries, ForecastChartPoint } from './chart-series';
-import { HORIZON_LABEL_WIDTH } from './forecast-chart-axes';
+import type { ChartOverlaySeries } from './chart-series';
 import {
   anchorCount,
   banded,
@@ -33,32 +32,13 @@ afterEach(cleanup);
  */
 const LONE_BAND_AXIS_MAX_KW = 8;
 
-const MS_PER_HOUR = 3_600_000;
-/** The fixture source's 7-day window: 168 hours back, now, and 24 forward. */
-const WEEK_RANGE_POINT_COUNT = 193;
-const WEEK_RANGE_LAST_MEASURED_INDEX = 168;
-
-/**
- * The series shape the 7-day view actually renders. Its horizon sits seven
- * eighths across the plot, which is where the label ran off the right of the
- * canvas and rendered as "forecast hori…".
+/*
+ * The plot's chrome moved out when #284 D9/D10 gave the time axis a second tier
+ * and both titles a rotation to assert: the horizon rule and its label, the two
+ * tiers, and the axis titles are `forecast-chart-axes.test.tsx`'s, beside the
+ * module that draws them. What is left here is the data — band, bounds, median,
+ * actuals, the gaps none of them bridge, and the table twin.
  */
-const weekRangeSeries = (): readonly ForecastChartPoint[] =>
-  Array.from({ length: WEEK_RANGE_POINT_COUNT }, (_unused, index) => ({
-    validTimeIso: new Date(Date.UTC(2026, 6, 23, 12) + index * MS_PER_HOUR).toISOString(),
-    medianKw: 4,
-    band: { p10Kw: 3, p90Kw: 5 },
-    actualKw: index <= WEEK_RANGE_LAST_MEASURED_INDEX ? 3.5 : null,
-  }));
-
-const horizonLabel = (container: HTMLElement): Element => {
-  const labels = [...container.querySelectorAll('.forecast-chart-axis-label')];
-  const found = labels.find((element) => element.textContent === 'forecast horizon');
-  if (found === undefined) {
-    throw new Error('no horizon label');
-  }
-  return found;
-};
 
 describe('ForecastChart', () => {
   it('renders the uncertainty band as a fill with no fill-opacity attribute', () => {
@@ -179,61 +159,6 @@ describe('ForecastChart', () => {
     expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(0);
   });
 
-  it('rules the forecast horizon at the last measured sample', () => {
-    const container = renderChart(SERIES);
-    const horizon = requireMark(container, '.forecast-chart-horizon');
-
-    expect(horizon.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, JSDOM_PLOT)));
-    expect(horizon.getAttribute('x1')).toBe(horizon.getAttribute('x2'));
-    expect(container.textContent).toContain('forecast horizon');
-  });
-
-  it('labels the horizon to the right of its rule while there is room for it', () => {
-    const container = renderChart(SERIES);
-    const label = horizonLabel(container);
-    const ruleX = Number(requireMark(container, '.forecast-chart-horizon').getAttribute('x1'));
-
-    expect(label.getAttribute('text-anchor')).toBe('start');
-    expect(Number(label.getAttribute('x'))).toBeGreaterThan(ruleX);
-    expect(Number(label.getAttribute('x')) + HORIZON_LABEL_WIDTH).toBeLessThanOrEqual(
-      JSDOM_PLOT.right,
-    );
-  });
-
-  /*
-   * The 7-day window shipped with this label clipped off the canvas. The
-   * assertion is the whole extent of the text, not just its anchor: an anchor
-   * inside the plot with the words running out of it is the defect.
-   */
-  it('flips the horizon label inwards when the horizon sits late in the window', () => {
-    const container = renderChart(weekRangeSeries());
-    const label = horizonLabel(container);
-    const anchorX = Number(label.getAttribute('x'));
-    const ruleX = xForIndex(WEEK_RANGE_LAST_MEASURED_INDEX, WEEK_RANGE_POINT_COUNT, JSDOM_PLOT);
-
-    expect(requireMark(container, '.forecast-chart-horizon').getAttribute('x1')).toBe(
-      String(ruleX),
-    );
-    // Where the words actually end, which depends on which end is anchored —
-    // an anchor inside the plot with the text running out of it is the defect.
-    const rightEdge =
-      label.getAttribute('text-anchor') === 'end' ? anchorX : anchorX + HORIZON_LABEL_WIDTH;
-
-    expect(rightEdge).toBeLessThanOrEqual(JSDOM_PLOT.right);
-    expect(label.getAttribute('text-anchor')).toBe('end');
-    expect(anchorX).toBeLessThan(ruleX);
-    expect(anchorX - HORIZON_LABEL_WIDTH).toBeGreaterThanOrEqual(JSDOM_PLOT.left);
-  });
-
-  it('omits the horizon and its marker when nothing has been measured', () => {
-    const container = renderChart(SERIES.map((point) => ({ ...point, actualKw: null })));
-
-    expect(marks(container, '.forecast-chart-horizon')).toHaveLength(0);
-    expect(marks(container, '.forecast-chart-actuals-marker')).toHaveLength(0);
-    expect(marks(container, '.forecast-chart-actuals')).toHaveLength(0);
-    expect(container.textContent).not.toContain('forecast horizon');
-  });
-
   it('lists all three series in draw order even when nothing is measured', () => {
     const container = renderChart(SERIES.map((point) => ({ ...point, actualKw: null })));
     const entries = [...container.querySelectorAll('.forecast-chart-legend li')];
@@ -263,19 +188,6 @@ describe('ForecastChart', () => {
       'Sunnyside Farm: forecast and actuals',
     );
     expect(container.querySelector('caption')?.textContent).toBe('Table view — Sunnyside Farm, kW');
-  });
-
-  /*
-   * The axis is UTC and never the reader's local zone, which chart-treatment.md
-   * accepts only on condition that the chart says so in its chrome. Both strings
-   * are written out here rather than imported from `chart-copy.ts`: a test that
-   * imports the constant it checks asserts nothing about the wording, and would
-   * follow a silent rename straight past the reader who needs the words.
-   */
-  it('states its clock in the plot chrome', () => {
-    const container = renderChart(SERIES);
-
-    expect(requireSvg(container).textContent).toContain('Times in UTC');
   });
 
   it('heads the table twin’s time column with the clock', () => {

@@ -209,6 +209,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The coarser of the time axis's two tiers (#284 D9). Both tiers wear the axis
+ * label ink above; the day carries one step of extra weight so it reads as the
+ * frame the hours hang on rather than as a second, longer kind of tick — the
+ * same size and the same colour, because it is the same axis, and nothing else
+ * to tell them apart would leave two rows of undifferentiated numbers.
+ *
+ * `.forecast-chart-axis-time` deliberately has no rule of its own: it is the
+ * tier's name in the DOM, which is what lets `e2e/chart-surfaces.spec.ts` read
+ * one row's rendered boxes without picking up the other's — the overlap claim is
+ * per tier, and comparing an hour against a day a row below it would be
+ * measuring nothing. */
+.forecast-chart-axis-day {
+  font-weight: var(--font-weight-medium);
+}
+
 .forecast-chart-axis-title {
   fill: var(--color-text-muted);
   font-family: var(--font-sans);
