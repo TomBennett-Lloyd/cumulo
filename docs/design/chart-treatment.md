@@ -86,12 +86,20 @@ Composition rules that keep both legible where they overlap:
   (r ≥ 4) and ringed in the surface colour so that an actuals dot crossing the median line, or two
   dots overlapping at a shared timestamp, stay countable. The ring is spacing, not a border — no
   mark ever gets a stroke drawn around it to separate it from another mark.
-- **The forecast horizon boundary is a vertical hairline** in `--color-chart-grid` with a small
-  direct label in `--color-chart-axis-label`, at the last timestamp with a measurement. Actuals
-  stop there; band and median continue past it. On the live fleet chart they do not merely continue
-  past it, they _begin_ at it — the two windows are disjoint, so the boundary is where one series
-  hands over to the other rather than where they overlap. The boundary is marked once, in chrome,
-  rather than by dashing the forecast line.
+- **The forecast horizon boundary is a dashed vertical hairline** in `--color-chart-grid` with a
+  small direct label in `--color-chart-axis-label`, at the last timestamp with a measurement.
+  Actuals stop there; band and median continue past it. On the live fleet chart they do not merely
+  continue past it, they _begin_ at it — the two windows are disjoint, so the boundary is where one
+  series hands over to the other rather than where they overlap. The boundary is marked once, in
+  chrome, rather than by dashing the forecast line. **The dash is what makes it read as a
+  boundary** ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11): drawn solid it
+  wore the gridlines' ink at the gridlines' weight, so the one vertical on the plot that means
+  something was told from the ones that mean nothing only by where it happened to fall. It stays
+  recessive — same ink, same hairline weight, chrome rather than data — because what changed is
+  legibility, not importance. This is the single exception to the no-dashed-chrome rule below, and
+  it is an exception on that rule's own terms: a dash reads as a threshold, and a threshold is
+  exactly what the seam is. The dash pattern itself belongs to `.forecast-chart-horizon` in
+  [`apps/web/src/charts/charts.css`](../../apps/web/src/charts/charts.css) and is not restated here.
 - **A gap _inside_ a series breaks the line. It is never bridged.** The horizon rule above says
   where the measurements stop; this says what a missing hour before that boundary looks like. A
   null actual ends the run and the line restarts after the gap, so the actuals series is drawn once
@@ -196,7 +204,9 @@ rule.
 
 - **Gridlines: `--color-chart-grid`, hairline (1px), solid, horizontal only.** Never dashed —
   dashing reads as "projection" or "threshold" when it is just a grid. The grid sits one step off
-  the surface and stays recessive.
+  the surface and stays recessive. The horizon rule is the one dashed mark on the canvas and does
+  not weaken this: it is not a gridline, and it is dashed for the reason the grid is not — it
+  genuinely is a threshold (see the horizon bullet above).
 - **Axis ticks and labels: `--color-chart-axis-label` at `--text-xs`**, with
   `font-variant-numeric: tabular-nums` so tick values align vertically. Axis titles use
   `--color-text-muted`.
@@ -293,7 +303,10 @@ agree everywhere except across the join between measured hours and forecast ones
 current hour is elided by construction rather than drawn as a hole the reader would have to
 interpret. The horizon rule already stands exactly at that join — it is where the measurements stop
 — so the seam is marked by a mark that is there for other reasons, and no second one is drawn for
-the elided hour. Reopen this only if a data source ever produces genuinely irregular sampling,
+the elided hour. That puts real weight on the horizon rule being _seen_, which is why it is dashed
+([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11, in the horizon bullet above): a
+seam marked by a line indistinguishable from the grid is a seam marked in name only.
+Reopen this only if a data source ever produces genuinely irregular sampling,
 which would make the two placements disagree about every point rather than about one.
 
 ## Categorical series order
@@ -343,8 +356,16 @@ having decided the table twin was optional.
 
 An SVG chart is interactive by default; the hover layer is part of the deliverable.
 
-- **A crosshair finds the X.** A vertical hairline tracks the pointer and snaps to the nearest
-  timestamp — readers aim at a time, not at a 2px line.
+- **A crosshair finds the X.** A vertical line tracks the pointer and snaps to the nearest
+  timestamp — readers aim at a time, not at a 2px line. It is drawn **solid, at the data weight
+  (2px), in `--color-text`** ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11):
+  chrome, but the reader's own chrome rather than part of the frame. At the grid's hairline weight
+  in the grid's ink it was the third of three near-identical verticals — grid, horizon rule,
+  crosshair — and the faintest of them was the only one the reader was moving. Full ink separates it
+  from both at a glance, and it can afford to be the loudest thing in the chrome because it exists
+  only while a pointer is held on the plot and leaves with it. No new token: `--color-text` is the
+  strong ink in both modes and already the validated body ink on these surfaces, so a stroke drawn
+  in it inherits a measurement rather than owing one.
 - **One tooltip, every series present at that timestamp.** The readout lists the actual, the
   median, the P10–P90 range and an overlay if the chart carries one — so the pointer never has to
   land on a line or inside the fill to get a number. The value leads and is high-contrast; the
@@ -460,13 +481,13 @@ Every token this treatment uses. Values, and the reasoning behind each value, ar
 | `--color-chart-1`                                        | median forecast line; first categorical slot                 |
 | `--color-chart-2` … `-6`                                 | additional series, fixed order, never cycled                 |
 | `--color-chart-actuals`                                  | measured actuals line (near-ink, not a categorical slot)     |
-| `--color-chart-grid`                                     | gridlines, forecast-horizon rule                             |
+| `--color-chart-grid`                                     | gridlines, forecast-horizon rule (dashed)                    |
 | `--color-chart-axis-label`                               | axis ticks, axis labels, horizon label                       |
 | `--color-surface`                                        | 2px marker rings, chart card background, tooltip panel fill  |
 | `--color-border`                                         | tooltip panel hairline                                       |
 | `--color-shadow`                                         | tooltip panel drop shadow (elevation ink)                    |
 | `--radius-sm`                                            | tooltip panel corner                                         |
-| `--color-text`                                           | legend labels, tooltip values                                |
+| `--color-text`                                           | legend labels, tooltip values, hover crosshair               |
 | `--color-text-muted`                                     | axis titles, tooltip series names, secondary legend text     |
 | `--color-danger` / `--color-warning` / `--color-success` | reserved status states, never series identity                |
 | `--text-xs`                                              | axis tick and label size                                     |

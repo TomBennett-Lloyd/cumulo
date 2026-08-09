@@ -41,10 +41,28 @@
   width: 100%;
 }
 
-.forecast-chart-grid,
+.forecast-chart-grid {
+  stroke: var(--color-chart-grid);
+  stroke-width: 1;
+}
+
+/* The measurement seam, and the only dashed mark on this canvas (#284 D11). It
+ * shared the grid's rule until now, which made the one line that means "the
+ * measurements stop here" indistinguishable from the eight that mean nothing at
+ * all. Same ink and same weight — it is still recessive chrome, not data — but
+ * dashed, which is what carries the meaning: chart-treatment.md bans a dashed
+ * *grid* precisely because a dash reads as "threshold", and a threshold is what
+ * this rule is. Dashing the forecast line instead stays banned; the seam is
+ * marked once, in chrome (#290, and the horizon bullet in that document).
+ *
+ * `stroke-dasharray` is a length pair, so it reaches the page through the
+ * documented allow-list residual in stylelint.config.mjs, the same way
+ * `stroke-width` above does — there is no dash-scale token to spend, and the
+ * pattern is owned here rather than restated in prose. */
 .forecast-chart-horizon {
   stroke: var(--color-chart-grid);
   stroke-width: 1;
+  stroke-dasharray: 4 3;
 }
 
 /* No `fill-opacity`: the alpha lives in the token (chart-treatment.md). */
@@ -123,11 +141,34 @@
   stroke-width: 2;
 }
 
-/* Chrome, not data: the crosshair is the same hairline weight and colour as the
- * grid it crosses, so it locates a time without competing with a series. */
+/* Chrome, but the reader's own landmark rather than part of the frame (#284
+ * D11). At the grid's hairline weight and the grid's ink it was the third
+ * near-identical vertical line on the plot — grid, horizon rule, crosshair —
+ * and the one the reader is *moving* was the faintest of them. Full ink at the
+ * chart's data weight tells it from both: the horizon dashes, the grid recedes,
+ * the crosshair is solid and reads first. It is under the pointer for as long as
+ * the reader holds it there and gone the moment they leave, so it can afford to
+ * be the loudest piece of chrome without competing with a series for attention.
+ *
+ * `--color-text` mints no token and owes no new AA audit: it is the strong ink
+ * in both themes — near-black on the light surface, near-white on the dark one —
+ * and is already the body ink over `--color-surface` and `--color-bg`, carrying
+ * that measurement in tokens.css. A stroke is not text, and the threshold a
+ * mark owes is the lower one, so the audit the token already carries covers
+ * this use with room to spare.
+ *
+ * It does land on the same value as `--color-chart-actuals` in both modes —
+ * near-ink is what both mean — so crosshair and actuals are the same colour at
+ * the same weight where they meet. Accepted rather than overlooked: they meet at
+ * a crossing, not along a run (one is vertical, the other broadly horizontal),
+ * and the crosshair exists only while a pointer is on the plot, so there is no
+ * state in which a reader is asked to tell a stationary pair apart. Two tokens
+ * agreeing today is also not a reason to make one reference the other — they
+ * mean different things and are free to diverge (chart-treatment.md reserves
+ * near-ink for one *series*; this is chrome). */
 .forecast-chart-crosshair {
-  stroke: var(--color-chart-grid);
-  stroke-width: 1;
+  stroke: var(--color-text);
+  stroke-width: 2;
 }
 
 /* Invisible, but the entire plot is a target — readers aim at a time, not at a
