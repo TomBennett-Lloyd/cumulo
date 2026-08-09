@@ -135,7 +135,7 @@ export const answerCall = (
  *
  * The call log is the point: this chunk's headline constraint is *which*
  * partition the loop reads (ADR 0002's review), and a log of exact call
- * arguments is the only way to prove a fleet fan-out never happened. Hence a
+ * arguments is the only way to prove a fleet-wide read never happened. Hence a
  * class rather than three loose spies — the log and the answer policy are
  * shared state (`structure.md` rule 2).
  */
@@ -188,11 +188,11 @@ export class ScriptedFleetDataSource implements FleetDataSource {
   };
 
   readonly fleetForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    throw new Error('ScriptedFleetDataSource: the forecast poll must not fan out over the fleet');
+    throw new Error('ScriptedFleetDataSource: the forecast poll must not read the fleet');
   };
 
   readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
-    throw new Error('ScriptedFleetDataSource: the forecast poll must not fan out over the fleet');
+    throw new Error('ScriptedFleetDataSource: the forecast poll must not read the fleet');
   };
 }
 

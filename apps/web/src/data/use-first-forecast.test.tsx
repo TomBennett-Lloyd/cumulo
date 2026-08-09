@@ -186,10 +186,10 @@ describe('useFirstForecast', () => {
     expect(source.calls).toHaveLength(2);
   });
 
-  // ADR 0002's review of this ticket: a per-site read is ~0.5 read units, the
-  // fleet fan-out ~25. A loop that re-listed the fleet would let three open
+  // ADR 0002's review of this ticket: a per-site read is ~0.5 read units, a
+  // fleet-wide read ~25. A loop that re-listed the fleet would let three open
   // tabs exhaust the table's capacity between them.
-  it('reads only the watched site’s own partition, never the fleet fan-out', async () => {
+  it('reads only the watched site’s own partition, never a fleet-wide read', async () => {
     const source = new ScriptedFleetDataSource(forecastAfterMs(48_000, SITE_ID));
     renderHook(() => useFirstForecast(source, SITE_ID));
 

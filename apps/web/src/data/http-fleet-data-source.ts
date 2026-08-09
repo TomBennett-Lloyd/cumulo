@@ -1,5 +1,6 @@
 import {
   fleetActualsResponseSchema,
+  fleetForecastResponseSchema,
   fleetSiteSchema,
   listSitesResponseSchema,
   siteForecastResponseSchema,
@@ -15,13 +16,11 @@ import type { ZodType } from 'zod';
 
 import { parseFleetApiResponse, thrownToNetworkFailure } from './fleet-api-result';
 import type {
-  FleetDataError,
   FleetDataSource,
   FleetSourceCapabilities,
   FleetSourceResult,
   RangeHours,
 } from './fleet-data-source';
-import { pacedMap } from './request-pacing';
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -41,34 +40,6 @@ const MS_PER_HOUR = 3_600_000;
  * headroom before it starts 400ing.
  */
 const SERIES_HORIZON_HOURS = 48;
-
-/**
- * How many per-site forecast requests the fleet fan-out launches per second.
- *
- * `infra/api/gateway.tf`'s `default_route_settings` throttles the whole stage
- * at 10 requests/second sustained (20 burst), and that ceiling is *shared* —
- * every visitor's dashboard, the Swagger page, and this fan-out all draw on the
- * same bucket. 8 keeps a fan-out under the sustained rate with room left for
- * the requests that are not part of it, rather than sitting exactly on a limit
- * whose other consumers this app cannot see.
- *
- * The pair is a declared infra mirror (`architecture.md` rule 8), held by
- * `.claude/scripts/check-infra-mirrors.sh` in the `verify` composite — and held
- * as a strict bound rather than an equality: this constant must stay *below*
- * the stage's `default_route_settings.throttling_rate_limit`, which is the
- * mechanical form of "under the sustained rate with room left". Raising the
- * fan-out to the throttle, or lowering the throttle to the fan-out, is a red
- * build rather than a fleet that spends the whole shared bucket on itself.
- *
- * The routes this fans out over — `GET /v1/sites` and `GET …/forecast` — are
- * **not** metered by the API's per-IP limiter (the route table in
- * `apps/api/src/main.ts` wraps only the three writes and `GET …/series`), so
- * even a 60-site fleet cannot trip the limiter's 30-requests-per-60-seconds
- * auto-block. A fan-out over `/series` would: 60 > 30, and the visitor would be
- * blocked for an hour by loading the dashboard once. That is why the fleet view
- * reads `/forecast` per site and why it must never be re-pointed at `/series`.
- */
-export const FLEET_FANOUT_LAUNCHES_PER_SECOND = 8;
 
 /** GET carries no body and no headers of its own; shared so it is written once. */
 const GET_INIT: RequestInit = { method: 'GET' };
@@ -101,40 +72,6 @@ const mapOk = <T, R>(
   project: (value: T) => R,
 ): FleetSourceResult<R> =>
   result.kind === 'ok' ? { kind: 'ok', value: project(result.value) } : result;
-
-/**
- * The fleet fan-out's result policy: partial beats nothing.
- *
- * If any site answered, the union of what answered is returned as `ok` — the
- * aggregate view labels an incomplete fleet as partial rather than pretending
- * completeness (`error-handling.md` rule 5), and a fleet where one site's
- * partition is briefly unreadable is still worth drawing. Only a fan-out where
- * *every* site failed is an error, and it reports the first one because that is
- * the failure the retry advice should be about; a list of sixty identical
- * `network` errors tells a reader nothing the first one did not.
- *
- * An empty fleet is `ok` with nothing in it: no site failed, there were none.
- */
-const combineFanOut = (
-  results: readonly FleetSourceResult<readonly Forecast[]>[],
-): FleetSourceResult<readonly Forecast[]> => {
-  const forecasts: Forecast[] = [];
-  let succeeded = false;
-  let firstError: FleetDataError | undefined;
-
-  for (const result of results) {
-    if (result.kind === 'ok') {
-      succeeded = true;
-      forecasts.push(...result.value);
-    } else {
-      firstError ??= result.error;
-    }
-  }
-
-  return firstError === undefined || succeeded
-    ? { kind: 'ok', value: forecasts }
-    : { kind: 'error', error: firstError };
-};
 
 export interface HttpFleetDataSourceOptions {
   /** Where the Fleet API is. A trailing slash is tolerated and dropped. */
@@ -276,10 +213,13 @@ export class HttpFleetDataSource implements FleetDataSource {
 
   /**
    * One false, one true, and the false one is not a shortcut this source could
-   * choose to undo: `fleetForecasts` below spends the range as a forward
-   * horizon because the only unmetered fleet-wide read of forecasts is a
-   * per-site fan-out over future hours (see the comment there). Closing that
-   * needs a fleet-aggregate forecast endpoint, not a change here.
+   * choose to undo. `fleetForecasts` below is one request now rather than a
+   * per-site fan-out (#296), and the flag did not move with it: the route it
+   * calls reads *forward from now*, so the range it takes is a horizon and
+   * there is no look-back for this source to honour however it asks. Closing
+   * that needs the fleet *series* endpoint — every site's stored points over an
+   * explicit window — which is #289's, on the way to #148. It is not something
+   * a different request shape here could reach.
    *
    * What the false one no longer means is "no window control". It used to: a
    * picker here moves the actuals' window and leaves the forecast half roughly
@@ -347,43 +287,46 @@ export class HttpFleetDataSource implements FleetDataSource {
   ): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
     mapOk(await this.seriesFor(siteId, range), (payload) => payload.actuals);
 
+  /**
+   * The whole fleet's forecasts, in one request — never a fan-out.
+   *
+   * `GET /v1/fleet/forecast` reads every site's stored points server-side and
+   * answers with one payload (#296). What did not change when the fan-out this
+   * replaced went away is the *direction*: `range` is still spent as a
+   * **forward horizon** rather than as the look-back {@link RangeHours}
+   * describes, because the route's window opens at the clock and runs ahead. So
+   * the fleet aggregate still shows no history, and it is still capped by how
+   * far the deployed pipeline has written. Closing that needs the fleet
+   * *series* endpoint, not a change here (#289, #148).
+   *
+   * That route *is* metered by the API's per-IP limiter, and deliberately so:
+   * the caller picks nothing about this request's cost and the fleet picks all
+   * of it, which is the pairing with `/v1/fleet/actuals` that the route table in
+   * `apps/api/src/main.ts` states. One metered request per range selection is
+   * the whole point — the fan-out spent one unmetered request per site plus a
+   * listing, and grew with the fleet.
+   *
+   * **All-or-nothing, and that is a deliberate change of semantics.** The
+   * fan-out returned the union of whichever sites answered; one request either
+   * answers for the fleet or fails for it, which is the posture `fleetActuals`
+   * has always had. Nothing is quietly dropped on the way — labelling an
+   * incomplete fleet as incomplete (`error-handling.md` rule 5) is now the
+   * server's obligation, discharged in
+   * `apps/api/src/forecast/get-fleet-forecast.ts`, rather than something this
+   * client reassembles from a pile of partial results.
+   */
   readonly fleetForecasts = async (
     range: RangeHours,
-  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
-    // The fan-out owns its own site list rather than taking one: a caller
-    // holding a stale list would silently fan out over sites that no longer
-    // exist, and a fleet-wide 404 is not what "the fleet failed" should mean.
-    //
-    // `hours={range}` below is a FORWARD horizon, not the look-back `RangeHours`
-    // describes: `/forecast` is the only fleet-wide read that is not metered by
-    // the per-IP limiter (a `/series` fan-out would spend one metered request
-    // per site against a 30-per-60-seconds budget), and it serves future hours
-    // only. So the fleet aggregate shows no history, and it is capped by how
-    // far ahead the deployed pipeline has written — ~48 h — which means every
-    // range beyond that renders identically. Closing that gap needs a
-    // fleet-aggregate *forecast* endpoint, not a change here (#148).
-    const sites = await this.listSites();
-    if (sites.kind === 'error') {
-      return sites;
-    }
-
-    const perSite = await pacedMap(
-      sites.value,
-      async (site) =>
-        mapOk(
-          await this.requestJson(
-            `fleetForecasts (site ${site.id}, ${String(range)}h)`,
-            `${this.siteUrl(site.id)}/forecast?hours=${String(range)}`,
-            siteForecastResponseSchema,
-            GET_INIT,
-          ),
-          (payload) => payload.forecasts,
-        ),
-      { launchesPerSecond: FLEET_FANOUT_LAUNCHES_PER_SECOND },
+  ): Promise<FleetSourceResult<readonly Forecast[]>> =>
+    mapOk(
+      await this.requestJson(
+        `fleetForecasts (${String(range)}h)`,
+        `${this.baseUrl}/v1/fleet/forecast?hours=${String(range)}`,
+        fleetForecastResponseSchema,
+        GET_INIT,
+      ),
+      (payload) => payload.forecasts,
     );
-
-    return combineFanOut(perSite);
-  };
 
   /**
    * The whole fleet's readings, in one request — never a fan-out.

@@ -99,14 +99,13 @@ export type FleetSourceResult<T> =
  * on rather than silently return nothing.
  *
  * Per-site reads honour the look-back. **Fleet-level _forecasts_ cannot.** The
- * only fleet-wide read of forecasts an HTTP source may fan out over without
- * tripping the API's per-IP limiter is the per-site `/forecast` route, and that
- * route returns *future* hours — so the HTTP source's fleet-level forecast
- * necessarily reinterprets this window as a forward horizon (see
- * {@link FleetDataSource.fleetForecasts}). Fleet-level range selection is
- * therefore horizon-capped in live mode: it selects how far *ahead* the
- * aggregate reaches, and any two ranges past the deployed pipeline's write
- * depth render identically.
+ * fleet-wide read of forecasts an HTTP source has is `GET /v1/fleet/forecast`,
+ * one request for every site (#296), and its window opens at the clock and runs
+ * *ahead* — so the HTTP source's fleet-level forecast reinterprets this window
+ * as a forward horizon (see {@link FleetDataSource.fleetForecasts}).
+ * Fleet-level range selection is therefore horizon-capped in live mode: it
+ * selects how far *ahead* the aggregate reaches, and any two ranges past the
+ * deployed pipeline's write depth render identically.
  *
  * Fleet-level *actuals* are the other half, and they do honour this window even
  * in live mode: `GET /v1/fleet/actuals` takes the look-back and answers for the
@@ -247,9 +246,11 @@ export interface FleetDataSource {
 
   /**
    * The whole fleet, once. Callers load this on mount and never poll it: a
-   * repeated fan-out across every site's partition is the read-capacity
-   * mistake ADR 0002's review called out (a per-site forecast poll costs
-   * ~0.5 read units; the fleet fan-out costs ~25).
+   * repeated read across every site's partition is the read-capacity mistake
+   * ADR 0002's review called out (a per-site forecast poll costs ~0.5 read
+   * units; a fleet-wide read costs ~25). Since #296 the fleet reads spend that
+   * inside one request rather than a fan-out, which moved where the Queries
+   * are issued and not how many.
    */
   readonly listSites: () => Promise<FleetSourceResult<readonly Site[]>>;
 
@@ -305,16 +306,16 @@ export interface FleetDataSource {
    * Every site's forecast over the window, unaggregated.
    *
    * The summing belongs to `@cumulo/shared`'s aggregation (`architecture.md`
-   * rule 3), so this returns the raw series and the view aggregates. Until the
-   * API grows a fleet-level endpoint this is a client-side fan-out — noted as
-   * out of scope on #14 rather than hidden here.
+   * rule 3), so this returns the raw series and the view aggregates. The HTTP
+   * source reads `GET /v1/fleet/forecast`, one request for the whole fleet —
+   * the client-side fan-out #14 left open was retired when that route landed
+   * (#296).
    *
-   * That fan-out spends `range` as a **forward horizon**, not as the look-back
-   * {@link RangeHours} otherwise describes: the unmetered per-site `/forecast`
-   * route serves future hours only, and fanning out over `/series` instead
-   * would trip the API's per-IP limiter (one request per site, against 30 per
-   * 60 seconds). An implementation is free to serve the look-back if it can —
-   * the demo source does — but no implementation is required to.
+   * It spends `range` as a **forward horizon**, not as the look-back
+   * {@link RangeHours} otherwise describes: that route's window opens at the
+   * clock and runs ahead, so there is no history in its answer to honour a
+   * look-back with. An implementation is free to serve the look-back if it can
+   * — the demo source does — but no implementation is required to.
    */
   readonly fleetForecasts: (range: RangeHours) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
