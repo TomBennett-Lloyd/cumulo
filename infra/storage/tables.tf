@@ -77,7 +77,10 @@
 # precise failure a ledger exists to prevent. So: change a billing mode or a
 # metered estimate, and the two sites above move in the same commit, together
 # with every driver row convention 3 requires. Every remaining mention in the
-# repo points here without a number (ADRs excepted).
+# repo points here without a number, with two named prose exceptions (ADRs are
+# a third, exempt as immutable): infra/README.md's ingestion teardown paragraph
+# and its "a forgotten stack is nearly free" cost note both carry the ≈ $0.30
+# and ≈ $1.48 estimates, and move with them.
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
