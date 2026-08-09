@@ -60,9 +60,13 @@
 # final snapshot, and no detaching network interfaces — and, unlike the Kinesis
 # stream ADR 0004 replaced, a queue nobody remembers to destroy really does cost
 # nothing. Within this stack the log group is the one thing that keeps spending,
-# and retention keeps that a fraction of a cent; a schedule left *enabled* also
-# meters the weather table's on-demand writes (#156, ~$0.30/mo at the canonical
-# fleet), billed under the storage stack it writes into.
+# and retention keeps that a fraction of a cent. A schedule left *enabled* costs
+# more than this stack's own lines, and on two meters rather than one, both
+# billed under the storage stack they write into: directly, the weather table's
+# on-demand writes (#156, ≈ $0.30/mo at the canonical fleet), and indirectly,
+# the series writes every message it enqueues becomes once the forecast
+# consumer drains it (#258, ≈ $1.48/mo) — the larger of the two, and driven from
+# here even though this stack never touches that table.
 
 output "queue_url" {
   description = "URL of the weather-readings queue ingestion publishes to. This is the value #12's event source mapping consumes and the value the function's QUEUE_URL environment variable carries — server-assigned, so read it from here rather than assembling it from an account id. Contains the account id — see the note above."

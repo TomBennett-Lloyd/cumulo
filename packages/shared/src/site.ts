@@ -15,10 +15,12 @@ import { utcIsoTimestampSchema } from './timestamp';
  *
  * The shared-schema tests deliberately pin `50`, `50.1` and `51` as *literals*
  * rather than deriving them from this constant (`site.test.ts`,
- * `forecast.test.ts`, `generation-reading.test.ts`). Probe values derived from
+ * `forecast.test.ts`, `generation-reading.test.ts`), and `simulated-actual.test.ts`
+ * pins the `50` alone — a forecast sitting exactly on the cap, proving the draw
+ * cannot scale a reading past it. Probe values derived from
  * the constant would move with it, so a typo'd `500` would leave every test
  * green; the literals make any change to this value go red. The shared-schema
- * pins are those three files, and the web pins follow — the rendered hint in
+ * pins are those four files, and the web pins follow — the rendered hint in
  * `AddSiteForm.test.tsx` and the `50.1` refusals there and in
  * `demo-fleet-data-source.test.ts` — so a value change reddens both layers by
  * design. If you are changing it, that double-touch is the intended friction,

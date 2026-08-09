@@ -154,8 +154,12 @@ describe('the contracts the document exists to publish', () => {
     expect(forecastOperation?.responses['404']).toBeDefined();
   });
 
-  it('binds the attribution object to both weather-derived responses', () => {
-    for (const name of ['SiteForecastResponse', 'SiteSeriesResponse']) {
+  it('binds the attribution object to every weather-derived response', () => {
+    // The list is exhaustive on purpose: attribution is a CC BY 4.0 obligation, so a new
+    // weather-derived wrapper that forgets it must fail here rather than ship. Fleet actuals
+    // are on the list because a simulated reading is still derived from a weather-driven
+    // forecast (`simulated-actual.ts`, #264).
+    for (const name of ['SiteForecastResponse', 'SiteSeriesResponse', 'FleetActualsResponse']) {
       const schema = openApiDocument.components.schemas[name];
 
       expect(schema?.required, name).toContain('attribution');

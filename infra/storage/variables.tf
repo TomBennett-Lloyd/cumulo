@@ -5,13 +5,16 @@ variable "aws_region" {
     *.auto.tfvars, so nothing can silently apply into the wrong region because
     a default said so.
 
-    It is load-bearing beyond the usual reasons here. DynamoDB's always-free
-    capacity pool is a *per-Region* allowance (ADR 0002;
-    `infra/storage/tables.tf`'s header owns the figures), and this stack's one
-    provisioned table (`series` — weather went on-demand, #156) is sized
-    against a pool that nothing else in the account consumes. Applying a
-    second copy into a second region would create a second pool; applying two
-    copies into the same region would share one.
+    It is load-bearing beyond the usual reasons here, and since #258 for a
+    changed reason. DynamoDB's always-free capacity pool is a *per-Region*
+    allowance (ADR 0002; `infra/storage/tables.tf`'s header owns the posture),
+    and no table in this stack draws on it any more — every one is on-demand,
+    so what the Region now decides is the per-request rate all five are metered
+    at, which differs by Region and is what infra/README.md's storage cost
+    table is quoted against. Applying a second copy into a second region would
+    meter a second set of tables at that region's rates; applying two copies
+    into the same region would share one pool that neither of them uses, and a
+    later batch-shaped table would find the pool already spoken for by nothing.
   EOT
   type        = string
 
