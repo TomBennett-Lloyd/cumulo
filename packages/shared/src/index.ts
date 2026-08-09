@@ -16,6 +16,8 @@ export {
   type SiteSeriesResponse,
   fleetActualsResponseSchema,
   type FleetActualsResponse,
+  fleetForecastResponseSchema,
+  type FleetForecastResponse,
 } from './fleet-api';
 export {
   forecastModelSchema,

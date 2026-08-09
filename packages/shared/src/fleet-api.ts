@@ -72,3 +72,21 @@ export const fleetActualsResponseSchema = z.object({
 });
 
 export type FleetActualsResponse = z.infer<typeof fleetActualsResponseSchema>;
+
+/**
+ * Fleet-wide forecasts over one forward horizon: every site's points merged into one array,
+ * carrying the same peer `attribution` as the schemas above.
+ *
+ * A separate named schema rather than a reuse of {@link siteForecastResponseSchema}, whose shape
+ * it currently matches exactly. `structure.md` rule 7's test — would one be wrong if the other
+ * changed? — answers no: one site's horizon and the whole fleet's are different intents in
+ * different contexts, and the fleet envelope is the one that may grow fleet-only siblings such as
+ * a contributing-site count. Same reason {@link fleetActualsResponseSchema} is not
+ * {@link siteSeriesResponseSchema} minus a field.
+ */
+export const fleetForecastResponseSchema = z.object({
+  forecasts: z.array(forecastSchema),
+  attribution: attributionSchema,
+});
+
+export type FleetForecastResponse = z.infer<typeof fleetForecastResponseSchema>;

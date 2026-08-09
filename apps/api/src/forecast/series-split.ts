@@ -7,9 +7,9 @@ import type { SeriesPoint } from '@cumulo/storage';
  * `SeriesAdapter.querySeriesRange` hands back forecasts and actuals interleaved
  * in one chronological list, which is exactly the property ADR 0002's sort key
  * exists to provide — one Query rather than three. The wire contract is two
- * arrays, so the split happens here, once, rather than inside each of the two
- * handlers that need it: change what a `SeriesPoint` is and both are wrong
- * until both change (`docs/standards/structure.md` rule 7).
+ * arrays, so the split happens here, once, rather than inside each of the
+ * handlers that need it: change what a `SeriesPoint` is and every one of them is
+ * wrong until they all change (`docs/standards/structure.md` rule 7).
  *
  * Both passes preserve the query's chronological order, so `forecasts[0]` is
  * still the earliest forecast in the window. Two traversals rather than one

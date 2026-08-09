@@ -1,16 +1,15 @@
 import {
   fleetActualsResponseSchema,
   openMeteoAttribution,
-  type GenerationReading,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { QueryPaginationBound, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
+import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
-import { hasBudgetForStorageCommands } from '../request-budget';
 
+import { readFleetSeries } from './fleet-series-read';
 import { FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { actualsIn } from './series-split';
 import { hoursBefore } from './series-window';
@@ -70,11 +69,12 @@ const fleetLookbackHoursSchema = z
 
 /**
  * Emitted when this route stopped reading because the invocation was running
- * out of time. Its own event rather than one shared with the per-site routes:
- * this is the only route whose cost grows with the fleet, so "is the fleet
- * outgrowing a 15-second function?" is a question only these entries can answer,
+ * out of time. Its own event rather than one shared with the per-site routes or
+ * with `GET /v1/fleet/forecast`: the two fleet routes are the ones whose cost
+ * grows with the fleet, so "is the fleet outgrowing a 15-second function, and on
+ * which of its two reads?" is a question only distinct event names can answer,
  * and a name shared with `api.series.read-deadline-reached` could not separate
- * them in a log query.
+ * them in a log query at all.
  */
 export const fleetActualsReadDeadlineEvent = 'api.fleet-actuals.read-deadline-reached';
 
@@ -88,23 +88,6 @@ export interface GetFleetActualsDeps {
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
 }
-
-/**
- * The one 500 this route answers, with the log line that says where it stopped.
- *
- * Two call sites — the fan-out stopped between sites, and one site's window
- * stopped mid-page — and deliberately one message and one event: a caller can do
- * nothing different with the two, while an operator reads the difference off the
- * fields in `detail`. One function rather than the message written twice, so the
- * two cannot drift into two contracts (`docs/standards/structure.md` rule 7).
- */
-const readDeadlineReached = (
-  log: GetFleetActualsDeps['log'],
-  detail: Record<string, unknown>,
-): ApiResponse => {
-  log({ event: fleetActualsReadDeadlineEvent, ...detail });
-  return errorResponse('internal', 'the request could not be completed in time');
-};
 
 export const getFleetActuals = async (
   deps: GetFleetActualsDeps,
@@ -132,45 +115,28 @@ export const getFleetActuals = async (
   const to = deps.now();
   const from = hoursBefore(to, hours.data);
 
-  // Asked between pages of one site's Query, never mid-page (`request-budget.ts`).
-  const bound: QueryPaginationBound = {
-    hasBudgetForNextPage: () => hasBudgetForStorageCommands(request.deadline.remainingMs(), 1),
-  };
+  // The sequential, deadline-gated fan-out, and its refusal: shared with
+  // `GET /v1/fleet/forecast`, which reads the same sites over the same kind of
+  // window in the opposite direction (`fleet-series-read.ts` argues the split).
+  // `deps` goes in whole — `GetFleetActualsDeps` is a superset of what the read
+  // needs, and the `Pick` in `FleetSeriesReadDeps` is what narrows it.
+  const read = await readFleetSeries(
+    deps,
+    request.deadline,
+    sites,
+    from,
+    to,
+    fleetActualsReadDeadlineEvent,
+  );
 
-  // One array per site, flattened once at the end rather than spread-pushed per
-  // site: the wire order is site by site, chronological within each, which is
-  // the order the demo source produces too and the order the fleet chart's
-  // hour-by-hour aggregation is indifferent to.
-  const perSite: GenerationReading[][] = [];
-
-  for (const [index, site] of sites.entries()) {
-    // Sequential, and gated before every site *after* the first — the first
-    // Query is this route's ungated prefix, as it is on every read here. A
-    // parallel fan-out would spend the fleet's worth of Queries with nothing
-    // between them to stop, which is the shape the deadline exists to refuse.
-    if (index > 0 && !hasBudgetForStorageCommands(request.deadline.remainingMs(), 1)) {
-      return readDeadlineReached(deps.log, { sitesRead: index, fleetSize: sites.length });
-    }
-
-    const { points, complete } = await deps.series.querySeriesRange(site.id, from, to, bound);
-
-    // A fleet short of one site's afternoon is the half-truth `get-site-series.ts`
-    // refuses at length, and it is worse here: these readings are summed hour by
-    // hour, so a missing site does not read as missing — it reads as a fleet
-    // that generated less. Serving the whole thing or nothing is the only
-    // honest option this wire contract offers
-    // (`docs/standards/error-handling.md` rule 5); labelling the response
-    // partial is the richer answer and is the same contract change #165 holds
-    // for the per-site routes.
-    if (!complete) {
-      return readDeadlineReached(deps.log, { siteId: site.id });
-    }
-
-    perSite.push(actualsIn(points));
+  if (!read.complete) {
+    return read.response;
   }
 
+  // Split per site and flattened once, rather than a split of one concatenated
+  // list: the wire order is site by site, chronological within each.
   return jsonResponse(200, fleetActualsResponseSchema, {
-    actuals: perSite.flat(),
+    actuals: read.perSite.flatMap((points) => actualsIn(points)),
     attribution: openMeteoAttribution,
   });
 };

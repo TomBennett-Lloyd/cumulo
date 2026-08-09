@@ -95,6 +95,7 @@ describe('the api composition root', () => {
       'GET /v1/sites/{siteId}/forecast',
       'GET /v1/sites/{siteId}/series',
       'GET /v1/fleet/actuals',
+      'GET /v1/fleet/forecast',
       'GET /openapi.json',
       'GET /docs',
       'GET /docs/{asset}',
@@ -376,6 +377,20 @@ describe('the abuse protections on the route table', () => {
     // that the limiter ran first, with no Origin header in sight: a read is not
     // a write, and the web app must be able to plot from wherever it is served.
     expect(response.statusCode).toBe(404);
+    expect(getBlock).toHaveBeenCalledWith(SOURCE_IP);
+  });
+
+  it('limits the fleet forecast fan-out, whose cost per request the fleet picks', async () => {
+    const { getBlock } = await stubStorage();
+    const { handler } = await import('./main');
+
+    const response = await handler(gatewayEvent({ method: 'GET', rawPath: '/v1/fleet/forecast' }));
+
+    // The fleet is stubbed empty, so the answer is a 200 with nothing in it —
+    // what this proves is that the limiter ran first. It is the positive
+    // control for the wrapper; `leaves the unlimited reads alone` above is the
+    // negative one, so a limiter applied to everything would fail there.
+    expect(response.statusCode).toBe(200);
     expect(getBlock).toHaveBeenCalledWith(SOURCE_IP);
   });
 });

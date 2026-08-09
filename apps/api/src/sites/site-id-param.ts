@@ -3,12 +3,12 @@ import { siteSchema } from '@cumulo/shared';
 import { errorResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 
 /**
- * The `{siteId}` path parameter, validated once for the three routes that take
- * one.
+ * The `{siteId}` path parameter, validated once for every route in `main.ts`'s
+ * table that takes one.
  *
- * Extracted rather than repeated because the three copies would have identical
- * intent (`docs/standards/structure.md` rule 7): change what a site id looks
- * like and all three are wrong until they change together. The check is also
+ * Extracted rather than repeated because the copies would have identical intent
+ * (`docs/standards/structure.md` rule 7): change what a site id looks like and
+ * every one of them is wrong until they change together. The check is also
  * load-bearing rather than cosmetic — without it, a path segment of any shape
  * reaches DynamoDB as a key, so "is this a uuid" is the difference between a
  * 400 and a billed read.

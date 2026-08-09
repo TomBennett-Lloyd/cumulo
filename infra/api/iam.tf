@@ -122,12 +122,12 @@ data "aws_iam_policy_document" "api" {
 
   # The series table, read only — ADR 0005's original sentence for this table,
   # restored. `querySeriesRange` is the only caller, behind
-  # `GET /v1/sites/{siteId}/forecast`, `GET /v1/sites/{siteId}/series` and
-  # `GET /v1/fleet/actuals`; the API creates no series row, because forecast
-  # rows are written by #12 and the generation readings beside them by the
-  # forecast service's simulated-actuals producer (#264,
-  # `apps/forecast/src/simulate-actuals.ts`, which carries its own grants in
-  # infra/forecast/iam.tf). There is deliberately no `PutItem` and no
+  # `GET /v1/sites/{siteId}/forecast`, `GET /v1/sites/{siteId}/series`,
+  # `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast`; the API creates no
+  # series row, because forecast rows are written by #12 and the generation
+  # readings beside them by the forecast service's simulated-actuals producer
+  # (#264, `apps/forecast/src/simulate-actuals.ts`, which carries its own grants
+  # in infra/forecast/iam.tf). There is deliberately no `PutItem` and no
   # `UpdateItem`, which is the grant-level statement of that.
   #
   # No write action of any kind, and that is a decision rather than an omission.

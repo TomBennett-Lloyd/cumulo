@@ -17,7 +17,7 @@ discipline: there is no HTTP client in this package to misuse.
 | `http/router.ts`                | Route table and matcher. 204 on preflight, 404 on no match, 400 on non-JSON body.      |
 | `abuse/ip-limiter.ts`           | The per-IP limiter and its policy numbers, over the `cumulo-abuse` table.              |
 | `abuse/origin-check.ts`         | Pure `Origin` allow-list check for the write routes. Friction, not auth.               |
-| `sites/site-id-param.ts`        | The `{siteId}` path parameter, validated once for the three routes that take one.      |
+| `sites/site-id-param.ts`        | The `{siteId}` path parameter, validated once for every `main.ts` route that has one.  |
 | `sites/*.ts`                    | One module per route: list, create, get, update, delete.                               |
 | `forecast/known-site.ts`        | The "is there such a site at all" gate both series routes open with.                   |
 | `forecast/series-window.ts`     | Window arithmetic: a horizon into an upper bound, and a window's width in hours.       |

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { openMeteoAttribution } from './attribution';
 import {
   fleetActualsResponseSchema,
+  fleetForecastResponseSchema,
   listSitesResponseSchema,
   siteForecastResponseSchema,
   siteSeriesResponseSchema,
@@ -128,5 +129,31 @@ describe('fleetActualsResponseSchema', () => {
     expect(fleetActualsResponseSchema.safeParse({ actuals: [generationReading] }).success).toBe(
       false,
     );
+  });
+});
+
+describe('fleetForecastResponseSchema', () => {
+  it('accepts fleet-wide forecasts carrying the attribution as a peer of the data it credits', () => {
+    const result = fleetForecastResponseSchema.safeParse({
+      forecasts: [forecast],
+      attribution: openMeteoAttribution,
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an empty forecasts array — a fleet awaiting its first cycle is a 200', () => {
+    expect(
+      fleetForecastResponseSchema.safeParse({ forecasts: [], attribution: openMeteoAttribution })
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects a bare array, the shape the wrapper exists to avoid', () => {
+    expect(fleetForecastResponseSchema.safeParse([forecast]).success).toBe(false);
+  });
+
+  it('rejects a body missing attribution', () => {
+    expect(fleetForecastResponseSchema.safeParse({ forecasts: [forecast] }).success).toBe(false);
   });
 });
