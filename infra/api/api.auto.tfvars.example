@@ -38,4 +38,13 @@ aws_region = "eu-west-1"
 # trailing slash, a path, and any whitespace around the comma, because the
 # function splits this exact string and compares it to a browser's Origin
 # header, which carries none of them.
+#
+# While #285's interim GitHub Pages hosting is live, that origin joins the list
+# too — scheme and host only, no path, or the validation above rejects it. Read
+# it back rather than predicting it, and strip the path:
+#
+#   gh api repos/TomBennett-Lloyd/cumulo/pages --jq .html_url
+#
+# It comes out of the list again at #144's teardown — see the header of
+# .github/workflows/deploy-pages.yml for the full teardown list.
 # web_origins = "http://localhost:5173"
