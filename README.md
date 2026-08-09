@@ -10,6 +10,8 @@ The name: cumulus clouds are the antagonist — the thing between the sun and th
 
 🚧 Bootstrap phase — tooling, standards, and the agentic build workflow are in place; the platform itself is being built issue by issue. Watch the [issues](https://github.com/TomBennett-Lloyd/cumulo/issues) and PR history to see the process.
 
+**Live demo:** <https://tombennett-lloyd.github.io/cumulo/> — interim hosting on GitHub Pages, published by [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) while [#144](https://github.com/TomBennett-Lloyd/cumulo/issues/144)'s CloudFront distribution waits on AWS account verification. Pages is not the hosting plan of record; that workflow's header owns the arrangement and carries the steps that undo it.
+
 ## Data sources
 
 - Weather and solar irradiance data by [Open-Meteo.com](https://open-meteo.com/), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Open-Meteo blends models and reanalysis data (ERA5, ERA5-Land) from national weather services; see their [data sources](https://open-meteo.com/en/docs) for the underlying providers.
