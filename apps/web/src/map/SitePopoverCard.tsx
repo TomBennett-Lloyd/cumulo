@@ -325,8 +325,27 @@ export const SitePopoverCard = ({
         <h2 className="site-popover-title" id={titleId}>
           {site.name}
         </h2>
-        <button type="button" className="site-popover-close" onClick={onClose}>
-          Close
+        {/*
+         * An X, with the word moved to the accessible name.
+         *
+         * `design.md` rule 2: a label whose only job is naming a control for
+         * assistive technology becomes an accessible name rather than visible
+         * text, and "close" is one of the two instances that rule settles.
+         * Nothing is lost to a screen reader — the button is still found by the
+         * name `Close` — and the card gets back the width the word was taking
+         * from a title that has a site name to fit.
+         *
+         * The mark is drawn on the header's terms (`header/HeaderMenu.tsx`'s
+         * burger): a 20-unit `viewBox`, `aria-hidden` so the name is said once,
+         * and stroked in `currentColor` so it follows the button through both
+         * themes. `site-popover.css` says why the drawing declarations are
+         * restated there rather than shared.
+         */}
+        <button type="button" className="site-popover-close" aria-label="Close" onClick={onClose}>
+          <svg className="site-popover-close-icon" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M5 5 15 15" />
+            <path d="M15 5 5 15" />
+          </svg>
         </button>
       </header>
 
