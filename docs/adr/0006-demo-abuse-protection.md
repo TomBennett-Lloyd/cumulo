@@ -23,11 +23,11 @@ So the effective ceiling at high parallelism today is concurrency-10 → 503, no
 
 ### The cost frame
 
-Figures are AWS list prices, us-east-1, **verified 2026-08-01** against the DynamoDB on-demand, CloudWatch, AWS WAF and SNS pricing pages, on the same basis as ADRs 0002, 0004 and 0005 (Ireland runs roughly 10–15% higher; nothing below turns on that margin).
+Figures are AWS list prices, us-east-1, **verified 2026-08-01** against the DynamoDB on-demand, CloudWatch, AWS WAF and SNS pricing pages, on the same basis as ADRs 0002, 0004 and 0005 (Ireland runs roughly 10–15% higher; nothing below turns on that margin). Values amended 2026-08-10 to the eu-west-1 basis are marked inline and recorded under Amendments; any figure not so marked remains on the us-east-1 basis stated here.
 
-- **DynamoDB on-demand:** $0.625 per million write request units, $0.125 per million read request units. An eventually-consistent `GetItem` on an item under 4 KB is half a read request unit, so **$0.0625 per million such reads**. Storage: always-free 25 GB.
+- **DynamoDB on-demand:** $0.705 per million write request units, $0.1415 per million read request units. An eventually-consistent `GetItem` on an item under 4 KB is half a read request unit, so **$0.07075 per million such reads** (amended 2026-08-10 to the eu-west-1 rates; see Amendments). Storage: always-free 25 GB.
 - **CloudWatch alarms:** **10 standard-resolution alarm metrics always free**, $0.10 per alarm metric per month beyond.
-- **CloudWatch Logs:** 5 GB/month ingest always free, then $0.50/GB.
+- **CloudWatch Logs:** 5 GB/month ingest always free, then $0.57/GB (amended 2026-08-10 to the eu-west-1 rate; see Amendments).
 - **AWS WAF:** **$5.00 per web ACL per month, $1.00 per rule per month, $0.60 per million requests.** No free tier.
 - **Amazon SNS:** a standard topic has no per-hour or per-topic charge; the always-free tier covers 1 million publishes and **1,000 email deliveries per month**, against an expected volume of a handful of alarm emails.
 
@@ -50,7 +50,7 @@ The issue asked for "API Gateway throttling/usage plans before reaching for WAF,
 | ---------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------- |
 | One IP, sustained, low parallelism             | **Per-IP application limiter** — 30 limited-route requests per 60 s  | 429 `rate_limited` with `retry-after`, then a 1-hour block |
 | One IP, writes only                            | **Per-route gateway throttle** — 2 rps / burst 4 on the three writes | gateway 429 (gateway body), then the limiter's 429         |
-| Many IPs, low parallelism                      | **Stage throttle** — 10 rps / burst 20 (shipped by #14)              | gateway 429; the bill stays inside ADR 0005's ≈ $36/month  |
+| Many IPs, low parallelism                      | **Stage throttle** — 10 rps / burst 20 (shipped by #14)              | gateway 429; the bill stays inside ADR 0005's ≈ $39/month  |
 | Any source, high parallelism (≳ 10 concurrent) | **Account Lambda concurrency, 10** — not ours, and not fixed here    | 503 — measured: 40-parallel → 11×200 + 29×503, zero 429s   |
 
 Layers 2 and 3 are gateway configuration and reject traffic before it reaches compute, which is free. Layer 1 costs a DynamoDB round trip per limited request, which is why it is the innermost and why the routes it covers are chosen rather than universal. Layer 4 is an account quota that nobody chose; it is recorded here because it is the layer that actually fires first in the one regime an attacker would use, and pretending otherwise would make the other three read as stronger than they are.
@@ -99,7 +99,7 @@ Every `alarms.tf` in this repo currently ends with a variant of the same paragra
 
 The money backstop is unchanged and is the existing budget in `infra/bootstrap/budget.tf`: a $100 limit with ACTUAL notifications at 50%, 80% and 100% plus a FORECASTED notification at 100%, emailing the operator directly with no subscription confirmation needed.
 
-One honest observation about that backstop, since `infra/api/alarms.tf` already made the opposite one. It notes that the budget's first threshold — 50% of ~$100 — "under ADR 0005's ≈ $36 worst case … would never fire at all". With this ticket's abuse table added, sustained worst-case abuse reaches ≈ $54/month (below), which **does** cross $50 — but only after roughly four weeks at the ceiling. The budget is a backstop that arrives late by construction; the `cumulo-api-<env>-request-flood` alarm (six requests/second averaged over five minutes) remains the fast signal, and this ADR does not change either threshold.
+One honest observation about that backstop, since `infra/api/alarms.tf` already made the opposite one. It notes that the budget's first threshold — 50% of ~$100 — "under ADR 0005's ≈ $36 worst case … would never fire at all". With this ticket's abuse table added, sustained worst-case abuse reaches ≈ $59/month (below), which **does** cross $50 — but only after roughly four weeks at the ceiling. The budget is a backstop that arrives late by construction; the `cumulo-api-<env>-request-flood` alarm (six requests/second averaged over five minutes) remains the fast signal, and this ADR does not change either threshold.
 
 ### 6. The alarm budget, settled (#126)
 
@@ -166,7 +166,7 @@ ADR 0005 dismantled this for function URLs: 10 × reserved concurrency welds the
 
 ### G. Keep #14's stage throttle and add nothing — rejected
 
-Worth stating because it is not absurd: the stage throttle already bounds the bill at ≈ $36/month, and the expected regime is a few hundred demo sessions. What it does not bound is **the fleet** — nothing stops a patient script adding sites one per second for an hour and pushing the location count past `MAX_LOCATIONS_PER_CYCLE`, at which point the Open-Meteo quota, the hard constraint in CLAUDE.md, is the thing under pressure rather than the bill. The cap, not the limiter, is the part of this ticket that protects the constraint the project actually cannot violate.
+Worth stating because it is not absurd: the stage throttle already bounds the bill at ≈ $39/month, and the expected regime is a few hundred demo sessions. What it does not bound is **the fleet** — nothing stops a patient script adding sites one per second for an hour and pushing the location count past `MAX_LOCATIONS_PER_CYCLE`, at which point the Open-Meteo quota, the hard constraint in CLAUDE.md, is the thing under pressure rather than the bill. The cap, not the limiter, is the part of this ticket that protects the constraint the project actually cannot violate.
 
 ## Consequences
 
@@ -176,16 +176,16 @@ The stage throttle held at its ceiling continuously for a 30-day month is `10 ×
 
 | Line                                              | Arithmetic                   | $/month   |
 | ------------------------------------------------- | ---------------------------- | --------- |
-| Gateway + Lambda + logs at the ceiling (ADR 0005) | 25.92M requests              | ≈ 36.00   |
-| Abuse-table writes (one per limited request)      | 25.92M × $0.625/M            | 16.20     |
-| Abuse-table reads (one eventually-consistent get) | 25.92M × $0.0625/M           | 1.62      |
+| Gateway + Lambda + logs at the ceiling (ADR 0005) | 25.92M requests              | ≈ 38.94   |
+| Abuse-table writes (one per limited request)      | 25.92M × $0.705/M            | 18.27     |
+| Abuse-table reads (one eventually-consistent get) | 25.92M × $0.07075/M          | 1.83      |
 | Abuse-table storage                               | TTL'd within the hour        | ~0        |
 | SNS, alarms                                       | inside the always-free tiers | 0.00      |
-| **Worst case, sustained, distributed**            |                              | **≈ $54** |
+| **Worst case, sustained, distributed**            |                              | **≈ $59** |
 
-**Roughly half the ~$100 ceiling, under continuous distributed abuse, forever** — up from ADR 0005's ≈ $36, and the increase is entirely the price of knowing who is calling. Single-IP abuse costs a few cents, because the block cache serves the denial. At the expected regime the abuse table bills fractions of a cent and the whole platform still rounds to about one cent a month.
+**Roughly half the ~$100 ceiling, under continuous distributed abuse, forever** — up from ADR 0005's ≈ $39, and the increase is entirely the price of knowing who is calling. Single-IP abuse costs a few cents, because the block cache serves the denial. At the expected regime the abuse table bills fractions of a cent and the whole platform still rounds to about one cent a month.
 
-**Standing cost stays $0.** The abuse table is on-demand and bills only for requests; the SNS topic has no per-topic charge; the alarms are held at exactly the always-free ten. ADR 0004's headline — no resource in Cumulo bills for existing — survives this ticket, which is the single strongest reason WAF was not bought.
+**Standing cost stays $0.** The abuse table is on-demand and bills only for requests; the SNS topic has no per-topic charge; the alarms are held at exactly the always-free ten. ADR 0004's headline — no resource in Cumulo bills for existing outside an always-free allowance (as amended 2026-08-10) — survives this ticket, which is the single strongest reason WAF was not bought.
 
 ### What becomes easier
 
@@ -215,3 +215,10 @@ ADRs are immutable: any change supersedes this one with a new ADR and never edit
 5. **The account Lambda concurrency quota moving.** A granted increase changes which layer bites first — the fourth row of the table becomes a gateway 429 instead of a 503 — and makes the measured facts in this document historical.
 6. **The abuse table becoming a visible cost line**, which is the signal that abuse is distributed enough for the block cache never to help, and therefore the same signal as trigger 1 arriving through the bill instead of an alarm.
 7. **The fixed-window 2× boundary being exploited in practice**, which buys a sliding window or a token bucket in the same table — a change of algorithm, not of architecture.
+
+## Amendments
+
+Per `docs/adr/README.md`: amendments true up stated values that have legitimately moved; the decision and its rationale are immutable.
+
+- **2026-08-10 — DynamoDB rates and the worst-case totals re-based us-east-1 → eu-west-1 (#200).** The cost frame above quoted us-east-1 list prices with a stated ~10–15% Ireland margin; the platform deploys into eu-west-1. On-demand writes $0.625/M → $0.705/M, reads $0.125/M → $0.1415/M (half-RRU eventually-consistent reads $0.0625/M → $0.07075/M), and CloudWatch Logs ingestion $0.50/GB → $0.57/GB — read from the Price List API offers for eu-west-1 (AmazonDynamoDB publication 2026-08-04, SKUs `F4EZE5SAMS3D49NJ` and `3ERQSZWPAMX2JWHN`, rates unchanged from the 2026-07-22 offer recorded in `infra/README.md`; AmazonCloudWatch publication 2026-08-06). The worst-case table moves: base ≈ $36.00 → ≈ $38.94 (ADR 0005's amendment of the same date), abuse-table writes $16.20 → $18.27, reads $1.62 → $1.83, total ≈ $54 → ≈ $59/month, and the bound's prose restatements in the layers table, option G, and the Consequences are trued to match. Every conclusion survives: the total still crosses the budget's $50 first threshold (§5's argument), is still roughly half the ~$100 ceiling, and the free-tier allowances the cap arithmetic leans on are confirmed $0-priced first tiers in the same offer. The eu-west-1 rates' record of use lives in `infra/README.md` ("What it costs", storage stack).
+- **2026-08-10 — ADR 0004's headline restated in its amended, precise form (#200, after #179/#188's audit).** Log groups, alarms, and stored bytes bill for existing at $0 by always-free allowance; the Consequences line now carries "outside an always-free allowance", as in ADR 0004's own amendment of the same date. The magnitude and the reason WAF was not bought are unchanged.

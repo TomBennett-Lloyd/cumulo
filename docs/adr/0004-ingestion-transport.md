@@ -121,7 +121,7 @@ Rejected because both variants trade a billed noun for an unbilled coupling:
 
 ## Consequences
 
-**The platform's total standing cost is now $0.** Not a rounding error and not "cents" — no resource in Cumulo bills for existing. ADR 0002 got storage to zero (four DynamoDB tables inside the permanently free 19 WCU / 24 RCU and 25 GB, no VPC, no NAT Gateway, no instance, no proxy, no PITR, no customer-managed key); Lambda invocations at this volume sit inside the always-free tier, as ADR 0001 already established; and the transport is now a queue whose ~675,000 requests/month sit inside the always-free 1 million. The ~$100/month ceiling is met with the whole ceiling unspent.
+**The platform's total standing cost is now $0.** Not a rounding error and not "cents" — no resource in Cumulo bills for existing outside an always-free allowance (amended 2026-08-10; see Amendments). ADR 0002 got storage to zero (four DynamoDB tables inside the permanently free 19 WCU / 24 RCU and 25 GB, no VPC, no NAT Gateway, no instance, no proxy, no PITR, no customer-managed key); Lambda invocations at this volume sit inside the always-free tier, as ADR 0001 already established; and the transport is now a queue whose ~675,000 requests/month sit inside the always-free 1 million. The ~$100/month ceiling is met with the whole ceiling unspent.
 
 **Superseding ADR 0002's standing-charge line.** Its Consequences, under "Standing cost", end: "The only standing charge in the platform remains ADR 0001's Kinesis stream." **That sentence no longer holds.** There is no Kinesis stream and there is no standing charge. Everything else in that paragraph — the free-tier capacity split, the storage figure, the levers if write volume ever matters — stands unchanged. Per the immutability convention, 0002 is not edited; this paragraph is the amendment of record, and 0002's Status stays `accepted` because its decision, the single-store DynamoDB design, is untouched by a change of transport.
 
@@ -158,3 +158,9 @@ Two smaller consequences follow inside 0001, and both are in its favour:
 5. **A second ESM-driven queue**, which pushes polling requests past the free million. The bill is cents; the reason to name it is that this ADR's headline "$0" would stop being literally true.
 6. **A horizon extension of roughly an order of magnitude**, which is the only way the per-location payload approaches SQS's 256 KB message limit.
 7. **Throughput that makes a shard's 1,000 records/second a real number.** At 0.02% today, this is a note for completeness rather than a live concern — but it is the trigger that would make option B correct rather than merely expensive.
+
+## Amendments
+
+Per `docs/adr/README.md`: amendments true up stated values that have legitimately moved; the decision and its rationale are immutable.
+
+- **2026-08-10 — "no resource in Cumulo bills for existing" made precise (#200, after #179/#188's audit).** The absolute was shown imprecise rather than wrong: log groups bill for retained bytes, CloudWatch alarms bill per alarm metric, and DynamoDB bills for stored bytes — all charges for existing, all at $0 because always-free allowances absorb them (5 GB of log storage, ten alarm metrics, 25 GB of table storage), not because no meter runs. The headline now reads "outside an always-free allowance". What this document actually bought is untouched: no per-hour resource exists anywhere in the platform, and the $0 standing cost is real. The per-resource precise statement lives in `infra/README.md` ("What it costs" notes, per stack — the ingestion stack's note states this ADR's relationship to it explicitly).

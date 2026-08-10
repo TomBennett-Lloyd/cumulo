@@ -12,7 +12,7 @@ ADR 0001 named the fleet API as one of Cumulo's four deployables — "runs on re
 
 **That ownership question is settled and this ADR does not reopen it.** It is restated because it is the reason this document exists at all: 0001 decided that #14 owns a compute, a gateway, and a Swagger host, and then said nothing whatever about what any of the three should _be_. The nouns were placeholders, exactly as "Kinesis stream" was a placeholder in the same sentence until ADR 0004 costed it and replaced it with a queue. This ADR fills in the three shapes before #14's Terraform commits to them.
 
-The frame is ADR 0004's, deliberately. That document's Consequences open: "**The platform's total standing cost is now $0.** Not a rounding error and not 'cents' — no resource in Cumulo bills for existing." Four DynamoDB tables sit inside the always-free provisioned allowance (0002), Lambda invocations sit inside the always-free tier (0001), and the transport is a queue whose ~675,000 requests/month sit inside the always-free million (0004). This is the first ticket since that sentence was written that provisions a new always-on, internet-facing resource. **The question this ADR answers is therefore not "what would work" — several options would — but "which of them can be added without being the resource that breaks $0."**
+The frame is ADR 0004's, deliberately. That document's Consequences open: "**The platform's total standing cost is now $0.** Not a rounding error and not 'cents' — no resource in Cumulo bills for existing." (quoted as 0004 stood when this was written; that headline was amended 2026-08-10 to read "outside an always-free allowance" — see ADR 0004's Amendments). Four DynamoDB tables sit inside the always-free provisioned allowance (0002), Lambda invocations sit inside the always-free tier (0001), and the transport is a queue whose ~675,000 requests/month sit inside the always-free million (0004). This is the first ticket since that sentence was written that provisions a new always-on, internet-facing resource. **The question this ADR answers is therefore not "what would work" — several options would — but "which of them can be added without being the resource that breaks $0."**
 
 ### The traffic, and why it is bimodal
 
@@ -24,13 +24,13 @@ Two regimes matter, and they are three orders of magnitude apart.
 
 ### The cost frame
 
-Figures are AWS list prices, us-east-1, **verified 2026-07-31** against the API Gateway, Lambda, Elastic Load Balancing and CloudWatch pricing pages, on the same basis as ADRs 0002 and 0004 (Ireland runs roughly 10–15% higher; nothing here turns on that margin).
+Figures are AWS list prices, us-east-1, **verified 2026-07-31** against the API Gateway, Lambda, Elastic Load Balancing and CloudWatch pricing pages, on the same basis as ADRs 0002 and 0004 (Ireland runs roughly 10–15% higher; nothing here turns on that margin). Values amended 2026-08-10 to the eu-west-1 basis are marked inline and recorded under Amendments; any figure not so marked remains on the us-east-1 basis stated here.
 
-- **API Gateway HTTP API:** $1.00 per million requests for the first 300 million/month, $0.90 per million above.
+- **API Gateway HTTP API:** $1.11 per million requests for the first 300 million/month, $1.00 per million above (amended 2026-08-10 to the eu-west-1 rates; see Amendments).
 - **API Gateway REST API:** $3.50 per million for the first 333 million/month.
 - **Lambda:** free tier of **one million requests and 400,000 GB-seconds per month**, which is _always_ free and does not expire at the end of the twelve-month term; beyond it, $0.20 per million requests and $0.0000166667 per GB-second (x86).
 - **Application Load Balancer:** $0.0225 per ALB-hour plus $0.008 per LCU-hour. No always-free tier.
-- **CloudWatch Logs:** $0.50 per GB ingested, $0.03 per GB-month archived, against an always-free 5 GB/month.
+- **CloudWatch Logs:** $0.57 per GB ingested (amended 2026-08-10 to the eu-west-1 rate; see Amendments), $0.03 per GB-month archived, against an always-free 5 GB/month.
 
 API Gateway does have a free tier — "one million API calls received for HTTP APIs … per month for up to 12 months" — but it is a **twelve-month, new-account** allowance, and **this ADR does not lean on it.** Every figure below is quoted at list price with that tier assumed absent. A cost claim that rests on an expiring allowance expires with it, and the account's age is not a fact this document should have to know. The always-free Lambda and CloudWatch allowances are used, because they do not expire.
 
@@ -53,12 +53,12 @@ Concretely, and owned by #14's Terraform per ADR 0001:
 
 Standing cost is what the resource charges for existing. Marginal cost is per million requests, at list price, with the twelve-month gateway tier assumed absent and Lambda's always-free allowances assumed present.
 
-| Option                                        | Standing $/month                        | Marginal $ per 1M requests                                           | Rate ceiling available                                 |
-| --------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ |
-| **A. Lambda + API Gateway HTTP API — chosen** | **$0**                                  | **$1.20** ($1.00 gateway + $0.20 Lambda requests; compute free ≤16M) | stage rate + burst, independent of concurrency         |
-| B. Lambda function URL                        | $0                                      | $0.20 (Lambda only)                                                  | reserved concurrency only, at a fixed 10 × concurrency |
-| C. Lambda + API Gateway REST API              | $0                                      | $3.70 ($3.50 + $0.20)                                                | same as A, plus per-method — 3.5× for features unused  |
-| D. ALB → Lambda target                        | **≈ $16.43** ($0.0225/ALB-hour × 730 h) | ~$0.20 + LCU charges                                                 | none native; needs WAF (a further per-month charge)    |
+| Option                                        | Standing $/month                        | Marginal $ per 1M requests                                           | Rate ceiling available                                                                  |
+| --------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **A. Lambda + API Gateway HTTP API — chosen** | **$0**                                  | **$1.31** ($1.11 gateway + $0.20 Lambda requests; compute free ≤16M) | stage rate + burst, independent of concurrency                                          |
+| B. Lambda function URL                        | $0                                      | $0.20 (Lambda only)                                                  | reserved concurrency only, at a fixed 10 × concurrency                                  |
+| C. Lambda + API Gateway REST API              | $0                                      | $3.70 ($3.50 + $0.20)                                                | same as A, plus per-method — 3.5× for features unused (us-east-1 basis; see Amendments) |
+| D. ALB → Lambda target                        | **≈ $16.43** ($0.0225/ALB-hour × 730 h) | ~$0.20 + LCU charges                                                 | none native; needs WAF (a further per-month charge)                                     |
 
 "Compute free ≤16M" is the point at which Lambda's always-free 400,000 GB-seconds runs out: at 256 MB and a 100 ms average duration each request costs 0.025 GB-s, so the allowance covers **16 million requests/month** before compute bills at all. Both figures are assumptions about a function not yet written; they are stated so the arithmetic below can be checked rather than believed.
 
@@ -68,13 +68,13 @@ At the chosen throttle, held at its ceiling continuously for a 30-day month, tra
 
 | Line                      | Arithmetic                                                   | $/month   |
 | ------------------------- | ------------------------------------------------------------ | --------- |
-| HTTP API requests         | 25.92M × $1.00/M                                             | 25.92     |
+| HTTP API requests         | 25.92M × $1.11/M                                             | 28.77     |
 | Lambda requests           | 25.92M × $0.20/M                                             | 5.18      |
 | Lambda compute            | (25.92M × 0.025 GB-s − 400,000 free) × $0.0000166667         | 4.13      |
-| CloudWatch Logs ingest    | ~6.5 GB at ~250 B/invocation, less the free 5 GB, × $0.50/GB | 0.75      |
-| **Worst case, sustained** |                                                              | **≈ $36** |
+| CloudWatch Logs ingest    | ~6.5 GB at ~250 B/invocation, less the free 5 GB, × $0.57/GB | 0.86      |
+| **Worst case, sustained** |                                                              | **≈ $39** |
 
-**Roughly a third of the ~$100/month ceiling, sustained, under continuous abuse, forever.** That is the argument for option A in one line: the throttle turns "we hope nobody hammers the demo" into an arithmetic bound, and $1.00 per million requests is what the bound costs. At the expected regime the same configuration bills about **one cent a month**.
+**Roughly a third of the ~$100/month ceiling, sustained, under continuous abuse, forever.** That is the argument for option A in one line: the throttle turns "we hope nobody hammers the demo" into an arithmetic bound, and $1.11 per million requests is what the bound costs. At the expected regime the same configuration bills about **one cent a month**.
 
 The bound is only as good as the configuration that produces it, which is the honest caveat: it lives in `default_route_settings` on the stage, and an apply that dropped it would remove the guarantee silently. That is a reason to alarm on spend, not a reason to prefer an option with no ceiling at all.
 
@@ -82,7 +82,7 @@ The bound is only as good as the configuration that produces it, which is the ho
 
 $0 standing: HTTP APIs have no per-hour charge, no minimum, and no per-stage fee; an idle API costs nothing, and — as with 0004's queue — an API somebody _forgets_ to destroy also costs nothing.
 
-What the $1.00 per million buys over option B's $0.20:
+What the $1.11 per million buys over option B's $0.20:
 
 - **A rate ceiling that is not a concurrency ceiling.** `throttling_rate_limit` and `throttling_burst_limit` are a token bucket: 10 requests/second sustained with a burst of 20 above it, expressed independently of how many executions run at once. This is the entire cost argument above, and it is the surface #29 extends rather than replaces.
 - **Routes and stages as first-class objects.** The route table still lives in code (seven routes do not justify a framework), but access logs carry route keys, and per-route throttle overrides exist unused today and available to #29 — the write endpoint is the one that needs a tighter limit than the reads.
@@ -101,7 +101,7 @@ Genuine downsides:
 
 The strongest rejected option, and it deserves accuracy rather than the usual dismissal. **Two things commonly said against function URLs are false, and were assumed in this ticket's plan:** they support CORS configuration natively (`AllowOrigins`, `AllowMethods`, `AllowHeaders`, `MaxAge` — set on the URL, applied by Lambda to every response), and they are **not** throttle-less. AWS documents the mechanism precisely: "You can throttle the rate of requests that your Lambda function processes through a function URL by configuring reserved concurrency … your function's maximum request rate per second (RPS) is equivalent to 10 times the configured reserved concurrency", with excess requests returning HTTP 429. Setting reserved concurrency to zero rejects all traffic, which is a genuinely good emergency stop that option A has no direct equivalent for.
 
-It is also **six times cheaper per request** — $0.20/M against $1.20/M — and needs no second resource at all: HTTPS endpoint, IPv6, resource policy, done.
+It is also **six and a half times cheaper per request** — $0.20/M against $1.31/M — and needs no second resource at all: HTTPS endpoint, IPv6, resource policy, done.
 
 Rejected because the rate ceiling it offers is welded to a quantity that should be set independently:
 
@@ -110,7 +110,7 @@ Rejected because the rate ceiling it offers is welded to a quantity that should 
 - **Nothing for #29 to extend.** Every request arrives on one implicit route with no gateway-side knobs, so per-route limits, per-IP limits and request-level rejection all become Lambda code — **billed per invocation**. An abuse control you pay to run is the wrong shape: option A rejects excess traffic before it reaches compute, at no cost.
 - **No custom domain.** Fronting `https://<url-id>.lambda-url.<region>.on.aws` with a real name means putting CloudFront in front of it, at which point the resource count is back where option A started and the routing metadata is still missing.
 
-The saving being declined is real and small: at the expected regime the difference between $0.20/M and $1.20/M is a fraction of a cent per month. **The trade is a rate limiter for a cent**, and stated that way it is not close.
+The saving being declined is real and small: at the expected regime the difference between $0.20/M and $1.31/M is a fraction of a cent per month. **The trade is a rate limiter for a cent**, and stated that way it is not close.
 
 ### C. Lambda + API Gateway REST API
 
@@ -123,7 +123,7 @@ Rejected because **every one of those features is either unused, duplicated, or 
 - **The one feature that would genuinely help — the response cache — is a per-hour charge** for a dedicated cache instance. ADR 0004 rejected Kinesis on the principle that a resource billing for existing is the wrong shape for a demo that idles; a cache instance is the same shape, and buying a 3.5× per-request premium in order to gain access to it would be paying twice.
 - **WAF is a further standing monthly charge** per web ACL, on top.
 
-At 25.92M worst-case requests the REST premium alone is `25.92 × $2.50 ≈ $65/month` more than option A — pushing the bounded worst case from roughly a third of the ceiling to essentially all of it, in exchange for capability this system has argued it does not want. If #30 ever chooses API keys as the auth mechanism, this option is worth re-costing; that is a revisit trigger, not a reason to buy it now.
+At 25.92M worst-case requests the REST premium alone is `25.92 × $2.50 ≈ $65/month` more than option A (us-east-1 basis on both sides; see Amendments) — pushing the bounded worst case from roughly a third of the ceiling to essentially all of it, in exchange for capability this system has argued it does not want. If #30 ever chooses API keys as the auth mechanism, this option is worth re-costing; that is a revisit trigger, not a reason to buy it now.
 
 ### D. Application Load Balancer with a Lambda target group
 
@@ -131,7 +131,7 @@ The conventional answer, and it brings real things: a stable DNS name independen
 
 Rejected on ADR 0004's precedent, applied without modification:
 
-- **≈ $16.43/month standing, before a single request** (`$0.0225 × 730`), plus LCU charges. It would be **the only resource in Cumulo that bills for existing**, undoing in one apply the property 0004 established. 0004 rejected a ≈ $10.95/month provisioned Kinesis shard as "11% of the ceiling for a transport"; this is 16% of the ceiling for a router, and the argument is not weaker just because the ticket is more visible.
+- **≈ $16.43/month standing, before a single request** (`$0.0225 × 730`), plus LCU charges. It would be **the only resource in Cumulo that bills for existing at a nonzero rate**, undoing in one apply the property 0004 established. 0004 rejected a ≈ $10.95/month provisioned Kinesis shard as "11% of the ceiling for a transport"; this is 16% of the ceiling for a router, and the argument is not weaker just because the ticket is more visible.
 - **It requires a VPC with subnets in at least two Availability Zones.** ADR 0002 counted "no VPC, no NAT Gateway, no instance, no proxy" among the specific reasons the storage layer costs $0. An ALB reintroduces that topology — and with it a class of misconfiguration this platform has never had to reason about — for a service whose only dependency is a public AWS API endpoint.
 - **Its free tier cannot be leaned on.** New accounts get shared load-balancer hours, but the allowance expires, and per the frame above this document does not rest cost claims on expiring tiers.
 - **Nothing it uniquely provides is needed.** There are no long-lived connections, no fleet of targets to health-check, no path-based routing across multiple services, and no request that legitimately runs longer than 30 seconds. It also has **no native rate limiting at all** — that is AWS WAF, at a further per-month charge — so the option with the highest standing cost is also the one that does not solve the problem option A was chosen for.
@@ -154,9 +154,9 @@ Its downsides are real and are accepted: serving static bytes from compute is in
 
 ## Consequences
 
-**The platform's standing cost stays $0.** ADR 0004's headline survives this ticket intact: the Lambda bills only for invocations, the HTTP API bills only for requests, and the log group bills only for bytes — three resources, none of which charge for existing. Cumulo still has no per-hour resource anywhere, and the ~$100/month ceiling remains entirely unspent at rest.
+**The platform's standing cost stays $0.** ADR 0004's headline survives this ticket intact: the Lambda bills only for invocations, the HTTP API bills only for requests, and the log group bills only for bytes — three resources, none of which charge for existing outside an always-free allowance (amended 2026-08-10; see Amendments). Cumulo still has no per-hour resource anywhere, and the ~$100/month ceiling remains entirely unspent at rest.
 
-**Worst-case spend is now a computed number rather than an assumption.** ≈ $36/month with the API pegged at its throttle ceiling continuously, derived above. This is the first place in the platform where an unbounded external input meets a metered resource, and the throttle is what makes the answer finite. Two things follow: the throttle settings are load-bearing configuration and belong in review whenever `infra/api` changes, and a billing alarm is the backstop for the case where they are removed.
+**Worst-case spend is now a computed number rather than an assumption.** ≈ $39/month with the API pegged at its throttle ceiling continuously, derived above. This is the first place in the platform where an unbounded external input meets a metered resource, and the throttle is what makes the answer finite. Two things follow: the throttle settings are load-bearing configuration and belong in review whenever `infra/api` changes, and a billing alarm is the backstop for the case where they are removed.
 
 **The cost guard is not a capacity guard, and the gap should be visible.** ADR 0002 sized `cumulo-series` at 21 provisioned RCU and named the backstop explicitly — "#29's gateway throttling and the billing alarms remain the right backstop either way". This is that throttling, arriving one ticket early. But the arithmetic does not fully close: a maximum-width `GET /v1/sites/{siteId}/series` over the 336-hour span cap reads on the order of a thousand small items, roughly 30 read units on an eventually-consistent Query (assuming ~250 B/item). Ten of those per second is an order of magnitude above 21 RCU sustained. 0002's 300-second burst reserve of 6,300 units absorbs a couple of hundred such requests instantly, which covers every demo-shaped load — but a determined caller pegging the throttle with maximum-width range reads surfaces as DynamoDB read throttling, not as a bill. That is the correct failure (0002 mandates `ReadThrottleEvents` alarms, and capacity mode is a one-attribute change), and it is recorded here rather than discovered later.
 
@@ -176,3 +176,11 @@ Its downsides are real and are accepted: serving static bytes from compute is in
 4. **Swagger asset traffic becoming a material share of requests**, which would make S2's CDN the right answer after all; the trigger is measurable from access logs rather than guessed.
 5. **A second HTTP surface** — an internal or admin API — at which point one gateway with two stages, or a shared gateway, is worth costing against a second function URL.
 6. **The throttle proving too blunt in practice**, i.e. legitimate visitors 429ing each other before #29 lands. The fix is per-route limits on the existing stage, not a change of hosting.
+
+## Amendments
+
+Per `docs/adr/README.md`: amendments true up stated values that have legitimately moved; the decision and its rationale are immutable.
+
+- **2026-08-10 — the chosen option's worst-case bound re-based us-east-1 → eu-west-1 (#200).** The cost frame above was computed at us-east-1 list prices with a stated "Ireland runs roughly 10–15% higher" margin. The platform deploys into eu-west-1, and two of the four rates behind the bound are regional: HTTP API requests $1.00/M → $1.11/M (first 300M; the over-300M tier $0.90 → $1.00; AmazonApiGateway offer for eu-west-1, publication 2026-07-24, SKU `WPZ6JK7P27W4K4QK`) and CloudWatch Logs ingestion $0.50/GB → $0.57/GB (AmazonCloudWatch offer, publication 2026-08-06, SKU `KJBTQPDHW2H92B8Y`). Lambda's $0.20/M requests and $0.0000166667/GB-s are identical in both Regions (AWSLambda offer, publication 2026-07-17). The worst-case table moves — gateway row $25.92 → $28.77, logs row $0.75 → $0.86, bound ≈ $36 → ≈ $39/month — and the chosen option's marginal, $1.20/M → $1.31/M, is trued everywhere it is stated in this document, including inside option B's comparison, whose own $0.20/M is Region-identical and whose argument (a rate limiter for a fraction of a cent at demo volume) is unchanged. No conclusion turns on it: the option comparisons are ratios, and the movement is ≲13% and near-uniform, so figures belonging to the rejected options alone (REST's $3.50/M and ≈ $65 premium, ALB's ≈ $16.43 standing) are left on their original us-east-1 basis rather than re-derived. That carve-out covers option C's `3.5×` per-request premium wherever it appears — the options table, and the rejection argument's restatements of it — which is a ratio of REST's $3.50/M to option A's pre-amendment $1.00/M; at the amended rate the ratio is 3.15× and the delta behind the "≈ $65/month" figure is $2.39 rather than $2.50, neither of which changes the argument that the premium buys capability this system does not want. Option B's comparison moved with the rate it is drawn from: $1.20/M ÷ $0.20/M was exactly six, and at $1.31/M it is 6.55, so "six times cheaper" reads "six and a half" above. `infra/README.md` ("What it costs", api stack) records the eu-west-1 CloudWatch ingestion rate; its gateway figures still stand at the us-east-1 $1.00/M, so on that rate this document leads the README rather than following it — #376 propagates it and the other restatement sites.
+- **2026-08-10 — "none of which charge for existing" made precise (#200, after #179/#188's audit).** Log groups, alarms, and stored bytes do bill for existing — at $0 because always-free allowances absorb them, not because no meter runs. The Consequences line now reads "outside an always-free allowance"; the magnitude, ≈ $0, is unchanged, and so is the argument it supports. The per-resource statement lives in `infra/README.md` ("What it costs" notes, per stack).
+- **2026-08-10 — the scope of the ≈ $39 bound stated (#200).** The bound prices gateway requests, Lambda requests and compute, and log ingestion — the terms that billed per-request when this was written, when every DynamoDB table sat inside provisioned free capacity and a read flood surfaced as throttling, not dollars (stated plainly in Consequences above). ADR 0002's Amendments (#156, #258) have since moved every table to on-demand, so throttle-pegged traffic now also bills DynamoDB request units this bound does not include: ADR 0006's worst-case table carries the abuse-table term (≈ $20/month at eu-west-1 rates), and per-request storage reads range from $0 (docs assets) to ≈ $110/month were every request a maximum-width series read (25.92M × ~30 RRU × $0.1415/M — the read this document itself sized at "roughly 30 read units"). This entry states the scope; re-deriving a platform-wide worst case is follow-up work (#375), not an amendment.
