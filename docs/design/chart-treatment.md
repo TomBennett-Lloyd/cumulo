@@ -109,7 +109,7 @@ Composition rules that keep both legible where they overlap:
   median**, which was the one series exempt from this until #264, because until then a sample
   existed only where a forecast did. It does not any more: the fleet chart's x-domain is the union
   of the forecast's hours and the actuals' hours, and in live mode those two windows are disjoint —
-  the forecast fan-out reaches forward from the clock, the actuals read reaches back from it — so
+  the forecast read reaches forward from the clock, the actuals read reaches back from it — so
   the hours behind the horizon carry a measurement and no forecast at all. The median is drawn once
   per contiguous run of forecast samples, and an hour with no forecast gets no median mark and an
   em dash in the table twin, never a zero. A straight

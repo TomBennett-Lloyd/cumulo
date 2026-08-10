@@ -176,8 +176,10 @@ the fleet — and would cost every deep link a spinner where the chart already i
 spends that one fleet request, once. `Dashboard.deep-link.test.tsx` asserts the "once" rather than
 leaving it to prose.
 
-The other cost is unchanged in shape and smaller in size: adding a site in live mode spends a fresh
-fleet request, bounded by `CreationThrottle`'s three-per-minute allowance.
+The other cost is unchanged in shape and smaller in size: adding a site in live mode re-sums the
+fleet, and that is two fresh metered requests rather than one — `refreshToken` sits in both query
+keys, so a creation re-asks the forecasts and the simulated actuals alike. Bounded by
+`CreationThrottle`'s three-per-minute allowance.
 
 Two implementation notes that went with the hiding. `fleet-panel.css` no longer restates
 `[hidden] { display: none }` — it had to, because `.fleet-panel` sets `display: grid` and beats
