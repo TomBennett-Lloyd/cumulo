@@ -1,11 +1,18 @@
 /*
- * Cumulo CSS gate: UI stylesheets consume design tokens only.
+ * Cumulo CSS gate: UI stylesheets consume design tokens only, and paint focus
+ * only where focus informs the reader.
  *
  * CLAUDE.md's frontend gate says "no arbitrary colors, sizes, or spacing
  * values". This config is the mechanical half of that rule for CSS (the ESLint
  * half, covering .ts/.tsx, lives in eslint.config.mjs). The single exemption is
  * packages/ui/src/tokens/*.css — the one file in the repo allowed to hold raw
  * values, because it is where the tokens are defined.
+ *
+ * The second gate here is not about values at all: it is
+ * docs/standards/design.md rule 11's, and it governs *when* a ring paints. It
+ * sits in this file because it is the same kind of thing — a design rule with a
+ * CSS-shaped tell that a linter can see — and see
+ * `selector-pseudo-class-disallowed-list` below for what it refuses and why.
  */
 export default {
   plugins: ['stylelint-declaration-strict-value'],
@@ -145,6 +152,41 @@ export default {
     'declaration-property-value-allowed-list': [
       { '/^--/': ['/^var\\(/'] },
       { reportDisables: true },
+    ],
+
+    /*
+     * A ring is for the reader who is navigating by keyboard, never for the one
+     * who just clicked — docs/standards/design.md rule 11 owns that rule and the
+     * argument for it. `:focus` matches however focus arrived, so styling it
+     * paints a ring on a pointer interaction that asked for none; the browser
+     * heuristic that tells the two arrivals apart is `:focus-visible`, and it is
+     * the only half of the pair this codebase may style.
+     *
+     * The list matches pseudo-class *names*, which is what makes a one-entry
+     * list sufficient: `focus-visible` and `focus-within` are different names,
+     * so they pass untouched while bare `:focus` is refused. The two `lint:css`
+     * runs on issue 339 are what establish that rather than the documentation —
+     * a seeded `.gate-probe:focus` was refused by this rule, and the tree's real
+     * `:focus-visible` rules stayed green.
+     *
+     * This landed on an already-clean tree (issue 339 audited every focus rule
+     * in the repo and found `:focus-visible` throughout), so it is a ratchet
+     * rather than a fix: it exists to fail the *next* bare `:focus`. That
+     * regression is invisible to jsdom — `:focus-visible` is a heuristic no
+     * jsdom test can run — so lint is the fast half of catching it and
+     * apps/web/e2e/pointer-focus.spec.ts, which measures the painted ring in a
+     * real browser, is the slow half.
+     *
+     * Deliberately absent from the tokens override below: defining a token is no
+     * licence to style focus, and the exemption there is about raw values only.
+     */
+    'selector-pseudo-class-disallowed-list': [
+      ['focus'],
+      {
+        reportDisables: true,
+        message:
+          'Style focus with :focus-visible, never bare :focus — rings for keyboard interaction, none for pointer (design.md rule 11 / P11, issue 339).',
+      },
     ],
 
     // See the suppression note above: this is what makes a `stylelint-disable`

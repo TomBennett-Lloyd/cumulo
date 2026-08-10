@@ -51,11 +51,15 @@ import {
  * describe below.
  *
  * `document.activeElement` is the whole assertion, and jsdom does implement it.
- * What jsdom cannot show is the focus *ring* — no layout, no painting — so
- * whether a ring appears where the reader did not ask for one is a browser
- * criterion (`testing.md` rule 10) and belongs to `e2e/keyboard-focus.spec.ts`,
- * which drives the keyboard path in real Chromium and carries the deep-link case
- * in the lane the #260 report was written about.
+ * What jsdom cannot show is the focus *ring* — no layout, no painting — so every
+ * question about one is a browser criterion (`testing.md` rule 10), and the
+ * browser lane splits it across two specs holding a clause each. Whether a ring
+ * appears where the reader did *not* ask for one — the pointer flows — is
+ * `e2e/pointer-focus.spec.ts`'s. Whether a keyboard reader still gets one is
+ * `e2e/keyboard-focus.spec.ts`'s, which drives the keyboard path in real
+ * Chromium and carries the deep-link case in the lane the #260 report was
+ * written about. Neither spec means anything without the other, so a change
+ * deleting one is deleting half of rule 11.
  */
 
 /** A well-formed id no fleet contains: a link to a site deleted, or mistyped. */

@@ -21,9 +21,14 @@ afterEach(cleanup);
  * split — `SitePopover.tsx` is the maplibre half and is untestable in jsdom
  * (`testing.md` rule 3), and everything with a decision in it is here.
  *
- * What this file cannot show is the focus *ring* around whatever it focuses,
- * which is layout and paint and therefore the browser lane's
- * (`e2e/keyboard-focus.spec.ts`).
+ * What this file cannot show is the focus *ring*, which is layout and paint and
+ * therefore the browser lane's. The card lands nobody inside itself since #328,
+ * so the only ring it can have is on one of its own controls, once a reader has
+ * arrived there by tabbing or by pressing it — and which of those two arrivals
+ * paints one is the rule that lane holds, in two specs of a clause each:
+ * `e2e/keyboard-focus.spec.ts` for the ring a keyboard reader must still get,
+ * `e2e/pointer-focus.spec.ts` for the ring that must not appear under a pointer.
+ * Both prove it on other controls, and neither means anything without the other.
  */
 
 const SITE: Site = {

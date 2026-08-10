@@ -152,8 +152,11 @@ first (and the modal's exception to it), and the third bullet is owned by two to
 that leaves owes a landing" for the capture-and-restore, and "a surface that never took the focus
 returns none" for the guard that has answered most dismissals since the landing went.
 The fourth bullet is the modal's own paragraph, "a modal owes its own landing". `Dashboard.focus.test.tsx` and
-`map/SitePopoverCard.test.tsx` pin all of it as far as `document.activeElement` goes; the ring a
-reader actually sees, and a deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.
+`map/SitePopoverCard.test.tsx` pin all of it as far as `document.activeElement` goes. The ring a
+reader actually sees is the browser lane's, and there it is two specs rather than one:
+`e2e/keyboard-focus.spec.ts` keeps the ring a keyboard reader depends on, and a deep link arriving
+over a real network; `e2e/pointer-focus.spec.ts` keeps the other clause, that no ring appears where
+the reader did not ask for one. Deleting either leaves half a rule standing.
 
 ## The fleet panel is never hidden, and always paid for
 
