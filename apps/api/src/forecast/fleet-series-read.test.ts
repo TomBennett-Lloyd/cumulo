@@ -257,20 +257,33 @@ describe('readFleetSeries', () => {
     ]);
   });
 
-  it('refuses when any site’s window stopped short, logging the first in site order and reading no further batch', async () => {
-    // Every site in the batch stopped short at once, which a concurrent fan-out
-    // can do and a one-at-a-time one could not. The operator is sent to the
-    // first of them in site order, and the next batch never starts: more sites
-    // cannot make a truncated answer whole.
+  it('refuses when a site’s window stopped short, logging the first in site order though it answered last, and reading no further batch', async () => {
+    // Two sites in one batch stop short — which a concurrent fan-out can do and
+    // a one-at-a-time one could not — and the two orders that could name the
+    // logged site are deliberately opposed: the *later* of them in site order
+    // answers *first*, and site 0 answers last of the whole batch. So a fan-out
+    // that recorded whichever short site answered soonest names site 3, and one
+    // that scanned the settled batch from the back names site 3 too; only
+    // judging the batch in site order names site 0. The next batch never
+    // starts either: more sites cannot make a truncated answer whole.
     const { deps, series, logged } = harness();
     const sites = fleetOfSize(FLEET_READ_CONCURRENCY + 1);
+    const firstShortInSiteOrder = idAt(sites, 0);
+    const lastShortInSiteOrder = idAt(sites, 3);
 
     const read = readFleetSeries(deps, fullBudgetDeadline, sites, FROM, TO, READ_DEADLINE_EVENT);
     await pendingWorkDone();
-    series.settleAll(stoppedShort);
+
+    series.settleOne(lastShortInSiteOrder, stoppedShort(lastShortInSiteOrder));
+    for (const siteId of series.dispatched.filter(
+      (id) => id !== firstShortInSiteOrder && id !== lastShortInSiteOrder,
+    )) {
+      series.settleOne(siteId, wholeWindow(siteId));
+    }
+    series.settleOne(firstShortInSiteOrder, stoppedShort(firstShortInSiteOrder));
 
     expect(refusalOf(await read).statusCode).toBe(500);
     expect(series.dispatched).toHaveLength(FLEET_READ_CONCURRENCY);
-    expect(logged).toEqual([{ event: READ_DEADLINE_EVENT, siteId: idAt(sites, 0) }]);
+    expect(logged).toEqual([{ event: READ_DEADLINE_EVENT, siteId: firstShortInSiteOrder }]);
   });
 });
