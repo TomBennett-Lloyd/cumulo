@@ -185,6 +185,30 @@ describe('FleetPanel’s heading row', () => {
       'Fleet forecast and simulated actuals, past 48 h and the forecast ahead',
     );
   });
+
+  it('names the window control for assistive technology alone, with no visible label beside it', async () => {
+    /*
+     * #329, and the answer to the question that raised it: the window's name is
+     * for screen readers, and it is already only for them. `design.md` rule 2
+     * settles the move — a label whose only job is naming for assistive
+     * technology becomes an accessible name, not visible text — and #284 D5 had
+     * already made it, deleting the window captions when the picker took over
+     * stating the window. This case is what stops one growing back as a heading
+     * over the control.
+     *
+     * Neither half stands alone. The `getByRole` is the positive control: it
+     * proves the name is still *on* the group, so the null below reads as "the
+     * name is not visible" rather than "the name was deleted". Which window is
+     * drawn is copy and stays in `FleetPanel.test.tsx`; what is pinned here is
+     * the route — `aria-label`, and no visible node.
+     */
+    const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
+
+    expect(
+      within(fleetHeader(container)).getByRole('group', { name: 'Aggregation range' }),
+    ).toBeDefined();
+    expect(screen.queryByText('Aggregation range')).toBeNull();
+  });
 });
 
 describe('FleetPanel’s chart', () => {
