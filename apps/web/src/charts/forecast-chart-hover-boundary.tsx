@@ -45,8 +45,10 @@ import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
  * hover frame, so those producers are simply never called; and this component's
  * own re-render walks straight past the elements it was handed, because their
  * references have not changed and React bails out of an unchanged child
- * (`dashboard/FleetPanel.memo.test.tsx` documents that bailout and relies on
- * it). Nothing here is memoised to achieve that — the boundary *is* the
+ * (`dashboard/FleetPanel.memo.test.tsx` documents that bailout, and steps
+ * around it deliberately — it re-renders its panel with a *fresh* element
+ * carrying the same props, precisely so the bailout cannot be what satisfies
+ * its assertion). Nothing here is memoised to achieve that — the boundary *is* the
  * mechanism, which is why adding a memo to a mark would be answering a question
  * this file has already answered. `forecast-chart-render-boundary.test.tsx`
  * counts the producers across a sweep and holds it.
