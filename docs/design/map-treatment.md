@@ -232,6 +232,22 @@ Placement:
   a band of chrome across the page rather than part of the map, and it takes its height out of
   the map on every screen.
 
+- **The band is full width, and it paints above the markers.** It runs the whole width of the map
+  rather than tucking into a corner, and a site or cluster marker whose centre falls under it is
+  not pointer-reachable there. That is accepted rather than worked around (#356, on the
+  composition #265 introduced), and what makes it acceptable is the relief family the marker
+  states already rely on: the map pans, so one gesture moves any marker clear of the band; markers
+  keep their place in the tab order and stay keyboard-operable there, where Enter selects exactly
+  as a click would; and the site table under the map and the header's search reach every site
+  without touching the map at all.
+
+  The inset corner chip was weighed and declined. It narrows the occluded strip without removing
+  it, so the relief rule above is owed either way; at narrow widths the band is licence-mandated
+  string from edge to edge, which makes a "corner" effectively full width anyway, so the corner
+  buys partial relief only at the widths where the map has the most room to spare; and it forfeits
+  the coherence the band has with the full-bleed map and with the Map chrome argument above, which
+  reads the bottom edge as the credits band's all the way across.
+
 - **Both are visible without interaction.** No "i" toggle, no hover-to-reveal, no collapsing the
   credits behind a control at narrow widths. Overlaying does not weaken this: the band is opaque
   enough to read at rest, and it is never faded, animated in, or suppressed while the reader is
@@ -241,8 +257,18 @@ Placement:
   fitting on one line, the band sheds its two leading phrases — `basemap tiles by` and
   `Weather data by` — and reads `© OpenStreetMap contributors · OpenFreeMap` and
   `Open-Meteo.com`. Both links, the `©` and the `·` survive at every width, and the shortened
-  weather credit is the compact form CLAUDE.md sanctions for a row that cannot hold the full
-  phrase (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
+  weather credit is the compact form CLAUDE.md sanctions for a row that, as composed, cannot hold
+  both credits' full forms (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
+
+  Both phrases go at once, and the width they go at is a property of **the row as composed** —
+  the two credits' full forms side by side — rather than of either phrase's own length. The
+  weather phrase alone would still fit on rows somewhat narrower than the pair's limit, and
+  dropping the two in stages, each at its own measured width, was weighed and declined (#356).
+  Staging would hold `Weather data by` on screen across a slice of widths, and it would cost a
+  second viewport breakpoint on this band — the census `stylelint.config.mjs`'s residual paragraph
+  exists to keep — plus a second measurement taken against a layout #326 is about to move. What
+  that buys is prose serving no reader decision ([`design.md`](../standards/design.md) rules 2 and
+  8), while the sanctioned compact form keeps both links on screen at every width regardless.
 
   This is computed visibility and nothing else: the DOM carries the identical text in both forms,
   so anything reading the page rather than painting it — a reader with stylesheets off, a scraper

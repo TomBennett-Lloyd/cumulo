@@ -141,8 +141,15 @@
  * answer in an overlay: a mostly-opaque surface between the ink and the tiles,
  * so the text is reading against a known colour while the map stays continuous
  * behind it. No `pointer-events` games — a CC BY 4.0 credit has to be
- * clickable, and this band is over the tiles, not over anything a reader
- * needs to reach.
+ * clickable.
+ *
+ * What the band does cover is the markers under it: it paints above them, so a
+ * site or cluster marker whose centre falls inside the band is not
+ * pointer-reachable there. That is the accepted composition, together with the
+ * relief that carries it — the map pans, markers stay in the tab order and
+ * keyboard-operable, the site table and the header's search reach every site.
+ * `docs/design/map-treatment.md`'s Attribution section decides it (#356) and is
+ * where the argument lives; this is a pointer, not a second copy of it.
  *
  * `flex-wrap: wrap` is still the last resort below the compact row's own width
  * (see the compact-form rule further down); what it is no longer is the *first*
@@ -196,8 +203,8 @@
  * `·` are outside the wrappers, so nothing a licence requires is hidden here —
  * the DOM text is identical either way and only the painting changes, which is
  * also why `MapAttributionStrip`'s wording tests never had to learn about this.
- * The Open-Meteo half is the compact form CLAUDE.md sanctions for a row that
- * cannot hold the full phrase (owner-amended 2026-08-09).
+ * The Open-Meteo half is the compact form CLAUDE.md sanctions for a row that, as
+ * composed, cannot hold both credits' full forms (owner-amended 2026-08-09).
  *
  * The rule lives here, scoped to `.map-attribution`, rather than beside
  * `.cumulo-attribution-prefix`'s own component in `@cumulo/ui`. Whether the
@@ -210,12 +217,17 @@
  *
  * 37.25rem is measured rather than picked. At this band's own typography the
  * full row needs 597px and the compact row 402px, so the full form wraps at
- * 596px and below, and the breakpoint sits exactly there. It sits *at* the wrap
- * point rather than comfortably above it because the two errors are not
- * symmetric: dropping the phrase on a row that could have held it is outside
- * what the constraint sanctions, while carrying it on a row that wraps is just
- * the behaviour this rule replaced. So where a platform's fonts run wider than
- * the measurement, this under-fires by design.
+ * 596px and below, and the breakpoint sits exactly there.
+ *
+ * What that threshold measures is where the row *as composed* stops fitting —
+ * both credits' full forms on one line — not where either phrase runs out on
+ * its own. The weather phrase alone would still fit roughly 96px further down
+ * (approximate, measured in #284's review; nothing computes with it, so it
+ * joins no ledger). A staged drop, each prefix going at its own width, was
+ * weighed and declined: `docs/design/map-treatment.md`'s Attribution section
+ * decides that (#356) rather than this comment re-arguing it. Sitting *at* the
+ * wrap point rather than comfortably above it is what makes this under-fire by
+ * design where a platform's fonts run wider than the measurement.
  *
  * Note what it cannot do: the compact row's own 402px is licence-mandated string
  * and nothing here can shorten it, so below roughly 25rem the band wraps in the
@@ -230,25 +242,22 @@
  *   compacted range and provably clear of the floor below it. A width derived
  *   from the stylesheet would assert nothing, so it spells them out: the
  *   asserting carrier rule 9 ledgers rather than forbids.
- * - `docs/tech-debt.md`, "The credits band occludes markers across the map's
- *   full width" (its #284 C12 update) — restates this width and the ~25rem
- *   floor, to say how far the occluded strip was narrowed and what is left.
  * - `docs/design/map-treatment.md`, the Attribution section — deliberately
  *   carries no number: it names the decision and points here for the width.
  *   Ledgered so it stays that way, since a number is the tempting thing to add
  *   to a paragraph describing a range.
  *
- * A container query would measure the row instead of inferring it from the
- * viewport, and would need no number at all. Declined while this is a
- * one-surface problem; it is the escalation the moment a second surface starts
- * wrapping, or this band gains a third credit.
+ * Measuring the container is the default and a viewport breakpoint is the
+ * documented escalation (`design.md` rule 7). This is a breakpoint, and the
+ * escalation is a thin one here: the map runs full bleed, so this row's
+ * container *is* the layout viewport, and a container query would arrive at the
+ * same width through a second mechanism.
  *
- * A second surface has since arrived — `header/header.css` (#284 D17) — and the
- * escalation was weighed rather than triggered: a container query serves one
- * container, so adopting it for both is two independent rewrites sharing no
- * value, and each width is still measured from the content of its own row.
- * Where that judgement is recorded, with the count it depends on, is
- * `stylelint.config.mjs`'s residual paragraph.
+ * What the breakpoint owes is a line in the census, and the census — along with
+ * the weighing that left `header/header.css` (#284 D17) on a breakpoint too —
+ * is owned by `stylelint.config.mjs`'s residual paragraph. Should the full-bleed
+ * layout stop making the container and the viewport the same width, migrating
+ * this band to container measurement belongs to #326.
  *
  * Gate residual: the width is a raw length, and there is no breakpoint scale to
  * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
