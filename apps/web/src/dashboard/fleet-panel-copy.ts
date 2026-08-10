@@ -68,9 +68,17 @@ const siteCountLabel = (count: number): string =>
  * Capacity comes from `@cumulo/shared` rather than a sum written here, because
  * fleet arithmetic lives there (`architecture.md` rule 3) and a second sum would
  * be a second definition of the fleet's size.
+ *
+ * The line used to end in the word "installed", and #344 took it out
+ * (`design.md` rule 2: chrome earns its place). It served no reader decision the
+ * line does not already serve — a kW figure under a heading reading "Fleet
+ * forecast" is the fleet's capacity, and the unit says which quantity it is. The
+ * saving is not only ink: this is the auxiliary text the header row shrinks
+ * first when it runs out of width (`fleet-panel.css`), so every character it
+ * does not need is a character the picker never has to displace.
  */
 export const fleetStatsLine = (sites: readonly Site[]): string =>
-  `${siteCountLabel(sites.length)} · ${capacityLabel(fleetCapacityKw(sites))} installed`;
+  `${siteCountLabel(sites.length)} · ${capacityLabel(fleetCapacityKw(sites))}`;
 
 /**
  * The window the chart's labels name.

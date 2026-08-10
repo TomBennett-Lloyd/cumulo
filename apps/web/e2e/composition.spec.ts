@@ -380,3 +380,100 @@ test('stacks the fleet chart under the map rather than beside it', async ({ page
 
   expect(chartBox.y).toBeGreaterThanOrEqual(mapBox.y + mapBox.height);
 });
+
+/**
+ * A phone, and the width the never-wrap rule is claimed at.
+ *
+ * 390x844 is a real device size rather than a number chosen just under a fold,
+ * and it is the same one `header.spec.ts` measures the bar's own fold at —
+ * shared on purpose, so a platform whose fonts run a few pixels wide shows up in
+ * both places at once rather than only in whichever picked the tighter width.
+ */
+const PHONE_VIEWPORT = { width: 390, height: 844 };
+
+/*
+ * The window selectors never wrap (#344, `design.md` rule 7).
+ *
+ * Its own `describe` because the claim is about a viewport, and `test.use` is
+ * how this lane opens a case at one (`chart-surfaces.spec.ts` and
+ * `header.spec.ts` both do it that way) — a `setViewportSize` inside the test
+ * would measure a page that had already been laid out at the default width and
+ * then reflowed, which is a different thing from the page a phone visitor gets.
+ *
+ * It belongs in this lane rather than beside the component for the reason
+ * `testing.md` rule 10 gives: wrapping is layout, and jsdom applies no
+ * stylesheet, so a jsdom twin of this case would assert nothing at all. It
+ * belongs in *this file* because it is a claim about the assembled header — the
+ * heading, the numbers, the (i) and the picker sharing one flex line, at a width
+ * where the page is also carrying a real map.
+ *
+ * Honest scope, because the routing above would otherwise imply more coverage
+ * than the case carries (`testing.md` rule 10's closing rule: where the lane owns
+ * a criterion no spec in it yet asserts, say so beside the code). What is
+ * asserted below is that the *picker group* does not wrap internally, and that
+ * is all. The fix #344 shipped has two halves — the summary yielding
+ * (`.fleet-panel-stats`' `flex: 1 1 0%` and its truncation set) and the picker
+ * refusing to shrink or break (`.range-picker`'s `flex-shrink: 0`,
+ * `.range-picker-button`'s `white-space: nowrap`) — and reverting *either* of
+ * them leaves this case, and the whole suite in both lanes, green. What actually
+ * killed the gate while it was being written was a seeded `flex-direction:
+ * column`, which none of those declarations control.
+ *
+ * The assertion that would close the gap is the one this file does not make: that
+ * the picker still shares `.fleet-panel-title`'s line rather than being pushed to
+ * a second row. It is deliberately not added here rather than forgotten — it is
+ * filed on issue 346 (the P7 gate candidates) because it needs a measured
+ * pre/post reading first. The pre-fix measurement taken while planning this batch
+ * had the tip and the picker together at 242px inside a 326px row, which is close
+ * enough that the picker may legitimately sit on a second line at 390px even with
+ * the fix in, and a case asserting otherwise on an assumption would be a gate
+ * asserting the wrong thing rather than a gate with a gap.
+ */
+test.describe('the fleet panel’s header at phone width', () => {
+  test.use({ viewport: PHONE_VIEWPORT });
+
+  test('keeps the range picker one button tall at phone width (issue 344, P7)', async ({
+    page,
+  }) => {
+    /*
+     * The map first, as every case here does. Nothing about the picker depends
+     * on the canvas, but the panel's position on the page does: the map is the
+     * tallest thing above it and acquires its height late, so a box read before
+     * that settles is a read of a page still about to move.
+     */
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    const panel = page.locator('.fleet-panel');
+    const picker = panel.locator('.range-picker');
+
+    await picker.scrollIntoViewIfNeeded();
+
+    const groupBox = await layoutBoxOf(picker, 'The range picker');
+    const buttonBox = await layoutBoxOf(
+      picker.locator('.range-picker-button').first(),
+      'The first range button',
+    );
+
+    /*
+     * One button tall is the whole claim: three chips on one line make the group
+     * exactly as tall as one of them, and a group that wrapped would come to
+     * two or three times this plus its own gaps — far outside any tolerance.
+     * Measured against a button rather than against a written-down height, so
+     * the case survives a change to the chips' padding or type scale; what it
+     * pins is the ratio, not the pixels.
+     */
+    expect(groupBox.height).toBeLessThanOrEqual(buttonBox.height + EDGE_TOLERANCE_PX);
+
+    /*
+     * And it fits, rather than merely staying short. A group kept on one line by
+     * running off the side of its card would satisfy the height above with the
+     * `7 d` chip unreachable, so the right edges are compared too — the panel is
+     * the container the fit is proven from inward (`design.md` rule 7).
+     */
+    const panelBox = await layoutBoxOf(panel, 'The fleet panel');
+
+    expect(groupBox.x + groupBox.width).toBeLessThanOrEqual(
+      panelBox.x + panelBox.width + EDGE_TOLERANCE_PX,
+    );
+  });
+});

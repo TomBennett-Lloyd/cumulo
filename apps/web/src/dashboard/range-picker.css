@@ -12,8 +12,16 @@
  * (react.md rule 5).
  */
 
+/* `flex-shrink: 0` is the belt to `fleet-panel.css`'s braces (#344, design.md
+ * rule 7 — the window selectors stay on one line at every screen size). The
+ * stats line yielding is what stops the group being pushed onto a line of its
+ * own; this is what stops the group being *squeezed* below its min-content width
+ * once it is sharing a line, which would crush the three chips rather than move
+ * them. Written here rather than at the header, because it is the picker's own
+ * claim about itself and travels with it to any second caller. */
 .range-picker {
   display: flex;
+  flex-shrink: 0;
   gap: var(--space-2);
 }
 
@@ -28,9 +36,15 @@
  * standing answer to that inversion rather than a border invented here — the
  * add-a-site hint in fleet-panel.css used to be the second example of it, and it
  * left with the map's own add-site control (#265). The toggle this shape came
- * from sits on the page background, where the inversion never arises. */
+ * from sits on the page background, where the inversion never arises.
+ *
+ * `white-space: nowrap` is the second half of #344's never-wrap belt: every
+ * label here holds a space (`24 h`, `7 d`), and a chip that broke at it would
+ * make the group two lines tall while the group itself was still, technically,
+ * on one line — the same defect design.md rule 7 forbids, one level down. */
 .range-picker-button {
   padding: var(--space-2) var(--space-4);
+  white-space: nowrap;
   border: none;
   border-radius: var(--radius-md);
   background: var(--color-bg);

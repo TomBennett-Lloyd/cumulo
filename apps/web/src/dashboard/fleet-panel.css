@@ -72,12 +72,38 @@
 }
 
 /* Tabular figures so the count and the capacity do not shuffle sideways when a
-   site is added and the numbers change width. */
+   site is added and the numbers change width.
+
+   The flex half of this rule is what decides *who* yields when the header row
+   runs out of width, and it is the text (design.md rule 7: controls have wrap
+   priority over auxiliary text, and the window selectors stay on one line at
+   every screen size; rule 2: the auxiliary line is what gives way). The
+   mechanism is worth spelling out because the obvious spelling does not work:
+   flex line-breaking is decided on *hypothetical* main sizes — every item's size
+   before any shrinking is applied — so an item that is merely shrinkable still
+   books its full width against the line and bumps its neighbours onto the next
+   one. `flex-basis: 0%` is what takes these numbers out of that decision
+   altogether: their hypothetical size is zero, so the summary can never be the
+   thing that pushes the picker down. The shrinking then happens on the line that
+   already exists, with `min-width: 0` releasing the automatic min-content floor
+   a flex item otherwise keeps, and the ellipsis saying out loud that the line
+   was cut.
+
+   `flex-grow: 1` hands the same item the line's slack, which at wide widths
+   carries the (i) and the picker over to the row's end. Deliberate rather than a
+   side effect (design.md rule 4): the heading and the numbers are one reading
+   unit and stay touching, and the two controls read as the row's other end
+   rather than as three unrelated things spaced along it. */
 .fleet-panel-stats {
+  flex: 1 1 0%;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--color-text);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* There is no `.fleet-panel-subtitle` rule any more. The sentence it styled
