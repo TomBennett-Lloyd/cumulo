@@ -14,9 +14,10 @@ import { revealSiteMarker } from './marker-reveal';
  * acceptable is a **relief rule**: the map pans, markers keep their place in the
  * tab order and stay keyboard-operable, where Enter selects exactly as a click
  * would, and the site table and the header's search reach every site without
- * touching the map. This file is the executable form of those claims: the
+ * touching the map. This file is the executable form of two of those: the
  * occlusion is asserted as a fact rather than tolerated as a mystery, and the
- * relief beside it is what stops the fact being a defect.
+ * keyboard relief beside it is what stops the fact being a defect. The site
+ * table and the header's search are not reached from here.
  *
  * The licence assertion is the point of the whole file, not a coda. CLAUDE.md's
  * Open-Meteo constraint (CC BY 4.0) says the link is visibly present and

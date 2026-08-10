@@ -277,8 +277,9 @@
  * of the app's viewport breakpoints — is owned by `stylelint.config.mjs`'s
  * residual paragraph. The census and the gate residual are what that paragraph
  * owns; the weighing above is this comment's, and no part of it lives there.
- * Should the full-bleed layout stop making the container and the viewport the
- * same width, migrating this band to container measurement belongs to #326.
+ * Should the layout widen that gap into a material one — large or variable
+ * enough that inferring this row's width from the viewport stops being sound —
+ * migrating this band to container measurement belongs to #326.
  *
  * Gate residual: the width is a raw length, and there is no breakpoint scale to
  * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media

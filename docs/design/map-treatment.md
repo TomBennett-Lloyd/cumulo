@@ -241,10 +241,11 @@ Placement:
   as a click would; and the site table under the map and the header's search reach every site
   without touching the map at all.
 
-  `e2e/attribution-band.spec.ts` is where that stops being a claim. It pans a marker under the
-  band, asks in both directions what the browser paints at the marker's centre — the credits, and
-  not the marker — and then selects that site with Enter in exactly that state. The occlusion and
-  the relief are measured against each other rather than either being asserted alone, which is the
+  `e2e/attribution-band.spec.ts` is where the occlusion and the keyboard relief stop being claims;
+  it does not touch the site table or the header's search. It pans a marker under the band, asks
+  in both directions what the browser paints at the marker's centre — the credits, and not the
+  marker — and then selects that site with Enter in exactly that state. The occlusion and that
+  relief are measured against each other rather than either being asserted alone, which is the
   only shape in which "accepted" means anything.
 
   The inset corner chip was weighed and declined. It narrows the occluded strip without removing
@@ -299,9 +300,12 @@ Placement:
   so anything reading the page rather than painting it — a reader with stylesheets off, a scraper
   honouring the licence — always gets the full phrase. That is what makes the collapse safe to do
   in a stylesheet at all, and it is asserted rather than asserted-about, in
-  `MapAttributionStrip.test.tsx` (the text), `e2e/composition.spec.ts` (the two forms) and
-  `e2e/attribution-band.spec.ts` (the wrapped state below the compact row's own floor, which is
-  the one state of the three that nothing else asserts).
+  `MapAttributionStrip.test.tsx` (the text) and `e2e/composition.spec.ts` (the two forms).
+  `e2e/attribution-band.spec.ts` visits the wrapped state at a phone's width, but what it asserts
+  there is reachability — both credit links visible and hit-testable however far the band has
+  wrapped — and deliberately nothing about that state's shape, which is therefore asserted by no
+  spec. Said here rather than left for the routing to imply
+  ([`testing.md`](../standards/testing.md) rule 10).
 
   The rule belongs to **this band**, not to the credit component. What runs out is the row as
   composed rather than the credit, and this is the only row in the app carrying two credits side
