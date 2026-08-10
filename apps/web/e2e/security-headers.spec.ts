@@ -19,7 +19,9 @@ import { routeBasemap } from './hermetic-basemap';
  * Two directives are genuinely exercised here despite the hermetic basemap, and
  * both are worth naming because it looks otherwise:
  *
- *   * `connect-src https://tiles.openfreemap.org`. CSP is evaluated by the
+ *   * `connect-src`'s basemap tiles origin — spelled in the template alone, and
+ *     owned by `src/map/basemap.ts`, whose restatement ledger names this lane's
+ *     one carrier of it (`hermetic-basemap.ts`'s route glob). CSP is evaluated by the
  *     browser *before* Playwright's route interception sees the request — the
  *     policy check happens at fetch initiation, the stub answers afterwards — so
  *     the style fetch is a real cross-origin connection as far as the policy is
@@ -146,4 +148,87 @@ test('boots the dashboard and map with zero CSP violations', async ({ page }) =>
     violations,
     `The page reported CSP violations: ${violations.map((violation) => `${violation.violatedDirective} blocked ${violation.blockedURI}`).join(', ')}`,
   ).toEqual([]);
+});
+
+/**
+ * A stand-in origin for the arm this lane cannot serve. `.test` is reserved by
+ * RFC 2606 and resolves nowhere, which is safe precisely because the case below
+ * never opens a connection to it.
+ */
+const SAMPLE_API_ORIGIN = 'https://api.example.test';
+
+/** The one directive `api_origin` is permitted to change. */
+const CONNECT_SRC = 'connect-src';
+
+/**
+ * The directive name a rendered directive starts with — everything up to its
+ * first space, or the whole of a value-less directive.
+ */
+const directiveName = (directive: string): string => {
+  const boundary = directive.indexOf(' ');
+
+  return boundary === -1 ? directive : directive.slice(0, boundary);
+};
+
+/**
+ * A rendered policy split back into its directives, keyed by name.
+ *
+ * Keyed rather than compared as one string so a difference is attributed to a
+ * directive by name instead of to an offset in a 300-character line.
+ */
+const directivesByName = (policy: string): Map<string, string> =>
+  new Map(policy.split('; ').map((directive) => [directiveName(directive), directive]));
+
+/*
+ * The arm that ships, asserted where nothing else can reach it.
+ *
+ * This case is a pure computation over the template — no page, no server. It is
+ * here rather than in a colocated `*.test.ts` because `vite.config.ts`'s
+ * `include` narrows vitest to `*.test.{ts,tsx}` files under `src/`, so nothing
+ * in this directory runs there at all; and it cannot be an assertion on a
+ * served header, because the lane pins
+ * `VITE_API_BASE_URL: ''` (`playwright.config.ts`) and standing up a second
+ * preview server for one string comparison would cost a build to prove an
+ * equality. The `beforeEach` above still builds a page for it, which buys
+ * nothing here and keeps this file on the same shape as every other spec.
+ *
+ * Why it earns its place: the served-header case above proves only the *empty*
+ * arm, and the empty arm is the one no deployment runs. Both deploy workflows
+ * refuse to publish a build without an API base URL, so `csp_api_origin`'s
+ * non-empty branch and this file's TS mirror of it are the production path and
+ * were, until this case, exercised by nothing.
+ *
+ * What it pins is the separator rule both implementations encode independently:
+ * exactly one space between the tiles origin and the API origin, contributed by
+ * the renderer and not by the value. That is also the property `infra/README.md`'s
+ * Phase B header readback asks an operator to confirm by eye — a policy with two
+ * spaces or none is still syntactically a policy, and the second silently
+ * concatenates two origins into one nonexistent host.
+ */
+test('appends the API origin to connect-src alone, behind exactly one space', () => {
+  const withoutApi = directivesByName(renderContentSecurityPolicy(''));
+  const withApi = directivesByName(renderContentSecurityPolicy(SAMPLE_API_ORIGIN));
+
+  /*
+   * Not vacuity insurance so much as the one hole the comparison below has: if
+   * `connect-src` were renamed and the placeholder moved with it, every
+   * directive would still line up and the loop would assert nothing about the
+   * directive this case is named for.
+   */
+  expect(
+    [...withoutApi.keys()],
+    `The rendered policy has no \`${CONNECT_SRC}\` directive to append an API origin to.`,
+  ).toContain(CONNECT_SRC);
+
+  expect(
+    [...withApi.keys()],
+    'An API origin changed which directives the policy declares, not just their values.',
+  ).toEqual([...withoutApi.keys()]);
+
+  for (const [name, directive] of withoutApi) {
+    expect(
+      withApi.get(name),
+      `\`${name}\` rendered differently for an API origin than expected.`,
+    ).toBe(name === CONNECT_SRC ? `${directive} ${SAMPLE_API_ORIGIN}` : directive);
+  }
 });

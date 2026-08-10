@@ -47,10 +47,18 @@ const TEMPLATE_PATH = fileURLToPath(
  * The header value `infra/web/security-headers.tf` renders for the same
  * `api_origin`, computed from the same file.
  *
- * `apiOrigin` is the deployment's Fleet API origin, or `''` for a demo-mode
- * deployment with no API at all — matching `local.csp_api_origin`'s two arms,
- * including the single leading space that belongs to the `connect-src`
+ * `apiOrigin` is the Fleet API origin, or `''` — matching `local.csp_api_origin`'s
+ * two arms, including the single leading space that belongs to the `connect-src`
  * separator rather than to the value.
+ *
+ * Which arm is which is worth being exact about, because this lane only ever
+ * runs one of them. Empty is demo mode here — `playwright.config.ts` pins
+ * `VITE_API_BASE_URL: ''` — and in Terraform it is the pre-API state that lets
+ * `infra/web` plan before `infra/api` exists (`infra/web/variables.tf`). It is
+ * *not* a deployment mode: both deploy workflows refuse to publish a build
+ * without an API base URL, so the non-empty arm is the only one that ever
+ * reaches a browser outside this repo. `security-headers.spec.ts` asserts that
+ * arm directly, as a pure computation, for exactly that reason.
  *
  * A template that no longer contains the placeholder throws rather than
  * rendering. Substituting nothing into nothing would produce a policy that is

@@ -49,24 +49,40 @@
 #     CSP does not govern; what CSP *would* govern is `setAttribute('style', …)`,
 #     and no such call exists in either built chunk (verified 2026-08-10 against
 #     the dist on `main`). Hence no `'unsafe-inline'`.
-#   * `img-src 'self' data: https://tiles.openfreemap.org` — `data:` for the
+#   * `img-src 'self' data:` plus the basemap tiles origin — `data:` for the
 #     `data:image/svg+xml` control icons embedded in the maplibre CSS
 #     (`MapRegion-*.css`); the tiles origin because raster and sprite image loads
 #     may route through either `fetch` (governed by `connect-src`) or an `Image`
 #     element (governed by `img-src`) depending on the engine, so both have to
-#     admit it.
-#   * `connect-src 'self' https://tiles.openfreemap.org<api origin>` — the tiles
-#     origin serves the style JSON, the TileJSON, the vector tiles, the sprites
-#     and the glyphs, all under that one origin (verified for `positron`). The
-#     API origin is appended from `var.api_origin`; see the local below and that
-#     variable's description for why it is a variable and never a wildcard.
+#     admit it. The origin itself is spelled only in the template, and is owned
+#     by `apps/web/src/map/basemap.ts`, whose restatement ledger lists every site
+#     a provider swap has to move (`docs/standards/architecture.md` rule 9) —
+#     which is why this bullet names the directive and not the host.
+#   * `connect-src 'self'` plus the same tiles origin and the API origin — the
+#     tiles origin serves the style JSON, the TileJSON, the vector tiles, the
+#     sprites and the glyphs, all under that one origin (verified for
+#     `positron`). The API origin is appended from `var.api_origin`; see the
+#     local below and that variable's description for why it is a variable and
+#     never a wildcard.
 #   * `worker-src 'self'`, and no `blob:` — `apps/web/src/map/MapView.tsx` pins
 #     maplibre's worker to a same-origin built asset via `setWorkerUrl`, and
 #     maplibre's blob trampoline engages only for a cross-origin worker URL. A
 #     `blob:` grant here would re-open arbitrary same-origin script execution for
 #     no capability the app uses.
-#   * `child-src 'self'` — the fallback older engines consult for workers before
-#     they learn `worker-src`. Same value, so the chain cannot disagree.
+#   * `child-src 'self'` — the hop CSP2 engines consult for workers, which
+#     learned `worker-src` later. Where `worker-src` is understood it wins and
+#     this line governs no worker at all, which is why the line below has to
+#     exist: `child-src` is *also* `frame-src`'s fallback, so on its own it
+#     would have been the one directive in this policy that loosens rather than
+#     tightens.
+#   * `frame-src 'none'` — the app frames nothing, stated rather than left to
+#     the chain, because the chain does not reach `default-src` here. CSP3's
+#     fallback for a frame is `frame-src` → `child-src` → `default-src`, so with
+#     `frame-src` undeclared the `child-src 'self'` above resolves framing to
+#     same-origin. Declared, both hops land where they should: a CSP2 engine
+#     takes this for frames and `child-src` for workers, and a CSP3 engine takes
+#     this for frames and `worker-src` for workers. Not `frame-ancestors`, which
+#     is below and points the other way — who may frame *us*.
 #   * `font-src 'self'` and `manifest-src 'self'` — no third-party font or
 #     manifest host; stated rather than left to `default-src 'none'` so that
 #     adding one is a visible edit rather than a silent breakage.
@@ -86,9 +102,11 @@
 locals {
   # The API origin, ready to concatenate onto the end of the `connect-src` line
   # — hence the leading space, which belongs to the separator and not to the
-  # value. Empty stays empty: a demo-mode deployment has no API origin and its
-  # `connect-src` must not end in a stray space that a reader could mistake for a
-  # dropped entry.
+  # value. Empty stays empty: the empty arm is the pre-API state — this stack
+  # planning and applying before `infra/api` exists, per `var.api_origin` — and
+  # its `connect-src` must not end in a stray space that a reader could mistake
+  # for a dropped entry. Every distribution actually serving the deployed SPA
+  # has an origin here; see that variable's description.
   csp_api_origin = var.api_origin == "" ? "" : " ${var.api_origin}"
 
   # The rendering contract, stated once and implemented twice — see the header
@@ -127,10 +145,10 @@ resource "aws_cloudfront_response_headers_policy" "web" {
       override     = true
     }
 
-    # Full origin to same-origin and to cross-origin HTTPS destinations, path
-    # and query stripped; nothing at all on a downgrade to HTTP. The outbound
-    # credit links are exactly the cross-origin case, and the origin is what an
-    # attribution target may legitimately see.
+    # The full URL, path and query included, on a same-origin request; the
+    # origin alone cross-origin over HTTPS; nothing at all on a downgrade to
+    # HTTP. The outbound credit links are exactly the cross-origin case, and the
+    # origin is what an attribution target may legitimately see.
     referrer_policy {
       referrer_policy = "strict-origin-when-cross-origin"
       override        = true
@@ -140,13 +158,15 @@ resource "aws_cloudfront_response_headers_policy" "web" {
     # browsers' own preload rules require.
     #
     # `include_subdomains = false` and `preload = false` are deliberate, not
-    # unfinished. This distribution answers on a shared `*.cloudfront.net`
-    # suffix: asserting `includeSubdomains` there claims something about names
-    # that are not ours, which is both useless and rude, and `preload` is a
-    # request to have a domain baked into browser binaries — not ours to make
-    # for `cloudfront.net`, and invalid without `includeSubdomains` anyway. Both
-    # become worth revisiting when #21 brings a custom domain, alongside the
-    # ACM/alias seam already commented on `viewer_certificate` in cloudfront.tf.
+    # unfinished. `includeSubDomains` pins names strictly *beneath* the host
+    # that sent it — from `<id>.cloudfront.net` that is `*.<id>.cloudfront.net`,
+    # not sibling distributions and not `cloudfront.net` itself — and no name
+    # exists under this host, so the assertion buys nothing here. `preload` is
+    # the one that would overreach: it is a request to have a domain baked into
+    # browser binaries, not ours to make for `cloudfront.net`, and invalid
+    # without `includeSubdomains` anyway. Both become worth revisiting when #21
+    # brings a custom domain, alongside the ACM/alias seam already commented on
+    # `viewer_certificate` in cloudfront.tf.
     #
     # Restatement ledger (`docs/standards/architecture.md` rule 9) for
     # this `max-age`: `infra/README.md`'s web Phase B header readback asserts

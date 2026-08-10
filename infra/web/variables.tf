@@ -30,8 +30,19 @@ variable "api_origin" {
   description = <<-EOT
     The origin the deployed SPA calls its API on — scheme and host, nothing
     else — appended to the Content-Security-Policy's `connect-src` by
-    security-headers.tf. Empty means a demo-mode deployment: the built app makes
-    no API calls, so its CSP admits no API origin.
+    security-headers.tf.
+
+    Empty is the **pre-API** state, not a deployment mode: it defaults to empty
+    so this stack can plan and apply before infra/api exists, and it is the only
+    reason the default is there. It is not "a demo-mode deployment" — neither
+    deploy path will publish a build without an API base URL.
+    .github/workflows/deploy-web.yml fails its preflight step on an empty
+    VITE_API_BASE_URL, and .github/workflows/deploy-pages.yml carries a
+    job-level `if: vars.VITE_API_BASE_URL != ''` and skips entirely. Demo mode
+    exists in local dev, vitest and the Playwright lane, and nowhere a
+    distribution serves. So any distribution reachable by deploy-web.yml needs
+    this set, and one serving content with this still empty is the quiet failure
+    the next paragraph describes rather than a supported configuration.
 
     This is the same operator-published string as the repo variable
     `VITE_API_BASE_URL` (step B2 of infra/README.md's web runbook), travelling
