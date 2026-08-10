@@ -1,32 +1,23 @@
-import {
-  useMemo,
-  useRef,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactElement,
-} from 'react';
-import { CHART_VIEW_BOX_HEIGHT, chartPlot, niceAxisMax } from './chart-geometry';
+import { useMemo, useRef, type ReactElement } from 'react';
+import { chartPlot, niceAxisMax } from './chart-geometry';
 import {
   contiguousRuns,
   highestOverlayKw,
   highestValueKw,
-  overlayReadingAt,
   overlayValuesByIndex,
   seriesSpanHours,
   type ChartOverlayColumn,
-  type ChartOverlayReading,
   type ChartOverlaySeries,
   type ChartScale,
   type ForecastChartPoint,
 } from './chart-series';
-import { hoverKeyAction, pointerSample, useChartHover } from './chart-hover-input';
 import {
   axisTitleElements,
   gridElements,
   horizonElements,
   xAxisElements,
 } from './forecast-chart-axes';
-import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
+import { ForecastChartHoverBoundary } from './forecast-chart-hover-boundary';
 import { forecastChartLegend } from './forecast-chart-legend';
 import {
   actualsElements,
@@ -67,15 +58,19 @@ import { useChartWidth } from './use-chart-width';
  * onto this series' x-domain once and then flows to the mark, the legend row,
  * the table column and the readout from that one join.
  *
- * **The readout has one source of truth.** Pointer and keyboard both settle on
- * an `activeIndex`, and `forecast-chart-hover.tsx` draws whatever that index
+ * **The readout has one source of truth, and since #331 it is not this file.**
+ * Pointer and keyboard both settle on an `activeIndex`, which
+ * `forecast-chart-hover-boundary.tsx` holds — the child this component wraps
+ * its chrome in — and `forecast-chart-hover.tsx` draws whatever that index
  * says. There is no separate keyboard rendering path to drift from the hover
  * one, which is what the treatment's "keyboard focus shows exactly what hover
  * shows" costs when it is designed in rather than retrofitted. The pointer
  * carries one thing the keyboard cannot — a continuous position, which the
  * panel follows and the crosshair ignores (#284 D7) — and it is a second field
  * beside the index rather than a second selection, so neither route can end up
- * reading a different sample.
+ * reading a different sample. It sits one level down rather than here because
+ * moving the panel must not re-run this body; that is the whole of what moved,
+ * and the single source of truth is the thing the move was careful to keep.
  *
  * **The chart is drawn 1:1 with the width it is rendered at.** `useChartWidth`
  * measures the figure and the view box takes that width, so one SVG user unit
@@ -88,7 +83,10 @@ import { useChartWidth } from './use-chart-width';
  * the hover layer and the figure's furniture sit beside it —
  * `forecast-chart-axes.tsx`, `-marks.tsx`, `-hover.tsx`, `-legend.tsx`,
  * `-table.tsx` — each a piece of the treatment named after the piece it draws,
- * and each well inside `structure.md` rule 4's ceiling.
+ * and each well inside `structure.md` rule 4's ceiling. `-hover-boundary.tsx`
+ * joined them in #331 and is the one named after something other than a piece
+ * of the drawing: it draws no mark of its own, and the seam it marks is where
+ * re-rendering stops.
  */
 
 export type {
@@ -115,22 +113,22 @@ export interface ForecastChartProps {
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const { points } = props;
   const figureRef = useRef<HTMLElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
   // The figure rather than the svg: the svg's own width is `100%` of this box
   // (`charts.css`), so measuring the container is measuring the chart without
   // asking an element about a size this render is about to give it.
   const width = useChartWidth(figureRef);
-  const hover = useChartHover();
-  const { activeIndex } = hover;
   // Joined once and read by every consumer below, so the mark, the table column
   // and the readout can never disagree about what the overlay says at an hour.
   //
-  // Memoised for identity rather than for speed. The tooltip panel follows the
-  // pointer at the rate `POINTER_FRAME_MS` sets (`chart-hover-input.ts`, #284
-  // D7) and its content is memoised against those frames — so a column, and the
-  // reading taken from it, rebuilt on every render would hand that memo a new
-  // object every frame and defeat it. The dependencies are the honest ones: a
-  // new series, or a new x-domain to join it onto, really is a new join.
+  // Memoised for identity rather than for speed, and still so after #331 moved
+  // the hover boundary down: this body no longer runs on a pointer frame, but it
+  // does run whenever the fleet, the range or the parent gives it a reason to,
+  // and two shallow compares below the boundary are watching this object. The
+  // reading `ForecastChartHoverBoundary` memoises against it, and through that
+  // the memoised tooltip panel, both survive such a re-render only while the
+  // join keeps its identity — rebuilt each time, they would rebuild with it and
+  // redraw a panel that has nothing new to say. The dependencies are the honest
+  // ones: a new series, or a new x-domain to join it onto, really is a new join.
   const overlay = useMemo<ChartOverlayColumn | undefined>(
     () =>
       props.overlay === undefined
@@ -151,11 +149,6 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     pointCount: points.length,
   };
   const spanHours = seriesSpanHours(points);
-  const activePoint = activeIndex === null ? undefined : points[activeIndex];
-  const overlayReading = useMemo<ChartOverlayReading | undefined>(
-    () => (activeIndex === null ? undefined : overlayReadingAt(overlay, activeIndex)),
-    [overlay, activeIndex],
-  );
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
   // Three series, one rule: each is drawn once per contiguous run of hours it
   // actually has a value for. The median joined that rule in #264, when a union
@@ -164,63 +157,25 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
 
-  const clearReadout = (): void => {
-    hover.selectSample(null);
-  };
-
-  const readAtPointer = (event: ReactPointerEvent<SVGRectElement>): void => {
-    hover.trackPointer(
-      pointerSample({
-        clientX: event.clientX,
-        svg: svgRef.current,
-        viewBoxWidth: width,
-        scale,
-      }),
-    );
-  };
-
-  /** Focus opens the readout on the first sample; a live pointer readout stands. */
-  const readAtFocus = (): void => {
-    if (activeIndex === null) {
-      hover.selectSample(0);
-    }
-  };
-
-  const readAtKey = (event: ReactKeyboardEvent<SVGSVGElement>): void => {
-    const action = hoverKeyAction({ key: event.key, activeIndex, pointCount: points.length });
-    if (action.kind === 'ignored') {
-      return;
-    }
-    // Only keys the chart actually acts on lose their default — arrows must not
-    // scroll the page out from under a focused chart, and Tab must still tab.
-    event.preventDefault();
-    hover.selectSample(action.kind === 'cleared' ? null : action.activeIndex);
-  };
-
   return (
     <figure className="forecast-chart-figure" ref={figureRef}>
-      {/* Draw order is back to front: grid → band → bounds → horizon → median →
+      {/* The chrome, handed down rather than drawn here: the boundary owns the
+          `<svg>` these go inside, because it owns the hover state that moves the
+          panel over them (#331). They are elements by the time they cross it, so
+          a pointer frame re-renders the boundary and reconciles straight past
+          them — and, more to the point, never re-runs the producers below.
+
+          Draw order is back to front: grid → band → bounds → horizon → median →
           overlay → actuals → marker. Actuals are drawn last of the data and win
           every overlap — an added series never covers the measurement — and the
           hover chrome and its pointer target sit above all of it. */}
-      <svg
-        ref={svgRef}
-        className="forecast-chart"
-        viewBox={`0 0 ${String(width)} ${String(CHART_VIEW_BOX_HEIGHT)}`}
-        /* Pinned, and not left to the aspect ratio. Once a measurement lands the
-           two agree — the view box is the rendered width, so `height: auto`
-           would resolve to this anyway — but on the frame before it, the view
-           box is still `DEFAULT_CHART_WIDTH` wide in a wider column, and an
-           unpinned height would draw that first frame tall and then collapse it.
-           Stating the height makes the pre-measurement frame a narrower chart
-           centred in its box rather than a vertical jump. */
-        height={CHART_VIEW_BOX_HEIGHT}
-        role="img"
-        aria-label={props.ariaLabel}
-        tabIndex={0}
-        onFocus={readAtFocus}
-        onBlur={clearReadout}
-        onKeyDown={readAtKey}
+      <ForecastChartHoverBoundary
+        points={points}
+        ariaLabel={props.ariaLabel}
+        width={width}
+        scale={scale}
+        spanHours={spanHours}
+        overlay={overlay}
       >
         {gridElements(scale)}
         {bandElements(points, bandRuns, scale)}
@@ -231,38 +186,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
         {xAxisElements(points, scale)}
         {axisTitleElements(scale.plot)}
-        <ForecastChartHoverLayer
-          points={points}
-          activeIndex={activeIndex}
-          pointerX={hover.pointerX}
-          scale={scale}
-          spanHours={spanHours}
-          overlay={overlayReading}
-        />
-        {/* Last child, and the whole plot: the readout must never depend on the
-            pointer hitting a 2px line. `charts.css` gives it the pointer-events
-            it needs and no fill. */}
-        <rect
-          className="forecast-chart-pointer-target"
-          x={scale.plot.left}
-          y={scale.plot.top}
-          width={scale.plot.right - scale.plot.left}
-          height={scale.plot.bottom - scale.plot.top}
-          onPointerMove={readAtPointer}
-          onPointerLeave={clearReadout}
-        />
-      </svg>
-
-      {/* The readout's only route to a screen reader. The svg above is a
-          `role="img"` with one name, so its subtree — tooltip included — is
-          collapsed to that label and the selected sample is never spoken from
-          inside it. This region is mounted empty with the chart and filled only
-          when a reader moves the selection, so every announcement is a real
-          change rather than text that was already there (`react.md`). Both
-          input routes feed it, because both set the same `activeIndex`. */}
-      <p className="forecast-chart-readout" aria-live="polite">
-        {activePoint === undefined ? '' : readoutText(activePoint, spanHours, overlayReading)}
-      </p>
+      </ForecastChartHoverBoundary>
 
       {forecastChartLegend(overlay?.label)}
       {forecastChartTable({ points, spanHours, caption: props.tableCaption, overlay })}

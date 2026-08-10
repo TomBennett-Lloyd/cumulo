@@ -1,0 +1,232 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  clientXFor,
+  JSDOM_PLOT,
+  isoHour,
+  renderChartWithOverlay,
+  requireMark,
+  requireSvg,
+  SERIES,
+  stubRenderedSize,
+  tooltipAnchor,
+  tooltipText,
+} from './forecast-chart-test-fixture';
+// Erased at compile time, so naming these modules here creates no import cycle
+// with the mocks below — they only give `importOriginal` a type to answer with.
+import type * as ForecastChartLegend from './forecast-chart-legend';
+import type * as ForecastChartMarks from './forecast-chart-marks';
+import type * as ForecastChartTable from './forecast-chart-table';
+
+/**
+ * Where the chart's hover boundary sits — #331.
+ *
+ * Moving the tooltip panel is a change to one `transform`, and everything else
+ * on the figure is the same drawing it was a frame ago. This file is the
+ * measurement that says so in numbers: it counts how many times the figure's
+ * *non-hover* producers run while a pointer sweeps the plot, and asserts that
+ * number does not grow with the sweep.
+ *
+ * "Did not re-run" is invisible in the DOM — React diffs against the previous
+ * element tree, so a producer re-run to the same output touches nothing a test
+ * could read back (the same problem `forecast-chart-tooltip.test.tsx` solves,
+ * one layer in: that file counts the panel's *content* renders, this one counts
+ * the whole figure around it). So the count is taken at a module seam instead,
+ * with the real implementations still doing the work underneath.
+ *
+ * **One counter covers the marks.** All five mark generators are called from
+ * the one `ForecastChart` body, so wrapping `medianElements` alone counts that
+ * body's runs — a second mark counter would only ever repeat this one.
+ *
+ * Counts are relative, never absolute (`FleetPanel.memo.test.tsx`'s discipline):
+ * each case settles the chart on a sample, snapshots the counters, and compares
+ * what the rest of the case adds. And each count assertion is paired with a
+ * positive control proving the frames really committed — a probe that stayed
+ * flat because the chart never rendered at all would otherwise pass everything
+ * here.
+ */
+
+interface ProducerCounts {
+  legend: number;
+  table: number;
+  marks: number;
+}
+
+const probe = vi.hoisted((): ProducerCounts => ({ legend: 0, table: 0, marks: 0 }));
+
+/**
+ * One producer, wrapped in a call counter. Hoisted alongside `probe` because
+ * `vi.mock` factories are lifted above the imports and can reach nothing else.
+ */
+const counting = vi.hoisted(
+  () =>
+    <Args extends readonly unknown[], Result>(
+      producer: keyof ProducerCounts,
+      implementation: (...args: Args) => Result,
+    ): ((...args: Args) => Result) =>
+    (...args: Args): Result => {
+      probe[producer] += 1;
+      return implementation(...args);
+    },
+);
+
+vi.mock('./forecast-chart-legend', async (importOriginal) => {
+  const actual = await importOriginal<typeof ForecastChartLegend>();
+  return { ...actual, forecastChartLegend: counting('legend', actual.forecastChartLegend) };
+});
+
+vi.mock('./forecast-chart-table', async (importOriginal) => {
+  const actual = await importOriginal<typeof ForecastChartTable>();
+  return { ...actual, forecastChartTable: counting('table', actual.forecastChartTable) };
+});
+
+vi.mock('./forecast-chart-marks', async (importOriginal) => {
+  const actual = await importOriginal<typeof ForecastChartMarks>();
+  return { ...actual, medianElements: counting('marks', actual.medianElements) };
+});
+
+// Vitest runs without global test hooks, so Testing Library's automatic cleanup
+// never registers itself.
+afterEach(cleanup);
+
+/**
+ * The gap between two samples in view-box units, derived rather than copied:
+ * the plot is the component's own arithmetic at the width jsdom draws at.
+ */
+const SAMPLE_SPACING = (JSDOM_PLOT.right - JSDOM_PLOT.left) / (SERIES.length - 1);
+
+const sampleX = (index: number): number => JSDOM_PLOT.left + index * SAMPLE_SPACING;
+
+/**
+ * A sixth of that gap. Two steps from a sample still sit inside its half-span —
+ * three would land exactly on the midpoint it shares with its neighbour — and
+ * four steps are over the line, so the same step both sweeps within one sample
+ * and crosses to the next.
+ */
+const SWEEP_STEP = SAMPLE_SPACING / 6;
+const STEPS_WITHIN_SPAN = 2;
+const STEPS_PAST_MIDPOINT = 4;
+
+/**
+ * A wait past `POINTER_FRAME_MS` — the frame the panel is allowed one move in
+ * (`chart-hover-input.ts`, whose restatement ledger names this file). Derived
+ * from it, so it moves if that value moves.
+ */
+const PAST_ONE_FRAME_MS = 40;
+
+/** Short enough that the panel it widens still sits well inside the plot. */
+const OVERLAY_LABEL = 'Sunnyside Farm';
+
+/**
+ * Through the overlay path deliberately: an overlay puts a row in the legend, a
+ * column in the table and a mark on the plot, so all three counted producers are
+ * doing the fuller job the sweep is supposed to leave alone.
+ */
+const renderOverlaidChart = (): HTMLElement => {
+  const container = renderChartWithOverlay(SERIES, {
+    label: OVERLAY_LABEL,
+    points: [
+      { validTimeIso: isoHour(12), kw: 3.3 },
+      { validTimeIso: isoHour(15), kw: 2.2 },
+    ],
+  });
+  // jsdom lays everything out at zero, so the hover layer has nothing to divide
+  // a client x by until this stub gives the svg a rendered box.
+  stubRenderedSize(requireSvg(container));
+  return container;
+};
+
+/** Fires one pointer move and lets exactly one frame commit it. */
+const movePointerTo = (container: HTMLElement, viewBoxX: number): void => {
+  fireEvent.pointerMove(requireMark(container, '.forecast-chart-pointer-target'), {
+    clientX: clientXFor(viewBoxX),
+  });
+  act(() => {
+    vi.advanceTimersByTime(PAST_ONE_FRAME_MS);
+  });
+};
+
+/** What sample 2 and sample 3 say, so a changed readout is a named change. */
+const SAMPLE_2_TEXT = `12:00Actual5.9Median6.0P10–P905.0–7.0${OVERLAY_LABEL}3.3`;
+const SAMPLE_3_TEXT = `15:00Median5.0P10–P904.0–6.0${OVERLAY_LABEL}2.2`;
+
+describe('ForecastChart render boundary', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    probe.legend = 0;
+    probe.table = 0;
+    probe.marks = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('moves the panel across pointer frames without re-running the marks, the legend or the table', () => {
+    const container = renderOverlaidChart();
+
+    movePointerTo(container, sampleX(2));
+    const settled = { ...probe };
+    const openingAnchor = tooltipAnchor(container);
+
+    for (let step = 1; step <= STEPS_WITHIN_SPAN; step += 1) {
+      movePointerTo(container, sampleX(2) + step * SWEEP_STEP);
+    }
+
+    // The panel really did travel — two more frames committed, each landing the
+    // pointer somewhere new. Without this the counts below would hold just as
+    // well for a chart that stopped responding after the first move.
+    expect(tooltipAnchor(container)).toBe(openingAnchor + STEPS_WITHIN_SPAN * SWEEP_STEP);
+    // And the data stayed put, which is the half of "the panel follows the
+    // pointer; the data snaps" that makes those frames pure movement.
+    expect(tooltipText(container)).toBe(SAMPLE_2_TEXT);
+
+    // So nothing outside the panel had anything new to say. On the pre-#331
+    // boundary each of those frames re-ran the whole figure to move one
+    // `transform` — five mark generators, the legend, and every table row.
+    expect(probe).toStrictEqual(settled);
+  });
+
+  it('changes the snapped sample without re-running them either', () => {
+    const container = renderOverlaidChart();
+
+    movePointerTo(container, sampleX(2));
+    const settled = { ...probe };
+    expect(tooltipText(container)).toBe(SAMPLE_2_TEXT);
+
+    movePointerTo(container, sampleX(2) + STEPS_PAST_MIDPOINT * SWEEP_STEP);
+
+    // The frame crossed the midpoint and the readout snapped to the next
+    // sample: a real selection change, not just a moved panel.
+    expect(tooltipText(container)).toBe(SAMPLE_3_TEXT);
+
+    // Which is still only the hover layer's business. The marks, the legend and
+    // the table are drawn from `points`, and `points` did not change.
+    expect(probe).toStrictEqual(settled);
+  });
+
+  it('steps the keyboard selection without re-running them', () => {
+    const container = renderOverlaidChart();
+    const svg = requireSvg(container);
+
+    act(() => {
+      svg.focus();
+    });
+    const settled = { ...probe };
+    const openingText = tooltipText(container);
+
+    fireEvent.keyDown(svg, { key: 'End' });
+
+    // The keystroke landed: focus opens on the first sample and End jumps to the
+    // last, so the readout is showing a different hour than it was.
+    expect(openingText).toContain('06:00');
+    expect(tooltipText(container)).toContain('18:00');
+
+    // The keyboard route reaches the same selection state the pointer does, so
+    // it has to sit inside the same boundary — otherwise every arrow key redraws
+    // the figure that a pointer frame no longer does.
+    expect(probe).toStrictEqual(settled);
+  });
+});

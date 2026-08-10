@@ -138,6 +138,8 @@ export const hoverKeyAction = ({
  * derived from this one, which would need re-deriving if it moved:
  *   - `forecast-chart-tooltip.test.tsx`: `INSIDE_ONE_FRAME_MS` and
  *     `PAST_ONE_FRAME_MS`, chosen to fall either side of this value.
+ *   - `forecast-chart-render-boundary.test.tsx`: `PAST_ONE_FRAME_MS`, the wait
+ *     each move in its pointer sweep advances by to commit exactly one frame.
  *   - `docs/design/chart-treatment.md`: the D7 bullet, which owns the decision
  *     and states it as a rate rather than as this interval.
  */
