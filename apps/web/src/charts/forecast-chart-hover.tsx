@@ -43,7 +43,14 @@ import {
  * the two is #284 D7, and the separation is structural rather than a
  * convention: the position lives on the group's `transform` and the content
  * lives inside a memoised child, so a frame that only moves the panel cannot
- * re-render a single row.
+ * re-render one of the panel's rows.
+ *
+ * That memo is one of two layers, and it is the inner one. It guards what is
+ * inside the panel; what keeps the rest of the figure — the marks, the legend,
+ * the table twin — out of the re-rendering subtree entirely is where the hover
+ * state lives, which since #331 is `forecast-chart-hover-boundary.tsx` rather
+ * than `ForecastChart`. Read the sentence above as the panel's own guarantee,
+ * not the figure's: the figure's is that file's.
  *
  * Positioning is SVG attributes and one `transform` — never a `style` prop,
  * which is a lint error in UI code (`react.md` rule 5), and never a CSS

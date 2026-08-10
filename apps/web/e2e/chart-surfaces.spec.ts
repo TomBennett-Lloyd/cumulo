@@ -533,7 +533,7 @@ type PlotBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
  *
  * Both are well inside the plot's own box, because the thing that hears a
  * pointer is the plot rect and not the whole svg (`.forecast-chart-pointer-target`,
- * `src/charts/ForecastChart.tsx`) — a share near either edge would land in an
+ * `src/charts/forecast-chart-hover-boundary.tsx`) — a share near either edge would land in an
  * axis gutter and summon nothing at all. Both are also on the same side of the
  * point where the panel flips to the *left* of the pointer to stay on the canvas
  * (`tooltipAnchorX`, `src/charts/chart-geometry.ts`): that flip moves the anchor

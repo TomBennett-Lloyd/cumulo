@@ -29,12 +29,13 @@ import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
  * five mark generators, both axes, the legend, and every row of the table twin.
  * React reconciled all of it to no DOM change, so nothing looked wrong; the
  * cost was element construction and reconciliation on a surface a reader hovers
- * deliberately (`docs/tech-debt.md`, 2026-08-09; #331).
+ * deliberately (#331, which measured it and now carries the reasoning the
+ * tech-debt log held until the same ticket retired that entry).
  *
  * So the state moved down to the elements that actually read it, which is this
  * component: the `<svg>` the pointer and the keyboard land on, the hover layer,
- * and the spoken readout beneath. That entry rules it **one** decision about
- * where the boundary belongs rather than three memos bolted onto the marks, the
+ * and the spoken readout beneath. #331 rules it **one** decision about where
+ * the boundary belongs rather than three memos bolted onto the marks, the
  * legend and the table — and this file is where the decision came out.
  *
  * **The chrome arrives as `children`, already built.** `ForecastChart` composes

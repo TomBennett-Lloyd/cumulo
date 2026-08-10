@@ -17,9 +17,10 @@ import {
 /**
  * The plot's data marks: the band and its bounds, the median, the measured
  * actuals, and an optional overlay series drawn beside them. Each builder
- * returns an array that `ForecastChart.tsx` spreads straight into the `<svg>`,
- * so every element here is a direct child of the plot and draw order is the
- * order the arrays are composed in.
+ * returns an array that `ForecastChart.tsx` spreads straight into the plot —
+ * since #331 by handing it down to `forecast-chart-hover-boundary.tsx`, which
+ * owns the `<svg>` — so every element here is still a direct child of that
+ * element and draw order is still the order the arrays are composed in.
  *
  * **A run of one sample is a mark, not a path.** A `<path>` with a single vertex
  * and a band area whose two edges coincide are both degenerate — SVG paints

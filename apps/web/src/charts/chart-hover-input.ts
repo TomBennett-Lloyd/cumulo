@@ -5,9 +5,11 @@ import type { ChartScale } from './chart-series';
 /**
  * Everything between an input event and a selection: which sample a pointer is
  * over, what a keystroke does to the readout, and how often the panel is allowed
- * to move. No JSX — `forecast-chart-hover.tsx` draws whatever this settles on,
- * and the two are separate files because sizing a panel and rate-limiting a
- * pointer are separate jobs that happened to start in one place
+ * to move. No JSX, and no opinion about who calls it: since #331 the component
+ * holding `useChartHover` is `forecast-chart-hover-boundary.tsx`, which is the
+ * point re-rendering stops, and `forecast-chart-hover.tsx` draws whatever the
+ * selection settles on. This is a file of its own because sizing a panel and
+ * rate-limiting a pointer are separate jobs that happened to start in one place
  * (`structure.md` rule 4).
  */
 

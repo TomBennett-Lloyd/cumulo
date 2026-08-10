@@ -417,7 +417,12 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   edge rule as any direct label, so the readout stays under the reader's eye instead of jumping a
   step behind it. Position updates are rate-limited to **30 a second**, with the last move always
   applied so the panel never freezes short of where the pointer came to rest; and the panel's
-  **content is memoised against those frames**, so moving it re-renders nothing inside it. Motion
+  **content is memoised against those frames**, so moving it re-renders nothing inside it. Those
+  frames also commit **inside a hover-boundary child** (`forecast-chart-hover-boundary.tsx`), which
+  the marks, the legend and the table twin are all built above and handed down to as
+  already-drawn elements: a frame therefore re-renders the hover chrome and the spoken readout,
+  and nothing else in the figure is rebuilt to move a panel
+  ([#331](https://github.com/TomBennett-Lloyd/cumulo/issues/331)). Motion
   comes from the pointer, never from a transition — there is no animation for
   `prefers-reduced-motion` to reduce. Settled in
   [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D7); a keyboard selection has no
