@@ -54,7 +54,7 @@ The map shell composes `MapSurface` (`apps/web/src/map/MapSurface.tsx`) — one 
 
 **A modal owes its own landing, because the platform stops paying it.** The add-site draft is a `<dialog>` over the page and closes by being unmounted — a removed dialog never runs the close steps, so the browser's usual focus restoration never happens. It returns focus to the map control that opened it, from the dialog's effect cleanup rather than its `cancel` handler: on the Escape path the browser is still restoring focus while `cancel` is dispatched, and would overwrite a focus set there. That return is now the last focus move a creation makes, since the card mounting behind it takes none.
 
-`Dashboard.focus.test.tsx` and `map/SitePopoverCard.test.tsx` hold all of this as far as `document.activeElement` goes; the ring a reader actually sees, and the deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.
+`Dashboard.focus.test.tsx` and `map/SitePopoverCard.test.tsx` hold all of this as far as `document.activeElement` goes. The ring a reader actually sees is a browser heuristic over _how_ the focus arrived, so it is the browser lane's, and there it is two specs holding one clause each: `e2e/keyboard-focus.spec.ts` keeps the ring a keyboard reader depends on — and the deep link arriving over a real network with it — while `e2e/pointer-focus.spec.ts` keeps the other clause, that no ring appears where the reader did not ask for one, over the pointer flows. Neither is meaningful alone, since each one's assertions are satisfied by an app that fails the other's, so a change deleting either is deleting half a rule.
 
 ## Why
 
