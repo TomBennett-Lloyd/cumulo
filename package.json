@@ -24,7 +24,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm verify:root && pnpm lint && pnpm typecheck && pnpm check:aws-test-guard && pnpm test && pnpm check:adr-index && pnpm check:infra-mirrors && pnpm check:module-names && pnpm check:supply-chain-policy && pnpm check:markdown-links && pnpm test:scripts && pnpm format:check",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks && git config commit.cleanup whitespace || true"
   },
   "lint-staged": {
     "*.{ts,tsx,mts,cts}": "eslint --no-warn-ignored --max-warnings 0 --cache --cache-location node_modules/.cache/eslint-precommit/",
