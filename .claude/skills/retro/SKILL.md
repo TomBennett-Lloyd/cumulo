@@ -5,7 +5,7 @@ description: Post-merge retrospective on how the workflow performed for a task. 
 
 You are reviewing how the _workflow_ performed on the task just merged — not re-reviewing the code.
 
-1. Reconstruct the task's history from the issue, plan comment, PR, and this session: plan accuracy (chunks re-planned? BLOCKED/STRUGGLING events?), review cycles used, findings that a standards trigger should have prevented, hook noise, wasted work, and any new entries in `docs/review-feedback.md` since the last retro.
+1. Reconstruct the task's history from the issue, plan comment, PR, and this session: plan accuracy (chunks re-planned? BLOCKED/STRUGGLING events?), review cycles used, findings that a standards trigger should have prevented, hook noise, wasted work, and any new entries in `docs/review-feedback.md` since the last retro. When the task ran delegated, read the task-orchestrator's RETRO NOTES/HANDOVER comment on the issue — the sole record of its retro observations, never the agent's chat reply — as first-hand input for this reconstruction; weigh it, don't just copy it.
 
 2. Produce EXACTLY ONE of:
    - **Clear signal with a clear fix** → make the change now, as its own small PR (issue label `workflow`). In order of preference:

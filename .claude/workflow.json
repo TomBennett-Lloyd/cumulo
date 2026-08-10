@@ -15,5 +15,9 @@
     "refactorRule": "SUBSUMED by reviewedSourceRule 2026-08-01 — a behaviour-preserving refactor is a source PR and merges on CI green + review-loop APPROVE like any other. Kept for the historical calibration record (PR #80 vs #77 C3) until the next gate revision deletes it.",
     "note": "Further relaxation (or tightening after a bad merge) is proposed via retro PR — the user decides. A merge later shown to be wrong reverts via a plain revert PR and gets a review-feedback entry naming what the review loop missed."
   },
+  "orchestration": {
+    "mode": "delegated-pilot",
+    "note": "flat = top-level runs plan-issue/execute/review-loop inline; delegated-pilot = /run-issue on selected issues while the owner evaluates; delegated = default. Graduation/rollback criteria live in the proposing retro PR. The top-level session owns merging in every mode."
+  },
   "feedbackLog": "docs/review-feedback.md"
 }
