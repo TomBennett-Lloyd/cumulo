@@ -52,6 +52,29 @@ const bandOf = (forecast: Forecast | undefined): UncertaintyBand => {
 
 const widthOf = (band: UncertaintyBand): number => band.p90AcPowerKw - band.p10AcPowerKw;
 
+/**
+ * The row at `index`, or a failure naming the gap it found instead — the same
+ * narrowing shape as `rowsOf` and `bandOf`. `noUncheckedIndexedAccess` makes
+ * every indexed read optional, and a fan-out that produced fewer rows than the
+ * case asked for should read as that, not as an assertion on `undefined`.
+ */
+const rowAt = (forecasts: readonly Forecast[], index: number): Forecast => {
+  const forecast = forecasts[index];
+  if (forecast === undefined) {
+    throw new Error(`expected a row at index ${String(index)}, got ${String(forecasts.length)}`);
+  }
+  return forecast;
+};
+
+/**
+ * A row's band width as a fraction of the estimate it brackets. The envelope is
+ * relative, so this is the quantity comparable across two hours of *different*
+ * output — raw width is not, and a wider band on a brighter hour would prove
+ * nothing about which weather it was paired with.
+ */
+const relativeWidthOf = (forecast: Forecast): number =>
+  widthOf(bandOf(forecast)) / forecast.acPowerKw;
+
 describe('locationForecasts', () => {
   it('produces nothing for a location with no sites', () => {
     expect(rowsOf({ sites: [], readings: [reading()], issuedAt: ISSUED_AT })).toEqual([]);
@@ -173,6 +196,33 @@ describe('locationForecasts', () => {
     // and the whole difference below belongs to the envelope.
     expect(broken?.acPowerKw).toBe(clear?.acPowerKw);
     expect(widthOf(bandOf(broken))).toBeGreaterThan(widthOf(bandOf(clear)));
+  });
+
+  it('pairs each row with its own hour’s cloud, not the horizon’s first', () => {
+    // The seam's actual job, and the one property the cases above cannot see: they
+    // vary cloud one *call* at a time, so a fan-out that read the horizon's first
+    // reading for every hour would satisfy every one of them. Two lit hours under
+    // different skies in a single horizon is what separates the two — the night
+    // hour cannot, because a zero estimate closes the band whatever cloud it is
+    // handed.
+    const forecasts = rowsOf({
+      sites: [sitePhysics()],
+      readings: [
+        reading({ validTime: '2026-07-31T13:00:00Z', cloudCoverPct: 50 }),
+        reading({ validTime: '2026-07-31T14:00:00Z', cloudCoverPct: 0 }),
+      ],
+      issuedAt: ISSUED_AT,
+    });
+    const brokenHour = rowAt(forecasts, 0);
+    const clearHour = rowAt(forecasts, 1);
+
+    // Both hours are lit, so the relative widths below are ratios of real output
+    // rather than of zero — the guard that keeps a night hour from passing this.
+    expect(brokenHour.acPowerKw).toBeGreaterThan(0);
+    expect(clearHour.acPowerKw).toBeGreaterThan(0);
+    // The clear hour is the *later* of the two, so lead time is pushing its band
+    // the other way: only the pairing can make it the narrower one.
+    expect(relativeWidthOf(brokenHour)).toBeGreaterThan(relativeWidthOf(clearHour));
   });
 
   it('stamps every row with the model, the vintage and the weather provenance', () => {

@@ -135,19 +135,35 @@ Composition rules that keep both legible where they overlap:
 ## Legend
 
 Several series are on the plot, so **a legend is always present** — identity is never carried by
-colour alone. The three forecast entries are fixed in draw order and do not reorder or repaint when
-a series is toggled off, or when a fourth arrives:
+colour alone. The forecast entries are fixed in draw order and do not reorder or repaint when a
+series is toggled off, or when an overlay arrives:
 
-| Entry              | Swatch                                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------------- |
-| Forecast (P10–P90) | rect filled `--color-chart-band-fill`, with hairline top and bottom edges in `--color-chart-band-stroke` |
-| Forecast (median)  | short 2px line key in `--color-chart-1`                                                                  |
-| Actuals            | short 2px line key in `--color-chart-actuals`                                                            |
-| _an overlay_       | short 2px line key in `--color-chart-2` — see below                                                      |
+| Entry                         | Swatch                                                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Forecast (P10–P90, simulated) | rect filled `--color-chart-band-fill`, with hairline top and bottom edges in `--color-chart-band-stroke` |
+| Forecast (median)             | short 2px line key in `--color-chart-1`                                                                  |
+| Actuals                       | short 2px line key in `--color-chart-actuals`                                                            |
+| _an overlay_                  | short 2px line key in `--color-chart-2` — see below                                                      |
 
 The swatch mirrors the mark: a rect for the area, a line key for the lines. The band's swatch is
 the one place where the bound stroke is doing double duty — at swatch size a bare 10% wash is
 nearly invisible, and the edges are what make it read as a band.
+
+**Two of the forecast entries are unconditional; the band's is gated on the data.** A series whose
+points carry no P10–P90 gets no band row, because a legend naming a band nothing produced is the
+chart claiming an uncertainty it does not have
+([#295](https://github.com/TomBennett-Lloyd/cumulo/issues/295)). Gating _removes_ that row; it
+never moves the others, so what a reader learned from the legend's order still holds. The median
+and actuals rows stay unconditional, which is what makes their presence a structural guarantee a
+state cannot take away — see the fixed-order rule above.
+
+**The band's entry says "simulated", and the wording is load-bearing rather than decorative.** The
+envelope is a deterministic width attached to every stored row
+(`@cumulo/shared`'s `simulated-uncertainty.ts`), not an ensemble the physics model produced, and
+the legend is where a reader is told which of the two they are looking at. The same qualifier
+belongs on any future band whose source is simulated; a fitted band from the ML layer would drop
+it. The hover readout's `P10–P90` row name stays bare — it labels the two values at a sample and
+makes no claim about where they came from.
 
 ## An overlay is a fourth series, and the rules it is held to
 
@@ -156,9 +172,10 @@ the shipped case: selecting a site draws that site's forecast over the fleet's s
 see how much of the afternoon is one roof without holding two charts in their head. Four
 decisions govern it, and each of them was previously written only in a code comment:
 
-- **It appends rather than taking a place in draw order.** The legend's three forecast entries keep
-  their positions and their swatches whether or not an overlay is present. Slotting a fourth entry
-  _into_ the order would repaint or shift the fixed three on a selection — the exact instability
+- **It appends rather than taking a place in draw order.** The legend's forecast entries keep their
+  positions and their swatches whether or not an overlay is present — so the overlay is the last
+  row, whether that makes it the fourth or, over a band-less series, the third. Slotting it _into_
+  the order would repaint or shift the entries above it on a selection — the exact instability
   the fixed-order rule above exists to prevent — for the sake of an ordering nobody reads the
   legend by. The mark itself is drawn between the median and the actuals, so the measurement still
   wins every overlap; the legend and the draw order are allowed to differ because they answer
@@ -391,7 +408,14 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   the same rows speech always dropped, and the readout changing height as the reader moves along
   the series is the accepted cost of the two saying one thing. **The table twin keeps the em
   dash** — it is a grid, its columns are fixed by the header, and a cell cannot be absent the way
-  a list item can.
+  a list item can. **The two surfaces drop a series at the granularity each one has, and for the
+  table that is the column, never the cell**: an hour with no value for a quantity its neighbours
+  do carry keeps the dash, because absence _at that hour_ is the fact worth showing and a grid has
+  no other way to show it; a quantity that **no** hour in the series carries loses its column
+  outright, because a column of nothing but dashes is not a partial result — it is a header
+  advertising a quantity the data never had. That is the distinction the band's columns are gated
+  on ([#295](https://github.com/TomBennett-Lloyd/cumulo/issues/295)), and it leaves the em-dash
+  rule above exactly as it was for every mixed series.
 - **The panel sizes to its content and floats above the plot.** Width is its two columns measured
   over the rows they hold — the widest name, the widest value, and the air between them — floored
   at a minimum so short samples do not read as a different component. An overlay's name is a site
@@ -475,9 +499,11 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   styles, so nothing is hidden there. The `<caption>` stays on the table, because it
   names the table — which window, which units — while a summary names the disclosure.
 - **The table twin carries a column per plotted value, and grows one for an overlay.** The time
-  column heads each row; the forecast's three quantities and the measurement take one each; an
-  overlay takes a sixth, headed by the series' own name. `forecast-chart-table.tsx` owns the
-  columns and their order. The extra column is not only symmetry with the legend: the contrast
+  column heads each row; the forecast's median and the measurement take one each; the P10 and P90
+  columns are there only where some hour in the series carries a band, on the column-versus-cell
+  rule above ([#295](https://github.com/TomBennett-Lloyd/cumulo/issues/295)); and an overlay takes
+  the last, headed by the series' own name — the sixth column over a banded series, the fourth
+  over one with no band at all. `forecast-chart-table.tsx` owns the columns and their order. The extra column is not only symmetry with the legend: the contrast
   WARN above obligates a relief channel for a light-mode chart reaching slot 3, and a chart that
   drew a fourth series without a fourth way to read it would be shipping the sub-threshold case
   the WARN refuses. An overlay sits in slot 2, which clears the threshold, so the column is not

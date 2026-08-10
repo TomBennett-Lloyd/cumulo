@@ -74,6 +74,20 @@ describe('AboutDialog when open', () => {
     expect(screen.getByText(PRODUCT_TAGLINE)).toBeDefined();
   });
 
+  it('calls the per-site band simulated rather than promising a modelled one', () => {
+    render(<AboutDialog open onClose={() => undefined} />);
+
+    // #295's capability claim, in the one place the product explains itself to a
+    // first-time reader. The envelope is a deterministic width this codebase
+    // attaches to every stored row (`@cumulo/shared`'s `simulated-uncertainty.ts`),
+    // not an ensemble the physics model produced — so the qualifier is the whole
+    // difference between a description and an over-claim, and it is pinned here
+    // for the same reason `FleetPanel.test.tsx` pins #264's "simulated actuals".
+    expect(screen.getByText(/Every site on the map/u).textContent).toContain(
+      'simulated uncertainty band',
+    );
+  });
+
   it('credits every source the app draws on, with the licence links', () => {
     render(<AboutDialog open onClose={() => undefined} />);
 

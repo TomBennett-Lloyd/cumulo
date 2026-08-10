@@ -102,10 +102,16 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  * What D3 actually asked for does survive untouched, and is what is asserted
  * here: the chart's key is never taken away by a *state*. The two unconditional
  * rows — median and actuals — are the fixed set, and every state below is
- * band-less (nothing is selected, so there is no overlay row either, and none of
- * these fixtures carries a forecast with a band). A state that returned early
- * past the legend still fails here, which is the regression the clause exists
- * for; a series that honestly has no band no longer does.
+ * band-less: nothing is selected, so there is no overlay row either, and in each
+ * of the five states asserted here no forecast row has reached the chart at all
+ * — the loading arm has not settled, the failed and forecastless arms have no
+ * rows to draw, the empty-fleet arm has no sites to draw them for, and the
+ * actuals-only arm carries measured hours alone. That is a fact about the
+ * states, not about the fixtures: two of the arms are built on `FULL_FLEET`,
+ * whose rows do carry bands, and those bands do reach the chart in the settled
+ * heading-row cases above. A state that returned early past the legend still
+ * fails here, which is the regression the clause exists for; a series that
+ * honestly has no band no longer does.
  */
 const expectPanelFurniture = (container: HTMLElement): void => {
   expect(screen.getByRole('heading', { name: 'Fleet forecast', level: 2 })).toBeDefined();

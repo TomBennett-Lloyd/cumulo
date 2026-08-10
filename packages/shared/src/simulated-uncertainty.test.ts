@@ -54,6 +54,44 @@ describe('simulatedUncertaintyBand', () => {
     }
   });
 
+  it('rounds a sub-watt band outward, where rounding to nearest crossed the estimate', () => {
+    // The regression this case exists for: the quantiles are published to watt precision and
+    // `acPowerKw` is not, so an estimate whose own distance to its quantiles is under half a watt
+    // used to get a band rounded onto the wrong side of it — 0.0006 kW came back bracketed by
+    // 0.001 and 0.001, with p10 *above* the estimate. Every day's first and last lit hour passes
+    // through these magnitudes, so this is production arithmetic rather than a corner.
+    expect(simulatedUncertaintyBand(aForecast({ acPowerKw: 0.0006 }), CLEAR_SKY)).toStrictEqual({
+      p10AcPowerKw: 0,
+      p90AcPowerKw: 0.001,
+    });
+    expect(simulatedUncertaintyBand(aForecast({ acPowerKw: 0.0022 }), CLEAR_SKY)).toStrictEqual({
+      p10AcPowerKw: 0.001,
+      p90AcPowerKw: 0.003,
+    });
+  });
+
+  it('brackets its own estimate at every magnitude, in every sky, at every lead', () => {
+    // The powers straddle the half-watt rounding boundary the case above is about, then climb to
+    // the residential cap; the skies and leads are the regimes the width model distinguishes.
+    // `p90 <= MAX_PLAUSIBLE_RESIDENTIAL_KW` is proved here too, by the band's own parse: a case
+    // that overshot the cap would throw rather than return.
+    const cases = [0, 0.0004, 0.0006, 0.001, 0.0022, 0.0042, 0.02, 1, 4.437, 49.997, 50].flatMap(
+      (acPowerKw) =>
+        [CLEAR_SKY, 25, HALF_COVER, 75, OVERCAST].flatMap((cloudCoverPct) =>
+          [0, 1, 26, 48, 168].map((leadHours) => ({ acPowerKw, cloudCoverPct, leadHours })),
+        ),
+    );
+
+    // Reported as the list of cases that failed rather than as an assertion per case, so a
+    // regression names the input it broke on instead of leaving a bare `0.001 <= 0.0006`.
+    const unbracketed = cases.filter(({ acPowerKw, cloudCoverPct, leadHours }) => {
+      const band = simulatedUncertaintyBand(aForecast({ acPowerKw, leadHours }), cloudCoverPct);
+      return !(band.p10AcPowerKw <= acPowerKw && acPowerKw <= band.p90AcPowerKw);
+    });
+
+    expect(unbracketed).toEqual([]);
+  });
+
   it('brackets a clear-sky forecast at issue time with the P10–P90 of the simulated actuals', () => {
     // 0.88 and 1.12 are asserted as literals, not derived from SIMULATED_ACTUAL_FACTOR_MIN/MAX: a
     // test that reads the value it is proving moves with it and proves nothing (restatement ledger
@@ -114,6 +152,20 @@ describe('simulatedUncertaintyBand', () => {
       p10AcPowerKw: 44,
       p90AcPowerKw: 50,
     });
+  });
+
+  it('treats a cover outside 0–100 % as the settled sky nearest to it', () => {
+    const forecast = aForecast({ acPowerKw: 2 });
+
+    // `weatherReadingSchema` bounds the reading, but this parameter is a bare number — and an
+    // unclamped parabola answers a cover just over 100 with a *narrower* band, which the band's
+    // own parse accepts. A quiet wrong answer is the one worth clamping away.
+    expect(simulatedUncertaintyBand(forecast, 150)).toStrictEqual(
+      simulatedUncertaintyBand(forecast, OVERCAST),
+    );
+    expect(simulatedUncertaintyBand(forecast, -20)).toStrictEqual(
+      simulatedUncertaintyBand(forecast, CLEAR_SKY),
+    );
   });
 
   it('treats a hindcast replay’s negative lead as no lead at all', () => {
