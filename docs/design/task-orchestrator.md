@@ -15,8 +15,10 @@ not its state now.
 This document is the rationale and the record of the decisions; the operative copies are
 [`.claude/agents/task-orchestrator.md`](../../.claude/agents/task-orchestrator.md) and
 [`.claude/skills/run-issue/SKILL.md`](../../.claude/skills/run-issue/SKILL.md), with the mode in
-`.claude/workflow.json`'s `orchestration` block. Where this document and those files disagree, the
-files win — they are the ones the agents read.
+`.claude/workflow.json`'s `orchestration` block, along with the boundary one-liners §9.3 places in
+`.claude/skills/execute/SKILL.md`, `.claude/skills/review-loop/SKILL.md`,
+`.claude/skills/retro/SKILL.md` and the `CLAUDE.md` Workflow bullet. Where this document and those
+files disagree, the files win — they are the ones the agents read.
 
 One amendment was made at adoption and is deliberately not folded into the body: **the agent
 file's must-NOT list sanctions worktree-lifecycle writes** — `git worktree add`, and
