@@ -68,24 +68,25 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *      not blipping.** It is reporting sustained capacity pressure, which is an
  *      alarm to answer rather than a request to retry into: ADR 0002 puts
  *      `ReadThrottleEvents`/`WriteThrottleEvents` alarms behind both
- *      batch-written tables, `series` and `weather` alike, and ~250 dashboard
- *      loads of burst reserve in front of the synchronous fan-out — the API's
- *      own, since #264 (actuals) and #296 (forecasts) moved that fan-out out of
- *      the browser and into the two fleet routes. The ADR's ~250 counts a load
- *      that reads `series` once; a load reads it twice now, so the same reserve
- *      absorbs about half as many. Burst reserve is a property of `series`, the
- *      one table still on provisioned capacity since #156.
+ *      batch-written tables, `series` and `weather` alike. Both bill on-demand
+ *      now (#156, #258), so a sustained throttle reports partition-level
+ *      pressure rather than an exhausted allocation — rarer, and still nothing
+ *      a third attempt would fix. The synchronous fan-out behind those alarms
+ *      is the API's own, since #264 (actuals) and #296 (forecasts) moved it out
+ *      of the browser and into the two fleet routes; the per-load read
+ *      arithmetic is owned by the `series` section of
+ *      `infra/storage/tables.tf`.
  *    - **Every site in the fleet backs off against the same handful of tables**,
- *      `series` and its provisioned ceiling among them, so a longer per-request
- *      budget is the thundering-herd direction — the reason the curve underneath
- *      is full jitter (`./batch`).
+ *      `series` among them, so a longer per-request budget is the
+ *      thundering-herd direction — the reason the curve underneath is full
+ *      jitter (`./batch`).
  *
  *    The cost is real and is stated rather than argued away: on the one
  *    genuinely user-visible throttle path ADR 0002 names, the synchronous
- *    per-site fan-out behind a dashboard load, a read that outlives the burst
- *    reserve exhausts this budget after a single retry and reaches the caller
- *    as a `StorageError` (`./errors`), which the API boundary renders as a
- *    generic 500.
+ *    per-site fan-out behind a dashboard load, a read the table keeps
+ *    throttling exhausts this budget after a single retry and reaches the
+ *    caller as a `StorageError` (`./errors`), which the API boundary renders as
+ *    a generic 500.
  *
  * 3. **A capacity-cancelled transaction**: `TransactionCanceledException`,
  *    whose cause is reachable only inside `CancellationReasons[].Code`. The

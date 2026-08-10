@@ -254,8 +254,8 @@ export interface FleetDataSource {
    * site's partition, ~25 read units on `series` a call, against a per-site
    * poll's ~0.5. Since #264 (actuals) and #296 (forecasts) those Queries are
    * issued server-side inside one request each rather than by a browser
-   * fan-out, which moved where they are spent and not how many, so polling
-   * either of them would still be that mistake.
+   * fan-out — polling either of them would still be that mistake. The per-load
+   * arithmetic is owned by the `series` section of `infra/storage/tables.tf`.
    */
   readonly listSites: () => Promise<FleetSourceResult<readonly Site[]>>;
 
