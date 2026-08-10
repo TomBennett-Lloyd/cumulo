@@ -301,9 +301,12 @@ jobs:
   #     that truth is supposed to be: the sanctioned sequence
   #     (merge.humanAlwaysRule) puts the review-feedback entry on the branch
   #     before the label goes on, so a labelled PR is green here from its first
-  #     labelled run — this gate is never the thing a PR is waiting on. A red
-  #     merge-ritual-gate on a labelled PR therefore reports a violated
-  #     sequence, not a pending review, and it is fixed on the branch.
+  #     labelled run — this gate is never the thing a PR is waiting on. So a red
+  #     merge-ritual-gate on a labelled PR never means "still waiting" — but
+  #     which red it is comes from the job's own `::error::`, not from the
+  #     conclusion: the missing-entry message reports a violated sequence and is
+  #     fixed on the branch, while the failed-read messages in comment (d) mean
+  #     the gate reached no verdict at all and are fixed by re-running the job.
   #     The cost, stated rather than left to be rediscovered: `on:` is
   #     workflow-level, so each label event re-runs every job in this file —
   #     ~2–3 min of wall time, in parallel, $0 on a public repo. Accepted as it
@@ -323,6 +326,17 @@ jobs:
   #     that the file is in the diff and nothing beyond that, so a placeholder
   #     line clears it just as a real one does — which is precisely why
   #     merge.mergeRitual, and not this job, owns what the entry must say.
+  #     Both API reads therefore carry an explicit failure arm that names the PR
+  #     and which read failed, rather than letting `bash -e` abort the step on a
+  #     failed command substitution. The direction was already right — an
+  #     unreadable PR must fail closed, never skip the check — but the two
+  #     outcomes were indistinguishable to a reader: rate limit, 5xx or a
+  #     token-scope problem produced the same red conclusion as a genuine
+  #     violation, with no `::error::` of its own, and `gh pr checks` shows only
+  #     the job name and that conclusion. That distinction is load-bearing
+  #     because the documented response differs — a violated sequence is fixed
+  #     on the branch, an unread PR is fixed by re-running the job — so a silent
+  #     failed read sends a bounce at a branch with nothing to fix.
   merge-ritual-gate:
     runs-on: ubuntu-latest
     permissions:
@@ -337,12 +351,18 @@ jobs:
             echo "push event - no PR to gate; nothing to check"
             exit 0
           fi
-          labels=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.labels[].name')
+          if ! labels=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.labels[].name'); then
+            echo "::error::could not read the labels of PR #$PR_NUMBER (GET repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER failed) - the gate reached NO verdict on this PR; re-run this job, do not change the branch"
+            exit 1
+          fi
           if ! printf '%s\n' "$labels" | grep -Fxq 'awaiting-review'; then
             echo "PR #$PR_NUMBER is not labelled 'awaiting-review'; gate does not apply"
             exit 0
           fi
-          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          if ! files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename'); then
+            echo "::error::could not read the changed files of PR #$PR_NUMBER (GET repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files failed) - the gate reached NO verdict on this PR; re-run this job, do not change the branch"
+            exit 1
+          fi
           if printf '%s\n' "$files" | grep -Fxq 'docs/review-feedback.md'; then
             echo "ok: awaiting-review PR touches docs/review-feedback.md"
             exit 0

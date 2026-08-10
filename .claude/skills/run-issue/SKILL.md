@@ -58,9 +58,13 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    "ready for review now", and only the relay carries that guarantee). That readiness
    check is satisfiable rather than circular: the review-feedback entry lands on the
    branch before the label goes on, so green-with-label is the normal state. A red
-   `merge-ritual-gate` on a labelled PR is therefore not a PR still waiting for
-   something — it says the sequence was violated, which is a bounce (step 5), never a
-   thing to wait out. The agent stays parked either way.
+   `merge-ritual-gate` on a labelled PR is therefore never a PR still waiting for
+   something — but read the job's error message before acting on it, because that is
+   what separates the two reds: a missing-entry error says the sequence was violated,
+   which is a bounce (step 5), while a "could not read the PR" error means the gate
+   reached no verdict at all and calls for a re-run of the job, not a bounce at a branch
+   with nothing to fix. Neither is a thing to wait out. The agent stays parked either
+   way.
 5. **Bounce, don't do**: anything ticket-shaped that surfaces before release — owner
    feedback on an awaiting-review PR (relay verbatim; the warm agent folds it into the
    branch's docs/review-feedback.md entry in the commit that responds — an on-branch
