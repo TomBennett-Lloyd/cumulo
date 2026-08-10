@@ -85,9 +85,11 @@ describe('MapSurface with a live map canvas', () => {
     // of what a reader might infer from this ordering. A marker under the band
     // is therefore not clickable, which is why `e2e/map-regressions.spec.ts`'s
     // `basemapPoint` treats `.map-attribution` as a covering overlay alongside
-    // `.maplibregl-marker`. Anyone reasoning about stacking from this test
-    // should read that predicate, and docs/tech-debt.md's entry on the band's
-    // occlusion, rather than this assertion.
+    // `.maplibregl-marker`. That occlusion is decided rather than tolerated,
+    // together with the relief rule that carries it, in
+    // docs/design/map-treatment.md's Attribution section (#356). Anyone
+    // reasoning about stacking from this test should read that predicate and
+    // that section rather than this assertion.
     render(
       <MapSurface
         canvas={{ kind: 'map', containerRef: createRef<HTMLDivElement>(), addSiteArmed: false }}
