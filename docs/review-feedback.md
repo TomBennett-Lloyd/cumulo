@@ -191,3 +191,10 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Feedback**: "294 looks good you can merge when ready" — owner approval in chat for the CLAUDE.md hard-constraint amendment (compact Open-Meteo attribution form at narrow widths).
 - **Why**: CLAUDE.md is a humanAlways path; the amendment relaxes mandated wording while keeping the visible link non-negotiable, and the owner had pre-approved the concept in the #284 D18 discussion.
 - **How applied**: merged on the approval; #284 D18 builds on it.
+
+## 2026-08-10 — PR #345 (#336 task-orchestrator adoption)
+
+- **Category**: approved-no-changes (workflow adoption)
+- **Feedback**: no revisions requested — the owner pre-approved the task-orchestrator adoption in session across 2026-08-09/10, recorded on [#336](https://github.com/TomBennett-Lloyd/cumulo/issues/336#issuecomment-5234760505) before the PR opened, and the PR merged under that pre-approval.
+- **Why**: PR #345 touches `CLAUDE.md` and `.claude/workflow.json`, both `humanAlways` paths, so the merge needed the owner rather than a green CI plus review-loop APPROVE; the recorded pre-approval is that owner decision, given on the design record the PR extracts (`docs/design/task-orchestrator.md`) rather than on the diff. The quality evidence sat beside it, not in place of it: the review loop ran to its 3-cycle cap and returned APPROVE with zero FIX-NOW.
+- **How applied**: merged under the pre-approval; `awaiting-review` applied and removed at merge per the policy's bookkeeping, and this entry is the log line the policy requires. Two systemic findings went to `docs/tech-debt.md`; discovered scope became #338.

@@ -9,8 +9,11 @@ This document names tokens; it never restates their values. Every colour, size a
 resolves through a CSS custom property declared in
 [`packages/ui/src/tokens/tokens.css`](../../packages/ui/src/tokens/tokens.css), which is the only
 file in the repo permitted to hold a raw value. Where this document and that file disagree, the
-file wins — it is the one the browser reads. The map _implementation_ is not owned here: #17
-builds the map view and picks the tile provider. This is the treatment it must hold to.
+file wins — it is the one the browser reads. This document decides one surface; the prospective
+cross-surface rules an implementer applies where no record has decided are
+[`docs/standards/design.md`](../standards/design.md), and a rule there that gets decided into the
+map lands here. The map _implementation_ is not owned here: #17 builds the map view and picks the
+tile provider. This is the treatment it must hold to.
 
 ## The basemap carries no colour
 
