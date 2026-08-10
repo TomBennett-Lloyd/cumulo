@@ -43,6 +43,14 @@ import type { Theme } from '../theme';
  *   matched against outgoing requests rather than a URL built from a constant.
  *   Miss it and the browser lane stops stubbing anything, silently fetching the
  *   live third-party style on every CI run instead of failing.
+ * - `infra/web/content-security-policy.tftpl` — carries the origin twice, on
+ *   `img-src` and on `connect-src` (tile image loads route through either
+ *   depending on the engine). Terraform cannot import a TS constant, and the
+ *   `check:infra-mirrors` gate cannot hold this pair either: its `str-eq` reader
+ *   takes only a plain double-quoted attribute, and the deployed value is a
+ *   `templatefile` render rather than an attribute. So this ledger entry is the
+ *   whole carrier. Miss it on a provider swap and the deployed app's CSP blocks
+ *   every tile request from the new origin.
  *
  * And the provider's *identity*, a separate obligation from its origin that the
  * same swap moves:

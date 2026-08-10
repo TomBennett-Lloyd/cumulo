@@ -2,6 +2,14 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // Ambient globals are opted into explicitly: with `types` unset this toolchain
+    // pulls nothing from `node_modules/@types`, so `node:fs`/`node:url` — which
+    // `content-security-policy.ts` reads the owning template with — do not resolve
+    // even as module specifiers. The lane runs in Node and drives a browser
+    // remotely, so the DOM comes from `lib` above (for the `page.evaluate` and
+    // `addInitScript` callbacks that really do run in the page) and the Node half
+    // comes from this entry.
+    "types": ["node"],
     "noEmit": true
   },
   "include": ["./**/*"]

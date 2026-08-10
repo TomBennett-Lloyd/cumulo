@@ -5,9 +5,21 @@
 #
 # What the endpoint is *not* is predictable. The api id is assigned at create
 # time, so the URL is read from this output after an apply and never assembled
-# from a template — ADR 0005 names that explicitly. Anything that needs it (the
-# smoke checks in apps/api/README.md, a web app's configuration) takes it from
-# here.
+# from a template — ADR 0005 names that explicitly. Anything that needs it takes
+# it from here, and there are three such consumers today:
+#
+#   * the smoke checks in apps/api/README.md;
+#   * the `VITE_API_BASE_URL` repo variable, baked into apps/web's build so the
+#     SPA knows where to call (infra/README.md's web runbook, step B2);
+#   * `api_origin` in infra/web's gitignored tfvars, rendered into the
+#     Content-Security-Policy's `connect-src` so the browser permits that call
+#     at all (infra/web/variables.tf argues the pair at length).
+#
+# The last two are copies held outside Terraform — no cross-stack reference
+# carries them, in either direction — so nothing here notices when they go
+# stale. **Re-applying this stack after a destroy reassigns the api id and
+# invalidates both**, which is why the teardown section of infra/README.md's api
+# runbook says so too; changing this output means visiting them.
 #
 # ---------------------------------------------------------------------------
 # IDLE COST: $0.00/month as billed — which is an allowance, not the absence of

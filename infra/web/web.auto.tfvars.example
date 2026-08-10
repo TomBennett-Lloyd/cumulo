@@ -13,3 +13,18 @@ aws_region = "eu-west-1"
 # access control name and the deploy policy name. Match it to the other stacks'
 # `environment` by convention; nothing here reads another stack's value.
 # environment = "dev"
+
+# Optional only before infra/api exists. The origin the deployed SPA calls its
+# API on, admitted by the Content-Security-Policy's `connect-src`. Leaving it
+# absent is the pre-API state — enough to plan and apply this stack on its own —
+# and not a demo-mode deployment: neither deploy workflow will publish a build
+# without an API base URL, so a distribution serving content with this empty is
+# a fault rather than a mode. Set it before the distribution serves anyone.
+#
+# Derive it, never retype it — it is the same string as the `VITE_API_BASE_URL`
+# repo variable (web runbook step B2), and the two must agree or the deployed
+# demo's own fetches are blocked by its own CSP:
+#
+#   terraform -chdir=../api output -raw api_endpoint
+#
+# api_origin = "https://<id>.execute-api.<region>.amazonaws.com"

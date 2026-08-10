@@ -85,6 +85,16 @@ resource "aws_cloudfront_distribution" "web" {
 
     cache_policy_id = data.aws_cloudfront_cache_policy.caching_optimized.id
 
+    # The security headers, argued in full in security-headers.tf. One behaviour
+    # means this policy applies to *every* response the distribution serves —
+    # the SPA shell, the hashed assets, the rewritten error responses, and the
+    # maplibre worker asset. The worker one is the load-bearing case and is
+    # deliberate: a worker executes under the CSP of its own response, not the
+    # document's, so it is this policy's `connect-src` that decides whether the
+    # worker may fetch tiles. The same entry covers both, which is why there is
+    # no worker-specific behaviour here to maintain.
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.web.id
+
     # Compression at the edge, not in the bucket: the objects are stored once,
     # uncompressed, and CloudFront negotiates gzip/brotli per request. This is
     # most of the transfer saving on a JS bundle.

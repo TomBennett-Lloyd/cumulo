@@ -3,7 +3,36 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    // `vite/client` for the app; `node` for `vite.config.ts`, which runs in Node
+    // and (since #176) imports `e2e/content-security-policy.ts` to render the
+    // preview server's CSP off `infra/web/content-security-policy.tftpl`.
+    //
+    // What the `node` entry does *not* buy is a guarantee that `src/**` cannot
+    // see `process`, because there never was one to spend. `include` holds
+    // `vite.config.ts`, which reaches `vite/dist/node/index.d.ts`, whose first
+    // line is `/// <reference types="node" />` — and a triple-slash reference
+    // inside a `.d.ts` is not filtered by `types`, which governs only automatic
+    // `@types/*` inclusion. So `@types/node`'s `declare global`s were already
+    // program-wide before this entry existed: at f82ac0f, with `types` at
+    // `["vite/client"]` and no `@types/node` declared here,
+    // `src/charts/chart-geometry.test.ts` used `process.env.TZ` and
+    // `src/charts/chart-css-contract.test.ts` imported `node:fs`, and the whole
+    // thing passed the verify gate. Measured again on #176: dropping `node`
+    // from this list still typechecks the current program clean.
+    //
+    // So the entry is explicitness, not capability. It makes the ambient Node
+    // globals something this package opts into — alongside the `@types/node`
+    // devDependency, which is what pins *which* copy wins (the store holds vite
+    // instances peer-resolved against three different `@types/node` versions)
+    // — rather than something inherited from a vendor reference that a vite
+    // upgrade could withdraw without a word. `src/**` still must not use those
+    // globals; `import.meta.env` is the app's only env. That has always been a
+    // convention here rather than a compiler-held line, and the alternative — a
+    // third tsconfig owning the config file alone — would not be free either:
+    // typescript-eslint's `projectService` walks up only to the nearest
+    // `tsconfig.json`, so it would need `allowDefaultProject` wiring on top of
+    // a whole extra program to keep in step.
+    "types": ["vite/client", "node"]
   },
   "include": ["src", "vite.config.ts"]
 }
