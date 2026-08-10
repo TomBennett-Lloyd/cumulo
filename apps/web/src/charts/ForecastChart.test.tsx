@@ -164,7 +164,7 @@ describe('ForecastChart', () => {
     const entries = [...container.querySelectorAll('.forecast-chart-legend li')];
 
     expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
-      'Forecast (P10–P90)',
+      'Forecast (P10–P90, simulated)',
       'Forecast (median)',
       'Actuals (simulated)',
     ]);
@@ -255,7 +255,7 @@ describe('ForecastChart', () => {
     const entries = [...container.querySelectorAll('.forecast-chart-legend li')];
 
     expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
-      'Forecast (P10–P90)',
+      'Forecast (P10–P90, simulated)',
       'Forecast (median)',
       'Actuals (simulated)',
       'Baseline',

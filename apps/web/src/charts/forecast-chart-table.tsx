@@ -39,6 +39,16 @@ import { formatKw, type ChartOverlayColumn, type ForecastChartPoint } from './ch
  * The `<caption>` stays inside the table rather than being folded into the
  * summary: it is the table's accessible name, it says which window and which
  * units the numbers are in, and a summary is a name for the *disclosure*.
+ *
+ * **The P10 and P90 columns exist only where some hour has a band** (#295), the
+ * same honesty rule the legend's band row keeps. Two columns of em dashes down
+ * every row are not a partial result — they are the table advertising a
+ * quantity the series never carried. A *mixed* series is the case that keeps
+ * them: there the em dash is doing its ordinary job of saying "this hour has no
+ * value", against neighbours that do, so the columns stay exactly as they were.
+ * Computed here rather than taken as a parameter because it is a fact about
+ * `points`, and a caller free to disagree with the points it passed is a way for
+ * the headers and the cells to end up saying different things.
  */
 
 export interface ForecastChartTableParams {
@@ -55,38 +65,42 @@ export const forecastChartTable = ({
   spanHours,
   caption,
   overlay,
-}: ForecastChartTableParams): ReactElement => (
-  <details className="forecast-chart-details">
-    <summary className="forecast-chart-summary">Raw data</summary>
+}: ForecastChartTableParams): ReactElement => {
+  const hasBand = points.some((point) => point.band !== undefined);
 
-    <table className="forecast-chart-table">
-      <caption>{caption}</caption>
-      <thead>
-        <tr>
-          <th scope="col">{TIME_COLUMN_HEADER}</th>
-          <th scope="col">P10</th>
-          <th scope="col">Median</th>
-          <th scope="col">P90</th>
-          <th scope="col">Actual</th>
-          {overlay === undefined ? null : <th scope="col">{overlay.label}</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {points.map((point, index) => (
-          <tr key={point.validTimeIso}>
-            <th scope="row">
-              <time dateTime={point.validTimeIso}>
-                {tickLabelFor(point.validTimeIso, spanHours)}
-              </time>
-            </th>
-            <td>{formatKw(point.band?.p10Kw)}</td>
-            <td>{formatKw(point.medianKw)}</td>
-            <td>{formatKw(point.band?.p90Kw)}</td>
-            <td>{formatKw(point.actualKw)}</td>
-            {overlay === undefined ? null : <td>{formatKw(overlay.values[index])}</td>}
+  return (
+    <details className="forecast-chart-details">
+      <summary className="forecast-chart-summary">Raw data</summary>
+
+      <table className="forecast-chart-table">
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{TIME_COLUMN_HEADER}</th>
+            {hasBand ? <th scope="col">P10</th> : null}
+            <th scope="col">Median</th>
+            {hasBand ? <th scope="col">P90</th> : null}
+            <th scope="col">Actual</th>
+            {overlay === undefined ? null : <th scope="col">{overlay.label}</th>}
           </tr>
-        ))}
-      </tbody>
-    </table>
-  </details>
-);
+        </thead>
+        <tbody>
+          {points.map((point, index) => (
+            <tr key={point.validTimeIso}>
+              <th scope="row">
+                <time dateTime={point.validTimeIso}>
+                  {tickLabelFor(point.validTimeIso, spanHours)}
+                </time>
+              </th>
+              {hasBand ? <td>{formatKw(point.band?.p10Kw)}</td> : null}
+              <td>{formatKw(point.medianKw)}</td>
+              {hasBand ? <td>{formatKw(point.band?.p90Kw)}</td> : null}
+              <td>{formatKw(point.actualKw)}</td>
+              {overlay === undefined ? null : <td>{formatKw(overlay.values[index])}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+};

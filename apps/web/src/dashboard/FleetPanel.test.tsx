@@ -342,7 +342,7 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     const table = screen.getByRole('table', { name: /Table view/u });
 
     expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
-      ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual'],
+      ['Time (UTC)', 'Median', 'Actual'],
     ]);
     // Scoped to the plot's own children: the legend draws a swatch in the same
     // class, so an unscoped sweep would find the key rather than the line.

@@ -91,8 +91,21 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  * The legend's entries are counted rather than read: *which* series it names is
  * copy, and this suite owns furniture (see the file header), so a rewording must
  * not fail here. Counting is what keeps an empty `<ul>` from satisfying a bare
- * presence check. Three is the fixed set with no overlay — the overlay appends a
- * fourth row, and nothing is selected in any state below.
+ * presence check.
+ *
+ * **Two, not the three D3 was written against — deliberately, and this is the
+ * clause reinterpreted rather than eroded.** #295 makes the band's legend row
+ * conditional on the data: a series of point estimates gets no P10–P90 row,
+ * because a legend naming a band nothing produced is the chart claiming an
+ * uncertainty it does not have. That is mutually exclusive with a fixed count of
+ * three, so D3's literal number could not survive the change whatever it did.
+ * What D3 actually asked for does survive untouched, and is what is asserted
+ * here: the chart's key is never taken away by a *state*. The two unconditional
+ * rows — median and actuals — are the fixed set, and every state below is
+ * band-less (nothing is selected, so there is no overlay row either, and none of
+ * these fixtures carries a forecast with a band). A state that returned early
+ * past the legend still fails here, which is the regression the clause exists
+ * for; a series that honestly has no band no longer does.
  */
 const expectPanelFurniture = (container: HTMLElement): void => {
   expect(screen.getByRole('heading', { name: 'Fleet forecast', level: 2 })).toBeDefined();
@@ -100,7 +113,7 @@ const expectPanelFurniture = (container: HTMLElement): void => {
   const legend = within(chartFigure(container)).getByRole('list');
 
   expect(legend.className).toBe('forecast-chart-legend');
-  expect(within(legend).getAllByRole('listitem')).toHaveLength(3);
+  expect(within(legend).getAllByRole('listitem')).toHaveLength(2);
 };
 
 /** The pair every state owes the reader: whatever it has to say, over the furniture. */
@@ -282,13 +295,16 @@ describe('FleetPanel’s chart', () => {
 
     const table = screen.getByRole('table', { name: /Table view/u });
 
-    // Every forecast cell is the em dash a gap reads as, which is what says the
-    // measured hours reached the chart on their own rather than by borrowing an
-    // x-domain from a forecast that never arrived.
+    // The Median cell is the em dash a gap reads as, beside an Actual that has a
+    // number — which is what says the measured hours reached the chart on their
+    // own rather than by borrowing an x-domain from a forecast that never
+    // arrived. It used to be three em dashes; #295 drops the P10 and P90 columns
+    // where no hour carries a band, and Median is not gated, so the same claim is
+    // made by one cell instead of three.
     expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
-      ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual'],
-      ['10:00', '—', '—', '—', '5.0'],
-      ['11:00', '—', '—', '—', '6.0'],
+      ['Time (UTC)', 'Median', 'Actual'],
+      ['10:00', '—', '5.0'],
+      ['11:00', '—', '6.0'],
     ]);
   });
 });
