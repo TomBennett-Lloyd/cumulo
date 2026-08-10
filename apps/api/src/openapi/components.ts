@@ -131,6 +131,11 @@ const componentSources = [
       'present, `p10AcPowerKw` never exceeds `p90AcPowerKw`. The API enforces it as a',
       'zod refinement, which is a predicate rather than a keyword, so it is stated',
       'here rather than generated into the schema below.',
+      '**The band is simulated in this deployment** (issue 295): a deterministic',
+      'envelope around the physics estimate, widened by cloud-cover variability and',
+      'forecast lead time. No field says so, for the reason `GenerationReading` states',
+      'below — the shape is the one model-fitted quantiles would fill either way, and',
+      'those arrive with the ML layer (issue 20).',
     ].join(' '),
   },
   {

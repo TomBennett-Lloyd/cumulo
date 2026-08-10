@@ -68,8 +68,11 @@ export type UncertaintyBand = z.infer<typeof uncertaintyBandSchema>;
  *   legitimate POA value can exceed its inputs.
  * - `weatherSource` propagates provenance from the weather input so the UI can
  *   render the mandatory Open-Meteo credit on forecast displays too
- * - `uncertainty` is optional because physics v1 (#12) emits point estimates.
- *   When present it carries both quantiles: a half-band is not representable.
+ * - `uncertainty` is optional because rows written before #295, ML rows until
+ *   #20, and any non-live producer may omit it; live physics rows carry a
+ *   simulated envelope attached by the forecast service (see
+ *   `simulated-uncertainty.ts`). When present it carries both quantiles: a
+ *   half-band is not representable.
  */
 export const forecastSchema = z.object({
   siteId: z.uuid(),
