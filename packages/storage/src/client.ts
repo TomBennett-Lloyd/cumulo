@@ -83,9 +83,9 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *    The cost is real and is stated rather than argued away: on the one
  *    genuinely user-visible throttle path ADR 0002 names, the synchronous
  *    per-site fan-out behind a dashboard load, a read that outlives the burst
- *    reserve exhausts this
- *    budget after a single retry and reaches the caller as a `StorageError`
- *    (`./errors`), which the API boundary renders as a generic 500.
+ *    reserve exhausts this budget after a single retry and reaches the caller
+ *    as a `StorageError` (`./errors`), which the API boundary renders as a
+ *    generic 500.
  *
  * 3. **A capacity-cancelled transaction**: `TransactionCanceledException`,
  *    whose cause is reachable only inside `CancellationReasons[].Code`. The

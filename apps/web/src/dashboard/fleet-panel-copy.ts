@@ -86,9 +86,9 @@ export const fleetStatsLine = (sites: readonly Site[]): string =>
  * The middle arm takes the range rather than spelling out 24, because #284 D5
  * gave that arm a picker: its actuals really do span whatever window the reader
  * chose. Its forecast half is named without a number on purpose — the fleet's
- * forecast read asks for the same window, but what comes back is only the hours the horizon
- * actually reaches, so "and the forecast ahead" claims exactly as much as the
- * chart can show.
+ * forecast read asks for the same window, but what comes back is only the hours
+ * the horizon actually reaches, so "and the forecast ahead" claims exactly as
+ * much as the chart can show.
  */
 export const windowLabel = (
   range: RangeHours,

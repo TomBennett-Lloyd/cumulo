@@ -160,11 +160,11 @@ describe('FleetPanel’s heading row', () => {
     /*
      * The combination #264 made real, and the reason D5 could delete the caption
      * instead of rewriting it. A source with simulated actuals has a window
-     * worth choosing even though its forecast read reaches forward only — a wider
-     * one buys more measured hours behind the horizon and asks that read for more
-     * ahead of it — so the picker is offered, and both halves of that are
-     * asserted: the source really is re-asked at 48 h, and the chart's own name
-     * really does follow.
+     * worth choosing even though its forecast read reaches forward only — a
+     * wider one buys more measured hours behind the horizon and asks that read
+     * for more ahead of it — so the picker is offered, and both halves of that
+     * are asserted: the source really is re-asked at 48 h, and the chart's own
+     * name really does follow.
      */
     const dataSource = new CountingFleetSource(
       DISJOINT_WINDOW_FLEET,
@@ -193,8 +193,8 @@ describe('FleetPanel’s chart', () => {
      * #284 D3, as one case rather than four scattered assertions. The panel used
      * to return its pending, failed and empty states *in place of* the chart, so
      * the tallest element on the page appeared and vanished under a reader
-     * watching a retry land — and a failed fleet read took the axes, the legend and
-     * the table twin with it, which is more than the failure had actually
+     * watching a retry land — and a failed fleet read took the axes, the legend
+     * and the table twin with it, which is more than the failure had actually
      * removed. Each arm asserts the state's own sentence beside the figure,
      * because a chart that stayed while the explanation went missing would be
      * the opposite defect.
@@ -239,11 +239,11 @@ describe('FleetPanel’s chart', () => {
     /*
      * #290's second finding. "No forecast" and "nothing to show" stopped being
      * the same question when the chart's x-domain became the union of the two
-     * series (`fleet-series.ts`, #264): a fleet whose forecast half has not produced
-     * yet still has every measured hour to draw, and the guard that returned on
-     * an empty *forecast* threw those hours away and told the reader there was
-     * nothing at all. The fix is to join first and ask about what would be
-     * drawn, which is what this case pins.
+     * series (`fleet-series.ts`, #264): a fleet whose forecast half has not
+     * produced yet still has every measured hour to draw, and the guard that
+     * returned on an empty *forecast* threw those hours away and told the reader
+     * there was nothing at all. The fix is to join first and ask about what
+     * would be drawn, which is what this case pins.
      */
     const container = await renderSettled(new CountingFleetSource(ACTUALS_ONLY_FLEET));
 

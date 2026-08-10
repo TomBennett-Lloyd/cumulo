@@ -187,19 +187,19 @@ export interface DashboardProps {
  * (`add-site/AddSiteDialog.tsx`). `docs/design/dashboard-composition.md` records
  * the reasoning and what it is buying.
  *
- * Two things it deliberately never does. It never re-lists the fleet: the
- * listing is a mount-time request, and a dashboard that polled it would be
- * treating the fleet as something to re-ask on a cadence — which is the habit
- * ADR 0002's review of this ticket priced. The listing itself is the cheap half
- * (one Query over the `FLEET` partition, ~2 read units on `sites`); what sits
- * beside it is the expensive half, the two fleet series reads at ~25 read units
- * on `series` each — every site's partition, once for the forecasts and once
- * for the simulated actuals — against a per-site forecast poll's ~0.5. Since
- * #264 and #296 those Queries run server-side inside one request each, which
- * moved where they are spent and not how many. And it never invents a site id:
- * the id it watches for a forecast is the one
- * `createSite` returned, because a locally predicted id addresses a site that
- * does not exist.
+ * Two things it deliberately never does. It never re-lists the fleet on a
+ * cadence: the listing is a mount-time request that only an explicit retry asks
+ * for again, and a dashboard that polled it would be treating the fleet as
+ * something to re-ask on a clock — which is the habit ADR 0002's review of this
+ * ticket priced. The listing itself is the cheap half (one Query over the
+ * `FLEET` partition, ~2 read units on `sites`); what sits beside it is the
+ * expensive half, the two fleet series reads at ~25 read units on `series`
+ * each — every site's partition, once for the forecasts and once for the
+ * simulated actuals — against a per-site forecast poll's ~0.5. Since #264 and
+ * #296 those Queries run server-side inside one request each, which moved where
+ * they are spent and not how many. And it never invents a site id: the id it
+ * watches for a forecast is the one `createSite` returned, because a locally
+ * predicted id addresses a site that does not exist.
  */
 export const Dashboard = ({
   theme,
@@ -274,13 +274,14 @@ export const Dashboard = ({
    * The sites created this session, readable from the listing effect without
    * being a dependency of it (`react.md` rule 2).
    *
-   * A dependency would make a creation re-run the listing, which is the one
-   * read this dashboard spends at mount and never again. But the stale-id guard
-   * below
-   * still has to count a created site as known: a reader whose listing failed
-   * can add a site, select it, and then retry the listing — and a guard that
-   * only knew the listing's sites would clear the selection of a site sitting
-   * right there in the list.
+   * A dependency would make a creation re-run the listing, and the listing is a
+   * read this dashboard re-spends only when something asks it to: once at mount,
+   * and once more per explicit retry (`listAttempt` above), never as a side
+   * effect of unrelated state moving. But the stale-id guard below still has to
+   * count a created site as known: a reader whose listing failed can add a site,
+   * select it, and then retry the listing — and a guard that only knew the
+   * listing's sites would clear the selection of a site sitting right there in
+   * the list.
    */
   const createdSitesRef = useRef(createdSites);
   createdSitesRef.current = createdSites;

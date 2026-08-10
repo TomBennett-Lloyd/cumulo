@@ -292,8 +292,8 @@ describe('FleetPanel against a source with simulated actuals but no look-back', 
  * that costs a single metered request — as, since #296, the forecast does too. Before #264's
  * review both failures came out of one `combineFleetQueries` arm: a failed actuals read withdrew
  * a fleet sum that had arrived and reported it as "Could not load the fleet forecast", and its
- * "Try again" re-spent the whole 60-site forecast read, then a request per site, to re-ask one
- * request that had never been the fleet's.
+ * "Try again" re-spent the 60-site fan-out the forecast read then was, to re-ask one request that
+ * had never been the fleet's.
  */
 describe('FleetPanel when the fleet’s actuals fail on their own', () => {
   const actualsFailurePattern = /simulated actuals could not be loaded/u;

@@ -282,9 +282,13 @@ const stateContent = (
   if (state.status === 'failed') {
     // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
     // which is offered because a fleet read that came back with nothing is
-    // exactly the failure a repeat can outlive. `react.md` withholds a retry
-    // where re-running the request would deterministically return what it
-    // already returned; a read that failed is the opposite case.
+    // exactly the failure a repeat can outlive. The rule is `react.md`'s
+    // **Failed** bullet ("a retry only when retrying can work"; no retry that
+    // "re-runs an identical metered request"), read as withholding one where
+    // re-running would deterministically return what it already returned — a
+    // read that failed being the opposite case. That reading is an
+    // interpretation, not the bullet's own words; `docs/tech-debt.md` has why
+    // the amendment belongs in `react.md` rather than here.
     return {
       notice: (
         <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />

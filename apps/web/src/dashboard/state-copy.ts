@@ -149,13 +149,13 @@ export const siteOverlayFailureNotice = (siteName: string): string =>
  * The third of this family, and it earns its place the same way the second did.
  * The fleet's two reads are two requests over two windows — one metered
  * `/v1/fleet/forecast` call (#296) and one metered `/v1/fleet/actuals` call
- * (#264) — so either can fail
- * without the other, and the panel used to answer a failed actuals read by
- * withdrawing the whole chart under {@link fleetForecastFailureMessage}. That
- * blamed the forecast for a failure the forecast had nothing to do with, which
- * is the wrong party named to a reader who might go looking at the wrong thing
- * (`error-handling.md` rule 1's blame tiebreak), and it threw away a complete
- * fleet sum that had already arrived (rule 5).
+ * (#264) — so either can fail without the other, and the panel used to answer a
+ * failed actuals read by withdrawing the whole chart under
+ * {@link fleetForecastFailureMessage}. That blamed the forecast for a failure
+ * the forecast had nothing to do with, which is the wrong party named to a
+ * reader who might go looking at the wrong thing (`error-handling.md` rule 1's
+ * blame tiebreak), and it threw away a complete fleet sum that had already
+ * arrived (rule 5).
  *
  * A constant rather than a function, unlike its sibling above: there is one
  * fleet, so there is no name to interpolate. The source's own message is left

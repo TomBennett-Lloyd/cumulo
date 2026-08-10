@@ -132,9 +132,8 @@ const DEFAULT_RANGE: RangeHours = 24;
  * forecast hour. These are two requests over two windows — one metered
  * `/v1/fleet/forecast` call and one metered `/v1/fleet/actuals` call — so either
  * can fail alone, and a failed actuals read used to be returned here as *the*
- * failure:
- * the panel then withdrew a fleet sum that had already arrived and reported it
- * under the forecast's name, blaming a party that had not failed
+ * failure: the panel then withdrew a fleet sum that had already arrived and
+ * reported it under the forecast's name, blaming a party that had not failed
  * (`error-handling.md` rule 1's blame tiebreak) and discarding a complete answer
  * to say so (rule 5). A failed actuals read is now a `ready` state carrying a
  * `failed` actuals arm, which the body draws as the chart plus a notice.
@@ -340,8 +339,8 @@ export const FleetPanel = ({
    * once-a-second poll during add-a-site — leaves both dependencies untouched
    * and both memos intact. That poll is why this is measured rather than
    * decorative (`react.md` rule 2 asks for exactly that before a `useMemo`):
-   * without it, a 60-site fleet's series were re-summed and re-joined every second while
-   * a reader watched their new site generate (#293).
+   * without it, a 60-site fleet's series were re-summed and re-joined every
+   * second while a reader watched their new site generate (#293).
    *
    * The first memo is not about cost — combining two query states is three
    * comparisons — but about being an honest dependency for the second. Its
