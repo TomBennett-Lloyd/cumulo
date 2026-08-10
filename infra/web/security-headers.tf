@@ -41,7 +41,9 @@
 #     what is allowed.
 #   * `script-src 'self'` — Vite emits only external module scripts;
 #     `dist/index.html` contains no inline script, so no hash or nonce is needed
-#     and none is granted.
+#     and none is granted. No `'unsafe-eval'` either, and the app is built not to
+#     want it: `apps/web/src/zod-jitless.ts` runs zod interpreted so that the
+#     denial produces zero violation events rather than one per page load.
 #   * `style-src 'self'` — production CSS arrives via `<link>`. React and
 #     maplibre set styles through the CSSOM (`element.style.width = …`), which
 #     CSP does not govern; what CSP *would* govern is `setAttribute('style', …)`,

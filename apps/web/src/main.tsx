@@ -1,3 +1,9 @@
+// Ahead of everything, stylesheets included: this has to evaluate before any
+// module that constructs a zod schema, and it says there why. It contributes no
+// stylesheet, so it does not disturb the cascade order the list below stakes on
+// this file's import order.
+import './zod-jitless';
+
 /*
  * Every stylesheet in this app, in one place and in cascade order.
  *
