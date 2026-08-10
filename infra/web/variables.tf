@@ -26,6 +26,39 @@ variable "aws_region" {
   }
 }
 
+variable "api_origin" {
+  description = <<-EOT
+    The origin the deployed SPA calls its API on — scheme and host, nothing
+    else — appended to the Content-Security-Policy's `connect-src` by
+    security-headers.tf. Empty means a demo-mode deployment: the built app makes
+    no API calls, so its CSP admits no API origin.
+
+    This is the same operator-published string as the repo variable
+    `VITE_API_BASE_URL` (step B2 of infra/README.md's web runbook), travelling
+    the other way. There, the value is baked into the build so the SPA knows
+    where to call; here, it is baked into the policy so the browser will let it.
+    The two carriers must agree. If they disagree — or if this is left empty
+    against a build that has an API base URL — the deployed demo's own fetches
+    are blocked by its own CSP, and the failure surfaces in the browser console
+    rather than in any plan or apply. Both come from the same command,
+    `terraform -chdir=../api output -raw api_endpoint`, and neither should ever
+    be retyped from the other.
+
+    Never a wildcard. `https://*.execute-api.<region>.amazonaws.com` would look
+    like a convenience and would in fact admit every API Gateway in the region —
+    including anyone else's — as a destination the page may send data to. The
+    exact host is the only safe value, which is why the validation below rejects
+    anything carrying a path, a trailing slash or a port as well.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.api_origin == "" || can(regex("^https://[a-z0-9][a-z0-9.-]*$", var.api_origin))
+    error_message = "api_origin must be empty, or an origin — scheme and host only, e.g. https://abc123.execute-api.eu-west-1.amazonaws.com — with no path, no trailing slash and no port."
+  }
+}
+
 variable "environment" {
   description = <<-EOT
     Environment suffix in every name this stack creates — the bucket
