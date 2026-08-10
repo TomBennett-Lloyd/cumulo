@@ -15,7 +15,8 @@ import { routeBasemap } from './hermetic-basemap';
  *
  * Kept small on purpose. This lane is slow (a cold production build per run)
  * and it is not where behaviour gets tested; `src/**` owns that. A case earns
- * its place here only if assembling the app is what makes it true.
+ * its place here only if assembling the app is what makes it true — with one
+ * documented exception, at the foot of this file.
  */
 
 /**
@@ -87,16 +88,21 @@ type BoxSource = Pick<Locator, 'boundingBox'>;
  * element was free to lose its layout again, and it was the second read that
  * owned the assertion. Three consecutive CI failures over one byte-identical
  * tree measured the window a contended runner opens — rotating victims across
- * two tests, two elements and this helper, against 30/30 green locally (#367).
- * Capturing what the poll saw closes the window by construction: there is no
- * second read left to disagree with the first.
+ * two tests and two elements, with this helper and its message constant in all
+ * three, against 30/30 green locally (#367). That invariance is what convicted
+ * the shared helper rather than either test: what the three failures had in
+ * common was the code below, not the case that happened to run it. Capturing
+ * what the poll saw closes the window by construction: there is no second read
+ * left to disagree with the first.
  *
  * Captured, but deliberately not *settled* — no second matching reading, no
- * stability window. The callers compare geometry under `EDGE_TOLERANCE_PX`
- * rather than aiming pointer events at the box, so "a box existed, and this is
- * it" is the entire precondition being established here. Waiting for a box to
- * stop moving would be scope bought against no measurement flake anyone has
- * seen.
+ * stability window. The callers compare geometry rather than aiming pointer
+ * events at the box — mostly under `EDGE_TOLERANCE_PX`, and where not, across
+ * gaps far larger than any jitter: the chart-under-map case below compares raw
+ * edges precisely because a whole panel gap separates the two boxes. So "a box
+ * existed, and this is it" is the entire precondition being established here.
+ * Waiting for a box to stop moving would be scope bought against no measurement
+ * flake anyone has seen.
  *
  * The sample lands in a one-property holder rather than a plain `let`, and that
  * is the compiler's requirement rather than a preference. TS never follows an
