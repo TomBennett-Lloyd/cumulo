@@ -559,6 +559,36 @@
   margin: 0;
 }
 
+/* The title and the way out, on one line (#340). `space-between` rather than a
+ * `margin-left: auto` on the button, because there are exactly two items and the
+ * claim being made is about the row: the heading starts it and the dismissal
+ * ends it. `align-items: center` sets the X against the middle of the title's
+ * line box rather than its baseline — a glyph has no baseline to share — and the
+ * `gap` is what a long title collides with before it collides with the button.
+ *
+ * A `div`, and deliberately not a `header`. `AboutDialog` renders inside
+ * `.app-header`'s `<header>` — `HeaderMenu` mounts the dialog as a sibling of
+ * `.header-menu`, and a `<dialog>` promoted to the top layer stays exactly where
+ * it is in the DOM, so nothing portals it out. HTML's content model for `header`
+ * is flow content with no `header` or `footer` descendant, and the banner-scoping
+ * algorithm demotes a `header` only under `article`/`aside`/`main`/`nav`/
+ * `section` — `dialog` is on neither list, so a `header` here would be invalid
+ * markup *and* would put a second banner in the document for as long as the
+ * dialog was open.
+ *
+ * `.site-popover-header` in `map/site-popover.css` is the same flex row and is
+ * genuinely a `header`, because that card is a `<section>` (`SitePopoverCard.tsx`)
+ * and a `section` is one of the five that scope one. The two rules are not shared
+ * for a separate reason: that card's title can wrap to two lines and starts its
+ * button at the top (`align-items: flex-start`), where this one's is a single
+ * line by construction. */
+.about-dialog-header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
 .about-dialog-title {
   margin: 0;
   font-size: var(--text-lg);
@@ -635,17 +665,49 @@
   color: var(--color-accent);
 }
 
-/* The one control in the dialog, at the end and on its own line: a modal a
- * pointer user cannot dismiss is a trap, and Escape is not a pointer. */
+/*
+ * Still the one control in the dialog, and still there for the same reason — a
+ * modal a pointer user cannot dismiss is a trap, and Escape is not a pointer.
+ * What changed at #340 is that it is an X in the title row instead of a worded
+ * button at the foot, so it is styled as chrome rather than as the card's
+ * primary action: `--space-2` on all four sides around a 20px mark, which is a
+ * 36px square hit target, and no fill. The accent fill went with the word. It
+ * was there to make a text button read as *the* action of the dialog, and a
+ * filled accent block in the top-right corner would instead read as the loudest
+ * thing on a card whose point is the text underneath it (`design.md` rule 2 —
+ * chrome earns its place, and this chrome's job is to be found, not to compete).
+ * `align-self` goes with it: the button is a flex *item of the title row* now,
+ * placed by `.about-dialog-header`, not an item of the body column.
+ *
+ * No type properties, unlike `.header-menu-button`, which keeps a `font-size`
+ * for the inline content a bar button might still hold. This button's only child
+ * is a glyph sized by its own `width`/`height` below, so a type scale here would
+ * set nothing at all.
+ */
 .about-dialog-close {
-  align-self: flex-end;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2);
   border: none;
   border-radius: var(--radius-md);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  background: transparent;
+  color: var(--color-text);
   cursor: pointer;
+}
+
+/*
+ * The X, drawn on exactly `.header-menu-icon`'s terms — see that rule above for
+ * what each of these five declarations is doing and why. Restated rather than
+ * added to that rule's selector list: the burger and the magnifier are grouped
+ * there because they sit adjacent on one bar and two visibly different weights
+ * would be the failure, and a dialog's close button is under no such constraint.
+ * The same call `.about-dialog-basemap` makes a few rules up, on the same test —
+ * if one copy changed, the other would not be wrong until it changed the same
+ * way (`structure.md` rule 7).
+ */
+.about-dialog-close-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }

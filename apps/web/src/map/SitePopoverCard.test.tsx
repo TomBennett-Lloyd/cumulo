@@ -144,7 +144,15 @@ describe('SitePopoverCard', () => {
     // A card at marker size is no place for a chart, and there is a chart under
     // the map already showing exactly these hours. The site's facts are what a
     // reader gets here.
-    expect(container.querySelector('svg')).toBeNull();
+    //
+    // The chart's own root class, not `querySelector('svg')`, which stood here
+    // until the close affordance became an X (#340): the card now holds an
+    // `<svg>` in every state, so a bare svg-presence query is false by
+    // construction and passes over exactly the defect it was written to catch.
+    // `dashboard/FleetPanel.test.tsx` retired the same proxy at #284 D3 for the
+    // same reason and its docblock carries the argument — naming the mark that
+    // must be absent is what the query is worth.
+    expect(container.querySelector('.forecast-chart')).toBeNull();
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });

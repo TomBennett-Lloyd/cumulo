@@ -35,6 +35,23 @@ export interface AboutDialogProps {
  * document at rest, where `App.test.tsx`'s "once" and "exactly two" counts
  * would find them and where a text-scraping reader could too.
  *
+ * ## The way out is an X in the title row
+ *
+ * The close control is an icon whose accessible name is the word it used to
+ * show (`design.md` rule 2: a label naming a control for assistive technology
+ * becomes an accessible name, not visible text). Losing the word means losing
+ * the one thing that made a button at the foot of the card legible as the way
+ * out, so the control moves to where an icon-only close is conventionally found
+ * and therefore needs no words — the dialog's top-right, sharing a row with the
+ * title (`design.md` rule 1: use the standard idiom where one exists).
+ *
+ * What the old bottom button was for is unchanged by the move: **a modal a
+ * pointer user cannot dismiss is a trap**, and Escape is not a pointer. The
+ * dialog still has exactly one control, it is still the whole of the dialog's
+ * say in whether it closes, and it is still reachable by pointer and by tab —
+ * it is now first in the reading order rather than last, which is where a
+ * reader looking for a way out of a modal looks.
+ *
  * ## Copy
  *
  * Placeholder, pending the design pass's own words — with one exception that is
@@ -60,9 +77,29 @@ export const AboutDialog = ({ open, onClose }: AboutDialogProps): ReactElement =
     <dialog className="about-dialog" ref={dialogRef} aria-labelledby={headingId} onCancel={onClose}>
       {open ? (
         <div className="about-dialog-body">
-          <h2 className="about-dialog-title" id={headingId}>
-            About Cumulo
-          </h2>
+          <div className="about-dialog-header">
+            <h2 className="about-dialog-title" id={headingId}>
+              About Cumulo
+            </h2>
+
+            {/*
+             * The X is drawn on the burger's terms one file over
+             * (`HeaderMenu.tsx`): a 20-unit `viewBox`, `aria-hidden` so the
+             * button's name is said once, stroked in `currentColor`. The
+             * accessible name is the word this button no longer shows.
+             */}
+            <button
+              type="button"
+              className="about-dialog-close"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              <svg className="about-dialog-close-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M5 5 15 15" />
+                <path d="M15 5 5 15" />
+              </svg>
+            </button>
+          </div>
 
           <p className="about-dialog-lede">{PRODUCT_TAGLINE}</p>
 
@@ -91,10 +128,6 @@ export const AboutDialog = ({ open, onClose }: AboutDialogProps): ReactElement =
               </small>
             </p>
           </section>
-
-          <button type="button" className="about-dialog-close" onClick={onClose}>
-            Close
-          </button>
         </div>
       ) : null}
     </dialog>

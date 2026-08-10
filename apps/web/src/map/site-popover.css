@@ -98,15 +98,57 @@
   line-height: var(--leading-tight);
 }
 
+/* One value on all four sides since the label became a glyph (#340) — the same
+   move `.header-menu-button` made at #284 D16 and for its reason: the word
+   `Close` was wider than it was tall and wanted the wider horizontal pad to sit
+   in, whereas a square mark in an oblong box reads as an icon shoved sideways.
+   `--space-2` around a 20px mark is a 36px square, which is the hit target the
+   word used to buy with its own width. `color` is now what the mark is drawn in
+   (below), and it is the card's full ink rather than the muted grey the word
+   carried: two strokes offer a reader far less area to find than five letters
+   do. No type properties, though, unlike the `.header-menu-button` rule this one
+   was written in the image of: that button keeps a `font-size` because it still
+   owns inline content that would use it, and this button's only child is a glyph
+   sized by its own `width`/`height` below — `display: block`, so not sitting on a
+   text baseline either — so a type scale here would set nothing at all. The same
+   call `.about-dialog-close` makes in `header/header.css`, for the same reason. */
 .site-popover-close {
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-2);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
+  color: var(--color-text);
   cursor: pointer;
+}
+
+/*
+ * The X. Five declarations that are word-for-word `.header-menu-icon`'s in
+ * `header/header.css`, restated here rather than shared — the same call
+ * `.about-dialog-basemap` makes about the map's credits pair, and for the same
+ * reason (`structure.md` rule 7). That file's rule groups the burger and the
+ * magnifier *because they are adjacent on one bar*, which is a constraint this
+ * mark is not under: it sits on a card floating over the map, and header chrome
+ * restyling itself would not make this wrong. If one copy changed, the other
+ * would not be wrong until it changed the same way — rule 7's test for
+ * incidental duplication.
+ *
+ * What each declaration is doing is argued once, at `.header-menu-icon`:
+ * `fill: none` so a stroked path does not ink the region its lines bound;
+ * `display: block` so the mark does not sit on a text baseline and leave
+ * descender space that would make a box square in this file and unsquare on
+ * screen; `currentColor` so one colour decision covers both themes; and a
+ * unitless `stroke-width` in the user units of the 20-unit `viewBox`, so the
+ * weight scales with the box rather than needing restating if the box changes.
+ * The `width`/`height` lengths are the CSS gate's documented length residual
+ * (`stylelint.config.mjs`), not a value slipping past it.
+ */
+.site-popover-close-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
 /* Two columns at this width, so the four facts read as a block rather than as a
