@@ -297,8 +297,14 @@ jobs:
   #     mistake and unlabelled again has its red run superseded by a green one,
   #     rather than left standing); and the step reads *live* label state from
   #     the API rather than from the event payload, so even a manual re-run of a
-  #     stale run reports what is true now instead of what was true then. The
-  #     cost, stated rather than left to be rediscovered: `on:` is
+  #     stale run reports what is true now instead of what was true then. What
+  #     that truth is supposed to be: the sanctioned sequence
+  #     (merge.humanAlwaysRule) puts the review-feedback entry on the branch
+  #     before the label goes on, so a labelled PR is green here from its first
+  #     labelled run — this gate is never the thing a PR is waiting on. A red
+  #     merge-ritual-gate on a labelled PR therefore reports a violated
+  #     sequence, not a pending review, and it is fixed on the branch.
+  #     The cost, stated rather than left to be rediscovered: `on:` is
   #     workflow-level, so each label event re-runs every job in this file —
   #     ~2–3 min of wall time, in parallel, $0 on a public repo. Accepted as it
   #     stands; a `concurrency` group is the lever if label traffic ever grows.
