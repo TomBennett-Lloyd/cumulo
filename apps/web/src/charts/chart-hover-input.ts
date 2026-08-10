@@ -5,9 +5,11 @@ import type { ChartScale } from './chart-series';
 /**
  * Everything between an input event and a selection: which sample a pointer is
  * over, what a keystroke does to the readout, and how often the panel is allowed
- * to move. No JSX — `forecast-chart-hover.tsx` draws whatever this settles on,
- * and the two are separate files because sizing a panel and rate-limiting a
- * pointer are separate jobs that happened to start in one place
+ * to move. No JSX, and no opinion about who calls it: since #331 the component
+ * holding `useChartHover` is `forecast-chart-hover-boundary.tsx`, which is the
+ * point re-rendering stops, and `forecast-chart-hover.tsx` draws whatever the
+ * selection settles on. This is a file of its own because sizing a panel and
+ * rate-limiting a pointer are separate jobs that happened to start in one place
  * (`structure.md` rule 4).
  */
 
@@ -138,6 +140,8 @@ export const hoverKeyAction = ({
  * derived from this one, which would need re-deriving if it moved:
  *   - `forecast-chart-tooltip.test.tsx`: `INSIDE_ONE_FRAME_MS` and
  *     `PAST_ONE_FRAME_MS`, chosen to fall either side of this value.
+ *   - `forecast-chart-render-boundary.test.tsx`: `PAST_ONE_FRAME_MS`, the wait
+ *     each move in its pointer sweep advances by to commit exactly one frame.
  *   - `docs/design/chart-treatment.md`: the D7 bullet, which owns the decision
  *     and states it as a rate rather than as this interval.
  */

@@ -518,3 +518,219 @@ test('keeps the fleet chart laid out once a selected site is drawn over it', asy
   // real change to where the labels land.
   await expectChartLaidOut(figure);
 });
+
+/**
+ * The plot's rendered box, named by deriving it rather than by restating it —
+ * Playwright gives `boundingBox` an anonymous return type with no exported name,
+ * and a hand-written `{ x, y, width, height }` here would be a second copy of a
+ * shape this file does not own (`architecture.md` rule 9).
+ */
+type PlotBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
+
+/**
+ * Where the pointer arrives on the plot, and where it parks, as shares of the
+ * plot's rendered width.
+ *
+ * Both are well inside the plot's own box, because the thing that hears a
+ * pointer is the plot rect and not the whole svg (`.forecast-chart-pointer-target`,
+ * `src/charts/forecast-chart-hover-boundary.tsx`) — a share near either edge would land in an
+ * axis gutter and summon nothing at all. Both are also on the same side of the
+ * point where the panel flips to the *left* of the pointer to stay on the canvas
+ * (`tooltipAnchorX`, `src/charts/chart-geometry.ts`): that flip moves the anchor
+ * backwards by the panel's whole width, and a sweep straddling it would be
+ * asserting a rightward travel the chart never promised. Nothing here has to
+ * know where the flip is, which is the point of measuring travel rather than
+ * position below — a sweep that started straddling it fails naming the distance
+ * it actually moved.
+ */
+const SWEEP_ARRIVAL = 0.4;
+const SWEEP_PARKING = 0.7;
+
+/**
+ * Intermediate positions in the closing move, so it is a pointer *stream* and
+ * not a jump.
+ *
+ * The stream is what this case exists to run: a single teleporting move would be
+ * one event, which any implementation lands correctly, while a run of them is
+ * what the panel's frame budget (`POINTER_FRAME_MS`, `src/charts/chart-hover-input.ts`)
+ * drops all but one of — and dropping the *last* one is the freeze this case
+ * ends by ruling out.
+ */
+const SWEEP_STEPS = 12;
+
+/**
+ * The panel's left edge in view-box units, read back out of the tooltip group's
+ * `transform`; `Number.NaN` where no tooltip is drawn.
+ *
+ * A lane-local twin of `tooltipAnchor` in `src/charts/forecast-chart-test-fixture.tsx`,
+ * duplicated deliberately (`structure.md` rule 7). The two run in different
+ * runtimes — this body is serialised into the page and executed by the browser,
+ * that one runs inside the vitest process against a jsdom container — so there
+ * is no module both could import even if they wanted one. What they have in
+ * common is one attribute's shape, which either would fail loudly on rather than
+ * silently, and they are free to diverge in everything else: the fixture wants an
+ * exact user-unit coordinate from a component it rendered itself, and this wants
+ * whatever a real pointer over a real build put there.
+ */
+const tooltipAnchor = async (figure: Locator): Promise<number> =>
+  figure.evaluate((element) => {
+    const transform = element.querySelector('.forecast-chart-tooltip')?.getAttribute('transform');
+    const anchor = /translate\((?<x>[-\d.]+)/u.exec(transform ?? '')?.groups?.x;
+
+    return anchor === undefined ? Number.NaN : Number(anchor);
+  });
+
+/** One reading of the plot's box, comparable to the last one — `null` when it has none. */
+const boxSignature = async (plot: Locator): Promise<string | null> => {
+  const box = await plot.boundingBox();
+
+  return box === null ? null : `${String(box.x)},${String(box.y)},${String(box.width)}`;
+};
+
+/** What `settledPlotBox` says once the column has stopped moving. */
+const BOX_SETTLED = 'settled';
+
+/**
+ * The plot's box, once two reads across a poll interval agree about it.
+ *
+ * The one measurement in this file that cannot simply be re-taken. Every other
+ * assertion here polls until a reading is right, but `page.mouse.move` is an
+ * *event* rather than a state: a coordinate computed from a box read while the
+ * map above the panel was still taking its band would put the pointer where the
+ * plot no longer is, and no later frame would correct it — the case would then
+ * fail on a tooltip that was never summoned, blaming the hover layer for a
+ * mis-aimed cursor.
+ */
+const settledPlotBox = async (plot: Locator): Promise<PlotBox> => {
+  let previous: string | null = null;
+
+  await expect
+    .poll(
+      async () => {
+        const current = await boxSignature(plot);
+        const settled = current !== null && current === previous;
+        previous = current;
+
+        return settled
+          ? BOX_SETTLED
+          : `the plot's box is still moving (now ${current ?? 'absent'})`;
+      },
+      { message: 'The plot never held still long enough to aim a pointer at it.' },
+    )
+    .toBe(BOX_SETTLED);
+
+  const box = await plot.boundingBox();
+
+  if (box === null) {
+    throw new Error('The plot settled and then reported no layout box.');
+  }
+
+  return box;
+};
+
+/**
+ * How far the panel's travel may differ from the pointer's, in pixels.
+ *
+ * The two are the same distance and not merely proportional, which is the whole
+ * claim: a client x becomes a view-box x by dividing by the rendered width and
+ * multiplying by the view box (`pointerSample`, `src/charts/chart-hover-input.ts`),
+ * and since #284 D15 those are the same number, so a pointer that moved 300px
+ * moves the anchor 300 user units. The slack is sub-pixel arithmetic and the
+ * `Math.round` the measured width goes through (`use-chart-width.ts`) — the same
+ * order of error `ONE_TO_ONE_TOLERANCE` above absorbs, and orders below the
+ * failure this has to catch, which is a panel that stopped at a frame the sweep
+ * passed through rather than at the one it ended on.
+ */
+const TRAVEL_TOLERANCE = 2;
+
+/** What the settled reading says when the panel is where the pointer left it. */
+const LANDED_WITH_THE_POINTER = 'landed where the pointer stopped';
+
+/*
+ * The hover readout under a real pointer, which is the half jsdom cannot see.
+ *
+ * `forecast-chart-tooltip.test.tsx` owns everything about this layer that is
+ * arithmetic — which sample an x snaps to, where the panel sits beside it, that
+ * a held frame lands — and it owns it against a stubbed `getBoundingClientRect`
+ * and fake timers, feeding the component client coordinates it invented. Two
+ * things are therefore untested until a browser runs it: the conversion from a
+ * client x to a view-box x, which needs a plot with a real rendered width, and a
+ * genuine pointer stream under real timers, where the frame budget is a wall
+ * clock rather than a `vi.advanceTimersByTime` (`testing.md` rule 10).
+ *
+ * Travel and not position, throughout. Where the panel *is* depends on the
+ * width the column happened to give the chart, which is not this case's
+ * business; how far it moved when the pointer moved is the contract, and it is
+ * one number at every viewport.
+ */
+test('follows a real pointer across the plot and lands where it stops', async ({ page }) => {
+  const figure = page.locator('.fleet-panel .forecast-chart-figure');
+  const plot = figure.locator(PLOT_SVG);
+
+  // The map is what pushes the panel down the page after first paint, so it is
+  // waited on before a single coordinate is computed — the same reason the D15
+  // case above waits for the canvas.
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  await expect(plot).toBeVisible();
+
+  const box = await settledPlotBox(plot);
+  const pointerY = box.y + box.height / 2;
+  const pointerXAt = (share: number): number => box.x + box.width * share;
+  const pointerTravel = box.width * (SWEEP_PARKING - SWEEP_ARRIVAL);
+
+  /*
+   * Arriving is one `pointermove` and nothing else — no click, no dwell. The
+   * readout opens on the first event the plot's target rect sees, which is what
+   * the treatment's "the pointer never has to land on a line" costs.
+   */
+  await page.mouse.move(pointerXAt(SWEEP_ARRIVAL), pointerY);
+  await expect(figure.locator('.forecast-chart-tooltip')).toHaveCount(1);
+
+  const arrivalAnchor = await tooltipAnchor(figure);
+
+  await page.mouse.move(pointerXAt(SWEEP_PARKING), pointerY, { steps: SWEEP_STEPS });
+
+  /*
+   * Both halves of the layer, because either alone is satisfiable by a broken
+   * one: a panel with no crosshair is a readout with nothing marking the sample
+   * it is reading, and the crosshair is the piece that has to *stay* attached
+   * while the panel moves independently of it (#284 D7).
+   */
+  await expect(figure.locator('.forecast-chart-crosshair')).toHaveCount(1);
+  await expect
+    .poll(async () => tooltipAnchor(figure), {
+      message: 'The panel did not move at all while the pointer swept across the plot.',
+    })
+    .toBeGreaterThan(arrivalAnchor);
+
+  /*
+   * The trailing flush, under a real clock: the pointer has stopped, so nothing
+   * more is coming, and the panel has to end up where the reader parked the
+   * cursor rather than at whichever frame the throttle last let through. Two
+   * equal reads a poll interval apart is "it has stopped"; the travel is "it
+   * stopped in the right place". Polled rather than slept on, because the state
+   * being waited for is a settled anchor and this lane keeps no retry budget to
+   * hide a sleep that was a little short.
+   */
+  let previous = Number.NaN;
+
+  await expect
+    .poll(
+      async () => {
+        const current = await tooltipAnchor(figure);
+        const held = current === previous;
+        const travelled = current - arrivalAnchor;
+        previous = current;
+
+        if (!held) {
+          return `the panel is still moving (anchor ${current.toFixed(1)})`;
+        }
+
+        return Math.abs(travelled - pointerTravel) <= TRAVEL_TOLERANCE
+          ? LANDED_WITH_THE_POINTER
+          : `the panel travelled ${travelled.toFixed(1)}px against the pointer's ${pointerTravel.toFixed(1)}px`;
+      },
+      { message: 'The panel froze short of where the pointer stopped.' },
+    )
+    .toBe(LANDED_WITH_THE_POINTER);
+});

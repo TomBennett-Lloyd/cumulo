@@ -7,10 +7,11 @@ import { axisTickText, type ChartScale, type ForecastChartPoint } from './chart-
 /**
  * The plot's chrome: the kW grid and its labels, the forecast-horizon rule, the
  * two tiers of the time axis, and the two axis titles. Each builder returns an
- * array that `ForecastChart.tsx` spreads straight into the `<svg>`, exactly as
- * `forecast-chart-marks.tsx` does for the data — chrome and marks are the two
- * halves of that plot and now sit in a file each, with the component left
- * holding composition (`structure.md` rule 4).
+ * array that `ForecastChart.tsx` spreads straight into the plot — since #331 by
+ * handing it down to `forecast-chart-hover-boundary.tsx`, which owns the `<svg>`
+ * these land inside — exactly as `forecast-chart-marks.tsx` does for the data.
+ * Chrome and marks are the two halves of that plot and now sit in a file each,
+ * with the component left holding composition (`structure.md` rule 4).
  *
  * Every number here is geometry in SVG user units, which are rendered pixels
  * (`chart-geometry.ts`'s `chartPlot`): coordinates and gaps, not styling. The

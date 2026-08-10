@@ -364,13 +364,28 @@ describe('ForecastChart tooltip motion', () => {
    * case its teeth.
    *
    * With no overlay every prop this panel is memoised on is a primitive or a
-   * value taken straight from `points`, so `ForecastChart`'s two `useMemo`s are
-   * both returning `undefined` and the shallow compare passes whether or not
-   * they exist — the case held while the memoisation it exists to prove was
-   * deleted. An overlay makes the join and the reading real objects, rebuilt per
-   * render unless something holds their identity: with either `useMemo` removed
-   * the three pointer moves below render the content three times instead of
-   * once, which is the failure this case is for.
+   * value taken straight from `points`, so the overlay reading the boundary
+   * derives is `undefined` either way and the shallow compare passes whether or
+   * not it is memoised — the case held while the memoisation it exists to prove
+   * was deleted. An overlay makes that reading a real object, rebuilt every
+   * frame unless something holds its identity: with the `useMemo` in
+   * `ForecastChartHoverBoundary` removed, the three pointer moves below render
+   * the content three times instead of once, which is the failure this case is
+   * for.
+   *
+   * That memo is one of two this case fails on, and the other is the panel's
+   * own. `ForecastChartHoverLayer` is not memoised, so it re-renders on every
+   * committed frame; `memo(TooltipPanel)` is what keeps the content out of
+   * those re-renders, and stripping it puts the three moves below at three
+   * content renders instead of one — measured, not reasoned about.
+   *
+   * What #331 took *off* that list is worth knowing about here: the join the
+   * reading is derived from is still a `useMemo`, but it stayed in
+   * `ForecastChart` while the reading moved down, and `ForecastChart`'s body no
+   * longer runs on a pointer frame. So the join keeps its identity across a
+   * sweep whether or not it is memoised, and deleting that one leaves
+   * everything here green. What it guards is a re-render arriving from above —
+   * a new range, a new fleet — which nothing in this file drives.
    */
   it('re-renders the tooltip content only when the snapped sample changes', () => {
     const container = renderChartWithOverlay(SERIES, {
