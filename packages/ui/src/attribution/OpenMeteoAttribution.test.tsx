@@ -33,12 +33,14 @@ describe('OpenMeteoAttribution', () => {
 
   it('wraps the droppable prefix in the compact-form class', () => {
     /*
-     * The class is a contract, not decoration: a surface whose row, as composed,
-     * cannot hold the full forms of the credits on it hides exactly this element
-     * to reach the compact form CLAUDE.md sanctions, and
-     * `apps/web/src/map/map.css` is the only one that does — its band is the one
-     * row in the app carrying a second credit beside this one, which is why a
-     * row this credit has to itself never meets the condition. The last
+     * The class is a contract, not decoration: a surface whose row cannot hold
+     * the full phrase hides exactly this element to reach the compact form
+     * CLAUDE.md sanctions, and `apps/web/src/map/map.css` is the only one that
+     * does — its band is the one row in the app carrying a second credit beside
+     * this one. Which rows meet that condition is
+     * `docs/design/map-treatment.md`'s Attribution section to say (#356); a row
+     * this credit has to itself is composed of this phrase alone and holds its
+     * full form at every width, so it never meets it. The last
      * assertion is the one with teeth — a wrapper that had
      * swallowed the anchor would take the non-negotiable half of the credit down
      * with the prose, and would still satisfy the two above it.

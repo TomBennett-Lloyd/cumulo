@@ -18,12 +18,13 @@ import type { ReactElement } from 'react';
  * `Weather data by` inside `OpenMeteoAttribution` — and the row reads
  * `© OpenStreetMap contributors · OpenFreeMap` and `Open-Meteo.com`. Both links,
  * the `©` and the `·` sit outside those wrappers and survive at every width; the
- * compact Open-Meteo form is the one CLAUDE.md sanctions for a row that, as
- * composed, cannot hold both credits' full forms (owner-amended 2026-08-09).
- * That the drop point is a fact about this row rather than about either phrase's
- * own length — and that both prefixes therefore go at once — is decided in
- * `docs/design/map-treatment.md`'s Attribution section (#356); `map.css` holds
- * the measured width and the rule itself.
+ * compact Open-Meteo form is the one CLAUDE.md sanctions where the row cannot
+ * hold the full phrase (owner-amended 2026-08-09), read here against the row as
+ * composed. That reading — and with it the decision that both prefixes go at
+ * once, at a width belonging to this row rather than to either phrase — is owned
+ * by `docs/design/map-treatment.md`'s Attribution section (#356), which is also
+ * where it is marked as a reading rather than as CLAUDE.md's own wording;
+ * `map.css` holds the measured width and the rule itself.
  *
  * Nothing here is conditional even so, because the two forms are one DOM: the
  * text is identical in both and only computed visibility differs. No licence

@@ -47,6 +47,13 @@ export default defineConfig({
    * the assertion or in the app, and a retry budget is how a suite learns to
    * hide one. The specs wait on states (`toBeVisible`, `toHaveCount`) rather
    * than on time, so there is nothing a second attempt legitimately fixes.
+   *
+   * The lane holds one duration — `DRAG_SETTLE_MS` in `attribution-band.spec.ts`
+   * — and it is not an exception to that. It elapses *inside* a gesture, between
+   * the pointer stopping and the button coming up, with nothing observed across
+   * it; what the gesture is trying to achieve is still waited on as a state
+   * afterwards. A duration nothing reads across cannot be the flake a retry would
+   * paper over, so the claim above holds lane-wide as stated.
    */
   retries: 0,
 
