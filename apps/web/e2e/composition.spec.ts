@@ -15,7 +15,8 @@ import { routeBasemap } from './hermetic-basemap';
  *
  * Kept small on purpose. This lane is slow (a cold production build per run)
  * and it is not where behaviour gets tested; `src/**` owns that. A case earns
- * its place here only if assembling the app is what makes it true.
+ * its place here only if assembling the app is what makes it true — with one
+ * documented exception, at the foot of this file.
  */
 
 /**
@@ -39,6 +40,18 @@ const EDGE_TOLERANCE_PX = 2;
  * principle, applied to a library boundary instead of a schema).
  */
 type LayoutBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
+
+/**
+ * The one capability `layoutBoxOf` needs of the thing it measures.
+ *
+ * Derived from `Locator` rather than restated, on the same principle as
+ * `LayoutBox` above: the helper cannot drift from Playwright's signature
+ * because it does not own it. Narrowing to the single method is also the seam
+ * the regression case below needs — a real `Locator` cannot be asked to flicker
+ * on demand, and what the helper does when its source flickers is the whole
+ * behaviour under test.
+ */
+type BoxSource = Pick<Locator, 'boundingBox'>;
 
 /**
  * One element's box, once the browser has laid it out.
@@ -67,30 +80,66 @@ type LayoutBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
  * poll's timeout is what reports it now, so an element that genuinely never
  * gets a box still fails, and fails naming itself.
  *
- * The second read is not redundant. `expect.poll` reports whether the condition
- * held, not the value it held — so the box is read again once the poll has
- * established there is one, and the guard after it covers the one case that
- * leaves: an element that had a box and lost it between the two reads. That is
- * a genuinely different failure from never having had one, and says so.
+ * The sample the poll settles on is the sample returned. `expect.poll` reports
+ * whether the condition held rather than the value it held, and this helper
+ * used to answer that by reading the box a second time — which re-opened at the
+ * other end the race #274 closed at this one. A box read is a state, and a
+ * state worth observing is a state worth keeping: between the two reads the
+ * element was free to lose its layout again, and it was the second read that
+ * owned the assertion. Three consecutive CI failures over one byte-identical
+ * tree measured the window a contended runner opens — rotating victims across
+ * two tests and two elements, with this helper and its message constant in all
+ * three, against 30/30 green locally (#367). That invariance is what convicted
+ * the shared helper rather than either test: what the three failures had in
+ * common was the code below, not the case that happened to run it. Capturing
+ * what the poll saw closes the window by construction: there is no second read
+ * left to disagree with the first.
+ *
+ * Captured, but deliberately not *settled* — no second matching reading, no
+ * stability window. The callers compare geometry rather than aiming pointer
+ * events at the box — mostly under `EDGE_TOLERANCE_PX`, and where not, across
+ * gaps far larger than any jitter: the chart-under-map case below compares raw
+ * edges precisely because a whole panel gap separates the two boxes. So "a box
+ * existed, and this is it" is the entire precondition being established here.
+ * Waiting for a box to stop moving would be scope bought against no measurement
+ * flake anyone has seen.
+ *
+ * The sample lands in a one-property holder rather than a plain `let`, and that
+ * is the compiler's requirement rather than a preference. TS never follows an
+ * assignment made inside the poll's closure, so a `let` initialised to `null`
+ * is still narrowed to `null` at the guard below, which reduces the guard to a
+ * comparison the checker can discharge — `no-unnecessary-condition` is right to
+ * call that decoration. A property of an object whose type is not a union is
+ * not narrowed by its initialiser, so `latest.box` keeps its honest
+ * `LayoutBox | null` and the guard stays a check the compiler admits.
+ *
+ * What that guard reports is an invariant, not a race: it can fire only if
+ * `expect.poll` resolved on a `null` sample, which its contract rules out. So
+ * it names a violated invariant rather than a failed measurement
+ * (`error-handling.md` rule 1).
  *
  * The name is a parameter rather than something reached in from the enclosing
  * test (`structure.md` rule 1), and it is what makes both messages point at the
  * element that actually failed.
  */
-const layoutBoxOf = async (locator: Locator, name: string): Promise<LayoutBox> => {
+const layoutBoxOf = async (source: BoxSource, name: string): Promise<LayoutBox> => {
+  const latest: { box: LayoutBox | null } = { box: null };
+
   await expect
-    .poll(async () => locator.boundingBox(), {
-      message: `${name} never acquired a layout box.`,
-    })
+    .poll(
+      async () => {
+        latest.box = await source.boundingBox();
+        return latest.box;
+      },
+      { message: `${name} never acquired a layout box.` },
+    )
     .not.toBeNull();
 
-  const box = await locator.boundingBox();
-
-  if (box === null) {
-    throw new Error(`${name} had a layout box and then lost it.`);
+  if (latest.box === null) {
+    throw new Error(`${name}'s layout-box poll resolved without a non-null sample to return.`);
   }
 
-  return box;
+  return latest.box;
 };
 
 /**
@@ -476,4 +525,35 @@ test.describe('the fleet panel’s header at phone width', () => {
       panelBox.x + panelBox.width + EDGE_TOLERANCE_PX,
     );
   });
+});
+
+/*
+ * The lane's own measuring instrument, asserted deterministically.
+ *
+ * The charter above would exclude this on its face — nothing here assembles the
+ * app — and it is here anyway because `layoutBoxOf` is here, and because the
+ * unit lane's include boundary deliberately stops at this directory
+ * (`apps/web/vite.config.ts` — "Vitest owns `src/` and nothing else"). Any other
+ * home for the case would mean moving the helper out of the file whose specs
+ * are its only callers.
+ *
+ * A source that has a box exactly once is #367's race made repeatable: the poll
+ * settles on reading one, and the pre-fix helper then re-read, got `null`, and
+ * threw. Three CI runs produced that by luck; this produces it by construction,
+ * which is what `testing.md` rule 4 asks of a regression test. The `beforeEach`
+ * still boots the page for it — the cost of living in this file, and it buys
+ * this case nothing.
+ */
+test('layoutBoxOf returns the box its poll observed rather than re-reading it', async () => {
+  const settled: LayoutBox = { x: 0, y: 0, width: 640, height: 480 };
+  let readings = 0;
+  const flickering: BoxSource = {
+    /* Not `async`: there is nothing to await, and `require-await` is right to say so. */
+    boundingBox: () => {
+      readings += 1;
+      return Promise.resolve(readings === 1 ? settled : null);
+    },
+  };
+
+  expect(await layoutBoxOf(flickering, 'The flickering element')).toEqual(settled);
 });

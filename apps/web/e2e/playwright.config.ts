@@ -9,7 +9,8 @@ import { defineConfig } from '@playwright/test';
  * the real shell, served from a real build. That gap is what this config fills,
  * and it is why the lane is deliberately thin. It is not a second component
  * suite; it asserts only the things that stop being true the moment the pieces
- * are assembled.
+ * are assembled — plus the one case, at the foot of `composition.spec.ts`, that
+ * proves this lane's own measuring instrument.
  */
 
 /**
