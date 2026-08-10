@@ -3,7 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # `types:` replaces GitHub's defaults rather than extending them, so the three
+  # that came for free are re-listed here alongside the two this repo needs.
+  # `labeled`/`unlabeled` exist for the merge-ritual-gate job at the foot of
+  # this file; its comment (b) carries the reasoning and the cost.
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   checks:
@@ -264,3 +269,77 @@ jobs:
         run: terraform -chdir=infra/web init -backend=false -lockfile=readonly
       - name: terraform validate (web)
         run: terraform -chdir=infra/web validate
+
+  # The mechanical half of the merge ritual: a PR labelled `awaiting-review`
+  # must carry its docs/review-feedback.md entry on the branch, where the
+  # reviewer it is waiting for can read it — not in somebody's memory of what to
+  # write once the merge is done. What the entry has to *say* is
+  # merge.mergeRitual in .claude/workflow.json, and is deliberately not restated
+  # here; this job only knows whether the file is in the diff.
+  #
+  # (a) Always runs, and the step decides — not a job-level `if:`. That is the
+  #     whole shape of this job. Branch protection counts a *skipped* required
+  #     context as satisfied, so a job-level condition that wrongly evaluates
+  #     false (a stale payload, an expression bug) fails open and leaves no
+  #     trace behind: the PR goes green having never been looked at. A step that
+  #     always runs prints its verdict either way, which is what keeps "gate
+  #     does not apply" distinguishable from "gate never ran". The one-way
+  #     naming coupling web-e2e's comment (a) describes would apply here too, if
+  #     this job is ever added to `main`'s required status contexts: renaming it
+  #     then leaves the context permanently unreported. Adding it to that list
+  #     is a repo-settings action, and is deliberately not done here.
+  # (b) Label staleness is this gate's normal case, not its edge case. The
+  #     ritual applies `awaiting-review` *after* CI has gone green, so every run
+  #     that exists at labelling time predates the label — the adversarial
+  #     ordering is the ordinary one. Two halves answer it. `labeled` and
+  #     `unlabeled` in the trigger at the top of this file guarantee a fresh run
+  #     on every label change (`unlabeled` included so that a PR labelled by
+  #     mistake and unlabelled again has its red run superseded by a green one,
+  #     rather than left standing); and the step reads *live* label state from
+  #     the API rather than from the event payload, so even a manual re-run of a
+  #     stale run reports what is true now instead of what was true then. The
+  #     cost, stated rather than left to be rediscovered: `on:` is
+  #     workflow-level, so each label event re-runs every job in this file —
+  #     ~2–3 min of wall time, in parallel, $0 on a public repo. Accepted as it
+  #     stands; a `concurrency` group is the lever if label traffic ever grows.
+  #     One known-harmless edge worth recognising in the logs: taking the label
+  #     off at merge time fires a run against a just-merged PR.
+  # (c) The diff is read from `pulls/{n}/files` with `--paginate`, not from a
+  #     checkout. So no `fetch-depth` question arises — the kind the gitleaks
+  #     job above had to answer — and this job needs no setup steps at all: no
+  #     checkout, no pnpm, no node, in contrast to every other job here. The
+  #     `gh` CLI is preinstalled on the runner image.
+  # (d) Token and permissions: `github.token` reaches `gh` as GH_TOKEN, under a
+  #     job-level `permissions:` block granting `pull-requests: read` — enough
+  #     for both API reads, and a job-level block zeroes every other scope for
+  #     this job alone, leaving the other jobs' defaults untouched. And the
+  #     limit of what this buys: the gate is a floor, not a proof. It can see
+  #     that the file is in the diff and nothing beyond that, so a placeholder
+  #     line clears it just as a real one does — which is precisely why
+  #     merge.mergeRitual, and not this job, owns what the entry must say.
+  merge-ritual-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: awaiting-review PR carries its review-feedback line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "push event - no PR to gate; nothing to check"
+            exit 0
+          fi
+          labels=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.labels[].name')
+          if ! printf '%s\n' "$labels" | grep -Fxq 'awaiting-review'; then
+            echo "PR #$PR_NUMBER is not labelled 'awaiting-review'; gate does not apply"
+            exit 0
+          fi
+          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename')
+          if printf '%s\n' "$files" | grep -Fxq 'docs/review-feedback.md'; then
+            echo "ok: awaiting-review PR touches docs/review-feedback.md"
+            exit 0
+          fi
+          echo "::error::PR #$PR_NUMBER carries 'awaiting-review' but its diff does not touch docs/review-feedback.md - merge.mergeRitual (.claude/workflow.json) requires the review-feedback entry on the branch"
+          exit 1
