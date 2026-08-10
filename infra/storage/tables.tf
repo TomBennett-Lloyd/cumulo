@@ -82,6 +82,18 @@
 # and its "a forgotten stack is nearly free" cost note both carry the ≈ $0.30
 # and ≈ $1.48 estimates, and move with them.
 #
+# The `series` section below also owns the per-dashboard-load read arithmetic:
+# #264 doubled it by giving a load a second fleet fan-out, and ADR 0002's
+# figure is amended (2026-08-10) rather than current. That section states the
+# numbers; this paragraph carries none of its own. Its carriers:
+# infra/README.md's `### Storage stack` series row (already enumerated above),
+# the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx, the
+# `listSites` docblock in apps/web/src/data/fleet-data-source.ts, the
+# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts and
+# the fleet-vs-poll comment in apps/web/src/data/use-first-forecast.test.tsx.
+# So: change the per-load read arithmetic, and those five sites move in the
+# same commit.
+#
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
 #
@@ -255,16 +267,20 @@ resource "aws_dynamodb_table" "sites" {
 #    forecast stack's cost table carries) ≈ $1.48/month, ≈ $2.50 at ADR 0002's
 #    ~50-site planning envelope of 4,850 units per cycle, ≈ $4.99 at #29's
 #    100-site cap, and $0 while the schedule is idle. Reads are activity-shaped
-#    for the same reason and stay negligible: the dashboard read the 21 RCU was
-#    sized for is ~50 read units per load on this table at $0.1415/M — ~25
-#    covering every site's partition for the fleet's forecasts and ~25 again for
-#    its simulated actuals, since #264 gave the fleet a measured half and #296
+#    for the same reason and stay negligible: the dashboard read path the
+#    21 RCU was sized against now costs **≈ 52 a load** at $0.1415/M — ~50
+#    read units per load on this table and ~2 elsewhere. The ~50 is ~25 covering
+#    every site's partition for the fleet's forecasts and ~25 again for its
+#    simulated actuals, since #264 gave the fleet a measured half and #296
 #    put both behind their own API route, where the per-site Queries are now
 #    issued server-side. (The load's remaining ~2 units are one Query over the
-#    `FLEET` partition on `sites`, not this table; ADR 0002 owns the split.) So
-#    the loads it takes to spend a cent still number in the thousands, and the
-#    bound on a determined caller is ADR 0005's gateway throttle rather than a
-#    read allocation — which is what the 21 RCU had become in practice anyway.
+#    `FLEET` partition on `sites`, not this table.) This paragraph owns the
+#    per-load figure — ADR 0002's ≈ 27 was honest until #264 gave a load its
+#    second `series` read, and is amended (2026-08-10) rather than current;
+#    every carrier is named in this file's header ledger. So the loads it
+#    takes to spend a cent still number in the thousands, and the bound on a
+#    determined caller is ADR 0005's gateway throttle rather than a read
+#    allocation — which is what the 21 RCU had become in practice anyway.
 #
 #    There is deliberately no `on_demand_throughput` block, for the same reason
 #    3 below states: a `max_write_request_units` ceiling is a per-second cap, so

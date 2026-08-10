@@ -196,8 +196,9 @@ export interface DashboardProps {
  * expensive half, the two fleet series reads at ~25 read units on `series`
  * each — every site's partition, once for the forecasts and once for the
  * simulated actuals — against a per-site forecast poll's ~0.5. Since #264 and
- * #296 those Queries run server-side inside one request each, which moved where
- * they are spent and not how many. And it never invents a site id: the id it
+ * #296 those Queries run server-side inside one request each; the per-load
+ * arithmetic and its history are owned by the `series` section of
+ * `infra/storage/tables.tf`. And it never invents a site id: the id it
  * watches for a forecast is the one `createSite` returned, because a locally
  * predicted id addresses a site that does not exist.
  */
