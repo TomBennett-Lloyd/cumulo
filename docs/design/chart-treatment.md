@@ -419,8 +419,10 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   applied so the panel never freezes short of where the pointer came to rest; and the panel's
   **content is memoised against those frames**, so moving it re-renders nothing inside it. Those
   frames also commit **inside a hover-boundary child** (`forecast-chart-hover-boundary.tsx`), which
-  the marks, the legend and the table twin are all built above and handed down to as
-  already-drawn elements: a frame therefore re-renders the hover chrome and the spoken readout,
+  the grid, the marks and the axes are built above and handed down to as already-drawn elements.
+  The legend and the table twin are handed nowhere: they sit beside that child rather than inside
+  it, and what spares them is that the body which builds them — `ForecastChart`'s — no longer runs
+  on a hover frame at all. So a frame re-renders the hover chrome and the spoken readout,
   and nothing else in the figure is rebuilt to move a panel
   ([#331](https://github.com/TomBennett-Lloyd/cumulo/issues/331)). Motion
   comes from the pointer, never from a transition — there is no animation for

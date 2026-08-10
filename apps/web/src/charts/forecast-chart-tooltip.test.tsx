@@ -373,13 +373,19 @@ describe('ForecastChart tooltip motion', () => {
    * the content three times instead of once, which is the failure this case is
    * for.
    *
-   * Since #331 that is the only memo this case can fail on, and the change is
-   * worth knowing about here: the join it reads from is still a `useMemo`, but
-   * it stayed in `ForecastChart` while the reading moved down, and
-   * `ForecastChart`'s body no longer runs on a pointer frame. So the join keeps
-   * its identity across a sweep whether or not it is memoised, and deleting that
-   * one leaves everything here green. What it guards is a re-render arriving
-   * from above — a new range, a new fleet — which nothing in this file drives.
+   * That memo is one of two this case fails on, and the other is the panel's
+   * own. `ForecastChartHoverLayer` is not memoised, so it re-renders on every
+   * committed frame; `memo(TooltipPanel)` is what keeps the content out of
+   * those re-renders, and stripping it puts the three moves below at three
+   * content renders instead of one — measured, not reasoned about.
+   *
+   * What #331 took *off* that list is worth knowing about here: the join the
+   * reading is derived from is still a `useMemo`, but it stayed in
+   * `ForecastChart` while the reading moved down, and `ForecastChart`'s body no
+   * longer runs on a pointer frame. So the join keeps its identity across a
+   * sweep whether or not it is memoised, and deleting that one leaves
+   * everything here green. What it guards is a re-render arriving from above —
+   * a new range, a new fleet — which nothing in this file drives.
    */
   it('re-renders the tooltip content only when the snapped sample changes', () => {
     const container = renderChartWithOverlay(SERIES, {

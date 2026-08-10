@@ -42,10 +42,12 @@ import type * as ForecastChartTable from './forecast-chart-table';
  *
  * Counts are relative, never absolute (`FleetPanel.memo.test.tsx`'s discipline):
  * each case settles the chart on a sample, snapshots the counters, and compares
- * what the rest of the case adds. And each count assertion is paired with a
- * positive control proving the frames really committed — a probe that stayed
- * flat because the chart never rendered at all would otherwise pass everything
- * here.
+ * what the rest of the case adds. That comparison is a probe against a snapshot
+ * of itself, so it needs two controls to mean anything — `{0,0,0}` equals
+ * `{0,0,0}`. `tooltipAnchor` and `tooltipText` prove the frames really
+ * committed, so a chart that stopped rendering after the first move cannot pass;
+ * and `settledCounts` names the settled values, so a probe wired to nothing
+ * cannot either.
  */
 
 interface ProducerCounts {
@@ -152,6 +154,30 @@ const movePointerTo = (container: HTMLElement, viewBoxX: number): void => {
 const SAMPLE_2_TEXT = `12:00Actual5.9Median6.0P10–P905.0–7.0${OVERLAY_LABEL}3.3`;
 const SAMPLE_3_TEXT = `15:00Median5.0P10–P904.0–6.0${OVERLAY_LABEL}2.2`;
 
+/**
+ * What the probe reads once the chart has settled on a sample: one run of each
+ * producer, and identical in all three cases below — the figure is built once
+ * at mount, and neither the first pointer frame nor the focus that opens the
+ * readout adds a second.
+ */
+const SETTLED_COUNTS: ProducerCounts = { legend: 1, table: 1, marks: 1 };
+
+/**
+ * The settled snapshot, and the assertion that it is a reading rather than an
+ * absence. Every case ends by comparing the probe against this snapshot of
+ * itself, and `{0,0,0}` equals `{0,0,0}`: if a `vi.mock` factory ever stopped
+ * intercepting — `medianElements` renamed, a producer moved to another module,
+ * `ForecastChart` composing differently — an unwired probe would sit at zero
+ * throughout and every case would pass having measured nothing. Naming the
+ * settled values is what makes that failure loud, so the check belongs here
+ * rather than in one case that happens to remember it.
+ */
+const settledCounts = (): ProducerCounts => {
+  const settled = { ...probe };
+  expect(settled).toStrictEqual(SETTLED_COUNTS);
+  return settled;
+};
+
 describe('ForecastChart render boundary', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -168,7 +194,7 @@ describe('ForecastChart render boundary', () => {
     const container = renderOverlaidChart();
 
     movePointerTo(container, sampleX(2));
-    const settled = { ...probe };
+    const settled = settledCounts();
     const openingAnchor = tooltipAnchor(container);
 
     for (let step = 1; step <= STEPS_WITHIN_SPAN; step += 1) {
@@ -193,7 +219,7 @@ describe('ForecastChart render boundary', () => {
     const container = renderOverlaidChart();
 
     movePointerTo(container, sampleX(2));
-    const settled = { ...probe };
+    const settled = settledCounts();
     expect(tooltipText(container)).toBe(SAMPLE_2_TEXT);
 
     movePointerTo(container, sampleX(2) + STEPS_PAST_MIDPOINT * SWEEP_STEP);
@@ -214,7 +240,7 @@ describe('ForecastChart render boundary', () => {
     act(() => {
       svg.focus();
     });
-    const settled = { ...probe };
+    const settled = settledCounts();
     const openingText = tooltipText(container);
 
     fireEvent.keyDown(svg, { key: 'End' });
