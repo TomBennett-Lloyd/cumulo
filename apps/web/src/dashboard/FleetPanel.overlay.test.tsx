@@ -138,8 +138,8 @@ describe('FleetPanel with a site selected', () => {
     /*
      * The recourse the notice owes. Re-asking genuinely can work here — this is one request for
      * one site, which is what `react.md` sets as the test for offering a retry at all — and the
-     * counter it bumps is the overlay's own, so pressing it must not re-spend the fleet's paced
-     * per-site fan-out. That second assertion is the one that would catch a shared counter.
+     * counter it bumps is the overlay's own, so pressing it must not re-spend the fleet's own
+     * forecast read. That second assertion is the one that would catch a shared counter.
      */
     const dataSource = new CountingFleetSource(OVERLAYLESS_FLEET);
     render(panel(dataSource, SITE_A_SELECTED));

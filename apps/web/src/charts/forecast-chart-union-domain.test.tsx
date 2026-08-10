@@ -23,7 +23,7 @@ import {
  * every hour, because a point existed *because* a forecast existed — so the median alone among the
  * series ran unbroken and needed no gap rule. The fleet chart's x-domain is now the union of the
  * two aggregated series (`dashboard/fleet-series.ts`), and against the deployed source the two
- * windows do not overlap at all: the forecast fan-out reaches forward from the clock, the actuals
+ * windows do not overlap at all: the forecast read reaches forward from the clock, the actuals
  * read reaches back from it.
  *
  * Its own file rather than more cases in `ForecastChart.test.tsx`, which sits on `structure.md`

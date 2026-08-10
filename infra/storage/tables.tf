@@ -255,11 +255,16 @@ resource "aws_dynamodb_table" "sites" {
 #    forecast stack's cost table carries) ≈ $1.48/month, ≈ $2.50 at ADR 0002's
 #    ~50-site planning envelope of 4,850 units per cycle, ≈ $4.99 at #29's
 #    100-site cap, and $0 while the schedule is idle. Reads are activity-shaped
-#    for the same reason and stay negligible: the dashboard fan-out the 21 RCU
-#    was sized for is ~25 read units per load at $0.1415/M, so the loads it
-#    takes to spend a cent number in the thousands, and the bound on a
-#    determined caller is ADR 0005's gateway throttle rather than a read
-#    allocation — which is what the 21 RCU had become in practice anyway.
+#    for the same reason and stay negligible: the dashboard read the 21 RCU was
+#    sized for is ~50 read units per load on this table at $0.1415/M — ~25
+#    covering every site's partition for the fleet's forecasts and ~25 again for
+#    its simulated actuals, since #264 gave the fleet a measured half and #296
+#    put both behind their own API route, where the per-site Queries are now
+#    issued server-side. (The load's remaining ~2 units are one Query over the
+#    `FLEET` partition on `sites`, not this table; ADR 0002 owns the split.) So
+#    the loads it takes to spend a cent still number in the thousands, and the
+#    bound on a determined caller is ADR 0005's gateway throttle rather than a
+#    read allocation — which is what the 21 RCU had become in practice anyway.
 #
 #    There is deliberately no `on_demand_throughput` block, for the same reason
 #    3 below states: a `max_write_request_units` ceiling is a per-second cap, so

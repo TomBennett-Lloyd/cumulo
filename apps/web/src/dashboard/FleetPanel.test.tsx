@@ -70,7 +70,7 @@ const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site
  * D3 it proves nothing: the figure is rendered in every state the panel has,
  * loading and failed included, so the query is true by construction and passes
  * over exactly the defect it was written to catch. The median path is the
- * part that exists only once the fan-out has summed to hours worth stroking,
+ * part that exists only once the fleet read has summed to hours worth stroking,
  * which is what each of these cases means when it says the chart survived. The
  * figure's mere presence has an owner — `FleetPanel.structure.test.tsx`, whose
  * whole subject it is — so restating it here bought a second copy of a weaker
@@ -146,7 +146,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     );
     // "Partial" is a caption on an aggregate that arrived, so the hours it is
     // short of a site are still drawn — which is the half a bare figure check
-    // could not tell from a fan-out that returned nothing at all.
+    // could not tell from a fleet read that returned nothing at all.
     expectForecastPlotted(container);
   });
 
@@ -218,7 +218,7 @@ describe('FleetPanel against a source that can only see the horizon', () => {
 /*
  * The combination #264 makes reachable, and the reason this suite exists at all.
  * The forecast service synthesises fleet actuals now, so the live source carries
- * them while its fan-out still reaches forward only. No source was ever in that
+ * them while its forecast read still reaches forward only. No source was ever in that
  * state before, and the copy that covered it named "next 24 h" over a plot that
  * now also carries the hours behind the horizon.
  *
@@ -277,7 +277,7 @@ describe('FleetPanel against a source with simulated actuals but no look-back', 
     // follow a silent rewrite straight past the reader the words are for.
     //
     // The forecast half is named without an hour count, and that is the claim
-    // worth pinning: the fan-out asks for the chosen window but serves only the
+    // worth pinning: the fleet read asks for the chosen window but serves only the
     // hours ahead of the clock, so a label promising a number of forecast hours
     // would be the chart describing a window it was never given.
     expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
@@ -289,10 +289,11 @@ describe('FleetPanel against a source with simulated actuals but no look-back', 
 /*
  * Two reads, two windows, two requests — so either can fail alone, and what the panel does about
  * it is not symmetrical. The forecast is the answer; the actuals are an addition to it, and one
- * that costs a single metered request rather than a paced fan-out over every site. Before #264's
+ * that costs a single metered request — as, since #296, the forecast does too. Before #264's
  * review both failures came out of one `combineFleetQueries` arm: a failed actuals read withdrew
  * a fleet sum that had arrived and reported it as "Could not load the fleet forecast", and its
- * "Try again" re-spent the 60-site fan-out to re-ask one request that had never been the fleet's.
+ * "Try again" re-spent the 60-site fan-out the forecast read then was, to re-ask one request that
+ * had never been the fleet's.
  */
 describe('FleetPanel when the fleet’s actuals fail on their own', () => {
   const actualsFailurePattern = /simulated actuals could not be loaded/u;
@@ -315,7 +316,7 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     expect(notice.className).toBe('panel-notice');
   });
 
-  it('re-asks only the metered actuals request, never the per-site forecast fan-out', async () => {
+  it('re-asks only the actuals request, never the fleet’s forecast read beside it', async () => {
     const dataSource = new CountingFleetSource(ACTUALS_FAILED_FLEET);
     await renderSettled(dataSource);
     await screen.findByText(actualsFailurePattern);
@@ -328,8 +329,8 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     await waitFor(() => {
       expect(dataSource.actualsCallCount).toBe(2);
     });
-    // The assertion that catches a shared attempt counter: the cheapest recourse on the panel must
-    // not silently buy the most expensive request the panel makes.
+    // The assertion that catches a shared attempt counter: a recourse offered for one missing
+    // series must not silently re-ask the other one, which arrived.
     expect(dataSource.forecastCallCount).toBe(1);
   });
 
@@ -339,7 +340,7 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
      * the failure suite below. An actuals failure is a caption on numbers that arrived; a forecast
      * failure is the numbers themselves not arriving — and since #284 D3 the difference shows in
      * the plot rather than in whether there is a plot. The figure stays put in every state, so
-     * what a failed fan-out takes away is every row of it.
+     * what a failed fleet read takes away is every row of it.
      */
     const container = await renderSettled(new CountingFleetSource(FAILED_FLEET));
     const table = screen.getByRole('table', { name: /Table view/u });
@@ -432,7 +433,7 @@ describe('FleetPanel as the page keeps it mounted', () => {
   it('sums the fleet on mount, without waiting to be looked at', async () => {
     /*
      * The trade #265 accepted, pinned as a fact rather than left as prose. The panel used to
-     * defer its first fan-out until it was first revealed, because a `?site=` deep link could
+     * defer its first fleet read until it was first revealed, because a `?site=` deep link could
      * leave it hidden forever (#178). Nothing hides it now — it is on screen in every state of
      * the page — so a deferral would only buy a spinner in front of a chart the reader is
      * already looking at.
@@ -448,7 +449,7 @@ describe('FleetPanel as the page keeps it mounted', () => {
 
   it('asks nothing at all of a fleet with no sites in it', async () => {
     // The other half of the gate that survived the reveal latch, and the one that still matters
-    // on a deep link: the listing is briefly in flight with no sites, and a fan-out fired then
+    // on a deep link: the listing is briefly in flight with no sites, and a fleet read fired then
     // would be a sum of nothing followed straight away by a real one.
     const dataSource = new CountingFleetSource(FULL_FLEET);
     render(
