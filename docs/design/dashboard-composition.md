@@ -173,7 +173,7 @@ never paid for it. That saving depended on the panel being hideable, and nothing
 fleet chart is on screen from first paint in every state, with the selected site drawn over it. A
 deferral would therefore buy no reader anything — there is no longer a reader who does not look at
 the fleet — and would cost every deep link a spinner where the chart already is. So the deep link
-spends that one fleet request, once. `Dashboard.deep-link.test.tsx` asserts the "once" rather than
+spends that one forecast request, once. `Dashboard.deep-link.test.tsx` asserts the "once" rather than
 leaving it to prose.
 
 The other cost is unchanged in shape and smaller in size: adding a site in live mode re-sums the
