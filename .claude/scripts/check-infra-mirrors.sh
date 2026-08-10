@@ -103,11 +103,20 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #
 #   `ts-lt`    tf-file | address | attr-path | ts-file | constant | ts-per-tf
 #              TS integer STRICTLY LESS THAN TF integer x ts-per-tf. The
-#              mechanical form of "sized under the ceiling with room left": the
-#              web fan-out rate against the API stage's throttle. Strict on
+#              mechanical form of "sized under the ceiling with room left", for
+#              a client constant sized against a deployed limit. Strict on
 #              purpose — equality there means the client is provisioned to spend
-#              the whole bucket, and if that is ever wanted it is a record edit
+#              the whole ceiling, and if that is ever wanted it is a record edit
 #              (`ts-lt` becomes `eq`) and therefore a visible decision.
+#              NO SHIPPED RECORD USES THIS MODE TODAY. The one it was written
+#              for (#133) held the web fleet fan-out's launch rate under the API
+#              stage's throttle, and #296 retired the fan-out itself — the fleet
+#              reads one endpoint now, so there is no client-side launch rate
+#              left to bound. The mode is kept rather than deleted because the
+#              relation is the one a client sizing itself against any deployed
+#              ceiling needs, and its grammar stays exercised: the harness next
+#              door declares its own `ts-lt` pair on a gate copy, the same way
+#              it reaches every other branch MIRRORS cannot express.
 #
 #   `str-eq`   tf-file | address | attr-path | ts-file | constant
 #              TF double-quoted string == TS `export const NAME = '<text>';`
@@ -164,7 +173,6 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 MIRRORS=(
   "eq|infra/ingestion/lambda.tf|aws_lambda_function.ingestion|timeout|apps/ingestion/src/cycle-budget.ts|INGESTION_LAMBDA_TIMEOUT_MS|1000"
   "eq|infra/api/lambda.tf|aws_lambda_function.api|timeout|apps/api/src/request-budget.ts|API_LAMBDA_TIMEOUT_MS|1000"
-  "ts-lt|infra/api/gateway.tf|aws_apigatewayv2_stage.default|default_route_settings.throttling_rate_limit|apps/web/src/data/http-fleet-data-source.ts|FLEET_FANOUT_LAUNCHES_PER_SECOND|1"
   "str-eq|infra/storage/tables.tf|aws_dynamodb_table.series|ttl.attribute_name|packages/storage/src/ttl.ts|TTL_ATTRIBUTE_NAME"
   "str-eq|infra/storage/tables.tf|aws_dynamodb_table.weather|ttl.attribute_name|packages/storage/src/ttl.ts|TTL_ATTRIBUTE_NAME"
   "str-eq|infra/storage/tables.tf|aws_dynamodb_table.abuse|ttl.attribute_name|packages/storage/src/ttl.ts|TTL_ATTRIBUTE_NAME"

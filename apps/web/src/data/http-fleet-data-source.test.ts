@@ -1,5 +1,5 @@
 import { openMeteoAttribution } from '@cumulo/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { HttpFleetDataSource } from './http-fleet-data-source';
 import {
@@ -220,62 +220,46 @@ describe('HttpFleetDataSource series window', () => {
   });
 });
 
-describe('HttpFleetDataSource fleet fan-out', () => {
-  const listBody = { sites: [fleetSite(SITE_A, 'A'), fleetSite(SITE_B, 'B')] };
+describe('HttpFleetDataSource fleet forecast', () => {
+  const forecastBody = {
+    forecasts: [forecastPoint(SITE_A, 1.4), forecastPoint(SITE_B, 2.6)],
+    attribution: openMeteoAttribution,
+  };
 
-  const fanOutAnswering = (forecastFor: (siteId: string) => Response) =>
-    sourceAnswering((url) => {
-      const siteId = url.includes(SITE_A) ? SITE_A : SITE_B;
-      return url.endsWith('/v1/sites') ? jsonResponse(listBody, 200) : forecastFor(siteId);
-    });
+  it('fleetForecasts unwraps the forecasts array from the fleet endpoint', async () => {
+    const { source, recorder } = sourceAnswering(() => jsonResponse(forecastBody, 200));
 
-  it('requests the unlimited forecast route per site, never the metered series route', async () => {
-    const { source, recorder } = fanOutAnswering((siteId) =>
-      jsonResponse(
-        { forecasts: [forecastPoint(siteId, 1)], attribution: openMeteoAttribution },
-        200,
-      ),
-    );
+    const forecasts = expectValue(await source.fleetForecasts(48));
 
-    await source.fleetForecasts(48);
-
+    expect(forecasts).toEqual(forecastBody.forecasts);
+    // One request, the fleet route, and the horizon it was handed: the per-site
+    // fan-out this replaced spent a site listing plus one request per site, so
+    // the call count and the URL together are the behaviour that changed.
     expect(recorder.calls.map((call) => call.url)).toEqual([
-      `${BASE_URL}/v1/sites`,
-      `${BASE_URL}/v1/sites/${SITE_A}/forecast?hours=48`,
-      `${BASE_URL}/v1/sites/${SITE_B}/forecast?hours=48`,
+      `${BASE_URL}/v1/fleet/forecast?hours=48`,
     ]);
+    expect(recorder.calls[0]?.init?.method).toBe('GET');
   });
 
-  it('returns the union of the sites that answered when only some of them fail', async () => {
-    const { source } = fanOutAnswering((siteId) =>
-      siteId === SITE_A
-        ? jsonResponse(
-            { forecasts: [forecastPoint(SITE_A, 4)], attribution: openMeteoAttribution },
-            200,
-          )
-        : jsonResponse({ code: 'internal', message: 'boom' }, 500),
+  it('maps a 429 from the metered fleet route to rate-limited', async () => {
+    const { source } = sourceAnswering(() =>
+      jsonResponse({ code: 'rate_limited', message: 'slow down' }, 429),
     );
 
-    expect(expectValue(await source.fleetForecasts(24))).toEqual([forecastPoint(SITE_A, 4)]);
+    expect(expectFailure(await source.fleetForecasts(24)).code).toBe('rate-limited');
   });
 
-  it('returns the first failure when every site fails', async () => {
-    const { source } = fanOutAnswering(() =>
+  /**
+   * All-or-nothing, which the fan-out was not: a 500 used to leave whatever the
+   * other sites had answered as an `ok` union. One request has no partial arm to
+   * return, so the failure is the fleet's.
+   */
+  it('maps a 500 from the fleet route to server-fault', async () => {
+    const { source } = sourceAnswering(() =>
       jsonResponse({ code: 'internal', message: 'boom' }, 500),
     );
 
-    const error = expectFailure(await source.fleetForecasts(24));
-    expect(error.code).toBe('server-fault');
-    expect(error.message).toContain(SITE_A);
-  });
-
-  it('returns the listing failure without fanning out when the fleet cannot be listed', async () => {
-    const { source, recorder } = sourceAnswering(() =>
-      jsonResponse({ code: 'forbidden', message: 'origin not allowed' }, 403),
-    );
-
-    expect(expectFailure(await source.fleetForecasts(24)).code).toBe('forbidden');
-    expect(recorder.calls).toHaveLength(1);
+    expect(expectFailure(await source.fleetForecasts(168)).code).toBe('server-fault');
   });
 });
 
@@ -312,60 +296,13 @@ describe('HttpFleetDataSource fleet actuals', () => {
    * third capability, or quietly flips one without the endpoint that would
    * justify it, fails here rather than letting the views promise something this
    * transport cannot supply. Both halves are earned above — actuals by the
-   * fleet route in this block, the disclaimed look-back by the horizon-only
-   * fan-out in the block before it.
+   * fleet route in this block, the disclaimed look-back by the forward-horizon
+   * fleet forecast route in the block before it, whose `hours` is a horizon and
+   * carries no history for a look-back to select from.
    */
   it('claims fleet actuals and disclaims the fleet look-back', () => {
     const { source } = sourceAnswering(() => jsonResponse(actualsBody, 200));
 
     expect(source.capabilities).toEqual({ fleetLookback: false, fleetActuals: true });
-  });
-});
-
-describe('HttpFleetDataSource fan-out pacing', () => {
-  /** A distinct valid site id per index, so nine of them cost one line. */
-  const pacedSiteId = (index: number): string => {
-    const digit = String(index);
-    return `${digit.repeat(8)}-${digit.repeat(4)}-4${digit.repeat(3)}-8${digit.repeat(3)}-${digit.repeat(12)}`;
-  };
-
-  /**
-   * One more site than the fan-out launches per second, which is the whole
-   * point: at eight or fewer, pacing and firing everything at once are
-   * indistinguishable, and the other fan-out tests above run two sites.
-   */
-  const NINE_SITES = Array.from({ length: 9 }, (_, index) =>
-    fleetSite(pacedSiteId(index), `Paced ${String(index)}`),
-  );
-
-  const forecastCallCount = (recorder: FetchRecorder): number =>
-    recorder.calls.filter((call) => call.url.includes('/forecast')).length;
-
-  it('launches eight of nine fan-out forecasts within the first second and the ninth only after it', async () => {
-    vi.useFakeTimers();
-    try {
-      const { source, recorder } = sourceAnswering((url) =>
-        url.endsWith('/v1/sites')
-          ? jsonResponse({ sites: NINE_SITES }, 200)
-          : jsonResponse({ forecasts: [], attribution: openMeteoAttribution }, 200),
-      );
-
-      const fanOut = source.fleetForecasts(48);
-
-      // Stops short of the one-second pacing wait, so everything that is not
-      // blocked on that wait has settled. An unpaced fan-out would have spent
-      // all nine requests by here — the API's shared 10/second stage throttle
-      // is what that would be walking into.
-      await vi.advanceTimersByTimeAsync(999);
-      expect(forecastCallCount(recorder)).toBe(8);
-
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(forecastCallCount(recorder)).toBe(9);
-      expect(expectValue(await fanOut)).toEqual([]);
-    } finally {
-      // Restored in a `finally` so one failed expectation cannot leave every
-      // later test in the file running on a frozen clock.
-      vi.useRealTimers();
-    }
   });
 });

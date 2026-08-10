@@ -176,20 +176,20 @@ resource "aws_apigatewayv2_stage" "default" {
   # the bill is not the expected traffic but this ceiling. Held at the ceiling
   # continuously for a 30-day month it is 25.92M requests ≈ $36 — roughly a
   # third of the ~$100/month ceiling, forever, under continuous abuse. Delete
-  # `throttling_burst_limit` and that half of the bound is gone silently; the
-  # bootstrap stack's budget alarm is the only backstop left. The sustained rate
-  # is not one of the silent ones any more — see the mirror below.
+  # either line of the block below and that half of the bound is gone silently;
+  # the bootstrap stack's budget alarm is the only backstop left.
   #
-  # `throttling_rate_limit` is a declared mirror (#133): `pnpm
-  # check:infra-mirrors`, in the `verify` composite and so in CI, holds
-  # `FLEET_FANOUT_LAUNCHES_PER_SECOND` in
-  # `apps/web/src/data/http-fleet-data-source.ts` STRICTLY BELOW this number —
-  # a strict bound rather than an equality, because the web fan-out has to leave
-  # room in a bucket every other caller draws on too. Lowering this to the
-  # fan-out's own value reds the build, and deleting it exits 2 rather than
-  # passing quietly: the gate refuses a pair it cannot read. The pair is
-  # declared in .claude/scripts/check-infra-mirrors.sh, and that constant's
-  # docblock cites this attribute back.
+  # `throttling_rate_limit` USED TO BE the half a gate would catch (#133). The
+  # web dashboard fanned one forecast request out per site, and
+  # `check:infra-mirrors` held that client-side launch rate STRICTLY BELOW this
+  # number, so the fleet view could not be provisioned to spend a bucket every
+  # other caller draws on too. #296 retired the fan-out: the fleet view reads
+  # `GET /v1/fleet/forecast` and `GET /v1/fleet/actuals` beside its one site
+  # listing — three requests a load, whatever the fleet's size — so there is no
+  # client-side launch rate left to bound, and the pair is gone from
+  # .claude/scripts/check-infra-mirrors.sh. Both halves here are therefore
+  # silent again: deleting either reds nothing, and the budget alarm is the only
+  # backstop for both.
   #
   # It is a *cost* control that looks like an abuse control, and ADR 0005 says
   # so: one caller consuming the full 10 rps 429s everybody else. Per-IP

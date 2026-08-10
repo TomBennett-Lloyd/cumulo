@@ -17,8 +17,12 @@
 # trivially easy to make.
 #
 # Since #133 there are five relations rather than one, so the fixture builds
-# every file the eight shipped records name — and three of its files carry a
-# shape the reader has to survive rather than parse: the API stage's
+# every file the seven shipped records name, plus the two files the harness's
+# OWN `ts-lt` pair needs: #296 retired the only shipped record of that mode
+# along with the web fan-out it bounded, so cases 18 and 19 declare their pair
+# on a gate copy instead (the gate's own mode doc states why the mode outlived
+# its record). Three of the fixture's files carry a shape the reader has to
+# survive rather than parse: the API stage's
 # `dynamic "route_settings" { content { … } }` sibling holding a DIFFERENT
 # throttle, the `<<-EOT` description above `variables.tf`'s validation block,
 # and the queue's `redrive_policy = jsonencode({ … })`. Delete any of the three
@@ -57,22 +61,32 @@ harness_init_tmp
 TF_REL=infra/ingestion/lambda.tf
 TS_REL=apps/ingestion/src/cycle-budget.ts
 
-# The other seven records' files. Every case below drives its own assertions
-# through one pair and leaves the rest at agreeing values, because the gate
-# refuses to reach a verdict at all while any declared pair is unreadable — so a
-# fixture missing one would send every case down the BLOCKED path and prove
+# The other six shipped records' files. Every case below drives its own
+# assertions through one pair and leaves the rest at agreeing values, because the
+# gate refuses to reach a verdict at all while any declared pair is unreadable —
+# so a fixture missing one would send every case down the BLOCKED path and prove
 # nothing about the case it was written for. They are written by the same
 # builder rather than once at setup, since each fixture is a fresh tree.
 API_TF_REL=infra/api/lambda.tf
 API_TS_REL=apps/api/src/request-budget.ts
-GATEWAY_REL=infra/api/gateway.tf
-WEB_TS_REL=apps/web/src/data/http-fleet-data-source.ts
 TABLES_REL=infra/storage/tables.tf
 TTL_TS_REL=packages/storage/src/ttl.ts
 VARIABLES_REL=infra/storage/variables.tf
 TABLE_NAME_TS_REL=packages/storage/src/table-name.ts
 QUEUE_REL=infra/ingestion/transport.tf
 FORECAST_REL=infra/forecast/lambda.tf
+
+# The `ts-lt` pair, which no shipped record declares since #296. The Terraform
+# half keeps the real gateway path, because the stage block's shape — one
+# attribute name at two depths — is exactly what case 18 is about. The
+# TypeScript half is a path NO REPO FILE OCCUPIES, deliberately: this pair lives
+# only inside the gate copies cases 18 and 19 run, and pointing it at a real
+# constant would quietly re-attach the mode's coverage to a mirror nobody
+# declares.
+GATEWAY_REL=infra/api/gateway.tf
+CLIENT_TS_REL=apps/web/src/data/api-rate-budget.ts
+CLIENT_CONSTANT=CLIENT_REQUEST_RATE
+TS_LT_RECORD="ts-lt|$GATEWAY_REL|aws_apigatewayv2_stage.default|default_route_settings.throttling_rate_limit|$CLIENT_TS_REL|$CLIENT_CONSTANT|1"
 
 # fixture <name> <tf-timeout-seconds> <ts-literal> -> sets DIR to a fresh tree
 # holding the files the gate reads. The Terraform files are written in
@@ -81,7 +95,7 @@ FORECAST_REL=infra/forecast/lambda.tf
 fixture() { # fixture <name> <tf-timeout> <ts-literal>
   DIR="$TMP_ROOT/$1"
   local rel
-  for rel in "$TF_REL" "$TS_REL" "$API_TF_REL" "$API_TS_REL" "$GATEWAY_REL" "$WEB_TS_REL" \
+  for rel in "$TF_REL" "$TS_REL" "$API_TF_REL" "$API_TS_REL" "$GATEWAY_REL" "$CLIENT_TS_REL" \
     "$TABLES_REL" "$TTL_TS_REL" "$VARIABLES_REL" "$TABLE_NAME_TS_REL" "$QUEUE_REL" "$FORECAST_REL"; do
     must mkdir -p "$DIR/$(dirname "$rel")"
   done
@@ -104,7 +118,7 @@ EOF
   # the `dynamic "route_settings"` block beside it sets the SAME attribute name
   # to 2 — a reader that searched the block for a name instead of following the
   # declared path would find both, and a reader that took the last one would
-  # compare the fan-out against a number that governs three write routes.
+  # compare the client constant against a number that governs three write routes.
   cat >"$DIR/$GATEWAY_REL" <<'EOF'
 resource "aws_apigatewayv2_stage" "default" {
   api_id = aws_apigatewayv2_api.api.id
@@ -130,9 +144,9 @@ resource "aws_apigatewayv2_stage" "default" {
   depends_on = [aws_apigatewayv2_route.write]
 }
 EOF
-  cat >"$DIR/$WEB_TS_REL" <<EOF
+  cat >"$DIR/$CLIENT_TS_REL" <<EOF
 /** Held strictly under the stage throttle in \`$GATEWAY_REL\`. */
-export const FLEET_FANOUT_LAUNCHES_PER_SECOND = 8;
+export const $CLIENT_CONSTANT = 8;
 EOF
 
   # Three tables carrying the same declared TTL attribute name, so the per-record
@@ -337,6 +351,22 @@ gate_copy() { # gate_copy <basename>
   must cp "$CHECK" "$COPY"
 }
 
+# gate_with_ts_lt <basename> -> COPY, a gate copy carrying the harness's own
+# `ts-lt` record as MIRRORS' first entry.
+#
+# The same technique as gate_copy's other callers and for the same reason —
+# MIRRORS is baked into the script — but reaching a mode rather than a malformed
+# record: since #296 no shipped record uses `ts-lt`, so the two cases that prove
+# the strict relation and the sub-block addressing declare the pair themselves
+# against files the fixture writes. What this can no longer catch is a shipped
+# `ts-lt` record whose paths have moved, which is case 2's job and which has
+# nothing to check while the shipped list holds none.
+gate_with_ts_lt() { # gate_with_ts_lt <basename>
+  gate_copy "$1"
+  must perl -pi -e "s{^MIRRORS=\\(\$}{MIRRORS=(\n  \"$TS_LT_RECORD\"}" "$COPY"
+  fixture_has "$COPY" "  \"$TS_LT_RECORD\""
+}
+
 # ==========================================================================================
 # 1. the gate parses
 # ==========================================================================================
@@ -373,7 +403,7 @@ begin "a tree where every declared relation holds passes"
 fixture agree 300 300_000
 run_check "$DIR"
 expect_rc 0 "$rc"
-expect_out "check-infra-mirrors: OK — 8 declared mirror relation(s) hold"
+expect_out "check-infra-mirrors: OK — 7 declared mirror relation(s) hold"
 expect_out "aws_lambda_function.ingestion.timeout = 300"
 expect_out "aws_lambda_function.api.timeout = 15"
 expect_out "aws_dynamodb_table.series.ttl.attribute_name"
@@ -623,11 +653,17 @@ end
 # attribute. The stage block declares `throttling_rate_limit` twice: 10 inside
 # `default_route_settings`, and 2 inside `dynamic "route_settings" { content { … } }`
 # — different depths, different paths, and a genuine difference in meaning (the
-# second governs three write routes). Reporting 2 here would hold the fan-out
-# against the wrong ceiling and pass, which is the quiet kind of wrong.
+# second governs three write routes). Reporting 2 here would hold the client
+# constant against the wrong ceiling and pass, which is the quiet kind of wrong.
+#
+# On a gate copy carrying the harness's own `ts-lt` record, for the reason
+# gate_with_ts_lt states. The property under test is the READER's, so it does not
+# care which record sends it into that block — but it does need a record that
+# addresses it, and no shipped one does since #296.
 begin "the addressed sub-block's attribute is read, not the dynamic block's"
 fixture sub_block 300 300_000
-run_check "$DIR"
+gate_with_ts_lt check-infra-mirrors-sub-block.sh
+run_script_with bash "$COPY" "$DIR"
 expect_rc 0 "$rc"
 expect_out "default_route_settings.throttling_rate_limit = 10"
 expect_not_out "throttling_rate_limit = 2"
@@ -637,17 +673,19 @@ end
 # 19. the strict bound is strict, at exactly the edge
 # ==========================================================================================
 # The whole content of `ts-lt` as opposed to a `<=` relation, and the case that
-# kills the mutant relaxing it: lowering the stage throttle to the fan-out's own
+# kills the mutant relaxing it: lowering the ceiling to the client constant's own
 # value is the client provisioned to spend the entire bucket, which is the state
-# the record exists to forbid. One below is fine; equal is not.
-begin "a stage throttle lowered to the fan-out's own value fails the strict bound"
+# the mode exists to forbid. One below is fine; equal is not. On the same gate
+# copy case 18 uses, for the same reason.
+begin "a stage throttle lowered to the client constant's own value fails the strict bound"
 fixture ts_lt_edge 300 300_000
+gate_with_ts_lt check-infra-mirrors-ts-lt-edge.sh
 must perl -pi -e 's/^    throttling_rate_limit  = 10$/    throttling_rate_limit  = 8/' "$DIR/$GATEWAY_REL"
 fixture_has "$DIR/$GATEWAY_REL" '    throttling_rate_limit  = 8'
 fixture_lacks "$DIR/$GATEWAY_REL" '    throttling_rate_limit  = 10'
-run_check "$DIR"
+run_script_with bash "$COPY" "$DIR"
 expect_rc 1 "$rc"
-expect_out "FLEET_FANOUT_LAUNCHES_PER_SECOND = 8, which is not strictly under 8 * 1 = 8"
+expect_out "$CLIENT_CONSTANT = 8, which is not strictly under 8 * 1 = 8"
 expect_not_out "check-infra-mirrors: OK"
 end
 
@@ -809,7 +847,7 @@ fixture_has "$COPY" 'TTL_ATTRIBUTE_NAME|"'
 run_script_with bash "$COPY" "$DIR"
 expect_rc 2 "$rc"
 expect_out "check-infra-mirrors: 1 declared mirror(s) could not be checked"
-expect_out "BLOCKED MIRRORS[4]: mode 'str-eq' takes exactly 5 fields after the tag, not 6"
+expect_out "BLOCKED MIRRORS[3]: mode 'str-eq' takes exactly 5 fields after the tag, not 6"
 expect_not_out "check-infra-mirrors: OK"
 end
 
