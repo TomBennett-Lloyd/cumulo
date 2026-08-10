@@ -1,10 +1,30 @@
 # Proposal: per-issue task-orchestrator (Opus), top-level session as merge owner
 
 Design record for
-[#336 — adopt the task-orchestrator workflow](https://github.com/TomBennett-Lloyd/cumulo/issues/336):
-the owner-approved proposal, committed verbatim as the spec of record. The text below is the
-document as reviewed; each contract it drafts is stated once more only in the file that owns it
-(§9).
+[#336 — adopt the task-orchestrator workflow](https://github.com/TomBennett-Lloyd/cumulo/issues/336),
+covering the delegated orchestration layer: what one task-orchestrator owns for its ticket set,
+what the top-level session keeps, and the report contracts between them.
+
+**Approved by the owner 2026-08-10**
+([pre-approval comment](https://github.com/TomBennett-Lloyd/cumulo/issues/336#issuecomment-5234760505))
+**and adopted by the commit that added this file.** The body below is preserved exactly as it was
+reviewed, so where it calls itself a proposal, calls its drafts drafts, or describes itself as
+draft for owner review and final pending that review, it is describing its state at review time,
+not its state now.
+
+This document is the rationale and the record of the decisions; the operative copies are
+[`.claude/agents/task-orchestrator.md`](../../.claude/agents/task-orchestrator.md) and
+[`.claude/skills/run-issue/SKILL.md`](../../.claude/skills/run-issue/SKILL.md), with the mode in
+`.claude/workflow.json`'s `orchestration` block. Where this document and those files disagree, the
+files win — they are the ones the agents read.
+
+One amendment was made at adoption and is deliberately not folded into the body: **the agent
+file's must-NOT list sanctions worktree-lifecycle writes** — `git worktree add`, and
+`git worktree prune` on its documented recovery path, both per `execute` step 1 — as a second
+main-checkout exception alongside the read-only `git -C <main-checkout> pull`. Found in review:
+as written, §8's "never write to the main checkout" forbade the first thing `execute` step 1 tells
+a task-orchestrator to do, so an agent reading the list as a hard rule would have had to refuse
+its own first step or learn that the list can be broken.
 
 Status: draft for owner review. If accepted, lands via the retro-PR route — this touches
 `.claude/workflow.json` and `CLAUDE.md`, both `humanAlways` paths, so the owner decides.
