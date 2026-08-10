@@ -1400,13 +1400,13 @@ CF_URL="$(terraform output -raw cloudfront_url)"
 curl -s -o /dev/null -w '%{http_code}\n' "$CF_URL/"
 # expect: 200 — the OAC signature, the bucket policy and default_root_object all work
 
-curl -s "$CF_URL/no-such-path?site=whatever" | grep -c 'id="root"'
+curl -s "$CF_URL/no-such-path?site=whatever" | command grep -c 'id="root"'
 # expect: 1 — the 403/404 -> /index.html rewrite, with the query string left on the browser's URL
 
-curl -sI "$CF_URL/index.html" | grep -i '^cache-control'
+curl -sI "$CF_URL/index.html" | command grep -i '^cache-control'
 # expect: no-cache — the one mutable object, so a deploy takes effect without waiting out a TTL
 
-curl -sI "$CF_URL/assets/<a-hashed-file-from-the-index-body>" | grep -i '^cache-control'
+curl -sI "$CF_URL/assets/<a-hashed-file-from-the-index-body>" | command grep -i '^cache-control'
 # expect: public,max-age=31536000,immutable — content-hashed, so this is true rather than optimistic.
 # Byte-for-byte, spaces and all: S3 echoes the header the deploy stored, and the deploy stores it space-free.
 ```
@@ -1431,7 +1431,9 @@ curl -sI "$CF_URL/" | command grep -i '^content-security-policy'
 
 **The third is the readback not to skip.** Confirm that its `connect-src` clause **ends with the exact `api_origin` value from `web.auto.tfvars`** — same scheme, same host, no trailing slash, and no stray space where an empty value would have left one. The policy's shape is proven long before this point: `apps/web/e2e/` renders the same owning template into a real response header over the built `dist` and drives the app under it in a browser, so the enforcing policy is exercised rather than merely validated by `terraform validate`. What no check before this one can reach is _this_ rendering — the one carrying the origin of an API that actually exists, on a distribution that actually exists — because CI has neither. So the string the deployed browser will be held to is produced for the first time by the apply that made this distribution, and this curl is the first and only thing that reads it. Its failure mode is the quietest in the stack, and the same one [A1](#phase-a--configure-and-plan-the-distribution) warns about: an SPA whose fetches are refused by its own policy, reported in the visitor's console and in no plan, apply or workflow run.
 
-`command grep` rather than plain `grep` in those three, because a shell whose `grep` is shimmed to another implementation can under-match an anchored case-insensitive pattern and print nothing — which here would read exactly like a header that is not being sent.
+**On the same browser visit, watch the map and the console.** The attribution check above already opens `$CF_URL/` in a browser; while it is open, confirm the basemap draws real tiles and that the console reports no CSP violation. `img-src`'s `tiles.openfreemap.org` and `data:` entries exist for the real OpenFreeMap style, and nothing in CI ever loads one — `apps/web/e2e/` stubs the provider and the dev server carries no CSP by design (`apps/web/e2e/security-headers.spec.ts` says so where it stops covering them) — so this readback is the only standing check those two entries have.
+
+`command grep` rather than plain `grep` in every check in this step, because a shell whose `grep` is shimmed to another implementation can under-match an anchored or case-insensitive pattern and print nothing — which in these checks would read exactly like a header that is not being sent, or a rewrite that is not happening.
 
 The URL itself embeds no account id and is safe to quote in a PR body or an issue comment.
 

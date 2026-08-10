@@ -141,8 +141,22 @@ test('boots the dashboard and map with zero CSP violations', async ({ page }) =>
    * settled, so a violation fired later than that could still slip past. And the
    * hermetic basemap serves a style with no sources and no layers, so the
    * sprite, glyph and raster image loads a real style would perform are not
-   * exercised here at all — `img-src`'s tiles origin and `data:` entry are
-   * covered by the browser-smoke check against the real style, not by this file.
+   * exercised here at all — which leaves `img-src`'s tiles origin and `data:`
+   * entry covered by no standing check at all. Not by this lane, which always
+   * stubs the provider (`hermetic-basemap.ts`); and not by anything driving the
+   * dev server, which carries no CSP by design (`vite.config.ts` serves the
+   * header on `preview` alone). Nothing re-measures them, so per `testing.md`
+   * rule 10 that is said here rather than left for the routing to imply.
+   *
+   * They were measured once, during #176, by a one-off run against a `vite
+   * preview` of the built app and the real OpenFreeMap provider: the basemap
+   * rendered with its site markers, `performance.getEntriesByType('resource')`
+   * showed the style, sprites and font ranges fetched from
+   * `tiles.openfreemap.org`, and the page reported zero violations. That was a
+   * manual dispatch rather than a check — it will not run again, and nothing
+   * would catch a regression in it. The standing carrier belongs with the
+   * operator: `infra/README.md`'s Phase B readback, alongside the `connect-src`
+   * confirmation.
    */
   expect(
     violations,
