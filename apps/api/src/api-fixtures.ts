@@ -49,6 +49,50 @@ export const fleetSite = (overrides: FleetSiteOverrides = {}): FleetSite =>
     ...overrides,
   });
 
+/**
+ * {@link RANELAGH_ID} with its last three hex digits cut off, so an index can be
+ * written into them. Everything a `z.uuid()` cares about — the length, the
+ * hyphens, the version nibble `4`, the variant nibble `8` — lives in the part
+ * that is kept, which is why the ids below are built this way rather than as a
+ * readable `site-${index}` that no schema would accept.
+ *
+ * Three digits rather than two because a mutation run widens
+ * `FLEET_READ_CONCURRENCY` to prove the fan-out's tests bite, and a fixture that
+ * ran out of ids first would kill the mutant with its own guard instead of with
+ * the assertion under test.
+ */
+const FLEET_ID_TEMPLATE_PREFIX = '3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4';
+
+/** Three hex digits of index, so ids stop being distinct past this many sites. */
+const MAX_DISTINCT_FIXTURE_SITES = 4096;
+
+/**
+ * A fleet of `count` distinct sites, for a test about how *many* sites a
+ * fan-out reads rather than about which ones.
+ *
+ * Deterministic, so a test asserting on the third site's id is asserting on a
+ * value it can read here rather than on randomness, and distinct, so a fan-out
+ * that read one site twice shows up as a repeat rather than as a coincidence.
+ * Asking for more sites than the template can distinguish throws: silently
+ * duplicated ids would surface as a puzzling assertion failure a long way from
+ * its cause (`docs/standards/error-handling.md` rule 1 — a violated invariant,
+ * in a fixture whose whole job is distinctness).
+ */
+export const fleetOfSize = (count: number): FleetSite[] => {
+  if (count > MAX_DISTINCT_FIXTURE_SITES) {
+    throw new Error(
+      `fleetOfSize: at most ${String(MAX_DISTINCT_FIXTURE_SITES)} sites have distinct ids, got ${String(count)}`,
+    );
+  }
+
+  return Array.from({ length: count }, (_unused, index) =>
+    fleetSite({
+      id: `${FLEET_ID_TEMPLATE_PREFIX}${index.toString(16).padStart(3, '0')}`,
+      name: `Fleet site ${String(index)}`,
+    }),
+  );
+};
+
 /** A valid `POST`/`PUT` body: every field a caller owns, and none it does not. */
 export const siteInput = (overrides: Partial<CreateSiteInput> = {}): CreateSiteInput =>
   createSiteInputSchema.parse({
