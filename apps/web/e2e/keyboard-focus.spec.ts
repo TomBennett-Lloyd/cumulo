@@ -2,45 +2,46 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
-import { PRESSED_RANGE_BUTTON, pressedRangeButton } from './range-picker';
 import { openSiteTable } from './site-table';
 
 /*
- * Who gets the focus when a site opens, driven by a real keyboard and a real
+ * Where the focus is when a site opens, driven by a real keyboard and a real
  * address bar.
  *
- * The dashboard's answer to a *reader-initiated* selection is a focus move: the
- * reader is put on the fleet panel's range picker, under the map, so the page
- * hands them a live control on the answer they just asked for rather than
- * leaving their focus on something about to unmount (#93, revised by #284 D14 —
- * the landing was the card's own heading until then). Under jsdom that is
- * provable only as far as `document.activeElement` — the assertion
- * `Dashboard.focus.test.tsx` already makes. What it cannot show is the half a
- * reader actually experiences: whether the ring `@cumulo/ui` paints on
- * `:focus-visible` is on that button afterwards. `:focus-visible` is a browser
- * heuristic over *how* focus arrived, jsdom implements no heuristic and paints
- * nothing, and no amount of unit testing can substitute for one.
+ * The dashboard's answer to a *reader-initiated* selection is now no focus move
+ * at all: the reader is left standing on the control they pressed, and the page
+ * answers by changing around them rather than by taking their place away
+ * (#328, `design.md` rule 11 — the landing was the card's own heading under
+ * #93, then the fleet panel's range picker under #284 D14, and is nowhere now).
+ * Under jsdom that is provable only as far as `document.activeElement` — the
+ * assertion `Dashboard.focus.test.tsx` already makes. What it cannot show is the
+ * half a reader actually experiences: whether the ring `@cumulo/ui` paints on
+ * `:focus-visible` is still on the row they pressed. `:focus-visible` is a
+ * browser heuristic over *how* focus arrived, jsdom implements no heuristic and
+ * paints nothing, and no amount of unit testing can substitute for one.
  *
- * So the first case is one interaction performed the way a keyboard user
- * performs it: Tab to the fleet table's summary, open it with Enter, Tab until a
- * row has focus, press Enter again, and measure what the browser then decided to
- * paint. Every step is a real key event — `Locator.press` on the row would reach
- * the same handler while telling us nothing about whether the row is reachable
- * by tabbing at all.
+ * That ring is the half of WCAG 2.4.7 the rings-only-for-keyboards change (#339)
+ * has to keep: rings came off *pointer* flows, and a keyboard reader who presses
+ * Enter on a row must still be able to see where they are afterwards. So the
+ * first case is one interaction performed the way a keyboard user performs it:
+ * Tab to the fleet table's summary, open it with Enter, Tab until a row has
+ * focus, press Enter again, and measure what the browser then decided to paint.
+ * Every step is a real key event — `Locator.press` on the row would reach the
+ * same handler while telling us nothing about whether the row is reachable by
+ * tabbing at all.
  *
- * It stops at the landing, and what that leaves uncovered is worth naming here
- * rather than leaving to be inferred. The card's hand-back on the way out is
- * owed only to a reader who has come *into* the card, which since D14 is no
- * longer where a selection leaves them — that path is `document.activeElement`
- * again, so `map/SitePopoverCard.test.tsx` and `Dashboard.focus.test.tsx` keep
- * it in the lane that can see it rather than this one re-proving it slowly. But
- * the *journey* into the card is exactly this lane's kind of question and no
- * case here asks it: the map precedes the reading column, so the route from the
- * landing is backwards past six stops — the (i) tip, the credits band's three
- * links, and the map's two controls — and then through maplibre's marker
- * overlay, which is where the card is portaled. Only a real tab order can say
- * whether it arrives. `docs/tech-debt.md` carries that gap; this comment is not a claim
- * that it is covered.
+ * What it leaves uncovered is worth naming here rather than leaving to be
+ * inferred. The card's hand-back on the way out is owed only to a reader who has
+ * come *into* the card, which since #328 no selection does for them — that path
+ * is `document.activeElement` again, so `map/SitePopoverCard.test.tsx` and
+ * `Dashboard.focus.test.tsx` keep it in the lane that can see it rather than
+ * this one re-proving it slowly. But the *journey* into the card is exactly this
+ * lane's kind of question and no case here asks it: the map precedes the reading
+ * column in DOM order, and the card is portaled into maplibre's marker overlay,
+ * so a reader standing on a row has to travel *backwards* out of the table and
+ * through the map's own controls to reach the answer they just opened. Only a
+ * real tab order can say whether they arrive. `docs/tech-debt.md` carries that
+ * gap; this comment is not a claim that it is covered.
  *
  * The disclosure is part of that claim rather than a preamble to it. The rows
  * are folded away by default since #265, so a `<details>` that could not be
@@ -158,7 +159,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('hands a keyboard selection to the range picker, ring and all', async ({ page }) => {
+test('leaves a keyboard selection standing on the row it was made from, ring and all', async ({
+  page,
+}) => {
   /*
    * Both halves of the page first. The table is what this tabs to; the map is
    * what it tabs *through*, and starting before its markers have mounted would
@@ -177,33 +180,39 @@ test('hands a keyboard selection to the range picker, ring and all', async ({ pa
 
   /*
    * The row answered, and answered for the site whose row it was. Without this
-   * the case would still pass if Enter had selected some other site — the
-   * landing is the same picker button whichever site was chosen, so everything
-   * asserted below would be green while the reader looked at a site they never
-   * asked for. Checked on the URL because the id is what the row and the address
-   * bar have in common; the card names the site but not the id.
+   * the case would still pass if Enter had selected some other site — the row
+   * keeps the focus whichever site was chosen, so everything asserted below
+   * would be green while the reader looked at a site they never asked for.
+   * Checked on the URL because the id is what the row and the address bar have
+   * in common; the card names the site but not the id.
    */
   await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
 
   /*
    * The card really opened, asserted before anything about focus: a selection
-   * that drew no card would leave the picker sitting there unfocused, and the
-   * landing assertion below would then be about a page with no answer on it.
+   * that drew no card would leave the reader standing on the row too, so the
+   * assertions below would be green against a page carrying no answer at all.
    */
   await expect(page.locator('.site-popover')).toBeVisible();
 
-  await expect(pressedRangeButton(page)).toBeFocused();
+  /*
+   * And the reader is exactly where they left themselves. Nothing on this page
+   * moves the focus on a selection any more (#328, `design.md` rule 11), so the
+   * row that was pressed is still the active element — compared by site id
+   * rather than by locator, because "the row I pressed" is what the rule is
+   * about and a locator would let a different row of the same shape satisfy it.
+   */
+  await expect.poll(() => focusedSiteId(page)).toBe(siteId);
 
   /*
-   * And the ring is on it. The button takes focus programmatically — nobody
-   * tabbed to it — so this measures the browser's `:focus-visible` heuristic as
-   * much as the stylesheet: Chromium carries focus-visible across a programmatic
-   * move when the interaction that triggered it was a keystroke, which is the
-   * whole reason the page is allowed to move focus silently. If this ever reads
-   * `none`, a keyboard reader is being moved across the page with no visible
-   * sign of where they landed.
+   * And the ring is still on it, which is the half of WCAG 2.4.7 that survived
+   * #339: rings were taken off *pointer* interaction only, and this focus was
+   * arrived at by Tab and held through a keystroke, so the browser's
+   * `:focus-visible` heuristic must still be painting one. If this ever reads
+   * `none`, a keyboard reader is pressing Enter on a page that then gives them
+   * no visible sign of where they are standing.
    */
-  const ring = await focusRing(page, PRESSED_RANGE_BUTTON);
+  const ring = await focusRing(page, `[data-site-id="${siteId}"]`);
 
   expect(ring.style).toBe('solid');
   expect(ring.widthPx).toBeGreaterThan(0);
@@ -219,8 +228,14 @@ test('takes no focus at all when ?site= opens the card (issue 260)', async ({ pa
    * the listing comes back, which over a real network can be well after the
    * reader has started using the page. A card that focused its heading on mount
    * therefore took focus from somebody who had done nothing to ask for it (WCAG
-   * 3.2.5). The settlement is that focus follows the *reader*, never the address
-   * bar, and this is the case that would fail if that rule were dropped.
+   * 3.2.5). Since #328 neither arm moves focus on the way in, so what the
+   * address bar's arm still refuses *alone* is the **capture**: whatever held
+   * the focus at that arbitrary instant is not an opener anybody chose to be
+   * returned to, which is the asymmetry `dashboard/selection-origin.ts` carries.
+   * This is the case that would fail if a mount-time focus move ever came back,
+   * and it is the arm that can see it — on a fresh load there is a `body` to
+   * read the absence against, where a reader's own press leaves focus on the
+   * control they pressed.
    *
    * An id read off the running page rather than a constant, for the reason
    * `dashboard-test-fixture.ts` gives about the same thing: a link's id comes

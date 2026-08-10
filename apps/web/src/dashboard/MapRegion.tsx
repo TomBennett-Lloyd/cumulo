@@ -1,5 +1,5 @@
 import type { Site } from '@cumulo/shared';
-import type { ReactElement, RefObject } from 'react';
+import type { ReactElement } from 'react';
 
 import { MapControls } from '../map/MapControls';
 import type { MapPosition } from '../map/MapView';
@@ -39,19 +39,11 @@ export interface MapRegionProps {
    * and when the selection names a site the listing never produced.
    */
   readonly selectedSite: Site | null;
-  /** Whether a reader asked for the selection, or the address bar did — the focus rule. */
-  readonly selectionOrigin: SelectionOrigin;
   /**
-   * Where a reader-initiated selection puts the focus: the fleet panel's
-   * pressed range button, under the map (#284 D14).
-   *
-   * It crosses this seam because the rule's two ends are in two halves of the
-   * page — the card that moves the focus is drawn on the map, and the control
-   * it moves the focus to is in the reading below — so the dashboard, which can
-   * see both, is what holds the ref. Passed straight through to the card, which
-   * falls back to its own heading when there is nothing to point at.
+   * Whether a reader asked for the selection, or the address bar did — which
+   * decides whether the card owes a hand-back on close.
    */
-  readonly selectionFocusRef?: RefObject<HTMLButtonElement | null>;
+  readonly selectionOrigin: SelectionOrigin;
   /** The dashboard's first-forecast poll for the selected site. */
   readonly firstForecast: ForecastViewState;
   readonly onRetryFirstForecast: () => void;
@@ -124,7 +116,6 @@ export const MapRegion = ({
   onToggleAddSite,
   selectedSite,
   selectionOrigin,
-  selectionFocusRef,
   firstForecast,
   onRetryFirstForecast,
   onDeselectSite,
@@ -137,7 +128,6 @@ export const MapRegion = ({
         key={selectedSite.id}
         site={selectedSite}
         selectionOrigin={selectionOrigin}
-        selectionFocusRef={selectionFocusRef}
         firstForecast={firstForecast}
         onRetryFirstForecast={onRetryFirstForecast}
         onClose={onDeselectSite}

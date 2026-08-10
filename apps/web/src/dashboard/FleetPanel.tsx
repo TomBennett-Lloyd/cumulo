@@ -1,5 +1,5 @@
 import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
-import { useId, useMemo, useState, type ReactElement, type RefObject } from 'react';
+import { useId, useMemo, useState, type ReactElement } from 'react';
 
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
@@ -235,19 +235,6 @@ export interface FleetPanelProps {
   readonly selectionReady: boolean;
   /** Bumped by the dashboard when a site is created, to re-sum the fleet. */
   readonly refreshToken: number;
-  /**
-   * Handed to the window picker, which points it at its pressed button.
-   *
-   * The dashboard's concern rather than this panel's: a reader-initiated
-   * selection lands focus on the picker (#284 D14, `map/SitePopoverCard.tsx`),
-   * and the two ends of that rule sit in different halves of the page — the
-   * card is on the map, the control it lands on is here. The panel reads
-   * nothing from it and behaves identically without one, which is why it is
-   * optional: a caller with no focus rule to serve has nothing to point
-   * anywhere. On the arm that renders no picker it simply never fills, and the
-   * card falls back to its own heading.
-   */
-  readonly rangePickerRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export const FleetPanel = ({
@@ -256,7 +243,6 @@ export const FleetPanel = ({
   selectedSite,
   selectionReady,
   refreshToken,
-  rangePickerRef,
 }: FleetPanelProps): ReactElement => {
   const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
@@ -412,18 +398,12 @@ export const FleetPanel = ({
          * looking at it. An empty fleet asks the source nothing whatever the
          * picker says, because `enabled` gates the queries and not this.
          *
-         * It is also where a reader-initiated selection puts the focus (#284
-         * D14): {@link FleetPanelProps.rangePickerRef} reaches the pressed
-         * button through it, so the card on the map can land a reader on a
-         * control that is on screen in every state this panel can be in.
+         * It takes no focus it was not given: a selection moves nobody here
+         * (#328, `design.md` rule 11), so the picker is reached the way every
+         * other control on the page is — by a reader going to it.
          */}
         {fleetLookback || fleetActuals ? (
-          <RangePicker
-            range={range}
-            ariaLabel="Aggregation range"
-            onSelect={setRange}
-            pressedButtonRef={rangePickerRef}
-          />
+          <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
         ) : null}
       </header>
       {sites.length === 0

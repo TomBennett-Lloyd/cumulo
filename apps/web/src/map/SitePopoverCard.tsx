@@ -1,5 +1,5 @@
 import type { Site } from '@cumulo/shared';
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, RefObject } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from 'react';
 import { useEffect, useId, useRef } from 'react';
 
 import type { ForecastViewState } from '../dashboard/forecast-view-state';
@@ -27,8 +27,9 @@ import {
  * now a second series on the fleet chart below the map (`site-overlay.ts`), so
  * the card carries the site's identity and the state of its first forecast and
  * stops there — a chart at marker size would be a chart nobody could read.
- * And the reading column stopped swapping at all, which is why the card owes a
- * focus landing of its own rather than inheriting the region's.
+ * And the reading column stopped swapping at all, which is why a selection has
+ * nothing to announce by displacement and this card announces itself by its own
+ * accessible name instead.
  */
 
 /**
@@ -131,19 +132,11 @@ const SiteForecastRegion = ({
 
 export interface SitePopoverCardProps {
   readonly site: Site;
-  /** Whether a reader asked for this selection, or the address bar did. */
-  readonly selectionOrigin: SelectionOrigin;
   /**
-   * Where a reader-initiated selection lands: the fleet panel's pressed range
-   * button, threaded down from the dashboard (#284 D14).
-   *
-   * Optional, and the fallback is the card's own heading — which is what a
-   * source rendering no picker at all leaves as the landing. Declared
-   * `| undefined` rather than merely optional because it is forwarded through
-   * props that have it optional too, and `exactOptionalPropertyTypes`
-   * distinguishes an absent property from a present-but-undefined one.
+   * Whether a reader asked for this selection, or the address bar did — which
+   * decides whether this card captures an opener to hand back on close.
    */
-  readonly selectionFocusRef?: RefObject<HTMLButtonElement | null> | undefined;
+  readonly selectionOrigin: SelectionOrigin;
   /** The dashboard's first-forecast poll for this site — it owns the clock, not the card. */
   readonly firstForecast: ForecastViewState;
   readonly onRetryFirstForecast: () => void;
@@ -154,64 +147,45 @@ export interface SitePopoverCardProps {
 /**
  * Everything known about one site, in the card anchored to its marker.
  *
- * ## Focus moves for a reader, and never for a link
+ * ## A selection moves focus nowhere
  *
- * The rule this card implements is the settlement of
- * [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260) as revised by
- * #284 D14, and `react.md`'s focus paragraphs are where it is written down.
- * When the selection came from a reader — a marker, a row, the header's search,
- * a creation — focus goes to the **fleet panel's range picker**
- * ({@link SitePopoverCardProps.selectionFocusRef}), the control under the map
- * that sets how far out both the fleet's line and this site's line over it are
- * drawn. Where there is no picker to point at — a source with neither a
- * look-back nor actuals renders none — the landing falls back to this card's own
- * heading, which is `tabIndex={-1}` so it is a focus target without joining the
- * tab order. When the selection came from `?site=`, focus does not move at all.
+ * This card takes no focus when it opens, whoever asked for the selection. That
+ * is `design.md` rule 11 — focus stays where the reader put it — as #328
+ * settled it; `react.md`'s focus paragraphs are where the mechanics are written
+ * down. A reader who pressed a marker is still on that marker, a reader who pressed a
+ * row is still on that row, and a reader who picked a site out of the header's
+ * search is still in the search input, which is the combobox discipline that
+ * pattern owes anyway.
  *
- * That last asymmetry is untouched by the revision, and it is not a special case
- * for page load; it is the whole rule. This card mounts when the *fleet listing
- * resolves*, and on a deep link that is not page load — it can be seconds later,
- * by which time the reader may be well inside the page. Moving focus then takes
- * it from somebody who did nothing to ask for it. The reader-initiated paths
- * have the opposite problem and the opposite answer: they changed the page in
- * response to a press, so a focus that stayed on the pressed control would leave
- * a keyboard reader to find the new surface by tabbing.
+ * What answers a selection instead is structure. This card is
+ * `aria-labelledby` its own heading, so the surface names its site the moment it
+ * exists; the fleet chart's *legend* grows a row under that same name as soon as
+ * the site's line is drawn (`dashboard/site-overlay.ts` supplies the label, and
+ * the legend is on screen in every state of the panel); and the header's search
+ * says so in its own status region. Not the chart's readout — that region mounts
+ * empty and fills only when a reader moves the chart's own selection, so at the
+ * moment of arrival it names nothing at all (`react.md`'s live-region bullet).
+ * The alternative is moving somebody to the answer, which this card did in two
+ * different spellings before #328 and no longer does in either: a page that
+ * grabs the focus takes the reader's place away to tell them something it could
+ * have told them where they stood.
  *
- * ### What landing on the picker costs
+ * {@link SitePopoverCardProps.selectionOrigin} therefore no longer decides
+ * whether focus *moves* — nothing moves it. What it still decides is whether
+ * this card captures an opener at all, which is the settlement of
+ * [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260) surviving in the
+ * one clause that outlived the landing. A `?site=` card returns nobody anywhere
+ * on close, because nobody's press put a reader anywhere for it to return them
+ * to: it mounts when the *fleet listing resolves*, which on a deep link is not
+ * page load and can be seconds later.
  *
- * The landing no longer says the site's name. A screen reader arriving on the
- * picker hears "24 h, pressed" rather than "Rathmines rooftop" — the announced
- * fact is the window, not the site. What is left naming the site is this card,
- * which is `aria-labelledby` its own heading, and the fleet chart's *legend*,
- * which grows a row under the site's name as soon as that site's line is drawn
- * (`dashboard/site-overlay.ts` supplies the label; the legend is on screen in
- * every state of the panel). Not the chart's readout: that region mounts empty
- * and fills only when a reader moves the chart's own selection, so at the moment
- * of landing it names nothing at all (`react.md`'s live-region bullet). The
- * reviewed
- * alternative was keeping the landing on the heading with a quieter ring on it,
- * which announces the site and then leaves the reader on a heading there is
- * nothing to do from; landing on a control puts them where the next act is
- * (owner's decision, #284 D14).
+ * Escape is the cost that is left, and it is now the ordinary one. Escape closes
+ * from anywhere *inside* the card, so a reader has to be in the card for it to
+ * mean anything — which a pointer press on Close does for free, and a keyboard
+ * reader does by tabbing to it. Nothing was added to reach them from outside:
+ * a document-level key handler would claim a key the map itself is free to want.
  *
- * The second cost is Escape, and it is larger than it first sounds. Escape
- * closes from anywhere *inside* the card, so a reader whose landing is the
- * picker has to get into the card before Escape means anything — and the card is
- * *behind* them in the tab order rather than ahead of it. The map is the first
- * thing in the dashboard and the reading column follows it down the page, so
- * tabbing forward from the picker walks away from the card and on through the
- * rest of the reading; Close is reached backwards, Shift-Tab past the (i) tip,
- * the credits band's three links (`MapSurface` renders it after the controls,
- * and the Open-Meteo one is there by licence in every state) and the map's own
- * two controls — six stops, and more when the pressed window is not the picker's
- * first button. A pointer reader pays none of that — Close is
- * on the card in front of them — which is exactly what makes it a keyboard cost
- * and not a general one. Accepted rather than answered with a document-level key
- * handler, which would claim a key the map itself is free to want; that
- * backwards route is asserted by nothing today, which `docs/tech-debt.md`
- * records rather than this comment implying otherwise.
- *
- * ## The landing on the way out, which this card now rarely owes
+ * ## The landing on the way out, which this card owes only to a reader inside it
  *
  * Closing gives focus back to whatever held it when the card opened, captured on
  * the way in rather than reconstructed on the way out. Reconstructing it is what
@@ -229,15 +203,15 @@ export interface SitePopoverCardProps {
  * browser puts it, which is the same place a card with no landing at all would
  * have left it.
  *
- * Since the landing moved to the picker that guard mostly declines by its own
+ * Since a selection lands nobody in here, that guard mostly declines by its own
  * terms, and deliberately so: a card the reader was never put inside is not
  * holding the focus it would be giving back, so a dismissal that happens from
- * outside it — another marker, a row, a search — leaves the reader on the picker
- * where they already were. What the machinery still answers is the reader who
- * came *into* the card: pressing Close focuses it, and tabbing to it does too,
- * so the control they are standing on is again about to unmount under them. The
- * mechanism is kept whole rather than deleted because that path is ordinary, not
- * because the old one might come back.
+ * outside it — another marker, a row, a search — leaves the reader exactly where
+ * they already were. What the machinery still answers is the reader who came
+ * *into* the card: pressing Close focuses it, and tabbing to it does too, so the
+ * control they are standing on is about to unmount under them. The mechanism is
+ * kept whole rather than deleted because that path is ordinary, not because the
+ * landing might come back.
  *
  * The document's focus is state no render owns and no re-render restores, so
  * this is exactly the external system an effect is for (`react.md` rule 1).
@@ -254,14 +228,12 @@ export interface SitePopoverCardProps {
 export const SitePopoverCard = ({
   site,
   selectionOrigin,
-  selectionFocusRef,
   firstForecast,
   onRetryFirstForecast,
   onClose,
 }: SitePopoverCardProps): ReactElement => {
   const titleId = useId();
   const cardRef = useRef<HTMLElement>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     if (selectionOrigin !== 'reader') {
@@ -272,13 +244,9 @@ export const SitePopoverCard = ({
     const opener = active instanceof HTMLElement ? active : null;
     const card = cardRef.current;
 
-    // The picker when the page has one, this card's heading when it has not.
-    // Read at this moment rather than captured earlier: the picker is mounted
-    // by a panel below the map and is already on screen by the time any reader
-    // can select a site, and reading it here is what lets the fallback be about
-    // whether a picker exists rather than about when this effect happened to
-    // run.
-    (selectionFocusRef?.current ?? headingRef.current)?.focus();
+    // Nothing is focused on the way in: a selection moves focus nowhere
+    // (`design.md` rule 11, #328). This effect exists for the way *out* — the
+    // capture above and the guarded restore below.
 
     return () => {
       // An opener that has left the document is not chased: focusing a detached
@@ -292,27 +260,26 @@ export const SitePopoverCard = ({
        * Only give focus back if this card still has it to give.
        *
        * A leaving card is not entitled to move a focus that is no longer its
-       * own. Three cases make that concrete, and since #284 D14 the first is the
+       * own. Three cases make that concrete, and since #328 the first is the
        * ordinary one rather than an edge. **The reader was never inside this
-       * card at all**: their landing was the picker, so every dismissal that
-       * does not go through a control in here — another marker, a row, the
-       * search — finds the focus somewhere this card never held it, and a
-       * restore would drag them back to the map from a live control. **The
-       * reader left of their own accord**, tabbing or clicking away and then
-       * dismissing from there, which is the same answer for the same reason.
-       * And **pressing marker B while site A's card is open** moves focus to
-       * marker B *before* the commit — so A's cleanup, if it restored
-       * unconditionally, would put focus back on marker A, B's mount effect
-       * would then capture marker A as its opener, and closing B would strand
-       * the reader on the marker of a site they stopped looking at two
-       * interactions ago.
+       * card at all**: opening it moved nobody, so every dismissal that does not
+       * go through a control in here — another marker, a row, the search — finds
+       * the focus somewhere this card never held it, and a restore would drag
+       * them back to the map from wherever they actually are. **The reader left
+       * of their own accord**, tabbing or clicking away and then dismissing from
+       * there, which is the same answer for the same reason. And **pressing
+       * marker B while site A's card is open** moves focus to marker B *before*
+       * the commit — so A's cleanup, if it restored unconditionally, would put
+       * focus back on marker A, B's mount effect would then capture marker A as
+       * its opener, and closing B would strand the reader on the marker of a
+       * site they stopped looking at two interactions ago.
        *
        * "Still has it" is `body` or inside this card. `body` is the usual answer
        * on a real dismissal: React detaches this subtree during the mutation
        * phase and the browser drops focus to `body` before this passive cleanup
-       * runs, so the heading or the Close button the reader was on is already
-       * gone. The `contains` arm covers the case where the DOM is still up —
-       * this effect re-running on a change of `selectionOrigin`, and StrictMode's
+       * runs, so the Close button the reader was on is already gone. The
+       * `contains` arm covers the case where the DOM is still up — this effect
+       * re-running on a change of `selectionOrigin`, and StrictMode's
        * development remount.
        */
       const focused = document.activeElement;
@@ -323,7 +290,7 @@ export const SitePopoverCard = ({
         opener.focus();
       }
     };
-  }, [selectionOrigin, selectionFocusRef]);
+  }, [selectionOrigin]);
 
   /**
    * Escape closes, from anywhere inside the card.
@@ -333,15 +300,13 @@ export const SitePopoverCard = ({
    * the second is the reason this is not just a handler on Close: the failed
    * arms of {@link SiteForecastRegion} carry a `Try again`, so a reader who has
    * moved on to the retry would otherwise be holding a control Escape does not
-   * answer from. The heading is covered too, but only as the *programmatic*
-   * fallback landing — it is `tabIndex={-1}`, so no reader ever tabs onto it.
-   * The handler rides the React event, so every child is covered without any of
-   * them knowing.
+   * answer from. The handler rides the React event, so every child is covered
+   * without any of them knowing.
    *
-   * What it deliberately does not cover is a reader still standing on their
-   * landing: since #284 D14 that is the range picker, outside this subtree, and
-   * the docblock above says why no document-level handler was added to reach
-   * them there.
+   * What it deliberately does not cover is a reader who has not come into the
+   * card — since #328 that is everybody a selection has just answered, standing
+   * wherever they pressed. The docblock above says why no document-level handler
+   * was added to reach them there.
    */
   const closeOnEscape = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') {
@@ -357,7 +322,7 @@ export const SitePopoverCard = ({
       onKeyDown={closeOnEscape}
     >
       <header className="site-popover-header">
-        <h2 className="site-popover-title" id={titleId} ref={headingRef} tabIndex={-1}>
+        <h2 className="site-popover-title" id={titleId}>
           {site.name}
         </h2>
         <button type="button" className="site-popover-close" onClick={onClose}>

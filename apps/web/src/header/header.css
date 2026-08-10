@@ -202,6 +202,33 @@
   white-space: nowrap;
 }
 
+/*
+ * What a search hit says out loud, and only out loud: off the page, but in the
+ * accessibility tree. Never `display: none` or `visibility: hidden` — either
+ * removes the element from that tree, which is the one place this region exists
+ * to be, and a live region nobody can reach announces nothing. A sighted reader
+ * needs none of it: the card opening and the camera moving to it are the same
+ * answer, painted.
+ *
+ * Copied from `.forecast-chart-readout` in `apps/web/src/charts/charts.css`
+ * rather than shared with it. That makes two consumers of this idiom and
+ * `structure.md` rule 7 puts the extraction threshold at the third, so the copy
+ * is the correct move today and a third region is the signal to lift it into
+ * `packages/ui`. The 1px lengths are the length half of the frontend gate's
+ * documented residual (`stylelint.config.mjs`), not an untokenised size that
+ * slipped past: no token could express them, because their whole job is to be
+ * the smallest box a browser will still lay out.
+ */
+.site-search-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 /* ---- The search where the bar runs out ---------------------------------- */
 
 /*

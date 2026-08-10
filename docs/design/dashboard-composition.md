@@ -94,43 +94,44 @@ the zoom, because the framing is the reader's choice and not the selection's.
 The page itself never scrolls on a selection any more, and the effect that used to do it is gone
 with the region it chased.
 
-## Focus follows the reader, never the address bar
+## Whether a selection is somebody's, not where anything lands
 
-A page that changes above the reader's focus point owes them a landing, and a page that changes
-for no reason of theirs owes them the opposite. The settled rule:
+No selection moves focus on the way in any more, so what is left for a selection to decide is the
+card's hand-back on the way out: a surface somebody opened captures whatever held the focus and
+owes it back, and a surface nobody opened has nobody to return anywhere. That asymmetry — capture,
+not landing — is what the dashboard carries beside the selection itself
+(`apps/web/src/dashboard/selection-origin.ts`). The settled rule:
 
-- **A reader-initiated selection lands the reader on the fleet panel's range picker** — every
-  opener that is a reader doing something qualifies: a marker press, a row press, a search hit, a
-  creation. The test is who acted, not which opener it was, which is why a new one inherits the
-  rule instead of extending a list. The landing was the card's own heading (`tabIndex={-1}`, a
-  target without joining the tab order) until #284 D14 moved it: the card is facts about a site
-  with nothing to do from it, while the picker is the control that decides what the reader is now
-  being shown, is on screen in every state of the page, and is where the next act is. The heading
-  remains the fallback where a source renders no picker. What it costs is the announcement — the
-  picker says "24 h, pressed" rather than the site's name, which the card's `aria-labelledby` and
-  the chart legend's row for that site still carry (the chart's _readout_ does not: it mounts empty
-  and fills only when a reader moves the chart's selection, so it names nothing at the moment of
-  landing). It costs a keyboard reader one more thing, and it is worth naming here because the
-  layout is what causes it: the map precedes the reading column, so the card sits _above_ the
-  landing and Escape — which only works from inside the card — is reached by tabbing backwards past
-  six stops: the (i) tip, the credits band's three links (the band is rendered after the controls,
-  and the Open-Meteo credit is in it by licence in every state), and the map's two controls. More
-  when the pressed window is not the picker's first button.
-- **A `?site=` selection moves focus nowhere.** This is the settlement of
-  [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260), and the asymmetry is the point
-  rather than an exception for page load: the card mounts when the fleet listing _resolves_, which
-  on a deep link can be seconds in, so a mount-time focus move takes focus from a reader who has
-  since started using the page (WCAG 3.2.5). The dashboard carries which of the two happened
-  beside the selection itself (`apps/web/src/dashboard/selection-origin.ts`); the alternative fix
-  considered and rejected was skipping the effect's first run, which is a rule about run counts
-  rather than about who acted, and says nothing about the second late arrival.
+- **A selection moves focus nowhere** — every opener, and whoever did the opening: a marker press,
+  a row press, a search hit, a creation. The reader keeps the control they pressed, and the search
+  keeps the reader in its input, which is the ARIA combobox's own discipline. The landing was the
+  card's own heading (`tabIndex={-1}`, a target without joining the tab order), then a control in
+  the panel below the map; #328 removed it outright, on the rule that a page that grabs the focus
+  takes the reader's place away to tell them something it could have told them where they stood
+  (`docs/standards/design.md` rule 11; `design-principles.md` carries the history). What answers the selection instead is structure they
+  can already reach: the card's `aria-labelledby` names the site, the chart legend grows a row under
+  that name once the site's line is drawn, and the header's search announces its hit in its own
+  status region — the chart's _readout_ does none of it, since it mounts empty and fills only when a
+  reader moves the chart's selection. What went with the landing is a cost rather than a benefit
+  lost: a reader on the picker reached Escape — which only works from inside the card — by tabbing
+  _backwards_ past six stops, because the map precedes the reading column. From a marker or a row
+  the card is where the reader already is.
+- **A `?site=` selection additionally captures no opener.** This is what survives of the settlement
+  of [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260) now that neither arm moves focus
+  on the way in, and the asymmetry is the point rather than an exception for page load: the card
+  mounts when the fleet listing _resolves_, which on a deep link can be seconds in, so whatever
+  holds the focus at that instant is not a control anybody chose to be returned to (WCAG 3.2.5).
+  The dashboard carries which of the two happened beside the selection itself
+  (`apps/web/src/dashboard/selection-origin.ts`); the alternative fix considered and rejected was
+  skipping the effect's first run, which is a rule about run counts rather than about who acted, and
+  says nothing about the second late arrival.
 - **Closing returns focus to whatever held it when the card opened, if the card is holding it**,
   captured on the way in. The panel this replaced reconstructed the landing instead — it searched
   the site list for the row naming its site — which was the right answer only for the one opener it
   knew about. Capturing covers every opener with no case analysis — a marker, a row, a search hit,
   a creation, and whatever is added next — and an opener that has since left the document is simply
-  not chased. Since the landing moved to the picker, the guard is what usually answers: a card the
-  reader was never inside stands aside and leaves them on the control they were left on. The
+  not chased. With nothing landing a reader inside the card, the guard is what usually answers: a
+  card the reader was never inside stands aside and leaves them where they already were. The
   hand-back still fires for a reader who came into the card, which pressing Close does.
 - **A dismissed draft returns focus to the map's add-site control**, the control the reader opened
   it with.
@@ -143,13 +144,13 @@ browser's own restoration is still running while `cancel` is being dispatched, a
 a focus set there. React flushes a commit's unmount cleanups before its mount effects, which is
 what makes a creation land correctly without a special case anywhere: the dialog's cleanup puts
 focus on the add-site control, and the new site's card — mounting in the same commit — captures
-_that_ as its opener before moving the reader on to the picker.
+_that_ as its opener and then moves nobody, which leaves the dialog's return as the last word.
 
-`react.md`'s focus paragraphs own the rule, five of them for the four bullets above — "focus
-follows the reader" owns the second bullet (_whether_ focus moves), "where the focus lands" owns
-the first (_which_ element, and what the revision costs), and the third bullet is owned by two
-together: "a surface that leaves owes a landing" for the capture-and-restore, and "a surface that
-never took the focus returns none" for the guard that has answered most dismissals since #284 D14.
+`react.md`'s focus paragraphs own the rule, five of them for the four bullets above — "whether a
+selection is the reader's" owns the second bullet, "where the focus lands on a selection" owns the
+first (and the modal's exception to it), and the third bullet is owned by two together: "a surface
+that leaves owes a landing" for the capture-and-restore, and "a surface that never took the focus
+returns none" for the guard that has answered most dismissals since the landing went.
 The fourth bullet is the modal's own paragraph, "a modal owes its own landing". `Dashboard.focus.test.tsx` and
 `map/SitePopoverCard.test.tsx` pin all of it as far as `document.activeElement` goes; the ring a
 reader actually sees, and a deep link arriving over a real network, are `e2e/keyboard-focus.spec.ts`'s.

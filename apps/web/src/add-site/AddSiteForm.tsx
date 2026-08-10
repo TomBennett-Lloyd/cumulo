@@ -255,14 +255,14 @@ export const AddSiteForm = ({
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   /*
-   * The heading half of `react.md`'s focus rule: a surface that arrives because
-   * the reader asked for it moves the focus to itself, and a surface whose own
-   * controls are the answer moves it to its heading — so a reader whose focus is
-   * somewhere else on the page is told something changed rather than left to
-   * find out. The selected site's card takes the rule's other branch and lands
-   * on a control elsewhere on the page (#284 D14), because a card of facts has
-   * nothing to do from it; this form is the opposite case, since everything the
-   * reader came for is inside it.
+   * The one focus landing `react.md`'s rule still grants, and it is granted to
+   * modals: a surface whose own controls *are* the answer moves the focus to its
+   * heading, so a reader whose focus is somewhere else on the page is told
+   * something changed rather than left to find out. Everything the reader came
+   * for is inside this dialog, and there is nothing behind it to go back to
+   * while it is up. A selection elsewhere on the page moves focus nowhere at all
+   * (#328), because the surfaces it opens are answers to look at rather than
+   * places to act from.
    *
    * The *reason* moved with the form. While this was an occupant of the reading
    * column's context region, the heading announced a region that had swapped
