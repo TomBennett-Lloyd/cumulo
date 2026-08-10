@@ -37,7 +37,7 @@ import {
  * one draws (#284 D3). Before this, three of those states returned in place of
  * the chart, so a reader watching a retry land saw the page's tallest element
  * appear under their pointer and everything below it jump — and a reader whose
- * fan-out failed lost the axes, the legend and the table twin along with the
+ * fleet read failed lost the axes, the legend and the table twin along with the
  * numbers, which is more than the failure took. `ForecastChart` draws bare
  * chrome for an empty series by contract, so "no points yet" is a chart with
  * nothing plotted on it rather than a hole where a chart goes.
@@ -45,7 +45,7 @@ import {
  * ## An empty answer is the *joined* series being empty
  *
  * The empty guard asks about what would be drawn, not about the forecast alone.
- * A fleet whose forecast fan-out summed to nothing while its actuals arrived is
+ * A fleet whose forecast read summed to nothing while its actuals arrived is
  * a fleet with hours to plot, and the earlier guard — which returned on an empty
  * forecast before the two series were joined — threw those hours away and told
  * the reader there was nothing at all (#290). What that state is owed is the
@@ -100,7 +100,7 @@ export interface FleetChartContext {
   readonly overlay: OverlayState;
   /** Re-asks for the selected site's hours, and only those. */
   readonly onRetryOverlay: () => void;
-  /** Re-asks for the fleet's readings, and only those — never the forecast fan-out. */
+  /** Re-asks for the fleet's readings, and only those — never the forecast read beside them. */
   readonly onRetryActuals: () => void;
 }
 
@@ -172,13 +172,18 @@ const fleetChart = (
  * arm's `PanelError` mounts a `role="alert"` beside that readout, which #284 D3
  * made possible by keeping the chart on screen through a failure rather than
  * returning in place of it. It is allowed because it cannot compete — a failed
- * fan-out leaves no points, so the readout renders empty for exactly as long as
- * the alert is up — and it is not licence for a third region here.
+ * fleet read leaves no points, so the readout renders empty for exactly as long
+ * as the alert is up — and it is not licence for a third region here.
  *
- * The retry is offered because re-asking genuinely can work *and* is cheap: one
- * site's hours, or the fleet's one metered actuals request. Neither re-spends
- * the paced per-site forecast fan-out, which is the test `react.md` sets for
- * offering a retry at all.
+ * The retry is offered because re-asking genuinely can work, which is the test
+ * `react.md` sets for offering one at all: a series that did not arrive is a
+ * failure a transient network fault or a 5xx can be repeated out of. What it
+ * re-asks is only the series that failed — one site's hours, or the fleet's one
+ * metered actuals request — and never the fleet's forecast read beside it,
+ * which arrived. Until #296 that second half was a cost argument too, because
+ * the forecast read was then a per-site fan-out over the whole fleet; it is one
+ * metered request now, and the half that survives is that refetching a series
+ * which never failed is waste at any price.
  */
 const partialSeriesNote = (message: string, onRetry: () => void): ReactElement => (
   <p className="panel-notice">
@@ -276,8 +281,14 @@ const stateContent = (
   }
   if (state.status === 'failed') {
     // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
-    // which is offered because the fan-out is the one request a transient
-    // failure genuinely can outlive.
+    // which is offered because a fleet read that came back with nothing is
+    // exactly the failure a repeat can outlive. The rule is `react.md`'s
+    // **Failed** bullet ("a retry only when retrying can work"; no retry that
+    // "re-runs an identical metered request"), read as withholding one where
+    // re-running would deterministically return what it already returned — a
+    // read that failed being the opposite case. That reading is an
+    // interpretation, not the bullet's own words; `docs/tech-debt.md` has why
+    // the amendment belongs in `react.md` rather than here.
     return {
       notice: (
         <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />

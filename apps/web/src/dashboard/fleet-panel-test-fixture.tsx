@@ -164,7 +164,7 @@ export const FAILED_FLEET: StubFleet = {
 };
 
 /**
- * The forecast fan-out answers; the one metered actuals request does not.
+ * The forecast read answers; the actuals request beside it does not.
  *
  * The half of the panel's failure surface that had no fixture until #264's review, which is a
  * large part of why the panel answered it by withdrawing the whole chart under the forecast's
@@ -209,7 +209,7 @@ export const DISJOINT_WINDOW_FLEET: StubFleet = {
 };
 
 /**
- * The forecast fan-out summed to nothing; the actuals arrived — #290's second finding.
+ * The forecast read summed to nothing; the actuals arrived — #290's second finding.
  *
  * A real state rather than a contrived one: the two reads are two requests over two windows, and a
  * forecast pipeline that has not produced yet leaves the measured hours untouched. The panel used
@@ -231,8 +231,8 @@ export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
 };
 
 /**
- * The combination #264 made real and the deployed source is in: simulated actuals over a fan-out
- * that still reaches forward only.
+ * The combination #264 made real and the deployed source is in: simulated actuals over a forecast
+ * read that still reaches forward only.
  *
  * Here rather than in one suite because both of them need it now — the window copy is
  * `FleetPanel.test.tsx`'s subject and the panel's furniture is `FleetPanel.structure.test.tsx`'s,
@@ -253,7 +253,7 @@ export const SIMULATED_ACTUALS_CAPABILITIES: FleetSourceCapabilities = {
  * The counting is the point of several tests, and what it counts is what this panel is frugal
  * about. "Does a new `refreshToken` re-sum the fleet", "does an empty fleet ask anything at all",
  * "does moving the selection ask about the new site rather than relabel the old one's answer" and
- * "does the overlay's retry spend a per-site request without re-spending the fan-out" are all
+ * "does the overlay's retry spend a per-site request without re-spending the fleet read" are all
  * questions about calls rather than about pixels, and only a stub that remembers can answer them.
  * (It also counted reveals until #265, when the panel stopped being hideable.)
  */

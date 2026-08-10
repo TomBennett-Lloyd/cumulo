@@ -104,11 +104,11 @@ interface FleetSectionProps {
  *
  * That panel can hold two of its own in one state, and it is the co-occurrence
  * the same bullet sanctions rather than a breach of it: since #284 D3 the chart
- * survives a failed fan-out, so `PanelError`'s alert mounts beside the readout
- * there. It is safe for the reason the bullet gives — a failed fan-out leaves no
- * points, so the readout is empty for as long as the alert is up — and it does
- * not change the composition here, because the budget is still per panel and
- * this section still mounts exactly one.
+ * survives a failed fleet read, so `PanelError`'s alert mounts beside the
+ * readout there. It is safe for the reason the bullet gives — a failed fleet
+ * read leaves no points, so the readout is empty for as long as the alert is up
+ * — and it does not change the composition here, because the budget is still per
+ * panel and this section still mounts exactly one.
  */
 const FleetSection = ({
   load,
@@ -187,13 +187,19 @@ export interface DashboardProps {
  * (`add-site/AddSiteDialog.tsx`). `docs/design/dashboard-composition.md` records
  * the reasoning and what it is buying.
  *
- * Two things it deliberately never does. It never re-lists the fleet: the
- * listing is a mount-time request, and a dashboard that polled it would fan out
- * across every site's storage partition every few seconds (ADR 0002's review of
- * this ticket — ~25 read units a time, against a per-site forecast poll's ~0.5).
- * And it never invents a site id: the id it watches for a forecast is the one
- * `createSite` returned, because a locally predicted id addresses a site that
- * does not exist.
+ * Two things it deliberately never does. It never re-lists the fleet on a
+ * cadence: the listing is a mount-time request that only an explicit retry asks
+ * for again, and a dashboard that polled it would be treating the fleet as
+ * something to re-ask on a clock — which is the habit ADR 0002's review of this
+ * ticket priced. The listing itself is the cheap half (one Query over the
+ * `FLEET` partition, ~2 read units on `sites`); what sits beside it is the
+ * expensive half, the two fleet series reads at ~25 read units on `series`
+ * each — every site's partition, once for the forecasts and once for the
+ * simulated actuals — against a per-site forecast poll's ~0.5. Since #264 and
+ * #296 those Queries run server-side inside one request each, which moved where
+ * they are spent and not how many. And it never invents a site id: the id it
+ * watches for a forecast is the one `createSite` returned, because a locally
+ * predicted id addresses a site that does not exist.
  */
 export const Dashboard = ({
   theme,
@@ -268,12 +274,14 @@ export const Dashboard = ({
    * The sites created this session, readable from the listing effect without
    * being a dependency of it (`react.md` rule 2).
    *
-   * A dependency would make a creation re-run the listing, which is the one
-   * fan-out this dashboard must never re-spend. But the stale-id guard below
-   * still has to count a created site as known: a reader whose listing failed
-   * can add a site, select it, and then retry the listing — and a guard that
-   * only knew the listing's sites would clear the selection of a site sitting
-   * right there in the list.
+   * A dependency would make a creation re-run the listing, and the listing is a
+   * read this dashboard re-spends only when something asks it to: once at mount,
+   * and once more per explicit retry (`listAttempt` above), never as a side
+   * effect of unrelated state moving. But the stale-id guard below still has to
+   * count a created site as known: a reader whose listing failed can add a site,
+   * select it, and then retry the listing — and a guard that only knew the
+   * listing's sites would clear the selection of a site sitting right there in
+   * the list.
    */
   const createdSitesRef = useRef(createdSites);
   createdSitesRef.current = createdSites;
@@ -443,7 +451,7 @@ export const Dashboard = ({
     }
 
     // The returned site, server-assigned id and all. Appended locally rather
-    // than re-listed: one fan-out avoided, and the site is already in hand.
+    // than re-listed: one listing request avoided, and the site is already in hand.
     setCreatedSites((current) => [...current, result.value]);
     // A creation is a reader-initiated selection like any other: they placed the
     // site, so the focus follows it to the range picker under the map.

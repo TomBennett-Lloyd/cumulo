@@ -46,8 +46,9 @@ import {
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
  * comment on `createStorageDocumentClient`. The `series` table's provisioned
  * read capacity (`infra/storage/tables.tf`) was sized against
- * eventually-consistent Query reads, and the dashboard fan-out is the one
- * user-visible path on that capacity.
+ * eventually-consistent Query reads, and the fleet routes' per-site fan-out —
+ * run here, inside the API, since #264 (actuals) and #296 (forecasts) rather
+ * than by the browser — is the one user-visible path on that capacity.
  */
 
 /**

@@ -186,9 +186,9 @@ describe('Dashboard', () => {
 
     expect(fleetRows()).toHaveLength(60);
 
-    // The fan-out rule from ADR 0002's review of this ticket: the fleet is read
-    // once. A dashboard that re-listed on a cadence would show up here as a
-    // second call, and in production as three tabs saturating the table.
+    // The read-capacity rule from ADR 0002's review of this ticket: the fleet is
+    // listed once. A dashboard that re-listed on a cadence would show up here as
+    // a second call, and in production as three tabs saturating the table.
     await advanceBy(CREATION_TO_FORECAST_BUDGET_MS);
 
     expect(listSites).toHaveBeenCalledTimes(1);
@@ -418,9 +418,9 @@ describe('Dashboard', () => {
  * from the fleet, so this block was about *which* context was on screen. #265
  * moved the site's detail onto its own marker and left the reading as a plain
  * flow, so the questions worth asking here changed shape: what survives a
- * selection, and how many fan-outs the composition spends doing it.
+ * selection, and how many fleet reads the composition spends doing it.
  *
- * The fan-out counts are taken on the real demo source rather than through a
+ * The request counts are taken on the real demo source rather than through a
  * canned one, because what is under test is how many requests the *composition*
  * makes — so the calls have to be the ones the shipping panel actually makes.
  */
@@ -443,8 +443,9 @@ describe('Dashboard selection', () => {
     expect(screen.queryByRole('heading', { name: site.name })).toBeNull();
     expect(siteOverlayColumn(site.name)).toBeNull();
     // One sum across the whole select-and-close round trip. In live mode a
-    // second one is a paced fan-out of one request per site, and a selection is
-    // not a change to the fleet's sum — only a second line drawn over it.
+    // second one is a second metered request to `GET /v1/fleet/forecast`, and a
+    // selection is not a change to the fleet's sum — only a second line drawn
+    // over it.
     expect(fleetForecasts).toHaveBeenCalledTimes(1);
   });
 
@@ -460,8 +461,8 @@ describe('Dashboard selection', () => {
     await settle();
 
     // The site's own hours are one request for one site; the fleet's sum is the
-    // fan-out, and it is not re-spent. That ratio is the whole argument for
-    // overlaying rather than swapping.
+    // fleet-wide read, and it is not re-spent. That ratio is the whole argument
+    // for overlaying rather than swapping.
     expect(siteForecasts).toHaveBeenCalledWith(site.id, 24);
     expect(fleetForecasts).toHaveBeenCalledTimes(1);
     expect(siteOverlayColumn(site.name)).not.toBeNull();
@@ -478,7 +479,7 @@ describe('Dashboard selection', () => {
     await addSite();
 
     // Creation is the one event that changes the sum, so it is the one event
-    // that re-spends the fan-out.
+    // that re-spends the fleet read.
     expect(fleetForecasts).toHaveBeenCalledTimes(2);
   });
 });

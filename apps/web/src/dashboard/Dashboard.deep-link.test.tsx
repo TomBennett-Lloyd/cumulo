@@ -70,7 +70,7 @@ describe('Dashboard deep links', () => {
     expect(window.location.search).toBe('');
   });
 
-  it('spends the fleet fan-out once on a deep link, the trade for a chart that is never hidden', async () => {
+  it('spends the fleet’s forecast read once on a deep link, the trade for a chart that is never hidden', async () => {
     const dataSource = new DemoFleetDataSource();
     const fleetForecasts = vi.spyOn(dataSource, 'fleetForecasts');
     const site = await firstListedSite(dataSource);
@@ -80,13 +80,14 @@ describe('Dashboard deep links', () => {
     await settle();
 
     /*
-     * #178 deferred this fan-out until the fleet panel was first revealed, so a
+     * #178 deferred this read until the fleet panel was first revealed, so a
      * deep-linked reader who never looked at the fleet never paid for it. #265
      * spent that saving deliberately: the fleet's chart is on screen from first
      * paint in every state of the page, and the selected site is drawn *over*
      * it, so there is no reader left who does not look at the fleet — only one
      * who would be shown a spinner where the chart already is. In live mode the
-     * cost is a paced per-site fan-out (~8 s over 60 sites).
+     * cost is one metered request to `GET /v1/fleet/forecast` (#296 — a
+     * drip-fed request per site before that route existed).
      *
      * What survives is the half that was always load-bearing: it is spent
      * **once**. The listing resolving and the deep link's selection landing in
