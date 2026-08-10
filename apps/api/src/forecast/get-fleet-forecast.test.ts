@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   countdownDeadline,
+  fleetOfSize,
   fleetSite,
   forecast,
   forecastPoint,
@@ -22,6 +23,7 @@ import {
 } from '../api-fixtures';
 import type { RequestDeadline } from '../http/request-deadline';
 
+import { FLEET_READ_CONCURRENCY } from './fleet-series-read';
 import {
   fleetForecastReadDeadlineEvent,
   getFleetForecast,
@@ -194,22 +196,27 @@ describe('GET /v1/fleet/forecast', () => {
   });
 
   it('answers 500 rather than a fleet that quietly stops part-way through', async () => {
-    // Three sites and room for one more read after the first: the fan-out stops
-    // between sites, where the handler can still answer, and refuses to serve a
-    // fleet forecast that is short a site — summed hour by hour, a missing site
-    // does not read as missing, it reads as a fleet that will generate less.
-    const { deps, reads, logged } = stub([
-      RANELAGH,
-      RATHMINES,
-      fleetSite({ id: '9d1f0c2e-3b4a-4c5d-8e6f-7a8b9c0d1e2f', name: 'Portobello mews' }),
-    ]);
+    // One site more than a batch holds, and a request with no time left: the
+    // fan-out stops between batches, where the handler can still answer, and
+    // refuses to serve a fleet forecast that is short a site — summed hour by
+    // hour, a missing site does not read as missing, it reads as a fleet that
+    // will generate less. The event name is this route's own, which is the half
+    // `fleet-series-read.test.ts` cannot prove from inside the shared module.
+    const fleet = fleetOfSize(FLEET_READ_CONCURRENCY + 1);
+    const { deps, reads, logged } = stub(fleet);
 
-    const response = await getFleetForecast(deps, fleetForecastRequest({}, countdownDeadline(1)));
+    const response = await getFleetForecast(deps, fleetForecastRequest({}, countdownDeadline(0)));
 
     expect(response.statusCode).toBe(500);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    expect(reads).toHaveLength(2);
-    expect(logged).toEqual([{ event: fleetForecastReadDeadlineEvent, sitesRead: 2, fleetSize: 3 }]);
+    expect(reads).toHaveLength(FLEET_READ_CONCURRENCY);
+    expect(logged).toEqual([
+      {
+        event: fleetForecastReadDeadlineEvent,
+        sitesRead: FLEET_READ_CONCURRENCY,
+        fleetSize: fleet.length,
+      },
+    ]);
   });
 
   it('answers 500 when any one site’s window stopped short, without reading on', async () => {
@@ -223,8 +230,10 @@ describe('GET /v1/fleet/forecast', () => {
 
     expect(response.statusCode).toBe(500);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    // Stopped at the first site: the answer cannot become whole by reading more.
-    expect(reads).toHaveLength(1);
+    // Both sites share one batch, so both were read — and the refusal names the
+    // first in site order. No further batch is started: the answer cannot
+    // become whole by reading more.
+    expect(reads).toHaveLength(2);
     expect(logged).toEqual([{ event: fleetForecastReadDeadlineEvent, siteId: RANELAGH_ID }]);
   });
 

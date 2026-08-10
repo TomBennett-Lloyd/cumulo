@@ -68,9 +68,12 @@ resource "aws_lambda_function" "api" {
   # is the one apps/api/README.md's error contract makes: a request killed here
   # never reaches the API's error boundary, so the caller gets a gateway 504
   # rather than an `apiErrorSchema` body, and one residual still leads there. It
-  # is stated rather than silent: independent per-command worst cases coinciding
-  # in a route's ungated straight-line prefix, counted per route in
-  # `request-budget.ts` and carried in docs/tech-debt.md.
+  # is stated rather than silent: independent per-unit worst cases coinciding in
+  # a route's ungated straight-line prefix — a unit being what one admission
+  # buys, bounded by one `STORAGE_COMMAND_WORST_MS` of wall clock rather than
+  # being one command, so a concurrent batch of Queries costs one unit between
+  # them rather than one each — counted per route in `request-budget.ts` and
+  # carried in docs/tech-debt.md.
   #
   # Mirrored into TypeScript as `API_LAMBDA_TIMEOUT_MS` in that same module,
   # which sizes the deadline against it — #29 needed a handler to know how long

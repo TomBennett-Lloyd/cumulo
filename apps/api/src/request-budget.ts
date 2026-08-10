@@ -28,20 +28,32 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * into the timeout — they stop and answer in schema instead, which is the whole
  * of what the deadline is for.
  *
- * **And every admitted unit is now exactly one storage command.** That is the
- * property that makes admission's promise complete rather than approximate: the
- * check prices *the next command*, so a unit that spent more than one command
- * behind a single admission could outrun what was priced for it. The API had
- * one such unit — the inline series cleanup, a Query and then a
- * `BatchWriteItem` behind one call — and ADR 0007 retired it rather than
- * shrinking it. Nothing here now admits work it has not priced.
+ * **And every admitted unit is now bounded by one
+ * {@link STORAGE_COMMAND_WORST_MS} of wall clock.** That is the property that
+ * makes admission's promise complete rather than approximate: a unit that could
+ * burn more wall clock than the check priced for it would outrun its own
+ * admission. Sequential work meets that by pricing *the next command* — one
+ * admission, one command. The fleet fan-out (`forecast/fleet-series-read.ts`)
+ * meets it a second way: one admission covers a whole batch of up to
+ * `FLEET_READ_CONCURRENCY` Queries, dispatched in the same tick and each
+ * independently bounded, so their worst cases *overlap* rather than add — the
+ * batch's wall clock is the longest of its members, not their sum — and no
+ * member starts a further command on that admission, because a next page is
+ * re-admitted per page by the Query's own `QueryPaginationBound`, exactly as on
+ * the per-site routes.
+ *
+ * What is still refused is accumulation **in series** behind one admission. The
+ * API had one such unit — the inline series cleanup, a Query and *then* a
+ * `BatchWriteItem`, sequential behind a single call, so its two worst cases
+ * followed one another — and ADR 0007 retired it rather than shrinking it.
+ * Nothing here now admits work it has not priced.
  *
  * **Where it stops.** Each route keeps an ungated straight-line prefix: the
  * limiter's own commands (`IpLimiter.check` spends two on the allowed path,
  * `getBlock` then `incrementRateWindow`), the lookups that decide what the
  * handler does, and the **first** page of any Query — a pagination bound is
  * checked *between* pages, so the first is always issued. Counted from the
- * handlers, at {@link STORAGE_COMMAND_WORST_MS} each:
+ * handlers, each unit at most {@link STORAGE_COMMAND_WORST_MS} of wall clock:
  *
  * - `GET /v1/sites` — **1** (`listFleetSites`; ADR 0002 holds the fleet in one
  *   bounded partition, so one page), ≈ 7 s.
@@ -50,6 +62,15 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   ≈ 14 s.
  * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page,
  *   ≈ 28 s.
+ * - `GET /v1/fleet/actuals` — **4**: limiter 2, `listFleetSites`, then the
+ *   fan-out's first batch, ≈ 28 s. That batch is up to
+ *   `FLEET_READ_CONCURRENCY` sites' first pages issued in one tick, and it
+ *   costs one unit between them rather than one each, because their worst
+ *   cases overlap (`forecast/fleet-series-read.ts` carries the argument). The
+ *   deadline gate sits *between* batches, so the first one is ungated exactly
+ *   as a first page is.
+ * - `GET /v1/fleet/forecast` — **4**: the same four over the same fleet, its
+ *   window running forwards rather than back, ≈ 28 s.
  * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
  *   admitted per command, including the up-to-36 commands of the store loop.
  *   The committed write is the last thing the route does: nothing follows it,
@@ -71,8 +92,8 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * worst case in the same request come to 14,000 ms and still land, with
  * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
  * what crosses it, at 21,000 ms. It therefore takes **three independent
- * per-command worst cases coinciding in one request's ungated prefix** to kill
- * an invocation — which the three- and four-command prefixes above can offer,
+ * per-unit worst cases coinciding in one request's ungated prefix** to kill
+ * an invocation — which the three- and four-unit prefixes above can offer,
  * and which is now the only route to it. Each of those worst cases is itself
  * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
  * module declines to size a slack against, for the same reason
