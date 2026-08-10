@@ -1,9 +1,10 @@
 import { createPhysicsForecast } from '@cumulo/forecast';
-import type {
-  Forecast,
-  ForecastWeatherReading,
-  SitePhysics,
-  UtcIsoTimestamp,
+import {
+  simulatedUncertaintyBand,
+  type Forecast,
+  type ForecastWeatherReading,
+  type SitePhysics,
+  type UtcIsoTimestamp,
 } from '@cumulo/shared';
 
 /**
@@ -19,6 +20,17 @@ import type {
  * 0002), so a site's whole horizon lands in one contiguous run. That keeps each
  * `BatchWriteItem` page mostly within a single partition instead of spraying
  * every page across all of them.
+ *
+ * It is also where a physics estimate and its simulated uncertainty envelope
+ * compose (#295). This is the one pure layer holding *both* halves the envelope
+ * needs — the `Forecast` and the weather hour it was computed from — because
+ * `@cumulo/shared`'s `simulated-uncertainty.ts` reads a field the physics chain
+ * deliberately does not, so the composition cannot happen upstream of here and
+ * would need the weather refetched anywhere downstream. That module owns the
+ * width model and the argument for attaching it outside the physics core; this
+ * is only the seam. `consume-message.ts` uses the same seam one layer out for
+ * simulated actuals (#264): simulation composed beside the physics, never
+ * folded into it.
  */
 
 /**
@@ -90,7 +102,10 @@ export const locationForecasts = (input: LocationForecastsInput): LocationForeca
           detail: result.detail,
         };
       }
-      forecasts.push(result.forecast);
+      forecasts.push({
+        ...result.forecast,
+        uncertainty: simulatedUncertaintyBand(result.forecast, weather.cloudCoverPct),
+      });
     }
   }
 

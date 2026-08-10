@@ -1,4 +1,4 @@
-import { utcIsoTimestampSchema, type Forecast } from '@cumulo/shared';
+import { utcIsoTimestampSchema, type Forecast, type UncertaintyBand } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -35,6 +35,22 @@ const rowsOf = (input: LocationForecastsInput): Forecast[] => {
   }
   return outcome.forecasts;
 };
+
+/**
+ * A row's simulated band, or a failure naming the row that had none — the same
+ * narrowing shape as `rowsOf`, for the same reason: `uncertainty` is optional on
+ * `Forecast`, and a missing band should read as a missing band rather than as an
+ * assertion on `undefined`.
+ */
+const bandOf = (forecast: Forecast | undefined): UncertaintyBand => {
+  const band = forecast?.uncertainty;
+  if (band === undefined) {
+    throw new Error('expected the row to carry a simulated uncertainty band');
+  }
+  return band;
+};
+
+const widthOf = (band: UncertaintyBand): number => band.p90AcPowerKw - band.p10AcPowerKw;
 
 describe('locationForecasts', () => {
   it('produces nothing for a location with no sites', () => {
@@ -110,6 +126,53 @@ describe('locationForecasts', () => {
 
     expect(middayForecast?.acPowerKw).toBeGreaterThan(0);
     expect(middayForecast?.poaIrradianceWm2).toBeGreaterThan(0);
+  });
+
+  it('attaches a simulated uncertainty band to every row', () => {
+    // The physics core emits point estimates only; the envelope is composed here,
+    // so "every row" is the property that makes the band UI honest downstream.
+    const forecasts = rowsOf({
+      sites: [sitePhysics(), rathmines],
+      readings: [reading(), nightReading()],
+      issuedAt: ISSUED_AT,
+    });
+
+    expect(forecasts).toHaveLength(4);
+    for (const forecast of forecasts) {
+      const band = bandOf(forecast);
+      expect(band.p10AcPowerKw).toBeLessThanOrEqual(forecast.acPowerKw);
+      expect(band.p90AcPowerKw).toBeGreaterThanOrEqual(forecast.acPowerKw);
+    }
+  });
+
+  it('closes the band to exactly zero width for a night hour', () => {
+    // The width is relative to the estimate, so an unlit panel gets no band at
+    // all — a ribbon around a flat zero night would be uncertainty about nothing.
+    const [nightForecast] = rowsOf({
+      sites: [sitePhysics()],
+      readings: [nightReading()],
+      issuedAt: ISSUED_AT,
+    });
+
+    expect(nightForecast?.acPowerKw).toBe(0);
+    expect(bandOf(nightForecast)).toEqual({ p10AcPowerKw: 0, p90AcPowerKw: 0 });
+  });
+
+  it('widens the band under broken cloud, for the same site-hour a clear sky narrows', () => {
+    const at = (cloudCoverPct: number): Forecast | undefined =>
+      rowsOf({
+        sites: [sitePhysics()],
+        readings: [reading({ cloudCoverPct })],
+        issuedAt: ISSUED_AT,
+      })[0];
+
+    const broken = at(50);
+    const clear = at(0);
+
+    // Cloud cover is not a physics input, so both hours share one point estimate
+    // and the whole difference below belongs to the envelope.
+    expect(broken?.acPowerKw).toBe(clear?.acPowerKw);
+    expect(widthOf(bandOf(broken))).toBeGreaterThan(widthOf(bandOf(clear)));
   });
 
   it('stamps every row with the model, the vintage and the weather provenance', () => {
