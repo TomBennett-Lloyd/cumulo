@@ -426,11 +426,23 @@ test('keeps the credits band on top of a marker it covers, and the site reachabl
    * `toBeEnabled` is vacuous on an anchor, so the trial click is the assertion
    * with the hit test in it — Playwright's full actionability sequence, stopping
    * short of navigating.
+   *
+   * Both links, and not because symmetry is tidy. A hit test is a question about
+   * a point rather than about a row: the site popover is open over the map by
+   * now, and the two credits sit at different x-positions in the band, so one
+   * being reachable does not imply the other. `map.css` says the OSM credit
+   * carries the same licence obligation on the same surface and is never a reason
+   * to hold it to a lower bar — which is a claim about this state too, not only
+   * about the narrow one below.
    */
-  const credit = page.locator(ATTRIBUTION).getByRole('link', { name: WEATHER_CREDIT });
+  const weatherCredit = page.locator(ATTRIBUTION).getByRole('link', { name: WEATHER_CREDIT });
+  const tileCredit = page.locator(ATTRIBUTION).getByRole('link', { name: TILE_CREDIT });
 
-  await expect(credit).toBeVisible();
-  await credit.click({ trial: true });
+  await expect(weatherCredit).toBeVisible();
+  await weatherCredit.click({ trial: true });
+
+  await expect(tileCredit).toBeVisible();
+  await tileCredit.click({ trial: true });
 });
 
 test.describe('the band at a phone’s width', () => {

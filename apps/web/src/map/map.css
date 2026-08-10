@@ -248,16 +248,28 @@
  *   to a paragraph describing a range.
  *
  * Measuring the container is the default and a viewport breakpoint is the
- * documented escalation (`design.md` rule 7). This is a breakpoint, and the
- * escalation is a thin one here: the map runs full bleed, so this row's
- * container *is* the layout viewport, and a container query would arrive at the
- * same width through a second mechanism.
+ * documented escalation (`design.md` rule 7). This is a breakpoint, and two
+ * separate arguments carry it.
  *
- * What the breakpoint owes is a line in the census, and the census — along with
- * the weighing that left `header/header.css` (#284 D17) on a breakpoint too —
- * is owned by `stylelint.config.mjs`'s residual paragraph. Should the full-bleed
- * layout stop making the container and the viewport the same width, migrating
- * this band to container measurement belongs to #326.
+ * The band-specific one is that the escalation is thin here: the map runs full
+ * bleed, so this row's container *is* the layout viewport, and a container query
+ * would arrive at the same width through a second mechanism. That says why this
+ * band's breakpoint is not even a compromise, and it says nothing about any other
+ * surface.
+ *
+ * The shared one is why neither of the app's viewport breakpoints migrated: a
+ * container query serves one container, so adopting it for both is two
+ * independent rewrites sharing no value. That reason is stated here rather than
+ * beside either breakpoint's own measurement, because it is about the pair;
+ * `header/header.css` (#284 D17) declines the migration for it and points at this
+ * comment, so removing it from here leaves that pointer resolving to nothing.
+ *
+ * What the breakpoint owes is a line in the census, and the census — the one list
+ * of the app's viewport breakpoints — is owned by `stylelint.config.mjs`'s
+ * residual paragraph. The census and the gate residual are what that paragraph
+ * owns; the weighing above is this comment's, and no part of it lives there.
+ * Should the full-bleed layout stop making the container and the viewport the
+ * same width, migrating this band to container measurement belongs to #326.
  *
  * Gate residual: the width is a raw length, and there is no breakpoint scale to
  * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media

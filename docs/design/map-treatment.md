@@ -241,6 +241,12 @@ Placement:
   as a click would; and the site table under the map and the header's search reach every site
   without touching the map at all.
 
+  `e2e/attribution-band.spec.ts` is where that stops being a claim. It pans a marker under the
+  band, asks in both directions what the browser paints at the marker's centre — the credits, and
+  not the marker — and then selects that site with Enter in exactly that state. The occlusion and
+  the relief are measured against each other rather than either being asserted alone, which is the
+  only shape in which "accepted" means anything.
+
   The inset corner chip was weighed and declined. It narrows the occluded strip without removing
   it, so the relief rule above is owed either way; at narrow widths the band is licence-mandated
   string from edge to edge, which makes a "corner" effectively full width anyway, so the corner
@@ -274,7 +280,9 @@ Placement:
   so anything reading the page rather than painting it — a reader with stylesheets off, a scraper
   honouring the licence — always gets the full phrase. That is what makes the collapse safe to do
   in a stylesheet at all, and it is asserted rather than asserted-about, in
-  `MapAttributionStrip.test.tsx` (the text) and `e2e/composition.spec.ts` (the two forms).
+  `MapAttributionStrip.test.tsx` (the text), `e2e/composition.spec.ts` (the two forms) and
+  `e2e/attribution-band.spec.ts` (the wrapped state below the compact row's own floor, which is
+  the one state of the three that nothing else asserts).
 
   The rule belongs to **this band**, not to the credit component. Whether the phrase fits is a
   fact about the row, and this is the only row in the app carrying two credits side by side; the
@@ -292,7 +300,11 @@ Placement:
 
 - **Both stay clickable.** The band takes pointer events like any other content; a credit whose
   link cannot be followed is not a credit, and `pointer-events: none` on an overlay is the
-  obvious way to lose one by accident.
+  obvious way to lose one by accident. `e2e/attribution-band.spec.ts` is what makes that
+  executable: it trial-clicks both links — Playwright's full actionability sequence, hit test
+  included, stopping short of navigating — in the occluded state and again at a phone's width,
+  because "followable" is a question about a point rather than about a row and neither link
+  answers it for the other.
 - Tile credit first, weather credit second, reading order matching what the reader is looking at:
   the map, then the data drawn on it.
 - The Open-Meteo credit's own styling belongs to the `OpenMeteoAttribution` component — muted ink

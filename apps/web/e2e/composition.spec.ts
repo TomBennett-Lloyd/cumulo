@@ -399,10 +399,12 @@ test('drops the credits’ prose to keep the band one row when the window narrow
 
   /*
    * The rule is the map band's alone. The footer gives the credit a row to
-   * itself and can hold the full phrase at this width, so it keeps it — which is
-   * the condition CLAUDE.md attaches to the compact form, and the reason the
-   * media query lives in `map.css` rather than beside the component in
-   * `@cumulo/ui`. A rule that leaked to every surface would fail right here.
+   * itself, so that row as composed is this phrase and nothing else and holds it
+   * here — never meeting the condition CLAUDE.md attaches to the compact form,
+   * which asks about the row as composed rather than about the phrase's own
+   * length. That is why the media query lives in `map.css` rather than beside the
+   * component in `@cumulo/ui`, and a rule that leaked to every surface would fail
+   * right here.
    */
   await expect(page.locator('.dashboard-footer .cumulo-attribution-prefix')).toBeVisible();
 });
