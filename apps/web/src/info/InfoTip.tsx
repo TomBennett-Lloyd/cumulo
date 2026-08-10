@@ -55,7 +55,7 @@ export interface InfoTipProps {
  * make three regions competing to be heard, and the reader would get whichever
  * won. The budget is also already at its limit there in one state: `react.md`
  * sanctions `PanelError`'s `role="alert"` mounting beside that readout when the
- * fan-out fails, on the grounds that a failed chart has no sample to speak and
+ * fleet read fails, on the grounds that a failed chart has no sample to speak and
  * so cannot compete with it. A live-region tip would be the one that genuinely
  * does. So the change is announced the way a disclosure announces it: the button
  * carries `aria-expanded`, which is state on the control the reader just pressed

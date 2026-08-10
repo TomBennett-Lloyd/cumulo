@@ -64,8 +64,10 @@ const utcSecondIso = (epochMs: number): string =>
  *
  * Every read route answers with an envelope — `{ sites }`, `{ forecasts,
  * attribution }` — and every caller here wants the array inside it, so the
- * unwrapping is one function rather than four `kind === 'ok'` ternaries that
- * could each get the error arm subtly wrong.
+ * unwrapping is one function rather than a `kind === 'ok'` ternary at every
+ * call site, each free to get the error arm subtly wrong. Deliberately without
+ * a count of those sites: the set moves whenever a route does — #296 changed it
+ * — and a literal count in prose goes stale the moment one is added.
  */
 const mapOk = <T, R>(
   result: FleetSourceResult<T>,

@@ -52,7 +52,7 @@ A reader comparing one roof against the fleet was asked to remember one chart wh
 other. A selection wrote its answer into a region that was frequently off the top of the screen,
 so the dashboard grew a scroll effect to chase it. And the fleet panel had to be `hidden` rather
 than unmounted, with all the live-region care that a `display: none` subtree needs, purely so that
-its expensive fan-out survived being displaced.
+its expensive fleet read survived being displaced.
 
 #265 replaced the region with two moves that between them retire all three costs:
 
@@ -154,27 +154,30 @@ reader actually sees, and a deep link arriving over a real network, are `e2e/key
 
 ## The fleet panel is never hidden, and always paid for
 
-`FleetPanel` is rendered unconditionally, with no `hidden` prop and no reveal latch. There is no
-fleet-level endpoint: a fleet sum in live mode is a client-side fan-out of one request per site —
-about eight seconds over sixty sites, paced to stay inside the API's per-IP limiter — so the
-question that matters is how often that is spent.
+`FleetPanel` is rendered unconditionally, with no `hidden` prop and no reveal latch. A fleet sum in
+live mode is **one metered request** — `GET /v1/fleet/forecast`, with `GET /v1/fleet/actuals`
+beside it for the measured half — so the question that matters is how often those are spent. That
+is #296's shape. Until it landed there was no fleet-level endpoint at all and the sum was a
+client-side request per site, released slowly enough to stay inside the API's per-IP limiter and
+taking seconds to finish over a fleet of sixty; the per-site Queries still happen, but server-side,
+inside the one request the browser makes.
 
 It is spent on mount, and re-spent on exactly one event: a site being added, which is the only
 thing that changes the sum. `refreshToken={createdSites.length}` is that event, counted.
 Deselection is not an event, and neither is selection — a selected site is one extra per-site
 request for its own line, not a re-sum.
 
-**The trade accepted in #265, stated because it is a real cost.** #178 deferred the first fan-out
-until the panel was first revealed, so a `?site=` deep-linked reader who never looked at the fleet
+**The trade accepted in #265, stated because it is a real cost.** #178 deferred the first fleet
+read until the panel was first revealed, so a `?site=` deep-linked reader who never looked at the fleet
 never paid for it. That saving depended on the panel being hideable, and nothing hides it now: the
 fleet chart is on screen from first paint in every state, with the selected site drawn over it. A
 deferral would therefore buy no reader anything — there is no longer a reader who does not look at
 the fleet — and would cost every deep link a spinner where the chart already is. So the deep link
-pays the fan-out, once. `Dashboard.deep-link.test.tsx` asserts the "once" rather than leaving it
-to prose.
+spends that one fleet request, once. `Dashboard.deep-link.test.tsx` asserts the "once" rather than
+leaving it to prose.
 
-The other cost is unchanged: adding a site in live mode spends a fresh fan-out, bounded by
-`CreationThrottle`'s three-per-minute allowance.
+The other cost is unchanged in shape and smaller in size: adding a site in live mode spends a fresh
+fleet request, bounded by `CreationThrottle`'s three-per-minute allowance.
 
 Two implementation notes that went with the hiding. `fleet-panel.css` no longer restates
 `[hidden] { display: none }` — it had to, because `.fleet-panel` sets `display: grid` and beats
@@ -193,13 +196,13 @@ The two gates are not the same gate, and #284 D5 is where they separated. The **
 `fleetActuals` alone, because that flag is exactly the question "are there measured hours to speak
 of". The **control** is gated on `fleetLookback || fleetActuals`, because a window is worth
 choosing wherever a wider one shows the reader more: with a look-back it widens the past, and with
-simulated actuals alone it widens both the span of measured hours and the horizon the fan-out is
-asked for. Only a source with neither — a bare forward horizon — goes without a picker, and that
+simulated actuals alone it widens both the span of measured hours and the horizon the forecast read
+is asked for. Only a source with neither — a bare forward horizon — goes without a picker, and that
 arm is pinned to 24 hours by construction, since the picker is the only thing that ever calls
 `setRange`.
 
 This settles a review finding from #150. The demo source has genuine history and its own actuals;
-the HTTP source's fan-out reaches forward only, and its actuals come from the forecast service's
+the HTTP source's fleet forecast route reaches forward only, and its actuals come from the forecast service's
 own producer (#264), which synthesises the fleet's past hours rather than metering an inverter.
 That is why the copy says "simulated" and never "measured": the numbers are real output of a real
 model, and nothing on the page should let them be read as a reading. Copy that promised history
@@ -215,8 +218,8 @@ independently, and #264 puts a source in the combination that previously had non
 without a look-back — so the window the chart names has a third answer beside "24 h range" and
 "next 24 h": "past 24 h and the forecast ahead", because a plot carrying past hours reaches behind
 the horizon whether or not the source can look back. The past half carries the chosen number of
-hours and the forecast half deliberately carries none: the fan-out is asked for the same window
-but serves only the hours ahead of the clock, so naming a count there would describe a window the
+hours and the forecast half deliberately carries none: the forecast read is asked for the same
+window but serves only the hours ahead of the clock, so naming a count there would describe a window the
 chart was never given.
 
 The window used to be stated a second time, in a sentence behind an (i) beside the chart. That tip

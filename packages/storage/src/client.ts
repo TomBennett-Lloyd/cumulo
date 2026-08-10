@@ -69,9 +69,12 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *      alarm to answer rather than a request to retry into: ADR 0002 puts
  *      `ReadThrottleEvents`/`WriteThrottleEvents` alarms behind both
  *      batch-written tables, `series` and `weather` alike, and ~250 dashboard
- *      loads of burst reserve in front of the synchronous fan-out — burst
- *      reserve being a property of `series`, the one table still on
- *      provisioned capacity since #156.
+ *      loads of burst reserve in front of the synchronous fan-out — the API's
+ *      own, since #264 (actuals) and #296 (forecasts) moved that fan-out out of
+ *      the browser and into the two fleet routes. The ADR's ~250 counts a load
+ *      that reads `series` once; a load reads it twice now, so the same reserve
+ *      absorbs about half as many. Burst reserve is a property of `series`, the
+ *      one table still on provisioned capacity since #156.
  *    - **Every site in the fleet backs off against the same handful of tables**,
  *      `series` and its provisioned ceiling among them, so a longer per-request
  *      budget is the thundering-herd direction — the reason the curve underneath
@@ -79,7 +82,8 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *
  *    The cost is real and is stated rather than argued away: on the one
  *    genuinely user-visible throttle path ADR 0002 names, the synchronous
- *    dashboard fan-out, a read that outlives the burst reserve exhausts this
+ *    per-site fan-out behind a dashboard load, a read that outlives the burst
+ *    reserve exhausts this
  *    budget after a single retry and reaches the caller as a `StorageError`
  *    (`./errors`), which the API boundary renders as a generic 500.
  *

@@ -59,9 +59,13 @@ export const LOADING_FLEET_LABEL = 'Loading the fleet…';
 /**
  * The aggregate is being computed, and the verb says so.
  *
- * "Summing" rather than "Loading" because in live mode this really is a paced
- * fan-out across every site, and a reader who is told what is happening waits
- * more happily than one watching a generic wait.
+ * "Summing" rather than "Loading" because summing is what the wait is for: the
+ * fleet's forecasts arrive one series per site and the panel adds them up. That
+ * survived #296 unchanged — the series now come back from one metered
+ * `/v1/fleet/forecast` request instead of a request per site, which moved where
+ * they are fetched and not what is done with them — and the verb never named
+ * the fetching anyway. A reader who is told what is happening waits more
+ * happily than one watching a generic wait.
  */
 export const LOADING_FLEET_FORECAST_LABEL = 'Summing the fleet’s forecasts…';
 
@@ -92,7 +96,7 @@ export const LOADING_MAP_LABEL = 'Loading map…';
  */
 export const ADDING_SITE_LABEL = 'Adding site…';
 
-/** The fan-out succeeded and summed to nothing — an answer, not a failure. */
+/** The fleet read succeeded and summed to nothing — an answer, not a failure. */
 export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
 
 /*
@@ -143,8 +147,9 @@ export const siteOverlayFailureNotice = (siteName: string): string =>
  * The fleet's forecast arrived; its simulated actuals did not.
  *
  * The third of this family, and it earns its place the same way the second did.
- * The fleet's two reads are two requests over two windows — a per-site forecast
- * fan-out and one metered `/v1/fleet/actuals` call (#264) — so either can fail
+ * The fleet's two reads are two requests over two windows — one metered
+ * `/v1/fleet/forecast` call (#296) and one metered `/v1/fleet/actuals` call
+ * (#264) — so either can fail
  * without the other, and the panel used to answer a failed actuals read by
  * withdrawing the whole chart under {@link fleetForecastFailureMessage}. That
  * blamed the forecast for a failure the forecast had nothing to do with, which
@@ -196,7 +201,7 @@ export const firstForecastUnansweredMessage = (deadlineSeconds: number): string 
  * knows nothing about.
  */
 
-/** The fleet fan-out failed — one sentence for both of the panel's two queries. */
+/** The fleet's forecast read failed — one sentence for both of the panel's two queries. */
 export const fleetForecastFailureMessage = (detail: string): string =>
   `Could not load the fleet forecast: ${detail}`;
 

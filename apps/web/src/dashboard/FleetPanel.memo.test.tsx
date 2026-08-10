@@ -15,7 +15,7 @@ import { CountingFleetSource, FULL_FLEET, panel, settle } from './fleet-panel-te
  * whether the *same* points are drawn: `FleetPanel` re-renders for reasons that
  * have nothing to do with the fleet's numbers (the range picker, three retry
  * counters, and the dashboard's once-a-second poll while a new site generates),
- * and until #293 each of those re-summed a 60-site fan-out and re-joined it from
+ * and until #293 each of those re-summed a 60-site fleet's series and re-joined them from
  * scratch. What proves the memo is that the array survives the re-render, and
  * an array's identity is invisible in the DOM.
  *

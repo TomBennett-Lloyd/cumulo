@@ -34,14 +34,16 @@ import { siteOverlaySeries } from './site-overlay';
  *
  * This panel used to be the *resting* state of a context region that a site
  * panel could take from it, so it was rendered `hidden` rather than unmounted
- * and its first fan-out was deferred until it was first revealed (#178). #265
+ * and its first fleet read was deferred until it was first revealed (#178). #265
  * removed the region: a site's card is anchored to its marker on the map now,
  * nothing displaces this panel, and there is no hidden state left to model. The
  * latch went with it.
  *
  * The trade that leaves, stated because it is a real cost and it was accepted
- * rather than overlooked: **a `?site=` deep link now spends the fleet fan-out**,
- * which in live mode is a paced per-site request (~8 s over 60 sites). #178
+ * rather than overlooked: **a `?site=` deep link now spends the fleet's forecast
+ * read**, which in live mode is one metered request to `GET /v1/fleet/forecast`
+ * (#296 — the browser used to ask each site in turn instead, and the per-site
+ * Queries that answers it now run server-side, inside that one request). #178
  * saved that spend for a reader who never looked at the fleet, and a reader who
  * never looks at the fleet is exactly who no longer exists — the fleet chart is
  * on screen from first paint in every state of the page. Deferring a request for
@@ -72,8 +74,8 @@ import { siteOverlaySeries } from './site-overlay';
  * ## Capability honesty is structural here, not editorial
  *
  * This panel says only what the source it holds can actually answer
- * (`dataSource.capabilities`). A fleet-level read in live mode is a fan-out over
- * the per-site `/forecast` route, which serves *future* hours only; fleet
+ * (`dataSource.capabilities`). A fleet-level read in live mode is one request to
+ * `GET /v1/fleet/forecast`, which serves *future* hours only; fleet
  * actuals do have a producer now — the forecast service synthesises them (#264)
  * — but synthesised is not measured, so the arm that mentions them says
  * "simulated actuals" and no arm claims a metered reading. Rather than carrying
@@ -86,7 +88,7 @@ import { siteOverlaySeries } from './site-overlay';
  * #284 D5 separated the two. A window is worth choosing wherever a wider one
  * would show the reader more hours, and that is true of both flags: with
  * `fleetLookback` the picker widens a look-back, and with `fleetActuals` alone
- * it widens the horizon the fan-out asks for *and* the span of simulated actuals
+ * it widens the horizon the fleet read asks for *and* the span of simulated actuals
  * behind it. So the picker renders on `fleetLookback || fleetActuals` and only a
  * source with neither — a bare forward horizon, pinned to
  * {@link DEFAULT_RANGE} because nothing can call `setRange` — goes without one.
@@ -127,9 +129,10 @@ const DEFAULT_RANGE: RangeHours = 24;
  * forecast is the answer itself not arriving, so it is an `alert` over a plot
  * with nothing drawn on it; a failed actuals read is an addition to an answer
  * that did arrive, so it is a `panel-notice` over a plot still carrying every
- * forecast hour. These are two requests over two windows — a per-site
- * forecast fan-out and one metered `/v1/fleet/actuals` call — so either can fail
- * alone, and a failed actuals read used to be returned here as *the* failure:
+ * forecast hour. These are two requests over two windows — one metered
+ * `/v1/fleet/forecast` call and one metered `/v1/fleet/actuals` call — so either
+ * can fail alone, and a failed actuals read used to be returned here as *the*
+ * failure:
  * the panel then withdrew a fleet sum that had already arrived and reported it
  * under the forecast's name, blaming a party that had not failed
  * (`error-handling.md` rule 1's blame tiebreak) and discarding a complete answer
@@ -263,15 +266,22 @@ export const FleetPanel = ({
    * imperative refetch: `useFleetQuery` re-runs on key change and nothing else,
    * and a counter is the smallest honest way to say "ask again".
    *
-   * Three counters, not one, and the split is about cost. The forecast's retry
-   * re-spends a paced per-site fan-out; the actuals' re-asks one metered
-   * `/v1/fleet/actuals` request; the overlay's re-asks a single site for a single
-   * window. A shared counter makes every cheap recourse buy the expensive request
-   * too — a reader pressing "try again" on one missing series would silently
-   * re-sum sixty sites — and makes the expensive one refetch series that never
-   * failed. The actuals got their own in #264's review: they had been keyed on
-   * `fleetAttempt` alongside the fan-out, so the one button offered for the
-   * cheapest failure on the panel was spending the most expensive request on it.
+   * Three counters, not one, and the split is about *scope*. Each of the three
+   * reads answers a different question — the fleet's forecasts, the fleet's
+   * simulated actuals, one selected site's own hours — so a shared counter would
+   * make any one recourse re-ask all three, and a reader pressing "try again" on
+   * the single series that failed would spend two further metered requests
+   * refetching answers that had already arrived.
+   *
+   * The split used to be about price as well, and that half has expired: until
+   * #296 the forecast's retry re-spent a per-site fan-out over the whole fleet
+   * while the actuals' re-asked one metered request, which is why the actuals
+   * got their own counter in #264's review — they had been keyed on
+   * `fleetAttempt` alongside it, so the one button offered for the cheapest
+   * failure on the panel was spending the most expensive request on it. Both
+   * fleet reads are one metered request each now, so the asymmetry is gone and
+   * the reason for three counters is not: refetching a series that never failed
+   * is waste at any price.
    */
   const [fleetAttempt, setFleetAttempt] = useState(0);
   const [actualsAttempt, setActualsAttempt] = useState(0);
@@ -281,11 +291,11 @@ export const FleetPanel = ({
    * An empty fleet has nothing to sum, so it asks nothing. That is the whole of
    * the gate now: this panel is on screen in every state of the page, so there
    * is no longer a reader who might never look at it and no reveal to defer the
-   * first fan-out to (#178, retired with the context region in #265 — the
+   * first fleet read to (#178, retired with the context region in #265 — the
    * docblock above states the trade).
    *
    * It still matters on a deep link, for a different reason than it used to: the
-   * listing is briefly in flight with `sites` empty, and a fan-out fired then
+   * listing is briefly in flight with `sites` empty, and a fleet read fired then
    * would be a sum of nothing followed immediately by a second one over the real
    * fleet.
    */
@@ -330,7 +340,7 @@ export const FleetPanel = ({
    * once-a-second poll during add-a-site — leaves both dependencies untouched
    * and both memos intact. That poll is why this is measured rather than
    * decorative (`react.md` rule 2 asks for exactly that before a `useMemo`):
-   * without it, a 60-site fan-out was re-summed and re-joined every second while
+   * without it, a 60-site fleet's series were re-summed and re-joined every second while
    * a reader watched their new site generate (#293).
    *
    * The first memo is not about cost — combining two query states is three
