@@ -60,8 +60,7 @@
  * `flex: 1 1 …` is what makes it the item that gives way. The bar is one
  * wrapping row (`app.css`), so the brand and the menu keep their intrinsic
  * widths and the search absorbs whatever is left, down to a basis wide enough to
- * read a site name in and up to a measure past which a search field starts
- * looking like a form.
+ * read a site name in and up to the cap below.
  *
  * The 14rem basis is also what the breakpoint below is derived from: the width
  * at which the row can no longer hold the brand, this basis and the menu is
@@ -71,14 +70,45 @@
  * same file, and why that comment points back at this declaration instead of
  * spelling the basis out a second time.
  *
+ * The cap and the two auto margins are one behaviour rather than two
+ * declarations, and the behaviour is `design.md` rule 7's — measure the
+ * container, take the largest version that fits in it (#327). The container is
+ * the gap the brand and the menu leave, and the field answers it in two ranges:
+ *
+ * - gap <= 500px — the field fills the gap. It has grown to the whole of the
+ *   free space by then, so there is none left for the margins and they resolve
+ *   to zero: the cap and the centring are both inert, and what a reader sees is
+ *   a field between two ordinary row gaps.
+ * - gap > 500px — the cap stops the growth, so the leftover stays free space on
+ *   the flex line, and the two `auto` margins split it equally. The field sits
+ *   in the middle of the gap instead of shoved against the brand with the dead
+ *   air all on one side, which is what a 500px field in a 1065px gap looked like
+ *   at desktop widths and is what #327 is.
+ *
+ * 31.25rem is 500px at the default root size. Like the `flex-basis` above and
+ * `.brand-mark`'s box, it is a raw length because there is no layout-size scale
+ * to reach for — `stylelint.config.mjs`'s residual paragraph owns that, and this
+ * points at it rather than restating it. `auto` on the margins is one of that
+ * gate's `ignoreValues`, a keyword rather than a spelled value.
+ *
+ * Restatement ledger (`architecture.md` rule 9) — the one site carrying 500 as a
+ * literal of its own, because it asserts it and a number read back out of this
+ * declaration would agree with it however wrong it was:
+ *
+ * - `apps/web/e2e/header.spec.ts`, `SEARCH_MAX_WIDTH_PX`.
+ *
  * This rule keeps applying below the breakpoint, to the copy inside the search
  * bar: what is hidden there is the *direct child* of `.app-header`, not every
- * `.site-search` on the page.
+ * `.site-search` on the page. That copy takes the cap and the margins too, and
+ * neither can bite there: the bar exists only below 439px, so the widest it can
+ * ever be is far under 500px, the cap never binds, and the margins are left
+ * nothing to split.
  */
 .site-search {
   position: relative;
   flex: 1 1 14rem;
-  max-width: 24rem;
+  max-width: 31.25rem;
+  margin-inline: auto;
 }
 
 .site-search-input {
@@ -272,23 +302,20 @@
    * the menu, which is what shipped in review cycle 1 and what
    * `e2e/header.spec.ts` measures now.
    *
-   * So the menu's own auto margin (below) has to be switched off here, and the
-   * selector is `.app-header > .header-menu` rather than the bare class for a
-   * cascade reason worth stating plainly: a media query contributes nothing to
-   * specificity, so a bare `.header-menu` in this block merely ties with the base
-   * rule — which sits further down this file and therefore wins on source order,
-   * at every width, silently. The descendant form outranks it wherever this query
-   * applies, and it is the more honest selector besides: this margin is the
-   * menu's placement *in the header row*, and the row is the only place the class
-   * appears.
+   * One auto margin per width, in other words, and this is the one below the
+   * fold. It used to have to switch a second one off as well — the menu's own,
+   * with an `.app-header >` selector, because a media query contributes nothing
+   * to specificity and a bare `.header-menu` here would merely tie with the base
+   * rule further down this file and lose to it on source order, at every width,
+   * silently. #327 removed the menu's margin outright: the search below the fold
+   * is hidden, and above it the search's own pair of auto margins centres the
+   * field and pushes the menu flush right, so a third margin on the line had
+   * nothing left to do but break the centring. There is nothing to override any
+   * more, and the override is gone with it.
    */
   .header-search-toggle {
     display: block;
     margin-left: auto;
-  }
-
-  .app-header > .header-menu {
-    margin-left: 0;
   }
 
   .header-search-bar {
@@ -299,21 +326,24 @@
 /* ---- Menu disclosure ---------------------------------------------------- */
 
 /*
- * `margin-left: auto` is what pushes the menu to the far end of the header bar
- * — the position the theme toggle used to claim for itself before it moved in
- * here. `position: relative` makes this the popover's containing block, so the
- * popover hangs off the button rather than off the page.
+ * `position: relative` makes this the popover's containing block, so the
+ * popover hangs off the button rather than off the page. That is the whole of
+ * this rule, and the menu is still at the far end of the bar — something else
+ * puts it there now.
  *
- * The margin is handed to the search toggle below the breakpoint, where the
- * toggle is the item immediately before this one and the free space has to be
- * absorbed once rather than twice — see that media query for the whole of it,
- * including why the rule that switches this one off has to out-specify it rather
- * than merely come earlier. The menu ends up in the same place either way; what
- * changes is which item pushed it there.
+ * It carried `margin-left: auto` of its own until #327, which is what a third
+ * auto margin on this line cannot be. The search above now carries two, and
+ * `auto` margins split the line's free space `F` equally between *all* of them:
+ * add the menu's and the field gets `F/3` to its left and `2F/3` to its right —
+ * a field the stylesheet says is centred and the screen says is not. So the free
+ * space is absorbed once per width instead. Above the fold the search's own
+ * right margin is what pushes this button flush right; below it the field is
+ * hidden and `.header-search-toggle`'s `margin-left: auto` does the same job for
+ * the pair, unchanged and argued in that media query above. The menu ends up in
+ * the same place at every width; what changes is which item pushed it there.
  */
 .header-menu {
   position: relative;
-  margin-left: auto;
 }
 
 /*

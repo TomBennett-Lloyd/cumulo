@@ -18,7 +18,7 @@ import { pressedRangeButton } from './range-picker';
  * (`src/header/*.test.tsx`): what is in the document, in which state, and what
  * each control means.
  *
- * Five cases, one per thing only this lane can see.
+ * Seven cases, one per thing only this lane can see.
  *
  * The first is the menu, as one continuous interaction rather than a case per
  * step, because the sequence is the behaviour: a reader arrives, finds the menu
@@ -61,6 +61,18 @@ import { pressedRangeButton } from './range-picker';
  * than the two ends of it, because what is worth catching is a search that
  * survives the fold — the combobox still selecting, and the field coming back
  * when the width does.
+ *
+ * The sixth and seventh are the two ranges the search's own box has above that
+ * fold (#327, `design.md` rule 7): capped and centred in a gap wider than the
+ * cap, and filling the gap when the gap is narrower. Both are resolved flex
+ * geometry — a `max-width` fighting a `flex-grow`, and `auto` margins splitting
+ * whatever is left — which is a computation jsdom does not perform at all. A
+ * unit test could read the declarations back out of the stylesheet and would be
+ * asserting that the file says what the file says; only a laid-out row can say
+ * where the field ended up. They are two cases rather than one because they fail
+ * to different mistakes: the cap alone leaves the field shoved against the brand
+ * with all the dead air on one side, and the margins alone leave a field as wide
+ * as the window.
  */
 
 /** How far one drag moves the camera, in CSS pixels. */
@@ -721,5 +733,205 @@ test.describe('the search on a bar too narrow to hold it', () => {
      */
     await expect(inlineSearch).toBeVisible();
     await expect(toggle).toBeHidden();
+  });
+});
+
+/**
+ * The width the search's box is capped at, in CSS pixels.
+ *
+ * `header/header.css` owns the decision as `max-width: 31.25rem`, and that
+ * rule's restatement ledger names this constant (`architecture.md` rule 9).
+ * Spelled out here rather than read back off the stylesheet for
+ * {@link PHONE_VIEWPORT}'s reason: a number derived from the declaration under
+ * test agrees with it however wrong it is, and would assert nothing.
+ */
+const SEARCH_MAX_WIDTH_PX = 500;
+
+/**
+ * How far a measured width may sit from that cap, in CSS pixels.
+ *
+ * One rather than the two the tolerances above allow, because there is less in
+ * this reading to be uncertain about: a capped box is `max-width` resolved
+ * directly, with no font metrics and no flex arithmetic between the declaration
+ * and the box, so only the browser's own sub-pixel rounding is in play. It is
+ * far below what the case catches — with the cap gone the field is over a
+ * thousand pixels wide at this viewport.
+ */
+const SEARCH_WIDTH_TOLERANCE_PX = 1;
+
+/**
+ * How far the search's two flanking gaps may differ, or sit from the row's own
+ * gap, and still read as the layout the stylesheet describes — in CSS pixels.
+ *
+ * Two, for {@link CENTRE_TOLERANCE_PX}'s reason rather than by sharing it: these
+ * are `getBoundingClientRect` reads of a laid-out page and sub-pixel layout
+ * lands in the last pixel or so. A constant of its own because that one measures
+ * a row of boxes agreeing on a centreline and this one measures horizontal space
+ * either side of one box, and the two are free to diverge (`structure.md`
+ * rule 7). It is far below either failure it separates: the free space these
+ * cases arbitrate is over 500px at a desktop width.
+ */
+const CENTRING_TOLERANCE_PX = 2;
+
+/** Where the search's box sits between the brand and the menu, in CSS pixels. */
+interface SearchGeometry {
+  readonly width: number;
+  readonly leftGap: number;
+  readonly rightGap: number;
+}
+
+/**
+ * Read that geometry off the laid-out row — `null` while any of the three
+ * elements is still without a box.
+ *
+ * The gaps are measured to the *neighbours* rather than to the header's content
+ * box, because the neighbours are the claim: the field is sized and placed in
+ * the space the brand and the menu leave it, whatever those two happen to
+ * measure under the reader's font stack (`design.md` rule 7 — measure the
+ * container). Reading it from the header's edges instead would bake the brand's
+ * own width into every expectation here.
+ *
+ * `null` rather than a throw for {@link isWithinViewport}'s reason: every caller
+ * polls the number it derives from this, an element with no box yet is a "not
+ * yet", and the poll's own timeout is what turns a permanent one into a failure.
+ * The direct-child selector is `AppHeader`'s two copies of the search told
+ * apart — the bar's copy is a second `.site-search` whenever it is open.
+ */
+const searchGeometry = async (page: Page): Promise<SearchGeometry | null> => {
+  const [brandBox, searchBox, menuBox] = await Promise.all([
+    page.locator('.brand').boundingBox(),
+    page.locator('.app-header > .site-search').boundingBox(),
+    page.locator('.header-menu-button').boundingBox(),
+  ]);
+
+  if (brandBox === null || searchBox === null || menuBox === null) {
+    return null;
+  }
+
+  return {
+    width: searchBox.width,
+    leftGap: searchBox.x - (brandBox.x + brandBox.width),
+    rightGap: menuBox.x - (searchBox.x + searchBox.width),
+  };
+};
+
+/**
+ * That same reading, once the row has one to give.
+ *
+ * The poll is the whole of the readiness handling, for `composition.spec.ts`'s
+ * `layoutBoxOf` reason: the state worth waiting on is "these three have boxes",
+ * which is exactly the precondition of measuring them. Nothing here waits for a
+ * number to *settle*, because none of the numbers the cases derive moves once
+ * the row is laid out — a capped box is the cap however wide the brand's
+ * wordmark renders, and two gaps split from one leftover are equal however wide
+ * it renders. That is what lets these cases assert plainly where the centreline
+ * case above has to poll: its reading is a font metric and these are not.
+ *
+ * The second read is not redundant. `expect.poll` reports whether the condition
+ * held, not the value it held, so the geometry is read again once the poll has
+ * established there is one — and the guard after it covers the case that leaves:
+ * a row that had boxes and lost them between the two reads, a different failure
+ * from never having had any, which says so rather than arriving as a `NaN`
+ * comparison downstream (`error-handling.md` rule 1).
+ */
+const settledSearchGeometry = async (page: Page): Promise<SearchGeometry> => {
+  await expect
+    .poll(async () => searchGeometry(page), {
+      message: 'The header row never laid out a brand, a search and a menu to measure.',
+    })
+    .not.toBeNull();
+
+  const geometry = await searchGeometry(page);
+
+  if (geometry === null) {
+    throw new Error('The header row lost a layout box between two reads of it.');
+  }
+
+  return geometry;
+};
+
+test('caps the search at 500px and centres it in the logo–menu gap', async ({ page }) => {
+  /*
+   * The live map before any measurement, for the centreline case's reason: the
+   * `.map-canvas` swap is a layout change directly under this row, so a bar
+   * measured while it is still in flight is a bar measured mid-assembly.
+   *
+   * No `test.use` here — this case wants Playwright's default 1280x720, which is
+   * where the brand and the menu leave the search a gap of roughly 1065px, and
+   * so where the cap is the binding constraint rather than the flex basis.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  const geometry = await settledSearchGeometry(page);
+
+  expect(Math.abs(geometry.width - SEARCH_MAX_WIDTH_PX)).toBeLessThanOrEqual(
+    SEARCH_WIDTH_TOLERANCE_PX,
+  );
+
+  /*
+   * And then where the leftover went, which the width alone cannot say: a 500px
+   * field with all 560px of the dead air on one side of it satisfies the
+   * assertion above perfectly, and that is what shipped before #327.
+   */
+  expect(Math.abs(geometry.leftGap - geometry.rightGap)).toBeLessThanOrEqual(CENTRING_TOLERANCE_PX);
+
+  /*
+   * And the row still ends where it did — which the two readings above cannot
+   * say between them, and this is the one that bites when the margins go.
+   * `.site-search`'s two auto margins are the only thing on this line claiming
+   * free space above the fold (`header/header.css`; the menu's own went with
+   * #327 precisely because a third claimant breaks the split), so deleting them
+   * leaves the whole cluster packed against the brand with every pixel of the
+   * leftover past the menu — equal gaps of one row gap each, a field still at
+   * its cap, and a menu 560px short of the end of the bar. Only this reading
+   * separates centred-in-the-gap from packed-left, and it is a measured mutant
+   * rather than a predicted one: the case passed without it.
+   */
+  expect(await menuRowEndGap(page)).toBeLessThanOrEqual(CENTRING_TOLERANCE_PX);
+});
+
+/**
+ * A window narrow enough that the gap the brand and the menu leave is under the
+ * cap, and still comfortably above `header/header.css`'s fold — 640px is 201px
+ * clear of it, so the field is the bar's own here and no media query is in play.
+ */
+const UNDER_CAP_VIEWPORT = { width: 640, height: 720 };
+
+test.describe('the search in a gap narrower than its cap', () => {
+  test.use({ viewport: UNDER_CAP_VIEWPORT });
+
+  test('fills the whole gap when the gap is under the cap', async ({ page }) => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    const geometry = await settledSearchGeometry(page);
+
+    /*
+     * The row's own gap, read off `.app-header`'s computed `column-gap` rather
+     * than written down here, for {@link iconPairGapError}'s reason: the row owns
+     * that value (it is `--space-4`) and a copy in this file would be a second
+     * home for it that agrees today and drifts silently (`architecture.md`
+     * rule 9).
+     */
+    const rowGap = await page
+      .locator('.app-header')
+      .evaluate((element) => Number.parseFloat(getComputedStyle(element).columnGap));
+
+    /*
+     * The cap is inert here — asserted rather than assumed, because a case whose
+     * viewport drifted above the cap would go on passing the readings below for
+     * the wrong reason.
+     */
+    expect(geometry.width).toBeLessThan(SEARCH_MAX_WIDTH_PX);
+
+    /*
+     * And the field took the whole gap: one ordinary row gap on each side and
+     * nothing left over, which is the two auto margins resolving to zero. Each
+     * side is asserted rather than their difference, because that is the reading
+     * the centring case above already makes — a field that stopped short of the
+     * gap and centred the remainder has two equal gaps as well, and only their
+     * size tells the two arrangements apart.
+     */
+    expect(Math.abs(geometry.leftGap - rowGap)).toBeLessThanOrEqual(CENTRING_TOLERANCE_PX);
+    expect(Math.abs(geometry.rightGap - rowGap)).toBeLessThanOrEqual(CENTRING_TOLERANCE_PX);
   });
 });
