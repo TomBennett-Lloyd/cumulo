@@ -23,11 +23,11 @@ So the effective ceiling at high parallelism today is concurrency-10 → 503, no
 
 ### The cost frame
 
-Figures are AWS list prices, us-east-1, **verified 2026-08-01** against the DynamoDB on-demand, CloudWatch, AWS WAF and SNS pricing pages, on the same basis as ADRs 0002, 0004 and 0005 (Ireland runs roughly 10–15% higher; nothing below turns on that margin).
+Figures are AWS list prices, us-east-1, **verified 2026-08-01** against the DynamoDB on-demand, CloudWatch, AWS WAF and SNS pricing pages, on the same basis as ADRs 0002, 0004 and 0005 (Ireland runs roughly 10–15% higher; nothing below turns on that margin). Values amended 2026-08-10 to the eu-west-1 basis are marked inline and recorded under Amendments; any figure not so marked remains on the us-east-1 basis stated here.
 
 - **DynamoDB on-demand:** $0.705 per million write request units, $0.1415 per million read request units. An eventually-consistent `GetItem` on an item under 4 KB is half a read request unit, so **$0.07075 per million such reads** (amended 2026-08-10 to the eu-west-1 rates; see Amendments). Storage: always-free 25 GB.
 - **CloudWatch alarms:** **10 standard-resolution alarm metrics always free**, $0.10 per alarm metric per month beyond.
-- **CloudWatch Logs:** 5 GB/month ingest always free, then $0.57/GB.
+- **CloudWatch Logs:** 5 GB/month ingest always free, then $0.57/GB (amended 2026-08-10 to the eu-west-1 rate; see Amendments).
 - **AWS WAF:** **$5.00 per web ACL per month, $1.00 per rule per month, $0.60 per million requests.** No free tier.
 - **Amazon SNS:** a standard topic has no per-hour or per-topic charge; the always-free tier covers 1 million publishes and **1,000 email deliveries per month**, against an expected volume of a handful of alarm emails.
 
