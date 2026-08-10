@@ -5,10 +5,11 @@ visible text or a label, a chart mark, a breakpoint or media query, focus or hov
 
 These are the owner's standing design decisions, distilled from the #265/#284 design passes
 (D1–D18), the 2026-08-10 feedback batch, and the owner's 2026-08-10 answers to the distillation's
-open questions (#337 is the distillation record). They are prospective rules for choices no
-design record has decided; the decided surfaces live in `docs/design/chart-treatment.md`,
-`map-treatment.md`, and `dashboard-composition.md`, and a rule here that gets decided into a
-surface lands in that surface's record.
+open questions (`docs/design/design-principles.md`, from #337, is the distillation record — the
+evidence corpus, the grounding behind each rule, and the owner's answers live there). They are
+prospective rules for choices no design record has decided; the decided surfaces live in
+`docs/design/chart-treatment.md`, `map-treatment.md`, and `dashboard-composition.md`, and a rule
+here that gets decided into a surface lands in that surface's record.
 
 ## Rules
 
@@ -105,8 +106,10 @@ surface lands in that surface's record.
     (#339; #328; #284 D14; #260)
 
 12. **Interaction smoothness is a demonstrated feature.** Pointer-driven surfaces update
-    position via transform at pointer rate (throttled ~30/s) and content at data cadence from
-    precomputed rows; data layers never re-render per pointer frame; linked interactions work
+    position via transform at the throttled pointer rate — `docs/design/chart-treatment.md`'s D7
+    "the panel follows the pointer" bullet owns that rate (~30 a second there today), and a
+    surface changing it changes it there — and content at data cadence from precomputed rows;
+    data layers never re-render per pointer frame; linked interactions work
     from data already held (API frugality). Measured and, where feasible, asserted — a
     measurement printed is not a measurement asserted. (#331; #284 D7; #324; #293)
 

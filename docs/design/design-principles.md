@@ -6,10 +6,12 @@ covering the distillation itself: the evidence corpus read, the thirteen princip
 grounding behind each, the counterfactuals, the binding mechanism, and the owner's answers that
 closed the open questions.
 
-**Status: adopted. Approved by the owner in session on 2026-08-10 and adopted by the commit that
-added this file.** The body below is preserved exactly as it was reviewed, so where it calls itself
-a proposal, calls its §3.3 text a draft, or describes the standards doc and the trigger row as
-things that would land later, it is describing its state at review time, not its state now.
+**Status: adopted. Approved by the owner in session on 2026-08-10**
+([approval comment](https://github.com/TomBennett-Lloyd/cumulo/issues/337#issuecomment-5235126347))
+**and adopted by the commit that added this file.** The body below is preserved exactly as it was
+reviewed, so where it calls itself a proposal, calls its §3.3 text a draft, or describes the
+standards doc and the trigger row as things that would land later, it is describing its state at
+review time, not its state now.
 
 This document is the rationale and the record of the decisions; the operative copy of the rules is
 [`docs/standards/design.md`](../standards/design.md), which is what agents read when the CLAUDE.md

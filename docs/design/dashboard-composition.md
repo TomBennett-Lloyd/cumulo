@@ -10,8 +10,10 @@ This is the composition, not the styling. The surfaces it arranges have their ow
 [`chart-treatment.md`](chart-treatment.md) for the forecast chart — and the async states every
 panel wears are a written convention in
 [`docs/standards/react.md`](../standards/react.md#async-surface-convention-appsweb) rather than a
-section here. Where this document and the code disagree, the code wins; what belongs here is the
-reasoning a diff cannot carry.
+section here. The prospective cross-surface rules an implementer applies where no record has
+decided are [`docs/standards/design.md`](../standards/design.md), and a rule there that gets
+decided into this composition lands here. Where this document and the code disagree, the code
+wins; what belongs here is the reasoning a diff cannot carry.
 
 ## What replaced the view nav
 
