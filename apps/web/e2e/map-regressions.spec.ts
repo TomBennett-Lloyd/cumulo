@@ -86,6 +86,14 @@ interface MarkerShape {
  * opens no draft — the band is content, not basemap — which arrived as this
  * helper silently returning a point the map never sees.
  *
+ * Listing `.map-attribution` here encodes an accepted product behaviour,
+ * not a workaround for a bug. The band is full width and paints above the
+ * markers by decision, and the relief rule that makes that acceptable — the
+ * pan, the tab order, the table and the search — is what
+ * `docs/design/map-treatment.md`'s Attribution section decides (#356). So a
+ * corner this predicate rejects is the map behaving as designed, and nothing
+ * here is waiting on a narrower band to delete the term.
+ *
  * And the map's own controls, in the top-right (`.map-controls`, #265). That one
  * is the nastiest of the three because of *which* control sits there: hand the
  * right-top corner back as a "basemap point" and the armed case clicks the

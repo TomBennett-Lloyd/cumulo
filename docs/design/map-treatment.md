@@ -232,6 +232,29 @@ Placement:
   a band of chrome across the page rather than part of the map, and it takes its height out of
   the map on every screen.
 
+- **The band is full width, and it paints above the markers.** It runs the whole width of the map
+  rather than tucking into a corner, and a site or cluster marker whose centre falls under it is
+  not pointer-reachable there. That is accepted rather than worked around (#356, on the
+  composition #265 introduced), and what makes it acceptable is the relief family the marker
+  states already rely on: the map pans, so one gesture moves any marker clear of the band; markers
+  keep their place in the tab order and stay keyboard-operable there, where Enter selects exactly
+  as a click would; and the site table under the map and the header's search reach every site
+  without touching the map at all.
+
+  `e2e/attribution-band.spec.ts` is where the occlusion and the keyboard relief stop being claims;
+  it does not touch the site table or the header's search. It pans a marker under the band, asks
+  in both directions what the browser paints at the marker's centre — the credits, and not the
+  marker — and then selects that site with Enter in exactly that state. The occlusion and that
+  relief are measured against each other rather than either being asserted alone, which is the
+  only shape in which "accepted" means anything.
+
+  The inset corner chip was weighed and declined. It narrows the occluded strip without removing
+  it, so the relief rule above is owed either way; at narrow widths the band is licence-mandated
+  string from edge to edge, which makes a "corner" effectively full width anyway, so the corner
+  buys partial relief only at the widths where the map has the most room to spare; and it forfeits
+  the coherence the band has with the full-bleed map and with the Map chrome argument above, which
+  reads the bottom edge as the credits band's all the way across.
+
 - **Both are visible without interaction.** No "i" toggle, no hover-to-reveal, no collapsing the
   credits behind a control at narrow widths. Overlaying does not weaken this: the band is opaque
   enough to read at rest, and it is never faded, animated in, or suppressed while the reader is
@@ -241,20 +264,55 @@ Placement:
   fitting on one line, the band sheds its two leading phrases — `basemap tiles by` and
   `Weather data by` — and reads `© OpenStreetMap contributors · OpenFreeMap` and
   `Open-Meteo.com`. Both links, the `©` and the `·` survive at every width, and the shortened
-  weather credit is the compact form CLAUDE.md sanctions for a row that cannot hold the full
-  phrase (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
+  weather credit is the compact form CLAUDE.md sanctions for a row that, as composed, cannot hold
+  both credits' full forms (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
+
+  **That last clause is this section's reading of the constraint, not the constraint's own
+  wording, and the difference is worth stating plainly.** CLAUDE.md sanctions the bare linked name
+  "at widths where the row cannot hold it", and the _it_ in that sentence is the full
+  "Weather data by Open-Meteo.com" phrase. This section reads "the row" as the row **as
+  composed** — every full form the row carries — rather than as that phrase measured on its own,
+  and the two are not the same condition: the composed one is the broader of the pair, so it
+  sanctions the compact form across a stretch of widths the narrower one would not.
+
+  Two things carry the reading. The amendment was made about this band, whose row is the
+  two-credit one the question arose on, so "the row" is most plausibly the row it was looking at.
+  And the narrower reading would leave the band's shipped behaviour unsanctioned across the whole
+  stretch of widths where the weather phrase alone would still fit but the pair does not — because
+  a row there _could_ hold the phrase by wrapping, which is this band's own sanctioned last resort
+  at the narrow end, and the band drops the prose instead. Reading the condition against the row
+  as composed is what puts that stretch inside the sanction.
+
+  It remains a judgement about what the amendment meant rather than a deduction from its text. If
+  the owner reads it the other way, what has to move is the breakpoint — not this paragraph.
+
+  Both phrases go at once, and the width they go at is a property of **the row as composed** —
+  the two credits' full forms side by side — rather than of either phrase's own length. The
+  weather phrase alone would still fit on rows somewhat narrower than the pair's limit, and
+  dropping the two in stages, each at its own measured width, was weighed and declined (#356).
+  Staging would hold `Weather data by` on screen across a slice of widths, and it would cost a
+  second viewport breakpoint on this band — the census `stylelint.config.mjs`'s residual paragraph
+  exists to keep — plus a second measurement taken against a layout #326 is about to move. What
+  that buys is prose serving no reader decision ([`design.md`](../standards/design.md) rules 2 and
+  8), while the sanctioned compact form keeps both links on screen at every width regardless.
 
   This is computed visibility and nothing else: the DOM carries the identical text in both forms,
   so anything reading the page rather than painting it — a reader with stylesheets off, a scraper
   honouring the licence — always gets the full phrase. That is what makes the collapse safe to do
   in a stylesheet at all, and it is asserted rather than asserted-about, in
   `MapAttributionStrip.test.tsx` (the text) and `e2e/composition.spec.ts` (the two forms).
+  `e2e/attribution-band.spec.ts` visits the wrapped state at a phone's width, but what it asserts
+  there is reachability — both credit links visible and hit-testable however far the band has
+  wrapped — and deliberately nothing about that state's shape, which is therefore asserted by no
+  spec. Said here rather than left for the routing to imply
+  ([`testing.md`](../standards/testing.md) rule 10).
 
-  The rule belongs to **this band**, not to the credit component. Whether the phrase fits is a
-  fact about the row, and this is the only row in the app carrying two credits side by side; the
-  dashboard footer, the About dialog, the error boundary and the tokens preview each give the
-  weather credit a row of its own and keep the full phrase at every width, which is the condition
-  the amended constraint attaches to the compact form. [`map.css`](../../apps/web/src/map/map.css)
+  The rule belongs to **this band**, not to the credit component. What runs out is the row as
+  composed rather than the credit, and this is the only row in the app carrying two credits side
+  by side; the dashboard footer, the About dialog, the error boundary and the tokens preview each
+  give the weather credit a row of its own, so their row is composed of that phrase alone and
+  holds its full form at every width — which is why none of them ever meets the condition the
+  amended constraint attaches to the compact form. [`map.css`](../../apps/web/src/map/map.css)
   holds the rule, the measured breakpoint and the argument for placing it there; this document
   names the decision and does not restate the number.
 
@@ -266,7 +324,11 @@ Placement:
 
 - **Both stay clickable.** The band takes pointer events like any other content; a credit whose
   link cannot be followed is not a credit, and `pointer-events: none` on an overlay is the
-  obvious way to lose one by accident.
+  obvious way to lose one by accident. `e2e/attribution-band.spec.ts` is what makes that
+  executable: it trial-clicks both links — Playwright's full actionability sequence, hit test
+  included, stopping short of navigating — in the occluded state and again at a phone's width,
+  because "followable" is a question about a point rather than about a row and neither link
+  answers it for the other.
 - Tile credit first, weather credit second, reading order matching what the reader is looking at:
   the map, then the data drawn on it.
 - The Open-Meteo credit's own styling belongs to the `OpenMeteoAttribution` component — muted ink

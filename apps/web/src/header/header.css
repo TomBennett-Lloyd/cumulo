@@ -268,8 +268,10 @@
 /*
  * A media query that exists because a row runs out of width rather than because
  * a device was named — which is `map/map.css`'s reason for its own, and the two
- * are counted and argued as a set in `stylelint.config.mjs`'s residual
- * paragraph rather than by either of them keeping a tally of the other.
+ * are counted as a set in `stylelint.config.mjs`'s residual paragraph rather
+ * than by either of them keeping a tally of the other. The census is what that
+ * paragraph keeps; the argument for each is made where the breakpoint is
+ * written, and this comment is where this one's is made.
  *
  * 27.4375rem is measured, not picked. At this bar's own content — the brand
  * lockup at 113.625px, the search at its flex basis above, the menu button at

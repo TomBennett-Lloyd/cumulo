@@ -29,15 +29,25 @@
  * There is deliberately no rule for `.cumulo-attribution-prefix`, the span the
  * component wraps `Weather data by ` in. It needs nothing this file does not
  * already give the credit, and — more to the point — *hiding* it is not this
- * file's decision to make. CLAUDE.md sanctions the bare linked name only at
- * widths where the row cannot hold the full phrase, and "the row" belongs to the
- * consuming surface rather than to the component: this stylesheet serves five of
- * them, and only `apps/web`'s map band ever runs out of width, because only it
- * puts a second credit on the same line. A viewport media query here would drop
- * the phrase on the other four as well, at widths where they demonstrably hold
- * it — the compact form used outside the condition that sanctions it. So the
- * rule lives with the surface that needs it, in `apps/web/src/map/map.css`,
- * which owns the measurement behind it.
+ * file's decision to make. CLAUDE.md sanctions the bare linked name only where
+ * the row cannot hold the full phrase, and "the row" belongs to the consuming
+ * surface rather than to the component: this stylesheet serves five of them, and
+ * only `apps/web`'s map band ever runs out of width, because only it puts a
+ * second credit on the same line.
+ *
+ * Reading that condition against the row *as composed* — every full form the row
+ * carries, which is this repo's reading of the sentence rather than its literal
+ * object — is what makes this a guard-rail rather than a caution. A row carrying this credit alone is composed
+ * of this phrase and nothing else, so it can hold its full form at every width
+ * and never meets the condition at all; the band's row has two full forms to fit
+ * side by side, so it does — which is also why the band is inside the sanction
+ * when it drops the prose at widths where this phrase on its own would still fit.
+ * A viewport media query here would drop the phrase on the other four surfaces as
+ * well, at widths where their rows demonstrably hold it — the compact form used
+ * outside the condition that sanctions it. So the rule lives with the surface
+ * that needs it, in `apps/web/src/map/map.css`, which owns the measurement behind
+ * it; `docs/design/map-treatment.md`'s Attribution section owns the reading
+ * (#356).
  */
 
 .cumulo-attribution {
