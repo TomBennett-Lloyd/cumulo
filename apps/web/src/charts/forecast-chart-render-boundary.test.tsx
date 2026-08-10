@@ -40,14 +40,17 @@ import type * as ForecastChartTable from './forecast-chart-table';
  * the one `ForecastChart` body, so wrapping `medianElements` alone counts that
  * body's runs — a second mark counter would only ever repeat this one.
  *
- * Counts are relative, never absolute (`FleetPanel.memo.test.tsx`'s discipline):
- * each case settles the chart on a sample, snapshots the counters, and compares
- * what the rest of the case adds. That comparison is a probe against a snapshot
- * of itself, so it needs two controls to mean anything — `{0,0,0}` equals
- * `{0,0,0}`. `tooltipAnchor` and `tooltipText` prove the frames really
- * committed, so a chart that stopped rendering after the first move cannot pass;
- * and `settledCounts` names the settled values, so a probe wired to nothing
- * cannot either.
+ * Every case's load-bearing claim is relative (`FleetPanel.memo.test.tsx`'s
+ * discipline): each settles the chart on a sample, snapshots the counters, and
+ * compares what the rest of the case adds. That comparison is a probe against a
+ * snapshot of itself, so it needs two controls to mean anything — `{0,0,0}`
+ * equals `{0,0,0}`. `tooltipAnchor` and `tooltipText` prove the frames really
+ * committed, so a chart that stopped rendering after the first move cannot pass.
+ * The second control is the one absolute reading in the file: `settledCounts`
+ * pins the snapshot to `SETTLED_COUNTS`, so a probe wired to nothing cannot pass
+ * either. It is a wiring check rather than a claim about the boundary, which is
+ * why an absolute count is the right instrument for it and the wrong one for
+ * everything else here.
  */
 
 interface ProducerCounts {
