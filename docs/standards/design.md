@@ -107,7 +107,7 @@ here that gets decided into a surface lands in that surface's record.
 
 12. **Interaction smoothness is a demonstrated feature.** Pointer-driven surfaces update
     position via transform at the throttled pointer rate — `docs/design/chart-treatment.md`'s D7
-    "the panel follows the pointer" bullet owns that rate (~30 a second there today), and a
+    "the panel follows the pointer" bullet owns that rate, and a
     surface changing it changes it there — and content at data cadence from precomputed rows;
     data layers never re-render per pointer frame; linked interactions work
     from data already held (API frugality). Measured and, where feasible, asserted — a
