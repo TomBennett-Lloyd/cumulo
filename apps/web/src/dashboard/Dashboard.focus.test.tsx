@@ -12,7 +12,6 @@ import {
   CREATED_SITE_NAME,
   firstListedSite,
   fleetTable,
-  pressedRangeButton,
   renderDashboard,
   settle,
   visit,
@@ -25,33 +24,38 @@ import {
  * link's are `Dashboard.deep-link.test.tsx`'s; this file is the third subject
  * split off the same mount (`structure.md` rule 4), through the same fixture.
  *
- * The rule it proves is #260's settlement as revised by #284 D14, and it has
- * three clauses that only make sense together. **A reader-initiated selection
- * lands the reader on the fleet panel's range picker** — the page changed
- * because they pressed something, and leaving focus on the pressed control would
- * make a keyboard or screen-reader user find the answer by tabbing; the picker
- * is where the next act is, and it is on screen in every state of the page.
- * **A `?site=` selection moves focus nowhere at all** — the card mounts when the
- * fleet listing resolves, which on a deep link is not page load and can be
- * seconds later, so a focus move there takes focus from somebody who did nothing
- * to ask for it (WCAG 3.2.5). **Closing returns focus to whatever held it when
- * the card opened, if the card had it to give** — which since the landing moved
- * out of the card means the reader who came *into* it, pressing or tabbing to
- * Close, rather than every dismissal.
+ * The rule it proves is `design.md` rule 11 as #328 settled it, and it has
+ * three clauses that only make sense together. **A
+ * selection moves focus nowhere**: whoever pressed a marker is still on that
+ * marker, whoever pressed a row is still on that row, and whoever picked a site
+ * out of the header's search is still in the search input, which is the
+ * combobox discipline that pattern owes anyway. What answers the selection is
+ * structure the reader can already reach — the card's own accessible name, the
+ * chart legend's row for the site — rather than a page that takes their place
+ * away to tell them something. **A `?site=` selection additionally captures no
+ * opener**: the card mounts when the fleet listing resolves, which on a deep
+ * link is not page load and can be seconds later, so nothing about that instant
+ * identifies a control anybody chose (WCAG 3.2.5, #260). **Closing returns
+ * focus to whatever held it when the card opened, if the card is holding it by
+ * then** — which, with nothing landing anybody inside the card, means exactly
+ * the reader who came *into* it, pressing or tabbing to Close.
  *
- * That third half is why several cases below press Close through {@link press}
+ * That third clause is why several cases below press Close through {@link press}
  * rather than clicking it: a real pointer press focuses the button it presses,
- * which is exactly how a reader standing on the picker ends up inside the card
- * a moment before it unmounts. A dismissal that never moves focus into the card
- * leaves the reader on the picker, and the cases that say so are here too.
+ * which is how a reader ends up inside the card a moment before it unmounts. A
+ * dismissal that never moves focus into the card leaves the reader where they
+ * were, and the cases that say so are here too.
+ *
+ * The one focus move left on this page is the add-site *dialog*'s, which is a
+ * modal — the surface whose own controls are the answer — and it is the last
+ * describe below.
  *
  * `document.activeElement` is the whole assertion, and jsdom does implement it.
- * What jsdom cannot show is the focus *ring* — no layout, no painting — so that
- * this landing is visible is a browser criterion (`testing.md` rule 10) and is
- * checked in `e2e/keyboard-focus.spec.ts`, which drives the keyboard-initiated
- * path in real Chromium, reads the computed outline off the focused picker
- * button, and carries the deep-link case in the lane the #260 report was written
- * about.
+ * What jsdom cannot show is the focus *ring* — no layout, no painting — so
+ * whether a ring appears where the reader did not ask for one is a browser
+ * criterion (`testing.md` rule 10) and belongs to `e2e/keyboard-focus.spec.ts`,
+ * which drives the keyboard path in real Chromium and carries the deep-link case
+ * in the lane the #260 report was written about.
  */
 
 /** A well-formed id no fleet contains: a link to a site deleted, or mistyped. */
@@ -142,49 +146,7 @@ afterEach(() => {
 });
 
 describe('Dashboard focus on a reader-initiated selection', () => {
-  it('lands the reader on the range picker when a marker opens a card', async () => {
-    const dataSource = new DemoFleetDataSource();
-    const site = await firstListedSite(dataSource);
-    renderDashboard(dataSource);
-    await settle();
-
-    press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
-
-    // The picker, not the card. The card is on screen and named — the assertion
-    // below is what keeps this from passing over a selection that never opened
-    // one — but the reader is put on the control that decides what the chart
-    // now shows them, which is the revision #284 D14 made to #260's answer.
-    expect(document.activeElement).toBe(pressedRangeButton());
-    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
-  });
-
-  it('lands on the window the reader chose, not the one the picker opened on', async () => {
-    const dataSource = new DemoFleetDataSource();
-    const site = await firstListedSite(dataSource);
-    renderDashboard(dataSource);
-    await settle();
-
-    // A reader who has already widened the window, which is the state the
-    // landing has to survive: the ref follows `aria-pressed` from button to
-    // button, so what it points at is whichever window is current rather than
-    // whichever one the panel opened on.
-    fireEvent.click(screen.getByRole('button', { name: '7 d' }));
-    await settle();
-
-    press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
-
-    /*
-     * Both halves, because the query alone cannot fail this: `pressedRangeButton`
-     * finds whatever is pressed, so a ref pinned to the first option would leave
-     * the reader on `24 h` while this looked for `7 d` — the first assertion is
-     * what catches that, and the second is what stops the pair from passing over
-     * a picker whose pressed state never moved either.
-     */
-    expect(document.activeElement).toBe(pressedRangeButton());
-    expect(pressedRangeButton().textContent).toBe('7 d');
-  });
-
-  it('leaves the reader on the picker when the card is dismissed from outside it', async () => {
+  it('leaves focus on the marker that opened the card', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
     renderDashboard(dataSource);
@@ -192,16 +154,33 @@ describe('Dashboard focus on a reader-initiated selection', () => {
 
     const marker = screen.getByRole('button', { name: `Marker: ${site.name}` });
     press(marker);
-    // A bare click, which — unlike {@link press} — moves no focus: the reader is
-    // still standing on the picker as the card goes. The card's restore is
-    // guarded on still holding the focus it would be giving back, so it stands
-    // aside, and that self-neutralizing is the whole reason the landing could be
-    // moved out of the card without the opener machinery fighting it.
+
+    // The marker, because that is where the reader put themselves. The card is
+    // on screen and named — the assertion below is what keeps this from passing
+    // over a selection that never opened one — and being named is how the card
+    // answers, rather than by taking the reader off the control they pressed
+    // (#328, `design.md` rule 11).
+    expect(document.activeElement).toBe(marker);
+    expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
+  });
+
+  it('leaves focus on the marker when the card is dismissed from outside it', async () => {
+    const dataSource = new DemoFleetDataSource();
+    const site = await firstListedSite(dataSource);
+    renderDashboard(dataSource);
+    await settle();
+
+    const marker = screen.getByRole('button', { name: `Marker: ${site.name}` });
+    press(marker);
+    // A bare click, which — unlike {@link press} — moves no focus: the reader
+    // never comes into the card, so the card never holds the focus it would be
+    // handing back and its guarded restore stands aside. Here the marker is both
+    // where the reader is and the opener the restore would name, so what this
+    // case pins is that the round trip is a no-op; the case that separates the
+    // two is `leaves focus where the reader themselves moved it` below.
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
-    // Not the marker. A restore here would yank a reader off a live control and
-    // back onto the map for a card they were not in.
-    expect(document.activeElement).toBe(pressedRangeButton());
+    expect(document.activeElement).toBe(marker);
   });
 
   it('hands focus back to the marker when the reader closes the card from inside it', async () => {
@@ -236,8 +215,9 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     press(markerA);
     press(markerB);
 
-    // B's selection lands where A's did, and B's card is the one on screen.
-    expect(document.activeElement).toBe(pressedRangeButton());
+    // B's selection moves the reader no more than A's did, and B's card is the
+    // one on screen.
+    expect(document.activeElement).toBe(markerB);
     expect(screen.getByRole('heading', { name: siteB.name })).toBeDefined();
 
     press(screen.getByRole('button', { name: 'Close' }));
@@ -250,8 +230,8 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * would strand the reader on the marker of a site they had already left. The
      * guard is what makes A stand aside: the reader's press moved focus to
      * marker B before the commit, so A no longer holds the focus it would be
-     * giving back — and since #284 D14 A was not holding it in the first place,
-     * because A's own landing was the picker. Either way B is the opener the
+     * giving back — and since #328 A was never holding it in the first place,
+     * because A's opening moved nobody into it. Either way B is the opener the
      * reader is owed, which is what the press on Close above collects.
      */
     expect(document.activeElement).toBe(markerB);
@@ -268,19 +248,22 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     const row = within(fleetTable()).getByRole('button', {
       name: (name) => name.startsWith(site.name),
     });
-    // The reader leaves their landing for a row of their own accord and
-    // dismisses from there. Escape is fired on the card because that is what
-    // still owns the handler; where the *focus* is is the point.
+    // The reader leaves the marker for a row of their own accord and dismisses
+    // from there. Escape is fired on the card because that is what still owns
+    // the handler; where the *focus* is is the point.
     row.focus();
     fireEvent.keyDown(screen.getByRole('heading', { name: site.name }), { key: 'Escape' });
 
-    // Not the marker, and not the picker either. A card that does not hold the
-    // focus is not entitled to move it, and yanking a reader back to a control
-    // they deliberately left is the same defect as never landing them anywhere.
+    // Not the marker. A card that does not hold the focus is not entitled to
+    // move it, and yanking a reader back to a control they deliberately left is
+    // the same defect as taking their place away in the first place. This is
+    // also the case that separates "focus did not move" from "focus was moved
+    // back to where it started", which the marker cases cannot: the reader is
+    // demonstrably somewhere the opener is not.
     expect(document.activeElement).toBe(row);
   });
 
-  it('lands the reader on the range picker when a row opens a card, and back on the row from inside it', async () => {
+  it('leaves focus on the row that opened the card, and returns to it from inside', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
     renderDashboard(dataSource);
@@ -291,14 +274,14 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     });
     press(row);
 
-    expect(document.activeElement).toBe(pressedRangeButton());
+    expect(document.activeElement).toBe(row);
 
     press(screen.getByRole('button', { name: 'Close' }));
 
-    // The same two mechanisms reaching a different opener, which is what makes
-    // the marker cases above and this one one rule rather than special cases per
-    // opener: the landing does not name the opener, and the hand-back does not
-    // need to be told who it was.
+    // The hand-back reaching a different opener, which is what makes the marker
+    // cases above and this one one rule rather than special cases per opener:
+    // the card does not need to be told who opened it, and nothing had to be
+    // told where a row press should have landed.
     expect(document.activeElement).toBe(row);
   });
 
@@ -313,17 +296,14 @@ describe('Dashboard focus on a reader-initiated selection', () => {
 
     /*
      * Fired from the Close button with the focus on it, which is a reader who
-     * has come into the card from their landing on the picker: Escape is handled
-     * on the card's container, so it works from every control inside the card
-     * and from none outside it. That last half is the cost #284 D14 accepted,
-     * and the journey is *backwards* rather than a Tab — the map precedes the
-     * reading column, so from the picker the card is behind the reader — six
-     * stops back, past the (i) tip, the credits band's three links and the map's
-     * two controls (`map/SitePopoverCard.tsx` states it beside the handler).
-     * This case puts the focus there directly. What the
-     * route itself costs a keyboard reader needs a real tab order and a real
-     * key modality, which is the browser lane's (`testing.md` rule 10) and is
-     * owned by no spec today — `docs/tech-debt.md` carries that gap.
+     * has come into the card: Escape is handled on the card's container, so it
+     * works from every control inside the card and from none outside it. That
+     * last half is the accepted cost of adding no document-level key handler
+     * (`map/SitePopoverCard.tsx` states it beside the handler), and this case
+     * puts the focus inside directly. What the *route* into the card costs a
+     * keyboard reader needs a real tab order and a real key modality, which is
+     * the browser lane's (`testing.md` rule 10) and is owned by no spec today —
+     * `docs/tech-debt.md` carries that gap.
      */
     const close = screen.getByRole('button', { name: 'Close' });
     close.focus();
@@ -333,38 +313,49 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     expect(document.activeElement).toBe(marker);
   });
 
-  it('lands the reader on the range picker when the header’s search picks a site', async () => {
+  it('keeps focus in the search input when the header’s search picks a site', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
     renderDashboard(dataSource);
     await settle();
 
     const search = screen.getByRole('combobox', { name: 'Search sites by name' });
+    // Focused first, because that is what typing into a field means and it is
+    // the state the assertion is about: the reader is *in* the combobox.
+    search.focus();
     fireEvent.change(search, { target: { value: site.name } });
     fireEvent.keyDown(search, { key: 'Enter' });
 
     /*
-     * The fourth opener, and the reason it needed no new focus code: the search
-     * selects through `selectSiteForReader` like a marker and a row do, so the
-     * selection is reader-initiated and the focus follows by the rule already in
-     * place. What this case rules out is the version where the bar wires itself
-     * straight to `setSelectedSiteId` — every assertion about the selection
-     * would still pass, and the reader would be left in a text field with their
-     * answer somewhere below.
+     * The opener this member is named for (#328). A combobox keeps focus in its
+     * input when a value is chosen — that is the pattern's own discipline
+     * (`design.md` rule 11) — so a selection that moved focus to a control
+     * elsewhere on the page was taking a reader out of the field they were still
+     * typing in, mid-search, on every hit. Nothing here is a special case for
+     * the search: it selects through `selectSiteForReader` like a marker and a
+     * row do, and no selection moves anybody now.
+     *
+     * The heading assertion is what stops this from passing over a search that
+     * selected nothing at all, which would leave focus in the input too.
      */
-    expect(document.activeElement).toBe(pressedRangeButton());
+    expect(document.activeElement).toBe(search);
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
   });
 
-  it('lands the reader on the range picker when a creation succeeds', async () => {
-    renderDashboard(new DemoFleetDataSource());
+  it('leaves a creation’s focus on the map control the dialog returned it to', async () => {
+    const container = renderDashboard(new DemoFleetDataSource());
     await settle();
 
     await addSite();
 
-    // A creation selects a site without anybody clicking into it, which is
-    // exactly the case a focus move written into a click handler would miss.
-    expect(document.activeElement).toBe(pressedRangeButton());
+    /*
+     * The dismissed dialog's landing, and — since the new site's card takes no
+     * focus behind it (#328) — the last focus move a creation makes. React
+     * flushes a commit's unmount cleanups before its mount effects, so a card
+     * that still grabbed focus here would win this assertion; that ordering is
+     * the reason this case is the one that would notice.
+     */
+    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
     expect(screen.getByRole('heading', { name: CREATED_SITE_NAME })).toBeDefined();
   });
 
@@ -385,9 +376,9 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * and this close would strand the reader on `body`.
      *
      * Reached by pressing Close rather than clicking it, for the reason the
-     * marker pair above gives: since #284 D14 the reader's landing is the
-     * picker, so the hand-back is owed only once they have come into the card —
-     * and this is the case that keeps the capture *ordering* observable at all.
+     * marker pair above gives: nothing puts a reader inside the card (#328), so
+     * the hand-back is owed only once they have come into it themselves — and
+     * this is the case that keeps the capture *ordering* observable at all.
      */
     expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
   });

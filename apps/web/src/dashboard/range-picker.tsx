@@ -1,4 +1,4 @@
-import type { ReactElement, RefObject } from 'react';
+import type { ReactElement } from 'react';
 
 import type { RangeHours } from '../data/fleet-data-source';
 
@@ -55,20 +55,6 @@ export interface RangePickerProps {
   /** Names the group for assistive technology — the panels mean different windows. */
   readonly ariaLabel: string;
   readonly onSelect: (range: RangeHours) => void;
-  /**
-   * Points at whichever button is pressed, for a caller that has to put focus
-   * on this control — the dashboard, which lands a reader-initiated selection
-   * here (`map/SitePopoverCard.tsx`, #284 D14).
-   *
-   * The pressed *button* rather than the group, because the group is a `div`
-   * and takes no focus, and because the pressed one is the button whose label
-   * names the window the reader is looking at. Declared `| undefined` rather
-   * than merely optional: it arrives through a panel that has it optional too,
-   * and under `exactOptionalPropertyTypes` forwarding a possibly-absent value
-   * needs the type to say so — which is how React declares its own `ref`, for
-   * the same reason.
-   */
-  readonly pressedButtonRef?: RefObject<HTMLButtonElement | null> | undefined;
 }
 
 /**
@@ -77,12 +63,9 @@ export interface RangePickerProps {
  * choice — the pressed styling in `range-picker.css` is the same fact rendered
  * visually.
  *
- * {@link RangePickerProps.pressedButtonRef} rides on the same `aria-pressed`
- * test rather than a second notion of which button is current, so the element a
- * caller focuses is by construction the one the reader sees as chosen. Changing
- * the window moves the ref with the pressed state: React detaches the old
- * element's ref before attaching the new one, so the caller is left holding the
- * button that is pressed now.
+ * Nothing outside points at these buttons, and nothing puts focus on them:
+ * `design.md` rule 11 leaves focus where the reader put it, so this control is
+ * reached the way every other control on the page is.
  */
 export const RangePicker = (props: RangePickerProps): ReactElement => (
   <div className="range-picker" role="group" aria-label={props.ariaLabel}>
@@ -91,7 +74,6 @@ export const RangePicker = (props: RangePickerProps): ReactElement => (
         key={option}
         type="button"
         className="range-picker-button"
-        ref={option === props.range ? props.pressedButtonRef : undefined}
         aria-pressed={option === props.range}
         onClick={() => {
           props.onSelect(option);

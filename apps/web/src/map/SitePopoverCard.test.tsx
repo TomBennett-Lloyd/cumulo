@@ -2,7 +2,6 @@
 
 import type { Site } from '@cumulo/shared';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { RefObject } from 'react';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import type { ForecastViewState } from '../dashboard/forecast-view-state';
@@ -101,12 +100,11 @@ describe('SitePopoverCard', () => {
     const { onClose } = renderCard(READY);
 
     // From the heading, which a handler bound to the close button alone would
-    // never hear from. Nobody *tabs* onto it — it is `tabIndex={-1}`, which
-    // `keeps the heading out of the tab order` below pins — so this stands for
-    // the programmatic fallback landing; the reachable control the container
-    // handler is really there for is the `Try again` on a failed first forecast.
-    // Since #284 D14 a reader's focus starts outside this subtree, on the picker
-    // under the map, where Escape is deliberately not this card's.
+    // never hear from. It is the cheapest child to fire from rather than a
+    // reader's route: nobody tabs onto a heading, and the reachable control the
+    // container handler is really there for is the `Try again` on a failed first
+    // forecast. A reader's focus starts *outside* this subtree — a selection
+    // moves nobody in (#328) — where Escape is deliberately not this card's.
     fireEvent.keyDown(screen.getByRole('heading', { name: 'Rathmines rooftop' }), {
       key: 'Escape',
     });
@@ -231,120 +229,81 @@ describe('SitePopoverCard first forecast', () => {
 });
 
 /*
- * The focus rule, settling #260 and revised by #284 D14. The composition-level
- * cases are `Dashboard.focus.test.tsx`'s — these are the component's own
- * contract, which is what makes the card renderable in isolation and the rule
- * readable in one file (`react.md` rule 4).
+ * The focus rule: `design.md` rule 11, as #328 settled it over #260. The
+ * composition-level cases are `Dashboard.focus.test.tsx`'s — these are the
+ * component's own contract, which is what makes the card renderable in isolation
+ * and the rule readable in one file (`react.md` rule 4).
  *
- * The two arms of the reader-initiated half are both here because the card is
- * the only place they are both visible: handed a landing it uses it, handed
- * none it falls back to its own heading. In the app the landing is the fleet
- * panel's range picker, and the fallback is what a source rendering no picker
- * at all leaves.
+ * Two halves, and the card is the only place both are visible. On the way *in*
+ * it takes nothing, whoever asked: the surface answers by being named, not by
+ * moving anybody to it. On the way *out* it returns the focus it captured — but
+ * only if it is holding that focus by then, which is true of exactly the reader
+ * who came into the card and dismissed it from inside.
  */
 describe('SitePopoverCard focus', () => {
-  /**
-   * A landing of the kind the app supplies: a real button, in the document, and
-   * *outside* the card.
-   *
-   * Outside is the whole of the revision rather than an incidental of the
-   * fixture — a landing the card contains would be a landing the card takes
-   * away again when it leaves, which is the arrangement #284 D14 moved away
-   * from. Handed back with its element so a case can take it out of the
-   * document, since nothing else here would.
-   */
-  const focusTarget = (): RefObject<HTMLButtonElement | null> => {
+  /** A control the reader can be standing on, in the document and outside the card. */
+  const controlOutside = (): HTMLButtonElement => {
     const button = document.createElement('button');
-    button.textContent = '24 h';
     document.body.append(button);
 
-    return { current: button };
+    return button;
   };
 
-  it('falls back to its own heading when it is given no landing to point at', () => {
-    // The fallback arm: a source that renders no range picker, which is one
-    // with neither a look-back nor actuals (`dashboard/FleetPanel.tsx`). No
-    // shipped source is in that state today — the demo fleet has both and the
-    // HTTP one has actuals — so this is the arm the card keeps *available*
-    // rather than one the app currently reaches. It is not dead either way:
-    // without a control to land on, announcing the surface by its own name is
-    // still better than leaving the reader on a marker.
-    renderCard(READY);
-
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Rathmines rooftop' }));
-  });
-
-  it('lands on the target it is given rather than on its own heading', () => {
-    const landing = focusTarget();
-
-    render(
-      <SitePopoverCard
-        site={SITE}
-        selectionOrigin="reader"
-        selectionFocusRef={landing}
-        firstForecast={READY}
-        onRetryFirstForecast={vi.fn<() => void>()}
-        onClose={vi.fn<() => void>()}
-      />,
-    );
-
-    // Both halves: the reader is on the control, and specifically *not* on the
-    // heading — which without the second assertion is what a card ignoring the
-    // ref would still look like from the first one alone if the target happened
-    // to hold focus already.
-    expect(document.activeElement).toBe(landing.current);
-    expect(document.activeElement).not.toBe(
-      screen.getByRole('heading', { name: 'Rathmines rooftop' }),
-    );
-
-    landing.current?.remove();
-  });
-
-  it('leaves a reader on that landing when it goes, rather than chasing its opener', () => {
-    const opener = document.createElement('button');
-    document.body.append(opener);
+  it('takes no focus when it opens, even though a reader asked for the selection', () => {
+    const opener = controlOutside();
     opener.focus();
 
-    const landing = focusTarget();
+    renderCard(READY);
+
+    /*
+     * The rule, at its narrowest. The card is on screen and named — the second
+     * assertion is what stops this from passing over a card that failed to
+     * render at all — and the reader is still on the control they pressed. Any
+     * landing put back into the mount effect, on the heading or anywhere else,
+     * fails here.
+     */
+    expect(document.activeElement).toBe(opener);
+    expect(screen.getByRole('heading', { name: 'Rathmines rooftop' })).not.toBeNull();
+
+    opener.remove();
+  });
+
+  it('leaves a reader where they moved to when it goes, rather than chasing its opener', () => {
+    const opener = controlOutside();
+    opener.focus();
+
     const { unmount } = render(
       <SitePopoverCard
         site={SITE}
         selectionOrigin="reader"
-        selectionFocusRef={landing}
         firstForecast={READY}
         onRetryFirstForecast={vi.fn<() => void>()}
         onClose={vi.fn<() => void>()}
       />,
     );
+
+    // The reader moves on to a live control of their own accord, which is the
+    // state every dismissal from outside the card is in.
+    const elsewhere = controlOutside();
+    elsewhere.focus();
 
     unmount();
 
     /*
      * The restore neutralizing itself, which is what lets the opener machinery
-     * survive the revision unchanged. The card still captured `opener` on the
-     * way in, but it never held the focus it would be handing back — so the
-     * guard declines and the reader keeps the live control they were left on.
+     * survive the removal of the landing unchanged. The card did capture
+     * `opener` on the way in, but it never held the focus it would be handing
+     * back — so the guard declines and the reader keeps the control they chose.
      * Restoring here would yank them onto the map for a card they were never in.
      */
-    expect(document.activeElement).toBe(landing.current);
+    expect(document.activeElement).toBe(elsewhere);
 
-    landing.current?.remove();
+    elsewhere.remove();
     opener.remove();
   });
 
-  it('keeps the heading out of the tab order while making it a focus target', () => {
-    renderCard(READY);
-
-    // `tabIndex={-1}`: a heading nobody can tab *to*, which is the whole point —
-    // it is the announcement of a surface, not a control.
-    expect(
-      screen.getByRole('heading', { name: 'Rathmines rooftop' }).getAttribute('tabindex'),
-    ).toBe('-1');
-  });
-
   it('moves no focus at all when the selection came from the address bar', () => {
-    const opener = document.createElement('button');
-    document.body.append(opener);
+    const opener = controlOutside();
     opener.focus();
 
     renderCard(READY, 'deep-link');
@@ -356,13 +315,43 @@ describe('SitePopoverCard focus', () => {
     opener.remove();
   });
 
-  // The two cases below are the fallback arm on the way out: with no landing to
-  // point at the card really does hold the focus, so it really does owe it back.
-  // In the app the same pair is reached by a reader who came into the card from
-  // the picker, which `Dashboard.focus.test.tsx` drives through a pressed Close.
+  it('captures no opener to return to when the selection came from the address bar', () => {
+    const opener = controlOutside();
+    opener.focus();
+
+    const { unmount } = render(
+      <SitePopoverCard
+        site={SITE}
+        selectionOrigin="deep-link"
+        firstForecast={READY}
+        onRetryFirstForecast={vi.fn<() => void>()}
+        onClose={vi.fn<() => void>()}
+      />,
+    );
+
+    // A reader tabs into the card and closes it — the one gesture that collects
+    // the hand-back on the reader-initiated arm below.
+    screen.getByRole('button', { name: 'Close' }).focus();
+
+    unmount();
+
+    /*
+     * And there is nothing to collect. What held focus when a deep-linked card
+     * mounted is whatever the reader happened to be on when the fleet listing
+     * resolved, which nobody chose as an opener — so the card never captured it,
+     * and focus falls where the browser leaves it. This is the whole of what
+     * `dashboard/selection-origin.ts` still gates now that neither arm moves
+     * focus on the way in; the case below is its positive control.
+     */
+    expect(document.activeElement).toBe(document.body);
+    opener.remove();
+  });
+
+  // The two cases below are the way out for a reader who came *into* the card,
+  // which is the only way it holds the focus it owes back. In the app that is a
+  // pressed or tabbed-to Close, which `Dashboard.focus.test.tsx` drives.
   it('hands focus back to whatever held it, when the card leaves', () => {
-    const opener = document.createElement('button');
-    document.body.append(opener);
+    const opener = controlOutside();
     opener.focus();
 
     const { unmount } = render(
@@ -375,7 +364,7 @@ describe('SitePopoverCard focus', () => {
       />,
     );
 
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Rathmines rooftop' }));
+    screen.getByRole('button', { name: 'Close' }).focus();
 
     unmount();
 
@@ -387,8 +376,7 @@ describe('SitePopoverCard focus', () => {
   });
 
   it('chases no opener that has left the document', () => {
-    const opener = document.createElement('button');
-    document.body.append(opener);
+    const opener = controlOutside();
     opener.focus();
 
     const { unmount } = render(
@@ -401,9 +389,11 @@ describe('SitePopoverCard focus', () => {
       />,
     );
 
-    // The opener goes before the card does — a control inside a dialog that has
-    // since been dismissed, say. Focusing a detached element does nothing except
+    // The reader is inside the card, so the hand-back is owed — and then the
+    // opener goes before the card does, a control inside a dialog that has since
+    // been dismissed, say. Focusing a detached element does nothing except
     // silently move focus to `body`, so the card declines rather than pretending.
+    screen.getByRole('button', { name: 'Close' }).focus();
     opener.remove();
     unmount();
 

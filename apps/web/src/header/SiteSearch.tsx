@@ -32,6 +32,22 @@ const SEARCH_LABEL = 'Search sites by name';
 const SEARCH_PLACEHOLDER = 'Search sites';
 
 /**
+ * What the status region says once a site has been picked.
+ *
+ * Copy this control owns, for the same reason as the two above: it is a widget
+ * describing its own answer to the reader who just used it, and
+ * `dashboard/state-copy.ts` owns the app's pending, failure and empty-fleet
+ * vocabulary — none of which this is. `header-copy.ts` is not its home either;
+ * that module says what the *product* is, and this says what just happened.
+ *
+ * A function rather than a template spelled at the call site so the sentence,
+ * word order included, is legible in one place — the name leads because it is
+ * what the reader was hunting for, and a screen reader reaching them mid-word
+ * has said the useful half first.
+ */
+const selectionAnnouncement = (name: string): string => `${name} selected`;
+
+/**
  * What the popup says when nothing matches.
  *
  * Deliberately not the words "no sites": that phrase belongs to the empty
@@ -137,6 +153,11 @@ export interface SiteSearchProps {
  *   dropped entirely while the popup is closed: `aria-controls` may name a
  *   popup that is not currently rendered, but an active descendant that
  *   resolves to no element is simply an invalid value.
+ * - **A selection is announced, because it is no longer anywhere to be seen.**
+ *   Focus stays in the input (`design.md` rule 11), the input's value is cleared
+ *   rather than rewritten, and the card opens over a map that may be nowhere near
+ *   the reader's attention — so a `role="status"` region carries the hit. Its
+ *   rules are stated where it is rendered, below.
  * - **No matches is a disabled option, not an empty list or silence.** A listbox
  *   may contain only options, so the message is one `role="option"` marked
  *   `aria-disabled` — it is announced with the popup, it is never the active
@@ -150,6 +171,7 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
   const [query, setQuery] = useState('');
   const [listOpen, setListOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [announcement, setAnnouncement] = useState('');
 
   const baseId = useId();
   const listboxId = `${baseId}-listbox`;
@@ -179,6 +201,11 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
 
   const select = (site: Site): void => {
     onSelectSite(site.id);
+    // The whole of what a reader is told, now that a selection moves the focus
+    // nowhere (#328, `design.md` rule 11). The card opens over a map the reader
+    // is not looking at and the field they are still standing in goes blank, so
+    // without this the answer to a search is silence.
+    setAnnouncement(selectionAnnouncement(site.name));
     // Cleared on the way out, so the next search starts from the fleet rather
     // than from the last answer — and so the popup cannot sit open over the map
     // describing a selection the reader has already made.
@@ -249,6 +276,12 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
           setQuery(event.target.value);
           setListOpen(event.target.value.length > 0);
           setActiveIndex(0);
+          // A reader typing again has moved on from the last answer, and a
+          // region still holding it would repeat that answer the next time a
+          // *different* site is picked only if the words happened to differ.
+          // Emptying it here means every selection is a change to an empty
+          // region, including the one that picks the same site twice.
+          setAnnouncement('');
         }}
         onKeyDown={handleKeyDown}
         onBlur={() => {
@@ -292,6 +325,25 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
           )}
         </ul>
       )}
+
+      {/*
+       * What a selection says, given that it now says nothing by moving.
+       *
+       * Mounted from first paint and empty until a reader picks something
+       * (`react.md`'s first-paint rule): an announcement reaches anybody only by
+       * *arriving* in a region that was already there, so a region rendered with
+       * its text already inside it would look accessible and announce nothing.
+       *
+       * The header panel's one live region, and it stays the only one
+       * (`react.md`'s at-most-one rule). The two `SiteSearch` renderings do not
+       * make it two: exactly one of them is ever in the accessibility tree —
+       * `AppHeader.tsx` owns that fact and the breakpoint arithmetic behind it —
+       * so the copy that can fill this is always the copy the reader is using,
+       * and the hidden one is never filled because nothing can type into it.
+       */}
+      <p role="status" className="site-search-status">
+        {announcement}
+      </p>
     </div>
   );
 };

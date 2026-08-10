@@ -242,12 +242,11 @@ describe('AddSiteForm', () => {
   });
 
   /*
-   * The form announces itself by focusing its own heading — the branch of
-   * `react.md`'s focus rule for a surface whose own controls are the answer.
-   * (A selected site's card takes the other branch and lands the reader on a
-   * control elsewhere on the page, #284 D14.) Without this a visitor who has
-   * just placed a pin has their focus left wherever it was while a form opens
-   * somewhere else.
+   * The form announces itself by focusing its own heading — the one landing
+   * `react.md`'s focus rule still grants, for a modal whose own controls are the
+   * answer. (A selection elsewhere on the page moves focus nowhere, #328.)
+   * Without this a visitor who has just placed a pin has their focus left
+   * wherever it was while a form opens somewhere else.
    *
    * It is a modal that arrives now rather than an occupant of the reading
    * column's context region (`AddSiteDialog.tsx`), which makes the heading do a

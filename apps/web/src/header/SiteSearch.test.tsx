@@ -60,6 +60,15 @@ const typeQuery = (query: string): void => {
 const optionNames = (): readonly string[] =>
   screen.queryAllByRole('option').map((option) => option.textContent);
 
+/**
+ * The control's live region.
+ *
+ * Found by role rather than by class, because the role is what makes it a live
+ * region at all — a query on `.site-search-status` would keep passing against a
+ * `<p>` that had lost its `role="status"` and gone silent.
+ */
+const statusRegion = (): HTMLElement => screen.getByRole('status');
+
 /** The option `aria-activedescendant` points at, or `null` when it points at nothing. */
 const activeOption = (): HTMLElement | null => {
   const id = searchInput().getAttribute('aria-activedescendant');
@@ -260,6 +269,53 @@ describe('SiteSearch selecting a match', () => {
     // `mousedown` is the whole point: the field's blur closes the popup, so a
     // handler on `click` would fire on an option that had already unmounted.
     expect(onSelectSite.mock.calls).toEqual([['id-dublin-rooftop-2']]);
+  });
+});
+
+/*
+ * The status region, which is the whole of what a selection tells a reader who
+ * cannot see the map (#328, `design.md` rule 11). Nothing else says it: the
+ * focus stays in the field by that rule, and the field's value is cleared on the
+ * way out rather than rewritten with the name, so a reader who picks a site off
+ * screen would otherwise get silence.
+ */
+describe('SiteSearch announcing a selection', () => {
+  it('mounts the region empty, so a later announcement is a change to it', () => {
+    renderSearch();
+
+    /*
+     * Present *and* empty, which is one claim rather than two. A region that
+     * only existed once it was full would have no change to report and would
+     * announce nothing (`react.md`'s first-paint rule, #161) — and a region that
+     * arrived already saying something would fail the same rule from the other
+     * side. This is also the negative control for the case below: it proves the
+     * announcement asserted there arrived rather than always having been there.
+     */
+    expect(statusRegion().textContent).toBe('');
+  });
+
+  it('announces the site that was chosen, by name', () => {
+    renderSearch();
+    typeQuery('Cork');
+
+    fireEvent.keyDown(searchInput(), { key: 'Enter' });
+
+    // The pointer route is not asserted again here: it runs the same `select()`,
+    // and that it does is 'selects the option a pointer presses' above.
+    expect(statusRegion().textContent).toBe('Cork rooftop 1 selected');
+  });
+
+  it('empties the region when the reader types again', () => {
+    renderSearch();
+    typeQuery('Cork');
+    fireEvent.keyDown(searchInput(), { key: 'Enter' });
+
+    typeQuery('Dublin');
+
+    // Otherwise picking the same site twice in a row would announce nothing the
+    // second time — the region's text would never change, and a live region only
+    // speaks when it changes.
+    expect(statusRegion().textContent).toBe('');
   });
 });
 

@@ -2,7 +2,6 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
-import { pressedRangeButton } from './range-picker';
 
 /*
  * The header, driven by a keyboard and a pointer, in a browser that has a top
@@ -415,12 +414,27 @@ test('finds a site by name and brings the camera to it when it is off screen', a
     })
     .toBe(true);
 
-  // And the reader has been moved on. A search hit is reader-initiated like a
-  // marker or a row press, so the focus follows it to the fleet panel's range
-  // picker by the rule the dashboard already had (`docs/standards/react.md`,
-  // revised by #284 D14) — asserted here because a field that kept the focus
-  // would leave a keyboard reader typing at their own answer.
-  await expect(pressedRangeButton(page)).toBeFocused();
+  /*
+   * And the reader has not been moved anywhere. A combobox selection keeps the
+   * caret in the field it was made from — the sharpest case of calm focus
+   * (`design.md` rule 11, #328), because a landing elsewhere takes a reader out
+   * of a field they may still be typing in. This lane rather than jsdom's
+   * because the Enter above is a real key press on a real field, so a handler
+   * moving the focus as a side effect of that key would show up here.
+   */
+  await expect(searchInput).toBeFocused();
+
+  /*
+   * Which leaves the announcement carrying the whole answer, so it is asserted
+   * on the same interaction rather than in a case of its own: the field goes
+   * blank, the card opens over a map the reader was just panning away from, and
+   * this region is the only thing that says which site was found. Its exact
+   * wording is `SiteSearch.test.tsx`'s to own; what only this lane can add is
+   * that the region on the assembled page holds the name of the site the search
+   * really selected. Read as text rather than measured — the region is clipped
+   * to a pixel by design, and `textContent` is what still reaches it.
+   */
+  await expect(page.locator('.site-search-status')).toContainText(siteName);
 });
 
 test('centres the brand mark on the same line as the search and the menu', async ({ page }) => {
