@@ -105,7 +105,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
     // value, because restating the sum here would only prove that two copies of it agree.
     expect(container.querySelector('.fleet-panel-stats')?.textContent).toMatch(
-      /^60 sites · \d+(\.\d)? kW installed$/u,
+      /^60 sites · \d+(\.\d)? kW$/u,
     );
     expectForecastPlotted(container);
   });
@@ -113,16 +113,12 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
   it('says "site" once and "sites" otherwise', async () => {
     const oneSite = await renderSettled(new CountingFleetSource(FULL_FLEET), [SITE_A]);
 
-    expect(oneSite.querySelector('.fleet-panel-stats')?.textContent).toBe(
-      '1 site · 4.0 kW installed',
-    );
+    expect(oneSite.querySelector('.fleet-panel-stats')?.textContent).toBe('1 site · 4.0 kW');
 
     cleanup();
     const twoSites = await renderSettled(new CountingFleetSource(FULL_FLEET));
 
-    expect(twoSites.querySelector('.fleet-panel-stats')?.textContent).toBe(
-      '2 sites · 8.0 kW installed',
-    );
+    expect(twoSites.querySelector('.fleet-panel-stats')?.textContent).toBe('2 sites · 8.0 kW');
   });
 
   it('asks the source for 168 hours when the 7 d control is pressed', async () => {
