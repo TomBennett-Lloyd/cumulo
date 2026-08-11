@@ -1,6 +1,6 @@
 # Retro proposals — 2026-08-11
 
-Four items from the 2026-08-11 retro pass that touch a `humanAlways` path (`CLAUDE.md`) or ask a question only the owner can answer. **Nothing here is applied.** The rest of that pass's dispositions — the `review-loop`, `plan-issue`, `planner.md`, `browser-smoke.md` and `stylelint.config.mjs` changes — landed in the same PR as this file, because none of them touches a gated path.
+Five items from the 2026-08-11 retro pass that touch a `humanAlways` path (`CLAUDE.md`) or ask a question only the owner can answer. **Nothing here is applied.** Every other disposition from that pass — the skill and agent amendments, the log pruning, and the `stylelint.config.mjs` fix — landed in the same PR as this file, because none of them touches a gated path. That sentence is a claim about **kind**, not a census: an enumeration of the applied changes would be one more list to keep true, and the PR's own body is where they are named.
 
 The convention this file follows is the one `docs/retro-proposals-2026-08-10.md` set: proposals live here until decided, the PR that applies them **deletes this file**, and the decisions are recorded in `docs/review-feedback.md`.
 
@@ -10,7 +10,7 @@ Each item states the evidence, the exact text proposed, what it costs, and what 
 
 ## P1 — A standards-index trigger row for security-policy authoring
 
-**Evidence (#176, PR #393).** A security ticket, planned on Fable and implemented on Opus, shipped a same-origin framing hole: `child-src 'self'` was added _defensively_, and CSP3 gives `child-src` two dependants — `worker-src` **and** `frame-src` — so the one directive added for safety is what opened the gap. Review cycle 1 caught it by reading the CSP3 fallback table. **No standards trigger fired, because none exists**: the index has rows for types, React, architecture, structure, error handling, testing and design, and the generic ones cannot reach this work — no type was written, no component touched, no module added. #176's handover calls this the clearest under-firing in the ticket.
+**Evidence (#176, PR #393).** A security ticket, planned on Fable and implemented on Opus, shipped a same-origin framing hole: `child-src 'self'` was added _defensively_, and CSP3 gives `child-src` two dependants — `worker-src` **and** `frame-src` — so the one directive added for safety is what opened the gap. Review cycle 1 caught it by reading the CSP3 fallback table. **No standards trigger covered the defect, because none exists for it.** The index has rows for types, React, architecture, structure, error handling, testing and design. Some of them did fire — PR #393 added `apps/web/src/zod-jitless.ts` and `apps/web/e2e/content-security-policy.ts`, so the `architecture.md` module trigger matched, and typed code was written — and **not one of them has anything to say about a directive whose absence inherits from another directive**. That is the honest shape of the gap: not silence from the index, but every row that answered answering about something else. #176's handover calls it the clearest under-firing in the ticket.
 
 **Proposed row**, to sit after the `error-handling.md` row:
 
@@ -62,7 +62,7 @@ Three answers, none obviously right:
 **Evidence (#356, PR #395).** This is the substance underneath P3, and it stands on its own: the compact-form condition is currently ambiguous between two readings, and the branch shipped the broader one, documented as a judgement in `docs/design/map-treatment.md`.
 
 - **Reading 1 (as written)**: the compact form is sanctioned at widths where the row cannot hold _the weather phrase_.
-- **Reading 2 (as shipped)**: at widths where the row cannot hold _itself as composed_ — both credits at full form, which triggers roughly 96px broader than reading 1.
+- **Reading 2 (as shipped)**: at widths where the row cannot hold _itself as composed_ — both credits at full form, which triggers at a measurably broader viewport than reading 1. The gap between the two is derived and owned by the breakpoint docblock over the `37.25rem` media query in `apps/web/src/map/map.css`, whose own parenthetical says nothing computes with it and it joins no ledger — so it is named there and deliberately not restated here.
 
 Reading 2 is what is deployed, and it is defensible: the row is what the user sees, and a row that overflows is not attribution either. But it means the bare linked name appears on wider viewports than the sentence in `CLAUDE.md` describes, and the hard constraint says the link itself is non-negotiable in every state — which both readings honour, so the licence obligation is not at risk under either.
 
@@ -70,6 +70,28 @@ Reading 2 is what is deployed, and it is defensible: the row is what the user se
 
 ---
 
+## P5 — `CLAUDE.md`'s cap sentence is the one carrier of the review-loop bound that this pass could not true up
+
+**Evidence (this PR's own review cycle 1).** The pass added a **scoped confirmation pass on the final fix diff** to `review-loop`, because a capped loop had no way to earn the APPROVE `reviewedSourceRule` demands — four PRs (#391, #395, #398, #400) had already invented that route independently. The rule landed, and the sentences stating the old bound did not move with it. The reviewer found the contradiction inside the same PR: an orchestrator reading "Hard cap: 3 cycles" stops exactly where the new rule says it must not.
+
+Eight carriers were trued up in this PR — `review-loop`'s frontmatter and its opening bound, `.claude/agents/task-orchestrator.md`'s stop-list, and four sites in `docs/design/task-orchestrator.md` — and the bound now carries a **restatement ledger** beside its owner in `review-loop`, naming every site including this one. One carrier is out of reach:
+
+> `CLAUDE.md`, the Workflow bullet: "Review loop (`/review-loop`): max 3 cycles. Systemic findings go to `docs/tech-debt.md`, not into endless iteration. Correctness bugs always block merge."
+
+**Proposed replacement**:
+
+> - Review loop (`/review-loop`): max 3 cycles, plus a scoped confirmation pass on the final fix diff. Systemic findings go to `docs/tech-debt.md`, not into endless iteration. Correctness bugs always block merge.
+
+**Why it is here rather than in the diff**: `CLAUDE.md` is `humanAlways`. Note that `.claude/workflow.json` does **not** state the bound (swept, no match), so this is the only gated carrier.
+
+**This is also the worked example P3 asks about**, which is why the two should be decided together. Every non-gated carrier could be — and was — trued up by a PR that never touched `CLAUDE.md`, leaving the repo in a state where seven documents say one thing and the gated one says another. Nothing gated that divergence. If P3 is answered "no" (a reading is not a change), the same shape recurs on the next amendment to any rule `CLAUDE.md` restates; if "yes", this PR itself would have tripped the gate, which is the cost side of that answer stated concretely.
+
+**Until it is decided**, the divergence is live and one-directional: `CLAUDE.md` understates the loop. That is the safe direction — an agent following it stops early and hands a PR to the confirmation pass late, rather than merging something unreviewed — but it is a contradiction, and the ledger in `review-loop` now names it as a known one rather than leaving it to be rediscovered.
+
+---
+
 ## What happens next
 
-If P1/P2/P4 are approved, the applying PR edits `CLAUDE.md` (and creates `docs/standards/security.md` for P1), deletes this file, and carries its own `docs/review-feedback.md` entry under the on-branch merge ritual. If any is declined, the decision is recorded in `docs/review-feedback.md` with the reason, and this file is deleted just the same — a declined proposal is a decision, not a backlog item. P3, if answered "yes" in either form, is a separate `.claude/workflow.json` PR.
+If P1/P2/P4/P5 are approved, the applying PR edits `CLAUDE.md` (and creates `docs/standards/security.md` for P1), deletes this file, and carries its own `docs/review-feedback.md` entry under the on-branch merge ritual. If any is declined, the decision is recorded in `docs/review-feedback.md` with the reason, and this file is deleted just the same — a declined proposal is a decision, not a backlog item. P3, if answered "yes" in either form, is a separate `.claude/workflow.json` PR.
+
+**P5 is the one with a clock on it**: until it lands, `CLAUDE.md` and seven other documents disagree about where the review loop ends. P5 and P3 want deciding together — P5 is the concrete instance of the question P3 asks in the abstract.

@@ -1,9 +1,11 @@
 ---
 name: review-loop
-description: Iterate reviewer findings on the current branch until the quality bar is met, max 3 cycles. Systemic findings go to the tech-debt log instead of blocking. Ends by opening the PR.
+description: Iterate reviewer findings on the current branch until the quality bar is met, max 3 cycles plus a scoped confirmation pass on the final fix diff. Systemic findings go to the tech-debt log instead of blocking. Ends by opening the PR.
 ---
 
-You are orchestrating the quality loop on the current branch. Hard cap: **3 cycles**. The cap is what stops "exemplary quality" from becoming an infinite loop; the tech-debt log is where the overflow goes.
+You are orchestrating the quality loop on the current branch. Hard cap: **3 cycles, plus a scoped confirmation pass on the final fix diff.** The cap is what stops "exemplary quality" from becoming an infinite loop; the tech-debt log is where the overflow goes. The confirmation pass is not a fourth cycle and does not extend the cap: the cap bounds **iteration on the branch**, while the pass reviews the fix commits the last cycle never saw, on that diff alone, under its own termination rule. Both are specified under Exit conditions — read them before deciding you are finished, because stopping at cycle 3 with unreviewed fixes on the branch is the specific failure this shape exists to prevent.
+
+**Restatement ledger for this bound** (`architecture.md` rule 9 — these sites carry the number and must move with it): the frontmatter `description` above; `.claude/agents/task-orchestrator.md`'s stop-list paragraph; `docs/design/task-orchestrator.md`'s ownership-split role table, its one-review-loop-per-batch paragraph, its bounce-round ownership item, and its risk table's sick-batch-member row; and `CLAUDE.md`'s Workflow bullet, which is a `humanAlways` path and therefore moves only by owner decision. Two sites match a sweep for the number and are deliberately **not** carriers: `docs/design/task-orchestrator.md`'s humanAlways-feedback bullet points here without stating the bound, and `.claude/agents/reviewer.md`'s prose-fix-round paragraph narrates two past tickets that "ran to the 3-cycle cap", which is a historical claim in the past tense and stays true whatever the bound becomes.
 
 Per cycle:
 

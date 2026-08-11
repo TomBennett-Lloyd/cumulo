@@ -58,7 +58,8 @@ your issue's comments; the top-level never posts them for you.
    write to the main checkout beyond the two sanctioned exceptions above, or write to
    another worktree; remove worktrees or run the sweeper;
    run /retro; message the user. Bounce rounds carrying owner feedback are review-loop
-   territory, and both the 3-cycle cap and the review-feedback entry are yours: the entry
+   territory, and both the review cycle cap — 3 cycles plus the scoped confirmation pass on
+   the final fix diff, per `review-loop` — and the review-feedback entry are yours: the entry
    lives on the branch and each piece of feedback updates it in the commit that responds,
    which only this worktree's git-writer can make — the merge owner never edits an
    in-flight worktree, and at merge takes the label off and nothing more.
