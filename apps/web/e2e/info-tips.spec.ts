@@ -2,6 +2,8 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { layoutBoxOf } from './layout-box';
+import { PHONE_VIEWPORT } from './viewports';
 
 /*
  * A description behind an (i), driven by a real keyboard.
@@ -12,13 +14,18 @@ import { routeBasemap } from './hermetic-basemap';
  * that needs a browser and none of it is repeated here.
  *
  * What is only true here is that a reader can get to it. `aria-expanded` and a
- * mounted `<span>` are jsdom facts; whether the button is reachable by tabbing
+ * mounted `<div>` are jsdom facts; whether the button is reachable by tabbing
  * through the assembled page, whether the panel that appears is *painted* rather
  * than merely present in the DOM, and whether Escape leaves the reader standing
  * on the button they pressed are facts about layout, stacking and real key
  * events. jsdom has no layout, so a panel positioned under the map's controls or
  * collapsed to nothing looks identical there to one a reader can read
  * (`testing.md` rule 10).
+ *
+ * **Where the panel lands** is the second thing only true here, and it arrived
+ * with the 2026-08-11 round (#429): the panel is clamped to the controls row's
+ * width and right edge, which is a claim about two boxes and therefore has no
+ * jsdom twin at all. The phone-width case at the foot of this file is that pin.
  *
  * One tip is driven, because one is the whole count. There were three when this
  * file was written and both departures were deletions rather than moves. #284 D5
@@ -128,4 +135,79 @@ test('opens the fleet chart’s description from the keyboard, and closes it bac
    */
   await expect(panel).toHaveCount(0);
   await expect(button).toBeFocused();
+});
+
+test.describe('at a phone width', () => {
+  test.use({ viewport: PHONE_VIEWPORT });
+
+  test('opens the description inside the page rather than off its edge', async ({ page }) => {
+    /*
+     * The owner's second ask of 2026-08-11, in their words: *"the (i) tooltip
+     * hangs off the edge of the page"*. The panel used to be anchored to the
+     * `.info-tip` itself — a 24px button carried to the *right* end of the
+     * controls row — and hung from its left edge at its own measure, so at a
+     * phone width most of it was drawn past the viewport and the sentence was
+     * unreadable without a horizontal scroll. It is anchored to the controls
+     * row and clamped to that row's width and right edge now
+     * (`src/info/info.css`, `src/dashboard/fleet-panel.css`).
+     *
+     * This lane, because there is nothing here jsdom can see: the defect is
+     * where a box lands, and jsdom lays nothing out (`testing.md` rule 10).
+     *
+     * `clientWidth` rather than the configured 390, for the reason
+     * `composition.spec.ts` gives at its own edge comparison: the page scrolls,
+     * so a classic scrollbar takes real width out of the layout viewport and a
+     * comparison against the window would fail by exactly a scrollbar on any
+     * engine that draws one.
+     */
+    const button = page.locator(FLEET_TIP_BUTTON);
+    const panel = page.locator(FLEET_TIP_PANEL);
+
+    await expect(button).toHaveCount(1);
+    await button.click();
+    await expect(panel).toBeVisible();
+
+    const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    const panelBox = await layoutBoxOf(panel, 'The fleet chart’s description panel');
+
+    expect(panelBox.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(layoutWidth);
+
+    /*
+     * And what is inside it is the legend, painted. `innerText` is rendered
+     * text rather than markup, so a key that reached the DOM but was clipped to
+     * nothing inside a panel this case has just called well-placed does not
+     * satisfy it. The row's own text is read first and asserted non-empty,
+     * which is the control the containment check needs: without it a legend of
+     * blank `<li>`s would pass on `''` being a substring of anything.
+     *
+     * The words are deliberately not written out, for the reason the case above
+     * gives about the sentence — the legend's copy has one home in
+     * `charts/forecast-chart-legend.tsx` and is asserted against it in the unit
+     * lane. A second copy here would go green against the old words.
+     */
+    const firstRow = panel.locator('.forecast-chart-legend li').first();
+    const rowText = (await firstRow.innerText()).trim();
+
+    expect(rowText.length).toBeGreaterThan(0);
+    expect(await panel.innerText()).toContain(rowText);
+
+    /*
+     * Still the topmost thing at its own centre. The row it now hangs from
+     * carries `container-type: inline-size`, whose layout containment makes it
+     * both the panel's containing block and a stacking context — so re-anchoring
+     * the panel outwards is exactly the change that could have dropped it behind
+     * the chart below. `toBeVisible` cannot see that: Playwright's visibility is
+     * a box and a computed style, not an occlusion test, which is the same
+     * reason `header.spec.ts` hit-tests its own popover over the map canvas.
+     */
+    const topmostAtCentre = await panel.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+
+      return hit !== null && element.contains(hit);
+    });
+
+    expect(topmostAtCentre).toBe(true);
+  });
 });

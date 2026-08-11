@@ -24,11 +24,18 @@ export const TOOLTIP_ROW_HEIGHT = 14;
 /** Clear of the plot ceiling so the panel border does not sit on the top grid line. */
 export const TOOLTIP_TOP_GAP = 4;
 /**
- * Long enough to read as a stroke of the series, short enough to stay a key.
+ * Long enough to read as a mark of the series, short enough to stay a key.
  * Shortened from 12 in #284 D12: with the rows in columns the key is read
  * against the name beside it rather than against the run of text it used to
  * introduce, so it can be a mark of the series' colour instead of a dash long
  * enough to hold its own.
+ *
+ * It is a *footprint* rather than a stroke length, and the distinction became
+ * real in #429: most rows key a line and draw one this long, but the range row
+ * keys the band, and what it draws in the same span is a wash between two bound
+ * hairlines rather than a stroke (`forecast-chart-hover.tsx`). The number is
+ * unchanged and the name is kept for the same reason — every row's key occupies
+ * exactly this much of the row, which is what the sizing below is computing.
  */
 export const KEY_STROKE_LENGTH = 8;
 export const KEY_TEXT_GAP = 6;
@@ -42,8 +49,7 @@ export const COLUMN_GAP = 10;
 export const FIRST_SERIES_ROW = 1;
 /**
  * Mean advance width of one character of tooltip text at `--text-xs`. Columns
- * are sized by a character *count* rather than by asking the browser, for the
- * reason `HORIZON_LABEL_WIDTH` is estimated in `forecast-chart-axes.tsx`:
+ * are sized by a character *count* rather than by asking the browser:
  * `getComputedTextLength` needs a laid-out DOM, which would make a pure render
  * depend on the browser and report zero under jsdom. Erring wide only leaves a
  * little air at the right-hand edge; erring narrow clips an overlay's name,
@@ -79,7 +85,16 @@ export const TOOLTIP_CHAR_WIDTH = 6.3;
 
 /** One line of the readout: a colour key, the series' name, and its value. */
 export interface TooltipRow {
-  /** The series' own class, so the key stroke cannot drift from the line it names. */
+  /**
+   * The series' own class, so the key cannot drift from the mark it names.
+   *
+   * "The line it names" until #429, which is now true of most rows rather than
+   * of all of them: the range row wears this class over a wash and two bound
+   * hairlines instead of a stroke. The class is still the tie to the series'
+   * ink either way, which is the whole of what this field is for; what shape it
+   * is painted in is `forecast-chart-hover.tsx`'s to decide and nothing here
+   * reads it.
+   */
   readonly seriesClassName: string;
   readonly value: string;
   readonly name: string;

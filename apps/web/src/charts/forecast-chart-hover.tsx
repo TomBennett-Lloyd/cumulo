@@ -34,7 +34,10 @@ import {
  * to land on a line or inside the fill to get a number — the series' name in
  * muted text and its value in full contrast beside it, in two columns (#284
  * D12), keyed by a short stroke of the series' own colour rather than a filled
- * box, and an em dash where an hour has no value for a series (#330). And
+ * box — except the range row, which is keyed by the band's own wash and bounds
+ * at that same stroke's footprint, so the panel says what the band is now that
+ * the legend sits behind the (i) (owner 2026-08-11, #429) — and an em dash where an
+ * hour has no value for a series (#330). And
  * **keyboard focus shows exactly what hover shows**: both routes end at the
  * same `activeIndex`, so there is one readout, not two implementations that
  * drift — one filtered for speech, which is `spokenTooltipRows` below and the
@@ -50,10 +53,12 @@ import {
  * re-render one of the panel's rows.
  *
  * That memo is one of two layers, and it is the inner one. It guards what is
- * inside the panel; what keeps the rest of the figure — the marks, the legend,
- * the table twin — out of the re-rendering subtree entirely is where the hover
- * state lives, which since #331 is `forecast-chart-hover-boundary.tsx` rather
- * than `ForecastChart`. Read the sentence above as the panel's own guarantee,
+ * inside the panel; what keeps the rest of the figure — the marks, the table
+ * twin — out of the re-rendering subtree entirely is where the hover state
+ * lives, which since #331 is `forecast-chart-hover-boundary.tsx` rather than
+ * `ForecastChart`. The legend was named in that list until 2026-08-11 and no
+ * longer needs to be: it is not in the figure at all now, so no boundary has to
+ * hold it out of one. Read the sentence above as the panel's own guarantee,
  * not the figure's: the figure's is that file's.
  *
  * Positioning is SVG attributes and one `transform` — never a `style` prop,
@@ -62,6 +67,26 @@ import {
  * animate, so there is no motion for `prefers-reduced-motion` to reduce.
  * Colour lives entirely in `charts.css`.
  */
+
+/**
+ * A row as it is **drawn**: everything the sizer needs, plus the one thing the
+ * sizer has no opinion about — which key names it.
+ *
+ * `keyKind` is a required literal union rather than an optional `isBand?` flag
+ * (`typing.md` rule 4): every producer of a row has to say which key it wants,
+ * so a row added later cannot silently inherit the wrong one, and there is no
+ * `undefined` arm for a reader to interpret. It is ink and nothing else — no
+ * arm of `tooltip-geometry.ts` reads it, which is why this extends `TooltipRow`
+ * here rather than widening it there. The panel measures the same width
+ * whichever key a row carries, and `forecast-chart-tooltip.test.tsx`'s
+ * width-invariance case is what holds that to be true rather than merely
+ * intended: the pinned tooltip's coverage of its own hour is argued from this
+ * panel's width in [#421](https://github.com/TomBennett-Lloyd/cumulo/issues/421),
+ * and a key that cost width would falsify it.
+ */
+export interface DrawnTooltipRow extends TooltipRow {
+  readonly keyKind: 'line' | 'band';
+}
 
 /**
  * The range row, which is the one row whose *existence* is a question about the
@@ -80,11 +105,12 @@ import {
 const bandRows = (
   band: ForecastChartBand | undefined,
   chartHasBand: boolean,
-): readonly TooltipRow[] => {
+): readonly DrawnTooltipRow[] => {
   if (band !== undefined) {
     return [
       {
         seriesClassName: 'forecast-chart-band-bound',
+        keyKind: 'band',
         value: `${formatKw(band.p10Kw)}–${formatKw(band.p90Kw)}`,
         name: 'P10–P90',
         present: true,
@@ -97,6 +123,7 @@ const bandRows = (
   return [
     {
       seriesClassName: 'forecast-chart-band-bound',
+      keyKind: 'band',
       // Through the formatter rather than as a literal, so this dash is the
       // same mark the table's cells and every other absent value carry by
       // construction instead of by a second spelling of it.
@@ -137,15 +164,17 @@ const tooltipRows = (
   point: ForecastChartPoint,
   overlay: ChartOverlayReading | undefined,
   chartHasBand: boolean,
-): readonly TooltipRow[] => {
-  const measured: TooltipRow = {
+): readonly DrawnTooltipRow[] => {
+  const measured: DrawnTooltipRow = {
     seriesClassName: 'forecast-chart-actuals',
+    keyKind: 'line',
     value: formatKw(point.actualKw),
     name: 'Actual',
     present: point.actualKw !== null,
   };
-  const median: TooltipRow = {
+  const median: DrawnTooltipRow = {
     seriesClassName: 'forecast-chart-median',
+    keyKind: 'line',
     value: formatKw(point.medianKw),
     name: 'Median',
     // Nullable since #264: an hour behind the horizon on a union x-domain was
@@ -153,7 +182,11 @@ const tooltipRows = (
     // than announcing a labelled series with an em dash for a value.
     present: point.medianKw !== null,
   };
-  const forecast: readonly TooltipRow[] = [measured, median, ...bandRows(point.band, chartHasBand)];
+  const forecast: readonly DrawnTooltipRow[] = [
+    measured,
+    median,
+    ...bandRows(point.band, chartHasBand),
+  ];
   return overlay === undefined
     ? forecast
     : [
@@ -162,6 +195,7 @@ const tooltipRows = (
           // The series' own class, so the key stroke is the overlay's slot-2
           // hue by construction rather than by a second declaration.
           seriesClassName: 'forecast-chart-overlay',
+          keyKind: 'line',
           value: formatKw(overlay.kw),
           name: overlay.label,
           present: overlay.kw !== null,
@@ -189,7 +223,7 @@ const tooltipRows = (
 const spokenTooltipRows = (
   point: ForecastChartPoint,
   overlay: ChartOverlayReading | undefined,
-): readonly TooltipRow[] =>
+): readonly DrawnTooltipRow[] =>
   // `false` and not the drawn gate: the only row the gate adds is a dashed one,
   // which this filter drops either way, so speech is independent of it rather
   // than quietly agreeing with it.
@@ -233,6 +267,80 @@ export const readoutText = (
     .join(', ')}`;
 
 /**
+ * How tall the band key's wash is drawn — its *only* dimension that is a choice
+ * here, since its width is `KEY_STROKE_LENGTH` and must stay so (below). Ink
+ * rather than sizing, which is why it lives beside the element it draws instead
+ * of in `tooltip-geometry.ts`: no arm of the panel's arithmetic reads it, and a
+ * row is `TOOLTIP_ROW_HEIGHT` tall whatever key it carries. Roughly the legend
+ * swatch's proportion of its own row, so the two read as the same mark.
+ */
+const BAND_KEY_HEIGHT = 10;
+/**
+ * Half a stroke in from each edge, so a 1-unit hairline centred on this line
+ * sits exactly inside the wash it bounds rather than half outside it — the
+ * legend's `2.5`/`11.5` against its own 10-unit swatch, restated as the offset
+ * it always was.
+ */
+const BAND_KEY_BOUND_INSET = 0.5;
+
+/**
+ * The mark that names a row's series, in the row's own left gutter.
+ *
+ * **A band is not a line, and with the legend behind the (i) since 2026-08-11
+ * the tooltip is where a reader finds that out without asking.** A line series is keyed by a
+ * stroke of its colour, as every row has been; the range row is keyed by the
+ * band's own treatment — the wash with a bound hairline top and bottom, the
+ * legend swatch at `forecast-chart-legend.tsx` scaled to this gutter — so the
+ * panel says what the band *is* rather than borrowing a stroke that looks like
+ * a line's. It reuses the plot's own class names, so the wash and the hairlines
+ * have one owner (`charts.css`) and the key cannot drift from the band it names.
+ *
+ * **It is drawn at the key footprint, not the legend's.** A legend swatch is
+ * several times the width `KEY_STROKE_LENGTH` reserves here, and drawing one at
+ * its own width would push `nameX` right and widen every panel the chart ever
+ * shows. The panel's width is load-bearing beyond this file —
+ * [#421](https://github.com/TomBennett-Lloyd/cumulo/issues/421)'s tap contract
+ * was argued on how much of its own hour a pinned panel covers — so the key
+ * kind changes the ink inside the gutter and nothing about the gutter.
+ */
+const rowKeyElement = (row: DrawnTooltipRow, y: number): ReactElement => {
+  const keyLeft = TOOLTIP_PADDING;
+  const keyRight = TOOLTIP_PADDING + KEY_STROKE_LENGTH;
+
+  if (row.keyKind === 'line') {
+    return <line className={row.seriesClassName} x1={keyLeft} x2={keyRight} y1={y} y2={y} />;
+  }
+
+  const top = y - BAND_KEY_HEIGHT / 2;
+  const bottom = y + BAND_KEY_HEIGHT / 2;
+  return (
+    <>
+      <rect
+        className="forecast-chart-band"
+        x={keyLeft}
+        y={top}
+        width={KEY_STROKE_LENGTH}
+        height={BAND_KEY_HEIGHT}
+      />
+      <line
+        className="forecast-chart-band-bound"
+        x1={keyLeft}
+        x2={keyRight}
+        y1={top + BAND_KEY_BOUND_INSET}
+        y2={top + BAND_KEY_BOUND_INSET}
+      />
+      <line
+        className="forecast-chart-band-bound"
+        x1={keyLeft}
+        x2={keyRight}
+        y1={bottom - BAND_KEY_BOUND_INSET}
+        y2={bottom - BAND_KEY_BOUND_INSET}
+      />
+    </>
+  );
+};
+
+/**
  * Row coordinates are local to the tooltip group, which carries the translate.
  *
  * Two sibling texts rather than one with two `tspan`s (#284 D12): a `tspan`
@@ -243,11 +351,16 @@ export const readoutText = (
  * every value at another, whatever the rows happen to say. `-text` carries the
  * font both need; `-name` and `-value` carry only their contrast.
  *
+ * The key itself is `rowKeyElement`'s: a line row wears a stroke of its colour
+ * and the range row wears the band's own wash and bounds, in the same gutter and
+ * at the same width. Everything below the key is identical either way, which is
+ * the whole of why the panel measures the same.
+ *
  * Keyed by `seriesClassName` rather than by `name`, because a name is not unique
  * and never was: an overlay's name is a *site* name, which is free text a visitor
  * types, so a site called "Median" shares a key with the forecast's own median
- * row. The class is one per series by construction — it is the same value that
- * colours the key stroke — so it cannot collide without two rows genuinely being
+ * row. The class is one per series by construction — it is the same value the
+ * row's key is drawn in — so it cannot collide without two rows genuinely being
  * the same series.
  *
  * What the collision actually cost is worth stating precisely, because it is
@@ -262,20 +375,14 @@ export const readoutText = (
  * exactly that reason.
  */
 const tooltipRowElement = (
-  row: TooltipRow,
+  row: DrawnTooltipRow,
   rowIndex: number,
   columns: TooltipColumns,
 ): ReactElement => {
   const y = tooltipRowY(rowIndex);
   return (
     <g key={row.seriesClassName}>
-      <line
-        className={row.seriesClassName}
-        x1={TOOLTIP_PADDING}
-        x2={TOOLTIP_PADDING + KEY_STROKE_LENGTH}
-        y1={y}
-        y2={y}
-      />
+      {rowKeyElement(row, y)}
       <text
         className="forecast-chart-tooltip-text forecast-chart-tooltip-name"
         x={columns.nameX}

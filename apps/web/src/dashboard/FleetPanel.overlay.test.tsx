@@ -85,7 +85,16 @@ describe('FleetPanel with a site selected', () => {
     const { container } = render(panel(new CountingFleetSource(FULL_FLEET), SITE_A_SELECTED));
     await settle();
 
-    // Scoped to the legend rather than swept for across the figure: the site's
+    /*
+     * Behind the (i) since 2026-08-11 (#429), so the press is part of the claim:
+     * the legend is mounted only while the tip is open, and the reader reaches
+     * the site's name by asking for it. Pressed after `settle`, because what is
+     * asserted is the legend the *arrived* overlay produced — a tip opened
+     * before it would have to be re-opened to see one.
+     */
+    fireEvent.click(screen.getByRole('button', { name: 'About this chart' }));
+
+    // Scoped to the legend rather than swept for across the panel: the site's
     // name is also the table's column header, and a document-wide text query
     // would go green on that alone — leaving the plot with an unnamed mark on it.
     await waitFor(() => {

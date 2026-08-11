@@ -16,7 +16,6 @@ import {
 } from './forecast-chart-test-fixture';
 // Erased at compile time, so naming these modules here creates no import cycle
 // with the mocks below — they only give `importOriginal` a type to answer with.
-import type * as ForecastChartLegend from './forecast-chart-legend';
 import type * as ForecastChartMarks from './forecast-chart-marks';
 import type * as ForecastChartTable from './forecast-chart-table';
 
@@ -40,11 +39,21 @@ import type * as ForecastChartTable from './forecast-chart-table';
  * the one `ForecastChart` body, so wrapping `medianElements` alone counts that
  * body's runs — a second mark counter would only ever repeat this one.
  *
+ * **The legend left the census on 2026-08-11, and leaving is the only honest way
+ * it could go.** #429 moved it behind the fleet panel's (i), so `ForecastChart`
+ * does not call `forecastChartLegend` at all and this figure has no such
+ * producer to count. Keeping the counter would have parked it at zero through
+ * every case — which is exactly the reading the second control below exists to
+ * refuse, since an unwired probe and an absent producer are indistinguishable at
+ * zero. So the module mock went with the field, and the two counters left both
+ * settle at one. What re-renders the legend is now a question about
+ * `FleetPanel`, and `FleetPanel.memo.test.tsx` is where that lives.
+ *
  * Every case's load-bearing claim is relative (`FleetPanel.memo.test.tsx`'s
  * discipline): each settles the chart on a sample, snapshots the counters, and
  * compares what the rest of the case adds. That comparison is a probe against a
- * snapshot of itself, so it needs two controls to mean anything — `{0,0,0}`
- * equals `{0,0,0}`. `tooltipAnchor` and `tooltipText` prove the frames really
+ * snapshot of itself, so it needs two controls to mean anything — `{0,0}`
+ * equals `{0,0}`. `tooltipAnchor` and `tooltipText` prove the frames really
  * committed, so a chart that stopped rendering after the first move cannot pass.
  * The second control is the one absolute reading in the file: `settledCounts`
  * pins the snapshot to `SETTLED_COUNTS`, so a probe wired to nothing cannot pass
@@ -54,12 +63,11 @@ import type * as ForecastChartTable from './forecast-chart-table';
  */
 
 interface ProducerCounts {
-  legend: number;
   table: number;
   marks: number;
 }
 
-const probe = vi.hoisted((): ProducerCounts => ({ legend: 0, table: 0, marks: 0 }));
+const probe = vi.hoisted((): ProducerCounts => ({ table: 0, marks: 0 }));
 
 /**
  * One producer, wrapped in a call counter. Hoisted alongside `probe` because
@@ -76,11 +84,6 @@ const counting = vi.hoisted(
       return implementation(...args);
     },
 );
-
-vi.mock('./forecast-chart-legend', async (importOriginal) => {
-  const actual = await importOriginal<typeof ForecastChartLegend>();
-  return { ...actual, forecastChartLegend: counting('legend', actual.forecastChartLegend) };
-});
 
 vi.mock('./forecast-chart-table', async (importOriginal) => {
   const actual = await importOriginal<typeof ForecastChartTable>();
@@ -125,9 +128,9 @@ const PAST_ONE_FRAME_MS = 40;
 const OVERLAY_LABEL = 'Sunnyside Farm';
 
 /**
- * Through the overlay path deliberately: an overlay puts a row in the legend, a
- * column in the table and a mark on the plot, so all three counted producers are
- * doing the fuller job the sweep is supposed to leave alone.
+ * Through the overlay path deliberately: an overlay puts a column in the table
+ * and a mark on the plot, so both counted producers are doing the fuller job the
+ * sweep is supposed to leave alone.
  */
 const renderOverlaidChart = (): HTMLElement => {
   const container = renderChartWithOverlay(SERIES, {
@@ -163,7 +166,7 @@ const SAMPLE_3_TEXT = `15:00Actual—Median5.0P10–P904.0–6.0${OVERLAY_LABEL}
  * at mount, and neither the first pointer frame nor the focus that opens the
  * readout adds a second.
  */
-const SETTLED_COUNTS: ProducerCounts = { legend: 1, table: 1, marks: 1 };
+const SETTLED_COUNTS: ProducerCounts = { table: 1, marks: 1 };
 
 /**
  * The settled snapshot, and the assertion that it is a reading rather than an
@@ -184,7 +187,6 @@ const settledCounts = (): ProducerCounts => {
 describe('ForecastChart render boundary', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    probe.legend = 0;
     probe.table = 0;
     probe.marks = 0;
   });
@@ -193,7 +195,7 @@ describe('ForecastChart render boundary', () => {
     vi.useRealTimers();
   });
 
-  it('moves the panel across pointer frames without re-running the marks, the legend or the table', () => {
+  it('moves the panel across pointer frames without re-running the marks or the table', () => {
     const container = renderOverlaidChart();
 
     movePointerTo(container, sampleX(2));
@@ -214,7 +216,7 @@ describe('ForecastChart render boundary', () => {
 
     // So nothing outside the panel had anything new to say. On the pre-#331
     // boundary each of those frames re-ran the whole figure to move one
-    // `transform` — five mark generators, the legend, and every table row.
+    // `transform` — five mark generators and every table row.
     expect(probe).toStrictEqual(settled);
   });
 
@@ -231,8 +233,8 @@ describe('ForecastChart render boundary', () => {
     // sample: a real selection change, not just a moved panel.
     expect(tooltipText(container)).toBe(SAMPLE_3_TEXT);
 
-    // Which is still only the hover layer's business. The marks, the legend and
-    // the table are drawn from `points`, and `points` did not change.
+    // Which is still only the hover layer's business. The marks and the table
+    // are drawn from `points`, and `points` did not change.
     expect(probe).toStrictEqual(settled);
   });
 

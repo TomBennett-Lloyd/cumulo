@@ -35,8 +35,8 @@ const LONE_BAND_AXIS_MAX_KW = 8;
 
 /*
  * The plot's chrome moved out when #284 D9/D10 gave the time axis a second tier
- * and both titles a rotation to assert: the horizon rule and its label, the two
- * tiers, and the axis titles are `forecast-chart-axes.test.tsx`'s, beside the
+ * and both titles a rotation to assert: the horizon rule, the two tiers, and
+ * the axis titles are `forecast-chart-axes.test.tsx`'s, beside the
  * module that draws them. What is left here is the data — band, bounds, median,
  * actuals, the gaps none of them bridge, and the table twin.
  */
@@ -153,15 +153,30 @@ describe('ForecastChart', () => {
     expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(0);
   });
 
-  it('lists all three series in draw order even when nothing is measured', () => {
-    const container = renderChart(SERIES.map((point) => ({ ...point, actualKw: null })));
-    const entries = [...container.querySelectorAll('.forecast-chart-legend li')];
+  it('draws no legend inside the figure, which is not this component’s any more', () => {
+    /*
+     * The owner's 2026-08-11 round moved the legend behind the fleet panel's (i)
+     * (#429, *"the legend can go in the (i) section"*), so this component draws
+     * the canvas and the announcement about it and nothing else. What the legend
+     * says is `forecast-chart-legend.test.tsx`'s; that a panel opens one in every
+     * state is `dashboard/FleetPanel.structure.test.tsx`'s.
+     *
+     * **The positive control is in that structure suite**, where the same class
+     * is queried inside `.info-tip-panel` and found. It has to be somewhere: a
+     * chart that rendered nothing at all satisfies a bare absence, and so would
+     * a selector that had been renamed out from under both files. The two halves
+     * are named here rather than left to be discovered because neither is worth
+     * anything without the other.
+     *
+     * The figure and its plot are asserted alongside, which is the weaker half
+     * of the same guard — an empty container cannot pass. The figure's full
+     * child-order contract is the structure suite's, in every state.
+     */
+    const container = renderChart(SERIES);
+    const figure = container.querySelector('.forecast-chart-figure');
 
-    expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
-      'Forecast (P10–P90, simulated)',
-      'Forecast (median)',
-      'Actuals (simulated)',
-    ]);
+    expect(figure?.querySelector('.forecast-chart')).not.toBeNull();
+    expect(container.querySelectorAll('.forecast-chart-legend')).toHaveLength(0);
   });
 
   it('puts every sample in the table twin, with an em dash where a value is missing', () => {
@@ -244,18 +259,6 @@ describe('ForecastChart', () => {
     expect(markers[0]?.getAttribute('cx')).toBe(String(xOfSample(SERIES, 0)));
   });
 
-  it('names the overlay in the legend, after the three fixed entries', () => {
-    const container = renderChartWithOverlay(SERIES, OVERLAY);
-    const entries = [...container.querySelectorAll('.forecast-chart-legend li')];
-
-    expect(entries.map((entry) => entry.textContent.trim())).toStrictEqual([
-      'Forecast (P10–P90, simulated)',
-      'Forecast (median)',
-      'Actuals (simulated)',
-      'Baseline',
-    ]);
-  });
-
   it('gives the overlay a table column headed by its label', () => {
     const container = renderChartWithOverlay(SERIES, OVERLAY);
     const headers = [...container.querySelectorAll('.forecast-chart-table thead th')];
@@ -310,12 +313,14 @@ describe('ForecastChart', () => {
     }
   });
 
-  it('draws no overlay mark, legend row or table column without the prop', () => {
+  it('draws no overlay mark or table column without the prop', () => {
+    // The legend row that used to be counted here is gone from this figure with
+    // the rest of the legend; its band-less/overlay-less arms are asserted
+    // against the function itself in `forecast-chart-legend.test.tsx`.
     const container = renderChart(SERIES);
 
     expect(marks(container, '.forecast-chart-overlay')).toHaveLength(0);
     expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(0);
-    expect(container.querySelectorAll('.forecast-chart-legend li')).toHaveLength(3);
     expect(container.querySelectorAll('.forecast-chart-table thead th')).toHaveLength(5);
     expect(tableCells(container, 0)).toHaveLength(4);
   });

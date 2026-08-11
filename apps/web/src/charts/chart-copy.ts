@@ -24,11 +24,18 @@
  * where the times are, and the two surfaces that state it read from one
  * constant rather than from two that agree (`architecture.md` rule 9).
  *
- * Out of scope on purpose: `Power (kW)`, `forecast horizon`, and the
- * P10/Median/P90/Actual column headers stay in the components that render them.
- * Those name the data, not the chrome — a chart that changed what it plots would
- * have to change them anyway, so centralising them would collect strings that
- * share only a file, not an intent (`structure.md` rule 7).
+ * Out of scope on purpose: `Power (kW)` and the P10/Median/P90/Actual column
+ * headers stay in the components that render them. Those name the data, not the
+ * chrome — a chart that changed what it plots would have to change them anyway,
+ * so centralising them would collect strings that share only a file, not an
+ * intent (`structure.md` rule 7).
+ *
+ * `forecast horizon` was on that list until the owner's 2026-08-11 design round
+ * ([#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)) deleted the
+ * words from the canvas. The dashed rule marks the threshold without captioning
+ * it, so there is no longer a string anywhere for this module to decline —
+ * naming it here would be this file remembering a word the charts stopped
+ * saying.
  */
 
 /**

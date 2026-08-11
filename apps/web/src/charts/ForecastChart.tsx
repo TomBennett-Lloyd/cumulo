@@ -19,7 +19,6 @@ import {
 } from './forecast-chart-axes';
 import { dayBoundaryElements, nightElements } from './forecast-chart-context';
 import { ForecastChartHoverBoundary } from './forecast-chart-hover-boundary';
-import { forecastChartLegend } from './forecast-chart-legend';
 import {
   actualsElements,
   bandElements,
@@ -33,8 +32,20 @@ import { useChartWidth } from './use-chart-width';
 /**
  * The forecast chart, drawn to `docs/design/chart-treatment.md`: a P10–P90 band
  * as a 10% wash with hairline bounds, the median on top, measured actuals in
- * near-ink last, a horizon rule where the measurements stop, an always-present
- * legend, and the table twin the treatment requires of every chart.
+ * near-ink last, a horizon rule where the measurements stop, and the table twin
+ * the treatment requires of every chart.
+ *
+ * **The legend is not here, and since 2026-08-11 it is not this component's at
+ * all.** The owner's design round put it behind the (i) that already carries the
+ * chart's description — in their words, *"the legend can go in the (i)
+ * section"* — so the caller renders `forecast-chart-legend.tsx` into that
+ * popover and this file draws only what is on the canvas. `FleetPanel.tsx` is
+ * the one caller today and owns the two inputs the legend reads, which are the
+ * same two facts this body derives for the plot: whether any drawn point carries
+ * a band, and the overlay's label. The treatment's rule is unchanged and is now
+ * discharged one press away rather than under the plot — a legend in every
+ * state, not a legend on every chart (`docs/design/chart-treatment.md`,
+ * "Legend").
  *
  * Presentational only — no fetching, no domain imports. Points arrive as plain
  * ISO strings and kW numbers, which branded `UtcIsoTimestamp` values satisfy.
@@ -61,8 +72,12 @@ import { useChartWidth } from './use-chart-width';
  * fixed categorical order, with slot 1 reserved for the forecast everywhere in
  * the product. One axis, never two: a second y-scale would invent a correlation
  * the data does not contain (`docs/design/chart-treatment.md`). It is joined
- * onto this series' x-domain once and then flows to the mark, the legend row,
- * the table column and the readout from that one join.
+ * onto this series' x-domain once and then flows to the mark, the table column
+ * and the readout from that one join. The legend's row for it is the one surface
+ * that no longer reads the join, because it no longer renders here — it takes
+ * the label straight off the same `ChartOverlaySeries` this prop carries, so the
+ * two still cannot disagree about what the overlay is *called*; what the join
+ * decides is what the overlay *says at an hour*, and no legend row asks that.
  *
  * **The readout has one source of truth, and since #331 it is not this file.**
  * Pointer and keyboard both settle on an `activeIndex`, which
@@ -89,14 +104,26 @@ import { useChartWidth } from './use-chart-width';
  * 2026-08-11 ask, in their words: *"i think the raw data could actually live in
  * a collapsible panel rather than inline with the graph etc"*. It has sat behind
  * a closed `<details>` since #284 D3 and still does; what moved is where the
- * disclosure sits. Inside the `<figure>` it was filed with the legend as one
- * more piece of the drawing's furniture, which is not what it is — it is the
+ * disclosure sits. Inside the `<figure>` it was filed alongside the legend as
+ * one more piece of the drawing's furniture, which is not what it is — it is the
  * same numbers in another form, offered *after* the chart rather than appended
  * to it. So this component returns a fragment: the figure, then the disclosure
  * as its next sibling, both landing in whatever layout the caller provides
  * (`dashboard/fleet-panel.css`'s `.fleet-panel-body` grid today). Nothing about
  * the fold itself changed — there is one disclosure, closed by default, and
  * `forecast-chart-table.tsx` still owns the argument for it.
+ *
+ * **What the figure holds is now a two-element contract**, and both moves of
+ * 2026-08-11 are what make it worth writing down: the table twin left for the
+ * sibling slot and the legend left for the (i), so a `<figure>` that once held
+ * four things holds the plot and the announcement about it and nothing else —
+ * `[svg.forecast-chart, p.forecast-chart-readout]`, in that order, with
+ * `.forecast-chart-details` as the figure's next sibling. The order is not
+ * cosmetic. The readout is the region a reader meets *after* the plot it
+ * describes, which is the arrangement `docs/design/chart-treatment.md`'s
+ * live-region bullet states, and #410 asked for it to be pinned rather than left
+ * to be read off this file. `dashboard/FleetPanel.structure.test.tsx` is where
+ * it is pinned, in every state of the panel.
  *
  * **Two names, because there are two things to name.** The standing aria
  * decision, written down as a decision rather than left to be read off the
@@ -115,11 +142,13 @@ import { useChartWidth } from './use-chart-width';
  * hour is the fleet's night is decided far from here and arrives on the point.
  *
  * This file is composition and nothing else. The plot's chrome, its data marks,
- * the hover layer, the legend and the table twin sit beside it —
- * `forecast-chart-axes.tsx`, `-marks.tsx`, `-context.tsx`, `-hover.tsx`,
- * `-legend.tsx`, `-table.tsx` — each a piece of the treatment named after the
- * piece it draws,
- * and each well inside `structure.md` rule 4's ceiling. `-hover-boundary.tsx`
+ * the hover layer and the table twin sit beside it — `forecast-chart-axes.tsx`,
+ * `-marks.tsx`, `-context.tsx`, `-hover.tsx`, `-table.tsx` — each a piece of the
+ * treatment named after the piece it draws,
+ * and each well inside `structure.md` rule 4's ceiling. `-legend.tsx` is still
+ * in that folder and is no longer one of this file's pieces: it draws a key for
+ * a chart rather than a part of one, and its caller is the panel that opens the
+ * (i). `-hover-boundary.tsx`
  * joined them in #331 and is the one named after something other than a piece
  * of the drawing: it draws no mark of its own, and the seam it marks is where
  * re-rendering stops.
@@ -238,8 +267,6 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           {xAxisElements(points, scale)}
           {axisTitleElements(scale.plot)}
         </ForecastChartHoverBoundary>
-
-        {forecastChartLegend(overlay?.label, bandRuns.length > 0)}
       </figure>
 
       {/* The twin, outside the figure since 2026-08-11 and a sibling of it: the

@@ -100,8 +100,33 @@
    that became a 24px trigger on 2026-08-11. The row's own arithmetic is below
    and `range-picker.css` owns the trigger's box; what the containment did to the
    row is unchanged by that, which is why this reading is amended rather than
-   re-argued. */
+   re-argued.
+
+   `position: relative` is this row discharging a contract `info/info.css` states
+   and `info/InfoTip.tsx` documents: a tip's panel is anchored to the nearest
+   positioned ancestor and clamped to its width and right edge, so every consumer
+   owes it one. That is what stops the panel running off a phone's viewport, and
+   this row is the right box to owe it — it is exactly as wide as the chart the
+   tip annotates.
+
+   Both of this row's overlays hang off it since 2026-08-12, not the tip's alone:
+   `range-picker.css` re-anchored the window sheet here after it opened 151px past
+   a phone's left edge from the trigger it used to hang from, and that file owns
+   the measurement and the argument. So what this declaration holds up is the
+   row's overlays rather than `InfoTip` in particular — worth saying, because a
+   reader weighing its removal against one consumer would be weighing it against
+   half of them.
+
+   It is written out rather than left to the containment above, which would in
+   fact supply it: `container-type: inline-size` implies layout containment, and
+   a layout-contained element is already a containing block for absolutely
+   positioned descendants. Relying on that would make an anchor a side effect of
+   a container query — delete the query when the stats line stops hiding, and a
+   panel silently escapes to the page box on the next phone that opens it. The
+   declaration says what is being promised, and costs a row in normal flow
+   nothing else. */
 .fleet-chart-controls {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);

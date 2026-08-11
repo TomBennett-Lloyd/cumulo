@@ -1,6 +1,7 @@
 import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
 import { useId, useMemo, useState, type ReactElement } from 'react';
 
+import { forecastChartLegend } from '../charts/forecast-chart-legend';
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { InfoTip } from '../info/InfoTip';
@@ -114,6 +115,16 @@ import { siteOverlaySeries } from './site-overlay';
  * failed. A reader cannot press for news they do not know has happened, so state
  * stays where it can be seen and description is one press away.
  *
+ * The chart's **legend** joined the sentence behind that press on 2026-08-11, on
+ * the owner's routing — *"the legend can go in the (i) section"* — and it is the
+ * same line drawn once more rather than a second policy. A key answers "which
+ * line is which", which is read once and then occupies a row under the plot for
+ * the rest of the reading; state is what the panel could not have told the
+ * reader in advance. So this panel now owns two facts the chart used to derive
+ * for itself — whether the drawn points carry a band, and what the overlay is
+ * called — and hands them to `charts/forecast-chart-legend.tsx` from the tip's
+ * children. `charts/ForecastChart.tsx` no longer renders a legend at all.
+ *
  * #323 drew that same line once more, against text it read as neither: the
  * `<h2>` and the "60 sites · 332 kW" line described the chart under them rather
  * than reporting anything, so the heading became this section's accessible name
@@ -156,9 +167,12 @@ const DEFAULT_RANGE: RangeHours = 24;
  *
  * **The two failures are not symmetrical, and that asymmetry is the whole of
  * this function.** Nothing takes the section down any more: since #284 D3 the
- * controls row, the figure and its legend are on screen in every state, so a
- * failure changes what the section *says* and what the plot *has on it*, never
- * whether there is a chart. What survives is the difference in weight — a failed
+ * controls row and the figure are on screen in every state, and the legend is
+ * still there in every state too — since 2026-08-11 one press into the (i) on
+ * that row rather than a row drawn under the plot, which is the same guarantee
+ * discharged by reachability instead of by presence (`chart-treatment.md`'s
+ * Legend section). So a failure changes what the section *says* and what the
+ * plot *has on it*, never whether there is a chart. What survives is the difference in weight — a failed
  * forecast is the answer itself not arriving, so it is an `alert` over a plot
  * with nothing drawn on it; a failed actuals read is an addition to an answer
  * that did arrive, so it is a `panel-notice` over a plot still carrying every
@@ -379,6 +393,29 @@ export const FleetPanel = ({
    */
   const fleet = useMemo(() => combineFleetQueries(forecasts, actuals), [forecasts, actuals]);
   const aggregate = useMemo(() => chartAggregateOf(fleet, sites), [fleet, sites]);
+  /*
+   * Whether the legend gets its band row: exactly the question the chart asks of
+   * the same points before drawing a band, asked once here because the legend no
+   * longer renders where that answer is already computed (the (i) below).
+   *
+   * Memoized on the same grounds as the two memos above rather than by reflex,
+   * which is what `react.md` rule 2 asks for: the dashboard's add-a-site poll
+   * re-renders this component about once a second, and this is a scan of every
+   * hour on the chart — 193 of them at the widest window — for a value that
+   * changes only when a new aggregate does. `aggregate` is the honest dependency
+   * and the whole of it: the memo above hands back one object per answer, so the
+   * poll leaves this one intact too.
+   *
+   * `.some` over the drawn points rather than a flag threaded down from the
+   * aggregation: "does the plot carry a band" is a question about what is on the
+   * chart, and the chart derives it from these same points
+   * (`charts/ForecastChart.tsx`'s `bandRuns`). Two readings of one array cannot
+   * disagree; a second producer's boolean could.
+   */
+  const hasBand = useMemo(
+    () => aggregate.points.some((point) => point.band !== undefined),
+    [aggregate],
+  );
 
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
   const retryFleet = (): void => {
@@ -400,6 +437,12 @@ export const FleetPanel = ({
     onRetryOverlay: retryOverlay,
     onRetryActuals: retryActuals,
   };
+  // The legend's fourth row, from the same value the chart's overlay mark is
+  // drawn from: `none` and `failed` are both "no second series on the plot", and
+  // a legend naming a line that is not there is the failure the row is gated
+  // against. Read off `context.overlay` rather than off `selectedSite`, because
+  // a site can be selected without its hours having arrived.
+  const overlayLabel = context.overlay.kind === 'series' ? context.overlay.series.label : undefined;
 
   return (
     /*
@@ -424,8 +467,15 @@ export const FleetPanel = ({
     <section className="fleet-chart-section" aria-labelledby={headingId}>
       {/*
        * The controls row, back to the four items #284 D4 wrote it with: the
-       * section's heading, the fleet's own numbers, the description behind an
-       * (i), and the window control.
+       * section's heading, the fleet's own numbers, the description — and, since
+       * 2026-08-11, the chart's legend — behind an (i), and the window control.
+       *
+       * The row is also the positioned ancestor both of its overlays hang from
+       * (`fleet-panel.css`), which is a contract the tip states in its own
+       * docblock and this row has to keep. It is what clamps each of them to the
+       * row's width and right edge instead of letting it run off the page — the
+       * tip's panel since 2026-08-11 and the window sheet since the day after,
+       * each stylesheet carrying its own measurement.
        *
        * #323 emptied it down to the two controls and, with nothing left on the
        * row that was *content*, sent them to its end with `justify-content:
@@ -469,9 +519,35 @@ export const FleetPanel = ({
          * `fleetActuals` still chooses between two complete sentences rather
          * than assembling a clause, so "simulated actuals" is still readable
          * as belonging to exactly one arm.
+         *
+         * **The legend is behind the same press since 2026-08-11**, which is
+         * the owner's own routing: *"the legend can go in the (i) section"*.
+         * The two belong together on the reading this panel already draws —
+         * what the chart *is* goes behind a press and what it currently *says*
+         * stays inline. A key is description in exactly that sense: it is read
+         * once, it answers "which line is which", and it does not change while
+         * a reader watches. Under the plot it took a row of height from the
+         * chart on every render for every reader, which is the cost the (i)
+         * exists to stop paying twice.
+         *
+         * What the treatment asks for survives the move intact, and it is worth
+         * saying which clause is which. "Identity is never carried by colour
+         * alone" is discharged by the key being *reachable*, not by its being
+         * on screen — one press on a named, keyboard-operable control, which is
+         * the same standard the table twin's disclosure is held to
+         * (`docs/design/chart-treatment.md`). "In every state" is discharged
+         * structurally: this row is outside the state switch below, so no state
+         * of the panel can take the (i) or its contents away.
+         *
+         * The two inputs are the panel's rather than the chart's now. Both are
+         * the same facts the plot is drawn from — `hasBand` scans the drawn
+         * points, `overlayLabel` comes off the overlay state the chart's mark
+         * reads — so the key cannot name a series the plot is not carrying,
+         * which is the whole of `#295`'s gating rule at its new address.
          */}
         <InfoTip label="About this chart">
           {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
+          {forecastChartLegend(overlayLabel, hasBand)}
         </InfoTip>
         {/*
          * A control rather than a caption, on both arms that have a window to

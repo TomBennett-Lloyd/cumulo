@@ -30,6 +30,38 @@ describe('InfoTip', () => {
     expect(container.querySelector('.info-tip-panel')).toBeNull();
   });
 
+  it('holds its content in divs, so flow content is valid inside it', () => {
+    /*
+     * The 2026-08-11 change, pinned because it is a contract rather than a
+     * styling choice: the fleet chart's legend moved in beside the sentence
+     * (#429), a `<ul>` is flow content, and a `<span>` may not contain one. Both
+     * containers are asserted — the panel is what holds the children, and the
+     * root is what holds the panel, so a root left as a `<span>` would nest the
+     * same invalid markup one level up.
+     *
+     * The list is rendered rather than described, which is what makes this a
+     * check on the contract instead of on two tag names: jsdom's parser is not
+     * the browser's and will not refuse the nesting, so the tag assertions are
+     * the instrument and the list is what says why they matter.
+     */
+    const { container } = render(
+      <InfoTip label={LABEL}>
+        <ul>
+          <li>A legend row</li>
+        </ul>
+      </InfoTip>,
+    );
+
+    fireEvent.click(tipButton());
+
+    expect(container.querySelector('.info-tip')?.tagName).toBe('DIV');
+
+    const panel = container.querySelector('.info-tip-panel');
+
+    expect(panel?.tagName).toBe('DIV');
+    expect(panel?.querySelector('ul')).not.toBeNull();
+  });
+
   it('reveals its sentence on press, and says so on the button', () => {
     renderTip();
 
