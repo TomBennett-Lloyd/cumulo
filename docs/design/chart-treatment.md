@@ -17,7 +17,10 @@ below are its specs, not house style. **No colour value appears in this document
 referenced by custom-property name only; the values live in
 [`packages/ui/src/tokens/tokens.css`](../../packages/ui/src/tokens/tokens.css), which is the only
 file in the repo allowed to hold them. Where the two disagree, this document is wrong, because the
-tokens are the artefact that ships.
+tokens are the artefact that ships. This document decides one surface; the prospective
+cross-surface rules an implementer applies where no record has decided are
+[`docs/standards/design.md`](../standards/design.md), and a rule there that gets decided into the
+charts lands here.
 
 ## The uncertainty band
 
