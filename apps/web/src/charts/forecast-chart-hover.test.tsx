@@ -47,9 +47,11 @@ const READOUT: readonly string[] = [
   '06:00Actual0.9Median1.0P10–P900.0–2.0',
   '09:00Actual3.8Median4.0P10–P903.0–5.0',
   '12:00Actual5.9Median6.0P10–P905.0–7.0',
-  // Past the horizon: no measurement, so no measured row at all (#284 D6).
-  '15:00Median5.0P10–P904.0–6.0',
-  '18:00Median2.0P10–P901.0–3.0',
+  // Past the horizon: the measured row stays and its cell is the em dash, so
+  // the panel says the hour has no measurement rather than saying nothing
+  // about it (#330).
+  '15:00Actual—Median5.0P10–P904.0–6.0',
+  '18:00Actual—Median2.0P10–P901.0–3.0',
 ];
 
 describe('ForecastChart hover layer', () => {
@@ -226,16 +228,33 @@ describe('ForecastChart hover layer', () => {
     expect(range).toBe(`${String(p10)}–${String(p90)}`);
   });
 
-  it('omits the range row for a point with no modelled uncertainty', () => {
+  it('omits the range row when no hour on the chart is banded', () => {
     const container = renderChart([bare(6, 1, 0.9), bare(9, 4, 3.8)]);
 
     act(() => {
       requireSvg(container).focus();
     });
 
-    // An absent row says "not modelled"; an em-dashed one would imply a range.
+    // The chart never carried a band, so the panel has no such row to dash —
+    // the same granularity the table twin's columns are gated at (#295), now
+    // shared by both surfaces.
     expect(tooltipText(container)).toBe('06:00Actual0.9Median1.0');
     expect(tooltipValues(container)).toStrictEqual(['0.9', '1.0']);
+  });
+
+  it('dashes the range row on a banded chart’s bare hour', () => {
+    const container = renderChart([banded(6, 1, 0.9), bare(9, 4, 3.8)]);
+    const svg = requireSvg(container);
+    act(() => {
+      svg.focus();
+    });
+
+    fireEvent.keyDown(svg, { key: 'ArrowRight' });
+
+    // This chart does carry a band, so an hour without one is an absence at
+    // that hour rather than a quantity the series never had — and an absence
+    // reads as the em dash (`design.md` rule 5, #330).
+    expect(tooltipValues(container)).toStrictEqual(['3.8', '4.0', '—']);
   });
 
   it('keeps the tooltip inside the plot at the right-hand end of the series', () => {
@@ -285,9 +304,10 @@ describe('ForecastChart hover layer', () => {
     act(() => {
       svg.focus();
     });
-    // Stepping onto a point with no modelled uncertainty drops the band row, so
-    // the row *set* changes — which is when keyed matching has to tell the two
-    // "Median" rows apart rather than pairing them off by position.
+    // Stepping onto a point with no modelled uncertainty rewrites the band row
+    // to an em dash and leaves every other row saying something new, which is
+    // when keyed matching has to tell the two "Median" rows apart rather than
+    // pairing them off by position.
     fireEvent.keyDown(svg, { key: 'ArrowRight' });
 
     const keyWarnings = logged.mock.calls
@@ -298,7 +318,7 @@ describe('ForecastChart hover layer', () => {
     // The rows the reader is owed are all still there, which is what the keys
     // are protecting. Asserted after the warning, because this is the assertion
     // that passes either way today.
-    expect(tooltipValues(container)).toStrictEqual(['3.8', '4.0', '8.5']);
+    expect(tooltipValues(container)).toStrictEqual(['3.8', '4.0', '—', '8.5']);
 
     logged.mockRestore();
   });

@@ -1,9 +1,10 @@
-import { memo, type ReactElement } from 'react';
+import { memo, useMemo, type ReactElement } from 'react';
 import { tickLabelFor, tooltipAnchorX, xForIndex } from './chart-geometry';
 import {
   formatKw,
   type ChartOverlayReading,
   type ChartScale,
+  type ForecastChartBand,
   type ForecastChartPoint,
 } from './chart-series';
 import {
@@ -28,13 +29,15 @@ import {
  * `docs/design/chart-treatment.md` asks for three things here, and each is a
  * separate piece below. The crosshair **snaps to the nearest timestamp**, so
  * the reader aims at a time rather than at a 2px line. **One tooltip lists
- * every series present at that timestamp**, so the pointer never has to land on
- * a line or inside the fill to get a number — the series' name in muted text
- * and its value in full contrast beside it, in two columns (#284 D12), keyed by
- * a short stroke of the series' own colour rather than a filled box. And
+ * every series the chart carries, at that timestamp**, so the pointer never has
+ * to land on a line or inside the fill to get a number — the series' name in
+ * muted text and its value in full contrast beside it, in two columns (#284
+ * D12), keyed by a short stroke of the series' own colour rather than a filled
+ * box, and an em dash where an hour has no value for a series (#330). And
  * **keyboard focus shows exactly what hover shows**: both routes end at the
  * same `activeIndex`, so there is one readout, not two implementations that
- * drift.
+ * drift — one filtered for speech, which is `spokenTooltipRows` below and the
+ * only place the two diverge.
  *
  * **The panel follows the pointer; the data snaps.** The crosshair and the rows
  * belong to the nearest sample — a landmark that moves in steps, because that is
@@ -60,10 +63,67 @@ import {
  */
 
 /**
- * Every series at one timestamp, in the treatment's order. The band row is
- * omitted rather than dashed out when the point carries no uncertainty: an
- * absent row says "not modelled", an em-dashed one would imply a range of
- * nothing.
+ * The range row, which is the one row whose *existence* is a question about the
+ * chart rather than about the hour.
+ *
+ * A band the hour carries is a row with a range in it. A band the hour lacks is
+ * a row with an em dash in it wherever the chart carries the quantity at all,
+ * and no row whatsoever where it does not — which is the table twin's column
+ * rule (#295, `forecast-chart-table.tsx`) applied at the tooltip's own
+ * granularity, so the two surfaces gate a series on the same fact. A dash says
+ * "nothing at this hour", which is true and worth showing against neighbours
+ * that do carry a range; a row of nothing but dashes down every hour a reader
+ * could visit would instead be the panel advertising a quantity the series
+ * never had.
+ */
+const bandRows = (
+  band: ForecastChartBand | undefined,
+  chartHasBand: boolean,
+): readonly TooltipRow[] => {
+  if (band !== undefined) {
+    return [
+      {
+        seriesClassName: 'forecast-chart-band-bound',
+        value: `${formatKw(band.p10Kw)}–${formatKw(band.p90Kw)}`,
+        name: 'P10–P90',
+        present: true,
+      },
+    ];
+  }
+  if (!chartHasBand) {
+    return [];
+  }
+  return [
+    {
+      seriesClassName: 'forecast-chart-band-bound',
+      // Through the formatter rather than as a literal, so this dash is the
+      // same mark the table's cells and every other absent value carry by
+      // construction instead of by a second spelling of it.
+      value: formatKw(null),
+      name: 'P10–P90',
+      present: false,
+    },
+  ];
+};
+
+/**
+ * Every series the chart carries, at one timestamp, in the treatment's order —
+ * a row per series rather than a row per value, which is what makes the panel
+ * the table twin's row-analogue rather than a list that happens to be near it.
+ *
+ * **An hour with no value dashes its cell** (owner 2026-08-10,
+ * [#330](https://github.com/TomBennett-Lloyd/cumulo/issues/330);
+ * `design.md` rule 5): absence is a fact about that hour and it reads as the
+ * mark absence always reads as here, `formatKw`'s em dash. The row set is then
+ * a fact about the chart rather than about the sample, which is what lets the
+ * panel's *height* hold still under a moving cursor (`design.md` rule 6) — see
+ * `TooltipPanel` below, whose height no longer changes as a reader steps along
+ * the series. Height and not the whole geometry: the panel's width is still
+ * measured over the rows it holds (`tooltipPanelWidth`), so it does still move
+ * as a reader steps between hours whose values are different lengths — see the
+ * same note under `TooltipPanel`. `present` is still marked, because speech
+ * wants the opposite answer: `spokenTooltipRows` is the one filter, and it is
+ * the only one.
  *
  * An overlay appends its row rather than displacing one, so the forecast rows
  * read the same whether or not a second series is on the plot. It goes through
@@ -75,8 +135,8 @@ import {
 const tooltipRows = (
   point: ForecastChartPoint,
   overlay: ChartOverlayReading | undefined,
+  chartHasBand: boolean,
 ): readonly TooltipRow[] => {
-  const { band } = point;
   const measured: TooltipRow = {
     seriesClassName: 'forecast-chart-actuals',
     value: formatKw(point.actualKw),
@@ -92,19 +152,7 @@ const tooltipRows = (
     // than announcing a labelled series with an em dash for a value.
     present: point.medianKw !== null,
   };
-  const forecast: readonly TooltipRow[] =
-    band === undefined
-      ? [measured, median]
-      : [
-          measured,
-          median,
-          {
-            seriesClassName: 'forecast-chart-band-bound',
-            value: `${formatKw(band.p10Kw)}–${formatKw(band.p90Kw)}`,
-            name: 'P10–P90',
-            present: true,
-          },
-        ];
+  const forecast: readonly TooltipRow[] = [measured, median, ...bandRows(point.band, chartHasBand)];
   return overlay === undefined
     ? forecast
     : [
@@ -121,17 +169,30 @@ const tooltipRows = (
 };
 
 /**
- * The rows a reader actually gets, drawn and spoken alike. An absent row is
- * dropped rather than dashed out (#284 D6): the em dash was chrome that said
- * nothing a screen reader could hear and nothing a reader needed to see, and
- * dropping it in one place rather than two is what keeps the two readouts the
- * same statement. The table twin still carries the dash — it is a grid, and a
- * grid with a hole in it is a different thing from a list with a row missing.
+ * The rows a reader *hears*, which are fewer than the rows they see.
+ *
+ * Drawn, an absent value is dashed (#330 — the paragraph above). Spoken, the
+ * same row is dropped, and the two are not in tension: screen readers at
+ * default punctuation verbosity voice an em dash as silence, so a dashed row
+ * announces a labelled series with no value at all — "Actual" and then nothing.
+ * That evidence is #284 D6's and it stands; what #330 reversed is only the half
+ * of D6 that acted on the drawn panel, where a dash is legible and a vanishing
+ * row is the thing that misleads. The table twin has carried the dash
+ * throughout, and the drawn tooltip now agrees with it.
+ *
+ * One producer, two filters — the treatment's "composed from the same rows"
+ * survives it, because a filter is not a second set of rows: nothing can be
+ * spoken that was not drawn, and no series can reach one surface without
+ * reaching the other.
  */
-const visibleTooltipRows = (
+const spokenTooltipRows = (
   point: ForecastChartPoint,
   overlay: ChartOverlayReading | undefined,
-): readonly TooltipRow[] => tooltipRows(point, overlay).filter((row) => row.present);
+): readonly TooltipRow[] =>
+  // `false` and not the drawn gate: the only row the gate adds is a dashed one,
+  // which this filter drops either way, so speech is independent of it rather
+  // than quietly agreeing with it.
+  tooltipRows(point, overlay, false).filter((row) => row.present);
 
 /**
  * The same rows, spoken rather than drawn: the time, then each series as its
@@ -149,8 +210,12 @@ const visibleTooltipRows = (
  * The `role="img"` chart collapses to its `aria-label`, so this string is what
  * a screen reader gets when a reader moves the selection — and it comes from
  * the same producer as the tooltip, so the announcement and the drawn panel
- * cannot say different things about one sample. Every word here names data,
- * which `chart-copy.ts` leaves to the component that owns it.
+ * cannot say different things about one sample. One producer, two filters
+ * since #330: the drawn panel dashes an absent value and this sentence omits
+ * it, which are two readings of one row set rather than two row sets — every
+ * series reaching speech reached the panel, in the panel's order, and no series
+ * can be added to one of them alone. Every word here names data, which
+ * `chart-copy.ts` leaves to the component that owns it.
  *
  * The en dashes inside `0.0–2.0` and `P10–P90` stay — both ends of those are
  * present, so a dropped dash still reads ("0.0 2.0 P10 P90"), and respelling a
@@ -162,7 +227,7 @@ export const readoutText = (
   spanHours: number,
   overlay: ChartOverlayReading | undefined,
 ): string =>
-  `${tickLabelFor(point.validTimeIso, spanHours)} — ${visibleTooltipRows(point, overlay)
+  `${tickLabelFor(point.validTimeIso, spanHours)} — ${spokenTooltipRows(point, overlay)
     .map((row) => `${row.name} ${row.value}`)
     .join(', ')}`;
 
@@ -248,6 +313,14 @@ interface TooltipPanelProps {
    * a fresh object per frame would defeat the memo this panel exists inside.
    */
   readonly plotWidth: number;
+  /**
+   * Whether the chart carries a band at any hour — which decides whether an
+   * unbanded hour gets a dashed range row or none at all (`tooltipRows`).
+   * A boolean and not the points it is derived from, for the same reason
+   * `plotWidth` is a number: the memo below compares props shallowly, and a
+   * primitive is the shape that comparison can actually see through.
+   */
+  readonly chartHasBand: boolean;
 }
 
 /**
@@ -257,16 +330,38 @@ interface TooltipPanelProps {
  * (`chart-hover-input.ts`), and every one of those frames would otherwise
  * rebuild four rows' worth of elements and hand React a fresh tree to
  * reconcile against the identical text already on screen (#284 D7). What it does
- * **not** save is `tooltipRows` itself — the layer below runs `visibleTooltipRows`
- * every frame regardless, because sizing the panel needs the rows before there
- * is anything to memoise. Element construction and reconciliation are the whole
+ * **not** save is `tooltipRows` itself — the layer below runs it every frame
+ * regardless, because sizing the panel needs the rows before there is anything
+ * to memoise. Element construction and reconciliation are the whole
  * saving. Its props are the snapped sample and numbers derived from it, so the
  * shallow compare bites for as long as the sample does — which is why the caller
  * hands it a stable `overlay` reading rather than one rebuilt per render.
+ *
+ * **Every row is drawn, dashes included** (#330). The filter that used to run
+ * here belongs to speech alone, and losing it is what makes this panel's height
+ * a constant per chart configuration rather than a number that changes as a
+ * reader steps between hours — `chart-treatment.md`'s "height is a constant per
+ * chart", and `design.md` rule 6's reference frame gained in that one dimension
+ * rather than merely defended.
+ *
+ * **Height, and only height.** The panel's *width* is still measured over the
+ * rows it holds (`tooltipPanelWidth`, the treatment's "The panel sizes to its
+ * content"), and a dash is a shorter value string than a range, so stepping
+ * from a banded hour to an unbanded one still narrows the panel under the
+ * cursor. That is decided behaviour rather than something this change left
+ * half-done, and the tension it leaves with rule 6 is logged in
+ * `docs/tech-debt.md` for the owner rather than settled here.
  */
 const TooltipPanel = memo(
-  ({ overlay, panelWidth, plotWidth, point, spanHours }: TooltipPanelProps): ReactElement => {
-    const rows = visibleTooltipRows(point, overlay);
+  ({
+    chartHasBand,
+    overlay,
+    panelWidth,
+    plotWidth,
+    point,
+    spanHours,
+  }: TooltipPanelProps): ReactElement => {
+    const rows = tooltipRows(point, overlay, chartHasBand);
     const columns = tooltipColumns(rows, plotWidth);
     return (
       <>
@@ -325,6 +420,17 @@ export const ForecastChartHoverLayer = (
   props: ForecastChartHoverLayerProps,
 ): ReactElement | null => {
   const { activeIndex, overlay, pointerX, points, scale, spanHours } = props;
+  // A fact about the chart, so it is answered from the whole series rather than
+  // from the sample: the panel carries a range row at every hour or at none,
+  // which is what the table's P10/P90 columns already do with the same question
+  // (#295). Memoised on the points, so this O(n) pass runs when the series
+  // changes and not once per pointer frame: since #331 the hover state lives in
+  // `forecast-chart-hover-boundary.tsx`, and a frame re-renders the hover
+  // chrome and the spoken readout with nothing else in the figure rebuilt, so
+  // nothing else in that frame walks the points for this pass to ride along
+  // with. Every hover-state render in between reuses the memo. Above the early
+  // return below, because a hook cannot sit under one.
+  const chartHasBand = useMemo(() => points.some((p) => p.band !== undefined), [points]);
   const point = activeIndex === null ? undefined : points[activeIndex];
   if (activeIndex === null || point === undefined) {
     return null;
@@ -334,7 +440,7 @@ export const ForecastChartHoverLayer = (
   const plotWidth = scale.plot.right - scale.plot.left;
   const panelWidth = tooltipPanelWidth(
     tickLabelFor(point.validTimeIso, spanHours),
-    visibleTooltipRows(point, overlay),
+    tooltipRows(point, overlay, chartHasBand),
     plotWidth,
   );
   const anchorX = tooltipAnchorX({
@@ -363,6 +469,7 @@ export const ForecastChartHoverLayer = (
           overlay={overlay}
           panelWidth={panelWidth}
           plotWidth={plotWidth}
+          chartHasBand={chartHasBand}
         />
       </g>
     </>

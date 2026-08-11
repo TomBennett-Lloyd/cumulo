@@ -155,7 +155,7 @@ const movePointerTo = (container: HTMLElement, viewBoxX: number): void => {
 
 /** What sample 2 and sample 3 say, so a changed readout is a named change. */
 const SAMPLE_2_TEXT = `12:00Actual5.9Median6.0P10–P905.0–7.0${OVERLAY_LABEL}3.3`;
-const SAMPLE_3_TEXT = `15:00Median5.0P10–P904.0–6.0${OVERLAY_LABEL}2.2`;
+const SAMPLE_3_TEXT = `15:00Actual—Median5.0P10–P904.0–6.0${OVERLAY_LABEL}2.2`;
 
 /**
  * What the probe reads once the chart has settled on a sample: one run of each

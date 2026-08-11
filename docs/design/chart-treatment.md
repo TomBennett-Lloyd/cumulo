@@ -386,9 +386,9 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   only while a pointer is held on the plot and leaves with it. No new token: `--color-text` is the
   strong ink in both modes and already the validated body ink on these surfaces, so a stroke drawn
   in it inherits a measurement rather than owing one.
-- **One tooltip, every series present at that timestamp.** The readout lists the actual, the
-  median, the P10–P90 range and an overlay if the chart carries one — so the pointer never has to
-  land on a line or inside the fill to get a number. **The rows are two columns**
+- **One tooltip, every series the chart carries, read at one timestamp.** The readout lists the
+  actual, the median, the P10–P90 range and an overlay if the chart carries one — so the pointer
+  never has to land on a line or inside the fill to get a number. **The rows are two columns**
   ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12): the series name in
   `--color-text-muted`, then its value high-contrast in a column of its own, every name starting at
   one x and every value at another. Packed instead — each value beginning wherever the text to its
@@ -397,25 +397,38 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   down, and because the spoken readout is composed from the same rows and "Median 6.0" is how a
   label reads aloud. Series are keyed with a short stroke of their
   colour, not a filled box — shorter since D12, since a key beside a name column is read as a
-  colour rather than as the start of a line of text. **A series with nothing at the sample gets no
-  row**, drawn or spoken:
-  the band where a point carries no modelled uncertainty, the measurement past the horizon, the
-  hour an overlay does not cover. An absent row says "there is nothing here"; the em dash that used
-  to hold those places said the same thing more quietly, and said it to nobody at all in speech —
-  screen readers at default punctuation verbosity voice an em dash as silence, so a dashed row
-  announced a labelled series with no value. Settled in
-  [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D6): the drawn tooltip now drops
-  the same rows speech always dropped, and the readout changing height as the reader moves along
-  the series is the accepted cost of the two saying one thing. **The table twin keeps the em
-  dash** — it is a grid, its columns are fixed by the header, and a cell cannot be absent the way
-  a list item can. **The two surfaces drop a series at the granularity each one has, and for the
+  colour rather than as the start of a line of text. **The drawn panel carries a row for every
+  series the chart has, and dashes the hours a series has nothing at** — the measurement past the
+  horizon, the band a point-estimate hour has no uncertainty for, the hour an overlay does not
+  cover. Missing data reads as missing (`docs/standards/design.md` rule 5), and the mark it reads
+  as is the em dash `formatKw` already puts in every other absent value in the product. Settled by
+  the owner on 2026-08-10 ([#330](https://github.com/TomBennett-Lloyd/cumulo/issues/330)), which
+  reverses the drawn half of [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D6: a
+  row that vanishes asks a reader to notice an absence nothing showed them, and it moves the rows
+  under a cursor they are still reading. Two things follow. The panel's **height is a constant per
+  chart** rather than a number that changes as a reader steps along the series, which is the
+  reference frame `design.md` rule 6 asks for — D6's note that a resizing readout was the accepted
+  cost is retired, because there is no longer a cost to accept. And whether a series has a row at
+  all is decided by **the chart, not the hour**, exactly as the table's columns are: the
+  granularity rule two bullets down is now shared verbatim by both surfaces.
+- **Speech still drops what the panel dashes**, and the two are one row set read twice rather than
+  two row sets. The evidence is D6's and it is unchanged: screen readers at default punctuation
+  verbosity voice an em dash as silence, so a spoken dashed row announces a labelled series with
+  no value — "Actual", then nothing. Drawn, that dash is legible and doing the work; spoken, it is
+  a row that says nothing at all. So one producer builds the rows in the panel's order and speech
+  filters them, which leaves the "composed from the same rows" guarantee below intact: nothing can
+  be spoken that was not drawn, and no series can reach one surface without reaching the other.
+- **The table twin keeps the em dash** — it is a grid, its columns are fixed by the header, and a
+  cell cannot be absent the way a list item can; the drawn tooltip now agrees with it rather than
+  contradicting it. **The two surfaces drop a series at the granularity each one has, and for the
   table that is the column, never the cell**: an hour with no value for a quantity its neighbours
   do carry keeps the dash, because absence _at that hour_ is the fact worth showing and a grid has
   no other way to show it; a quantity that **no** hour in the series carries loses its column
   outright, because a column of nothing but dashes is not a partial result — it is a header
   advertising a quantity the data never had. That is the distinction the band's columns are gated
-  on ([#295](https://github.com/TomBennett-Lloyd/cumulo/issues/295)), and it leaves the em-dash
-  rule above exactly as it was for every mixed series.
+  on ([#295](https://github.com/TomBennett-Lloyd/cumulo/issues/295)), and since #330 the tooltip's
+  range row is gated on the same fact about the same series: a chart banded anywhere dashes the
+  hours without a band, and a chart banded nowhere has no range row to dash.
 - **The panel sizes to its content and floats above the plot.** Width is its two columns measured
   over the rows they hold — the widest name, the widest value, and the air between them — floored
   at a minimum so short samples do not read as a different component. An overlay's name is a site
@@ -463,14 +476,15 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   announcement is a real change — a live region mounted with its text already inside it announces
   nothing. It is styled off-screen and never with `display: none` or `visibility: hidden`, either
   of which would remove it from the accessibility tree it exists to reach.
-  **The announcement and the tooltip are composed from the same rows**, so the spoken readout
-  cannot drift from the drawn one; and pointer and keyboard both feed that single region, because
-  both settle on the same active sample. The pointer carries one thing the keyboard does not — the
-  continuous position the panel tracks, per the D7 bullet above — but that rides beside the sample
-  rather than being a second selection, and nothing spoken reads it: a frame that only moves the
-  panel leaves the announcement's text exactly as it was. Forking the source per input device would
-  recreate exactly the drift this rule exists to prevent, and `polite` coalescing bounds the chatter
-  a moving pointer produces.
+  **The announcement and the tooltip are composed from the same rows** — speech skipping the
+  dashed ones, per the drop bullet above — so the spoken readout cannot drift from the drawn one
+  about any series either of them carries; and pointer and keyboard both feed that single region,
+  because both settle on the same active sample. The pointer carries one thing the keyboard does
+  not — the continuous position the panel tracks, per the D7 bullet above — but that rides
+  beside the sample rather than being a second selection, and nothing spoken reads it: a frame
+  that only moves the panel leaves the announcement's text exactly as it was. Forking the source
+  per input device would recreate exactly the drift this rule exists to prevent, and `polite`
+  coalescing bounds the chatter a moving pointer produces.
   The live region is the focus-mode and VoiceOver enhancement, not the accessible surface: a
   screen reader in browse mode consumes arrow keys before the chart ever sees them, so **the table
   twin below remains the canonical route** to every value — one press on its disclosure away, per

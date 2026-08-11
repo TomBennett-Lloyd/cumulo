@@ -1,6 +1,6 @@
 /**
  * Pure sizing for the chart's hover tooltip: how wide the panel has to be to
- * hold the words it was given, how tall its visible rows make it, where each
+ * hold the words it was given, how tall its drawn rows make it, where each
  * row's centre line sits and where its two columns begin. No React and no DOM —
  * `forecast-chart-hover.tsx` composes these numbers into SVG attributes, and
  * every one of them is testable without rendering a chart (`structure.md` rule
@@ -88,6 +88,12 @@ export interface TooltipRow {
    * `formatKw`'s em dash. Marked on the row rather than re-derived downstream,
    * so the one producer of the rows is also the one place that knows which of
    * them are real.
+   *
+   * **What it decides is speech, not ink** (#330): such a row is *drawn*, dash
+   * and all, because an absence a reader can see is the honest thing to show
+   * (`design.md` rule 5) — and *skipped* when the same rows are spoken, because
+   * a screen reader at default punctuation verbosity voices an em dash as
+   * silence, so announcing one is announcing a labelled series with no value.
    */
   readonly present: boolean;
 }
@@ -228,12 +234,12 @@ export const tooltipPanelWidth = (
  * is fine; adding one without moving that probe to a seam the new caller does
  * not share is not.
  */
-export const tooltipPanelHeight = (visibleRowCount: number): number =>
-  TOOLTIP_PADDING * 2 + TOOLTIP_ROW_HEIGHT * (visibleRowCount + FIRST_SERIES_ROW);
+export const tooltipPanelHeight = (drawnRowCount: number): number =>
+  TOOLTIP_PADDING * 2 + TOOLTIP_ROW_HEIGHT * (drawnRowCount + FIRST_SERIES_ROW);
 
 /** Centre line of the time label, which occupies row 0. */
 export const TOOLTIP_TIME_Y = TOOLTIP_PADDING + TOOLTIP_ROW_HEIGHT / 2;
 
-/** Centre line of a drawn series row, counted over the visible rows only. */
+/** Centre line of a series row, counted over the drawn rows. */
 export const tooltipRowY = (rowIndex: number): number =>
   TOOLTIP_PADDING + TOOLTIP_ROW_HEIGHT * (rowIndex + FIRST_SERIES_ROW) + TOOLTIP_ROW_HEIGHT / 2;
