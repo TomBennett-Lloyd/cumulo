@@ -282,7 +282,7 @@ Placement:
   dropping the two in stages, each at its own measured width, was weighed and declined (#356).
   Staging would hold `Weather data by` on screen across a slice of widths, and it would cost a
   second viewport breakpoint on this band — the census `stylelint.config.mjs`'s residual paragraph
-  exists to keep — plus a second measurement taken against a layout #326 is about to move. What
+  exists to keep — plus a second measurement taken against this band's layout. What
   that buys is prose serving no reader decision ([`design.md`](../standards/design.md) rules 2 and
   8), while the sanctioned compact form keeps both links on screen at every width regardless.
 
