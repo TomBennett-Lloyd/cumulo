@@ -13,11 +13,15 @@
    holds that per-directive rationale in prose; `infra/web/content-security-policy.tftpl` is the policy
    text's one owner, read by every consumer rather than copied into any of them.
 
-   So do not restate the policy's current directive values — not here, not in a plan, not in a PR body,
-   not in a second config. A security value with two carriers drifts in whichever direction nobody was
-   watching. Name the owning file and let the reader open it. (`child-src 'self'` appears in rule 2 as
-   the subject of a worked example about an unenumerated hop — not as a statement of what the policy's
-   text is, today or ever. For that, read the template.)
+   So do not keep a **standing** copy of the policy's current directive values — not here, not in a
+   second config, not in a doc or README that states the policy at rest. A security value with two
+   carriers drifts in whichever direction nobody was watching. Name the owning file and let the
+   reader open it. What the ban does not reach: the per-directive rationale beside the grant in the
+   exemplar pair above, and the dependant resolutions rules 2 and 3 require a change to state in its
+   plan or PR body — neither is a second carrier that outlives the edit, both are that change's own
+   evidence about it. (`child-src 'self'` appears in rule 2 as the subject of a worked example about
+   an unenumerated hop — not as a statement of what the policy's text is, today or ever. For that,
+   read the template.)
 
 2. **Adding, changing or removing a directive means naming every directive that inherits from it, and
    stating what each one resolves to after the change.** The question is not "what does this directive
