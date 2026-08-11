@@ -4,6 +4,7 @@ export {
   aggregateFleetActuals,
   type FleetActualsPoint,
   fleetCapacityKw,
+  fleetCentroid,
 } from './aggregation';
 export { apiErrorCodeSchema, type ApiErrorCode, apiErrorSchema, type ApiError } from './api-error';
 export { attributionSchema, type Attribution, openMeteoAttribution } from './attribution';

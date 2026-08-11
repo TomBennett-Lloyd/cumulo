@@ -65,6 +65,39 @@
   stroke-dasharray: 4 3;
 }
 
+/* The two context layers (#335), drawn so the diurnal shape of the series reads
+ * against its cause rather than being explained in a sentence (design.md rule
+ * 10). Both are decoration to assistive technology: they live inside the
+ * `role="img"` svg, add nothing to the tab order and nothing to the label.
+ *
+ * The wash is a fill and no more — the alpha is baked into the token, exactly as
+ * the band's is, so nothing here double-dips with a `fill-opacity`. It is the
+ * backmost mark on the canvas, which is what lets it be this faint: every other
+ * mark is drawn over it at full strength.
+ *
+ * The boundary is the *third* vertical meaning on this plot, and the three are
+ * separated by treatment rather than by position: day boundary solid at the
+ * grid's hairline weight in the grid's ink, horizon dashed at the same weight
+ * and ink, crosshair solid at the data weight in full ink. Grid ink and a
+ * hairline are right for a boundary because it is the most recessive of the
+ * three — it is the frame the hours hang on, like the axis's day tier, not an
+ * event and not the reader's own landmark.
+ *
+ * The coincidence case, accepted rather than overlooked: with "now" near a UTC
+ * midnight the horizon rule can land on the same x as a boundary, and the two
+ * are then dash over solid at the same weight in the same ink. The pair still
+ * says everything true — a day turns here and the measurements stop here — and
+ * the alternative, nudging one of them off its own x, would put a mark where its
+ * meaning is not. */
+.forecast-chart-night {
+  fill: var(--color-chart-night-fill);
+}
+
+.forecast-chart-day-boundary {
+  stroke: var(--color-chart-grid);
+  stroke-width: 1;
+}
+
 /* No `fill-opacity`: the alpha lives in the token (chart-treatment.md). */
 .forecast-chart-band {
   fill: var(--color-chart-band-fill);
@@ -142,12 +175,13 @@
 }
 
 /* Chrome, but the reader's own landmark rather than part of the frame (#284
- * D11). The plot carries exactly two verticals — the horizon rule and this —
- * and at the grid's hairline weight in the grid's ink they were the same line
- * drawn twice, told apart only by which one moved. (The grid is no part of that
- * confusion: it is horizontal only, so orientation alone already separated it.)
- * Full ink at the chart's data weight is what tells the pair apart at a glance,
- * and the horizon's dash is the other half of it. It is under the pointer for as long as
+ * D11). The plot carries three verticals — the day boundary, the horizon rule
+ * and this — and at the grid's hairline weight in the grid's ink this one and
+ * the horizon were the same line drawn twice, told apart only by which one
+ * moved. (The grid is no part of that confusion: it is horizontal only, so
+ * orientation alone already separated it.) Full ink at the chart's data weight
+ * is what tells this one from the other two at a glance, and the horizon's dash
+ * is what tells those two apart. It is under the pointer for as long as
  * the reader holds it there and gone the moment they leave, so it can afford to
  * be the loudest piece of chrome without competing with a series for attention.
  *

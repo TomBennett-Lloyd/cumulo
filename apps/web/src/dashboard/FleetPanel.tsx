@@ -177,9 +177,12 @@ const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
  * panel that is loading or has failed, exactly as the ready arm is handed the
  * same one by the memo below.
  */
-const chartAggregateOf = (state: QueryState<FleetSeries>): FleetChartAggregate =>
+const chartAggregateOf = (
+  state: QueryState<FleetSeries>,
+  sites: readonly Site[],
+): FleetChartAggregate =>
   state.status === 'ready'
-    ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals))
+    ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals), sites)
     : EMPTY_FLEET_AGGREGATE;
 
 /**
@@ -339,9 +342,16 @@ export const FleetPanel = ({
    * result is a fresh object per render otherwise, which would defeat the memo
    * that reads it; stabilizing it at its source is what `react.md` rule 2 asks
    * for instead of trimming a dependency array.
+   *
+   * `sites` joined the second array when the night layer did (#335), and it
+   * costs the memo nothing for the same reason: `Dashboard` already memoizes
+   * that array on the listing and the session's creations, so the poll leaves it
+   * untouched too. It is a genuine input — where the fleet's sites are decides
+   * which hours are shaded — so it is listed, which is the honest direction of
+   * `react.md` rule 2 rather than the trimming one.
    */
   const fleet = useMemo(() => combineFleetQueries(forecasts, actuals), [forecasts, actuals]);
-  const aggregate = useMemo(() => chartAggregateOf(fleet), [fleet]);
+  const aggregate = useMemo(() => chartAggregateOf(fleet, sites), [fleet, sites]);
 
   const { fleetLookback, fleetActuals } = dataSource.capabilities;
   const retryFleet = (): void => {

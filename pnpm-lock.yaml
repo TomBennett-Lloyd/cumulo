@@ -131,6 +131,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@cumulo/forecast':
+        specifier: workspace:*
+        version: link:../../packages/forecast
       '@cumulo/shared':
         specifier: workspace:*
         version: link:../../packages/shared

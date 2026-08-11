@@ -1,7 +1,15 @@
-import { utcIsoTimestampSchema, type UncertaintyBand, type UtcIsoTimestamp } from '@cumulo/shared';
+import {
+  canonicalFleetSeed,
+  forecastSchema,
+  generateFleet,
+  utcIsoTimestampSchema,
+  type Forecast,
+  type UncertaintyBand,
+  type UtcIsoTimestamp,
+} from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
-import { joinFleetSeries, minimumContributingSites } from './fleet-series';
+import { fleetChartAggregate, joinFleetSeries, minimumContributingSites } from './fleet-series';
 
 const timestamp = (hour: number): UtcIsoTimestamp =>
   utcIsoTimestampSchema.parse(`2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`);
@@ -117,6 +125,69 @@ describe('joinFleetSeries', () => {
       '2026-07-30T12:00:00Z',
       '2026-07-30T13:00:00Z',
     ]);
+  });
+});
+
+/*
+ * `fleetChartAggregate` is the pipeline the panel actually calls, and the only place the night flag
+ * is stamped. What it owes a test is the *threading*: that the fleet reaches the classifier and the
+ * classifier reaches every point. Whether a given hour is really night is `fleet-night.test.ts`'s
+ * question, so the assertions below turn on a contrast the summer/winter split makes unarguable
+ * rather than on any single hour's verdict.
+ */
+const forecastAt = (hourUtc: number, acPowerKw: number, dayIso: string): Forecast =>
+  forecastSchema.parse({
+    siteId: '11111111-1111-4111-8111-111111111111',
+    validTime: `${dayIso}T${hourUtc.toString().padStart(2, '0')}:00:00Z`,
+    issuedAt: `${dayIso}T00:00:00Z`,
+    model: 'physics',
+    weatherSource: 'open-meteo',
+    poaIrradianceWm2: acPowerKw * 100,
+    acPowerKw,
+  });
+
+describe('fleetChartAggregate', () => {
+  const demoFleet = generateFleet(canonicalFleetSeed);
+
+  it('marks the fleet’s dark hours and leaves its daylight hours unmarked', () => {
+    // Midwinter, where the contrast is widest and needs no fine judgement: 02:00 UTC is the middle
+    // of the night anywhere in these islands, and 12:00 UTC is the middle of the day.
+    const aggregate = fleetChartAggregate(
+      [forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')],
+      [],
+      demoFleet,
+    );
+
+    expect(aggregate.points.map((point) => point.night)).toEqual([true, false]);
+  });
+
+  it('flags every point, so an unflagged point means the flag was never threaded', () => {
+    const aggregate = fleetChartAggregate(
+      [forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')],
+      [],
+      demoFleet,
+    );
+
+    expect(aggregate.points.every((point) => point.night !== undefined)).toBe(true);
+  });
+
+  it('marks nothing at all for a fleet with no sites, whatever the hour', () => {
+    // The empty-fleet arm reaching the chart: a fleet that is nowhere has no night, so the layer
+    // draws nothing rather than shading hours no site was consulted about.
+    const aggregate = fleetChartAggregate(
+      [forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')],
+      [],
+      [],
+    );
+
+    expect(aggregate.points.map((point) => point.night)).toEqual([false, false]);
+  });
+
+  it('leaves the kilowatts and the completeness count untouched by the night layer', () => {
+    const aggregate = fleetChartAggregate([forecastAt(12, 9, '2026-12-21')], [], demoFleet);
+
+    expect(aggregate.points.map((point) => point.medianKw)).toEqual([9]);
+    expect(aggregate.minContributingSites).toBe(1);
   });
 });
 

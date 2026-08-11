@@ -11,19 +11,21 @@ import { describe, expect, it } from 'vitest';
  * proves the declarations exist, not that they take effect (testing.md rule 10).
  *
  * What that leaves to the browser lane is the thing this file is named for:
- * whether the plot's two verticals are actually *told apart* by a reader — the
- * dashed horizon rule and the solid full-ink crosshair, which before #284 D11
- * were one line drawn twice. The grid was never in that comparison: it is
- * horizontal only, so a reader separates it by orientation before ink or weight
- * comes into it. `apps/web/e2e/` owns
+ * whether the plot's three verticals are actually *told apart* by a reader — the
+ * solid hairline day boundary, the dashed hairline horizon rule and the solid
+ * full-ink crosshair. Two of them were one line drawn twice before #284 D11, and
+ * #335 added the third. The grid was never in that comparison: it is horizontal
+ * only, so a reader separates it by orientation before ink or weight comes into
+ * it. `apps/web/e2e/` owns
  * that criterion and no spec in it asserts it today, so this is what the fast
- * lane can honestly say about #284 D11, and it is deliberately a claim about the
- * declarations rather than about the pixels.
+ * lane can honestly say about #284 D11 and #335, and it is deliberately a claim
+ * about the declarations rather than about the pixels.
  *
  * The failure it exists to catch is a merge back to sameness: the horizon rule
  * folded into the grid's selector list again (which is where it lived until
- * D11), or the crosshair quietly returned to the grid's ink and hairline weight.
- * Both are one-line edits that no other test in the repo would notice.
+ * D11), the crosshair quietly returned to the grid's ink and hairline weight, or
+ * the day boundary picking up a dash and becoming a second horizon. Each is a
+ * one-line edit that no other test in the repo would notice.
  */
 
 const css = readFileSync(new URL('./charts.css', import.meta.url), 'utf8');
@@ -148,10 +150,27 @@ const declarationsFor = (selector: string): string => {
 };
 
 const DASH = /stroke-dasharray\s*:/;
+const STROKE_WIDTH = /stroke-width\s*:\s*(?<width>[^;]+);/;
+
+/**
+ * The stroke width a rule declares. A vertical mark with none is a violated
+ * invariant of this contract rather than a case to compare vacuously — every one
+ * of the three sets its own weight, and the whole point below is that they do
+ * not all set the same one.
+ */
+const strokeWidthOf = (selector: string): string => {
+  const width = STROKE_WIDTH.exec(declarationsFor(selector))?.groups?.width;
+
+  if (width === undefined) {
+    throw new Error(`charts.css declares no stroke-width for '${selector}'`);
+  }
+
+  return width.trim();
+};
 
 // The suite name carries no issue number: the lint gate reads `#284` in a string
 // literal as a hex colour, and the reference belongs in the docblock anyway.
-describe('charts.css tells the horizon rule and the hover crosshair apart', () => {
+describe('charts.css tells the plot’s three verticals apart', () => {
   it('marks the measurement seam with a dashed rule', () => {
     expect(declarationsFor('.forecast-chart-horizon')).toMatch(DASH);
   });
@@ -173,5 +192,31 @@ describe('charts.css tells the horizon rule and the hover crosshair apart', () =
   it('keeps the crosshair off the grid ink it used to share', () => {
     expect(declarationsFor('.forecast-chart-grid')).toContain('var(--color-chart-grid)');
     expect(declarationsFor('.forecast-chart-crosshair')).not.toContain('var(--color-chart-grid)');
+  });
+
+  /*
+   * #335's third vertical. The day boundary shares the horizon's ink and weight,
+   * so the dash is the entire difference between them — and it shares the
+   * crosshair's solidity, so the weight is the entire difference there. Neither
+   * distinction has a second channel to fall back on, which is why both are
+   * asserted rather than assumed from the declarations being written down once.
+   */
+  it('leaves the day boundary solid, which is what keeps the dash the seam’s own mark', () => {
+    // Positive control on the same pattern: the emptiness below is a fact about
+    // the boundary rather than about a regex that matches nothing.
+    expect(declarationsFor('.forecast-chart-horizon')).toMatch(DASH);
+    expect(declarationsFor('.forecast-chart-day-boundary')).not.toMatch(DASH);
+  });
+
+  it('keeps both hairline verticals off the crosshair’s weight', () => {
+    const crosshair = strokeWidthOf('.forecast-chart-crosshair');
+
+    expect(strokeWidthOf('.forecast-chart-day-boundary')).not.toBe(crosshair);
+    expect(strokeWidthOf('.forecast-chart-horizon')).not.toBe(crosshair);
+    // The pair really is a pair: same weight as each other, told apart by dash
+    // alone, which is what the assertion above is protecting.
+    expect(strokeWidthOf('.forecast-chart-day-boundary')).toBe(
+      strokeWidthOf('.forecast-chart-horizon'),
+    );
   });
 });

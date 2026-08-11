@@ -17,6 +17,7 @@ import {
   horizonElements,
   xAxisElements,
 } from './forecast-chart-axes';
+import { dayBoundaryElements, nightElements } from './forecast-chart-context';
 import { ForecastChartHoverBoundary } from './forecast-chart-hover-boundary';
 import { forecastChartLegend } from './forecast-chart-legend';
 import {
@@ -79,10 +80,17 @@ import { useChartWidth } from './use-chart-width';
  * `CHART_VIEW_BOX_HEIGHT` is an owned constant, because a kW axis that rescaled
  * on every resize would be a different chart at every window size.
  *
+ * **The time of day is a layer, not a sentence.** Hours the whole fleet is dark
+ * get a wash behind the series and each UTC midnight gets a hairline, so the
+ * diurnal shape of the curve reads against its cause without a word of copy
+ * (`design.md` rule 10). `forecast-chart-context.tsx` draws both; whether an
+ * hour is the fleet's night is decided far from here and arrives on the point.
+ *
  * This file is composition and nothing else. The plot's chrome, its data marks,
  * the hover layer and the figure's furniture sit beside it —
- * `forecast-chart-axes.tsx`, `-marks.tsx`, `-hover.tsx`, `-legend.tsx`,
- * `-table.tsx` — each a piece of the treatment named after the piece it draws,
+ * `forecast-chart-axes.tsx`, `-marks.tsx`, `-context.tsx`, `-hover.tsx`,
+ * `-legend.tsx`, `-table.tsx` — each a piece of the treatment named after the
+ * piece it draws,
  * and each well inside `structure.md` rule 4's ceiling. `-hover-boundary.tsx`
  * joined them in #331 and is the one named after something other than a piece
  * of the drawing: it draws no mark of its own, and the seam it marks is where
@@ -165,10 +173,15 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           a pointer frame re-renders the boundary and reconciles straight past
           them — and, more to the point, never re-runs the producers below.
 
-          Draw order is back to front: grid → band → bounds → horizon → median →
-          overlay → actuals → marker. Actuals are drawn last of the data and win
-          every overlap — an added series never covers the measurement — and the
-          hover chrome and its pointer target sit above all of it. */}
+          Draw order is back to front: night wash → grid → day boundaries → band
+          → bounds → horizon → median → overlay → actuals → marker. The wash is
+          the backmost thing on the canvas — it is what everything else is drawn
+          *against*, so the grid reads over it rather than being tinted out by
+          it — and the day boundaries sit immediately above the grid because they
+          are the same kind of thing, chrome the reader consults, and belong
+          under every data mark. Actuals are drawn last of the data and win every
+          overlap — an added series never covers the measurement — and the hover
+          chrome and its pointer target sit above all of it. */}
       <ForecastChartHoverBoundary
         points={points}
         ariaLabel={props.ariaLabel}
@@ -177,7 +190,9 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         spanHours={spanHours}
         overlay={overlay}
       >
+        {nightElements(points, scale)}
         {gridElements(scale)}
+        {dayBoundaryElements(points, scale)}
         {bandElements(points, bandRuns, scale)}
         {boundElements(points, bandRuns, scale)}
         {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}

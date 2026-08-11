@@ -78,7 +78,10 @@ edges of the wash are the same curve over the same points and cannot drift apart
 
 Composition rules that keep both legible where they overlap:
 
-- **Draw order is back to front: grid → band fill → band bounds → median → actuals → markers.**
+- **Draw order is back to front: context layers → grid → band fill → band bounds → median →
+  actuals → markers.** The context layers straddle the grid rather than sitting beside it — the
+  night wash goes behind everything, the day boundaries immediately over the grid and under every
+  data mark ("Context layers" says why each lands where it does).
   Actuals are drawn last and therefore win every overlap. Where the measurement sits inside the
   band — the normal case for a good forecast — hue _and_ lightness both separate it from a 10%
   blue wash, so nothing collapses.
@@ -334,6 +337,56 @@ seam marked by a line indistinguishable from the grid is a seam marked in name o
 Reopen this only if a data source ever produces genuinely irregular sampling,
 which would make the two placements disagree about every point rather than about one.
 
+## Context layers
+
+Data sometimes needs context the data itself does not carry — why a series dips, where the days
+turn. **That context is drawn, never written** (`docs/standards/design.md` rule 10): a subtle
+graphical layer costs a reader nothing to skip and costs the chart no copy, no legend row and no
+categorical slot. Two such layers ship, both settled by the owner on 2026-08-10 in
+[#335](https://github.com/TomBennett-Lloyd/cumulo/issues/335), and both drawn by
+`apps/web/src/charts/forecast-chart-context.tsx`.
+
+- **Night-time shading: `--color-chart-night-fill`, behind everything.** The hours of darkness get
+  a wash over the full height of the plot, so the flat stretch of a PV curve reads as _caused_
+  rather than as data that went missing (`docs/standards/design.md` rule 5 draws that distinction,
+  and this layer is what keeps a nightly zero from having to be argued about). It is the backmost
+  mark on the canvas — grid, chrome and every series are drawn over it at full strength — which is
+  what lets the token be as faint as it is. A fill and no `fill-opacity`, exactly as the band is:
+  the alpha is baked into the token.
+- **Day boundaries: `--color-chart-grid`, solid hairline, at every UTC midnight.** A vertical line
+  where the date turns, drawn immediately over the grid and under every data mark, because it is
+  the same kind of thing the grid is — the frame the samples hang on. It is _not_ a second time
+  axis: the axis's day tier still names the days (see "The time axis"), and this marks where one
+  ends.
+
+**Whose night, for a fleet that has several.** The fleet's night is the hours when **no site in the
+fleet is receiving light** — the intersection, each site judged at civil twilight. The centroid's
+night was measured against the real fleet and rejected: the fleet spans enough longitude that a
+single point's sunset lands inside the fleet's own rolloff, which would assert darkness in a column
+where the summed curve above it is visibly non-zero, and a context layer contradicting the series it
+sits behind is worse than no layer. The intersection can only under-claim, so it never contradicts
+the curve. The definition, the measurements and the reasoning are
+`apps/web/src/dashboard/fleet-night.ts`'s; what belongs here is that a fleet-level shading owes an
+answer to "whose night" and that this is the one chosen. No metered request is spent on it — it is
+solar geometry over the site coordinates, computed with the same NREL SPA port the physics chain
+runs on.
+
+**An edge lands on a sample.** Both layers place their geometry at sample positions, so a twilight
+crossing or a midnight falling between two hourly samples is drawn at the nearer one — within half
+an hour. That is inside tolerance for a layer nobody reads a sunset or a date off, and it is the
+same imprecision the index-spaced axis already accepts. Placement follows the axis: index-spaced
+today, time-proportional along with everything else if
+[#325](https://github.com/TomBennett-Lloyd/cumulo/issues/325) lands.
+
+**A run of one sample is not shaded.** Two samples are the minimum with any width between them; a
+lone dark hour would be a zero-width rect SVG paints nothing for, and drawn as a hairline instead it
+would be a fourth thing on this canvas that looks like a vertical line.
+
+**Context layers are decoration to assistive technology.** Both live inside the chart's `role="img"`
+svg, which collapses to its `aria-label`: nothing here enters the tab order, and the accessible
+description is unchanged — the issue allowed at most one phrase and this needs none. Neither gets a
+legend row either: a legend names series, and the reader's night is not one.
+
 ## Categorical series order
 
 Multi-series charts — per-site comparison, per-cluster aggregation — take
@@ -384,12 +437,14 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
 - **A crosshair finds the X.** A vertical line tracks the pointer and snaps to the nearest
   timestamp — readers aim at a time, not at a 2px line. It is drawn **solid, at the data weight
   (2px), in `--color-text`** ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11):
-  chrome, but the reader's own chrome rather than part of the frame. The plot draws exactly two
-  vertical lines — the horizon rule and this — and at the grid's hairline weight in the grid's ink
-  they were the same mark twice over, separated only by the fact that one of them moved. The grid
+  chrome, but the reader's own chrome rather than part of the frame. The plot draws three vertical
+  lines — the day boundary, the horizon rule and this (the "Context layers" section owns the first)
+  — and at the grid's hairline weight in the grid's ink the horizon and this one were the same mark
+  twice over, separated only by the fact that one of them moved. The grid
   is no part of that: it is horizontal only (see the gridline bullet above), so orientation tells
-  it from both before ink or weight is asked to. Full ink at the data weight is what separates the
-  pair at a glance, with the horizon's dash doing the other half of the work, and the crosshair can
+  it from all three before ink or weight is asked to. Full ink at the data weight is what separates
+  the crosshair from the other two at a glance, with the horizon's dash separating that pair, and
+  the crosshair can
   afford to be the loudest thing in the chrome because it exists
   only while a pointer is held on the plot and leaves with it. No new token: `--color-text` is the
   strong ink in both modes and already the validated body ink on these surfaces, so a stroke drawn
@@ -553,7 +608,8 @@ Every token this treatment uses. Values, and the reasoning behind each value, ar
 | `--color-chart-1`                                        | median forecast line; first categorical slot                 |
 | `--color-chart-2` … `-6`                                 | additional series, fixed order, never cycled                 |
 | `--color-chart-actuals`                                  | measured actuals line (near-ink, not a categorical slot)     |
-| `--color-chart-grid`                                     | gridlines, forecast-horizon rule (dashed)                    |
+| `--color-chart-grid`                                     | gridlines, forecast-horizon rule (dashed), day boundaries    |
+| `--color-chart-night-fill`                               | night-time shading behind the plot (alpha baked in)          |
 | `--color-chart-axis-label`                               | axis ticks, axis labels, horizon label                       |
 | `--color-surface`                                        | 2px marker rings, chart section ground, tooltip panel fill   |
 | `--color-border`                                         | tooltip panel hairline                                       |
