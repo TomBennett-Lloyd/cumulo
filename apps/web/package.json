@@ -12,6 +12,7 @@
     "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "dependencies": {
+    "@cumulo/forecast": "workspace:*",
     "@cumulo/shared": "workspace:*",
     "@cumulo/ui": "workspace:*",
     "d3-shape": "^3.2.0",

@@ -139,6 +139,19 @@
 
   --color-chart-grid: #e3e9ef;
 
+  /* The night wash behind a diurnal series (#335): the hours the whole fleet is
+     dark, shaded so the flat part of a PV curve reads as caused rather than
+     missing. A neutral tint of the body ink rather than a hue — it must not read
+     as a series, and any hue at this alpha would tint the marks drawn over it.
+     The alpha is baked in for the reason the band's is: the layer is a fill and
+     a `fill-opacity` beside it would double-dip.
+
+     Deliberately the faintest thing in this file. It sits behind every mark on
+     the canvas, so its whole budget is "visible but subtle, with every series
+     line still legible over it" — a criterion only a rendered page can settle,
+     and this value is a starting point pending that pass, not a measurement. */
+  --color-chart-night-fill: rgba(15, 20, 25, 0.05);
+
   /* Axis ticks and labels. Darkened from #6b7683 (#323): `design.md` rule 8 puts
      axis chrome at the smallest scale step with a *higher-contrast* ink, and the
      size half was already at --text-xs, so contrast is the whole lever. The
@@ -241,6 +254,15 @@
   --color-chart-band-stroke: rgba(57, 135, 229, 0.35);
 
   --color-chart-grid: #262b30;
+
+  /* Not the light block's tint reused, and not its inverse: on a near-black
+     surface a wash of the *body* ink would lighten the night rather than deepen
+     it, which is the wrong direction for the thing it means. Pure black at a
+     much higher alpha is what darkens this surface at all, and the alpha is
+     larger because there is less room between the surface and black than there
+     is between the light surface and its ink. Unvalidated in the same way the
+     light value is — the browser pass is the arbiter of both. */
+  --color-chart-night-fill: rgba(0, 0, 0, 0.28);
 
   /* Lightened from #8d97a3 for the reason the light block states (#323), and
      measured independently rather than flipped: on --color-surface #16181a

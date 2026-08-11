@@ -32,6 +32,7 @@ export const tokens = {
     chartBandFill: 'var(--color-chart-band-fill)',
     chartBandStroke: 'var(--color-chart-band-stroke)',
     chartGrid: 'var(--color-chart-grid)',
+    chartNightFill: 'var(--color-chart-night-fill)',
     chartAxisLabel: 'var(--color-chart-axis-label)',
     mapMarker: 'var(--color-map-marker)',
     mapMarkerHover: 'var(--color-map-marker-hover)',

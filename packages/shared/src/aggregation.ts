@@ -1,5 +1,6 @@
 import type { Forecast, UncertaintyBand } from './forecast';
 import type { GenerationReading } from './generation-reading';
+import type { GeoCoordinates } from './location';
 import type { Site } from './site';
 import type { UtcIsoTimestamp } from './timestamp';
 
@@ -185,4 +186,45 @@ export const fleetCapacityKw = (sites: readonly Site[]): number => {
     capacityKw += site.capacityKw;
   }
   return capacityKw;
+};
+
+/**
+ * The fleet's centre of geography: the arithmetic mean of every site's coordinates, or `null` for a
+ * fleet with no sites.
+ *
+ * Here rather than in a view for the same reason as {@link fleetCapacityKw}: it is fleet arithmetic
+ * over sites, and `architecture.md` rule 3 puts that in the pure core. `null` rather than a
+ * fallback point is the honest answer for an empty fleet — a fleet with no sites is not *somewhere*,
+ * and any coordinate invented here would be a location the caller could not distinguish from a real
+ * one. Callers decide what an unlocated fleet means for them.
+ *
+ * **Unweighted, and that is a choice.** Every site counts once regardless of capacity, because the
+ * question this answers is where the fleet *is*, not where its kilowatts are. A capacity-weighted
+ * centroid would answer a different question, and no caller has asked it.
+ *
+ * **Plane arithmetic, not spherical.** The mean is taken per axis, which is the centroid of the
+ * lat/lon rectangle rather than of the sphere. Two consequences, both stated because they are real
+ * rather than because they bite here: the answer drifts a little poleward-of-true on a fleet spread
+ * over many degrees of latitude, and a fleet straddling the antimeridian averages to the *opposite*
+ * side of the planet (+179° and −179° give 0°, not 180°). `fleet-centroid.test.ts` pins that
+ * antimeridian answer so the limitation is executable rather than merely written down — this
+ * function's suite is that file rather than `aggregation.test.ts`, for the reason its own header
+ * gives. Neither
+ * matters for a fleet inside one continental span, which is every fleet this repo builds
+ * (`fleet.ts`'s cluster centres); a fleet that outgrows that needs a spherical mean here, not a
+ * correction at the call site.
+ */
+export const fleetCentroid = (sites: readonly Site[]): GeoCoordinates | null => {
+  if (sites.length === 0) {
+    return null;
+  }
+
+  let latitude = 0;
+  let longitude = 0;
+  for (const site of sites) {
+    latitude += site.latitude;
+    longitude += site.longitude;
+  }
+
+  return { latitude: latitude / sites.length, longitude: longitude / sites.length };
 };

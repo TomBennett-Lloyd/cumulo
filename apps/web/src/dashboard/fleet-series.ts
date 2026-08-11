@@ -5,10 +5,12 @@ import {
   type FleetForecastPoint,
   type Forecast,
   type GenerationReading,
+  type Site,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
 
 import type { ForecastChartPoint } from '../charts/ForecastChart';
+import { fleetNightClassifier } from './fleet-night';
 
 /*
  * The fleet aggregate, as the chart's point shape — and how complete it is.
@@ -145,15 +147,32 @@ export const EMPTY_FLEET_AGGREGATE: FleetChartAggregate = { points: [], minContr
  * output is used twice and computed once, which is why the completeness count travels with the
  * points rather than being asked for separately: split across two calls, memoizing the points
  * would have left the count re-summing the whole fleet on every render.
+ *
+ * `sites` is here rather than in `joinFleetSeries` because night is not a property of the join.
+ * The join's business is the union x-domain and what each series has to say at each hour; where
+ * the fleet *is* is a fact about the fleet, and it arrives from the panel alongside the two reads.
+ * Keeping it out of the join is also what leaves that function's own tests untouched by this layer.
+ *
+ * The classifier is built once per aggregate and applied per hour, which is the whole reason
+ * `fleetNightClassifier` returns a function: whether there is a fleet to answer about at all is a
+ * fact about the fleet, not about the hour. This runs inside the panel's memo, so the sites are
+ * walked once per hour of one answer rather than once per hour of every render (#293's reasoning,
+ * extended to this layer) — and that walk short-circuits at the first daylit site, so the daylight
+ * hours, which are most of them, cost one solar position each.
  */
 export const fleetChartAggregate = (
   forecasts: readonly Forecast[],
   readings: readonly GenerationReading[],
+  sites: readonly Site[],
 ): FleetChartAggregate => {
   const forecastPoints = aggregateFleetForecast(forecasts);
+  const isNight = fleetNightClassifier(sites);
 
   return {
-    points: joinFleetSeries(forecastPoints, aggregateFleetActuals(readings)),
+    points: joinFleetSeries(forecastPoints, aggregateFleetActuals(readings)).map((point) => ({
+      ...point,
+      night: isNight(point.validTimeIso),
+    })),
     minContributingSites: minimumContributingSites(forecastPoints),
   };
 };

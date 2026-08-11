@@ -13,6 +13,7 @@ export {
   createPhysicsForecast,
   runPhysicsChain,
   defaultPhysicsParams,
+  HOUR_MIDPOINT_OFFSET_MS,
   type PhysicsParams,
   type PhysicsChainResult,
   type PhysicsForecastResult,

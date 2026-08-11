@@ -38,6 +38,22 @@ export interface ForecastChartPoint {
   readonly band?: ForecastChartBand;
   /** `null` where no measurement exists: past the horizon, or a gap inside it. */
   readonly actualKw: number | null;
+  /**
+   * Whether the hour falls in the fleet's night — the diurnal context layer's input.
+   *
+   * **Optional on purpose, and absence means "draw nothing".** It is not a `boolean` defaulting to
+   * `false`, because those are different facts: `false` is a caller that worked out this hour is
+   * daylight, and absence is a caller that did not answer the question at all. Only the fleet's
+   * series is classified (`dashboard/fleet-night.ts`); every other producer of these points — the
+   * site overlay's own domain, a fixture in a test — has no fleet to ask the question of and would
+   * be inventing an answer by supplying one. Both cases draw no shading, so the chart's rendering
+   * rule collapses them, but the type keeps them distinct so a future reader can tell an unshaded
+   * daylight hour from an unclassified one.
+   *
+   * Under `exactOptionalPropertyTypes` that distinction is real rather than notional: the key is
+   * omitted, never set to `undefined`, exactly as `band` above is.
+   */
+  readonly night?: boolean;
 }
 
 /** One hour of a series drawn alongside the forecast, in the overlay's own time base. */
