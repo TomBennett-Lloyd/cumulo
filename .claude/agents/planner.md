@@ -41,7 +41,7 @@ Server-assigned identifiers (GitHub issue/PR numbers, database ids, ARNs) are ne
 
 A plan must never specify an import from a package's transitive dependencies: pnpm's isolated `node_modules` refuses them, correctly, so when a chunk names an import at a call site, confirm the importing package declares that dependency itself — otherwise have the chunk probe through the depending package's public surface instead (#128 C2 was told to import `@aws-sdk/lib-dynamodb` from packages that reach it only through `@cumulo/storage`).
 
-A grep that serves as acceptance evidence must be written `command grep -E` — the shimmed `grep` is ugrep, which silently under-matches ERE alternations (#206) — and every "no matches remain" criterion must be paired with a positive control proving the same pattern matches a known-present case.
+A grep that serves as acceptance evidence must be written `command grep -E` — `docs/standards/evidence.md` catalogues what the bare form does instead — and every "no matches remain" criterion must be paired with a positive control proving the same pattern matches a known-present case.
 
 A scoped vitest run in a `Verify:` command is written `pnpm --filter <pkg> exec vitest run <patterns>`. The `pnpm --filter <pkg> test -- <patterns>` idiom does not filter at all — the `--` makes vitest ignore the patterns and run the whole suite — so a chunk written that way pays for a full run while believing it exercised two files (two #104 implementers measured it independently).
 

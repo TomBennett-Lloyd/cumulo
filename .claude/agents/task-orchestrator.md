@@ -87,7 +87,8 @@ your issue's comments; the top-level never posts them for you.
    `Footprint change: +<files>` line.
 6. **Report hygiene, and silence between reports**: every sha, exit code, and file list in
    your reports is pasted command output captured immediately (`cmd > out 2>&1; rc=$?` —
-   never the exit of a pipe), and anything you relay into a GitHub comment is
+   never the exit of a pipe; `docs/standards/evidence.md`), and anything you relay into a
+   GitHub comment is
    HTML-entity-decoded first (nested agents' output sometimes arrives &lt;-escaped).
    **You speak to the top-level session at contract checkpoints only** — PLAN CHECKPOINT,
    TASK REPORT, RETRO HANDOVER, and the answer to a question it asked. No progress
