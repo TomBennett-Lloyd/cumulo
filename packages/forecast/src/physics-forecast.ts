@@ -231,13 +231,19 @@ export type PhysicsForecastResult =
     };
 
 /**
- * The physics forecast for one site-hour, as the `Forecast` the rest of the system stores,
- * serves and compares against ML — or as the reason this hour has none.
+ * The physics forecast for one site-hour, as the `Forecast` the rest of the system serves
+ * and compares against ML — or as the reason this hour has none. The live service stores
+ * this row *plus* a simulated uncertainty envelope of its own (see below), so what follows
+ * describes the estimate every stored row is built from rather than, verbatim, the row.
  *
  * No `uncertainty` key is set at all — physics v1 emits point estimates, and under
  * `exactOptionalPropertyTypes` an omitted optional field and one explicitly set to
  * `undefined` are different things. The omitted form is the honest one: it round-trips
- * through JSON and DynamoDB as "absent" rather than as a null nobody meant.
+ * through JSON and DynamoDB as "absent" rather than as a null nobody meant. That has not
+ * changed: this core is still a point estimator and ADR 0003's golden fixtures still pin it
+ * exactly. The band live rows now carry is *simulated*, attached one layer up by the
+ * forecast service at its fan-out (`apps/forecast/src/location-forecasts.ts`, #295), whose
+ * module doc carries that decision and names the module owning the width model.
  *
  * **The `forecastSchema` parse is this package's classification point.** Its bounds are
  * *not* unreachable from schema-valid inputs, so an hour outside them is an expected

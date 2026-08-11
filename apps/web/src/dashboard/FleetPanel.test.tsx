@@ -92,7 +92,7 @@ const expectForecastPlotted = (container: HTMLElement): void => {
 };
 
 describe('FleetPanel against a source with the full fleet-level capabilities', () => {
-  it('offers the aggregation range and promises simulated actuals, against the demo source', async () => {
+  it('offers the aggregation range and qualifies both simulations, against the demo source', async () => {
     const dataSource = new DemoFleetDataSource();
     const sites = await demoFleet(dataSource);
     const container = await renderSettled(dataSource, sites);
@@ -101,7 +101,16 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     openTip('About this chart');
 
-    expect(screen.getByText(/summed hour by hour/u).textContent).toContain('simulated actuals');
+    // Both halves of what this arm promises are qualified: #264's actuals, and
+    // #295's band. Neither word is decoration — the readings are synthesised from
+    // the forecast and the envelope is a deterministic width attached to every
+    // row, so a subtitle that dropped either would claim a capability the product
+    // does not have. Pinned rather than left to review, because that is the claim
+    // both tickets were about.
+    const subtitle = screen.getByText(/summed hour by hour/u).textContent;
+
+    expect(subtitle).toContain('simulated actuals');
+    expect(subtitle).toContain('simulated P10–P90 band');
     // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
     // value, because restating the sum here would only prove that two copies of it agree.
     expect(container.querySelector('.fleet-panel-stats')?.textContent).toMatch(
@@ -200,6 +209,22 @@ describe('FleetPanel against a source that can only see the horizon', () => {
     expect(container.innerHTML.toLowerCase()).not.toContain('simulated actuals');
     expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
       'Fleet forecast, next 24 h',
+    );
+  });
+
+  it('still qualifies its band as simulated with the actuals half gone', async () => {
+    await renderSettled(horizonSource());
+
+    // Opened for the same reason the case above opens it: the sentence is not in
+    // the document while the tip is shut.
+    openTip('About this chart');
+
+    // This arm's subtitle is the one place the band claim stands alone — the
+    // actuals clause the case above forbids is exactly what used to carry the
+    // word "simulated" into this sentence. #295's honesty edit lives or dies
+    // here, so it is asserted rather than implied.
+    expect(screen.getByText(/summed hour by hour/u).textContent).toContain(
+      'simulated P10–P90 band',
     );
   });
 
@@ -342,7 +367,7 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     const table = screen.getByRole('table', { name: /Table view/u });
 
     expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
-      ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual'],
+      ['Time (UTC)', 'Median', 'Actual'],
     ]);
     // Scoped to the plot's own children: the legend draws a swatch in the same
     // class, so an unscoped sweep would find the key rather than the line.

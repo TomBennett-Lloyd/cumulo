@@ -15,6 +15,7 @@ import {
   requireMark,
   requireSvg,
   SERIES,
+  tableCells,
 } from './forecast-chart-test-fixture';
 import { DEFAULT_CHART_WIDTH } from './use-chart-width';
 
@@ -150,6 +151,73 @@ describe('forecast chart drawing space', () => {
     expect(attributeNumber(target, 'y') + attributeNumber(target, 'height')).toBe(
       JSDOM_PLOT.bottom,
     );
+  });
+});
+
+/*
+ * The band's chrome, and the series that must not get any (#295).
+ *
+ * Live forecasts are point estimates until the envelope reaches a stored row, so
+ * a chart is genuinely handed band-less series — and the legend row and the two
+ * table columns are the chart *claiming* a P10–P90 it was never given. These
+ * three cases are the negative half of that rule; the positive half is already
+ * in `ForecastChart.test.tsx`, whose draw-order and table cases run the banded
+ * `SERIES` and would fail if the chrome stopped rendering where a band exists.
+ *
+ * Here rather than there for the reason the whole file exists: that suite is on
+ * `structure.md` rule 4's ceiling.
+ */
+
+/** The legend's rows, in draw order, as the words a reader sees. */
+const legendEntries = (container: HTMLElement): readonly string[] =>
+  [...container.querySelectorAll('.forecast-chart-legend li')].map((entry) =>
+    entry.textContent.trim(),
+  );
+
+/** The table twin's column headings, in document order. */
+const columnHeaders = (container: HTMLElement): readonly (string | null)[] =>
+  [...container.querySelectorAll('.forecast-chart-table thead th')].map(
+    (header) => header.textContent,
+  );
+
+/** Two point estimates and nothing else — no `band` key on either. */
+const BARE_SERIES = [bare(6, 1, 0.9), bare(9, 4, 3.8)];
+
+describe('forecast chart band chrome', () => {
+  it('omits the band legend row when no point carries a band', () => {
+    const entries = legendEntries(renderChart(BARE_SERIES));
+
+    // Exactly the two series that are on the plot. The band row would name a
+    // third the reader can neither see nor find a number for.
+    expect(entries).toStrictEqual(['Forecast (median)', 'Actuals (simulated)']);
+  });
+
+  it('omits the P10 and P90 columns when no point carries a band', () => {
+    const container = renderChart(BARE_SERIES);
+
+    expect(columnHeaders(container)).toStrictEqual(['Time (UTC)', 'Median', 'Actual']);
+    // The cells go with the headings: two columns of em dashes down every row
+    // is the same false claim, made in the table's own voice.
+    expect(tableCells(container, 0)).toStrictEqual(['1.0', '0.9']);
+  });
+
+  it('keeps the columns for a mixed series, where the em dash means one missing hour', () => {
+    // One hour with a band, one without. Here the em dash is doing its ordinary
+    // job — "no value at this hour", against a neighbour that has one — so
+    // dropping the columns would throw away a value the series really carries.
+    const container = renderChart([banded(6, 1, 0.9), bare(9, 4, 3.8)]);
+
+    expect(columnHeaders(container)).toStrictEqual([
+      'Time (UTC)',
+      'P10',
+      'Median',
+      'P90',
+      'Actual',
+    ]);
+    expect(tableCells(container, 0)).toStrictEqual(['0.0', '1.0', '2.0', '0.9']);
+    expect(tableCells(container, 1)).toStrictEqual(['—', '4.0', '—', '3.8']);
+    // And the legend keeps its row, because a band really is drawn.
+    expect(legendEntries(container)[0]).toBe('Forecast (P10–P90, simulated)');
   });
 });
 

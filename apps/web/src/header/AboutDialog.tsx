@@ -104,8 +104,9 @@ export const AboutDialog = ({ open, onClose }: AboutDialogProps): ReactElement =
           <p className="about-dialog-lede">{PRODUCT_TAGLINE}</p>
 
           <p>
-            Every site on the map gets its own forecast with an uncertainty band, and the fleet view
-            is those forecasts summed. Drop a new site anywhere and the aggregate moves with it.
+            Every site on the map gets its own forecast with a simulated uncertainty band, and the
+            fleet view is those forecasts summed. Drop a new site anywhere and the aggregate moves
+            with it.
           </p>
 
           <section className="about-dialog-sources">

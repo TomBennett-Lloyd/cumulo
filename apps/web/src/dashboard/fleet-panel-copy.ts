@@ -53,10 +53,10 @@ import { capacityLabel } from './site-format';
 const HORIZON_WINDOW_LABEL = 'next 24 h';
 
 export const SUBTITLE_WITH_ACTUALS =
-  'Every site’s forecast, summed hour by hour, with the fleet’s P10–P90 band and simulated actuals (the demo fleet has no real inverters).';
+  'Every site’s forecast, summed hour by hour, with the fleet’s simulated P10–P90 band and simulated actuals (the demo fleet has no real inverters).';
 
 export const SUBTITLE_FORECAST_ONLY =
-  'Every site’s forecast for the hours ahead, summed hour by hour, with the fleet’s P10–P90 band.';
+  'Every site’s forecast for the hours ahead, summed hour by hour, with the fleet’s simulated P10–P90 band.';
 
 /** Plural is the fleet's usual state; the singular exists so the demo's first site reads right. */
 const siteCountLabel = (count: number): string =>

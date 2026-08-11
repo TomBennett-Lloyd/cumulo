@@ -188,7 +188,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {axisTitleElements(scale.plot)}
       </ForecastChartHoverBoundary>
 
-      {forecastChartLegend(overlay?.label)}
+      {forecastChartLegend(overlay?.label, bandRuns.length > 0)}
       {forecastChartTable({ points, spanHours, caption: props.tableCaption, overlay })}
     </figure>
   );

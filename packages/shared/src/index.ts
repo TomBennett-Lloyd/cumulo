@@ -33,6 +33,7 @@ export {
   SIMULATED_ACTUAL_FACTOR_MIN,
   SIMULATED_ACTUAL_FACTOR_MAX,
 } from './simulated-actual';
+export { simulatedUncertaintyBand } from './simulated-uncertainty';
 export { locationId, type GeoCoordinates } from './location';
 export {
   baselineSchema,
