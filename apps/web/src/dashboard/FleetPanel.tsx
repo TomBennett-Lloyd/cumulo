@@ -1,5 +1,5 @@
 import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
-import { useMemo, useState, type ReactElement } from 'react';
+import { useId, useMemo, useState, type ReactElement } from 'react';
 
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
@@ -14,6 +14,7 @@ import {
 } from './fleet-panel-body';
 import {
   chartCopy,
+  fleetStatsLine,
   SUBTITLE_FORECAST_ONLY,
   SUBTITLE_WITH_ACTUALS,
   windowLabel,
@@ -99,20 +100,45 @@ import { siteOverlaySeries } from './site-overlay';
  * — and it sits behind an (i) (`info/InfoTip.tsx`, #265). It was read once and
  * then occupied a line on every render, above a chart that is the reason anyone
  * is here. There was a second (i) beside it, naming the window for the arm with
- * no picker; #284 D5 deleted it rather than moving it, because the picker now
- * renders on that arm and states the window as a control the reader can act on.
+ * no picker; #284 D5 deleted it rather than moving it, because the picker had
+ * reached that arm and stated the window as a control the reader could act on.
+ * That premise is spent: the fold of 2026-08-11 put the three windows behind a
+ * calendar icon, so the current one is no longer readable without a press, and
+ * `range-picker.tsx` writes that loss down rather than softening it. It is not a
+ * reason to bring the tip back. What states the window now is the chart's own
+ * accessible name and its table caption, both from `fleet-panel-copy.ts` — the
+ * answer that file gives — so the window has a carrier and the deleted tip is
+ * still not it.
  * What has never moved is everything the section says about its current state:
  * the partial-aggregate notice, and the notice that a selected site's line
  * failed. A reader cannot press for news they do not know has happened, so state
  * stays where it can be seen and description is one press away.
  *
- * #323 is the same line drawn once more, and this time against text that was
- * neither: the `<h2>` and the "60 sites · 332 kW" line described the chart under
- * them rather than reporting anything, so they went — the heading into this
- * section's accessible name, the numbers into nothing, because the site table
- * below already counts the fleet. The completeness note lost its complete arm
- * for the same reason (`fleet-panel-body.tsx`): "every site contributed" is not
- * news, and only the partial direction is.
+ * #323 drew that same line once more, against text it read as neither: the
+ * `<h2>` and the "60 sites · 332 kW" line described the chart under them rather
+ * than reporting anything, so the heading became this section's accessible name
+ * and the numbers went entirely. **The owner reversed that half on 2026-08-11,
+ * and both are back as visible text.** The judgement that changed is about what
+ * a heading over a chart is *for*: reviewing the headless row, the owner read it
+ * as a chart floating without a name a sighted reader could see, and a fleet's
+ * size as a fact the chart states nowhere — a plot of summed kW is not a count
+ * of roofs, and sending the reader to the site table at the foot of the page for
+ * it was making them leave the chart to read the chart. So the name is visible
+ * again and points at the section by `aria-labelledby` rather than being spelled
+ * a second time in an `aria-label`, and the numbers sit beside it.
+ *
+ * What did *not* come back with them is the rest of #323, which stands on its
+ * own arguments: this is still a full-width band on the map's surface rather
+ * than a card (`fleet-panel.css`), and the completeness note still has no
+ * complete arm (`fleet-panel-body.tsx`) — "every site contributed" is not news,
+ * and only the partial direction is. A reversal of one clause is not a reversal
+ * of the ticket.
+ *
+ * The stats line is the one thing here that is allowed to disappear, and it
+ * disappears by *width* rather than by state: below a measured container width
+ * the row cannot hold four items, and the numbers are the item that yields
+ * (`design.md` rule 7 — controls have wrap priority over auxiliary text).
+ * `fleet-panel.css` owns that width and derives it; nothing here restates it.
  *
  * ## Attribution
  *
@@ -254,6 +280,7 @@ export const FleetPanel = ({
   selectionReady,
   refreshToken,
 }: FleetPanelProps): ReactElement => {
+  const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
   /*
    * Retrying is a new question, so it is a new query key rather than an
@@ -376,38 +403,59 @@ export const FleetPanel = ({
 
   return (
     /*
-     * A section named for assistive technology and headed by nothing visible.
+     * A section headed by a visible name, which is where this started and where
+     * the owner has put it back (2026-08-11).
      *
-     * The `<h2>Fleet forecast</h2>` that used to carry this name sat directly
-     * above a chart whose own accessible name begins "Fleet forecast" — a label
-     * whose only remaining job was naming, which `design.md` rule 2 turns into
-     * an accessible name rather than visible text (the window label in #329 and
-     * the word "close" in #340 are the same move). The section keeps the name so
-     * the landmark is still navigable and still announced; what a sighted reader
-     * loses is a line of chrome restating the chart under it.
+     * #323 turned the `<h2>Fleet forecast</h2>` into an `aria-label` on the
+     * reading that a label whose only remaining job is naming becomes an
+     * accessible name rather than visible text (`design.md` rule 2, alongside
+     * the window label in #329 and the word "close" in #340). Those two stay
+     * decided; this one did not survive the owner seeing it, because a heading
+     * over the page's one chart is not only naming it — it is what tells a
+     * sighted reader where the fleet's section begins on a page that is three
+     * full-width bands in a row with no card edges left to separate them.
      *
-     * `aria-label` rather than `aria-labelledby` now, because there is no longer
-     * an element in the tree to point at — which is also why `useId` left with
-     * the heading.
+     * `aria-labelledby` rather than `aria-label`, now that there is an element
+     * in the tree to point at: the name is written once, in the heading, and the
+     * landmark borrows it. `useId` is back for the same reason it left — the
+     * pointer needs an id, and a hand-written one would collide the moment a
+     * second panel rendered.
      */
-    <section className="fleet-chart-section" aria-label="Fleet forecast">
+    <section className="fleet-chart-section" aria-labelledby={headingId}>
       {/*
-       * The slim controls row: the description behind an (i), and the window
-       * control, pushed to the row's end.
+       * The controls row, back to the four items #284 D4 wrote it with: the
+       * section's heading, the fleet's own numbers, the description behind an
+       * (i), and the window control.
        *
-       * What is *not* here is the point of #323. This was a four-item header —
-       * a heading, the fleet's own numbers, the (i) and the picker — sitting on
-       * a padded card between the map and the chart. The heading became this
-       * section's accessible name and the numbers went entirely (the site table
-       * counts the fleet, `SiteTable.tsx`), so what is left is two controls and
-       * nothing to space them against; `justify-content: flex-end` puts them
-       * where the reader's eye leaves the row rather than stranding them over
-       * the plot's left edge. `flex-wrap` survives the cut for the reason #284
-       * D4 added it: at a width that cannot hold both, the picker takes its own
-       * line rather than being crushed (`design.md` rule 7 — controls have wrap
-       * priority).
+       * #323 emptied it down to the two controls and, with nothing left on the
+       * row that was *content*, sent them to its end with `justify-content:
+       * flex-end`. There is content again, so the layout goes back to the shape
+       * that fits it: the heading and the numbers read from the row's start, and
+       * the two controls are carried to its end by a margin on the (i) rather
+       * than by a `justify-content` that would have spaced all four apart
+       * (`fleet-panel.css` carries both halves and the reasoning).
+       *
+       * Document order is the reading order and the tab order at once, which is
+       * why the two controls come last: a reader meets the section's name, then
+       * what it is a summary of, then the things they can press.
+       *
+       * `flex-wrap` keeps doing the job #284 D4 gave it: at a width that cannot
+       * hold the controls, the picker takes its own line rather than being
+       * crushed (`design.md` rule 7 — controls have wrap priority). What gives
+       * way *before* that happens is the stats line, which the stylesheet hides
+       * whole below a measured container width.
        */}
       <div className="fleet-chart-controls">
+        <h2 className="fleet-chart-title" id={headingId}>
+          Fleet forecast
+        </h2>
+        {/*
+         * The fleet in one line, and the row's one piece of auxiliary text. It
+         * is derived during render from the `sites` prop rather than mirrored
+         * into state (`react.md` rule 1) — it is a function of a prop and
+         * nothing else, so a second copy of it could only ever disagree.
+         */}
+        <p className="fleet-chart-stats">{fleetStatsLine(sites)}</p>
         {/*
          * The subtitle, behind an (i) since #265. It was a paragraph under the
          * heading that every reader read once and then scrolled past on every
@@ -433,9 +481,18 @@ export const FleetPanel = ({
          * looking at it. An empty fleet asks the source nothing whatever the
          * picker says, because `enabled` gates the queries and not this.
          *
-         * It takes no focus it was not given: a selection moves nobody here
-         * (#328, `design.md` rule 11), so the picker is reached the way every
-         * other control on the page is — by a reader going to it.
+         * Nothing on this page lands a reader on it: the picker is reached the
+         * way every other control here is, by a reader going to it (#328,
+         * `design.md` rule 11). What it does do, since the fold on 2026-08-11,
+         * is hand the focus *back* on a selection — choosing a window closes the
+         * popover, and the buttons the reader was standing on leave the document
+         * with it, so without the hand-back a keyboard reader is dropped on
+         * `body`. That is rule 11's own carve-out rather than an exception to
+         * it — the page changed in answer to their action, and the trigger is
+         * where their next act lives. `range-picker.tsx`'s docblock
+         * (§ "Dismissal, and why the shape is copied rather than shared")
+         * carries that argument; this panel only has to know that the control it
+         * renders is one that returns what it took.
          */}
         {fleetLookback || fleetActuals ? (
           <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />

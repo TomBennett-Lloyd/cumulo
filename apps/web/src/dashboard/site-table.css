@@ -40,12 +40,12 @@
 }
 
 /* The affordance and the section's name in one. It takes the heading's own type
-   scale, because that is what it replaced — and since #323 it is the only visible
-   heading anywhere below the map, the chart band's name having become an
-   `aria-label` on the section (FleetPanel.tsx). A summary set below the heading
-   scale would leave the whole reading under the map with no landmark a sighted
-   reader can see, which is a heavier job than the one this scale was originally
-   defending against. `cursor: pointer`
+   scale, because that is what it replaced. Between #323 and 2026-08-11 it was
+   also the only visible heading anywhere below the map, the chart band's name
+   having become an `aria-label` on the section (FleetPanel.tsx); that stretch
+   ended when the fleet chart got its `<h2>` back (dashboard/fleet-panel.css), at
+   this same step, so the summary reads level with that heading rather than
+   standing in for one. The scale is the replacement's either way. `cursor: pointer`
    and the platform focus ring (@cumulo/ui's styles.css, which lists `summary`
    among the elements it rings) are the whole of its interaction treatment: the
    marker triangle, the open/closed state and the keyboard operation are the

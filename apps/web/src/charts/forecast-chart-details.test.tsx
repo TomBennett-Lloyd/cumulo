@@ -20,8 +20,8 @@ import {
 import { DEFAULT_CHART_WIDTH } from './use-chart-width';
 
 /**
- * The table twin's disclosure (#284 D3), the chart's own view box (D15), and
- * what the curved marks (D8) do at a gap.
+ * The table twin's disclosure (#284 D3) — the fold, and where it sits — the
+ * chart's own view box (D15), and what the curved marks (D8) do at a gap.
  *
  * Its own file rather than more cases in `ForecastChart.test.tsx`, which is at
  * `structure.md` rule 4's ceiling — the same split
@@ -37,6 +37,13 @@ import { DEFAULT_CHART_WIDTH } from './use-chart-width';
  * seeing the summary and not the rows until they press it, and the plot filling
  * its panel once the rows are out of the way) is the browser lane's, and
  * `e2e/chart-surfaces.spec.ts` is where it is asserted (`testing.md` rule 10).
+ *
+ * Where the disclosure sits is this lane's, though, and it is a DOM fact rather
+ * than a rendered one: since 2026-08-11 the twin is a panel *after* the figure
+ * instead of a row inside it (`ForecastChart.tsx` carries the owner's ask and
+ * the reasoning). Structure is exactly what jsdom can see, so the case below
+ * pins it here rather than paying the browser lane for a question no box has to
+ * be laid out to answer.
  */
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
@@ -95,6 +102,31 @@ describe('forecast chart table disclosure', () => {
     fireEvent.click(summary);
 
     expect(details.open).toBe(true);
+  });
+
+  it('puts the disclosure after the figure rather than inside it', () => {
+    const container = renderChart(SERIES);
+    const details = disclosure(container);
+    const figure = container.querySelector('.forecast-chart-figure');
+
+    if (figure === null) {
+      throw new Error('The chart rendered no figure for the twin to sit after.');
+    }
+
+    /*
+     * The positive controls, and the reason the negative below is a claim about
+     * anything: "the details is not in the figure" is satisfied perfectly by a
+     * component that rendered nothing at all. `disclosure` has already thrown
+     * unless a real `<details>` is in the document, and the figure is asserted
+     * to hold the plot rather than merely to exist — an empty figure would pass
+     * the negative while proving no chart was drawn.
+     */
+    expect(figure.querySelector('svg.forecast-chart')).not.toBeNull();
+
+    expect(figure.querySelector('.forecast-chart-details')).toBeNull();
+    // Sibling *and* after it: the panel is what the reader is offered once the
+    // chart has had its say, so the order is half of what the move was for.
+    expect(figure.nextElementSibling).toBe(details);
   });
 });
 

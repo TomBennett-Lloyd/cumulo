@@ -333,12 +333,37 @@
   flex: none;
 }
 
-/* The disclosure the table twin sits behind (#284 D3). It is a sub-section of
-   the panel the chart is in, not a peer of it, so unlike `.site-table` it wears
-   no surface, radius or padding of its own — it is a line under the legend that
-   opens. */
+/* The disclosure the table twin sits behind (#284 D3), and since 2026-08-11 a
+   quiet panel rather than a line under the legend — the owner asked for the raw
+   data to "live in a collapsible panel rather than inline with the graph".
+   `ForecastChart.tsx` carries what moved and why; this is the half of it a
+   stylesheet can say.
+
+   Recessed, not raised: `--color-bg` is the page's own colour and the band this
+   sits in is `--color-surface` (`dashboard/fleet-panel.css`), so the panel reads
+   as a well cut into the band rather than as a card floating over it. That
+   direction is the point — a raised card would compete with the chart above it
+   for the reading's attention, and this is the thing a reader is offered second.
+   Contrast survives the move by the tokens file's own reckoning rather than by
+   assertion: `--color-bg` is one of the two surfaces
+   `packages/ui/src/tokens/tokens.css` measures ink against, and the muted ink
+   this caption takes is the literal it measures there — that file's axis-label
+   note records the pair and the ratio.
+
+   One padding step rather than the `--space-4` a card takes: the panel is
+   holding a summary and, once opened, a table that brings its own row rhythm, so
+   the edge only has to stop the text being flush against it.
+
+   The margin is on top of the caller's own gap rather than instead of it — the
+   twin is a sibling of the figure in `.fleet-panel-body`'s grid now, so the seam
+   a reader sees is that grid's step plus this one. Deliberately the loosest seam
+   in this reading: every other gap here joins things that are one statement, and
+   this is the one place a separation is meant (`design.md` rule 4). */
 .forecast-chart-details {
   margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
 }
 
 /* One step down from `.site-table-summary`, and deliberately: that summary names

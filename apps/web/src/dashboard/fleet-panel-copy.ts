@@ -1,9 +1,13 @@
+import { fleetCapacityKw, type Site } from '@cumulo/shared';
+
 import type { RangeHours } from '../data/fleet-data-source';
 import { rangeLabel } from './range-picker';
+import { capacityLabel } from './site-format';
 
 /*
  * What the fleet chart says about itself: its subtitle, how it names the window
- * it is drawing, and the two names it carries.
+ * it is drawing, the two names it carries, and the one line summarising the
+ * fleet.
  *
  * The third copy module in `apps/web`, and the split between the three is by
  * subject rather than by size. `state-copy.ts` owns what the app says while it
@@ -31,9 +35,16 @@ import { rangeLabel } from './range-picker';
 /*
  * Two window *captions* used to head this module, for the arm that rendered no
  * picker. #284 D5 deleted both along with the (i) that carried them: the picker
- * renders wherever there is a window to choose now, and a control states its
- * window better than a sentence a reader has to press for. What is left is the
- * labels below, which name a window inside the chart's own names.
+ * had reached every arm with a window to choose, and a control stated its window
+ * better than a sentence a reader had to press for.
+ *
+ * The second half of that argument is spent. On 2026-08-11 the picker folded
+ * behind a calendar icon, so the control is now itself a thing a reader has to
+ * press for — `range-picker.tsx` records the trade and what it bought. It does
+ * not send the captions back, because the window kept a carrier without them:
+ * the labels below name it inside the chart's own accessible name and its table
+ * caption, which is the answer `range-picker.tsx` points at and this module
+ * supplies.
  */
 
 /**
@@ -54,20 +65,43 @@ export const SUBTITLE_WITH_ACTUALS =
 export const SUBTITLE_FORECAST_ONLY =
   'Every site’s forecast for the hours ahead, summed hour by hour, with the fleet’s simulated P10–P90 band.';
 
-/*
- * There is no `fleetStatsLine` here any more, and no `siteCountLabel` under it.
- * The line read "60 sites · 332 kW" beside a chart of exactly those 60 sites,
- * and #323 deleted it with the heading it sat next to: a summary restating what
- * the chart below it draws serves no reader decision the chart does not already
- * serve (`design.md` rule 2). #344 had already taken the word "installed" off
- * the end of it for the same reason, one clause at a time. The fleet's count
- * survives where a reader goes to count it — the site table's own summary
- * (`SiteTable.tsx`, "Sites (n)") — and `capacityLabel` stays in
- * `site-format.ts`, whose three surviving callers are `SiteTable.tsx`,
- * `map/SitePopoverCard.tsx` and `header/SiteSearch.tsx`. Named rather than
- * counted, so the next reader can check the claim without a grep of their own
- * (`architecture.md` rule 10).
+/** Plural is the fleet's usual state; the singular exists so the demo's first site reads right. */
+const siteCountLabel = (count: number): string =>
+  `${String(count)} ${count === 1 ? 'site' : 'sites'}`;
+
+/**
+ * The fleet in one line: how many, and how much of it there is.
+ *
+ * **It was deleted and it is back, which is the only unusual thing about it.**
+ * #323 read it as a summary restating what the chart below it draws and took it
+ * out with the heading it sat beside (`design.md` rule 2). The owner asked for
+ * both back on 2026-08-11, having seen the row without them: a chart of a fleet
+ * is not a statement of how large that fleet is, and the reader who wants the
+ * size was being sent to the site table's summary at the bottom of the page to
+ * get it. The words are #323's own, restored rather than rewritten — they had an
+ * owner and a history, and re-inventing the phrasing would have thrown both away.
+ *
+ * Capacity comes from `@cumulo/shared` rather than a sum written here, because
+ * fleet arithmetic lives there (`architecture.md` rule 3) and a second sum would
+ * be a second definition of the fleet's size.
+ *
+ * The line still ends without the word "installed" that #344 took off it
+ * (`design.md` rule 2: chrome earns its place). That clause was cut on its own
+ * argument and nothing in the reinstatement disturbs it — a kW figure under a
+ * heading reading "Fleet forecast" is the fleet's capacity, and the unit says
+ * which quantity it is.
+ *
+ * **How it yields has changed with it, and the docblock has to say so.** Until
+ * #323 this was the item the header row *shrank* first, ellipsis and all, so a
+ * narrow row kept a truncated fraction of it. It does not truncate now: below a
+ * measured container width the whole line is hidden and the row carries the
+ * heading and the two controls (`fleet-panel.css`, which owns that width and
+ * derives it). Half a number is worse than no number, and a fleet size cut to
+ * "60 sites · 33…" is a figure a reader can misread rather than one they can
+ * see is absent.
  */
+export const fleetStatsLine = (sites: readonly Site[]): string =>
+  `${siteCountLabel(sites.length)} · ${capacityLabel(fleetCapacityKw(sites))}`;
 
 /**
  * The window the chart's labels name.

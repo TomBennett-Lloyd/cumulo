@@ -524,20 +524,32 @@
  * and no spec measures it (`docs/tech-debt.md`).
  *
  * There are two such values in this file, this one and `.site-search-listbox`'s,
- * and one more of the same kind outside it: `.info-tip-panel` in `info/info.css`,
- * which is deliberately equal to them although the tip that needed it — the one
- * on this bar — is gone, leaving only the fleet panel's, which clears static
- * content on document order alone. That file carries the argument for keeping
- * one value per component rather than one per placement.
+ * and two more of the same kind outside it. `.info-tip-panel` in `info/info.css`
+ * is deliberately equal to them although the tip that needed it — the one on
+ * this bar — is gone, leaving only the fleet panel's, which clears static
+ * content on document order alone; that file carries the argument for keeping
+ * one value per component rather than one per placement. `.range-picker-popover`
+ * in `dashboard/range-picker.css` joined them on 2026-08-11, when the window
+ * chips folded behind a trigger, on that same argument — and its own note is
+ * the one to read before assuming what the value buys there, because it says
+ * plainly, by hit test with the declaration removed, that the value is not what
+ * puts that sheet over the chart.
  * One further value exists and is deliberately unlike them: `.site-popover-anchor`
  * in `map/site-popover.css` is `1`, because the selected site's card rides a
  * maplibre marker and its only competition is the sibling markers in that pane,
  * which carry no value at all. It is not `10` because it must not clear this bar
  * — the card is a thing on the map, not an overlay over it. That file carries
  * the argument.
- * Grep `z-index` across the app's own stylesheets and those four are the hits
- * (maplibre's vendored sheet has its own, which is what the three above have to
- * clear).
+ * This paragraph is the one place the values are read against each other, so it
+ * states a floor and the sweep that found it rather than a count that the next
+ * stylesheet falsifies (`architecture.md` rule 9) — which is exactly what
+ * happened to its predecessor, a bare "those four" that the range-picker's fold
+ * made wrong the day it landed. As of 2026-08-11,
+ * `git grep -nE '^[[:space:]]*z-index[[:space:]]*:' -- ':/'` from a worktree
+ * root returns the five named above and nothing else; a value written after that
+ * date belongs in this list, added by whoever writes it. (maplibre's vendored
+ * sheet has its own, which is what the values painted over its canvas have to
+ * clear.)
  * `.map-attribution` (map/map.css) has been positioned over the basemap since
  * #265 and still needs no value at all: it competes with nothing, being the
  * last positioned element in its own container, so it paints above its siblings

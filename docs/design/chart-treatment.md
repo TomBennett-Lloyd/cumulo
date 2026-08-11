@@ -609,6 +609,14 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   the panel it is in and the twin is one keystroke away. The disclosure is a native
   `<details>`/`<summary>`, the same element the fleet's table uses (`dashboard/SiteTable.tsx`), so
   the open/closed semantics, the keyboard operation and the announcement are the platform's.
+  **It sits after the figure, as its own panel** — the owner's ask on 2026-08-11, in their words:
+  _"i think the raw data could actually live in a collapsible panel rather than inline with the
+  graph etc"_. It used to render inside the `<figure>`, under the legend, which filed the numbers
+  as one more piece of the drawing's furniture; as the figure's next sibling on a quiet recessed
+  surface it reads as what it is — the same values in another form, offered after the chart rather
+  than appended to it. Only the placement moved: there is still exactly one disclosure and it is
+  still closed by default, so everything the rest of this bullet argues stands unchanged.
+  `charts/ForecastChart.tsx` carries the move and `charts/charts.css` the panel's treatment.
   **This does not weaken the bullet above** — but what discharges it is reachability, not
   presence, and the difference is worth stating precisely. A closed `<details>` keeps its children
   in the **document**; it does not keep them in the **accessibility tree**, because a browser does

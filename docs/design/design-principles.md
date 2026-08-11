@@ -70,8 +70,11 @@ first-class, hiring-manager-on-phone).
 
 **Rule:** Every visible piece of text or control must serve a reader decision the UI does not
 already serve. Text that states what the page already shows does not ship: no window label under
-an axis that shows the window, no "aggregated from 60 sites" beside a chart of exactly that, no
-written instructions for an affordance a control can carry, no `:00` on hourly ticks. If a
+an axis that shows the window, no written instructions for an affordance a control can carry, no
+`:00` on hourly ticks. A fourth example stood in that list — "aggregated from 60 sites" beside a
+chart said to show exactly that — until the owner reversed its deletion on 2026-08-11; §2 item 1
+records what that boundary case does and does not do to this rule, and the short version is that
+a chart of summed kW does not state how many sites it summed. If a
 label's only real job is naming something for assistive technology, it becomes an accessible
 name, not visible text — a move the owner has now made twice, which makes it a confirmed rule,
 not a one-off: the window label (#329) and the word "Close", which "should always be a close
@@ -91,7 +94,8 @@ for screen readers too?" (#329).
 **Grounding:** #265 round 2 item 11 (add-site mode button "instead of written instructions
 cluttering the page") and item 12 (descriptions out of flow into (i) tips); #284 D5 (delete the
 "About this window" tip — "the x-axis states the window"), D9 (drop the `:00` — "minute
-resolution is noise"), D13 (delete the header (i)); #323 (remove "aggregated from 60 sites");
+resolution is noise"), D13 (delete the header (i)); #323 (remove "aggregated from 60 sites" —
+reversed by the owner on 2026-08-11, §2 item 1);
 #329 (window label: drop visible text if the accessible name can carry it); #340 ("we should
 never have the word 'close', it should always be a close icon" — the second visible-text→
 accessible-name move, and D16's burger precedent applied by the owner to a new control); #344
@@ -337,10 +341,18 @@ Four concrete counterfactuals, for credibility:
    horizon caption shipped in #265 C10 behind an "About this window" (i); #284 D5 deleted that
    tip ("the x-axis states the window") but kept a visible `windowLabel`; #329 now removes the
    visible label too (accessible name only). The fleet-stats line ("aggregated from 60 sites")
-   shipped in #284 D4's heading row and is removed by #323. Had P2 existed, none of the four
-   ships: the implementer's test — "what reader decision does this text serve that the page
-   doesn't already?" — fails each of them at design time. Estimated avoided rework: parts of
-   #284 C5/wave-B plus two 2026-08-10 tickets.
+   shipped in #284 D4's heading row and was removed by #323 — and then came back: the owner
+   reversed that one clause on 2026-08-11 (#431), and the numbers are visible text again
+   wherever the row can hold them (`dashboard-composition.md` records the reversal;
+   `apps/web/src/dashboard/FleetPanel.tsx` carries the argument). Had P2 existed, the first
+   three do not ship: the implementer's test — "what reader decision does this text serve that
+   the page doesn't already?" — fails each of them at design time. The fourth is kept here as
+   the counter-example it turned into, because a principle's boundary is worth more than a
+   tidy count: P2 would have blocked at design time a line the owner has since asked for, and
+   the reason it survives the test on re-reading is that the site count is not something the
+   plot states — a chart of summed kW never says how many roofs it is a sum of. What #344
+   actually objected to was the row's width, which is now answered by measurement rather than
+   by deletion. Estimated avoided rework: parts of #284 C5/wave-B plus two 2026-08-10 tickets.
 
 2. **P7 (container measurement) — wave D's breakpoints, retired the week they shipped.** #284
    C11/C12 introduced the repo's first two viewport media queries (header collapse, attribution
@@ -360,8 +372,10 @@ Four concrete counterfactuals, for credibility:
 
 4. **P3 + P4 (data owns the viewport, adjacency) — the fleet panel's three-pass shrink.** #265
    C3 kept the chart inside a padded fleet panel capped at 46rem; #284 D3 removed the cap and
-   folded the table; D4/D15 flattened the header and compressed the stack; #323 removes the
-   panel and its spacing entirely. Four converging corrections of one shape. Had P3/P4 existed
+   folded the table; D4/D15 flattened the header and compressed the stack; #323 removed the
+   panel and its spacing entirely. Four converging corrections of one shape. (The heading row
+   #323 emptied was refilled on 2026-08-11 — item 1 above — which reverses one clause of that
+   ticket and none of this shape: the panel, its box and its measure stayed gone.) Had P3/P4 existed
    at #265 planning, the "chart directly beneath the map" theme reads as "chart and map are one
    unit at full width" from the start — the panel chrome never ships, and D3's "full width"
    ambiguity (the 72rem-vs-viewport question the plan had to flag) never arises.
@@ -564,8 +578,14 @@ documented residual — is the model. Split:
 - **P13:** a stylelint/css-contract check that `transition`/`animation` declarations sit behind
   a `prefers-reduced-motion` guard (or use a shared motion custom property that a reduced-motion
   block zeroes).
-- **P7:** an e2e single-line invariant on the range-picker group at the mobile viewport — the
-  group's bounding-box height ≤ 1 button height (#344's never-wrap rule, measured).
+- **P7 (lapsed 2026-08-11):** an e2e single-line invariant on the range-picker group at the
+  mobile viewport — the group's bounding-box height ≤ 1 button height (#344's never-wrap rule,
+  measured). #431 folded the three window chips behind a calendar trigger
+  (`dashboard/range-picker.tsx`), so the row holds one button and there is no group left on it
+  to wrap: the candidate now names nothing measurable. Recorded rather than deleted, because
+  the rule it would have gated is intact — the fold is a stronger way of keeping #344's line
+  than measuring it — and the fit question the row still has is answered by the container query
+  `dashboard/fleet-panel.css` owns, which is P7's own idiom rather than a gate candidate.
 - **P6:** an e2e no-post-paint-resize case: read the tooltip panel's box on the frame it
   appears and one poll later; the boxes match (#343).
 

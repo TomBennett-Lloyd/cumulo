@@ -85,6 +85,29 @@ import { useChartWidth } from './use-chart-width';
  * `CHART_VIEW_BOX_HEIGHT` is an owned constant, because a kW axis that rescaled
  * on every resize would be a different chart at every window size.
  *
+ * **The table twin is a panel of its own, after the figure** — the owner's
+ * 2026-08-11 ask, in their words: *"i think the raw data could actually live in
+ * a collapsible panel rather than inline with the graph etc"*. It has sat behind
+ * a closed `<details>` since #284 D3 and still does; what moved is where the
+ * disclosure sits. Inside the `<figure>` it was filed with the legend as one
+ * more piece of the drawing's furniture, which is not what it is — it is the
+ * same numbers in another form, offered *after* the chart rather than appended
+ * to it. So this component returns a fragment: the figure, then the disclosure
+ * as its next sibling, both landing in whatever layout the caller provides
+ * (`dashboard/fleet-panel.css`'s `.fleet-panel-body` grid today). Nothing about
+ * the fold itself changed — there is one disclosure, closed by default, and
+ * `forecast-chart-table.tsx` still owns the argument for it.
+ *
+ * **Two names, because there are two things to name.** The standing aria
+ * decision, written down as a decision rather than left to be read off the
+ * markup: the disclosure is named by its `<summary>` ("Raw data") — what a
+ * reader meets while it is closed and what they press — and the table is named
+ * by its `<caption>`, which states which window and which units the numbers are
+ * in. That pair is why the caption is not folded into the summary: a summary
+ * names the *disclosure*, and taking it for the table would leave one of the two
+ * nameless and the other saying two things at once. Neither name ever came from
+ * the figure, so leaving it costs the pair nothing.
+ *
  * **The time of day is a layer, not a sentence.** Hours the whole fleet is dark
  * get a wash behind the series and each UTC midnight gets a hairline, so the
  * diurnal shape of the curve reads against its cause without a word of copy
@@ -92,7 +115,7 @@ import { useChartWidth } from './use-chart-width';
  * hour is the fleet's night is decided far from here and arrives on the point.
  *
  * This file is composition and nothing else. The plot's chrome, its data marks,
- * the hover layer and the figure's furniture sit beside it —
+ * the hover layer, the legend and the table twin sit beside it —
  * `forecast-chart-axes.tsx`, `-marks.tsx`, `-context.tsx`, `-hover.tsx`,
  * `-legend.tsx`, `-table.tsx` — each a piece of the treatment named after the
  * piece it draws,
@@ -176,45 +199,55 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
 
   return (
-    <figure className="forecast-chart-figure" ref={figureRef}>
-      {/* The chrome, handed down rather than drawn here: the boundary owns the
-          `<svg>` these go inside, because it owns the hover state that moves the
-          panel over them (#331). They are elements by the time they cross it, so
-          a pointer frame re-renders the boundary and reconciles straight past
-          them — and, more to the point, never re-runs the producers below.
+    <>
+      <figure className="forecast-chart-figure" ref={figureRef}>
+        {/* The chrome, handed down rather than drawn here: the boundary owns the
+            `<svg>` these go inside, because it owns the hover state that moves
+            the panel over them (#331). They are elements by the time they cross
+            it, so a pointer frame re-renders the boundary and reconciles
+            straight past them — and, more to the point, never re-runs the
+            producers below.
 
-          Draw order is back to front: night wash → grid → day boundaries → band
-          → bounds → horizon → median → overlay → actuals → marker. The wash is
-          the backmost thing on the canvas — it is what everything else is drawn
-          *against*, so the grid reads over it rather than being tinted out by
-          it — and the day boundaries sit immediately above the grid because they
-          are the same kind of thing, chrome the reader consults, and belong
-          under every data mark. Actuals are drawn last of the data and win every
-          overlap — an added series never covers the measurement — and the hover
-          chrome and its pointer target sit above all of it. */}
-      <ForecastChartHoverBoundary
-        points={points}
-        ariaLabel={props.ariaLabel}
-        width={width}
-        scale={scale}
-        spanHours={spanHours}
-        overlay={overlay}
-      >
-        {nightElements(points, scale)}
-        {gridElements(scale)}
-        {dayBoundaryElements(points, scale)}
-        {bandElements(points, bandRuns, scale)}
-        {boundElements(points, bandRuns, scale)}
-        {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}
-        {medianElements(points, medianRuns, scale)}
-        {overlay === undefined ? null : overlayElements(overlay.values, scale)}
-        {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
-        {xAxisElements(points, scale)}
-        {axisTitleElements(scale.plot)}
-      </ForecastChartHoverBoundary>
+            Draw order is back to front: night wash → grid → day boundaries →
+            band → bounds → horizon → median → overlay → actuals → marker. The
+            wash is the backmost thing on the canvas — it is what everything else
+            is drawn *against*, so the grid reads over it rather than being
+            tinted out by it — and the day boundaries sit immediately above the
+            grid because they are the same kind of thing, chrome the reader
+            consults, and belong under every data mark. Actuals are drawn last of
+            the data and win every overlap — an added series never covers the
+            measurement — and the hover chrome and its pointer target sit above
+            all of it. */}
+        <ForecastChartHoverBoundary
+          points={points}
+          ariaLabel={props.ariaLabel}
+          width={width}
+          scale={scale}
+          spanHours={spanHours}
+          overlay={overlay}
+        >
+          {nightElements(points, scale)}
+          {gridElements(scale)}
+          {dayBoundaryElements(points, scale)}
+          {bandElements(points, bandRuns, scale)}
+          {boundElements(points, bandRuns, scale)}
+          {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}
+          {medianElements(points, medianRuns, scale)}
+          {overlay === undefined ? null : overlayElements(overlay.values, scale)}
+          {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
+          {xAxisElements(points, scale)}
+          {axisTitleElements(scale.plot)}
+        </ForecastChartHoverBoundary>
 
-      {forecastChartLegend(overlay?.label, bandRuns.length > 0)}
+        {forecastChartLegend(overlay?.label, bandRuns.length > 0)}
+      </figure>
+
+      {/* The twin, outside the figure since 2026-08-11 and a sibling of it: the
+          drawing is one thing and the numbers behind a press are another, which
+          is what the owner asked the layout to say (docblock above). It is the
+          caller's grid that spaces the two, and `charts.css` that gives this one
+          its surface. */}
       {forecastChartTable({ points, spanHours, caption: props.tableCaption, overlay })}
-    </figure>
+    </>
   );
 };

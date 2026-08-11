@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
 import { layoutBoxOf, maybeBoxOf } from './layout-box';
+import { PRESSED_RANGE_BUTTON, RANGE_TRIGGER } from './range-picker';
 import { PHONE_VIEWPORT } from './viewports';
 
 /*
@@ -412,7 +413,8 @@ test('meets the map band with the chart band, no page showing between them', asy
 });
 
 /*
- * The window selectors never wrap (#344, `design.md` rule 7).
+ * The window selectors never wrap, and are reachable where they now live (#344,
+ * `design.md` rule 7).
  *
  * Its own `describe` because the claim is about a viewport, and `test.use` is
  * how this lane opens a case at one (`chart-surfaces.spec.ts` and
@@ -423,40 +425,55 @@ test('meets the map band with the chart band, no page showing between them', asy
  * It belongs in this lane rather than beside the component for the reason
  * `testing.md` rule 10 gives: wrapping is layout, and jsdom applies no
  * stylesheet, so a jsdom twin of this case would assert nothing at all. It
- * belongs in *this file* because it is a claim about the assembled controls row —
- * the (i) and the picker sharing one flex line, at a width where the page is also
- * carrying a real map. #344 wrote that row as four items; #323 left two, the
- * heading having become the section's accessible name and the fleet's numbers
- * having gone entirely.
+ * belongs in *this file* because it is a claim about the assembled controls row,
+ * at a width where the page is also carrying a real map. #344 wrote that row as
+ * four items; #323 left two; the owner's 2026-08-11 reversal put the heading and
+ * the fleet's numbers back, and the same day's fold turned the picker into a
+ * calendar trigger — which is what made all four fit here. `fleet-panel.css`
+ * hides the stats line below a container width it measures and owns, and this
+ * case opens at 390px of window, which is 358px of row, so the numbers are on
+ * screen at this viewport. They were not before the fold: the old threshold was
+ * wider, and the same three items shared this line with the numbers hidden.
+ *
+ * That last clause used to be prose alone and is now a case — the second one in
+ * this describe — with the hiding half in the describe below it. Both arms were
+ * unasserted in either lane until then, so the rule the owner asked for (the
+ * numbers wherever there is room, and only then) rested on a stylesheet nothing
+ * would have noticed the deletion of.
+ *
+ * What the fold changes about the *claim* is where the three chips are. They are
+ * in a popover now, out of the flow of the row entirely, so "the picker does not
+ * wrap the row" and "the chips do not wrap each other" have come apart into two
+ * measurements — and a third arrives with them, because a control folded behind
+ * a trigger is only as good as what opening it puts on screen.
  *
  * Honest scope, because the routing above would otherwise imply more coverage
  * than the case carries (`testing.md` rule 10's closing rule: where the lane owns
  * a criterion no spec in it yet asserts, say so beside the code). What is
- * asserted below is that the *picker group* does not wrap internally, and that
- * is all. The fix #344 shipped had two halves and only one of them still exists:
- * the auxiliary text that yielded is gone with the stats line, so all that now
- * holds the group together is the picker refusing to shrink or break
- * (`.range-picker`'s `flex-shrink: 0`, `.range-picker-button`'s
- * `white-space: nowrap`) — and reverting either of those leaves this case, and
- * the whole suite in both lanes, green. What actually killed the gate while it
- * was being written was a seeded `flex-direction: column`, which neither
- * declaration controls.
+ * asserted below is the trigger's own box, the chips' one line, and the sheet
+ * fitting the viewport. Of the two declarations #344 shipped, only
+ * `.range-picker-button`'s `white-space: nowrap` is still load-bearing for the
+ * chips' line — `.range-picker`'s `flex-shrink: 0` now protects a 24px trigger,
+ * and reverting either leaves this case, and the whole suite in both lanes,
+ * green. What actually killed the gate while it was first written was a seeded
+ * `flex-direction: column`, which neither declaration controls.
  *
- * The assertion that would close the gap is the one this file does not make: that
- * the picker still shares the (i)'s line rather than being pushed to a second row.
- * It is deliberately not added here rather than forgotten — it is filed on issue
- * 346 (the P7 gate candidates) because it needs a measured pre/post reading first,
- * and #323 changed the row it would be measured in: the pre-fix reading taken
- * while planning that batch had the tip and the picker together at 242px inside a
- * 326px row it was then sharing with a heading and a stats line, so it says
- * nothing about the two-item row shipping now. A case asserting one on an
- * assumption would be a gate asserting the wrong thing rather than a gate with a
- * gap.
+ * The assertion that would close the gap is the one this file still does not
+ * make: that the row's four items share one line rather than one being pushed to
+ * a second row. It is deliberately not added here rather than forgotten — it is
+ * filed on issue 346 (the P7 gate candidates) because it needs a measured
+ * pre/post reading first, and the row it would be measured in has now changed
+ * three times: the pre-fix reading taken while planning that batch had the tip
+ * and the picker together at 242px inside a 326px row, #323 left a two-item row,
+ * the reversal made it four, and the fold took ~144px out of it. So the old
+ * reading says nothing about it, and the new one has not been taken. A case
+ * asserting one on an assumption would be a gate asserting the wrong thing
+ * rather than a gate with a gap.
  */
 test.describe('the fleet chart’s controls row at phone width', () => {
   test.use({ viewport: PHONE_VIEWPORT });
 
-  test('keeps the range picker one button tall at phone width (issue 344, P7)', async ({
+  test('folds the window picker into a trigger whose windows all fit when opened (issue 344, P7)', async ({
     page,
   }) => {
     /*
@@ -468,39 +485,172 @@ test.describe('the fleet chart’s controls row at phone width', () => {
     await expect(page.locator('.maplibregl-canvas')).toBeVisible();
 
     const section = page.locator('.fleet-chart-section');
-    const picker = section.locator('.range-picker');
+    const trigger = section.locator(RANGE_TRIGGER);
 
-    await picker.scrollIntoViewIfNeeded();
+    await trigger.scrollIntoViewIfNeeded();
 
-    const groupBox = await layoutBoxOf(picker, 'The range picker');
-    const buttonBox = await layoutBoxOf(
-      picker.locator('.range-picker-button').first(),
-      'The first range button',
-    );
-
-    /*
-     * One button tall is the whole claim: three chips on one line make the group
-     * exactly as tall as one of them, and a group that wrapped would come to
-     * two or three times this plus its own gaps — far outside any tolerance.
-     * Measured against a button rather than against a written-down height, so
-     * the case survives a change to the chips' padding or type scale; what it
-     * pins is the ratio, not the pixels.
-     */
-    expect(groupBox.height).toBeLessThanOrEqual(buttonBox.height + EDGE_TOLERANCE_PX);
-
-    /*
-     * And it fits, rather than merely staying short. A group kept on one line by
-     * running off the side of its band would satisfy the height above with the
-     * `7 d` chip unreachable, so the right edges are compared too — the chart
-     * section is the container the fit is proven from inward (`design.md` rule 7).
-     * It is the full width of the page since #323, which makes the claim weaker
-     * than it was against a card and still the right one: the container a control
-     * must fit is whichever one it is in.
-     */
+    const triggerBox = await layoutBoxOf(trigger, 'The range picker’s trigger');
     const sectionBox = await layoutBoxOf(section, 'The fleet chart section');
 
-    expect(groupBox.x + groupBox.width).toBeLessThanOrEqual(
+    /*
+     * The trigger is square and inside the band. Square rather than a
+     * written-down size, so the case survives a change to the icon's step of the
+     * spacing scale; what it pins is that the control is an icon box rather than
+     * a label that grew back. The right edges are compared for the reason the
+     * chips' were — the chart section is the container the fit is proven from
+     * inward (`design.md` rule 7) — and it is the full width of the page since
+     * #323, which makes the claim weaker than it was against a card and still
+     * the right one: the container a control must fit is whichever one it is in.
+     */
+    expect(Math.abs(triggerBox.width - triggerBox.height)).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+    expect(triggerBox.x + triggerBox.width).toBeLessThanOrEqual(
       sectionBox.x + sectionBox.width + EDGE_TOLERANCE_PX,
     );
+
+    await trigger.click();
+
+    const popover = page.locator('.range-picker-popover');
+
+    await expect(popover).toBeVisible();
+
+    const chips = popover.locator('.range-picker-button');
+
+    await expect(chips).toHaveCount(3);
+
+    /*
+     * #344's claim, moved to where the chips moved. "One button tall" was the
+     * pre-fold spelling of "the three share a line"; against a sheet with its own
+     * padding, comparing tops says the same thing without this file having to
+     * restate what `--space-2` resolves to (`architecture.md` rule 9). A sheet
+     * that wrapped puts a chip a whole chip-height below the first, far outside
+     * any tolerance.
+     *
+     * And the fold has to be worth taking, which is the claim the pre-fold case
+     * could not make: a control behind a trigger is only as good as what opening
+     * it puts on screen. So each chip is also required inside the viewport on
+     * both horizontal edges — the sheet hangs from the row's right-hand end and
+     * grows leftwards, so the failure to catch is one running off either side
+     * rather than only off the right, which is why this one is measured against
+     * the viewport where the trigger above was measured against the band.
+     */
+    const viewportWidth = page.viewportSize()?.width ?? 0;
+
+    expect(viewportWidth).toBeGreaterThan(0);
+
+    const firstChipBox = await layoutBoxOf(chips.first(), 'The first range button');
+
+    for (let index = 0; index < 3; index += 1) {
+      const box = await layoutBoxOf(chips.nth(index), `Range chip ${String(index)}`);
+
+      expect(Math.abs(box.y - firstChipBox.y)).toBeLessThanOrEqual(EDGE_TOLERANCE_PX);
+      expect(box.x).toBeGreaterThanOrEqual(-EDGE_TOLERANCE_PX);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewportWidth + EDGE_TOLERANCE_PX);
+    }
+
+    /*
+     * And which window is current is readable once the sheet is up — precisely
+     * what the fold took off the row, so opening the picker has to give it back.
+     */
+    await expect(popover.locator(PRESSED_RANGE_BUTTON)).toBeVisible();
+  });
+
+  test('shows the fleet’s own numbers, because this width has room for them', async ({ page }) => {
+    /*
+     * The visible arm of the stats line's rule, and the assertion this describe's
+     * docblock has been claiming in prose without making: at 390px of window the
+     * row has room for all four items, so the numbers are on screen.
+     *
+     * Rendered visibility rather than the stylesheet, which is the whole point of
+     * the case being in this lane: a test that read the `@container` rule back
+     * would pass against a rule that had stopped matching anything. jsdom cannot
+     * host it either — it applies no stylesheet and lays nothing out, so a jsdom
+     * twin would assert nothing whatever it claimed (`testing.md` rule 10, which
+     * `FleetPanel.structure.test.tsx` says out loud at its own stats case).
+     *
+     * The text's *shape* is asserted beside its visibility, and the pair is what
+     * makes it a case about the numbers rather than about an element: a line that
+     * survived as an empty box would satisfy `toBeVisible` on its own. The count
+     * is tied to `DEMO_FLEET_SIZE` rather than to a spelled number, so this reads
+     * the fleet the built app actually assembled; the capacity is matched by
+     * shape, because what it sums is the generator's business and not this file's.
+     */
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    const stats = page.locator('.fleet-chart-stats');
+
+    await expect(stats).toBeVisible();
+    await expect(stats).toHaveText(
+      new RegExp(String.raw`^${String(DEMO_FLEET_SIZE)} sites · [\d.]+ kW$`, 'u'),
+    );
+  });
+});
+
+/*
+ * The other arm of the same rule: below the width the row can hold four items,
+ * the numbers go — whole, rather than shrinking to an ellipsis.
+ *
+ * **Both arms or neither.** Each is satisfiable by a bug the other catches: a
+ * stats line deleted outright passes the hiding case, and one that never hides
+ * passes the showing case above. They are two describes rather than two cases in
+ * one because the claim is about a viewport and `test.use` is how this lane opens
+ * a case at one — the reason the sibling describe above states at greater length.
+ *
+ * **Why a third viewport, and not `SMALL_PHONE_VIEWPORT`.** The threshold is
+ * `fleet-panel.css`'s and is deliberately not restated here (`architecture.md`
+ * rule 9), but where the two named phone widths fall relative to it is a fact
+ * about *this case's* choice of viewport and has to be recorded somewhere: both
+ * of them are on the *showing* side. Measured against the built app, the numbers
+ * are still on screen at 390px and at 360px — the latter clearing the fold by
+ * about two pixels of row — and go at 358px and below. So neither constant can
+ * open this arm, and reaching for the nearer one would have produced a case that
+ * passed for two pixels' worth of reason and turned red on any platform whose
+ * fonts ran a hair wide.
+ *
+ * 320px is chosen for being a real device width rather than for its distance
+ * from the fold — it is the narrowest viewport in common use, and the same kind
+ * of choice `viewports.ts` makes for its own two. That it clears the fold with
+ * room to spare is what makes the case stable, and it is a consequence of the
+ * choice rather than the reason for it. Declared here rather than added to
+ * `viewports.ts`, which says in its own header that it is not a registry of
+ * every size the lane uses and that specs still declare their own.
+ */
+const NARROW_PHONE_VIEWPORT = { width: 320, height: 568 } as const;
+
+test.describe('the fleet chart’s controls row below that width', () => {
+  test.use({ viewport: NARROW_PHONE_VIEWPORT });
+
+  test('drops the fleet’s numbers whole rather than crushing the row', async ({ page }) => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    /*
+     * Hidden, and hidden by *layout* rather than by being unrendered: the element
+     * is still in the document — `FleetPanel` renders it in every state — and what
+     * the container query takes away is its box. `toBeHidden` is the right
+     * instrument for exactly that, where `toHaveCount(0)` would pass on a panel
+     * that had stopped rendering the line at all, which is a different product.
+     */
+    const stats = page.locator('.fleet-chart-stats');
+
+    await expect(stats).toHaveCount(1);
+    await expect(stats).toBeHidden();
+
+    /*
+     * And the point of the hiding, which is the half that says why the rule
+     * exists: the row stays one line. The numbers are the item with wrap
+     * priority against them (`design.md` rule 7 — controls outrank auxiliary
+     * text), so a rule that stopped firing here would not merely show a long
+     * line, it would push the picker onto a second row. Measured as the row
+     * being no taller than the tallest control in it, which is the trigger.
+     */
+    const rowBox = await layoutBoxOf(
+      page.locator('.fleet-chart-controls'),
+      'The fleet chart’s controls row',
+    );
+    const triggerBox = await layoutBoxOf(
+      page.locator('.fleet-chart-section').locator(RANGE_TRIGGER),
+      'The range picker’s trigger',
+    );
+
+    expect(rowBox.height).toBeLessThanOrEqual(triggerBox.height + EDGE_TOLERANCE_PX);
   });
 });

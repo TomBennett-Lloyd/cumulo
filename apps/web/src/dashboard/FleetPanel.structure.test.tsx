@@ -34,12 +34,13 @@ import {
  * that has a window to choose, and one chart present in every state the section
  * can be in.
  *
- * Since #323 the furniture includes an *absence*: there is no visible heading
- * over the chart, and the name a reader of assistive technology gets comes from
- * the section's `aria-label` instead (`design.md` rule 2). Both halves of that
- * are asserted together below, because either alone is satisfiable by a bug —
- * a missing name looks like a successful deletion, and a heading that came back
- * looks like a successful naming.
+ * The furniture includes a visible heading again. #323 deleted it and moved the
+ * name onto the section's `aria-label`; the owner reversed that on 2026-08-11,
+ * so the name is an `<h2>` once more and the section borrows it by
+ * `aria-labelledby`. Both halves are asserted together below, because either
+ * alone is satisfiable by a bug — a heading with nothing pointing at it leaves
+ * the landmark unnamed, and a named landmark with no heading is the state this
+ * file used to pin.
  *
  * The messages below are imported from `state-copy.ts` rather than written out,
  * which is the opposite of what the copy suite does and for the same reason: a
@@ -94,11 +95,13 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  *
  * The name is queried by role over the whole document rather than by class,
  * because what the criterion is about is a landmark a reader can navigate to.
- * It was a `heading` until #323 and is the labelled `region` the `<section>`
- * itself exposes now — the same claim about the same criterion, made about the
- * element the name moved to (`design.md` rule 2). Which element carries it is
- * the subject of the dedicated case below; what is asserted here is only that no
- * *state* takes it away.
+ * The `region` is what is queried and stays queried across both reversals of
+ * where the name lives: it was the `<section>`'s own `aria-label` between #323
+ * and 2026-08-11, and it is the `<h2>` the section points at by
+ * `aria-labelledby` now. Either way the landmark answers to "Fleet forecast",
+ * which is the criterion. Which element carries it is the subject of the
+ * dedicated case below; what is asserted here is only that no *state* takes it
+ * away.
  *
  * The legend's entries are counted rather than read: *which* series it names is
  * copy, and this suite owns furniture (see the file header), so a rewording must
@@ -141,55 +144,75 @@ const expectChartWith = (container: HTMLElement, message: string | RegExp): void
 };
 
 describe('FleetPanel’s controls row', () => {
-  it('renders the chart section with an accessible name and no visible heading', async () => {
+  it('renders the chart section with a visible heading that names it', async () => {
     /*
-     * #323's copy half, as one case, because the two clauses only mean anything
-     * together. `design.md` rule 2 converts a label whose only job is naming
-     * into an accessible name rather than deleting the name outright — so a
-     * section that lost the `<h2>` *and* the name would satisfy the second
-     * assertion below while failing the ticket, and a section that kept both
-     * would satisfy the first.
+     * The 2026-08-11 reversal of #323's copy half, as one case, because the two
+     * clauses only mean anything together. A heading nothing points at leaves
+     * the landmark unnamed while looking correct on screen, and a section named
+     * by a stray `aria-label` passes an accessible-name check with no heading in
+     * the document at all — which is exactly the state this case replaced.
      *
-     * The `getByRole('region')` is therefore the positive control for the null:
-     * it proves the words "Fleet forecast" are still on the section, so the
-     * absent heading reads as "the name is not visible" rather than "the name
-     * was deleted". This is the same pairing the window-control case at the foot
-     * of this block uses, for the same rule.
+     * So the `aria-labelledby` is resolved rather than trusted: the heading is
+     * found first, and then the region query is required to land on the section
+     * whose attribute holds *that* heading's id. A pair of independent presence
+     * checks would pass against a section labelled one way and a heading saying
+     * the same words by coincidence, which is a real failure mode here because
+     * the chart's own accessible name also begins "Fleet forecast".
      *
-     * Queried at *any* level rather than level 2, because what the ticket
-     * removed is a visible heading over this chart and not one particular tag:
-     * an `<h3>` grown back in the same place would be the same defect.
+     * Queried at *any* level rather than level 2, because what the owner asked
+     * for is a visible name over this chart and not one particular tag.
      */
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
     const section = screen.getByRole('region', { name: 'Fleet forecast' });
+    const heading = within(section).getByRole('heading', { name: 'Fleet forecast' });
 
     expect(section.className).toBe('fleet-chart-section');
-    expect(within(section).queryByRole('heading')).toBeNull();
-    expect(screen.queryByText('Fleet forecast')).toBeNull();
-    // The line that used to sit beside that heading. It restated the fleet's
-    // size next to a chart of exactly that fleet, and the count survives where a
-    // reader goes to count it — the site table's own summary, which is not this
-    // component's and so is not asserted here.
-    expect(container.textContent).not.toMatch(/\d+ sites? · /u);
+    expect(heading.className).toBe('fleet-chart-title');
+    expect(section.getAttribute('aria-labelledby')).toBe(heading.id);
+    /*
+     * The line that sits beside that heading, back with it. Its *shape* rather
+     * than its wording, which is `FleetPanel.test.tsx`'s (see the file header).
+     *
+     * jsdom always renders it, and that is the whole of what this asserts. Where
+     * the line disappears is a container query in `fleet-panel.css`, and jsdom
+     * applies no stylesheet and lays nothing out, so a jsdom assertion about the
+     * hiding would assert nothing whatever it claimed (`testing.md` rule 10 —
+     * layout is the browser lane's, and a jsdom twin of a layout case is not a
+     * weaker version of it but an empty one). No spec in either lane pins that
+     * threshold today; said here rather than left implied by this case's
+     * presence, which rule 10's closing clause asks for.
+     */
+    expect(screen.getByText(/\d+ sites? · /u)).toBeDefined();
+    expect(container.querySelector('.fleet-chart-stats')).not.toBeNull();
   });
 
-  it('holds the description and the window control, pushed to the row’s end', async () => {
+  it('holds the name, the numbers, the description and the window control, in that order', async () => {
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
     const controls = fleetControls(container);
 
     expect(within(controls).getByRole('button', { name: 'About this chart' })).toBeDefined();
-    expect(within(controls).getByRole('group', { name: 'Aggregation range' })).toBeDefined();
+    expect(within(controls).getByRole('button', { name: 'Aggregation range' })).toBeDefined();
 
-    // Order, because the row reads left to right: the (i) explains the chart and
-    // the picker changes it, so the annotation comes before the control that
-    // acts. `querySelectorAll` returns document order, which is what a reader
-    // tabbing through and a screen reader reading out both follow.
+    // Order, because the row reads left to right and is tabbed through in the
+    // same direction: the section's name, then what it is a summary of, then the
+    // annotation, then the control that acts. `querySelectorAll` returns
+    // document order, which is what a reader tabbing through and a screen reader
+    // reading out both follow.
     //
-    // Two items, asserted as an exact list rather than a pair of presence
-    // checks: #323 emptied this row of everything that was not a control, and a
-    // third child appearing here is the header row growing back one item at a
-    // time.
+    // Four items, asserted as an exact list rather than four presence checks.
+    // #323 emptied this row down to the last two and the owner put the first two
+    // back on 2026-08-11; an exact list is what catches the row drifting in
+    // either direction — a fifth item appearing, or one of the four quietly
+    // going again.
+    //
+    // The fourth is still `.range-picker` after the same day's fold: the picker
+    // kept its root class and its place on the row, and what changed is what
+    // that root holds — a calendar trigger, with the three windows in a popover
+    // hung off it rather than laid out on this line. So this list is untouched
+    // by the fold, which is the point of the class having stayed.
     expect(Array.from(controls.children, (element) => element.className.split(' ')[0])).toEqual([
+      'fleet-chart-title',
+      'fleet-chart-stats',
       'info-tip',
       'range-picker',
     ]);
@@ -205,14 +228,18 @@ describe('FleetPanel’s controls row', () => {
      * one (i) is all the panel has left.
      *
      * The negative queries have their positive control in the case above, which
-     * finds a tip button by role and name; a null here is therefore an absent
-     * control rather than a query that never matches anything.
+     * finds both the tip's button and the picker's trigger by role and name; a
+     * null here is therefore an absent control rather than a query that never
+     * matches anything. The picker's query became a button query with the
+     * 2026-08-11 fold, and that is what keeps it biting: the group it used to
+     * ask for is mounted only while the picker is open, so a null would have
+     * been true of every arm, picker or no picker.
      */
     const container = await renderSettled(
       new CountingFleetSource(FULL_FLEET, HORIZON_ONLY_CAPABILITIES),
     );
 
-    expect(screen.queryByRole('group', { name: 'Aggregation range' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Aggregation range' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'About this window' })).toBeNull();
     expect(container.querySelectorAll('.info-tip-button')).toHaveLength(1);
     expect(screen.getByRole('img', { name: /Fleet forecast/u }).getAttribute('aria-label')).toBe(
@@ -236,10 +263,15 @@ describe('FleetPanel’s controls row', () => {
     );
     const container = await renderSettled(dataSource);
 
-    expect(
-      within(fleetControls(container)).getByRole('group', { name: 'Aggregation range' }),
-    ).toBeDefined();
+    const trigger = within(fleetControls(container)).getByRole('button', {
+      name: 'Aggregation range',
+    });
 
+    expect(trigger).toBeDefined();
+
+    // The windows are mounted only while the trigger is open since the
+    // 2026-08-11 fold, so reaching one takes two presses now.
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole('button', { name: '48 h' }));
 
     await waitFor(() => {
@@ -260,8 +292,15 @@ describe('FleetPanel’s controls row', () => {
      * stating the window. This case is what stops one growing back as a heading
      * over the control.
      *
+     * It is aimed at the trigger since the 2026-08-11 fold, and that is more
+     * than a re-target: the trigger's name lives *only* in the attribute now,
+     * with an `aria-hidden` calendar under it, so this is no longer a control
+     * that would merely be badly named without it — it would be announced as
+     * "button". `range-picker.tsx`'s docblock states that edge and points at
+     * this case as what notices.
+     *
      * Neither half stands alone. The `getByRole` is the positive control: it
-     * proves the name is still *on* the group, so the null below reads as "the
+     * proves the name is still *on* the trigger, so the null below reads as "the
      * name is not visible" rather than "the name was deleted". Which window is
      * drawn is copy and stays in `FleetPanel.test.tsx`; what is pinned here is
      * the route — `aria-label`, and no visible node.
@@ -269,9 +308,55 @@ describe('FleetPanel’s controls row', () => {
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
 
     expect(
-      within(fleetControls(container)).getByRole('group', { name: 'Aggregation range' }),
+      within(fleetControls(container)).getByRole('button', { name: 'Aggregation range' }),
     ).toBeDefined();
     expect(screen.queryByText('Aggregation range')).toBeNull();
+  });
+
+  it('closes the window popover on a choice and hands focus back to the trigger', async () => {
+    /*
+     * The fold's own clause, and the one the rest of the suite cannot see: with
+     * the windows behind a disclosure, choosing one unmounts the button the
+     * reader is standing on. Without the hand-back, focus lands on `body` and a
+     * keyboard reader is returned to the top of the page — which is the
+     * carve-out `design.md` rule 11 makes rather than an exception to it, since
+     * the page changed in answer to their press and the trigger is where their
+     * next act lives.
+     *
+     * Both halves in one case, because either alone is satisfiable by a bug: a
+     * popover that closed while dropping focus passes the first, and a popover
+     * that stayed open with the trigger focused passes the second. The chips are
+     * queried rather than the popover element, because what a reader loses when
+     * the close fails is the sheet standing over the chart — and the chips are
+     * the thing mounted only while it is up.
+     *
+     * `document.activeElement` rather than a matcher, for the reason
+     * `Dashboard.focus.test.tsx` gives: focus is the browser's own state and
+     * jsdom keeps it honestly, so it is asked directly.
+     */
+    const dataSource = new CountingFleetSource(FULL_FLEET);
+    const container = await renderSettled(dataSource);
+    const trigger = within(fleetControls(container)).getByRole('button', {
+      name: 'Aggregation range',
+    });
+
+    fireEvent.click(trigger);
+
+    // The positive control for the two nulls below: the chips really are in the
+    // document while the picker is open, so their absence afterwards is a close
+    // rather than a query that never matched.
+    expect(screen.getByRole('button', { name: '48 h' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: '48 h' }));
+
+    expect(screen.queryByRole('button', { name: '48 h' })).toBeNull();
+    expect(container.querySelector('.range-picker-popover')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    // And the choice really was made, not merely dismissed — a popover that
+    // closed without calling `onSelect` would satisfy every line above.
+    await waitFor(() => {
+      expect(dataSource.forecastRanges).toEqual([24, 48]);
+    });
   });
 });
 
@@ -290,12 +375,13 @@ describe('FleetPanel’s chart', () => {
      * D3's two other clauses — the section's name survives whether or not there
      * is data, and the legend renders in every state — are asserted per arm by
      * `expectPanelFurniture` rather than left implied by the figure count; its
-     * docblock is where the element that name sits on since #323 is stated. Both
-     * hold by construction and that is the point of pinning them: the name is an
-     * attribute of the `<section>` that wraps the state switch in
-     * `FleetPanel.tsx`, and the legend is unconditional inside the figure in
-     * `ForecastChart.tsx`, so a future state that returns early past either
-     * would be exactly the regression these clauses were written against.
+     * docblock is where the element that name sits on is stated. Both hold by
+     * construction and that is the point of pinning them: the name reaches the
+     * `<section>` that wraps the state switch in `FleetPanel.tsx` from a heading
+     * on its controls row, which is outside that switch, and the legend is
+     * unconditional inside the figure in `ForecastChart.tsx`, so a future state
+     * that returns early past either would be exactly the regression these
+     * clauses were written against.
      */
     const loading = render(panel(new CountingFleetSource(FULL_FLEET))).container;
 

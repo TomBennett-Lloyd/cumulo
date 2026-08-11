@@ -89,12 +89,15 @@
 }
 
 /* `--text-lg`, a step below the retired site panel's `--text-xl` (#265): the
-   card is a card on the map rather than the top of the reading. It no longer
-   steps below a heading, though — since #323 there is no heading under the map
-   at all, the fleet chart's name having become an `aria-label`. What the step
-   matches now is `.site-table-summary` (site-table.css), the one named box the
-   reading still has, so the card sits level with the section below it rather
-   than over it. */
+   card is a card on the map rather than the top of the reading. It does not
+   step below a heading, though, and that survived the fleet chart getting its
+   `<h2>` back on 2026-08-11 (dashboard/fleet-panel.css) — because that heading
+   is `--text-lg` too. So the card is level with the first heading under the map
+   rather than under it, which is the same relation `.site-table-summary`
+   (site-table.css) has and the one this step was chosen for: a card on the map
+   sits level with the sections below it rather than over them. Between #323 and
+   that reversal there was no heading under the map at all, and the step was
+   matched to `.site-table-summary` alone. */
 .site-popover-title {
   margin: 0;
   font-size: var(--text-lg);

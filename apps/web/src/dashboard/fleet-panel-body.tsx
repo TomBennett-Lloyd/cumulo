@@ -43,6 +43,53 @@ import {
  * chrome for an empty series by contract, so "no points yet" is a chart with
  * nothing plotted on it rather than a hole where a chart goes.
  *
+ * ### Restatement ledger (`architecture.md` rule 9)
+ *
+ * This section is the owner of the claim "one chart, in every state" — that the
+ * body is one arrangement the states differ *inside*, rather than a switch
+ * between arrangements. The sites below restate it in their own words, each
+ * because it asserts or reasons about it locally; changing what the states share
+ * finds them here rather than one review cycle at a time. Banked on #403 and
+ * written in #431, the first member since to touch this file.
+ *
+ * - `bodyLayout`'s docblock below — "the one arrangement every state renders",
+ *   which is this claim stated about the function that enforces it.
+ * - `FleetPanel.tsx` — the "One chart, always on screen" section, the
+ *   `combineFleetQueries` docblock ("nothing takes the section down any more"),
+ *   and the `enabled` comment.
+ * - `FleetPanel.structure.test.tsx` — the file header, and
+ *   `expectPanelFurniture`'s docblock, which is where D3's clauses are read.
+ * - `FleetPanel.test.tsx` — the figure-presence note, the overlay-state note and
+ *   the first-mount note.
+ * - `Dashboard.test.tsx` — the first-paint live-region case's comment.
+ * - `Dashboard.tsx` — the composition comment's "nothing swaps" paragraph.
+ * - `Dashboard.deep-link.test.tsx` — the comment spending #178's saving on the
+ *   grounds that the chart is on screen from first paint.
+ * - `dashboard-test-fixture.tsx` — the chart-section locator's docblock.
+ * - `map/SitePopoverCard.tsx` — the note that the card plots nothing because the
+ *   fleet chart is on screen in every state of the panel.
+ * - `docs/design/dashboard-composition.md` — the "A selection changes what is
+ *   drawn, not what is on screen" section.
+ * - `docs/standards/react.md`'s D3 bullets — **listed, never edited.** That file
+ *   is a standards doc; a change here that falsified those bullets is a proposal
+ *   to amend the standard, not an edit to make in passing.
+ *
+ * The sweep is
+ * `command grep -rnE "in every state|One chart|one arrangement" apps/web/src docs`,
+ * run **from the worktree root** — run at the repo root it descends into
+ * `.claude/worktrees/` and returns every sibling checkout's copy of this list.
+ * Re-run 2026-08-11, which is where the list above comes from; the three members
+ * #403 banked without (`Dashboard.tsx`, `Dashboard.deep-link.test.tsx`, the
+ * composition doc) are what that re-run added. It is still a floor rather than a
+ * census, because a carrier paraphrasing the claim without the phrase is
+ * invisible to it (`architecture.md` rule 10).
+ *
+ * Two things the sweep returns that are **not** members, named so the next
+ * reader does not re-decide them: the "in every state" in `Dashboard.test.tsx`'s
+ * attribution-credit docblock and in `design.md` / `design-principles.md`
+ * belongs to the Open-Meteo licence claim, a different obligation that happens
+ * to share the phrase.
+ *
  * ## An empty answer is the *joined* series being empty
  *
  * The empty guard asks about what would be drawn, not about the forecast alone.

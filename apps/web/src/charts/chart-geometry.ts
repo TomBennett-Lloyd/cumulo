@@ -68,11 +68,56 @@ export interface PlotRect {
  * where it used to be 6px of the plot. #323 was asked for width and not height,
  * and nothing above asks the height to change.
  *
+ * **The row changed twice on 2026-08-11, and 184 stands because neither change
+ * made it taller.** The owner reversed #323's heading-and-stats half, so the
+ * controls row carries four items where it carried two, and then folded the
+ * window picker into a calendar trigger (`dashboard/FleetPanel.tsx` and
+ * `dashboard/range-picker.tsx` carry the two arguments). It is one flex line
+ * throughout, and a flex line is as tall as its tallest item. The heading was
+ * never that item and still is not — its line box sits under the controls' on
+ * both sides of the change. What did change is which control is tallest: the (i)
+ * and the picker's trigger now are, level with each other and a pixel under what
+ * the segmented picker used to be.
+ *
+ * So the row did not grow, which is the whole of what this derivation asks of it,
+ * and none of the numbers above were re-derived here. The pixel it gave back
+ * leaves the paragraph above conservative rather than stale — the figure's bottom
+ * and the slack over it each move by it, in the direction that fits. The
+ * px-by-px reading behind all of this is deliberately not repeated here:
+ * `dashboard/fleet-panel.css` owns the row's own arithmetic — every item's
+ * measured box, which of them sets the height, and the container width below
+ * which the stats line hides — and points at this constant for the height rather
+ * than restating it (`architecture.md` rule 9). This passage carried four of
+ * those literals before the fold and now carries a single relative figure; the
+ * pointer is what replaced them, not detail lost.
+ *
+ * **The disclosure left the figure later that same day, and the tighter reading
+ * above is no longer a reading of the same box.** The raw-data twin is a panel
+ * *after* the figure now rather than a row inside it (`ForecastChart.tsx`), and
+ * it wears a padding step of its own on top of the body grid's gap
+ * (`charts.css`). Nothing above the plot moved, so the stack, the 636 and the
+ * 264 are untouched and 184 still fits by exactly the argument above. What moved
+ * is what the tighter reading was of: the figure ends at the legend now, and
+ * what actually finishes the section is the panel below it, which sits lower
+ * than the figure's old bottom by the gap and the padding it gained. Those
+ * pixels are deliberately not restated, because nothing has re-measured them on
+ * a rendered page — the D15 case measures the *plot*, the reading that was never
+ * in question here, and it passes unchanged across the move. So "894px, 6px
+ * short of the fold" is a dated reading of a box that no longer exists; re-measure
+ * before reasoning from the tighter figure again.
+ *
+ * That is a claim about a rendered row, made from a measurement of the row alone
+ * rather than of the dashboard: **the browser wave re-measures the D15 fold on a
+ * real page**, which is where a discrepancy would show up and where it would be
+ * fixed. Stated rather than assumed, because the whole value of this docblock is
+ * that it says which of its numbers came from where.
+ *
  * The arithmetic here is the reasoning; `e2e/chart-surfaces.spec.ts` measuring a
  * rendered page is the evidence, and it imports this constant rather than
  * restating it. What that case pins is the *plot's* bottom against the fold,
  * which is the looser of the two readings above and only gained room in #323;
- * the tighter one — the figure's own bottom, legend and disclosure included — is
+ * the tighter one — where the reading actually finishes, which since 2026-08-11
+ * is the raw-data panel below the figure rather than the figure itself — is
  * asserted by no spec in either lane today (`testing.md` rule 10's closing rule).
  */
 export const CHART_VIEW_BOX_HEIGHT = 184;

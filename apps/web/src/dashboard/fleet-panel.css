@@ -34,9 +34,11 @@
    (`e2e/chart-surfaces.spec.ts`).
 
    No `border-radius` and no `display: grid` any more. The radius belonged to a
-   card; the grid existed to space a header row from a body, and with the header
-   gone the two remaining children stack in normal flow with their own margins
-   and the controls row's own box. */
+   card; the grid existed to space a `.fleet-panel-header` from a body, and with
+   that element gone the section's two children stack in normal flow with their
+   own margins and the controls row's own box. The row carries a heading again
+   since 2026-08-11, but it is still the flex row below and not a grid child, so
+   nothing here changed with it. */
 .fleet-chart-section {
   padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
@@ -49,38 +51,185 @@
    displaces this section, it is never handed `hidden`, and a rule for a state
    that cannot occur is a rule nobody can tell has stopped working. */
 
-/* The controls row: the (i) carrying the description, and the window picker.
+/* The controls row: the section's heading, the fleet's own numbers, the (i)
+   carrying the description, and the window picker.
 
-   Two items where there were four (#284 D4 put a heading and the fleet's own
-   numbers on this line; #323 removed both — the heading became the section's
-   accessible name and the numbers were a restatement of the chart below them).
-   With nothing on the row that is *content*, there is nothing for the controls
-   to be spaced against, so they go to the row's end rather than sitting over the
-   plot's left edge with a void beside them.
+   Four items again. #284 D4 wrote the row with these four; #323 removed the
+   first two — the heading became the section's `aria-label` and the numbers were
+   read as a restatement of the chart below them — and the owner put both back on
+   2026-08-11 (`FleetPanel.tsx`'s docblock carries the argument). What that
+   reinstatement undoes here is the `justify-content: flex-end` #323 added, which
+   only made sense while the row held nothing but controls: spacing all four to
+   the end would strand the heading in the middle of the row, and spacing them
+   apart would break the heading off from the numbers it is read with (design.md
+   rule 4 — the two are one reading unit and stay touching).
 
-   `flex-wrap` survives the cut, and keeps doing the job #284 D4 gave it: at a
-   width that cannot hold both controls the picker takes a line of its own rather
-   than being crushed (design.md rule 7 — controls have wrap priority, and the
-   window selectors stay on one line at every screen size).
+   `margin-left: auto` on the (i) does the job instead, and does exactly it: one
+   auto margin absorbs the line's free space at that one point, so the heading
+   and the numbers sit at the row's start and the two controls at its end, with
+   nothing spread through the middle. It is on the (i) rather than on the picker
+   because the (i) and the picker are the pair being carried over together.
 
-   There is no `flex: 1 1 0%` item on this row any more. It was `.fleet-panel-stats`'
-   and its whole purpose was to be the item that yielded when the row ran out of
-   width; with no auxiliary text left on the row, nothing has to yield and
-   `justify-content` is the whole of the layout. */
+   `flex-wrap` keeps doing the job #284 D4 gave it: at a width that cannot hold
+   the controls, the picker takes a line of its own rather than being crushed
+   (design.md rule 7 — controls have wrap priority, and the window selectors stay
+   on one line at every screen size). `.range-picker`'s own `flex-shrink: 0` is
+   the belt to that brace and states so in range-picker.css.
+
+   There is still no `flex: 1 1 0%` item on this row, and the stats line is
+   deliberately not one. Until #323 that declaration made the numbers the item
+   that *shrank* — to an ellipsis, at whatever width the row ran out of. They now
+   hide whole instead, at a width this file measures (the container query below).
+
+   `container-type: inline-size` is what lets that query ask the row rather than
+   the window, which is design.md rule 7's default rather than its documented
+   escalation. `.app-header` in header/header.css (:297–:299) is the precedent
+   and the worked example of the same choice; what is asked here is simpler than
+   what is asked there, because this row is a plain block in normal flow whose
+   inline size was already the section's to decide, so containing it changes
+   nothing about its own box. Measured rather than assumed: the row is 24px tall
+   and its items keep their widths on both sides of the declaration, and both
+   overlays this row opens — the `.info-tip-panel` and, since the picker folded,
+   the `.range-picker-popover` — are the topmost element at their own centre. The
+   stacking context the containment creates does not bury either of them under
+   the chart below (checked in Chromium against these stylesheets and this row's
+   real markup, by a hit test; the browser wave re-checks it on the real page).
+
+   24px rather than the 25px this note read when the containment was written:
+   the height is the tallest item's, and the 25px item was the segmented picker
+   that became a 24px trigger on 2026-08-11. The row's own arithmetic is below
+   and `range-picker.css` owns the trigger's box; what the containment did to the
+   row is unchanged by that, which is why this reading is amended rather than
+   re-argued. */
 .fleet-chart-controls {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
-  justify-content: flex-end;
+  container-type: inline-size;
 }
 
-/* There is no `.fleet-panel-title`, `.fleet-panel-stats` or `.fleet-panel-titles`
-   rule any more, and no `.fleet-panel-subtitle` either. The subtitle's sentence
-   moved inside an `InfoTip` in #265 (info.css carries it); the title and the
-   stats line went in #323, the first into the section's `aria-label` and the
-   second into nothing at all. A rule kept for a class nothing renders is a claim
-   about a shape the page does not have. */
+.fleet-chart-controls > .info-tip {
+  margin-left: auto;
+}
+
+/* The section's name, visible again since 2026-08-11. Restored from the
+   `.fleet-panel-title` rule #323 deleted, declaration for declaration: this is
+   the same heading at the same step of the type scale, not a new one that
+   happens to look similar. */
+.fleet-chart-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* Tabular figures so the count and the capacity do not shuffle sideways when a
+   site is added and the numbers change width.
+
+   Restored from `.fleet-panel-stats` minus its whole flex half — `flex: 1 1 0%`,
+   `min-width: 0`, `overflow: hidden` and `text-overflow: ellipsis` are all gone.
+   That machinery existed to make this the item that yielded *by shrinking*, and
+   the yield is a different one now: the line hides whole below the width the
+   query below measures, so there is nothing to truncate and no slack to claim.
+   `white-space: nowrap` stays, and is now the only member of that set left — it
+   stops the line wrapping to two rows in the widths just above the threshold,
+   which is the one shape between "whole" and "absent" that this rule still has
+   to forbid. */
+.fleet-chart-stats {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+ * The width below which the numbers go, asked of the row and not of the window.
+ *
+ * 20.375rem is measured, not picked. At this row's own content — the heading at
+ * 115.48px (`--text-lg`, `--font-weight-semibold`), the stats line at 126.09px
+ * ("60 sites · 332.0 kW", `--text-sm`, tabular figures), the (i) at 24px, the
+ * picker's trigger at 24px and three `--space-3` gaps at 12px each — the row's
+ * max-content width is 325.58px, and a bisection on the container's width put
+ * the one-line/two-line boundary at exactly that: at 325.58px the row is 24px
+ * tall and at 325.57px it is 60px. 325.58px is 20.349rem at the default root
+ * size, and the query fires at 20.375rem (326px), the next 1/16rem step above
+ * it. Rounding *up* rather than down is deliberate and is the safe direction:
+ * the failure this rule exists to prevent is the numbers surviving into a
+ * wrapped row, so at most half a pixel of width where they could still have
+ * fitted is the price, and it buys the guarantee that they never outstay the
+ * room for them.
+ *
+ * **It read 29.375rem until 2026-08-11, and the drop is the point of the change
+ * rather than a consequence of it.** The owner folded the segmented picker into
+ * a calendar trigger — *"perhaps if we made the time period selection into a
+ * dropdown from a calendar icon there might always be space"* — and a 167.75px
+ * control became a 24px one, taking 143.75px out of a row whose max-content
+ * width was 469.33px. Every other term above is unchanged and re-measured to the
+ * same figure. A threshold left at the old number would have kept hiding the
+ * numbers across 144px of width that now holds them comfortably, which is the
+ * same defect as never reinstating them: what was asked for is the fleet's own
+ * count and capacity wherever there is room, and the fold is what made room.
+ *
+ * How it was obtained, stated because the number is only as good as its method:
+ * a throwaway Chromium run over these stylesheets and this row's real markup —
+ * tokens.css, info.css, range-picker.css and the two rules above — rather than a
+ * reading of the rendered dashboard. So it is the row's own arithmetic, measured
+ * in the engine that will lay it out, with the page around it absent. The same
+ * harness re-measured the pre-fold row first and returned the four widths above
+ * it to the hundredth of a pixel, so the two thresholds are comparable readings
+ * and not two methods. The browser wave re-checks it on a real page; a reading a
+ * few pixels off there is a correction to this literal, not a fault in the
+ * mechanism.
+ *
+ * The query is unnamed because it cannot be ambiguous: `.fleet-chart-stats` is a
+ * direct child of the one element declaring `container-type` above, so the
+ * nearest ancestor container it resolves to is that row by construction rather
+ * than by luck. (`.app-header` in header/header.css states the same test for the
+ * same reason.)
+ *
+ * Two residuals, both inherited from measuring text rather than boxes, and both
+ * the same ones header.css records for its own threshold. Both got *larger* in
+ * relative terms with the fold, because the row is shorter while the two text
+ * items are not — they are now 74% of its max-content width rather than 51%:
+ *
+ * - The heading and the numbers are set in `--font-sans`, which resolves to the
+ *   platform's system stack. Where that stack runs wider than the measurement
+ *   this under-fires — the row wraps a few pixels before the numbers leave — and
+ *   where it runs narrower the numbers leave with room to spare.
+ * - The stats width is the demo fleet's line. A larger fleet sets it wider
+ *   ("120 sites · 1332.0 kW" measures 143.44px, 17px more), so a fleet grown far
+ *   past 60 sites wraps slightly before the query fires. The demo fleet is 60
+ *   sites and session-created sites move it by ones, so the gap is small; the
+ *   alternative — a threshold derived from a fleet nobody has — would be a
+ *   number measured against nothing.
+ *
+ * The heading still does not make the row taller, and the row is now a pixel
+ * shorter than it was: the heading's line box is 22.5px (`--text-lg` ×
+ * `--leading-tight`) against a 24px (i) and a 24px trigger, where the picker it
+ * replaced was 25px. Measured in the same run: the four-item row and the row
+ * with the numbers hidden are both 24px. `charts/chart-geometry.ts` derives
+ * `CHART_VIEW_BOX_HEIGHT` from a stack that includes this row, on the argument
+ * that the row does not get taller; a row that got *shorter* leaves that
+ * constant standing with a pixel more clearance than its derivation claimed, so
+ * nothing there had to move.
+ *
+ * The division of ownership is the durable half of that, and it is what this
+ * pointer states: this sheet owns the row's px-by-px arithmetic — every item's
+ * measured box, which of them sets the height, and the container width below
+ * which the numbers hide — while that file owns the constant and consumes only
+ * the conclusion, pointing back here rather than restating any of it
+ * (`architecture.md` rule 9). Written as who owns what rather than as what that
+ * file currently says, because a pointer reporting another file's state goes
+ * stale the moment somebody fixes it — which is exactly what happened to the
+ * sentence this replaces, inside the batch that fixed it.
+ */
+@container (max-width: 20.375rem) {
+  .fleet-chart-stats {
+    display: none;
+  }
+}
 
 /* Whatever the section has to say and the chart it says it about are one
    statement, so they sit at the tightest step this reading uses. `--space-2` was
