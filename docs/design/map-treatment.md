@@ -267,24 +267,13 @@ Placement:
   weather credit is the compact form CLAUDE.md sanctions for a row that, as composed, cannot hold
   both credits' full forms (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
 
-  **That last clause is this section's reading of the constraint, not the constraint's own
-  wording, and the difference is worth stating plainly.** CLAUDE.md sanctions the bare linked name
-  "at widths where the row cannot hold it", and the _it_ in that sentence is the full
-  "Weather data by Open-Meteo.com" phrase. This section reads "the row" as the row **as
-  composed** — every full form the row carries — rather than as that phrase measured on its own,
-  and the two are not the same condition: the composed one is the broader of the pair, so it
-  sanctions the compact form across a stretch of widths the narrower one would not.
-
-  Two things carry the reading. The amendment was made about this band, whose row is the
-  two-credit one the question arose on, so "the row" is most plausibly the row it was looking at.
-  And the narrower reading would leave the band's shipped behaviour unsanctioned across the whole
-  stretch of widths where the weather phrase alone would still fit but the pair does not — because
-  a row there _could_ hold the phrase by wrapping, which is this band's own sanctioned last resort
-  at the narrow end, and the band drops the prose instead. Reading the condition against the row
-  as composed is what puts that stretch inside the sanction.
-
-  It remains a judgement about what the amendment meant rather than a deduction from its text. If
-  the owner reads it the other way, what has to move is the breakpoint — not this paragraph.
+  **That condition is now the constraint's own wording, not a reading of it.** It began as this
+  section's judgement on the 2026-08-09 amendment, whose sentence measured the row against the
+  weather phrase alone: #356 shipped the composed-row reading and recorded it here as a judgement
+  pending the owner's answer. The owner confirmed the composed-row reading on 2026-08-11 (P4 of
+  that day's retro proposals; decision recorded in `docs/review-feedback.md`), and CLAUDE.md's
+  sentence now conditions the compact form on the row as composed. The breakpoint did not move —
+  it already implemented this reading.
 
   Both phrases go at once, and the width they go at is a property of **the row as composed** —
   the two credits' full forms side by side — rather than of either phrase's own length. The
