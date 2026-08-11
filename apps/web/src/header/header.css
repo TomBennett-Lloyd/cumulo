@@ -347,11 +347,12 @@
  * derived from the measurement above, each needing re-deriving if this bar's
  * content or typography moves it:
  *
- * - `apps/web/e2e/header.spec.ts`, `PHONE_VIEWPORT` — names the viewport this
- *   threshold works out to and the clearance 390px has under it, to justify a
- *   viewport provably inside the folded range. A width derived from the
- *   stylesheet would assert nothing, so it spells it out: the asserting carrier
- *   rule 9 ledgers rather than forbids.
+ * - `apps/web/e2e/viewports.ts`, `PHONE_VIEWPORT` — the lane's phone width, held
+ *   at a literal 390 so a case asserts a real device size rather than a number
+ *   derived from this stylesheet, which would assert nothing: the asserting
+ *   carrier rule 9 ledgers rather than forbids. It moved here from
+ *   `header.spec.ts` in #404, and it no longer restates the threshold or the
+ *   clearance — its docblock points back at this file for both.
  * - `apps/web/src/header/AppHeader.tsx`, the docblock section on the fold —
  *   carries the 63px-to-114px height it costs the bar, which is the measurement
  *   this threshold was chosen from and the reason the fold exists at all.

@@ -104,8 +104,10 @@ test('opens the fleet chart’s description from the keyboard, and closes it bac
    * the map's controls are painted over — Playwright's visibility is a box and a
    * `visibility` computed style, not an occlusion test — so the sentence itself
    * is read back as well: an empty panel is what a tip that lost its children
-   * would look like, and a zero-height one is what a stacking or layout failure
-   * would leave.
+   * would look like, and the `innerText` read below is what catches one. A
+   * zero-height panel is not the other half of that pair: it would already have
+   * failed the `toBeVisible` on this same element, which Playwright grants only
+   * to a non-empty box (#404).
    *
    * The sentence is deliberately not restated here. It belongs to `FleetPanel`
    * and is asserted against its own constant in the unit lane; a copy in this
@@ -114,13 +116,6 @@ test('opens the fleet chart’s description from the keyboard, and closes it bac
    */
   await expect(panel).toBeVisible();
 
-  const box = await panel.boundingBox();
-
-  if (box === null) {
-    throw new Error('The info tip panel is visible but has no layout box.');
-  }
-
-  expect(box.height).toBeGreaterThan(0);
   expect((await panel.innerText()).trim().length).toBeGreaterThan(0);
 
   await page.keyboard.press('Escape');

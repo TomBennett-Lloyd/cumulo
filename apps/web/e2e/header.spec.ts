@@ -2,6 +2,8 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { layoutBoxOf, maybeBoxOf, polledSample } from './layout-box';
+import { PHONE_VIEWPORT } from './viewports';
 
 /*
  * The header, driven by a keyboard and a pointer, in a browser that has a top
@@ -104,7 +106,7 @@ const fleetMarkers = (page: Page): Locator => page.locator('.map-site-marker, .m
  * timeout is what turns a permanent one into a failure.
  */
 const isWithinViewport = async (page: Page, locator: Locator): Promise<boolean> => {
-  const box = await locator.boundingBox();
+  const box = await maybeBoxOf(locator);
   const viewport = page.viewportSize();
 
   if (box === null || viewport === null) {
@@ -155,7 +157,7 @@ const CENTRE_TOLERANCE_PX = 2;
  * each other.
  */
 const maxCentreMisalignment = async (elements: readonly Locator[]): Promise<number> => {
-  const boxes = await Promise.all(elements.map(async (element) => element.boundingBox()));
+  const boxes = await Promise.all(elements.map(async (element) => maybeBoxOf(element)));
   const centres: number[] = [];
 
   for (const box of boxes) {
@@ -205,12 +207,7 @@ const panelIsOnTop = async (panel: Locator): Promise<boolean> =>
  * screen" — which is the precondition the case needs and cannot assume.
  */
 const panFleetOutOfView = async (page: Page): Promise<void> => {
-  const canvas = page.locator('.map-canvas');
-  const box = await canvas.boundingBox();
-
-  if (box === null) {
-    throw new Error('The map has no layout box to drag inside.');
-  }
+  const box = await layoutBoxOf(page.locator('.map-canvas'), 'The map canvas');
 
   const startX = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -495,11 +492,7 @@ test('hangs the menu over the map rather than under it', async ({ page }) => {
    * could press either way — and a collapsed popover is exactly the failure a
    * stacking regression could arrive alongside.
    */
-  const box = await popover.boundingBox();
-
-  if (box === null) {
-    throw new Error('The header menu popover is visible but has no layout box.');
-  }
+  const box = await layoutBoxOf(popover, 'The header menu popover');
 
   expect(box.width).toBeGreaterThan(0);
   expect(box.height).toBeGreaterThan(0);
@@ -513,25 +506,6 @@ test('hangs the menu over the map rather than under it', async ({ page }) => {
    */
   expect(await panelIsOnTop(popover)).toBe(true);
 });
-
-/**
- * A phone, and specifically one below the width at which `header/header.css`
- * measured the brand, the field and the menu stopping fit on one line: a 439px
- * window and narrower.
- *
- * That file states the threshold as a container width now, not a viewport one —
- * #326 converted the fold to `@container (max-width: 25.4375rem)` against the
- * bar's own content box, which is the window less the bar's inline padding, so
- * 439px of window is 407px of container and the fold flips exactly where it did
- * before. This viewport is the window-side reading of it, which is what a spec
- * that sets viewports needs; the stylesheet owns the derivation.
- *
- * 390x844 rather than a width picked just under the fold: it is a real device
- * size, it is 49px clear of it, and the clearance is what keeps this case from
- * turning red over a platform whose fonts lay the bar out a few pixels wider
- * than the measurement.
- */
-const PHONE_VIEWPORT = { width: 390, height: 844 };
 
 /** A desktop window, well above the fold — where the field is the bar's own. */
 const WIDE_VIEWPORT = { width: 1280, height: 800 };
@@ -565,8 +539,8 @@ const ICON_GAP_TOLERANCE_PX = 2;
  * reading that never arrives must never be mistaken for a passing one.
  */
 const iconPairGapError = async (page: Page): Promise<number> => {
-  const toggleBox = await page.locator('.header-search-toggle').boundingBox();
-  const menuBox = await page.locator('.header-menu').boundingBox();
+  const toggleBox = await maybeBoxOf(page.locator('.header-search-toggle'));
+  const menuBox = await maybeBoxOf(page.locator('.header-menu'));
   const rowGap = await page
     .locator('.app-header')
     .evaluate((element) => Number.parseFloat(getComputedStyle(element).columnGap));
@@ -594,7 +568,7 @@ const iconPairGapError = async (page: Page): Promise<number> => {
  * rather than with the window's, and stays true if the bar's padding changes.
  */
 const menuRowEndGap = async (page: Page): Promise<number> => {
-  const menuBox = await page.locator('.header-menu').boundingBox();
+  const menuBox = await maybeBoxOf(page.locator('.header-menu'));
   const contentRight = await page.locator('.app-header').evaluate((element) => {
     const styles = getComputedStyle(element);
 
@@ -711,12 +685,8 @@ test.describe('the search on a bar too narrow to hold it', () => {
      * leaving a field narrower than the icon that opened it, so the claim is
      * made against the brand's box: the bar starts below where the brand ends.
      */
-    const brandBox = await page.locator('.brand').boundingBox();
-    const barBox = await bar.boundingBox();
-
-    if (brandBox === null || barBox === null) {
-      throw new Error('The header bar is visible but something on it has no layout box.');
-    }
+    const brandBox = await layoutBoxOf(page.locator('.brand'), 'The brand');
+    const barBox = await layoutBoxOf(bar, 'The header search bar');
 
     expect(barBox.y).toBeGreaterThanOrEqual(brandBox.y + brandBox.height);
 
@@ -812,35 +782,81 @@ interface SearchGeometry {
  * container). Reading it from the header's edges instead would bake the brand's
  * own width into every expectation here.
  *
+ * One `page.evaluate` and not three `boundingBox` reads, which is the point of
+ * the shape rather than a saving. Three awaited reads are three round trips, and
+ * the row is free to be laid out again between any two of them — the map below
+ * takes its band, a font resolves — so what came back was three rectangles from
+ * up to three different layouts, and both gaps below are *differences between
+ * two of them*. A geometry describing no layout the page ever had is the one
+ * failure a poll cannot retry its way out of, because each reading is
+ * individually plausible. Inside one evaluate the three `getBoundingClientRect`
+ * calls run in a single JS turn, and layout cannot change under them.
+ *
+ * `getBoundingClientRect` rather than `Locator.boundingBox` because that is what
+ * a single turn can call three times, and the two differ in exactly one way that
+ * matters here: Playwright reports `null` for an element whose box is empty
+ * where the rect reports zeros. The fold this file measures is a `display: none`
+ * one, so an empty rect is mapped back to "no box yet" and the poll above keeps
+ * meaning what it meant.
+ *
  * `null` rather than a throw for {@link isWithinViewport}'s reason: every caller
  * polls the number it derives from this, an element with no box yet is a "not
  * yet", and the poll's own timeout is what turns a permanent one into a failure.
  * The direct-child selector is `AppHeader`'s two copies of the search told
  * apart — the bar's copy is a second `.site-search` whenever it is open.
+ *
+ * A second match is the one condition here that is *not* a "not yet", so it is
+ * the one that throws. `Locator.boundingBox` came with that guard for free —
+ * strict mode fails loudly on an ambiguous selector — and a bare `querySelector`
+ * silently takes the first, which on this file's selectors is a live risk rather
+ * than a hypothetical: `.header-search-bar` is itself a direct child of
+ * `.app-header`, so flattening the bar's copy would give `.app-header >
+ * .site-search` two matches, and the centring case would keep passing against
+ * whichever field came first in the document. A throw and not a `null` because
+ * `expect.poll` propagates an error raised by its own function rather than
+ * retrying it — it awaits that function outside the `try` that turns a failed
+ * match into another poll interval — so the failure names the selector at once
+ * instead of arriving as a timeout that blames layout for never settling.
+ * Measured, not assumed: pointing this reading at a deliberately ambiguous
+ * selector failed the centring case in 616ms with `.app-header * matched 17
+ * elements`, against a poll timeout of several seconds.
  */
-const searchGeometry = async (page: Page): Promise<SearchGeometry | null> => {
-  const [brandBox, searchBox, menuBox] = await Promise.all([
-    page.locator('.brand').boundingBox(),
-    page.locator('.app-header > .site-search').boundingBox(),
-    page.locator('.header-menu-button').boundingBox(),
-  ]);
+const searchGeometry = async (page: Page): Promise<SearchGeometry | null> =>
+  page.evaluate(() => {
+    const rectOf = (selector: string): DOMRect | null => {
+      const matches = document.querySelectorAll(selector);
 
-  if (brandBox === null || searchBox === null || menuBox === null) {
-    return null;
-  }
+      if (matches.length > 1) {
+        throw new Error(
+          `${selector} matched ${String(matches.length)} elements, so there is no one box to measure.`,
+        );
+      }
 
-  return {
-    width: searchBox.width,
-    leftGap: searchBox.x - (brandBox.x + brandBox.width),
-    rightGap: menuBox.x - (searchBox.x + searchBox.width),
-  };
-};
+      const rect = matches[0]?.getBoundingClientRect() ?? null;
+
+      return rect === null || (rect.width === 0 && rect.height === 0) ? null : rect;
+    };
+
+    const brand = rectOf('.brand');
+    const search = rectOf('.app-header > .site-search');
+    const menu = rectOf('.header-menu-button');
+
+    if (brand === null || search === null || menu === null) {
+      return null;
+    }
+
+    return {
+      width: search.width,
+      leftGap: search.left - brand.right,
+      rightGap: menu.left - search.right,
+    };
+  });
 
 /**
  * That same reading, once the row has one to give.
  *
- * The poll is the whole of the readiness handling, for `composition.spec.ts`'s
- * `layoutBoxOf` reason: the state worth waiting on is "these three have boxes",
+ * The poll is the whole of the readiness handling, for `layoutBoxOf`'s reason
+ * (`layout-box.ts`): the state worth waiting on is "these three have boxes",
  * which is exactly the precondition of measuring them. Nothing here waits for a
  * number to *settle*, because none of the numbers the cases derive moves once
  * the row is laid out — a capped box is the cap however wide the brand's
@@ -848,28 +864,16 @@ const searchGeometry = async (page: Page): Promise<SearchGeometry | null> => {
  * it renders. That is what lets these cases assert plainly where the centreline
  * case above has to poll: its reading is a font metric and these are not.
  *
- * The second read is not redundant. `expect.poll` reports whether the condition
- * held, not the value it held, so the geometry is read again once the poll has
- * established there is one — and the guard after it covers the case that leaves:
- * a row that had boxes and lost them between the two reads, a different failure
- * from never having had any, which says so rather than arriving as a `NaN`
- * comparison downstream (`error-handling.md` rule 1).
+ * `polledSample` rather than a poll and a second read, because the second read
+ * is what re-opened at this end the race the poll closed at the other: the
+ * geometry the assertions run against is now the one the poll actually settled
+ * on. That module's docblock owns the argument.
  */
-const settledSearchGeometry = async (page: Page): Promise<SearchGeometry> => {
-  await expect
-    .poll(async () => searchGeometry(page), {
-      message: 'The header row never laid out a brand, a search and a menu to measure.',
-    })
-    .not.toBeNull();
-
-  const geometry = await searchGeometry(page);
-
-  if (geometry === null) {
-    throw new Error('The header row lost a layout box between two reads of it.');
-  }
-
-  return geometry;
-};
+const settledSearchGeometry = async (page: Page): Promise<SearchGeometry> =>
+  polledSample(
+    async () => searchGeometry(page),
+    'The header row never laid out a brand, a search and a menu to measure.',
+  );
 
 test('caps the search at 500px and centres it in the logo–menu gap', async ({ page }) => {
   /*
