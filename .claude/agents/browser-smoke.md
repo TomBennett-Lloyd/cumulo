@@ -34,6 +34,12 @@ End with exactly one status block:
 
 ```
 STATUS: PASS | FAIL | INCONCLUSIVE
+Ran: <how you started it — command, tree/branch, URL and port — and the viewport(s) you measured at>
 Measured: <what you read, with the actual values>
+Findings: <one line each, or `none`>
 Server: stopped
 ```
+
+`Findings:` is where the three obligations above land — the unanswered addition, the copy that was asked the prior question, the criterion no durable assertion owns. They are not measurements, and folded into `Measured:` they are skimmed past by a spawner reading for a number; `none` written explicitly is what makes "no findings" distinguishable from "findings not reported".
+
+`Ran:` exists because a later reader has only your report to reason from. #176's review cycle 2 built a finding on the premise that this agent had driven the dev server, when it had been dispatched against `vite preview` with explicit overrides — the conclusion happened to survive for a different reason, and the premise had to be corrected in the next dispatch to stop an implementer writing something false.

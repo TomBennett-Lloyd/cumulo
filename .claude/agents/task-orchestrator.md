@@ -58,7 +58,8 @@ your issue's comments; the top-level never posts them for you.
    write to the main checkout beyond the two sanctioned exceptions above, or write to
    another worktree; remove worktrees or run the sweeper;
    run /retro; message the user. Bounce rounds carrying owner feedback are review-loop
-   territory, and both the 3-cycle cap and the review-feedback entry are yours: the entry
+   territory, and both the review cycle cap — 3 cycles plus the scoped confirmation pass on
+   the final fix diff, per `review-loop` — and the review-feedback entry are yours: the entry
    lives on the branch and each piece of feedback updates it in the commit that responds,
    which only this worktree's git-writer can make — the merge owner never edits an
    in-flight worktree, and at merge takes the label off and nothing more.
@@ -108,8 +109,13 @@ your issue's comments; the top-level never posts them for you.
    ships NOTHING: drop its commit in curation (no revert commits — nothing of it reaches
    main), post a status comment on its issue, strike its `Closes` line — the batch ships
    without it. On a "curate onto latest main" bounce: rebase onto fresh main, resolve
-   docs/tech-debt.md per the union rules with the marker sweep, re-verify, force-push,
-   re-report. PR body carries one `Closes #<m>` per surviving member. Every report
+   docs/tech-debt.md per the union rules, with the marker sweep and the rebase hygiene
+   `review-loop` step 5 states (`core.commentChar`, subject-and-body check), re-verify,
+   force-push, re-report. **History honesty is mechanical, not inferred**: for every file
+   the branch ADDS, assert no earlier commit references it (`git log --oneline -S<path>`,
+   `git ls-tree`) before writing any commit message that claims a split — two commits in
+   the #327 batch asserted a split that was false and named a file two commits away, on
+   causation reasoning that was coherent and wrong where two git commands settled it. PR body carries one `Closes #<m>` per surviving member. Every report
    includes the per-ticket block and the branch commit list.
 8. **The scratchpad is shared; treat every path in it as contested.** The session scratchpad
    directory is not isolated per agent, and concurrent orchestrators pick the same obvious
@@ -154,7 +160,11 @@ CI: green | red | pending — pasted `gh pr checks` tail, and the head sha it ra
 Verify: rc=<n> (pasted: `pnpm verify; echo $?` — including its `verify root:` line,
   which must name this worktree and branch)
 
-Review loop: VERDICT APPROVE | CAP-REACHED — cycles <c>/3
+Review loop: VERDICT APPROVE | CAP-REACHED | CAP-REACHED+CONFIRMED-APPROVE — cycles <c>/3
+  Confirmation pass (mandatory whenever the cap was reached): scope <the fix commits the
+    last cycle never saw>, rounds <n>, verdict APPROVE | ITERATE, findings <n>. It is not
+    a cycle, so it never moves the /3 above. Report bare CAP-REACHED only if the pass has
+    not returned APPROVE — that is what routes the PR to human review.
   FIX-NOW found/resolved: <n>/<n>
   Demoted at cap (pure-quality, logged to tech-debt): <titles | none>
   Correctness residue: NONE (mandatory NONE — a known bug never reaches this report as DONE)
@@ -200,7 +210,8 @@ STATUS: DONE — READY (auto) | DONE — AWAITING-HUMAN | PARTIAL — <detail> |
 Plan accuracy: chunks as planned <n>/<k>; re-planned: <ids + one line why | none>
   (batch: one line per member, including dropped members and their drop cause)
 Escalations: BLOCKED <n>, STRUGGLING <n> (consultant verdicts, one line each | none)
-Review loop: cycles <c>/3; findings a standards-index trigger should have caught
+Review loop: cycles <c>/3 (+ confirmation pass: <rounds, verdict> | none needed —
+  the loop closed on APPROVE); findings a standards-index trigger should have caught
   earlier: <finding → the trigger that under-fired | none>
 Bounce rounds after first TASK REPORT: <n> (cause of each | none)
 Wasted work: <duplicated/discarded effort and its cause | none>

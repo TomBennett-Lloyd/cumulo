@@ -94,7 +94,7 @@ a per-ticket dimension rather than multiplying.
 | Worktree creation, chunk ledger, wave dispatch                                                                           | top-level                      | task-orchestrator                                                                   |
 | Wave verify + commits (implementers never touch git)                                                                     | top-level                      | task-orchestrator                                                                   |
 | STRUGGLING → consultant, browser-smoke sequencing                                                                        | top-level                      | task-orchestrator                                                                   |
-| Review loop (≤3 cycles), FIX-NOW/SYSTEMIC/demote-at-cap                                                                  | top-level                      | task-orchestrator                                                                   |
+| Review loop (≤3 cycles + confirmation pass), FIX-NOW/SYSTEMIC/demote-at-cap                                              | top-level                      | task-orchestrator                                                                   |
 | Push branch, open PR, wait CI, classify per workflow.json                                                                | top-level                      | task-orchestrator                                                                   |
 | `awaiting-review` label (human-class PRs)                                                                                | top-level                      | task-orchestrator applies label; top-level notifies owner                           |
 | **Merge chain, conflict resolution, merge ritual**                                                                       | top-level                      | **top-level, exclusively**                                                          |
@@ -235,7 +235,11 @@ CI: green | red | pending — pasted `gh pr checks` tail, and the head sha it ra
 Verify: rc=<n> (pasted: `pnpm verify; echo $?` — including its `verify root:` line,
   which must name this worktree and branch)
 
-Review loop: VERDICT APPROVE | CAP-REACHED — cycles <c>/3
+Review loop: VERDICT APPROVE | CAP-REACHED | CAP-REACHED+CONFIRMED-APPROVE — cycles <c>/3
+  Confirmation pass (mandatory whenever the cap was reached): scope <the fix commits the
+    last cycle never saw>, rounds <n>, verdict APPROVE | ITERATE, findings <n>. It is not
+    a cycle, so it never moves the /3 above. Report bare CAP-REACHED only if the pass has
+    not returned APPROVE — that is what routes the PR to human review.
   FIX-NOW found/resolved: <n>/<n>
   Demoted at cap (pure-quality, logged to tech-debt): <titles | none>
   Correctness residue: NONE (mandatory NONE — a known bug never reaches this report as DONE)
@@ -287,7 +291,8 @@ field as PARTIAL — a template hole is a claim withheld, not a default-pass.
 Plan accuracy: chunks as planned <n>/<k>; re-planned: <ids + one line why | none>
   (batch: one line per member, including dropped members and their drop cause)
 Escalations: BLOCKED <n>, STRUGGLING <n> (consultant verdicts, one line each | none)
-Review loop: cycles <c>/3; findings a standards-index trigger should have caught
+Review loop: cycles <c>/3 (+ confirmation pass: <rounds, verdict> | none needed —
+  the loop closed on APPROVE); findings a standards-index trigger should have caught
   earlier: <finding → the trigger that under-fired | none>
 Bounce rounds after first TASK REPORT: <n> (cause of each | none)
 Wasted work: <duplicated/discarded effort and its cause | none>
@@ -424,7 +429,8 @@ non-interactive), or plain `--amend` when the member's commit is HEAD. At any se
 branch IS the curated history — "the only commits on the branch at merge time are the ones
 isolated to each member" (the owner's condition) holds by construction, never by cleanup. One
 review loop over the whole branch diff (one surface, one reviewer pass — a batching win); the
-3-cycle cap applies to the batch, which is one more reason for the ≤8-chunk bound.
+3-cycle cap — plus the scoped confirmation pass that closes it — applies to the batch,
+which is one more reason for the ≤8-chunk bound.
 **A member that cannot reach DONE ships nothing**: if by review time a member's chunks are not
 all verified — or a member's fix would burn cycles the batch doesn't have — the member's commit
 is simply **dropped from the branch history during curation** (non-interactive
@@ -622,7 +628,8 @@ your issue's comments; the top-level never posts them for you.
    except on an explicit "curate onto latest main" bounce (rule 7);
    write to the main checkout or another worktree; remove worktrees or run the sweeper;
    run /retro; message the user. Bounce rounds carrying owner feedback are review-loop
-   territory: the 3-cycle cap and the review-feedback logging stay with their owners
+   territory: the review cycle cap (3 cycles plus the confirmation pass) and the
+   review-feedback logging stay with their owners
    (cap: you; the log: the merge owner).
    3a. **On `RELEASE`**: finalize your RETRO NOTES comment into the full RETRO HANDOVER
    template — the comment is the sole authoritative record — then emit the same content
@@ -654,8 +661,13 @@ your issue's comments; the top-level never posts them for you.
    ships NOTHING: drop its commit in curation (no revert commits — nothing of it reaches
    main), post a status comment on its issue, strike its `Closes` line — the batch ships
    without it. On a "curate onto latest main" bounce: rebase onto fresh main, resolve
-   docs/tech-debt.md per the union rules with the marker sweep, re-verify, force-push,
-   re-report. PR body carries one `Closes #<m>` per surviving member. Every report
+   docs/tech-debt.md per the union rules, with the marker sweep and the rebase hygiene
+   `review-loop` step 5 states (`core.commentChar`, subject-and-body check), re-verify,
+   force-push, re-report. **History honesty is mechanical, not inferred**: for every file
+   the branch ADDS, assert no earlier commit references it (`git log --oneline -S<path>`,
+   `git ls-tree`) before writing any commit message that claims a split — two commits in
+   the #327 batch asserted a split that was false and named a file two commits away, on
+   causation reasoning that was coherent and wrong where two git commands settled it. PR body carries one `Closes #<m>` per surviving member. Every report
    includes the per-ticket block and the branch commit list.
 
 ### PLAN CHECKPOINT template (ends round 1)
@@ -817,7 +829,7 @@ real dispatchable thing), and its activation checklist should be revised to buil
 | **Warm context diverges from disk across rounds** — the merge owner acted on the branch (union resolution, update-branch) after the agent's last look                                 | Reconcile-disk-state opens EVERY round, bounce rounds included; context is a hypothesis about disk, never disk (agent rule 1).                                                                                                                                                                                                                                                                                                                                                           |
 | **Handover becomes noise** — a witness that must produce observations invents them, polluting the friction log                                                                        | The handover _proposes_; `/retro` (top-level) keeps the "don't force a lesson out of noise" bar and decides what lands. Template fields all accept "none"; the pilot's fidelity criterion audits handover-vs-artifact accuracy.                                                                                                                                                                                                                                                          |
 | **Two long-lived orchestrators + the top-level all commenting on one issue** after a bounce touches shared concerns                                                                   | Bounces are per-ticket by construction (the agent may only write its own issue/PR/worktree); cross-ticket concerns route through the top-level, which owns everything shared.                                                                                                                                                                                                                                                                                                            |
-| **One sick batch member poisons the batch** — its fix rounds burn the shared 3-cycle cap, or its half-done state entangles siblings' diffs                                            | The drop rule: a member not fully verified by review time is dropped from history in curation and ships nothing; one-commit-per-member makes the drop a clean commit removal. Admission bounds (≤6 members, ≤8 chunks, debt-burn scale each) keep any one member's blast radius small.                                                                                                                                                                                                   |
+| **One sick batch member poisons the batch** — its fix rounds burn the shared 3-cycle cap and the confirmation pass that closes it, or its half-done state entangles siblings' diffs   | The drop rule: a member not fully verified by review time is dropped from history in curation and ships nothing; one-commit-per-member makes the drop a clean commit removal. Admission bounds (≤6 members, ≤8 chunks, debt-burn scale each) keep any one member's blast radius small.                                                                                                                                                                                                   |
 | **A batch member ships that should not have** — reviewer approved the aggregate diff without judging each ticket's acceptance                                                         | The ledger is per-chunk and chunks are per-member: DONE requires every surviving member's chunks individually verified against their own acceptance criteria, and the report's per-ticket block forces the claim per member — an aggregate "looks fine" cannot fill it.                                                                                                                                                                                                                  |
 | **Wrong revert granularity post-merge** — one batched change needs backing out alone                                                                                                  | Dissolved by the unsquashed design (owner decision 2026-08-10): each member lands as its own main commit, so the revert unit IS the member — revert one commit, siblings untouched. The residual case is a bad change _inside_ one member commit, which is exactly the single-issue revert story, no worse.                                                                                                                                                                              |
 | **Uncurated history reaches merge time** — WIP/fix-round commits on the branch, or a rewrite error loses a sibling's hunks ("60 random tweak commits" is the owner's named nightmare) | Curation is continuous by contract (fixup+autosquash as edits land), so a dirty branch is a contract breach, not a merge-day surprise; the merge owner's mechanical check (report's commit list vs `git log main..<branch>` vs surviving members) is a hard gate alongside CI — either failing blocks the merge and bounces the agent. A rewrite error is caught the same way `execute` catches everything: the post-curation `pnpm verify` + the reviewer reads the post-curation diff. |
