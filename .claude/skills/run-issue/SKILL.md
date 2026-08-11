@@ -40,7 +40,9 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    reported HEAD — mismatch: stop, reconcile from the issue ledger before anything else);
    cross-check the classification against the changed-file list; check the changed files
    against other in-flight tasks. Then the merge chain of review-loop step 5 (which owns
-   update-branch, the tech-debt union routine, the settle-then-watch, the ritual), one PR
+   update-branch, the tech-debt union routine, the settle-then-watch, and all of the
+   ritual still owed at merge time — taking the label off, the review-feedback entry
+   having landed on the branch before the label ever went on), one PR
    at a time — merges are serialized, always. Single-issue PRs merge `--squash` as today;
    batch PRs merge `--rebase` AFTER the mechanical curated-history check passes — the
    report's branch commit list must show commit count == surviving-member count, each
@@ -53,12 +55,21 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    report's review guide — and only via this relay, after you have verified readiness
    (CI green on the reported head) yourself; the label is already on, and there is
    deliberately NO issue @-mention at label time (owner, 2026-08-09: a ping must mean
-   "ready for review now", and only the relay carries that guarantee). The agent stays
-   parked either way.
+   "ready for review now", and only the relay carries that guarantee). That readiness
+   check is satisfiable rather than circular: the review-feedback entry lands on the
+   branch before the label goes on, so green-with-label is the normal state. A red
+   `merge-ritual-gate` on a labelled PR is therefore never a PR still waiting for
+   something — but read the job's error message before acting on it, because that is
+   what separates the two reds: a missing-entry error says the sequence was violated,
+   which is a bounce (step 5), while a "could not read the PR" error means the gate
+   reached no verdict at all and calls for a re-run of the job, not a bounce at a branch
+   with nothing to fix. Neither is a thing to wait out. The agent stays parked either
+   way.
 5. **Bounce, don't do**: anything ticket-shaped that surfaces before release — owner
-   feedback on an awaiting-review PR (relay verbatim; log it to docs/review-feedback.md
-   yourself, as merge owner), branch-side merge fallout beyond the sanctioned tech-debt
-   union routine, a post-merge verification failure, or a question from you or the owner —
+   feedback on an awaiting-review PR (relay verbatim; the warm agent folds it into the
+   branch's docs/review-feedback.md entry in the commit that responds — an on-branch
+   edit, so it is never yours to make), branch-side merge fallout beyond the sanctioned
+   tech-debt union routine, a post-merge verification failure, or a question from you or the owner —
    goes to the warm agent by SendMessage. You never edit an in-flight worktree. Each
    mutating bounce ends in a refreshed TASK REPORT; re-verify it as in step 4.
 6. **Release**: when the PR is merged, the surviving ticket(s) are closed (a batch's
