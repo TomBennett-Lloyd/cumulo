@@ -376,17 +376,22 @@ describe('ForecastChart tooltip shape', () => {
 });
 
 /**
- * View-box positions inside sample 2's span. The five samples sit 138 units
+ * View-box positions inside sample 2's span. The five samples sit 140 units
  * apart from `JSDOM_PLOT.left` (56, since #284 D10 widened the left gutter), so
- * sample 2 is at 332 and the midpoint it shares with sample 3 is at 401 — every
+ * sample 2 is at 336 and the midpoint it shares with sample 3 is at 406 — every
  * value below but the last is on sample 2's side of it, and the last is over
  * the line by 4 units.
+ *
+ * Re-derived for #430, which gave the plot eight units of right margin back and
+ * so widened the span these four sit in from 138 to 140. Every number moved and
+ * every relationship above is the one it was, which is the point of stating the
+ * relationships rather than only the values.
  */
-const ON_SAMPLE_2 = 332;
-const NEAR_SAMPLE_2 = 355;
+const ON_SAMPLE_2 = 336;
+const NEAR_SAMPLE_2 = 359;
 /** 16 units short of the midpoint: still sample 2's, and visibly moved. */
-const STILL_SAMPLE_2 = 385;
-const PAST_THE_MIDPOINT = 405;
+const STILL_SAMPLE_2 = 390;
+const PAST_THE_MIDPOINT = 410;
 /**
  * Two waits, chosen to fall either side of `POINTER_FRAME_MS` — the frame the
  * panel is allowed one move in (`chart-hover-input.ts`, which ledgers these two

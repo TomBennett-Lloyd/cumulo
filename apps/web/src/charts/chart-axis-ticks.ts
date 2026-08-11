@@ -143,10 +143,12 @@ const thinnedToFit = (labels: readonly TierLabel[]): readonly TierLabel[] => {
  * a first label can actually run out of on that side is the canvas.
  *
  * At the margins the chart is drawn with, this floor does not bite: the widest
- * label a tier produces is `Wed 30`, whose half is comfortably inside
- * `PLOT_LEFT`. It is a floor rather than an assertion because those margins are
- * somebody else's to change, and a label clipped at the canvas edge is the #19
- * defect this chart keeps being asked not to reproduce.
+ * label a tier produces is `Wed 30`, whose modelled half is comfortably inside
+ * the left gutter at either of the two widths `chartPlot` gives it. It is a
+ * floor rather than an assertion because those margins are somebody else's to
+ * change — #430 moved both of them, and this arm went on not biting — and
+ * because a label clipped at the canvas edge is the #19 defect this chart keeps
+ * being asked not to reproduce.
  */
 const labelXOnCanvas = (x: number, text: string): number => Math.max(labelWidth(text) / 2, x);
 

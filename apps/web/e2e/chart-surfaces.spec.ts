@@ -5,6 +5,7 @@ import { CHART_VIEW_BOX_HEIGHT } from '../src/charts/chart-geometry';
 import { routeBasemap } from './hermetic-basemap';
 import { layoutBoxOf, maybeBoxOf, settledBoxOf } from './layout-box';
 import { openSiteTable } from './site-table';
+import { PHONE_VIEWPORT } from './viewports';
 
 /*
  * Chart geometry, which is the one question jsdom answers with a shrug.
@@ -223,6 +224,129 @@ const PANEL_FILL_TOLERANCE = 18;
 const FILLS_PANEL = 'fills its section';
 
 /**
+ * The *drawn* plot, as opposed to the canvas it is drawn on.
+ *
+ * `panelFit` above measures the `<svg>`, which fills its column by CSS and
+ * therefore always passes the moment the column is right; what a reader sees as
+ * the chart's edge is the plot rect inside it, held off the canvas by the
+ * margins the axis labels need (`src/charts/chart-geometry.ts`). Those are the
+ * two different questions, and the owner's #430 complaint — a gap on the right
+ * "equivalent to the width of the y axis" — is the second one: the svg was
+ * filling the section perfectly while the plot stopped 32px inside it.
+ *
+ * This element is the plot rect exactly: `forecast-chart-hover-boundary.tsx`
+ * sizes it from `scale.plot` because a reader has to be able to aim anywhere in
+ * the plot, so measuring it is measuring where the marks may go.
+ */
+const PLOT_RECT = '.forecast-chart-pointer-target';
+
+/** How far the drawn plot's two edges sit inside its section's content box. */
+interface PlotEdgeGaps {
+  readonly left: number;
+  readonly right: number;
+}
+
+/**
+ * That reading, in rendered pixels — `null` where either box is missing.
+ *
+ * Against the section's **content** box, not the border box `boundingBox`
+ * reports, and the padding is read off the element rather than written down
+ * here: `dashboard/fleet-panel.css` chooses that step and the token owns the
+ * length, so a spec that restated it would fail on a padding change that broke
+ * nothing (`architecture.md` rule 9). `PANEL_FILL_TOLERANCE` above does restate
+ * it, and says so; one such restatement in this file is enough.
+ *
+ * Both edges in one reading because they are one question asked twice, and
+ * because a single `page.evaluate` cannot be caught halfway between two
+ * differently-timed reads of a column that is still settling.
+ */
+const plotEdgeGaps = async (page: Page): Promise<PlotEdgeGaps | null> =>
+  page.locator(CHART_SECTION).evaluate((section, selector) => {
+    const plot = section.querySelector(selector)?.getBoundingClientRect();
+
+    if (plot === undefined) {
+      return null;
+    }
+
+    const box = section.getBoundingClientRect();
+    const padding = globalThis.getComputedStyle(section);
+
+    return {
+      left: plot.left - (box.left + Number.parseFloat(padding.paddingLeft)),
+      right: box.right - Number.parseFloat(padding.paddingRight) - plot.right,
+    };
+  }, PLOT_RECT);
+
+/**
+ * How far the plot's right edge may sit inside its section's content edge.
+ *
+ * A **ceiling**, and the half of the contract the containment poll cannot
+ * state. Containment is the floor: a margin too small clips the last time-axis
+ * label, and `escapedLabels` fails. Nothing until #430 said the margin must not
+ * be *larger* than the label needs — so it was 32 against a requirement of
+ * 22.19 (half of `Wed 29` at the shipping type, measured), and the plot gave up
+ * a tenth of a phone's chart to hold nothing. The two together pin it from both
+ * sides, which is why this is a separate case rather than a tighter tolerance
+ * on `panelFit`.
+ *
+ * 25 is the 24 the chart ships plus a pixel, and the pixel is for sub-pixel
+ * layout rather than for slack in the margin: the section's padding and the
+ * svg's `width: 100%` both resolve against a fractional viewport on a scaled
+ * display. It is deliberately not derived from `chart-geometry.ts` — importing
+ * the constant would make a case that passes at any margin, which is precisely
+ * the state this exists to leave behind.
+ */
+const PLOT_RIGHT_GAP_BUDGET = 25;
+
+/**
+ * The same ceiling on the left, at the widths the thinner gutter is used at.
+ *
+ * 51 for the 50 the narrow gutter ships. It is a different number from the one
+ * above rather than the same claim twice: this gutter holds the rotated
+ * `Power (kW)` title *and* a whole kW label, where the right margin holds half
+ * of one time label, so the two are only ever equal by coincidence. What it
+ * catches is the width-dependent gutter silently not applying — a threshold
+ * retuned past these viewports, or `chartPlot` losing its argument — which
+ * leaves a chart that is correct in every other assertion in this file and 6px
+ * narrower than the owner asked for.
+ */
+const NARROW_PLOT_LEFT_GAP_BUDGET = 51;
+
+/** What the reading below says when the plot reaches both of those edges. */
+const REACHES_ITS_SECTION = 'reaches its section’s content edges';
+
+/**
+ * Whether the drawn plot reaches its section's content edges, described — the
+ * same reading-is-the-diagnosis shape as `escapedLabels` and `panelFit`.
+ *
+ * `leftBudget` is a parameter because the left gutter is the one margin that
+ * varies with the width the chart is drawn at (#430), so a caller has to say
+ * which regime it is asserting; the right margin is one distance everywhere and
+ * is not.
+ */
+const plotEdgeFit = async (page: Page, leftBudget: number): Promise<string> => {
+  const gaps = await plotEdgeGaps(page);
+
+  if (gaps === null) {
+    return 'the fleet chart section or its plot rect has no layout box';
+  }
+
+  const problems = [
+    gaps.right > PLOT_RIGHT_GAP_BUDGET
+      ? `the plot stops ${gaps.right.toFixed(1)}px inside the section's right edge (budget ${String(PLOT_RIGHT_GAP_BUDGET)}px)`
+      : null,
+    gaps.left > leftBudget
+      ? `the plot starts ${gaps.left.toFixed(1)}px inside the section's left edge (budget ${String(leftBudget)}px)`
+      : null,
+  ].filter((problem) => problem !== null);
+
+  return problems.length === 0 ? REACHES_ITS_SECTION : problems.join('; ');
+};
+
+/** The wide gutter, which is what every viewport above the threshold draws. */
+const WIDE_PLOT_LEFT_GAP_BUDGET = 57;
+
+/**
  * Whether the plot fills the section it is in, described.
  *
  * A description rather than a number for the same reason `escapedLabels` above
@@ -395,6 +519,27 @@ test('fills the panel and folds the raw data away', async ({ page }) => {
   await expect(table).toBeVisible();
 });
 
+/*
+ * #430's right-hand half, at the viewport a visitor opens the app in. The owner
+ * asked for the graph to "fill the remaining width on the RHS", where it was
+ * stopping a whole y-axis gutter short of one — and the case that would have
+ * caught it did not exist, because the assertion this file already had measures
+ * the svg and the svg was filling the section the whole time. This measures the
+ * plot instead.
+ *
+ * Polled, like every geometry read here: the column is laid out again as the map
+ * settles and as the fonts resolve.
+ */
+test('draws its plot out to the section’s edges, not just its canvas', async ({ page }) => {
+  await expect(page.locator(`${CHART_SECTION} ${PLOT_RECT}`)).toBeVisible();
+
+  await expect
+    .poll(async () => plotEdgeFit(page, WIDE_PLOT_LEFT_GAP_BUDGET), {
+      message: 'The fleet chart is drawing its plot short of the section it fills.',
+    })
+    .toBe(REACHES_ITS_SECTION);
+});
+
 /**
  * The viewport D15 is a claim about: an ordinary desktop window.
  *
@@ -541,6 +686,60 @@ test.describe('a narrow window', () => {
   test('keeps its tick labels apart, and inside the plot, at a narrow viewport', async ({
     page,
   }) => {
+    await expectChartLaidOut(page.locator(CHART_FIGURE));
+  });
+
+  /*
+   * #430's other half: at this width the gutter is the thinner one, and the
+   * case above is what proves the six units it gave back were not taken out of
+   * a label. The two are the ceiling and the floor on the same distance, and
+   * running both here is the whole of what makes either safe to tighten.
+   */
+  test('spends the thinner gutter at a narrow viewport', async ({ page }) => {
+    await expect(page.locator(`${CHART_SECTION} ${PLOT_RECT}`)).toBeVisible();
+
+    await expect
+      .poll(async () => plotEdgeFit(page, NARROW_PLOT_LEFT_GAP_BUDGET), {
+        message: 'The fleet chart is not using the narrow gutter at a narrow viewport.',
+      })
+      .toBe(REACHES_ITS_SECTION);
+  });
+});
+
+/*
+ * A phone, where the owner's complaint was made: "the axis takes up too much of
+ * the screen on those devices".
+ *
+ * A separate describe from the narrow window above rather than a second width in
+ * that one, because the two are different claims about the same geometry — 500px
+ * is where the *label budget* bites hardest, and this is where the *gutter* costs
+ * most as a share of the canvas. The section gives the chart 358px here, so the
+ * two margins were a quarter of it before #430 and are a fifth after.
+ *
+ * The width comes from `./viewports` rather than a fourth declaration of 390x844
+ * in this lane (#404).
+ */
+test.describe('a phone', () => {
+  test.use({ viewport: PHONE_VIEWPORT });
+
+  test('spends the thinner gutter at a phone width', async ({ page }) => {
+    await expect(page.locator(`${CHART_SECTION} ${PLOT_RECT}`)).toBeVisible();
+
+    await expect
+      .poll(async () => plotEdgeFit(page, NARROW_PLOT_LEFT_GAP_BUDGET), {
+        message: 'The fleet chart is not using the narrow gutter at a phone width.',
+      })
+      .toBe(REACHES_ITS_SECTION);
+  });
+
+  /*
+   * And the floor, at the width where the gutter has least room to be wrong in.
+   * This is the case that would fail if the thinner gutter had been bought by
+   * clipping the `Power (kW)` title or a kW label against the canvas edge —
+   * which a gap measurement cannot see, because a clipped label leaves the plot
+   * exactly where the geometry put it.
+   */
+  test('keeps its labels inside the plot in the thinner gutter', async ({ page }) => {
     await expectChartLaidOut(page.locator(CHART_FIGURE));
   });
 });

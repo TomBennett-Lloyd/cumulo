@@ -66,26 +66,27 @@ describe('tooltipPanelWidth', () => {
    * row-dependent and neither site said so, so this case fixes both halves: the
    * width it holds at, and the row shape it is measured over.
    */
-  it('takes 75 characters of site name to outgrow the plot a default-width chart draws', () => {
+  it('takes 76 characters of site name to outgrow the plot a default-width chart draws', () => {
     // The basis, asserted so the threshold below cannot quietly change meaning:
     // a margin change moves this, and the case that owns the figure is the one
-    // that should fail.
-    expect(DEFAULT_PLOT_WIDTH).toBe(552);
+    // that should fail. It did exactly that in #430, which gave the plot back
+    // eight units of right margin: 552 and 75 characters became 560 and 76.
+    expect(DEFAULT_PLOT_WIDTH).toBe(560);
 
     const wants = (length: number): number =>
       tooltipPanelWidth(TIME_LABEL, rowsUnderName(length), UNCAPPED);
 
-    expect(wants(74)).toBeLessThanOrEqual(DEFAULT_PLOT_WIDTH);
-    expect(wants(75)).toBeGreaterThan(DEFAULT_PLOT_WIDTH);
+    expect(wants(75)).toBeLessThanOrEqual(DEFAULT_PLOT_WIDTH);
+    expect(wants(76)).toBeGreaterThan(DEFAULT_PLOT_WIDTH);
 
-    // And through the shipped call, ceiling included: at 74 the panel is still
-    // sized by its content, at 75 it is the plot's width and the name is being
+    // And through the shipped call, ceiling included: at 75 the panel is still
+    // sized by its content, at 76 it is the plot's width and the name is being
     // clamped. Asserted here too because the threshold is only interesting as a
     // statement about what the reader gets.
-    expect(tooltipPanelWidth(TIME_LABEL, rowsUnderName(74), DEFAULT_PLOT_WIDTH)).toBeLessThan(
+    expect(tooltipPanelWidth(TIME_LABEL, rowsUnderName(75), DEFAULT_PLOT_WIDTH)).toBeLessThan(
       DEFAULT_PLOT_WIDTH,
     );
-    expect(tooltipPanelWidth(TIME_LABEL, rowsUnderName(75), DEFAULT_PLOT_WIDTH)).toBe(
+    expect(tooltipPanelWidth(TIME_LABEL, rowsUnderName(76), DEFAULT_PLOT_WIDTH)).toBe(
       DEFAULT_PLOT_WIDTH,
     );
   });

@@ -133,8 +133,10 @@ describe('highestOverlayKw', () => {
 
 /**
  * A width chosen for arithmetic rather than for realism: `chartPlot(608)` puts
- * the plot's edges at 56 and 576, a span of 520, so runs of two and three
- * samples land on whole pixels.
+ * the plot's edges at 56 and 584, a span of 528, so runs of two and three
+ * samples land on whole pixels. (56 and 576, a span of 520, until #430 gave the
+ * plot eight units of right margin back; the property this width was picked for
+ * survived the change, and the numbers stating it did not.)
  *
  * **The rounding these fixtures have to stay clear of applies to both axes.**
  * `d3-shape`'s generators build their path with `digits = 3` (`withPath` in

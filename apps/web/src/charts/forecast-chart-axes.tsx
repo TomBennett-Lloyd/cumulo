@@ -30,6 +30,37 @@ import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './c
 /** SVG user units between a kW tick label and the plot's left edge. */
 const Y_LABEL_GAP = 10;
 /**
+ * The canvas x a kW tick label's end may never come inside, whatever gutter its
+ * plot was given.
+ *
+ * Everything to the left of it is spoken for and cannot move: the rotated
+ * `Power (kW)` title's box runs to canvas x 13.66 at the shipping type — its
+ * far end is already 0.34 units *past* the canvas edge, so it cannot be slid
+ * over — and the widest label `axisTicks` can print is `1000` at 30.23 units
+ * measured on a rendered page, which has to sit whole or it is the #19 defect.
+ * 13.66 + 30.23 leaves 2.1 units of clearance between the two at 46, and that is
+ * this number.
+ *
+ * A floor rather than a second gap because the wide gutter already sits exactly
+ * on it: 56 − `Y_LABEL_GAP` is 46. So the two say one thing between them —
+ * a label sits `Y_LABEL_GAP` from the plot where the gutter can afford it, and
+ * the narrow gutter (`chart-geometry.ts`'s `PLOT_LEFT_NARROW`, 50) buys its six
+ * units back out of that gap, leaving 4. There is nothing under 46 left to
+ * spend, which is why that module's floor is 50 and not lower.
+ */
+const KW_LABEL_END_FLOOR = 46;
+/**
+ * Where a kW tick label ends — its `text-anchor="end"` x — in the gutter this
+ * plot was given.
+ *
+ * `Math.max` and not a branch on the width: this file is handed a plot rather
+ * than a measurement, and the constraint is a position on the canvas rather
+ * than a rule about panels, so it is expressible without knowing which gutter
+ * `chartPlot` chose (`architecture.md` rule 9 — the threshold has one owner and
+ * it is not here).
+ */
+const kwLabelX = (plot: PlotRect): number => Math.max(KW_LABEL_END_FLOOR, plot.left - Y_LABEL_GAP);
+/**
  * The three baselines under the plot's floor, spending the band
  * `chart-geometry.ts`'s `X_AXIS_BAND` reserves: the hours, the days that
  * qualify them, and the axis title under both.
@@ -49,8 +80,16 @@ const X_TITLE_BASELINE = 41;
  *
  * Its glyphs run *across* that line once the rotation is applied — ascenders one
  * way, descenders the other — so the title occupies roughly this ± half a line
- * of text, and 8 puts that band clear of both the canvas edge and the widest kW
- * label. `PLOT_LEFT` carries the arithmetic for the gutter the two share.
+ * of text: canvas x −0.34 to 13.66, measured on a rendered page for #430. That
+ * band is the whole reason the gutter cannot be thinner than it is, and it is
+ * why this constant cannot simply be moved left to make room — the ascender end
+ * is already a third of a pixel past the canvas edge, which the containment
+ * budget in `e2e/chart-surfaces.spec.ts` absorbs (0.005 of the box's height,
+ * against a quarter) and a smaller `Y_TITLE_X` would not.
+ *
+ * `KW_LABEL_END_FLOOR` above holds the label off the other end of that band, and
+ * `chart-geometry.ts`'s two `PLOT_LEFT_*` constants carry the arithmetic for the
+ * gutter all three share.
  */
 const Y_TITLE_X = 8;
 
@@ -76,7 +115,7 @@ export const gridElements = (scale: ChartScale): readonly ReactElement[] =>
         />
         <text
           className="forecast-chart-axis-label"
-          x={scale.plot.left - Y_LABEL_GAP}
+          x={kwLabelX(scale.plot)}
           y={y}
           textAnchor="end"
           dominantBaseline="middle"
