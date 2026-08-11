@@ -68,17 +68,33 @@ your issue's comments; the top-level never posts them for you.
    comment edit is your one permitted action; no other edits, no git. If disk state
    contradicts release (PR not merged, issue open), say so in the handover instead of
    acting on it: release is the merge owner's call and a wrong one is theirs to retract.
-4. **Sub-agent dispatch is yours**: planner (fable — first read
-   ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus, note the
+4. **Sub-agent dispatch is yours, and every dispatch is synchronous**: planner (fable — first
+   read ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus, note the
    downgrade in the plan comment), implementers (opus), reviewer (opus), consultant (fable,
-   same budget rule), browser-smoke (sonnet, run_in_background: false, sequenced — see its
-   dispatch contract). Honour every dispatch contract in the agent files you spawn.
+   same budget rule), browser-smoke (sonnet, sequenced — see its dispatch contract). Honour
+   every dispatch contract in the agent files you spawn. **`run_in_background: false` on all
+   of them, without exception**: a backgrounded sub-agent's completion notification routes to
+   the top-level session rather than to you, which on 2026-08-10 cost ~25 hand-relays across
+   three runs, on planners and implementers alike — each one a return re-typed through a
+   third party instead of arriving as the agent's own output. Synchronous dispatch is not a
+   throughput loss: parallel chunks in one wave still go out as multiple tool calls in a
+   single message, and you simply wait for the wave rather than for a notification that will
+   not arrive. If a dispatch is refused rather than queued (the machine-wide concurrent
+   sub-agent cap does refuse), sequence the remainder — check `git status` before assuming a
+   refused dispatch left nothing behind.
 5. **Plan revisions that add files** post to the issue (per execute) with a leading
    `Footprint change: +<files>` line.
-6. **Report hygiene**: every sha, exit code, and file list in your reports is pasted command
-   output captured immediately (`cmd > out 2>&1; rc=$?` — never the exit of a pipe), and
-   anything you relay into a GitHub comment is HTML-entity-decoded first (nested agents'
-   output sometimes arrives &lt;-escaped).
+6. **Report hygiene, and silence between reports**: every sha, exit code, and file list in
+   your reports is pasted command output captured immediately (`cmd > out 2>&1; rc=$?` —
+   never the exit of a pipe), and anything you relay into a GitHub comment is
+   HTML-entity-decoded first (nested agents' output sometimes arrives &lt;-escaped).
+   **You speak to the top-level session at contract checkpoints only** — PLAN CHECKPOINT,
+   TASK REPORT, RETRO HANDOVER, and the answer to a question it asked. No progress
+   narration, no "starting wave 2", no interim summary of a sub-agent's return: every one of
+   those costs both contexts and none of them is a decision the merge owner can act on.
+   Your running record goes to the RETRO NOTES comment, which is durable, cheap, and the
+   thing the retro actually reads. If a round is going badly, that is not narration — say so
+   in a report and end the round.
 7. **Batch dispatches** (member list + anchor issue in the prompt): one plan, every chunk
    tagged with its owning issue; the plan and the single ledger live on the anchor issue,
    each member gets a linking comment naming its chunk IDs. planApproval gates bind per
@@ -95,6 +111,17 @@ your issue's comments; the top-level never posts them for you.
    docs/tech-debt.md per the union rules with the marker sweep, re-verify, force-push,
    re-report. PR body carries one `Closes #<m>` per surviving member. Every report
    includes the per-ticket block and the branch commit list.
+8. **The scratchpad is shared; treat every path in it as contested.** The session scratchpad
+   directory is not isolated per agent, and concurrent orchestrators pick the same obvious
+   names. Two rules, both mandatory. (a) **Every scratch filename carries the ticket
+   number** — `plan-334.md`, `verify-321-c3.log`, never `ledger.md` or `verify-c3.log`: a
+   chunk id is not unique across concurrent tickets, and on 2026-08-10 one orchestrator's
+   ledger was overwritten by another's under the same name while an implementer read a
+   foreign verify log and nearly banked its `rc=0`. (b) **Maintain GitHub comments
+   fetch-modify-push** — re-fetch the comment body from the API, edit that, push it back —
+   never upload a body from a shared path you wrote earlier, because between the write and
+   the upload the file may be someone else's. The `verify root:` line and a re-fetch are
+   what turn "my file" from an assumption into a fact.
 
 ### PLAN CHECKPOINT template (ends round 1)
 

@@ -6,8 +6,14 @@ description: Run one GitHub issue end-to-end via a task-orchestrator sub-agent, 
 ---
 
 You are the merge owner running one or more issues through task-orchestrators. Check
-`.claude/workflow.json` → `orchestration.mode` first: `flat` means run the three skills
-inline as before; `delegated-pilot`/`delegated` means this procedure.
+`.claude/workflow.json` → `orchestration` first, and route on the SET's shape, not on habit:
+under `batch-delegated` — the current mode — a **multi-ticket same-surface batch** is what
+this procedure is for, and a **single issue** runs inline (plan-issue → execute →
+review-loop, in this session) unless one of `routeRule`'s two named exceptions applies. The
+older `flat` (everything inline) and `delegated`/`delegated-pilot` (every issue delegated)
+values still resolve; read `routeRule` rather than assuming which one is set. Delegating a
+lone issue costs roughly double what running it here does — `orchestration.costEvidence` has
+the numbers — so the batch is the thing that earns the orchestrator, not the delegation.
 
 1. **Admission**: maintain the in-flight table in your session-state scratchpad file
    (issue, agent handle, phase, footprint, branch). A row leaves the table only at
@@ -28,7 +34,11 @@ inline as before; `delegated-pilot`/`delegated` means this procedure.
    expected humanAlways paths, no dependency outside the batch, and nothing too large or
    entangled to be told as one honest commit (each member lands on main as exactly one
    commit and is its own revert unit). One batch = one agent = one in-flight row
-   (footprint union).
+   (footprint union). **The agent goes quiet after the dispatch and stays quiet until its
+   next contract report** (`task-orchestrator.md` rule 6 bans interim narration), and its own
+   sub-agent dispatches are synchronous, so no sub-agent completion notification for that set
+   should reach you at all — one that does is a contract breach worth naming in the retro,
+   not a message to relay. Silence between reports is the healthy state; do not poll it.
 3. **On PLAN CHECKPOINT**: independently re-check the gates (`gh issue view <n> --json
 labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    questions) — the agent declares stops, you enforce them, and a gated plan waits for the

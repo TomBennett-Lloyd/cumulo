@@ -29,7 +29,7 @@ brew install shellcheck # required: pnpm verify's lint:sh gate hard-fails withou
 brew install actionlint # required: pnpm verify's lint:workflows gate hard-fails without it
 ```
 
-`pnpm install` runs the root `prepare` script, which sets `core.hooksPath=.githooks` — the hook is committed and version-controlled, so there is nothing to copy into `.git/hooks` by hand.
+`pnpm install` runs the root `prepare` script, which sets two pieces of repo-local git config. `core.hooksPath=.githooks` points git at the committed hook, so there is nothing to copy into `.git/hooks` by hand. `commit.cleanup=whitespace` stops git deleting comment lines from commit messages: every commit subject here begins `#<issue>:`, which git's default `cleanup=strip` reads as a comment and silently removes, promoting the body's first paragraph to subject. It bites only where git re-commits a message nobody retyped — `git rebase --continue` after a conflict, most often — and "Successfully rebased" is not evidence to the contrary; PR #385 lost a subject that way.
 
 Three layers guard the same rules at different moments, deliberately redundant but with no duplicated work:
 
