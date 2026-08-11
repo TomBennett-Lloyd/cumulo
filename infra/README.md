@@ -167,11 +167,11 @@ cd infra/bootstrap
 
 ### Where the phases sit relative to PR review
 
-The runbook splits at the plan, because `.tf` files require human review before they are applied ([CLAUDE.md](../CLAUDE.md) merge policy) and because a plan is exactly the artefact a reviewer needs:
+The runbook splits at the plan because a plan is exactly the artefact a reviewer needs, and the apply follows the merge. This section is where that merge policy is stated; every other stop-here step in this document points back here rather than restating it. A `.tf` PR is a source-code PR under `merge.reviewedSourceRule` (`.claude/workflow.json` owns it): it merges on green CI plus a review-loop APPROVE, with no labelling step and no separate human sign-off, because `infra/**` is not a `humanAlways` path.
 
 - **Phase A** — through `terraform plan`. Nothing is created; a plan needs only read access. Its summary goes in the PR body.
-- **PR review** — human, on the PR.
-- **Phase B** — `apply` onward, after review.
+- **PR review** — per merge policy, on the PR.
+- **Phase B** — `apply` onward, after the merge.
 
 On the bootstrap PR this ordering is mandatory. On any later clean spin-up (including the teardown rehearsal's re-apply) there is no PR in flight, so Phase A runs straight into Phase B.
 
@@ -243,7 +243,7 @@ terraform plan -no-color | tee ~/cumulo-bootstrap-plan.txt
 
 Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, and the AWS Budgets cost-ceiling budget. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
 
-**A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for review. `oidc-smoke` does not run on the PR at all — it has not been a pre-merge check since #11 (convention 8) — so there is no red check to explain here; B7 runs it by hand once the variables exist.
+**A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). `oidc-smoke` does not run on the PR at all — it has not been a pre-merge check since #11 (convention 8) — so there is no red check to explain here; B7 runs it by hand once the variables exist.
 
 ### Phase B — apply, migrate, publish
 
@@ -482,7 +482,7 @@ Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — the topic and its em
 
 **If the plan fails with the "must hold a single plain email address" message**, the parameter holds a display name, angle brackets, or a comma-separated list. That is a deliberate `postcondition` in `topic.tf`, mirroring `bootstrap/budget.tf`: AWS accepts a malformed endpoint, creates a subscription that looks healthy, and never delivers — which would silence every alarm in the platform. Fix the parameter and re-plan.
 
-**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy).
+**A5. Stop here on the PR.** Phase B waits for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review).
 
 ### Phase B — apply, confirm, and prove delivery
 
@@ -569,7 +569,7 @@ cd infra/storage
 
 ### Phase A — configure and plan the tables
 
-The same A/B split as the bootstrap runbook, and for the same reason: `.tf` files require human review before they are applied, and a plan is exactly the artefact a reviewer needs. The heading differs from bootstrap's only so the two sections have distinct anchors.
+The same A/B split as the bootstrap runbook, and for the same reason: a plan is exactly the artefact a reviewer needs, and the apply follows the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). The heading differs from bootstrap's only so the two sections have distinct anchors.
 
 **A1. Create the two gitignored local files from their committed examples.**
 
@@ -619,7 +619,7 @@ Tables + alarm _instances_ is the expected plan count; blocks expanded by `for_e
 
 **The invariant, which outlives the number:** this stack plans exactly the tables `tables.tf` declares plus their throttle alarms, and nothing else. Any other count means the configuration is not what this document describes; stop and find out why — and a count **above** the arithmetic above is the one to stop on hardest, because the surplus resource is an `aws_appautoscaling_target` or `aws_appautoscaling_policy`, which is the single thing `tables.tf` exists to prevent. A table added by a later ticket moves the number and leaves the invariant untouched; re-run the greps before concluding that a plan is wrong.
 
-**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, table-name shape, billing modes — and label it `awaiting-review`.
+**A5. Stop here on the PR.** Phase B waits for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). Summarise the plan in the PR body — resource counts, table-name shape, billing modes.
 
 ### Phase B — apply and prove
 
@@ -776,7 +776,7 @@ terraform plan -no-color | tee ~/cumulo-ingestion-plan.txt
 
 Expect **`Plan: 14 to add, 0 to change, 0 to destroy.`** — the queue, the DLQ, the function, the log group, the EventBridge rule, its target, the async invoke config that pins the function's retry policy to zero, the Lambda permission, the execution role, its inline policy, the three alarms, and the deploy grant on `cumulo-github-actions`. Any other count means the configuration is not what this document describes; stop and find out why. The five data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, and three IAM policy documents (Lambda trust, execution, deploy) — are read rather than created and add nothing to the count.
 
-**A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, queue-name shape, the timeout numbers — and label it `awaiting-review`. Per convention 7, quote shapes rather than digits.
+**A6. Stop here on the PR.** Phase B waits for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). Summarise the plan in the PR body — resource counts, queue-name shape, the timeout numbers. Per convention 7, quote shapes rather than digits.
 
 ### Phase B — apply and prove the cycle
 
@@ -934,7 +934,7 @@ cd infra/api
 
 ### Phase A — build, configure, and plan the API
 
-The same A/B split as every other runbook, and for the same reason: `.tf` files require human review before they are applied, and a plan is exactly the artefact a reviewer needs.
+The same A/B split as every other runbook, and for the same reason: a plan is exactly the artefact a reviewer needs, and the apply follows the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review).
 
 **A1. Build the artefact. This comes first, not last.**
 
@@ -986,7 +986,7 @@ Expect **`Plan: 15 to add, 0 to change, 0 to destroy.`** — the function, its l
 
 **Read both throttles in the plan before approving it.** `default_route_settings` should show `throttling_rate_limit = 10` and `throttling_burst_limit = 20` — the bound in ADR 0005's cost table. The three `route_settings` blocks should show `2` and `4` on the write route keys, which is ADR 0006's layer 2. A plan that does not show them is a plan that costs something else.
 
-**A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, the throttle numbers, the function name — and label it `awaiting-review`.
+**A6. Stop here on the PR.** Phase B waits for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). Summarise the plan in the PR body — resource counts, the throttle numbers, the function name.
 
 ### Phase B — apply and prove the endpoint
 
@@ -1110,7 +1110,7 @@ cd infra/forecast
 
 ### Phase A — build, configure, and plan the forecast
 
-The same A/B split as every other runbook, and for the same reason: `.tf` files require human review before they are applied, and a plan is exactly the artefact a reviewer needs.
+The same A/B split as every other runbook, and for the same reason: a plan is exactly the artefact a reviewer needs, and the apply follows the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review).
 
 **A1. Build the artefact. This comes first, not last.**
 
@@ -1162,7 +1162,7 @@ Expect **`Plan: 7 to add, 0 to change, 0 to destroy.`** — the function, the lo
 
 Three values in that plan are worth reading rather than skimming, because all three are decisions the review is for: `timeout = 50` on the function (half of the 6× coupling with ingestion's `visibility_timeout_seconds = 300`), and `batch_size = 1` and `maximum_concurrency = 2` on the mapping (the write-side bound that kept a burst of location messages from hitting `cumulo-series`' provisioned write capacity all at once — since #258 that table is on-demand, so the bound is a consumer-side choice rather than a capacity one; `infra/forecast/event-source.tf` owns it).
 
-**A6. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — resource counts, the timeout and concurrency numbers, the queue-name shape. Per convention 7, quote shapes rather than digits.
+**A6. Stop here on the PR.** Phase B waits for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). Summarise the plan in the PR body — resource counts, the timeout and concurrency numbers, the queue-name shape. Per convention 7, quote shapes rather than digits.
 
 ### Phase B — apply and prove a message is consumed
 
@@ -1349,7 +1349,7 @@ Expect **`Plan: 7 to add, 0 to change, 0 to destroy.`** — the bucket, its publ
 
 **Read two things in the plan before approving it.** There must be exactly one `origin` block and one `default_cache_behavior`, both pointing at the bucket — an API origin is the change this stack must never acquire. And `viewer_certificate` must be `cloudfront_default_certificate = true` with no `aliases`: the custom domain is #21's, and its arrival is additive.
 
-**A5. Stop here on the PR.** `.tf` files require human review before they are applied (CLAUDE.md merge policy). Summarise the plan in the PR body — the resource count, the bucket name's _shape_ rather than its digits (convention 7), and the absence of an API origin.
+**A5. Stop here on the PR.** Phase B waits for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). Summarise the plan in the PR body — the resource count, the bucket name's _shape_ rather than its digits (convention 7), and the absence of an API origin.
 
 ### Phase B — apply, publish, and prove the edge
 
