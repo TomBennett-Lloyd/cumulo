@@ -42,6 +42,10 @@ const allOperations = (): OperationObject[] =>
 const jsonSchemaOf = (response: ResponseObject): unknown =>
   response.content?.['application/json']?.schema;
 
+/** A component's published prose, as a string a containment can be asserted on. */
+const descriptionOf = (name: string): string =>
+  String(openApiDocument.components.schemas[name]?.description);
+
 let routes: readonly Route[] = [];
 
 beforeAll(async () => {
@@ -142,6 +146,19 @@ describe('the contracts the document exists to publish', () => {
 
     expect(String(forecast?.description)).toContain('p10AcPowerKw');
     expect(String(forecast?.description)).toContain('p90AcPowerKw');
+  });
+
+  it('states that the band and the readings are simulated — disclosure is contract, not prose', () => {
+    // The disclosure has nowhere else to live: there is deliberately no field
+    // saying so (each description below argues why), so the sentence in the
+    // document *is* how a client learns it, and a description rewrite that drops
+    // it changes the contract. "gives every component a description" proves the
+    // prose exists at all; this proves what three of those descriptions say.
+    // `docs/design/dashboard-composition.md` — "Simulated-data disclosure" — owns
+    // which surfaces owe the disclosure and why.
+    expect(descriptionOf('Forecast')).toContain('band is simulated');
+    expect(descriptionOf('GenerationReading')).toContain('Simulated in this deployment');
+    expect(descriptionOf('FleetActualsResponse')).toContain('simulated');
   });
 
   it('states that an empty forecast array is a 200 rather than a 404', () => {

@@ -245,6 +245,62 @@ is gone (#284 D5). It existed only on the arm with no picker, and once the picke
 the caption was a description of a control standing next to it — so the panel now has exactly one
 (i), carrying the one description it has left: what the chart is a sum of.
 
+## Simulated-data disclosure
+
+Two of the quantities this page can draw are synthesized rather than measured: the actuals, and the
+band around the forecast. Which surfaces have to say so — and which deliberately do not — is one
+rule with two triggers. It is the section above's precedent stated generally rather than a second
+policy, and it exists so the next surface is decided by the rule instead of by whoever writes it
+(#406).
+
+**Description copy is gated on capability.** A sentence describing what a source _produces_ is
+written out per capability arm, whole, so the arms are auditable side by side rather than assembled
+from a conditional clause. `dashboard/fleet-panel-copy.ts` is that design and its header states it
+beside the arms; the section above is where the argument for it lives.
+
+**Drawn chrome is gated on arrival.** A legend row, a table column, a swatch — anything standing for
+a quantity in the plot — exists only where the drawn points carry that quantity.
+`charts/forecast-chart-legend.tsx` gates the band's row on it and
+`charts/forecast-chart-table.tsx` gates the band's two columns on the same test, each stating the
+reason beside itself (#295).
+
+**Where the two meet is the boundary working, not a contradiction.** #406 read the subtitle and the
+legend as disagreeing: the subtitle names the band on both of its arms, while the legend row and the
+columns appear only where the points carry one. Both are right, because they are about different
+things. The subtitle sits behind the panel's single (i) (`dashboard/FleetPanel.tsx`) and is the
+section's only self-description now that the window statement is the picker's job (above), so it
+describes **what the source produces**. The legend and the table describe **what the plot holds**.
+Following the data with the subtitle would trade a description of the section for a report on the
+current response, and would cost the arms the property they exist for.
+
+### The surfaces that carry it, and the two that deliberately do not
+
+- **The panel's subtitle, and both of the chart's names** — `dashboard/fleet-panel-copy.ts`.
+  Capability-gated. An accessible name and a table caption are copy like any other, which is why
+  they are arms rather than one string with a clause.
+- **The band's legend row** — `charts/forecast-chart-legend.tsx`. The actuals row beside it is
+  unconditional in the markup, and that is this rule's one exception rather than an instance of it:
+  the series is derived from the data (`actualKw != null`), not from the capability, so the demo
+  source earns the row by synthesizing a reading for every past hour while a real fleet with no
+  stored history yet draws no actuals line under a legend that still names one. Logged in
+  `docs/tech-debt.md` rather than fixed here — the diff that names a rule is the wrong place to
+  change a drawn surface.
+- **The band's columns** — `charts/forecast-chart-table.tsx`. Arrival-gated, and the one member
+  whose own headers carry no wording: what discloses over the table is the legend row above it and
+  the caption it takes from the copy module.
+- **The API's component descriptions** — `apps/api/src/openapi/components.ts`, on `Forecast`,
+  `GenerationReading` and `FleetActualsResponse`. There is deliberately no field, so the prose _is_
+  the contract, and `apps/api/src/openapi/document.test.ts` pins all three: a disclosure nothing
+  reads is one that can quietly stop being true.
+
+Deliberate non-members, named so their silence reads as a decision rather than an oversight: the
+README's opening product paragraph, and `PRODUCT_TAGLINE` (`apps/web/src/header/header-copy.ts`,
+rendered by `AboutDialog.tsx`). Both are vision prose about the product — the ML correction layer
+included, which is issue 20 and unbuilt — rather than a description of anything on screen. The
+disclosure belongs one layer in, to every surface that _displays_ the data, and it is complete
+there. A caveat in a tagline would hedge a sentence that shows no numbers, and it would be the
+first thing to go stale when the layer it hedges against ships.
+
 ## Two credits, and why that is not one too many
 
 The Open-Meteo credit is a CC BY 4.0 licence condition wherever weather-derived data is displayed
