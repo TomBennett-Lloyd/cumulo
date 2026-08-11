@@ -20,10 +20,11 @@
     "check:infra-mirrors": "bash .claude/scripts/check-infra-mirrors.sh",
     "check:markdown-links": "bash .claude/scripts/check-markdown-links.sh",
     "check:module-names": "bash .claude/scripts/check-module-names.sh",
+    "check:node-types": "bash .claude/scripts/check-node-types.sh",
     "check:supply-chain-policy": "bash .claude/scripts/check-supply-chain-policy.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm verify:root && pnpm lint && pnpm typecheck && pnpm check:aws-test-guard && pnpm test && pnpm check:adr-index && pnpm check:infra-mirrors && pnpm check:module-names && pnpm check:supply-chain-policy && pnpm check:markdown-links && pnpm test:scripts && pnpm format:check",
+    "verify": "pnpm verify:root && pnpm lint && pnpm typecheck && pnpm check:aws-test-guard && pnpm test && pnpm check:adr-index && pnpm check:infra-mirrors && pnpm check:module-names && pnpm check:node-types && pnpm check:supply-chain-policy && pnpm check:markdown-links && pnpm test:scripts && pnpm format:check",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks && git config commit.cleanup whitespace || true"
   },
   "lint-staged": {
