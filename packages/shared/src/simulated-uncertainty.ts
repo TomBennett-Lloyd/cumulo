@@ -82,12 +82,21 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * …)` binds before the rounding, so it moves with that cap and with nothing else here. The
  * sub-watt cases' `0`, `0.001` and `0.003` are stable at today's constants but are *not*
  * invariant — a base half-width of `0.088` flips one of them — so they are omitted as
- * low-sensitivity, not as fixed. In
- * {@link DECIMAL_GRID_TOLERANCE}'s comment: the worked example reads `0.88` and `1.12` off the
- * derived base to locate where the representation error enters. In the lead bullet above: `26 h`
- * is solved from the three width constants below, not measured, so it moves when any of them
- * does. Change either actuals bound, or {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}, and those
- * are the copies to change with it.
+ * low-sensitivity, not as fixed.
+ *
+ * Prose carries these constants too, and a paraphrase is invisible to a grep keyed to the literal
+ * (`architecture.md` rule 10), so the restatements in words are listed with the assertions. Riding
+ * {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}: the lead bullet above says the far horizon "sits
+ * flat at exactly ±50 %", which reads `±60 %` at `0.6`; and in `simulated-uncertainty.test.ts`,
+ * the p90 snap case calls its expectation "half again the estimate" and spells `1.5`, while the
+ * saturation case's name says "half the estimate" and its comment "the `0.5` cap". Riding the base
+ * half-width: that file's p10 snap case works through `1 − halfWidth` as `0.88` and reads
+ * `901.9999999999999`, `902` and `0.901` off it. In {@link DECIMAL_GRID_TOLERANCE}'s comment: the
+ * worked example reads `0.88` and `1.12` off the derived base to locate where the representation
+ * error enters. Also in the lead bullet: `26 h` is *solved*, not measured, from all four width
+ * constants — base, cloud, per-hour lead, and the ceiling it is solved against — so it moves
+ * with any of them, and reads `46 h` at a ceiling of `0.6`. Change either actuals bound, or
+ * {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}, and every copy above is one to change with it.
  *
  * A precondition rather than a copy, listed here for the same reason — it is a fact about another
  * module's value that this one silently depends on. {@link MAX_PLAUSIBLE_RESIDENTIAL_KW} must sit
@@ -166,8 +175,10 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * complaint. That is precisely the quiet unbracketed band outward rounding exists to remove.
  *
  * The failure is scale-free in `t`, so there is no safe absolute tolerance — not a small one, not
- * any. Whatever `t` is, a median whose scaled value falls below it comes back `{0, 0}`: `t = 1e-3`
- * breaks at `7.5e-7 kW`, `t = 1e-9` at `7.5e-13 kW`, and so on down. Nothing floors a non-zero
+ * any. The boundary is `t / (1000 × (1 + h))`, so it moves with the half-width and any figure
+ * quoted without one is only true in the regime it was computed in; anything below `t / 1500`
+ * breaks at *every* half-width this model produces. `t = 1e-3` fails a `5e-7 kW` estimate,
+ * `t = 1e-9` fails `5e-13 kW`, and so on down. Nothing floors a non-zero
  * `acPowerKw` away from zero (`z.number().gte(0)`, and the physics chain does not quantise), so
  * there is no smallest estimate for such a bound to sit under, and the invariant this module
  * leads with is "at every magnitude". Relative is not the better of two workable choices here; it

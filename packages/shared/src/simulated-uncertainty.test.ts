@@ -193,6 +193,16 @@ describe('simulatedUncertaintyBand', () => {
     expect(simulatedUncertaintyBand(forecast, -20)).toStrictEqual(
       simulatedUncertaintyBand(forecast, CLEAR_SKY),
     );
+
+    // The infinities are covers too, on a bare `number` parameter, and the clamp answers them the
+    // same way. Asserted rather than described because the module's note now says so, and the
+    // `NaN` case below is the only escape it claims — a claim that would otherwise rest on prose.
+    expect(simulatedUncertaintyBand(forecast, Number.POSITIVE_INFINITY)).toStrictEqual(
+      simulatedUncertaintyBand(forecast, OVERCAST),
+    );
+    expect(simulatedUncertaintyBand(forecast, Number.NEGATIVE_INFINITY)).toStrictEqual(
+      simulatedUncertaintyBand(forecast, CLEAR_SKY),
+    );
   });
 
   it('refuses a NaN cover at its own parse rather than returning a quiet band', () => {
