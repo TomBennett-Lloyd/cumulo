@@ -77,6 +77,19 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * grid-snap cases' `23.124` and `7.708`. Retuning one constant leaves the other's set untouched —
  * `0.5 → 0.6` moves `5`/`15` to `4`/`16` and does not touch `0.88`/`1.12`.
  *
+ * A second kind of member rides the same two constants from the other end: a **tuned input**, a
+ * value chosen so that an example lands where the case needs it. In `simulated-uncertainty.test.ts`
+ * the p10 snap case's estimate `1.025` is tuned against the base half-width, so that
+ * `1.025 × (1 − base) × 1000` lands a hair below a whole watt — the product
+ * {@link DECIMAL_GRID_TOLERANCE}'s own comment works through — and the p90 snap case's estimate
+ * `15.416` is tuned against {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}, so that
+ * `15.416 × (1 + `{@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}`) × 1000` lands a hair above one.
+ * Retuning either owned constant does not leave these cases wrong so much as pointless: their
+ * asserted literals are in the list above and move with the constant, and once those have been
+ * trued the input no longer sits a hair off a watt — so the case stops demonstrating the snap it
+ * was written for, silently, and while green. That quiet is the reason they are ledgered: a case
+ * that has lost its point looks exactly like one that still has it.
+ *
  * Two absences, for different reasons, because "it did not move when I tried it" is not a reason.
  * The ceiling case's `50` is *clamp*-dominated: `Math.min(`{@link MAX_PLAUSIBLE_RESIDENTIAL_KW}`,
  * …)` binds before the rounding, so it moves with that cap and with nothing else here. The
@@ -89,9 +102,11 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * **Read the list below as a floor, not a census**: it is what a sweep for the claim families —
  * the literals themselves, plus `half again|half the estimate|spans|±\d+ ?%|flat at|saturat` —
  * turned up, and the next paraphrase nobody thought to grep for is exactly the copy this ledger
- * cannot promise to hold. Where a figure could be *eliminated* rather than listed it was: the two
- * width constants' own docblocks state their meaning as an expression now, so they no longer
- * quote the numbers they own.
+ * cannot promise to hold. Neither half of that sweep reaches a tuned input, which carries neither
+ * the owner's literal nor any phrasing of it: the pair above was found by reading each case's
+ * arithmetic instead, and that reading is the sweep to repeat for them. Where a figure could be
+ * *eliminated* rather than listed it was: the two width constants' own docblocks state their
+ * meaning as an expression now, so they no longer quote the numbers they own.
  *
  * Riding {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}: the lead bullet above says the far horizon
  * "sits flat at exactly ±50 %", which reads `±60 %` at `0.6`; and in
@@ -137,6 +152,11 @@ const SIMULATED_UNCERTAINTY_LEAD_WIDENING_PER_HOUR = 0.005;
 
 /**
  * The ceiling on relative half-width: the band spans `1 − max` to `1 + max` times the estimate.
+ *
+ * That span is the width only where nothing else binds, which is the qualifier the summary above
+ * omits: p90 is clamped at {@link MAX_PLAUSIBLE_RESIDENTIAL_KW} *before* the rounding, so a site
+ * near nameplate publishes a band asymmetric about its estimate and narrower above than this
+ * ceiling alone implies.
  */
 const SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX = 0.5;
 
@@ -189,17 +209,21 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  *
  * The failure is scale-free in `t`, so there is no safe absolute tolerance — not a small one, not
  * any. The boundary is `t / (1000 × (1 + h))`, so it moves with the half-width, and any figure
- * quoted without one is only true in the regime it was computed in — the worst case being
- * `10 **`{@link POWER_DECIMALS}` × (1 + `{@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}`)`, below
- * which an estimate fails at *every* half-width this model produces. `t = 1e-3` fails a `5e-7 kW`
- * estimate, `t = 1e-9` fails `5e-13 kW`, and so on down; those two clear the worst case by enough
- * to survive any ceiling up to `1.0`. Nothing floors a non-zero
- * `acPowerKw` away from zero (`z.number().gte(0)`, and the physics chain does not quantise), so
- * there is no smallest estimate for such a bound to sit under, and the invariant this module
- * leads with is "at every magnitude". Relative is not the better of two workable choices here; it
- * is the only one. At every magnitude this module sees, `1e-9` sits about seven orders of
- * magnitude above a single ulp of the scaled value and at least four below the watt it must never
- * cross.
+ * quoted without one is only true in the regime it was computed in — the
+ * **worst-case boundary being** `t / (10 **`{@link POWER_DECIMALS}` × (1 + `
+ * {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}`))`, below which an estimate fails at *every*
+ * half-width this model produces. `t = 1e-3` fails a `5e-7 kW` estimate, `t = 1e-9` fails
+ * `5e-13 kW`, and so on down — and neither example has margin to spare: at a ceiling of exactly
+ * `1.0` both scale to precisely `t`, so the snap-to-zero they demonstrate survives
+ * **only because the comparison** in {@link onDecimalGrid} is `<=` rather than `<`. Zero margin,
+ * not "enough".
+ *
+ * Nothing floors a non-zero `acPowerKw` away from zero (`z.number().gte(0)`, and the physics
+ * chain does not quantise), so there is no smallest estimate for such a bound to sit under, and
+ * the invariant this module leads with is "at every magnitude". Relative is not the better of two
+ * workable choices here; it is the only one. At every magnitude this module sees, `1e-9` sits
+ * about seven orders of magnitude above a single ulp of the scaled value and at least four below
+ * the watt it must never cross.
  */
 const DECIMAL_GRID_TOLERANCE = 1e-9;
 
