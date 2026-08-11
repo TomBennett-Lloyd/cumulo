@@ -6,7 +6,7 @@ This is a portfolio project. The repo's **process** — commit history, PR disci
 
 ## Hard constraints
 
-- **Open-Meteo attribution is mandatory** (CC BY 4.0): a visible attribution link to [Open-Meteo.com](https://open-meteo.com/) wherever weather-derived data is displayed in the UI — the full "Weather data by Open-Meteo.com" phrase at standard widths; at widths where the row cannot hold it, the bare linked name is the sanctioned compact form (CC BY 4.0 §3(a)(2) permits medium-appropriate attribution; owner-amended 2026-08-09) — plus a data-sources credit in the README. The link itself is non-negotiable in every state.
+- **Open-Meteo attribution is mandatory** (CC BY 4.0): a visible attribution link to [Open-Meteo.com](https://open-meteo.com/) wherever weather-derived data is displayed in the UI — the full "Weather data by Open-Meteo.com" phrase at standard widths; at widths where the row as composed cannot hold its credits' full forms, the bare linked name is the sanctioned compact form (CC BY 4.0 §3(a)(2) permits medium-appropriate attribution; owner-amended 2026-08-09, composed-row reading owner-confirmed 2026-08-11) — plus a data-sources credit in the README. The link itself is non-negotiable in every state.
 - **API frugality by design**: Open-Meteo free tier (no key) — 10,000 calls/day, 5,000/hour, 600/minute. Only ever fetch weather for locations where active fleet sites exist.
 - **Cost ceiling**: free-tier-first AWS, hard ceiling ~$100/month. All infra in Terraform, designed for clean spin-up/tear-down.
 - **No long-lived AWS credentials**: GitHub Actions authenticates via OIDC only. Never commit secrets; `.env` is gitignored; gitleaks runs in CI.
@@ -32,8 +32,10 @@ Policy:
 - Writing or changing TypeScript types, or tempted by `any`/an assertion/a loose object shape? → `docs/standards/typing.md`
 - Writing or modifying a React component, hook, or `useEffect`? → `docs/standards/react.md`
 - Adding a module, package, service, or cross-package dependency, or restating an owned value (infrastructure, schema ceiling, cost) in code or prose — **or changing one**, which means enumerating its carriers _and_ the figures derived from it before you edit? → `docs/standards/architecture.md`
+- Changing behaviour that a comment beside it argues for or defends — which makes that comment part of the change surface? → `docs/standards/architecture.md`
 - Creating or splitting a file, extracting/naming a helper, choosing function vs class, or copy-pasting code? → `docs/standards/structure.md`
 - Writing a `catch`, or deciding what happens when something fails? → `docs/standards/error-handling.md`
+- Writing or changing a security policy whose directives have fallback semantics — a CSP, a CORS policy, any response header where an omitted directive inherits from another? → `docs/standards/security.md`
 - Writing or modifying tests, or deciding what to test? → `docs/standards/testing.md`
 - Adding, moving, or restyling anything a user sees — a component, layout, spacing, visible text or a label, a chart mark, a breakpoint or media query, focus or hover behaviour? → `docs/standards/design.md`
 
@@ -43,7 +45,7 @@ These docs are self-contained — one hop only, no chained references. If a rule
 
 - Every task starts from a GitHub issue. The plan lives in the issue (posted by `/plan-issue`); every PR links its issue. Never commit directly to `main` after bootstrap.
 - Sub-agent return contract: reports end with `STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING` plus detail. Diverging silently from the plan is the failure mode; stopping and reporting is correct behaviour.
-- Review loop (`/review-loop`): max 3 cycles. Systemic findings go to `docs/tech-debt.md`, not into endless iteration. Correctness bugs always block merge.
+- Review loop (`/review-loop`): max 3 cycles, plus a scoped confirmation pass on the final fix diff. Systemic findings go to `docs/tech-debt.md`, not into endless iteration. Correctness bugs always block merge.
 - **Merge policy** (`.claude/workflow.json`): docs/config PRs auto-merge on green CI; source-code PRs auto-merge on green CI **plus a review-loop APPROVE** (graduated 2026-08-01). Human review is reserved for `humanAlways` paths — `docs/adr/**`, `.claude/workflow.json`, `CLAUDE.md` — which get the `awaiting-review` label and wait (chat approval also unblocks); keep working on independent tickets meanwhile. An `awaiting-review` PR carries its own `docs/review-feedback.md` line **in the diff** — even "approved, no changes" — and the merger only removes the label; a quiet category must be distinguishable from an unlogged one, and a line owed after the merge is a line no gate can block (PRs #345 and #348, 2026-08-10). Gate changes are proposed via retro PR and decided by the user.
 - **Plan approval** (`.claude/workflow.json`): `planApproval.mode` is `auto` (graduated 2026-08-01) — `/plan-issue` posts the plan and execution proceeds, EXCEPT plans for `adr`-labelled issues, and plans whose Risks section holds a question only the user can answer: those stop and wait.
 - **Orchestration**: `.claude/workflow.json` → `orchestration` owns the lane rule — which ticket sets the top-level session runs inline and which it delegates to a persistent `task-orchestrator` (`/run-issue`), the token evidence behind the split, and how it rolls back. Read it there before starting a set; this bullet deliberately restates none of it, which is what `docs/standards/architecture.md` rule 9 asks of every mention that is not the owner.
