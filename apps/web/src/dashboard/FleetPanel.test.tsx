@@ -21,6 +21,7 @@ import {
   rowCells,
   settle,
   SIMULATED_ACTUALS_CAPABILITIES,
+  SITE_A,
   type StubFleet,
 } from './fleet-panel-test-fixture';
 import { EMPTY_FLEET_MESSAGE } from './state-copy';
@@ -31,8 +32,8 @@ import { EMPTY_FLEET_MESSAGE } from './state-copy';
  * Two of its other subjects have suites of their own, both split off when this
  * file reached the 300-line ceiling (`structure.md` rule 4). What a *selected
  * site* adds to the same chart is `FleetPanel.overlay.test.tsx`'s. The panel's
- * own furniture — one slim controls row, one (i), one chart present in every
- * state, and no visible heading over any of it — is
+ * own furniture — the controls row and its four items, one (i), the visible
+ * heading the section is named by, and one chart present in every state — is
  * `FleetPanel.structure.test.tsx`'s. All three share
  * `fleet-panel-test-fixture.tsx`, which is where the canned fleets and the two
  * lines every test writes to get a panel on screen live.
@@ -97,7 +98,9 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     const sites = await demoFleet(dataSource);
     const container = await renderSettled(dataSource, sites);
 
-    expect(screen.getByRole('group', { name: 'Aggregation range' })).toBeDefined();
+    // The trigger, which is the whole of the picker while nobody is asking: the
+    // windows fold behind a calendar icon since 2026-08-11 (`range-picker.tsx`).
+    expect(screen.getByRole('button', { name: 'Aggregation range' })).toBeDefined();
 
     openTip('About this chart');
 
@@ -111,22 +114,37 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     expect(subtitle).toContain('simulated actuals');
     expect(subtitle).toContain('simulated P10–P90 band');
+    // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
+    // value, because restating the sum here would only prove that two copies of it agree.
+    expect(container.querySelector('.fleet-chart-stats')?.textContent).toMatch(
+      /^60 sites · \d+(\.\d)? kW$/u,
+    );
     expectForecastPlotted(container);
   });
 
   /*
-   * There is no "60 sites · 332 kW" case here any more, and no pluralisation
-   * case under it. #323 deleted the line and `fleetStatsLine` with it: it
-   * restated the size of the fleet beside a chart of exactly that fleet, which
-   * is text stating what the UI already shows (`design.md` rule 2). The count
-   * survives in the site table's own summary, and `SiteTable.test.tsx` is where
-   * a case about it belongs — asserting it from this suite would be this
-   * component's tests pinning a sentence another component renders.
+   * The assertion above and the case below went with `fleetStatsLine` in #323
+   * and are back with it (owner, 2026-08-11). Restored rather than rewritten,
+   * for the reason the copy itself was: the wording they pin had an owner and a
+   * history, and a fresh pair would have re-decided both. The only change is the
+   * class they read — `.fleet-panel-stats` became `.fleet-chart-stats` when the
+   * panel became a band.
    *
-   * Its absence is pinned rather than merely un-asserted, in
-   * `FleetPanel.structure.test.tsx`'s accessible-name case, so a stats line
-   * growing back fails a gate rather than only a review.
+   * They are the only exercise either arm of `siteCountLabel` gets. The
+   * structure suite pins the line's *presence* by shape (`/\d+ sites? · /u`),
+   * which matches singular and plural alike, so without the case below the
+   * `count === 1` arm would ship unexercised.
    */
+  it('says "site" once and "sites" otherwise', async () => {
+    const oneSite = await renderSettled(new CountingFleetSource(FULL_FLEET), [SITE_A]);
+
+    expect(oneSite.querySelector('.fleet-chart-stats')?.textContent).toBe('1 site · 4.0 kW');
+
+    cleanup();
+    const twoSites = await renderSettled(new CountingFleetSource(FULL_FLEET));
+
+    expect(twoSites.querySelector('.fleet-chart-stats')?.textContent).toBe('2 sites · 8.0 kW');
+  });
 
   it('asks the source for 168 hours when the 7 d control is pressed', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
@@ -134,6 +152,10 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     expect(dataSource.forecastRanges).toEqual([24]);
 
+    // Two presses, because the windows are mounted only while the calendar
+    // trigger is open (`range-picker.tsx`). The first is not part of what this
+    // case pins — it is how the control the case is about is reached.
+    fireEvent.click(screen.getByRole('button', { name: 'Aggregation range' }));
     fireEvent.click(screen.getByRole('button', { name: '7 d' }));
 
     await waitFor(() => {
@@ -406,7 +428,9 @@ describe('FleetPanel with nothing to show', () => {
     // rearranging itself under a reader who was already looking at it (#284
     // D3/D5) — and an empty fleet still asks the source nothing, because the
     // queries are gated on having sites rather than on having a picker.
-    expect(screen.getByRole('group', { name: 'Aggregation range' })).toBeDefined();
+    //
+    // The trigger is the picker at rest, so the trigger is what is asked for.
+    expect(screen.getByRole('button', { name: 'Aggregation range' })).toBeDefined();
   });
 
   it('leaves the add-a-site invitation to the map, in every fleet state', async () => {

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
-import { PRESSED_RANGE_BUTTON } from './range-picker';
+import { RANGE_TRIGGER } from './range-picker';
 
 /*
  * What the browser paints when the reader arrived by pointer: nothing.
@@ -129,24 +129,34 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
 });
 
-test('paints no ring on the range picker when a pointer presses it', async ({ page }) => {
+test('paints no ring on the range picker’s trigger when a pointer presses it', async ({ page }) => {
   /*
-   * The already-pressed button, and not for convenience: `PRESSED_RANGE_BUTTON`
-   * selects by `aria-pressed`, so clicking an unpressed one would move the
-   * pressed state to it and leave the selector resolving to a *different*
-   * element than the one that was clicked — the ring would then be measured on a
-   * button nobody touched. Pressing the current window is also a real gesture
-   * that changes no state, which keeps this case about focus and nothing else.
+   * The calendar trigger, and not for convenience. This case measured the
+   * already-pressed chip until the 2026-08-11 fold, on the grounds that pressing
+   * the current window is a real gesture changing no state — so the selector
+   * still resolved to the element that was clicked, where pressing an unpressed
+   * chip would have moved the pressed state and left the ring measured on a
+   * button nobody touched. The chips are behind a disclosure now and a press on
+   * one *closes* it, which breaks that property much harder than moving the
+   * state would: the measured element leaves the document before the ring can be
+   * read.
+   *
+   * The trigger has the same property in a stronger form. It is on the row in
+   * every state, a press toggles a disclosure rather than moving anything the
+   * selector depends on, and focus stays on it throughout — which is what the
+   * helper's own focus assertion needs in order to mean anything.
    *
    * This control is worth pinning beyond being convenient to reach. Until this
-   * batch it was where a reader-initiated selection landed programmatically, so
-   * it is the button on the page most likely to reacquire a ring by accident.
+   * batch the picker was where a reader-initiated selection landed
+   * programmatically, so it is the part of the page most likely to reacquire a
+   * ring by accident, and the trigger inherited both that history and the
+   * picker's place on the row.
    */
-  const ring = await ringAfterPointerClick(page, PRESSED_RANGE_BUTTON);
+  const ring = await ringAfterPointerClick(page, RANGE_TRIGGER);
 
   expect(
     paintsARing(ring),
-    `The range picker painted ${ring.style} at ${String(ring.widthPx)}px after a pointer click.`,
+    `The range picker’s trigger painted ${ring.style} at ${String(ring.widthPx)}px after a pointer click.`,
   ).toBe(false);
 });
 

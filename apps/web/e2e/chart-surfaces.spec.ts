@@ -350,8 +350,16 @@ test('fills the panel and folds the raw data away', async ({ page }) => {
     })
     .toBe(FILLS_PANEL);
 
-  const summary = figure.locator('.forecast-chart-summary');
-  const table = figure.locator('.forecast-chart-table');
+  /*
+   * Scoped to the section rather than to the figure: since 2026-08-11 the twin
+   * is a panel *after* the figure instead of a row inside it, so a figure-scoped
+   * locator would resolve to nothing and every assertion below would fail on a
+   * chart that is behaving perfectly (`charts/ForecastChart.tsx` carries the
+   * move). The band is still the right scope — the page draws other disclosures,
+   * and the fleet table's is one of them.
+   */
+  const summary = page.locator(`${CHART_SECTION} .forecast-chart-summary`);
+  const table = page.locator(`${CHART_SECTION} .forecast-chart-table`);
 
   /*
    * Closed means closed *to a reader*, which is the claim jsdom cannot make: a
@@ -404,10 +412,13 @@ test.describe('the first viewport', () => {
 
   /*
    * #284 D15: the map, the row of controls over the chart, and the whole plot on
-   * one screen. The heading row that phrasing named went in #323 — the section's
-   * name is an `aria-label` now and the fleet's numbers went entirely — so what
-   * is left above the plot, and what is measured below, is
-   * `.fleet-chart-controls`: the (i) and the window picker.
+   * one screen. The separate heading row that phrasing named went in #323, and
+   * what is above the plot — and what is measured below — has been one element
+   * since: `.fleet-chart-controls`. The owner's 2026-08-11 reversal put the
+   * heading and the fleet's numbers back *onto that row* rather than above it,
+   * so the thing measured here is unchanged and so is its height: the row is one
+   * flex line whose tallest item is still the picker (`charts/chart-geometry.ts`
+   * adds the stack up and states why `CHART_VIEW_BOX_HEIGHT` did not move).
    *
    * The reason this is a *layout* case and not an arithmetic one is that the
    * stack above the chart is made of text boxes — a header bar, a row of chips —

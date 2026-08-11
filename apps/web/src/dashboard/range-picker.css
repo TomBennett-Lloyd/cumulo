@@ -1,68 +1,271 @@
 /*
- * The window picker's own sheet.
+ * The window picker's own sheet: a calendar trigger, and the sheet of chips it
+ * reveals.
  *
- * These three rules are `views.css`'s `.view-range` block, moved verbatim apart
- * from the class names and given the file the control now lives beside (#148).
- * The rest of `views.css` — the chart views' headings, selects, status lines and
- * footers — died with the views themselves: its state lines had already been
- * superseded by `panel-states.css`, and everything else described pages that no
- * longer exist.
+ * The three chip rules started as `views.css`'s `.view-range` block, moved
+ * verbatim apart from the class names and given the file the control now lives
+ * beside (#148). The rest of `views.css` — the chart views' headings, selects,
+ * status lines and footers — died with the views themselves: its state lines had
+ * already been superseded by `panel-states.css`, and everything else described
+ * pages that no longer exist.
  *
  * Every value is a token — the gate in stylelint.config.mjs, not a style choice
  * (react.md rule 5).
  */
 
-/* `flex-shrink: 0` is the belt to `fleet-panel.css`'s braces (#344, design.md
+/* The box is the trigger's, and the three chips have left the flow for a sheet
+ * positioned against the row rather than against this corner. `inline-flex` so
+ * the root is exactly as wide as the trigger rather than a block claiming the
+ * line.
+ *
+ * No `position`, deliberately — the sheet below is anchored to
+ * `.fleet-chart-controls`, on the terms `info/info.css` states at the head of
+ * that file for the tip's panel and this file does not restate
+ * (`architecture.md` rule 9). It was `relative` until 2026-08-12 and that one
+ * declaration was the whole of a CI failure; the popover's own note below
+ * carries the measurement, because that is where the anchor is chosen.
+ *
+ * `flex-shrink: 0` is the belt to `fleet-panel.css`'s braces (#344, design.md
  * rule 7 — the window selectors stay on one line at every screen size). What it
- * stops is the group being *squeezed* below its min-content width while it is
- * sharing a line, which would crush the three chips rather than move them.
+ * stops is the picker being *squeezed* below its min-content width while it is
+ * sharing a line. What that protects is smaller than it was and is kept for a
+ * reason that grew rather than shrank: a 24px trigger has nothing much left to
+ * crush, but it is now the row's only route to the window at all, so a trigger
+ * squeezed to a sliver is not a cramped control but an unreachable one. The
+ * chips it opens are laid out in a sheet that is not in the row's flex line and
+ * cannot be squeezed by it.
  *
  * It used to be half of a pair: the stats line yielding was what stopped the
- * group being pushed onto a line of its own. That item went with #323, and
- * nothing replaced it — the controls row it now sits in carries two controls and
- * no text, so at a width that cannot hold both the picker takes a line of its
- * own, which is the outcome `fleet-panel.css`'s `flex-wrap` deliberately sanctions
- * (controls have wrap priority; they are never crushed). The rule below is
- * unchanged by that and is the claim this file is entitled to make: whatever line
- * the group ends up on, the chips on it keep their width.
+ * group being pushed onto a line of its own. That item went with #323 and came
+ * back with the owner's 2026-08-11 reversal — but the pairing did not, because
+ * it no longer yields the same way. It shrank to an ellipsis then; it is hidden
+ * whole below a measured container width now (`fleet-panel.css` owns that width
+ * and derives it, and re-derived it against this trigger). So above the
+ * threshold the row holds all four items and nothing has to give, and below it
+ * the text is already gone before the question arises.
  *
  * Written here rather than at the row, because it is the picker's own claim about
  * itself and travels with it to any second caller. */
 .range-picker {
-  display: flex;
+  display: inline-flex;
   flex-shrink: 0;
+}
+
+/* The (i)'s quiet chrome, deliberately not the (i)'s shape.
+ *
+ * Chrome first, because that is the half that should match: this trigger stands
+ * immediately beside `.info-tip-button` on the controls row, so a resting border
+ * in `--color-border` over `--color-surface` with muted ink, going to accent and
+ * full ink on hover and while open, is one treatment for one meaning — a small
+ * quiet control that reveals something (design.md rule 9). Two channels rather
+ * than one, for info.css's reason: a control whose only state cue is a hue is a
+ * control some readers never see change. The platform focus ring is @cumulo/ui's
+ * and is not suppressed here.
+ *
+ * The shape is `--radius-md` rather than the (i)'s `--radius-full`, and that is
+ * the half that should *not* match. Round is the (i)'s own idiom — a letter in a
+ * circle — and borrowing it for a calendar would make two different meanings
+ * wear one treatment. `.header-menu-button` in header.css is the app's other
+ * icon disclosure and is exactly this shape, which is the convention design.md
+ * rule 1 asks to be used rather than beaten.
+ *
+ * The box is `--space-6` on both axes, matching the (i) exactly — a spacing
+ * token doing a sizing job, which is the same expression info.css uses and the
+ * reason neither is a raw length. Matching it is load-bearing rather than
+ * tidy: the row's height is set by its tallest item, and two 24px controls
+ * beside a 22.5px heading line box is what keeps the row where
+ * `charts/chart-geometry.ts` counted it. */
+.range-picker-trigger {
+  display: inline-flex;
+  width: var(--space-6);
+  height: var(--space-6);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.range-picker-trigger:hover,
+.range-picker-trigger[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+/* The calendar, in the trigger's own ink. `currentColor` inherits the button's
+   `color`, so the mark follows it through both themes and through the open and
+   hover treatments above without a second colour decision to keep in step — the
+   gate allows it by `ignoreValues` for the reason it allows `var(--token)`, it
+   being a reference to a decided colour rather than a spelled one.
+
+   `fill: none` because a stroked path left at the default fill would ink the
+   region the lines bound. `display: block` because an inline `<svg>` sits on the
+   text baseline and leaves descender space beneath it, which in a button whose
+   only child it is would show up as padding that is square in this file and not
+   square on screen. Both are `.header-menu-icon`'s reasons in header.css, where
+   the same two mistakes were made and fixed.
+
+   The box is `--space-4` inside a `--space-6` button, leaving a step of clear
+   space on every side. `stroke-width` is a raw length, which is the residual
+   stylelint.config.mjs documents rather than a value slipping the gate — the
+   token set has no stroke scale, and `.header-menu-icon` carries the same one. */
+.range-picker-icon {
+  display: block;
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+/*
+ * The sheet of chips, hanging under the row the trigger sits on.
+ *
+ * **Anchored to the row, not to the trigger** — `.fleet-chart-controls` in
+ * `fleet-panel.css` is the nearest positioned ancestor and declares
+ * `position: relative` to be exactly that, and `.range-picker` above carries no
+ * `position` so nothing nearer intercepts. That is `info/info.css`'s contract for
+ * `.info-tip-panel`, joined rather than re-derived: the argument for anchoring an
+ * overlay to the consuming row and clamping it there is written once, at the head
+ * of that file, and this sheet is its second consumer (`architecture.md` rule 9).
+ *
+ * It hung off the trigger until 2026-08-12, and that is a fixed defect rather
+ * than a tidied anchor — the same defect, in the same batch, that re-anchoring
+ * the tip's panel fixed. The premise the old note argued from was that the picker
+ * is the last item on the row, so a right-pinned sheet grows back across the row
+ * it came from. That premise is only true while the row is one line. `flex-wrap`
+ * is on the row for a reason this file's `flex-shrink: 0` note names, and when it
+ * fires the picker takes a line of its own at the row's **start** — the auto
+ * margin that carries the controls to the end sits on the (i), which stays on the
+ * first line. A sheet pinned to a trigger 24px from the left edge then grows
+ * leftwards off the page, which is the `right: 0` reasoning inverted by the one
+ * case it did not consider.
+ *
+ * Measured, in Chromium at 390x844 over this tree's build, with `--font-sans`
+ * forced to a stack whose first available family is not the platform's system
+ * font: the row wraps (60px tall, against 24px under the system stack), the
+ * trigger lands at x=16, and the first chip opens at **x=-142.7** — 151px of
+ * sheet off the left edge. That is the CI failure (`web-e2e` on PR #443 read
+ * x=-141.5, the ~1px being the runner's fallback family against the local
+ * proxy's), and it is why this is a real anchor bug rather than a platform
+ * difference to tolerate: the row wraps wherever the heading and the numbers run
+ * wide, and nothing about the sheet was bounded by the page.
+ *
+ * `right: 0` and `top: 100%` are now the row's right edge and the row's bottom —
+ * so the sheet opens under whichever line the trigger wrapped to rather than over
+ * the row, at the end of the band the chart occupies, at every width and with no
+ * breakpoint. Both are anchors rather than sizes: one a percentage of the
+ * containing block, the other the zero the CSS gate ignores.
+ *
+ * `z-index` mirrors `.info-tip-panel`'s, and it mirrors the honest half of that
+ * rule too. header.css's note is the argument for keeping one: a value belongs
+ * to a component rather than to a placement, because where the next opener sits
+ * is not something this sheet gets told and a value that has to be added back at
+ * the point of use is one that will not be. What info.css states plainly beside
+ * its own is that no spec observes it and nothing needs it at the placement it
+ * has, and the same is true here — **measured, with the control that makes the
+ * measurement mean something**. In Chromium over these stylesheets and this
+ * row's real markup, a hit test at the open sheet's own centre returns a chip
+ * inside it; removing the declaration and repeating the hit test returns the
+ * same chip. So the value is not what puts this sheet over the chart. What does
+ * is #431 C1's `container-type: inline-size` on the row, which applies layout
+ * containment and so makes the row a stacking context — one Chromium paints
+ * after the in-flow body below it, this sheet included. Written down because a
+ * green hit test with the value present would look identical either way, and the
+ * next reader is entitled to know which fact is holding.
+ *
+ * Both readings were retaken on 2026-08-12 against the real built page, and
+ * retaken rather than inherited for the reason `info.css` gives for retaking its
+ * own: re-anchoring an overlay changes which stacking context it paints in, so a
+ * measurement taken while it hung off the trigger says nothing about it hanging
+ * off the row. Same outcome either way, with and without the declaration.
+ *
+ * That makes this the fifth `z-index` in the app's own stylesheets. header.css's
+ * census — the one place the values are read against each other rather than each
+ * counting the others — names this one, and states a dated floor rather than a
+ * count now, because a count is what this sheet falsified on arrival.
+ *
+ * `max-width: 100%` is the other half of the anchor, and `box-sizing:
+ * border-box` is what makes it mean what it says — `.info-tip-panel` states why
+ * a content-box clamp is not one, having cost that panel its padding and border
+ * in overhang. Bare `100%` rather than the tip's `min(22rem, 100%)`: the `22rem`
+ * there is a *measure*, the width past which a sentence stops being readable, and
+ * three chips sized to their labels have no such thing to cap. So the row is the
+ * only bound there is a reason for, and it is the one that matters — a sheet
+ * bounded by the box it hangs from cannot leave the band at any width.
+ *
+ * What that clamp bounds is this sheet's box and not the chips inside it, which
+ * is worth being plain about because the two come apart at the extreme. Measured
+ * under the wide-font proxy above: at 390px the sheet is 191.73px in a 358px row,
+ * so the clamp does not bite and the three chips hold one line — equal tops, the
+ * first opening at x=191.27 and the last closing at x=365, both inside the row.
+ * It first bites below a 223.7px viewport, where the row is narrower than the
+ * chips' natural line; at 220px the sheet takes the row's 188px and the chips
+ * overhang it by 3.7px rather than wrapping (`white-space: nowrap` below, and the
+ * automatic minimum size that stops a flex item shrinking under its content),
+ * still 5px clear of the viewport. Nothing is built for that case here: no width
+ * this app is measured at reaches it, and the fix for it when something does is
+ * the chips' own sizing rather than a second clamp.
+ *
+ * `display: flex` with the group's old `gap`, so the three chips keep the
+ * spacing they had when they sat on the row. They stay in one line here for the
+ * reason they did there (`.range-picker-button`'s `white-space: nowrap` below),
+ * but on a sheet sized to its own content rather than to a line it is sharing.
+ */
+.range-picker-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  box-sizing: border-box;
+  max-width: 100%;
   gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 /* Same shape as `.theme-toggle`, deliberately its own class: a range is a
  * choice among three, and borrowing the toggle's selector would tie a data
  * control to a chrome control that is free to change.
  *
- * The unpressed fill is `--color-bg`, not `--color-surface`: the picker sits on
- * a `--color-surface` ground (`.fleet-chart-section`, the full-width band #323
- * made of the card that used to hold it), so a surface-on-surface chip has no
- * edge at all and the two windows the reader has *not* chosen read as plain text
- * rather than as controls. `--color-bg` against that ground is the app's standing
- * answer to the inversion rather than a border invented here — the add-a-site
- * hint in fleet-panel.css used to be the second example of it, and it left with
- * the map's own add-site control (#265). What the ground is a *shape* of does not
- * enter into it: losing the card's radius and measure changed nothing about the
- * two colours meeting. The toggle this shape came from sits on the page
+ * The unpressed fill is `--color-bg`, not `--color-surface`: the chips sit on a
+ * `--color-surface` ground — the popover above, which is the same colour as the
+ * `.fleet-chart-section` band they sat on until the fold — so a
+ * surface-on-surface chip has no edge at all and the two windows the reader has
+ * *not* chosen read as plain text rather than as controls. `--color-bg` against
+ * that ground is the app's standing answer to the inversion rather than a border
+ * invented here — the add-a-site hint in fleet-panel.css used to be the second
+ * example of it, and it left with the map's own add-site control (#265). What
+ * the ground is a *shape* of does not enter into it: losing the card's radius
+ * and measure changed nothing about the two colours meeting, and neither did
+ * gaining the sheet's. The toggle this shape came from sits on the page
  * background, where the inversion never arises.
  *
  * `white-space: nowrap` is the second half of #344's never-wrap belt: every
  * label here holds a space (`24 h`, `7 d`), and a chip that broke at it would
- * make the group two lines tall while the group itself was still, technically,
+ * make the sheet two lines tall while the sheet itself was still, technically,
  * on one line — the same defect design.md rule 7 forbids, one level down.
  *
  * The padding is one step down on both axes from the shape it inherited (#323).
- * The picker is chrome, and the row it sits on is the last thing between the map
- * and the plot: every pixel that row is tall is a pixel the chart does not get
+ * That step was bought for the controls row, on the argument that the chips set
+ * its height and every pixel that row is tall is a pixel the chart does not get
  * (design.md rule 3 — the data owns the viewport; `chart-geometry.ts`'s
- * `CHART_VIEW_BOX_HEIGHT` is where that stack is added up). The chips set the
- * row's height, so a step off each axis buys the chart that height back without
- * touching the label, the fill, or the shrink belt above — the chips still size
- * to their content, so the group's width follows its labels exactly as before. */
+ * `CHART_VIEW_BOX_HEIGHT` is where that stack is added up). The chips no longer
+ * set the row's height — the trigger and the (i) do, and the fold took the row
+ * from 25px to 24px — so the step is no longer buying that. It stays because it
+ * is now what keeps the sheet from being a heavier object than the row it hangs
+ * off, and because the chips still size to their content either way. */
 .range-picker-button {
   padding: var(--space-1) var(--space-3);
   white-space: nowrap;

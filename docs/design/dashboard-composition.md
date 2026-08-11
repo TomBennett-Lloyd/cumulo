@@ -49,6 +49,14 @@ around the site table and the footer, where the reading genuinely is a separate 
 bands above it. The chart is better for the extra width in its own right: its axis is time, and a
 time axis has more to say the wider it is drawn.
 
+#323 also took the visible `<h2>` and the "60 sites · 332 kW" line off that band, moving the name
+into the section's accessible name and deleting the numbers outright; the owner reversed that half
+on 2026-08-11 and both are visible text again, on the reasoning that a band with no card edge left
+around it needs a heading to say where the fleet's section begins, and that a plot of summed kW
+never states how many roofs it is a sum of (`apps/web/src/dashboard/FleetPanel.tsx` carries the
+argument; `fleet-panel.css` owns the container width below which the numbers hide). The rest of
+#323 stands unchanged — this is a reversal of one clause, not of the ticket.
+
 The table is folded away behind a `<details>` disclosure whose summary counts the fleet
 (`apps/web/src/dashboard/SiteTable.tsx`). Sixty rows open under the chart are the tallest thing
 this page can hold, and they were carrying a job the header's search took over — finding one site
@@ -268,8 +276,11 @@ reason beside itself (#295).
 legend as disagreeing: the subtitle names the band on both of its arms, while the legend row and the
 columns appear only where the points carry one. Both are right, because they are about different
 things. The subtitle sits behind the panel's single (i) (`dashboard/FleetPanel.tsx`) and is the
-section's only self-description now that the window statement is the picker's job (above), so it
-describes **what the source produces**. The legend and the table describe **what the plot holds**.
+section's only self-description, the window statement having left it for the chart's own names
+(above) — #284 D5 deleted the second (i) because the picker stated the window on the row, and when
+the picker folded behind a calendar icon on 2026-08-11 that job went on to the chart's accessible
+name and its table caption in `dashboard/fleet-panel-copy.ts` rather than back to a tip. So the
+subtitle describes **what the source produces**. The legend and the table describe **what the plot holds**.
 Following the data with the subtitle would trade a description of the section for a report on the
 current response, and would cost the arms the property they exist for.
 
