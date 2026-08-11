@@ -3,19 +3,11 @@
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ForecastChartPoint } from './chart-series';
-import { HORIZON_LABEL_WIDTH } from './forecast-chart-axes';
-import {
-  JSDOM_PLOT,
-  marks,
-  renderChart,
-  requireMark,
-  SERIES,
-  xOfSample,
-} from './forecast-chart-test-fixture';
+import { marks, renderChart, requireMark, SERIES, xOfSample } from './forecast-chart-test-fixture';
 
 /**
- * The plot's chrome, rendered: the horizon rule and the words naming it, the two
- * tiers of the time axis, and the two axis titles.
+ * The plot's chrome, rendered: the horizon rule, the two tiers of the time axis,
+ * and the two axis titles.
  *
  * Split out of `ForecastChart.test.tsx` when #284 D9/D10 gave the axis a second
  * tier and both titles a rotation to assert — the file was at the 300-line
@@ -40,9 +32,12 @@ const WEEK_RANGE_POINT_COUNT = 193;
 const WEEK_RANGE_LAST_MEASURED_INDEX = 168;
 
 /**
- * The series shape the 7-day view actually renders. Its horizon sits seven
- * eighths across the plot, which is where the label ran off the right of the
- * canvas and rendered as "forecast hori…".
+ * The series shape the 7-day view actually renders — a week of hours, which is
+ * the span the two-tier axis below is written for. Its horizon sits seven
+ * eighths across the plot, which used to be the hard case for the words beside
+ * the rule: start-anchored they ran off the right of the canvas and rendered as
+ * "forecast hori…". #429 deleted those words, so the extreme position now costs
+ * the chart nothing and this series is kept for its span alone.
  */
 const weekRangeSeries = (): readonly ForecastChartPoint[] =>
   Array.from({ length: WEEK_RANGE_POINT_COUNT }, (_unused, index) => ({
@@ -52,15 +47,6 @@ const weekRangeSeries = (): readonly ForecastChartPoint[] =>
     actualKw: index <= WEEK_RANGE_LAST_MEASURED_INDEX ? 3.5 : null,
   }));
 
-const horizonLabel = (container: HTMLElement): Element => {
-  const labels = [...container.querySelectorAll('.forecast-chart-axis-label')];
-  const found = labels.find((element) => element.textContent === 'forecast horizon');
-  if (found === undefined) {
-    throw new Error('no horizon label');
-  }
-  return found;
-};
-
 describe('the forecast horizon', () => {
   it('rules the horizon at the last measured sample', () => {
     const container = renderChart(SERIES);
@@ -68,45 +54,24 @@ describe('the forecast horizon', () => {
 
     expect(horizon.getAttribute('x1')).toBe(String(xOfSample(SERIES, 2)));
     expect(horizon.getAttribute('x1')).toBe(horizon.getAttribute('x2'));
-    expect(container.textContent).toContain('forecast horizon');
-  });
-
-  it('labels the horizon to the right of its rule while there is room for it', () => {
-    const container = renderChart(SERIES);
-    const label = horizonLabel(container);
-    const ruleX = Number(requireMark(container, '.forecast-chart-horizon').getAttribute('x1'));
-
-    expect(label.getAttribute('text-anchor')).toBe('start');
-    expect(Number(label.getAttribute('x'))).toBeGreaterThan(ruleX);
-    expect(Number(label.getAttribute('x')) + HORIZON_LABEL_WIDTH).toBeLessThanOrEqual(
-      JSDOM_PLOT.right,
-    );
   });
 
   /*
-   * The 7-day window shipped with this label clipped off the canvas. The
-   * assertion is the whole extent of the text, not just its anchor: an anchor
-   * inside the plot with the words running out of it is the defect.
+   * The pin on #429: the owner's 2026-08-11 round deleted the words `forecast
+   * horizon` from the canvas and kept the dashed rule, which now carries the
+   * threshold alone (`docs/design/chart-treatment.md`, the horizon bullet).
+   *
+   * Both halves are asserted together on purpose. A chart that rendered nothing
+   * at all would satisfy the absence on its own, so the rule being drawn is what
+   * makes the absence mean "the mark speaks without words" rather than "there is
+   * no mark". The phrase is written out rather than imported, since a test that
+   * imports the string it forbids cannot notice the string coming back.
    */
-  it('flips the horizon label inwards when the horizon sits late in the window', () => {
-    const series = weekRangeSeries();
-    const container = renderChart(series);
-    const label = horizonLabel(container);
-    const anchorX = Number(label.getAttribute('x'));
-    const ruleX = xOfSample(series, WEEK_RANGE_LAST_MEASURED_INDEX);
+  it('marks the horizon with the rule alone, never with words on the canvas', () => {
+    const container = renderChart(SERIES);
 
-    expect(requireMark(container, '.forecast-chart-horizon').getAttribute('x1')).toBe(
-      String(ruleX),
-    );
-    // Where the words actually end, which depends on which end is anchored —
-    // an anchor inside the plot with the text running out of it is the defect.
-    const rightEdge =
-      label.getAttribute('text-anchor') === 'end' ? anchorX : anchorX + HORIZON_LABEL_WIDTH;
-
-    expect(rightEdge).toBeLessThanOrEqual(JSDOM_PLOT.right);
-    expect(label.getAttribute('text-anchor')).toBe('end');
-    expect(anchorX).toBeLessThan(ruleX);
-    expect(anchorX - HORIZON_LABEL_WIDTH).toBeGreaterThanOrEqual(JSDOM_PLOT.left);
+    expect(marks(container, '.forecast-chart-horizon')).toHaveLength(1);
+    expect(container.textContent).not.toContain('forecast horizon');
   });
 
   it('omits the horizon and its marker when nothing has been measured', () => {
@@ -115,7 +80,6 @@ describe('the forecast horizon', () => {
     expect(marks(container, '.forecast-chart-horizon')).toHaveLength(0);
     expect(marks(container, '.forecast-chart-actuals-marker')).toHaveLength(0);
     expect(marks(container, '.forecast-chart-actuals')).toHaveLength(0);
-    expect(container.textContent).not.toContain('forecast horizon');
   });
 });
 

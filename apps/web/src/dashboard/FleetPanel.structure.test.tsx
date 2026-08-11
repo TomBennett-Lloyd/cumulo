@@ -30,7 +30,8 @@ import {
  * the 300-line ceiling (`structure.md` rule 4), on the same subject line the
  * overlay suite was split on: that file owns the section's *copy* — which window
  * the chart names, what is and is not said about simulated actuals — and this
- * one owns its furniture. One slim controls row, one (i), a picker on every arm
+ * one owns its furniture. One slim controls row, one (i) — carrying the chart's
+ * legend as well as its description since 2026-08-11 — a picker on every arm
  * that has a window to choose, and one chart present in every state the section
  * can be in.
  *
@@ -63,7 +64,7 @@ const fleetControls = (container: HTMLElement): HTMLElement => {
 };
 
 /**
- * The chart's figure, as an element the legend query can be scoped to.
+ * The chart's figure, as an element the child-order assertion can be made about.
  *
  * Exactly one, not "at least one" — a state that grew a second chart beside the
  * first would satisfy a presence check while doubling the tallest thing on the
@@ -84,13 +85,35 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
 };
 
 /**
+ * The tip's panel, opened — the legend's address since 2026-08-11.
+ *
+ * Pressing rather than reading a hidden node, because there is no hidden node:
+ * `InfoTip` mounts its children only while open, which is the component's own
+ * decision and the reason a legend behind it is *reachable* rather than merely
+ * present. So the gesture is part of the criterion.
+ */
+const openFleetTip = (container: HTMLElement): HTMLElement => {
+  fireEvent.click(
+    within(fleetControls(container)).getByRole('button', { name: 'About this chart' }),
+  );
+
+  const panel = container.querySelector('.info-tip-panel');
+
+  if (!(panel instanceof HTMLElement)) {
+    throw new Error('The fleet panel’s (i) was pressed and revealed no panel.');
+  }
+
+  return panel;
+};
+
+/**
  * The furniture every state owes the reader, whatever that state has to say.
  *
  * #284 D3 asks for three things in every state and not only for the figure: the
  * section's name, the chart, and the chart's legend. The figure alone is the
  * weakest of the three to assert, because the states that used to return *in
  * place of* the chart took the name's siblings and the key down with it — and
- * a figure that came back without its legend reads as a plot of anonymous lines,
+ * a chart the reader cannot find a key for reads as a plot of anonymous lines,
  * which is the regression this pair exists to catch.
  *
  * The name is queried by role over the whole document rather than by class,
@@ -102,6 +125,16 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  * which is the criterion. Which element carries it is the subject of the
  * dedicated case below; what is asserted here is only that no *state* takes it
  * away.
+ *
+ * **The legend is asserted behind the (i), which is D3's clause at its new
+ * address rather than a weakening of it.** The owner's 2026-08-11 round moved
+ * the key off the plot and into the description popover — *"the legend can go in
+ * the (i) section"* — so "in every state" is now a claim about a press, and the
+ * press is what this helper performs. What makes that the same guarantee is
+ * where the (i) lives: on the controls row, which is outside the state switch,
+ * so no state of the panel can take it or its contents away. What would falsify
+ * it is a state that rendered no tip, a tip that opened empty, or a panel that
+ * lost the wiring which puts a legend in it — and each of those fails here.
  *
  * The legend's entries are counted rather than read: *which* series it names is
  * copy, and this suite owns furniture (see the file header), so a rewording must
@@ -127,14 +160,42 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  * controls-row cases above. A state that returned early past the legend still
  * fails here, which is the regression the clause exists for; a series that
  * honestly has no band no longer does.
+ *
+ * **And the figure's children are a contract** — [#410](https://github.com/TomBennett-Lloyd/cumulo/issues/410)'s
+ * ask, written against the order this round creates rather than the one it
+ * inherited. Two moves on 2026-08-11 emptied the `<figure>` down to the plot and
+ * the announcement about it: the table twin became the figure's next sibling
+ * (#284 D3's fold, relocated) and the legend went behind the (i). What is left
+ * is `[svg.forecast-chart, p.forecast-chart-readout]` in that order, and the
+ * order is the point — the live region a reader meets *after* the plot it
+ * describes is the arrangement `docs/design/chart-treatment.md` states, and an
+ * exact list is what stops a fourth element drifting back into the figure or the
+ * two swapping. It is asserted here rather than in a case of its own so that all
+ * five states inherit the ratchet: a state that composed its own figure would
+ * otherwise satisfy every count above.
  */
 const expectPanelFurniture = (container: HTMLElement): void => {
   expect(screen.getByRole('region', { name: 'Fleet forecast' })).toBeDefined();
 
-  const legend = within(chartFigure(container)).getByRole('list');
+  const legend = within(openFleetTip(container)).getByRole('list');
 
   expect(legend.className).toBe('forecast-chart-legend');
   expect(within(legend).getAllByRole('listitem')).toHaveLength(2);
+
+  const figure = chartFigure(container);
+
+  // `getAttribute` rather than `className`, because an `<svg>`'s is an
+  // `SVGAnimatedString` and would compare unequal to the string it displays as.
+  // `tagName` is lower-cased for the mirror-image reason: the DOM reports it in
+  // the source case, which is lower for SVG and upper for HTML, and a list that
+  // spelled one of each would read as a typo rather than as a contract.
+  expect(
+    Array.from(
+      figure.children,
+      (child) => `${child.tagName.toLowerCase()}.${child.getAttribute('class') ?? ''}`,
+    ),
+  ).toStrictEqual(['svg.forecast-chart', 'p.forecast-chart-readout']);
+  expect(figure.nextElementSibling?.getAttribute('class')).toBe('forecast-chart-details');
 };
 
 /** The pair every state owes the reader: whatever it has to say, over the furniture. */
@@ -373,15 +434,17 @@ describe('FleetPanel’s chart', () => {
      * the opposite defect.
      *
      * D3's two other clauses — the section's name survives whether or not there
-     * is data, and the legend renders in every state — are asserted per arm by
+     * is data, and the legend is there in every state — are asserted per arm by
      * `expectPanelFurniture` rather than left implied by the figure count; its
      * docblock is where the element that name sits on is stated. Both hold by
      * construction and that is the point of pinning them: the name reaches the
      * `<section>` that wraps the state switch in `FleetPanel.tsx` from a heading
-     * on its controls row, which is outside that switch, and the legend is
-     * unconditional inside the figure in `ForecastChart.tsx`, so a future state
-     * that returns early past either would be exactly the regression these
-     * clauses were written against.
+     * on its controls row, which is outside that switch — and since 2026-08-11
+     * the legend reaches the reader from that same row, through the (i), rather
+     * than from inside the figure. So a future state that returns early past
+     * either would be exactly the regression these clauses were written
+     * against, and a state that stopped rendering the row would now take both
+     * at once.
      */
     const loading = render(panel(new CountingFleetSource(FULL_FLEET))).container;
 

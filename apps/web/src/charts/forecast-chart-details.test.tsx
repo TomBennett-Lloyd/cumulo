@@ -198,21 +198,24 @@ describe('forecast chart drawing space', () => {
  * The band's chrome, and the series that must not get any (#295).
  *
  * Live forecasts are point estimates until the envelope reaches a stored row, so
- * a chart is genuinely handed band-less series — and the legend row and the two
- * table columns are the chart *claiming* a P10–P90 it was never given. These
- * three cases are the negative half of that rule; the positive half is already
- * in `ForecastChart.test.tsx`, whose draw-order and table cases run the banded
+ * a chart is genuinely handed band-less series — and the two table columns are
+ * the chart *claiming* a P10–P90 it was never given. These cases are the
+ * negative half of that rule; the positive half is already in
+ * `ForecastChart.test.tsx`, whose draw-order and table cases run the banded
  * `SERIES` and would fail if the chrome stopped rendering where a band exists.
  *
  * Here rather than there for the reason the whole file exists: that suite is on
  * `structure.md` rule 4's ceiling.
+ *
+ * **The legend row was the third member of this set until 2026-08-11** and is
+ * not asserted here any more, because it is no longer chrome this chart draws:
+ * #429 moved the legend behind the fleet panel's (i). The rule is unchanged and
+ * so is its gating — what moved is the address, and the two files that now hold
+ * it are `forecast-chart-legend.test.tsx` (the row is gated on `hasBand`) and
+ * `dashboard/FleetPanel.structure.test.tsx` (the panel derives `hasBand` from
+ * the points it draws). Named rather than merely dropped, so this note is what a
+ * reader looking for the missing third case finds.
  */
-
-/** The legend's rows, in draw order, as the words a reader sees. */
-const legendEntries = (container: HTMLElement): readonly string[] =>
-  [...container.querySelectorAll('.forecast-chart-legend li')].map((entry) =>
-    entry.textContent.trim(),
-  );
 
 /** The table twin's column headings, in document order. */
 const columnHeaders = (container: HTMLElement): readonly (string | null)[] =>
@@ -224,14 +227,6 @@ const columnHeaders = (container: HTMLElement): readonly (string | null)[] =>
 const BARE_SERIES = [bare(6, 1, 0.9), bare(9, 4, 3.8)];
 
 describe('forecast chart band chrome', () => {
-  it('omits the band legend row when no point carries a band', () => {
-    const entries = legendEntries(renderChart(BARE_SERIES));
-
-    // Exactly the two series that are on the plot. The band row would name a
-    // third the reader can neither see nor find a number for.
-    expect(entries).toStrictEqual(['Forecast (median)', 'Actuals (simulated)']);
-  });
-
   it('omits the P10 and P90 columns when no point carries a band', () => {
     const container = renderChart(BARE_SERIES);
 
@@ -256,8 +251,13 @@ describe('forecast chart band chrome', () => {
     ]);
     expect(tableCells(container, 0)).toStrictEqual(['0.0', '1.0', '2.0', '0.9']);
     expect(tableCells(container, 1)).toStrictEqual(['—', '4.0', '—', '3.8']);
-    // And the legend keeps its row, because a band really is drawn.
-    expect(legendEntries(container)[0]).toBe('Forecast (P10–P90, simulated)');
+    // And the band really is drawn, which is what makes the columns above a
+    // report on the plot rather than a table with a life of its own. It stood in
+    // for the legend row this case used to read; the row itself is asserted
+    // where the legend now renders (see the note above this describe). What is
+    // drawn for a lone banded hour is the interval a single-sample run collapses
+    // to rather than an area, which is `ForecastChart.test.tsx`'s own rule.
+    expect(marks(container, '.forecast-chart-band-interval')).toHaveLength(1);
   });
 });
 

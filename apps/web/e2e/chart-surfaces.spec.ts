@@ -16,9 +16,10 @@ import { openSiteTable } from './site-table';
  * fact about layout: a plot's rendered box, and whether the text hung off its
  * axes fits inside that box once the browser has shaped the glyphs. jsdom has
  * no layout — `getBoundingClientRect` there is zeros all the way down, which is
- * why `HORIZON_LABEL_WIDTH` in `forecast-chart-axes.tsx` is an estimated
- * constant rather than a measurement, and why the chart's own measurement finds
- * nothing to adopt there and every suite draws at `DEFAULT_CHART_WIDTH`
+ * why `TOOLTIP_CHAR_WIDTH` in `tooltip-geometry.ts` sizes columns from an
+ * estimated mean advance rather than a measurement, and why the chart's own
+ * measurement finds nothing to adopt there and every suite draws at
+ * `DEFAULT_CHART_WIDTH`
  * (`use-chart-width.ts`). So the chart's own suite under `src/` can assert the
  * attributes the component wrote and never the pixels they turned into. That is
  * exactly the class of defect #19 kept producing: labels clipped at the canvas
@@ -68,17 +69,25 @@ import { openSiteTable } from './site-table';
  * different typeface rather than a different scale. A quarter leaves room over
  * the ~0.13–0.15 measured above for a CI image whose `system-ui` resolves to a
  * font with a taller ascent, and is still far below what any genuinely cut label
- * loses — the #19 horizon label ran off the plot by most of its width, and D15's
- * own clipped tick label by 0.98 of its height.
+ * loses — the #19 horizon label, since deleted by #429, ran off the plot by most
+ * of its width, and D15's own clipped tick label by 0.98 of its height.
  */
 const LABEL_CONTAINMENT_TOLERANCE = 0.25;
 
 /**
- * The plot, told apart from the legend keys.
+ * The plot, named rather than inferred.
  *
- * `.forecast-chart-figure` holds four `<svg>` elements — the chart, and one
- * swatch per legend row — so a bare `svg` would measure whichever came first
- * and quietly assert the containment of a 28x14 swatch with no text in it.
+ * `.forecast-chart-figure` used to hold four `<svg>` elements — the chart, and
+ * one swatch per legend row — and this selector was what stopped a bare `svg`
+ * measuring a 28x14 swatch with no text in it. The legend has since moved into
+ * the (i) popover, so the figure holds exactly one `<svg>` now and a bare query
+ * would find the right element by luck.
+ *
+ * The class stays because that is the fact it refuses to depend on. The figure's
+ * `<svg>` count has already changed once under this constant, and the reads
+ * below are all about the plot's own box — so naming the plot keeps them
+ * measuring the plot on the day something else is drawn inside the figure again,
+ * instead of measuring whatever the DOM happened to order first.
  */
 const PLOT_SVG = 'svg.forecast-chart';
 
@@ -562,11 +571,25 @@ test('keeps the fleet chart laid out once a selected site is drawn over it', asy
    * mark with no legend row is a line the reader cannot identify (the treatment's
    * rule that colour never names a series alone), and a legend row with no mark
    * is a chart claiming a series it never drew.
+   *
+   * The name half is read out of the (i)'s panel since 2026-08-11, when the
+   * owner's round moved the legend off the plot and behind that press (#429) —
+   * so the tip is opened here, after the mark has landed, and the row is looked
+   * for there rather than in the figure. What is being asserted is unchanged:
+   * the drawn line has a name a reader can reach. It is opened *after* the poll
+   * on purpose, because a legend read before the overlay arrives would be a
+   * legend that honestly has no row for it yet.
    */
   await expect
     .poll(async () => figure.locator('.forecast-chart-overlay').count())
     .toBeGreaterThan(0);
-  await expect(figure.locator('.forecast-chart-legend')).toContainText(siteName);
+  const tipButton = page.locator('.fleet-chart-section .info-tip-button');
+
+  await tipButton.click();
+  await expect(page.locator('.fleet-chart-section .info-tip-panel')).toContainText(siteName);
+  // Put it away before measuring: the geometry claim below is about the chart a
+  // reader sees, and a sheet floated over the top of it is not part of that.
+  await tipButton.click();
 
   // And the geometry still holds with the extra series on the plot. The axis is
   // scaled to what is drawn, so a single site's line under a sixty-site sum is a

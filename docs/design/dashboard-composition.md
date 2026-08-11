@@ -127,13 +127,24 @@ not landing — is what the dashboard carries beside the selection itself
   the panel below the map; #328 removed it outright, on the rule that a page that grabs the focus
   takes the reader's place away to tell them something it could have told them where they stood
   (`docs/standards/design.md` rule 11; `design-principles.md` carries the history). What answers the selection instead is structure they
-  can already reach: the card's `aria-labelledby` names the site, the chart legend grows a row under
-  that name once the site's line is drawn, and the header's search announces its hit in its own
-  status region — the chart's _readout_ does none of it, since it mounts empty and fills only when a
-  reader moves the chart's selection. What went with the landing is a cost rather than a benefit
+  can already reach: the card's `aria-labelledby` names the site, the chart draws that site's line
+  in slot 2, and the header's search announces its hit in its own status region — the chart's
+  _readout_ does none of it, since it mounts empty and fills only when a reader moves the chart's
+  selection.
+
+  **The chart's half of that got thinner on 2026-08-11 and is named honestly here rather than
+  overstated.** This paragraph used to say the legend grows a row under the site's name once its
+  line is drawn, and that row is now behind the (i) (`chart-treatment.md`'s Legend section) — so
+  what a reader sees _without asking_ is the drawn slot-2 line itself, and the site's name in the
+  tooltip's own row once they read a sample. The name is still reachable in the legend, one press
+  away, and it is still what the card carries in full. What is no longer true is that a selection
+  writes the site's name into the page unprompted, which is what the old sentence claimed. That does
+  not reopen the landing question — a line appearing on the page's one chart is a visible answer to
+  a press, and the argument above was never that the legend row in particular was the answer. What went with the landing is a cost rather than a benefit
   lost: a reader on the picker reached Escape — which only works from inside the card — by tabbing
   _backwards_ past six stops, because the map precedes the reading column. From a marker or a row
   the card is where the reader already is.
+
 - **A `?site=` selection additionally captures no opener.** This is what survives of the settlement
   of [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260) now that neither arm moves focus
   on the way in, and the asymmetry is the point rather than an exception for page load: the card
@@ -297,8 +308,18 @@ current response, and would cost the arms the property they exist for.
   `docs/tech-debt.md` rather than fixed here — the diff that names a rule is the wrong place to
   change a drawn surface.
 - **The band's columns** — `charts/forecast-chart-table.tsx`. Arrival-gated, and the one member
-  whose own headers carry no wording: what discloses over the table is the legend row above it and
-  the caption it takes from the copy module.
+  whose own headers carry no wording: `P10` and `P90` name a quantity, not where it came from. Two
+  things disclose over the table — the `<caption>` it takes from the copy module, and the legend's
+  band row. **They stopped being neighbours on 2026-08-11.** The legend row used to sit directly
+  above the table inside the same `<figure>`; that round moved the legend into the panel's (i) and
+  the table out into its own panel after the figure (`chart-treatment.md`'s Legend section and its
+  fold bullet), so neither is _above_ the table any more and the disclosure has to be argued from
+  where the two now are. It holds on both halves. The caption is inside the table as its accessible
+  name, so no rearrangement of panels can leave it behind, and it is capability-gated like every
+  other arm in the copy module. The legend is one press away in every state, and the band's row
+  sits inside it wherever the drawn points carry a band — in the very popover that holds the
+  subtitle naming the band simulated, so where there is a band to disclose, the drawn disclosure
+  and the described one now arrive together rather than a panel apart.
 - **The API's component descriptions** — `apps/api/src/openapi/components.ts`, on `Forecast`,
   `GenerationReading` and `FleetActualsResponse`. There is deliberately no field, so the prose _is_
   the contract, and `apps/api/src/openapi/document.test.ts` pins all three: a disclosure nothing

@@ -3,7 +3,6 @@ import {
   axisTicks,
   CHART_VIEW_BOX_HEIGHT,
   chartPlot,
-  horizonLabelAnchor,
   niceAxisMax,
   sampleXs,
   snapToNearestX,
@@ -322,50 +321,6 @@ describe('tooltipAnchorX', () => {
     const overwide = PLOT.right - PLOT.left + 1;
 
     expect(tooltipAnchorX({ followX: 100, tooltipWidth: overwide, plot: PLOT })).toBe(PLOT.left);
-  });
-});
-
-describe('horizonLabelAnchor', () => {
-  // Wide enough that the flip happens well inside the plot, as the real label does.
-  const LABEL_WIDTH = 84;
-
-  it('reads rightwards from the rule while the label fits before the plot edge', () => {
-    const anchor = horizonLabelAnchor({ ruleX: 200, labelWidth: LABEL_WIDTH, plot: PLOT });
-
-    expect(anchor.textAnchor).toBe('start');
-    expect(anchor.x).toBeGreaterThan(200);
-    expect(anchor.x + LABEL_WIDTH).toBeLessThanOrEqual(PLOT.right);
-  });
-
-  /*
-   * The case that shipped clipped. In the 7-day window the horizon lands seven
-   * eighths across the plot, and a start-anchored label ran past the right edge
-   * of the canvas — the reader saw "forecast hori…".
-   */
-  it('flips to the left of the rule rather than run off the right edge', () => {
-    const anchor = horizonLabelAnchor({ ruleX: 420, labelWidth: LABEL_WIDTH, plot: PLOT });
-
-    expect(anchor.textAnchor).toBe('end');
-    expect(anchor.x).toBeLessThan(420);
-    expect(anchor.x - LABEL_WIDTH).toBeGreaterThanOrEqual(PLOT.left);
-  });
-
-  it('keeps the whole label inside the plot at every position the rule can take', () => {
-    for (let ruleX = PLOT.left; ruleX <= PLOT.right; ruleX += 1) {
-      const anchor = horizonLabelAnchor({ ruleX, labelWidth: LABEL_WIDTH, plot: PLOT });
-      const leftEdge = anchor.textAnchor === 'start' ? anchor.x : anchor.x - LABEL_WIDTH;
-
-      expect(leftEdge).toBeGreaterThanOrEqual(PLOT.left);
-      expect(leftEdge + LABEL_WIDTH).toBeLessThanOrEqual(PLOT.right);
-    }
-  });
-
-  it('pins the label to the left plot edge when it fits on neither side', () => {
-    const overwide = PLOT.right - PLOT.left + 1;
-    const anchor = horizonLabelAnchor({ ruleX: 430, labelWidth: overwide, plot: PLOT });
-
-    expect(anchor.textAnchor).toBe('end');
-    expect(anchor.x - overwide).toBe(PLOT.left);
   });
 });
 

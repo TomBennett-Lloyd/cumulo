@@ -1,10 +1,20 @@
 import type { ReactElement } from 'react';
 
 /**
- * The chart's legend: fixed in draw order and always present, because several
- * series are on the plot and identity is never carried by colour alone
+ * The chart's legend: fixed in draw order and always one press away, because
+ * several series are on the plot and identity is never carried by colour alone
  * (`docs/design/chart-treatment.md`). Legend text wears text tokens, never the
  * series colour — the swatch beside it is what names the series.
+ *
+ * **It does not render on the chart.** The owner's 2026-08-11 round put it
+ * inside the (i) that already carries the fleet chart's description — *"the
+ * legend can go in the (i) section"* — so the caller is
+ * `dashboard/FleetPanel.tsx` and not `ForecastChart.tsx`, and the two arguments
+ * below arrive from the panel. What the treatment asks for is discharged by
+ * reachability rather than by presence, on the same standard the table twin's
+ * disclosure is held to: one press on a named, keyboard-operable control, in
+ * every state of the panel. This file still lives in `charts/` because what it
+ * draws is a chart's key; where that key is shown is the surface's business.
  *
  * A function rather than the constant this was: a series that is not on the
  * plot must not be in the legend, and two of them vary. A chart may carry one
@@ -24,9 +34,14 @@ import type { ReactElement } from 'react';
  */
 
 /**
- * The band swatch is the one place the bound stroke does double duty — at
- * swatch size a bare 10% wash is nearly invisible, and the edges are what make
+ * Wherever the band is keyed at swatch size the bound stroke does double duty —
+ * at that size a bare 10% wash is nearly invisible, and the edges are what make
  * it read as a band.
+ *
+ * This was "the one place" until #429 gave the hover tooltip's range row the
+ * same treatment at the key stroke's own footprint
+ * (`forecast-chart-hover.tsx`); there are two now, and the rule was never about
+ * the count. `docs/design/chart-treatment.md`'s Legend section owns it.
  */
 export const forecastChartLegend = (
   overlayLabel: string | undefined,

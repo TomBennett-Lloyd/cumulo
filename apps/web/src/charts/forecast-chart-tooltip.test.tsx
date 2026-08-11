@@ -19,6 +19,7 @@ import {
   tooltipText,
   tooltipValues,
 } from './forecast-chart-test-fixture';
+import type { DrawnTooltipRow } from './forecast-chart-hover';
 import {
   TOOLTIP_CHAR_WIDTH,
   TOOLTIP_MIN_WIDTH,
@@ -85,10 +86,19 @@ const panelAttribute = (container: HTMLElement, name: string): number =>
 /** The ceiling `tooltipPanelWidth` is capped at: the plot the panel floats over. */
 const PLOT_WIDTH = JSDOM_PLOT.right - JSDOM_PLOT.left;
 
-/** The centre line of each drawn series row, in the tooltip group's own space. */
+/**
+ * The centre line of each drawn series row, in the tooltip group's own space.
+ *
+ * Read off the name column rather than off the keys, which is what this counted
+ * until the range row's key became the band's swatch: a band key is a wash and
+ * two bound hairlines, so counting `line` elements counted that row twice and
+ * put neither of them on its centre. A name is one text per row, anchored at the
+ * row's own centre line by `dominantBaseline="middle"` — one element per row and
+ * the centre it is asked for, whatever key the row happens to wear.
+ */
 const rowCentreLines = (container: HTMLElement): readonly number[] =>
-  [...container.querySelectorAll('.forecast-chart-tooltip g line')].map((line) =>
-    attributeNumber(line, 'y1'),
+  [...container.querySelectorAll('.forecast-chart-tooltip .forecast-chart-tooltip-name')].map(
+    (name) => attributeNumber(name, 'y'),
   );
 
 /** One column's texts, in document order — the rows top to bottom. */
@@ -326,6 +336,42 @@ describe('ForecastChart tooltip shape', () => {
 
     expect(rowCentreLines(container)).toHaveLength(3);
     expect(panelAttribute(container, 'height')).toBe(openingHeight);
+  });
+
+  /*
+   * The key kind is ink, and the sizer cannot see it — a load-bearing property
+   * rather than an incidental one. The range row wears the band's own swatch
+   * since #429 (`forecast-chart-hover.test.tsx` holds what it looks like), and
+   * a legend swatch is several times the width `KEY_STROKE_LENGTH` reserves:
+   * drawn at its own width it would have widened every panel this chart ever
+   * shows. The panel's width is quoted outside this file —
+   * [#421](https://github.com/TomBennett-Lloyd/cumulo/issues/421)'s tap contract
+   * was dropped on an argument about how much of its own hour a pinned panel
+   * covers at a phone viewport — so a wider key would falsify a published
+   * finding rather than merely look wide. This is the case that says it did not.
+   *
+   * Asserted over `tooltipPanelWidth` itself, because that is the one arm every
+   * panel's width comes out of. The drawn half is already held above: the
+   * columns case measures a *banded* chart's real panel against model rows that
+   * carry no band key at all, so a key that cost width fails there too.
+   */
+  it('measures the same panel whichever key its rows wear', () => {
+    const rows: readonly DrawnTooltipRow[] = [
+      { ...sizedRow('0.9', 'Actual'), keyKind: 'line' },
+      { ...sizedRow('1.0', 'Median'), keyKind: 'line' },
+      { ...sizedRow('0.0–2.0', 'P10–P90'), keyKind: 'band' },
+    ];
+    const width = tooltipPanelWidth('06:00', rows, PLOT_WIDTH);
+    const asLineKeys = rows.map((row) => ({ ...row, keyKind: 'line' as const }));
+
+    expect(width).toBe(tooltipPanelWidth('06:00', asLineKeys, PLOT_WIDTH));
+    // Neither vacuous nor a fact about a constant: the panel is measuring its
+    // content rather than resting on the floor that would swallow a difference…
+    expect(width).toBeGreaterThan(TOOLTIP_MIN_WIDTH);
+    // …and the same call answers differently the moment something it *does* read
+    // changes, so the equality above is a fact about `keyKind` specifically.
+    const wider = [...rows, { ...sizedRow('2.5', 'Sunnyside Farm'), keyKind: 'line' }];
+    expect(tooltipPanelWidth('06:00', wider, PLOT_WIDTH)).toBeGreaterThan(width);
   });
 });
 

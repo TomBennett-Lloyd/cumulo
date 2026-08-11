@@ -3,7 +3,9 @@
 import { act, cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ForecastChartPoint } from './chart-series';
+import { KEY_STROKE_LENGTH, TOOLTIP_PADDING } from './tooltip-geometry';
 import {
+  attributeNumber,
   banded,
   bare,
   clientXFor,
@@ -58,6 +60,39 @@ const READOUT: readonly string[] = [
   '15:00Actual—Median5.0P10–P904.0–6.0',
   '18:00Actual—Median2.0P10–P901.0–3.0',
 ];
+
+/** One group per drawn series row, in the order the panel lists them. */
+const tooltipRowGroups = (container: HTMLElement): readonly Element[] => [
+  ...container.querySelectorAll('.forecast-chart-tooltip > g'),
+];
+
+/**
+ * One element inside a row group. Throws rather than answering `null`, so a
+ * selector that stops matching reads as the missing mark it is instead of
+ * quietly comparing `NaN` against a coordinate.
+ */
+const requireIn = (group: Element | undefined, selector: string): Element => {
+  const found = group?.querySelector(selector);
+  if (found === null || found === undefined) {
+    throw new Error(`no ${selector} in the tooltip row`);
+  }
+  return found;
+};
+
+/**
+ * A row's centre line, read off its name text — one element per row, anchored
+ * at the centre by `dominantBaseline="middle"`, and the one part of a row that
+ * is the same shape whichever key the row wears.
+ */
+const rowCentre = (group: Element | undefined): number =>
+  attributeNumber(requireIn(group, '.forecast-chart-tooltip-name'), 'y');
+
+/**
+ * Half of the band bound's 1-unit stroke (`charts.css`), which is how far
+ * inside the wash's edge its centre line has to sit for the hairline to land on
+ * the edge rather than half outside it.
+ */
+const HAIRLINE_INSET = 0.5;
 
 describe('ForecastChart hover layer', () => {
   it('shows nothing until the chart is pointed at or focused', () => {
@@ -326,6 +361,75 @@ describe('ForecastChart hover layer', () => {
     expect(tooltipValues(container)).toStrictEqual(['3.8', '4.0', '—', '8.5']);
 
     logged.mockRestore();
+  });
+
+  /*
+   * The key each row wears, which is what the panel says about a series beyond
+   * its name. Here rather than in `forecast-chart-tooltip.test.tsx`, whose
+   * subject this is: that file is 23 code lines under the 300-line ceiling and
+   * these two cases do not fit inside it (see the note this pair's width guard
+   * carries there, which is the half that had to sit beside the other width
+   * cases). The split is a ceiling talking, not a claim that a key is about
+   * which sample got selected.
+   */
+  it('keys the range row with the band’s own swatch — the wash and its two bounds', () => {
+    const container = renderChart(SERIES);
+    act(() => {
+      requireSvg(container).focus();
+    });
+
+    const range = tooltipRowGroups(container).at(-1);
+    const wash = requireIn(range, 'rect.forecast-chart-band');
+    const bounds = [...(range?.querySelectorAll('line.forecast-chart-band-bound') ?? [])];
+
+    // The band's own ink under the band's own class names, so the key has one
+    // owner with the mark it names: the wash, bounded top and bottom. That is
+    // the legend swatch's treatment, and drawing it here is what leaves the
+    // panel self-describing now that the legend sits behind the (i) (#429).
+    expect(bounds).toHaveLength(2);
+
+    const top = attributeNumber(wash, 'y');
+    const height = attributeNumber(wash, 'height');
+
+    // Centred on the row it keys, and inside the same gutter every line key
+    // occupies — never wider, which is the constraint the width guard in
+    // `forecast-chart-tooltip.test.tsx` holds from the other side.
+    expect(top + height / 2).toBe(rowCentre(range));
+    expect(attributeNumber(wash, 'x')).toBe(TOOLTIP_PADDING);
+    expect(attributeNumber(wash, 'width')).toBe(KEY_STROKE_LENGTH);
+    // The bounds are the wash's own edges rather than a second mark near it:
+    // half a stroke inside each, so a hairline reads as the band's boundary
+    // instead of hanging half outside the fill it bounds.
+    expect(bounds.map((bound) => attributeNumber(bound, 'y1'))).toStrictEqual([
+      top + HAIRLINE_INSET,
+      top + height - HAIRLINE_INSET,
+    ]);
+  });
+
+  it('keys every line series with one stroke and no swatch', () => {
+    const container = renderChartWithOverlay(SERIES, {
+      label: 'Sunnyside Farm',
+      points: [{ validTimeIso: isoHour(6), kw: 2.5 }],
+    });
+    act(() => {
+      requireSvg(container).focus();
+    });
+
+    // Actual, Median, P10–P90, overlay — naming the range row's position is
+    // what keeps "every other row" a count rather than a hope.
+    const groups = tooltipRowGroups(container);
+    expect(groups).toHaveLength(4);
+
+    for (const group of groups.filter((_, index) => index !== 2)) {
+      const key = requireIn(group, 'line');
+      expect(group.querySelectorAll('rect')).toHaveLength(0);
+      expect(attributeNumber(key, 'x1')).toBe(TOOLTIP_PADDING);
+      expect(attributeNumber(key, 'x2')).toBe(TOOLTIP_PADDING + KEY_STROKE_LENGTH);
+      // Flat, on the row's own centre line: nothing of the band key's vertical
+      // extent leaked into the rows that are still keyed by a stroke.
+      expect(attributeNumber(key, 'y1')).toBe(rowCentre(group));
+      expect(attributeNumber(key, 'y2')).toBe(rowCentre(group));
+    }
   });
 
   it('positions the whole readout with SVG attributes and no inline style', () => {

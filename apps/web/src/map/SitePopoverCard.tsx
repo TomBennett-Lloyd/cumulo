@@ -104,7 +104,10 @@ interface SiteForecastRegionProps {
  * giving up its chart. The arrival of the forecast is not announced (`react.md`
  * — completion is the busy container being replaced), and where the forecast
  * went is on screen already: the fleet chart below the map has grown a series
- * named after this site, with its own legend row and its own table column.
+ * for this site, with its own column in the table twin. The legend row naming it
+ * is a press away rather than on screen, since #429 moved the legend behind that
+ * panel's (i) — which costs this paragraph nothing, because what it is claiming
+ * is that the forecast visibly arrived somewhere, not that its name did.
  */
 const SiteForecastRegion = ({
   site,
@@ -159,12 +162,18 @@ export interface SitePopoverCardProps {
  *
  * What answers a selection instead is structure. This card is
  * `aria-labelledby` its own heading, so the surface names its site the moment it
- * exists; the fleet chart's *legend* grows a row under that same name as soon as
- * the site's line is drawn (`dashboard/site-overlay.ts` supplies the label, and
- * the legend is on screen in every state of the panel); and the header's search
- * says so in its own status region. Not the chart's readout — that region mounts
- * empty and fills only when a reader moves the chart's own selection, so at the
- * moment of arrival it names nothing at all (`react.md`'s live-region bullet).
+ * exists; the fleet chart *draws that site's line* over the fleet's sum as soon
+ * as its hours arrive; and the header's search says so in its own status region.
+ * Not the chart's readout — that region mounts empty and fills only when a
+ * reader moves the chart's own selection, so at the moment of arrival it names
+ * nothing at all (`react.md`'s live-region bullet).
+ *
+ * The chart's contribution used to be written here as its *legend* growing a row
+ * under the site's name, and that stopped being the unprompted half on
+ * 2026-08-11: #429 moved the legend behind the panel's (i), so the row still
+ * exists and still carries the name (`dashboard/site-overlay.ts` supplies the
+ * label) but it is one press away rather than on screen. The drawn line is what
+ * a reader is shown without asking, which is what this paragraph is about.
  * The alternative is moving somebody to the answer, which this card did in two
  * different spellings before #328 and no longer does in either: a page that
  * grabs the focus takes the reader's place away to tell them something it could

@@ -91,15 +91,17 @@ export interface PlotRect {
  * those literals before the fold and now carries a single relative figure; the
  * pointer is what replaced them, not detail lost.
  *
- * **The disclosure left the figure later that same day, and the tighter reading
- * above is no longer a reading of the same box.** The raw-data twin is a panel
- * *after* the figure now rather than a row inside it (`ForecastChart.tsx`), and
- * it wears a padding step of its own on top of the body grid's gap
- * (`charts.css`). Nothing above the plot moved, so the stack, the 636 and the
- * 264 are untouched and 184 still fits by exactly the argument above. What moved
- * is what the tighter reading was of: the figure ends at the legend now, and
- * what actually finishes the section is the panel below it, which sits lower
- * than the figure's old bottom by the gap and the padding it gained. Those
+ * **The disclosure and the legend both left the figure later that same day, and
+ * the tighter reading above is no longer a reading of the same box.** The
+ * raw-data twin is a panel *after* the figure now rather than a row inside it
+ * (`ForecastChart.tsx`), and it wears a padding step of its own on top of the
+ * body grid's gap (`charts.css`); the legend went to the fleet panel's (i)
+ * (`dashboard/FleetPanel.tsx`). Nothing above the plot moved, so the stack, the
+ * 636 and the 264 are untouched and 184 still fits by exactly the argument
+ * above. What moved is what the tighter reading was of: the figure ends at the
+ * plot's own visually hidden readout now, which takes no height at all, and what
+ * actually finishes the section is the panel below it, which sits lower than the
+ * figure's old bottom by the gap and the padding it gained. Those
  * pixels are deliberately not restated, because nothing has re-measured them on
  * a rendered page — the D15 case measures the *plot*, the reading that was never
  * in question here, and it passes unchanged across the move. So "894px, 6px
@@ -182,9 +184,9 @@ const PLOT_LEFT = 56;
 const PLOT_RIGHT_MARGIN = 32;
 /**
  * Headroom above the plot's ceiling. It held the two axis titles until #284 D10
- * turned both of them parallel to the axis they name; what it does now is keep
- * the top gridline — and a mark that reaches the axis maximum — off the canvas
- * edge, and give the horizon label a line to sit on inside the plot.
+ * turned both of them parallel to the axis they name, and a line for the horizon
+ * label to sit on until #429 deleted those words; what it does now is keep the
+ * top gridline — and a mark that reaches the axis maximum — off the canvas edge.
  */
 const PLOT_TOP = 12;
 
@@ -467,55 +469,4 @@ export const tooltipAnchorX = ({ followX, tooltipWidth, plot }: TooltipAnchorPar
   return rightAnchor + tooltipWidth <= plot.right
     ? rightAnchor
     : Math.max(plot.left, followX - TOOLTIP_GAP - tooltipWidth);
-};
-
-/** SVG user units between the horizon rule and the words naming it. */
-const HORIZON_LABEL_GAP = 6;
-
-export interface HorizonLabelParams {
-  /** The horizon rule's x, in SVG user units. */
-  readonly ruleX: number;
-  /** Rendered advance width of the label text — an estimate, from the caller. */
-  readonly labelWidth: number;
-  readonly plot: PlotRect;
-}
-
-export interface HorizonLabelAnchor {
-  readonly x: number;
-  /** SVG `text-anchor`: which end of the label sits at `x`. */
-  readonly textAnchor: 'start' | 'end';
-}
-
-/**
- * Where the "forecast horizon" label goes, given where the rule landed.
- *
- * The same decision `tooltipAnchorX` makes, in the form text needs: the label
- * reads rightwards from the rule until that would push it past the plot, then
- * flips and reads leftwards into the rule instead. Without the flip a late
- * horizon runs off the canvas — a 7-day window puts the rule seven eighths
- * across the plot, and the label rendered as "forecast hori…".
- *
- * The limit is the plot rect, not the view box, even though the view box is
- * wider: the margin beyond the plot belongs to the last x-axis tick label,
- * which is centred on `plot.right` and already spends it.
- *
- * A label too wide for the plot on either side pins its left edge to the left
- * plot edge, matching the tooltip's rule — a label overlapping its own rule is
- * still readable, one whose first word is off the canvas is not.
- */
-export const horizonLabelAnchor = ({
-  ruleX,
-  labelWidth,
-  plot,
-}: HorizonLabelParams): HorizonLabelAnchor => {
-  const rightAnchor = ruleX + HORIZON_LABEL_GAP;
-  if (rightAnchor + labelWidth <= plot.right) {
-    return { x: rightAnchor, textAnchor: 'start' };
-  }
-  // End-anchored, so the text runs from `x` leftwards and its far edge is
-  // `x - labelWidth` — which is what the floor below keeps inside the plot.
-  return {
-    x: Math.max(plot.left + labelWidth, ruleX - HORIZON_LABEL_GAP),
-    textAnchor: 'end',
-  };
 };

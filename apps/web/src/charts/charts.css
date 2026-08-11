@@ -309,12 +309,24 @@
 }
 
 /* Legend text wears text tokens, never the series colour — identity comes from
- * the swatch beside it (chart-treatment.md). */
+ * the swatch beside it (chart-treatment.md).
+ *
+ * The class names are the chart's and the rule stays in this file, but since
+ * 2026-08-11 the legend does not render on the chart: it sits under the
+ * sentence in the (i)'s popover (`dashboard/FleetPanel.tsx`, `info/info.css`).
+ * Here rather than moved to `info.css` because what it styles is a chart's key —
+ * `info.css` styles the tip, whoever opens one and whatever they put in it.
+ *
+ * `--space-3` above rather than the `--space-4` that separated it from the plot.
+ * The step was clearing a drawing; it is now separating two lines of a small
+ * sheet whose own padding is `--space-3`, and a step wider than the padding
+ * around it reads as a gap rather than as a rhythm. `--space-2` was the other
+ * candidate and is too tight to break the sentence from the key it precedes. */
 .forecast-chart-legend {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-6);
-  margin: var(--space-4) 0 0;
+  margin: var(--space-3) 0 0;
   padding: 0;
   color: var(--color-text);
   font-size: var(--text-sm);

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { xAxisTiers, type TierLabel } from './chart-axis-ticks';
 import { TIME_COLUMN_HEADER } from './chart-copy';
-import { axisTicks, horizonLabelAnchor, yForKw, type PlotRect } from './chart-geometry';
+import { axisTicks, yForKw, type PlotRect } from './chart-geometry';
 import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './chart-series';
 
 /**
@@ -44,8 +44,6 @@ const Y_LABEL_GAP = 10;
 const TIME_TIER_BASELINE = 13;
 const DAY_TIER_BASELINE = 27;
 const X_TITLE_BASELINE = 41;
-/** The horizon label's baseline, below the plot's ceiling. */
-const HORIZON_LABEL_BASELINE = 8;
 /**
  * The rotated y title's baseline, measured from the canvas's left edge.
  *
@@ -60,19 +58,9 @@ const Y_TITLE_X = 8;
  * What the y axis counts. A literal here rather than in `chart-copy.ts`, which
  * scopes itself to the words a plot prints about its own *frame* and leaves the
  * ones naming the data to the component drawing them — this names the quantity
- * on the axis, exactly as `forecast horizon` names the mark below it.
+ * the plot is of, not something the plot says about itself.
  */
 const POWER_AXIS_TITLE = 'Power (kW)';
-
-/**
- * Advance width of "forecast horizon" at `--text-xs`, rounded up. Estimated
- * rather than measured: `getComputedTextLength` needs a laid-out DOM, which
- * would make a pure render depend on the browser and jsdom report zero. Erring
- * wide only flips the label early, which is harmless; erring narrow is the
- * clipping this constant exists to prevent. Exported so a test can assert the
- * label's whole extent, not just its anchor.
- */
-export const HORIZON_LABEL_WIDTH = 84;
 
 export const gridElements = (scale: ChartScale): readonly ReactElement[] =>
   axisTicks(scale.axisMaxKw).map((kilowatts) => {
@@ -102,20 +90,25 @@ export const gridElements = (scale: ChartScale): readonly ReactElement[] =>
 /**
  * Marked once, in chrome — never by dashing the forecast line.
  *
- * The label's side is a decision, not a constant: a horizon late in the window
- * (the 7-day view puts it seven eighths across) would push a right-hand label
- * off the canvas, so `horizonLabelAnchor` flips it to read leftwards instead.
+ * **The dash carries the meaning alone** (owner's design round, 2026-08-11,
+ * [#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)). The rule used
+ * to be captioned `forecast horizon` in `--color-chart-axis-label` just inside
+ * the plot's ceiling, with the caption flipping to the rule's left where a late
+ * horizon would have pushed it off the canvas. The words went and the mark
+ * stayed: a dash reads as a threshold, which is what the caption was spelling
+ * out (`docs/design/chart-treatment.md`, the horizon bullet), so the caption
+ * was the plot telling the reader in words what the ink already said. The flip
+ * and the estimated label width it needed went with it.
+ *
+ * Still plural and still an array, like every builder in this file: the whole
+ * chrome is spread into the plot the same way, and a rule alone today is not a
+ * reason for this one to be handled differently at the call site.
  */
 export const horizonElements = (
   lastMeasuredIndex: number,
   scale: ChartScale,
 ): readonly ReactElement[] => {
   const x = xAt(scale, lastMeasuredIndex);
-  const label = horizonLabelAnchor({
-    ruleX: x,
-    labelWidth: HORIZON_LABEL_WIDTH,
-    plot: scale.plot,
-  });
   return [
     <line
       key="rule"
@@ -125,15 +118,6 @@ export const horizonElements = (
       y1={scale.plot.top}
       y2={scale.plot.bottom}
     />,
-    <text
-      key="label"
-      className="forecast-chart-axis-label"
-      x={label.x}
-      y={scale.plot.top + HORIZON_LABEL_BASELINE}
-      textAnchor={label.textAnchor}
-    >
-      forecast horizon
-    </text>,
   ];
 };
 

@@ -1,15 +1,39 @@
 /*
  * The (i) toggletip: a round button, and the panel it reveals.
  *
+ * ## The contract this sheet has with whoever opens a tip
+ *
+ * **The panel is anchored to the consumer's box, not to the tip's.** `.info-tip`
+ * carries no `position`, so the panel's containing block is the nearest
+ * positioned ancestor the consuming surface supplies — and the panel is pinned
+ * to that box's right edge and capped at its width. Every consumer therefore
+ * owes it one; `InfoTip.tsx`'s docblock states the obligation in the component's
+ * own terms and `dashboard/fleet-panel.css` is where today's one consumer
+ * discharges it.
+ *
+ * That is a 2026-08-11 change and it fixed a real defect rather than tidying an
+ * anchor. Hung from the tip itself, the panel had a 24px button for a containing
+ * block: nothing bounded its width but its own measure, and a tip carried to the
+ * right end of a row opened a 22rem sheet that ran hundreds of pixels past a
+ * phone's viewport — the owner's words, *"the (i) tooltip hangs off the edge of
+ * the page"*. Bounding it by the row is what makes the fix container-measured
+ * rather than a breakpoint: the panel is as wide as there is room for it to be,
+ * at every viewport, with no width written down anywhere
+ * (`docs/standards/design.md` rule 7's default). `e2e/info-tips.spec.ts` is the
+ * pin, at a phone width, because none of this is visible to jsdom.
+ *
  * Tokens only, as everywhere outside packages/ui/src/tokens/tokens.css. There
- * is exactly one raw length here — the panel's measure, `max-width: 22rem` —
- * and it reaches the page through a property the CSS gate's list deliberately
- * omits, because the token set has no measure scale (stylelint.config.mjs
- * documents that residual; `.brand-mark`'s box in header.css is the same shape
- * of exception). The button's box is not a second one: it is `--space-6` on both
- * axes, a spacing token doing a sizing job, which the scale can express. Nor are
- * the panel's `top: 100%` and `left: 0`, which anchor rather than size — one is
- * a percentage of the tip's own box, the other the zero the gate ignores.
+ * is exactly one raw length here — the panel's measure, inside
+ * `max-width: min(22rem, 100%)` — and it reaches the page through a property the
+ * CSS gate's list deliberately omits, because the token set has no measure scale
+ * (stylelint.config.mjs documents that residual; `.brand-mark`'s box in
+ * header.css is the same shape of exception). The `100%` beside it is not a
+ * second one: it is the containing block's width, which is the clamp rather than
+ * a size anyone chose. The button's box is not one either — it is `--space-6` on
+ * both axes, a spacing token doing a sizing job, which the scale can express.
+ * Nor are the panel's `top: 100%` and `right: 0`, which anchor rather than
+ * size — one is a percentage of the containing block, the other the zero the
+ * gate ignores.
  *
  * Its own sheet rather than a corner of `header.css` or `dashboard.css`, because
  * the component is neither surface's: the header opened one beside the brand and
@@ -22,8 +46,11 @@
  * sheet, in cascade order — components do not import their own CSS in this app.
  */
 
+/* No `position` here, deliberately — see the contract at the head of this file.
+   It was `relative` until 2026-08-11, and that one declaration was the whole of
+   the overflow defect: it made a 24px button the panel's containing block, so
+   the panel could be bounded by nothing wider than its own measure. */
 .info-tip {
-  position: relative;
   display: inline-flex;
 }
 
@@ -61,7 +88,32 @@
 }
 
 /*
- * The panel hangs under its button, over whatever is below.
+ * The panel hangs under the row its button sits on, over whatever is below.
+ *
+ * `right: 0` with `left: auto`, so it is the panel's *right* edge that is pinned
+ * and its left edge that floats. That direction is chosen by where these tips
+ * are: an (i) annotates something and sits at the end of the row it annotates
+ * (`dashboard/fleet-panel.css` carries it there with an auto margin), so a sheet
+ * growing leftwards from the row's right edge opens into the room there is,
+ * while one growing rightwards from the button opens into the margin. `left` is
+ * written out as `auto` rather than left unset because it is the half of the
+ * pair a reader will look for, and its absence would read as an oversight.
+ *
+ * `min(22rem, 100%)` rather than the bare measure: the measure is what keeps a
+ * long sentence readable, and the `100%` is what keeps the panel inside the box
+ * it is anchored to when that box is narrower than the measure — a phone. Taking
+ * the smaller of the two needs no breakpoint to know which case it is in.
+ *
+ * `box-sizing: border-box` is what makes that `100%` mean what it says, and it
+ * is the fix's second half rather than a tidy-up. Under the default
+ * `content-box` the cap bounds the *content*, so the panel drew 26px wider than
+ * the clamp — its padding and border — and still crossed the row's left edge at
+ * a phone width by exactly that much. It is the same declaration for the same
+ * reason as `.dashboard-content` in `dashboard/dashboard.css` and
+ * `.site-search-input` in `header/header.css`: a padded box that has been given
+ * a width to honour, honouring it. The 22rem changes meaning with it, from a
+ * text measure to the panel's own width — a slightly narrower column of prose,
+ * and the same convention `.dashboard-content`'s `72rem` already reads under.
  *
  * `z-index` for the reason header.css states over its own two values, which this
  * is the third of: the header is above the dashboard in DOM order but is not a
@@ -73,8 +125,16 @@
  * same rule that declined a second value for the panel's tip when there were
  * two; where the next tip opens is not something this sheet gets told, and a
  * value that has to be added back at the point of use is one that will not be.
- * Stated plainly so nobody has to rediscover it: no spec observes this value
- * now, because the case that did was the on-bar tip's.
+ * Stated plainly so nobody has to rediscover it: no spec observes this *value*
+ * now, because the case that did was the on-bar tip's. What a spec does observe
+ * since 2026-08-11 is the outcome it would be one contributor to —
+ * `e2e/info-tips.spec.ts` hit-tests the panel's centre — and that case would
+ * still pass with the value gone, since the containing block the panel moved to
+ * carries `container-type: inline-size`, whose layout containment already lifts
+ * the whole row over the chart below it (`dashboard/fleet-panel.css` measured
+ * that). Which is the reason the hit test is there rather than an argument for
+ * dropping the value: re-anchoring the panel changed which stacking context it
+ * paints in, so the claim needed re-measuring rather than inheriting.
  *
  * `width: max-content` capped by a measure, so a short sentence gets a small
  * panel and a long one wraps at a readable width instead of stretching to the
@@ -83,11 +143,13 @@
 .info-tip-panel {
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
+  left: auto;
   z-index: 10;
   display: block;
+  box-sizing: border-box;
   width: max-content;
-  max-width: 22rem;
+  max-width: min(22rem, 100%);
   margin-top: var(--space-2);
   padding: var(--space-3);
   border-style: solid;

@@ -104,9 +104,6 @@ export const TokensPreviewChart = (): ReactElement => (
       <polyline className="chart-band-bound" points={lowerBoundPoints} />
 
       <line className="chart-horizon" x1={horizonX} x2={horizonX} y1={PLOT.top} y2={PLOT.bottom} />
-      <text className="chart-axis-label" x={horizonX + 6} y={PLOT.top + 8}>
-        forecast horizon
-      </text>
 
       <polyline className="chart-median" points={medianPoints} />
       <polyline className="chart-actuals" points={actualsPoints} />

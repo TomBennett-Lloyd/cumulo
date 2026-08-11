@@ -19,8 +19,15 @@ export interface InfoTipProps {
    */
   readonly label: string;
   /**
-   * The sentence itself. Phrasing content — this mounts inside a `<span>`, so a
-   * caller handing it a `<p>` would be writing invalid markup.
+   * What is behind the press. Flow content — this mounts inside a `<div>`, so a
+   * list or a paragraph is valid here.
+   *
+   * It was phrasing content in a `<span>` until 2026-08-11, when the fleet
+   * chart's legend moved in beside its sentence (#429): a `<ul>` is flow content
+   * and a `<span>` may not contain one, so the container is the element that had
+   * to give way rather than the content. Nothing about what a tip is *for*
+   * changed with it — a description, and now a key, which is description of the
+   * same kind.
    */
   readonly children: ReactNode;
 }
@@ -89,11 +96,33 @@ export interface InfoTipProps {
  * popover will copy — and applying that decision means applying it to both, in
  * one place, which is when the shared hook earns its keep.
  *
+ * ## What the consumer owes it: a positioned ancestor
+ *
+ * **The panel is not anchored to this component.** `.info-tip` carries no
+ * `position` of its own, so the panel's containing block is whatever positioned
+ * ancestor the consuming surface supplies — and it is clamped to *that* box's
+ * width and right edge (`info.css`). Every consumer must therefore give it one.
+ * The fleet chart's controls row is the one consumer today and does it in
+ * `dashboard/fleet-panel.css`, whose `.fleet-chart-controls` rule states the
+ * obligation where it is discharged.
+ *
+ * It is a requirement rather than an implementation detail because of what
+ * happens when it is not met: the panel falls back to the initial containing
+ * block — the page — and hangs off whichever edge it was opened near, which is
+ * exactly the defect this arrangement was adopted to fix (the owner, 2026-08-11:
+ * *"the (i) tooltip hangs off the edge of the page"*). Anchoring to `.info-tip`
+ * itself is what produced that: a 24px button near the right edge of the page is
+ * not a box a 22rem panel can be clamped inside, so the panel's own measure
+ * decided its width and its width ran past the viewport. The row is, which is
+ * why the anchor moved outwards rather than the measure inwards. A new consumer
+ * that cannot offer a positioned ancestor is a design question for that surface,
+ * not a case for a second rule here.
+ *
  * Presentational (`react.md` rule 4): all it owns is whether it is open.
  */
 export const InfoTip = ({ label, children }: InfoTipProps): ReactElement => {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLSpanElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // A subscription to something outside React (`react.md` rule 1), and so
@@ -121,7 +150,7 @@ export const InfoTip = ({ label, children }: InfoTipProps): ReactElement => {
     };
   }, [open]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>): void => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape' && open) {
       setOpen(false);
       // Ordinarily a no-op, because the panel takes no focus and the reader is
@@ -133,7 +162,7 @@ export const InfoTip = ({ label, children }: InfoTipProps): ReactElement => {
   };
 
   return (
-    <span className="info-tip" ref={containerRef} onKeyDown={handleKeyDown}>
+    <div className="info-tip" ref={containerRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
         className="info-tip-button"
@@ -147,7 +176,7 @@ export const InfoTip = ({ label, children }: InfoTipProps): ReactElement => {
         i
       </button>
 
-      {open ? <span className="info-tip-panel">{children}</span> : null}
-    </span>
+      {open ? <div className="info-tip-panel">{children}</div> : null}
+    </div>
   );
 };

@@ -92,9 +92,12 @@ Composition rules that keep both legible where they overlap:
   (r ≥ 4) and ringed in the surface colour so that an actuals dot crossing the median line, or two
   dots overlapping at a shared timestamp, stay countable. The ring is spacing, not a border — no
   mark ever gets a stroke drawn around it to separate it from another mark.
-- **The forecast horizon boundary is a dashed vertical hairline** in `--color-chart-grid` with a
-  small direct label in `--color-chart-axis-label`, at the last timestamp with a measurement.
-  Actuals stop there; band and median continue past it. On the live fleet chart they do not merely
+- **The forecast horizon boundary is a dashed vertical hairline** in `--color-chart-grid`, at the
+  last timestamp with a measurement, and it is the whole of the marking. It carried a small direct
+  label reading `forecast horizon` in `--color-chart-axis-label` until the owner's design round of
+  2026-08-11 ([#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)) removed the words and
+  kept the mark: the dash already reads as a threshold (below), so the label was the plot saying in
+  words what its own ink had said. Actuals stop there; band and median continue past it. On the live fleet chart they do not merely
   continue past it, they _begin_ at it — the two windows are disjoint, so the boundary is where one
   series hands over to the other rather than where they overlap. The boundary is marked once, in
   chrome, rather than by dashing the forecast line. **The dash is what makes it read as a
@@ -143,9 +146,9 @@ Composition rules that keep both legible where they overlap:
 
 ## Legend
 
-Several series are on the plot, so **a legend is always present** — identity is never carried by
-colour alone. The forecast entries are fixed in draw order and do not reorder or repaint when a
-series is toggled off, or when an overlay arrives:
+Several series are on the plot, so **a legend is always one press away, in every state** — identity
+is never carried by colour alone. The forecast entries are fixed in draw order and do not reorder or
+repaint when a series is toggled off, or when an overlay arrives:
 
 | Entry                         | Swatch                                                                                                   |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -154,9 +157,29 @@ series is toggled off, or when an overlay arrives:
 | Actuals                       | short 2px line key in `--color-chart-actuals`                                                            |
 | _an overlay_                  | short 2px line key in `--color-chart-2` — see below                                                      |
 
-The swatch mirrors the mark: a rect for the area, a line key for the lines. The band's swatch is
-the one place where the bound stroke is doing double duty — at swatch size a bare 10% wash is
-nearly invisible, and the edges are what make it read as a band.
+**Where it renders is the chart's surface's business, not the chart's**, and since the owner's
+design round of 2026-08-11 ([#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)) the fleet
+chart's renders inside the "About this chart" popover — the owner's own routing: _"the legend can go
+in the (i) section"_. It used to sit under the plot, inside the `<figure>`, where it cost a row of
+height on every render for every reader to say something read once. A key is description in exactly
+the sense the dashboard already sorts by: what a surface **is** goes behind a press, what it
+currently **says** stays inline (`dashboard-composition.md`).
+
+What that changes about the rule is one word and not the rule. "Always present" becomes "always one
+press away", and it is discharged the same way the table twin's fold is — by **reachability**: one
+press on a named, keyboard-operable control, and _a route one press away is a route_ (the fold
+bullet below argues it at length). "In every state" is what did not move, and it is structural
+rather than a habit: the (i) sits on the fleet panel's controls row, which is outside the switch
+between loading, failed, empty, forecastless and ready, so no state can take the key away.
+`apps/web/src/dashboard/FleetPanel.tsx` renders it and `FleetPanel.structure.test.tsx` opens the tip
+in all five states. `apps/web/src/charts/forecast-chart-legend.tsx` still draws it and still lives
+beside the chart, because what it draws is a chart's key.
+
+The swatch mirrors the mark: a rect for the area, a line key for the lines. Wherever the band is
+keyed at swatch size the bound stroke does double duty — here, and since 2026-08-11 in the
+tooltip's range row, which wears this same treatment at the key stroke's footprint (the hover
+bullet below). At that size a bare wash is nearly invisible, and the edges are what make it read
+as a band.
 
 **Two of the forecast entries are unconditional; the band's is gated on the data.** A series whose
 points carry no P10–P90 gets no band row, because a legend naming a band nothing produced is the
@@ -222,9 +245,9 @@ on every point is chaos and goes unread.
 **A direct label never runs off the plot.** A label placed relative to its mark reads outwards
 until that would cross the plot edge, then flips and reads inwards from the same mark; where it
 fits on neither side it pins to the near edge rather than overflow. This applies to every label
-positioned by a mark — the horizon label, the hover readout — because the mark that needs labelling
-most is usually the last one, and a label clipped at the edge is worse than one overlapping its own
-rule.
+positioned by a mark — the hover readout is the one the shipping chart places this way — because
+the mark that needs labelling most is usually the last one, and a label clipped at the edge is
+worse than one overlapping its own rule.
 
 ## Grid, axes, and the single-axis rule
 
@@ -506,7 +529,18 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   down, and because the spoken readout is composed from the same rows and "Median 6.0" is how a
   label reads aloud. Series are keyed with a short stroke of their
   colour, not a filled box — shorter since D12, since a key beside a name column is read as a
-  colour rather than as the start of a line of text. **The drawn panel carries a row for every
+  colour rather than as the start of a line of text. **The range row is keyed by the band's own
+  swatch instead** — the wash with a bound hairline at its top and bottom edge, the legend's key
+  drawn at the key stroke's own footprint (owner, 2026-08-11,
+  [#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)). A band is not a line, and with
+  the legend behind the (i) since that same round the drawn tooltip is the only thing on the plot
+  that says what the band is, so the panel has to be self-describing rather than borrowing a stroke
+  that reads as one more series. At the footprint and not at the legend's width: a legend swatch is several
+  times the width the key gutter reserves (`KEY_STROKE_LENGTH` in
+  `apps/web/src/charts/tooltip-geometry.ts` owns that figure), and drawn at its own size it would
+  have widened every panel the chart shows — so the key kind is ink, and the sizing bullet below
+  is untouched by it.
+  **The drawn panel carries a row for every
   series the chart has, and dashes the hours a series has nothing at** — the measurement past the
   horizon, the band a point-estimate hour has no uncertainty for, the hour an overlay does not
   cover. Missing data reads as missing (`docs/standards/design.md` rule 5), and the mark it reads
@@ -552,7 +586,14 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D12 and they do not retire this
   cap: no arrangement of two columns fits 120 characters into a panel narrower than they are.
   **Eliding the name that overflows is the half still open**, and the cap bounds what it costs
-  until then. Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
+  until then. **The 2026-08-11 round leaves all of this exactly as it was**: it changes the ink of
+  one row's key and nothing a column is measured over — no row is added or removed, no text
+  changes — so the panel is content-measured on the same terms, rule 6's constancy still holds in
+  height and not in width, and whether a width that moves under a cursor is acceptable stays
+  [#411](https://github.com/TomBennett-Lloyd/cumulo/issues/411)'s open decision rather than
+  something #429 settled; the range row reaches that question through the same producer as every
+  other row, which is why the answer to it will apply to this key as it does to the rest.
+  Padding is equal on all four sides, the corner takes `--radius-sm`, and the panel casts a
   small drop shadow in `--color-shadow`: it is the one surface in the product genuinely floated
   over live data, and the marks beneath it are the same ink and weights it is drawn in. The
   hairline border in `--color-border` stays under the shadow rather than being replaced by it.
@@ -566,9 +607,12 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   **content is memoised against those frames**, so moving it re-renders nothing inside it. Those
   frames also commit **inside a hover-boundary child** (`forecast-chart-hover-boundary.tsx`), which
   the grid, the marks and the axes are built above and handed down to as already-drawn elements.
-  The legend and the table twin are handed nowhere: they sit beside that child rather than inside
-  it, and what spares them is that the body which builds them — `ForecastChart`'s — no longer runs
-  on a hover frame at all. So a frame re-renders the hover chrome and the spoken readout,
+  The table twin is handed nowhere: it sits beside that child rather than inside it, and what
+  spares it is that the body which builds it — `ForecastChart`'s — no longer runs on a hover frame
+  at all. The legend was the second half of that sentence until 2026-08-11 and is spared by a wider
+  margin now: it is built by the panel above the chart and rendered into the (i)'s popover, so a
+  hover frame does not reach the component that produces it, let alone the child that commits.
+  So a frame re-renders the hover chrome and the spoken readout,
   and nothing else in the figure is rebuilt to move a panel
   ([#331](https://github.com/TomBennett-Lloyd/cumulo/issues/331)). Motion
   comes from the pointer, never from a transition — there is no animation for
@@ -580,11 +624,22 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   not wade through every text node inside it. That is also why the tooltip cannot carry the
   announcement — the label collapses the whole subtree, so nothing drawn inside the SVG is spoken
   however it is marked up. The selected sample reaches assistive tech through **one visually
-  hidden `aria-live="polite"` region in the figure**, between the plot and the legend. It is
-  mounted empty with the chart and filled only when a reader moves the selection, so every
-  announcement is a real change — a live region mounted with its text already inside it announces
-  nothing. It is styled off-screen and never with `display: none` or `visibility: hidden`, either
-  of which would remove it from the accessibility tree it exists to reach.
+  hidden `aria-live="polite"` region in the figure**, after the plot and before the table twin's
+  disclosure. It is mounted empty with the chart and filled only when a reader moves the selection,
+  so every announcement is a real change — a live region mounted with its text already inside it
+  announces nothing. It is styled off-screen and never with `display: none` or `visibility: hidden`,
+  either of which would remove it from the accessibility tree it exists to reach.
+
+  **Where it sits is now the whole of what the figure holds**, and that is a change of surroundings
+  rather than of the region. The 2026-08-11 round emptied the `<figure>` from both sides: the
+  disclosure moved out to become the figure's next sibling (the fold bullet below) and the legend
+  moved out to the (i) (the Legend section above). So the region is the figure's second and last
+  child, the plot is its first, and "between the plot and the legend" — which is how this bullet
+  read while the legend was under it — names no arrangement that exists. What the ordering is
+  actually about survives all of it: a reader meets the plot and then the announcement about it, and
+  a region that arrived before the thing it describes would be announcing a selection in a chart the
+  reader has not reached yet. `apps/web/src/dashboard/FleetPanel.structure.test.tsx` pins the
+  figure's two children and their order, in every state of the panel.
   **The announcement and the tooltip are composed from the same rows** — speech skipping the
   dashed ones, per the drop bullet above — so the spoken readout cannot drift from the drawn one
   about any series either of them carries; and pointer and keyboard both feed that single region,
@@ -599,6 +654,7 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   twin below remains the canonical route** to every value — one press on its disclosure away, per
   the fold bullet below, which is where what a closed `<details>` does and does not withhold is
   set out.
+
 - **Tooltips enhance, they never gate.** Every value in the tooltip is also reachable without a
   pointer, through direct labels or the table view. Every chart has a table-view twin — the
   WCAG-clean equivalent — reachable from the chart container.
@@ -664,7 +720,7 @@ Every token this treatment uses. Values, and the reasoning behind each value, ar
 | `--color-chart-actuals`                                  | measured actuals line (near-ink, not a categorical slot)     |
 | `--color-chart-grid`                                     | gridlines, forecast-horizon rule (dashed), day boundaries    |
 | `--color-chart-night-fill`                               | night-time shading behind the plot (alpha baked in)          |
-| `--color-chart-axis-label`                               | axis ticks, axis labels, horizon label                       |
+| `--color-chart-axis-label`                               | axis ticks, axis labels                                      |
 | `--color-surface`                                        | 2px marker rings, chart section ground, tooltip panel fill   |
 | `--color-border`                                         | tooltip panel hairline                                       |
 | `--color-shadow`                                         | tooltip panel drop shadow (elevation ink)                    |

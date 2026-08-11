@@ -143,7 +143,16 @@ export const stubRenderedSize = (svg: SVGSVGElement): void => {
 export const clientXFor = (viewBoxX: number): number =>
   RENDERED_BOUNDS.left + viewBoxX * (RENDERED_BOUNDS.width / DEFAULT_CHART_WIDTH);
 
-/** Scoped to the plot, so legend swatches wearing the same classes stay out. */
+/**
+ * Scoped to the plot's direct children, so keys wearing the same classes stay
+ * out of a count of what is drawn on the canvas.
+ *
+ * It was the legend's swatches this was written against; they left the figure on
+ * 2026-08-11 (#429) and the scoping still earns its place, because the tooltip's
+ * range row wears `.forecast-chart-band` and `.forecast-chart-band-bound` over
+ * its own key gutter (#429 again, `forecast-chart-hover.tsx`) — inside the same
+ * `<svg>`, and so inside an unscoped query.
+ */
 export const marks = (container: HTMLElement, selector: string): readonly Element[] => [
   ...container.querySelectorAll(`.forecast-chart > ${selector}`),
 ];
