@@ -127,11 +127,16 @@ export const ForecastChartHoverBoundary = (
         viewBox={`0 0 ${String(width)} ${String(CHART_VIEW_BOX_HEIGHT)}`}
         /* Pinned, and not left to the aspect ratio. Once a measurement lands the
            two agree — the view box is the rendered width, so `height: auto`
-           would resolve to this anyway — but on the frame before it, the view
-           box is still `DEFAULT_CHART_WIDTH` wide in a wider column, and an
-           unpinned height would draw that first frame tall and then collapse it.
-           Stating the height makes the pre-measurement frame a narrower chart
-           centred in its box rather than a vertical jump. */
+           would resolve to this anyway — but before one lands the view box is
+           still `DEFAULT_CHART_WIDTH` wide in a column of some other width, and
+           an unpinned height would draw that pass tall and then collapse it.
+           Stating the height makes it a narrower chart centred in its box
+           rather than a vertical jump.
+           Still earning its place after #343, which moved the browser's first
+           measurement before paint: it removed the *painted* pre-measurement
+           frame and not the arms where there is no measurement to wait for —
+           an environment with no `ResizeObserver`, and jsdom, which is where
+           every chart suite under `src/` reads this attribute. */
         height={CHART_VIEW_BOX_HEIGHT}
         role="img"
         aria-label={ariaLabel}

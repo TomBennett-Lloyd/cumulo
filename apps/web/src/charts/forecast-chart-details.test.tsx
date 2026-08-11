@@ -102,15 +102,23 @@ describe('forecast chart table disclosure', () => {
  * The chart's drawing space (#284 D15).
  *
  * Everything here is the *fallback* arm, and that is the point rather than a
- * limitation. jsdom ships no `ResizeObserver`, so `useChartWidth` never
- * measures and every chart in every jsdom suite in this directory is drawn at
- * `DEFAULT_CHART_WIDTH` — which is what makes the exact coordinates the rest of
- * those suites assert reproducible at all. The measured arm is unreachable from
- * this lane by construction and is the browser lane's to prove
- * (`e2e/chart-surfaces.spec.ts`, `testing.md` rules 7 and 10).
+ * limitation. Two guards put it there and not one (`use-chart-width.ts`, which
+ * states the pair): `useChartWidth` does attempt a measurement on every mount,
+ * but jsdom lays every box out at zero and a zero is not a measurement, so the
+ * seed survives the initial read; and jsdom ships no `ResizeObserver`, so no
+ * later resize adopts anything either. Every chart in every jsdom suite in this
+ * directory is therefore drawn at `DEFAULT_CHART_WIDTH` — which is what makes
+ * the exact coordinates the rest of those suites assert reproducible at all.
+ *
+ * The measured arm is reachable from this lane only by stubbing the rect, which
+ * `use-chart-width.test.tsx` does deliberately and nothing here has any reason
+ * to. What no stub can reach is whether that measurement lands *before paint*,
+ * which is the browser lane's alone (`e2e/chart-first-paint.spec.ts`, with
+ * `e2e/chart-surfaces.spec.ts` on where the marks land once it has;
+ * `testing.md` rules 7 and 10).
  */
 describe('forecast chart drawing space', () => {
-  it('draws at the fallback width, because jsdom has nothing to measure with', () => {
+  it('draws at the fallback width, because jsdom lays out nothing to measure', () => {
     /*
      * The vacuity guard, and the reason the two cases below mean anything. They
      * assert the fallback width; if this environment ever gained a

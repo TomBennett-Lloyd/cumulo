@@ -16,14 +16,15 @@ import { openSiteTable } from './site-table';
  * axes fits inside that box once the browser has shaped the glyphs. jsdom has
  * no layout — `getBoundingClientRect` there is zeros all the way down, which is
  * why `HORIZON_LABEL_WIDTH` in `forecast-chart-axes.tsx` is an estimated
- * constant rather than a measurement, and why jsdom never measures the chart at
- * all and draws every suite at `DEFAULT_CHART_WIDTH` (`use-chart-width.ts`). So
- * the chart's own suite under `src/` can assert the attributes the component
- * wrote and never the pixels they turned into. That is exactly the class of
- * defect #19 kept producing: labels clipped at the canvas edge, and elements
- * that mounted at zero height. D15 produced one more of them on its way in — at
- * 1:1 the plot's right margin stopped scaling up with the panel, and the last
- * time-axis label, centred on that edge, hung 13.8px past the canvas.
+ * constant rather than a measurement, and why the chart's own measurement finds
+ * nothing to adopt there and every suite draws at `DEFAULT_CHART_WIDTH`
+ * (`use-chart-width.ts`). So the chart's own suite under `src/` can assert the
+ * attributes the component wrote and never the pixels they turned into. That is
+ * exactly the class of defect #19 kept producing: labels clipped at the canvas
+ * edge, and elements that mounted at zero height. D15 produced one more of them
+ * on its way in — at 1:1 the plot's right margin stopped scaling up with the
+ * panel, and the last time-axis label, centred on that edge, hung 13.8px past
+ * the canvas.
  *
  * One chart, in two states, because that is what the page has since #265: a
  * selected site is a second series *on* the fleet chart rather than a chart of

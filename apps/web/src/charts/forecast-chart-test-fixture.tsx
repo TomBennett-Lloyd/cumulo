@@ -80,11 +80,13 @@ export const renderChartWithOverlay = (
 /**
  * The plot every jsdom suite's coordinates are in.
  *
- * jsdom has no `ResizeObserver` (`use-chart-width.ts` documents the check), so
- * every chart rendered under `src/` draws at `DEFAULT_CHART_WIDTH` and this is
- * the rect it draws into. Derived rather than written out: the plot is the
- * component's own arithmetic at a known width, and a copy of the four numbers
- * here would be a second definition to keep true.
+ * Two guards hold that width, and `use-chart-width.ts` states both: the initial
+ * measurement is taken but discarded, because jsdom lays every box out at zero
+ * and a zero reading is refused; and no later resize replaces it, because jsdom
+ * ships no `ResizeObserver`. So every chart rendered under `src/` draws at
+ * `DEFAULT_CHART_WIDTH` and this is the rect it draws into. Derived rather than
+ * written out: the plot is the component's own arithmetic at a known width, and
+ * a copy of the four numbers here would be a second definition to keep true.
  */
 export const JSDOM_PLOT: PlotRect = chartPlot(DEFAULT_CHART_WIDTH);
 
