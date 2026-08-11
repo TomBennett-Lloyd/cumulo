@@ -88,9 +88,13 @@
   justify-content: space-between;
 }
 
-/* `--text-lg`, a step below the panel's old `--text-xl`: the card is a card on
-   the map rather than the top of the reading, and the fleet panel's own title
-   is now the largest heading under it. */
+/* `--text-lg`, a step below the retired site panel's `--text-xl` (#265): the
+   card is a card on the map rather than the top of the reading. It no longer
+   steps below a heading, though — since #323 there is no heading under the map
+   at all, the fleet chart's name having become an `aria-label`. What the step
+   matches now is `.site-table-summary` (site-table.css), the one named box the
+   reading still has, so the card sits level with the section below it rather
+   than over it. */
 .site-popover-title {
   margin: 0;
   font-size: var(--text-lg);

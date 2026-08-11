@@ -82,6 +82,21 @@ const LABEL_CONTAINMENT_TOLERANCE = 0.25;
 const PLOT_SVG = 'svg.forecast-chart';
 
 /**
+ * The full-width band the chart lives in since #323, and the figure inside it.
+ *
+ * Named rather than written out at each of the ten reads below, which is what
+ * this file's own history argues for: the band was `.fleet-panel` until #323
+ * turned the card into a section, and the rename cost ten identical edits here
+ * alone (`structure.md` rule 7). One constant is one edit next time.
+ *
+ * Scoped to the band rather than bare, because the page draws legend swatches and
+ * — while a site is selected — a popover of its own; a bare `.forecast-chart-figure`
+ * would be a claim about whichever figure the DOM happened to order first.
+ */
+const CHART_SECTION = '.fleet-chart-section';
+const CHART_FIGURE = `${CHART_SECTION} .forecast-chart-figure`;
+
+/**
  * Every label that is not inside the plot it belongs to, described.
  *
  * Descriptions rather than a boolean, because the failure is the reading: an
@@ -178,38 +193,40 @@ const crowdedTickLabels = async (figure: Locator): Promise<readonly string[]> =>
   );
 
 /**
- * How far the plot's right edge may sit from its panel's before the chart is not
- * filling the panel, in pixels.
+ * How far the plot's right edge may sit from its section's before the chart is
+ * not filling the section, in pixels.
  *
- * The panel pads itself by one `--space-4` step (`dashboard/fleet-panel.css`
- * owns that, and the token owns the length), so a chart filling its column still
- * stops that step short of the panel's *border* box — which is the box
- * `boundingBox` reports. The budget is that one step at the default root size
+ * The chart section pads itself *horizontally* by one `--space-4` step
+ * (`dashboard/fleet-panel.css` owns that, and the token owns the length), so a
+ * chart filling its column still stops that step short of the section's *border*
+ * box — which is the box `boundingBox` reports. The axis is named because the two
+ * stopped agreeing in #323: the vertical step is `--space-2` now, and this budget
+ * is about the horizontal one alone. It is that one step at the default root size
  * plus a little sub-pixel slack, and nothing more. What it has to catch is the
  * chart being held to a *measure* narrower than its column, which before #284 D3
- * left it short by most of the panel's width at the default viewport; a budget
+ * left it short by most of the section's width at the default viewport; a budget
  * loose enough to admit that would be measuring nothing.
  */
 const PANEL_FILL_TOLERANCE = 18;
 
-/** What `panelFit` says when the plot is filling its panel. */
-const FILLS_PANEL = 'fills its panel';
+/** What `panelFit` says when the plot is filling its section. */
+const FILLS_PANEL = 'fills its section';
 
 /**
- * Whether the plot fills the panel it is in, described.
+ * Whether the plot fills the section it is in, described.
  *
  * A description rather than a number for the same reason `escapedLabels` above
  * returns descriptions: the reading is the diagnosis. Signed, so both failures
- * are one measurement — a chart short of its panel (the D3 defect) and a chart
- * overhanging it (a plot spilling out of the card it lives in) are equally wrong
+ * are one measurement — a chart short of its section (the D3 defect) and a chart
+ * overhanging it (a plot spilling out of the band it lives in) are equally wrong
  * and read differently in the message.
  */
 const panelFit = async (page: Page): Promise<string> => {
-  const panel = await page.locator('.fleet-panel').boundingBox();
-  const plot = await page.locator(`.fleet-panel ${PLOT_SVG}`).boundingBox();
+  const panel = await page.locator(CHART_SECTION).boundingBox();
+  const plot = await page.locator(`${CHART_SECTION} ${PLOT_SVG}`).boundingBox();
 
   if (panel === null || plot === null) {
-    return 'the fleet panel or its plot has no layout box';
+    return 'the fleet chart section or its plot has no layout box';
   }
 
   const shortfall = panel.x + panel.width - (plot.x + plot.width);
@@ -296,7 +313,7 @@ test('draws the fleet chart at a real size, with its labels inside it', async ({
    * chart is the one on screen when the app opens. The default view is the one
    * every visitor gets and the one no jsdom test can measure.
    */
-  await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
+  await expectChartLaidOut(page.locator(CHART_FIGURE));
 });
 
 /*
@@ -308,7 +325,7 @@ test('draws the fleet chart at a real size, with its labels inside it', async ({
  * rendered box starts (`testing.md` rule 10).
  */
 test('fills the panel and folds the raw data away', async ({ page }) => {
-  const figure = page.locator('.fleet-panel .forecast-chart-figure');
+  const figure = page.locator(CHART_FIGURE);
 
   await expect(figure).toBeVisible();
 
@@ -376,23 +393,27 @@ test.describe('the first viewport', () => {
   test.use({ viewport: D15_VIEWPORT });
 
   /*
-   * #284 D15: the map, the panel's heading row and the whole plot on one screen.
+   * #284 D15: the map, the row of controls over the chart, and the whole plot on
+   * one screen. The heading row that phrasing named went in #323 — the section's
+   * name is an `aria-label` now and the fleet's numbers went entirely — so what
+   * is left above the plot, and what is measured below, is
+   * `.fleet-chart-controls`: the (i) and the window picker.
    *
    * The reason this is a *layout* case and not an arithmetic one is that the
-   * stack above the chart is made of text boxes — a header bar, a heading row, a
-   * completeness line — whose heights are the font's to decide. The chart's
-   * height is the one part of that stack anybody chose (`CHART_VIEW_BOX_HEIGHT`,
-   * `src/charts/chart-geometry.ts`), and it was chosen by subtracting the rest
-   * from this viewport, which is a sum only a rendered page can check.
+   * stack above the chart is made of text boxes — a header bar, a row of chips —
+   * whose heights are the font's to decide. The chart's height is the one part of
+   * that stack anybody chose (`CHART_VIEW_BOX_HEIGHT`,
+   * `src/charts/chart-geometry.ts`), and that docblock's arithmetic is a sum only
+   * a rendered page can check.
    *
    * Nothing here scrolls, deliberately: `boundingBox` is relative to the
    * viewport's own origin, so a case that scrolled first would be asserting that
    * the chart fits on *some* screenful rather than on the first one.
    */
-  test('fits the map, the heading row and the whole chart in one desktop viewport (D15)', async ({
+  test('fits the map, the controls row and the whole chart in one desktop viewport (D15)', async ({
     page,
   }) => {
-    const chart = page.locator(`.fleet-panel ${PLOT_SVG}`);
+    const chart = page.locator(`${CHART_SECTION} ${PLOT_SVG}`);
 
     // Both, and polled: the map's canvas is the thing above the chart that
     // arrives late, and a chart measured before the map has taken its band would
@@ -404,25 +425,37 @@ test.describe('the first viewport', () => {
      * Polled as one reading rather than asserted as three, for the reason
      * `escapedLabels` is: the failure is the diagnosis. A message naming which
      * of the three claims broke, and by how much, is the difference between "the
-     * chart moved" and knowing whether it grew, the map grew, or the heading row
-     * wrapped to a second line.
+     * chart moved" and knowing whether it grew, the map grew, or the controls row
+     * left the flow above it.
+     *
+     * What the controls row's box is doing in the reading, now that the row it
+     * replaced carried the section's heading: it is the one part of the stack
+     * above the plot that this file can see at all, and reading it keeps the
+     * failure legible — a row with no box is a row that never rendered, which is
+     * a different defect from a chart in the wrong place. Its *height* is not
+     * asserted, deliberately. A row that wraps to a second line pushes the plot
+     * down rather than over it, so that failure arrives as an overhang and is the
+     * first arm's to report; what the second arm catches is the row leaving the
+     * flow — positioned, overlapped, or drawn under the plot it introduces.
+     * Normal flow puts the plot's top exactly at the row's bottom, so the
+     * comparison is `>` and touching is the passing case.
      */
     await expect
       .poll(
         async () => {
           const chartBox = await chart.boundingBox();
-          const headerBox = await page.locator('.fleet-panel-header').boundingBox();
+          const controlsBox = await page.locator('.fleet-chart-controls').boundingBox();
 
-          if (chartBox === null || headerBox === null) {
-            return 'the chart or the panel heading row has no layout box';
+          if (chartBox === null || controlsBox === null) {
+            return 'the chart or the section’s controls row has no layout box';
           }
 
           const overhang = chartBox.y + chartBox.height - D15_VIEWPORT.height;
           const scaleError = Math.abs(chartBox.height - CHART_VIEW_BOX_HEIGHT);
           const problems = [
             overhang > 0 ? `the chart runs ${overhang.toFixed(1)}px past the fold` : null,
-            headerBox.y + headerBox.height > chartBox.y
-              ? 'the panel heading row is not wholly above the chart'
+            controlsBox.y + controlsBox.height > chartBox.y
+              ? 'the section’s controls row is not wholly above the chart'
               : null,
             // The 1:1 claim, measured. A chart drawn in a fixed view box and
             // scaled to its column renders at whatever height the aspect ratio
@@ -449,7 +482,7 @@ test.describe('the first viewport', () => {
    * margins have to hold a label in.
    */
   test('keeps its labels inside the plot at the desktop viewport too', async ({ page }) => {
-    await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
+    await expectChartLaidOut(page.locator(CHART_FIGURE));
   });
 });
 
@@ -478,7 +511,7 @@ test.describe('a narrow window', () => {
   test('keeps its tick labels apart, and inside the plot, at a narrow viewport', async ({
     page,
   }) => {
-    await expectChartLaidOut(page.locator('.fleet-panel .forecast-chart-figure'));
+    await expectChartLaidOut(page.locator(CHART_FIGURE));
   });
 });
 
@@ -499,7 +532,7 @@ test('keeps the fleet chart laid out once a selected site is drawn over it', asy
 
   await row.click();
 
-  const figure = page.locator('.fleet-panel .forecast-chart-figure');
+  const figure = page.locator(CHART_FIGURE);
 
   /*
    * The mark, and then the name. Polled rather than read once because the
@@ -665,7 +698,7 @@ const LANDED_WITH_THE_POINTER = 'landed where the pointer stopped';
  * one number at every viewport.
  */
 test('follows a real pointer across the plot and lands where it stops', async ({ page }) => {
-  const figure = page.locator('.fleet-panel .forecast-chart-figure');
+  const figure = page.locator(CHART_FIGURE);
   const plot = figure.locator(PLOT_SVG);
 
   // The map is what pushes the panel down the page after first paint, so it is

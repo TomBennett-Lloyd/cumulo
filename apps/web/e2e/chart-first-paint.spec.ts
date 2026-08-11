@@ -60,7 +60,7 @@ declare global {
 const PLOT_SVG = 'svg.forecast-chart';
 
 /** The figure whose measured box the plot's width is supposed to be. */
-const CHART_FIGURE = '.fleet-panel .forecast-chart-figure';
+const CHART_FIGURE = '.fleet-chart-section .forecast-chart-figure';
 
 /**
  * The width out of a `viewBox`, which is its third number.

@@ -1,13 +1,9 @@
-import { fleetCapacityKw, type Site } from '@cumulo/shared';
-
 import type { RangeHours } from '../data/fleet-data-source';
 import { rangeLabel } from './range-picker';
-import { capacityLabel } from './site-format';
 
 /*
- * What the fleet panel says about itself: its subtitle, how the chart names the
- * window it is drawing, the two names its chart carries, and the one line
- * summarising the fleet.
+ * What the fleet chart says about itself: its subtitle, how it names the window
+ * it is drawing, and the two names it carries.
  *
  * The third copy module in `apps/web`, and the split between the three is by
  * subject rather than by size. `state-copy.ts` owns what the app says while it
@@ -58,27 +54,20 @@ export const SUBTITLE_WITH_ACTUALS =
 export const SUBTITLE_FORECAST_ONLY =
   'Every site’s forecast for the hours ahead, summed hour by hour, with the fleet’s simulated P10–P90 band.';
 
-/** Plural is the fleet's usual state; the singular exists so the demo's first site reads right. */
-const siteCountLabel = (count: number): string =>
-  `${String(count)} ${count === 1 ? 'site' : 'sites'}`;
-
-/**
- * The fleet in one line: how many, and how much of it there is.
- *
- * Capacity comes from `@cumulo/shared` rather than a sum written here, because
- * fleet arithmetic lives there (`architecture.md` rule 3) and a second sum would
- * be a second definition of the fleet's size.
- *
- * The line used to end in the word "installed", and #344 took it out
- * (`design.md` rule 2: chrome earns its place). It served no reader decision the
- * line does not already serve — a kW figure under a heading reading "Fleet
- * forecast" is the fleet's capacity, and the unit says which quantity it is. The
- * saving is not only ink: this is the auxiliary text the header row shrinks
- * first when it runs out of width (`fleet-panel.css`), so every character it
- * does not need is a character the picker never has to displace.
+/*
+ * There is no `fleetStatsLine` here any more, and no `siteCountLabel` under it.
+ * The line read "60 sites · 332 kW" beside a chart of exactly those 60 sites,
+ * and #323 deleted it with the heading it sat next to: a summary restating what
+ * the chart below it draws serves no reader decision the chart does not already
+ * serve (`design.md` rule 2). #344 had already taken the word "installed" off
+ * the end of it for the same reason, one clause at a time. The fleet's count
+ * survives where a reader goes to count it — the site table's own summary
+ * (`SiteTable.tsx`, "Sites (n)") — and `capacityLabel` stays in
+ * `site-format.ts`, whose three surviving callers are `SiteTable.tsx`,
+ * `map/SitePopoverCard.tsx` and `header/SiteSearch.tsx`. Named rather than
+ * counted, so the next reader can check the claim without a grep of their own
+ * (`architecture.md` rule 10).
  */
-export const fleetStatsLine = (sites: readonly Site[]): string =>
-  `${siteCountLabel(sites.length)} · ${capacityLabel(fleetCapacityKw(sites))}`;
 
 /**
  * The window the chart's labels name.

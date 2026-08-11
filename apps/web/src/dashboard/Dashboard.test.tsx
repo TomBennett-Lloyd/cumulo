@@ -18,7 +18,7 @@ import {
   fleetChartTable,
   fleetRows,
   fleetTable,
-  fleetPanel,
+  fleetChartSection,
   renderDashboard,
   settle,
   sitePopover,
@@ -208,7 +208,7 @@ describe('Dashboard', () => {
     // And the fleet keeps its place. A selection used to displace this panel;
     // nothing displaces it now, which is what lets the site be drawn *over* the
     // fleet rather than instead of it (#265).
-    expect(fleetPanel(container)).not.toBeNull();
+    expect(fleetChartSection(container)).not.toBeNull();
     expect(
       within(fleetTable())
         .getByRole('button', { name: (name) => name.startsWith(site.name) })

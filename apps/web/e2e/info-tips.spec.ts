@@ -58,8 +58,8 @@ import { routeBasemap } from './hermetic-basemap';
  */
 const MAX_TAB_PRESSES = 100;
 
-const FLEET_TIP_BUTTON = '.fleet-panel .info-tip-button';
-const FLEET_TIP_PANEL = '.fleet-panel .info-tip-panel';
+const FLEET_TIP_BUTTON = '.fleet-chart-section .info-tip-button';
+const FLEET_TIP_PANEL = '.fleet-chart-section .info-tip-panel';
 
 /** Tab until the fleet panel's (i) holds focus, or say which element never did. */
 const tabToFleetTip = async (page: Page): Promise<void> => {

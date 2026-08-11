@@ -13,12 +13,21 @@
  */
 
 /* `flex-shrink: 0` is the belt to `fleet-panel.css`'s braces (#344, design.md
- * rule 7 — the window selectors stay on one line at every screen size). The
- * stats line yielding is what stops the group being pushed onto a line of its
- * own; this is what stops the group being *squeezed* below its min-content width
- * once it is sharing a line, which would crush the three chips rather than move
- * them. Written here rather than at the header, because it is the picker's own
- * claim about itself and travels with it to any second caller. */
+ * rule 7 — the window selectors stay on one line at every screen size). What it
+ * stops is the group being *squeezed* below its min-content width while it is
+ * sharing a line, which would crush the three chips rather than move them.
+ *
+ * It used to be half of a pair: the stats line yielding was what stopped the
+ * group being pushed onto a line of its own. That item went with #323, and
+ * nothing replaced it — the controls row it now sits in carries two controls and
+ * no text, so at a width that cannot hold both the picker takes a line of its
+ * own, which is the outcome `fleet-panel.css`'s `flex-wrap` deliberately sanctions
+ * (controls have wrap priority; they are never crushed). The rule below is
+ * unchanged by that and is the claim this file is entitled to make: whatever line
+ * the group ends up on, the chips on it keep their width.
+ *
+ * Written here rather than at the row, because it is the picker's own claim about
+ * itself and travels with it to any second caller. */
 .range-picker {
   display: flex;
   flex-shrink: 0;
@@ -29,21 +38,33 @@
  * choice among three, and borrowing the toggle's selector would tie a data
  * control to a chrome control that is free to change.
  *
- * The unpressed fill is `--color-bg`, not `--color-surface`: the picker sits
- * inside a `--color-surface` card (`.fleet-panel`), so a surface-on-surface chip
- * has no edge at all and the two windows the reader has *not* chosen read as
- * plain text rather than as controls. `--color-bg` against a card is the app's
- * standing answer to that inversion rather than a border invented here — the
- * add-a-site hint in fleet-panel.css used to be the second example of it, and it
- * left with the map's own add-site control (#265). The toggle this shape came
- * from sits on the page background, where the inversion never arises.
+ * The unpressed fill is `--color-bg`, not `--color-surface`: the picker sits on
+ * a `--color-surface` ground (`.fleet-chart-section`, the full-width band #323
+ * made of the card that used to hold it), so a surface-on-surface chip has no
+ * edge at all and the two windows the reader has *not* chosen read as plain text
+ * rather than as controls. `--color-bg` against that ground is the app's standing
+ * answer to the inversion rather than a border invented here — the add-a-site
+ * hint in fleet-panel.css used to be the second example of it, and it left with
+ * the map's own add-site control (#265). What the ground is a *shape* of does not
+ * enter into it: losing the card's radius and measure changed nothing about the
+ * two colours meeting. The toggle this shape came from sits on the page
+ * background, where the inversion never arises.
  *
  * `white-space: nowrap` is the second half of #344's never-wrap belt: every
  * label here holds a space (`24 h`, `7 d`), and a chip that broke at it would
  * make the group two lines tall while the group itself was still, technically,
- * on one line — the same defect design.md rule 7 forbids, one level down. */
+ * on one line — the same defect design.md rule 7 forbids, one level down.
+ *
+ * The padding is one step down on both axes from the shape it inherited (#323).
+ * The picker is chrome, and the row it sits on is the last thing between the map
+ * and the plot: every pixel that row is tall is a pixel the chart does not get
+ * (design.md rule 3 — the data owns the viewport; `chart-geometry.ts`'s
+ * `CHART_VIEW_BOX_HEIGHT` is where that stack is added up). The chips set the
+ * row's height, so a step off each axis buys the chart that height back without
+ * touching the label, the fill, or the shrink belt above — the chips still size
+ * to their content, so the group's width follows its labels exactly as before. */
 .range-picker-button {
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-3);
   white-space: nowrap;
   border: none;
   border-radius: var(--radius-md);

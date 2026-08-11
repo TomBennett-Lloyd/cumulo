@@ -522,6 +522,39 @@ export const Dashboard = ({
           </div>
 
           {/*
+           * The fleet's chart, as a full-width band directly under the map and
+           * never displaced.
+           *
+           * A sibling of `.dashboard-map` rather than the first card inside the
+           * reading, which is #323's structural half. The map and the chart are
+           * one reading unit — the same fleet, drawn in space and then in time —
+           * and the measure, the padding and the card edge between them were all
+           * claiming a separation nobody meant (`design.md` rule 4). The two
+           * surfaces now share a continuous `--color-surface` band with no gap
+           * between them (`.dashboard { gap: 0 }`), and the centred measure picks
+           * up again below, where the reading genuinely is a separate thing.
+           *
+           * There is no context region here any more. One region showing either a
+           * site or the fleet was the shape the reading had while a site's detail
+           * was a panel in this flow; the detail is a card on the site's own marker
+           * now, so nothing swaps, nothing is hidden, and the fleet chart is on
+           * screen in every state of the page.
+           *
+           * The selection reaches it as an overlay rather than as a replacement,
+           * which is the whole argument for the move: a reader comparing one roof
+           * against the fleet was previously asked to remember one chart while
+           * looking at the other. The fleet's sum still changes on exactly one
+           * event — a site being added — and `refreshToken` is that event, counted.
+           */}
+          <FleetPanel
+            dataSource={dataSource}
+            sites={sites}
+            selectedSite={selectedSite}
+            selectionReady={forecast.status === 'ready'}
+            refreshToken={createdSites.length}
+          />
+
+          {/*
            * A `div` rather than the `<aside>` this used to be. `aside` marks a
            * complementary landmark — content beside the thing the page is about —
            * which is what this was while it sat in a column next to the map. It is
@@ -529,29 +562,6 @@ export const Dashboard = ({
            * the landmark would be describing a shape the layout no longer has.
            */}
           <div className="dashboard-content">
-            {/*
-             * The fleet's chart, first under the map and never displaced.
-             *
-             * There is no context region here any more. One region showing either a
-             * site or the fleet was the shape the reading had while a site's detail
-             * was a panel in this flow; the detail is a card on the site's own marker
-             * now, so nothing swaps, nothing is hidden, and the fleet chart is on
-             * screen in every state of the page.
-             *
-             * The selection reaches it as an overlay rather than as a replacement,
-             * which is the whole argument for the move: a reader comparing one roof
-             * against the fleet was previously asked to remember one chart while
-             * looking at the other. The fleet's sum still changes on exactly one
-             * event — a site being added — and `refreshToken` is that event, counted.
-             */}
-            <FleetPanel
-              dataSource={dataSource}
-              sites={sites}
-              selectedSite={selectedSite}
-              selectionReady={forecast.status === 'ready'}
-              refreshToken={createdSites.length}
-            />
-
             {/*
              * The fleet as a table, folded away (#265). It used to be a section
              * with a `Sites` heading and sixty rows open under it, which is the

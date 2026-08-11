@@ -1,7 +1,7 @@
 /*
  * The content column's async states, wearing one set of clothes.
  *
- * These seven classes are the whole vocabulary: a panel that needs a "loading"
+ * These six classes are the whole vocabulary: a panel that needs a "loading"
  * or "this failed" or "there is nothing here" line reaches for one of them
  * rather than inventing a sibling, which is what kept `.view-status`,
  * `.forecast-status` and `.dashboard-failure` saying the same thing three ways.
@@ -81,13 +81,11 @@
   text-decoration: underline;
 }
 
-/* The quiet footnote under a chart: how complete the aggregate behind it is.
-   Smaller than a state line because it accompanies content rather than standing
-   in for it. It used to carry the window as well; that sentence is a description
-   rather than a state and moved behind the fleet panel's (i) in #265
-   (`info/info.css`), leaving the completeness line as this class's one caller. */
-.panel-caption {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
+/* There is no `.panel-caption` rule any more. It was the quiet footnote under a
+   chart, and it lost its callers one at a time: the window it also carried moved
+   behind the fleet chart's (i) in #265 (`info/info.css`), leaving the
+   "Aggregated from n sites" line as its last one, and #323 deleted that too —
+   a complete aggregate is what a reader already expects, so the sentence
+   described the chart rather than reporting anything (`design.md` rule 2). A
+   rule kept for a class nothing renders is a claim about a shape the page does
+   not have; the vocabulary is the six above. */
