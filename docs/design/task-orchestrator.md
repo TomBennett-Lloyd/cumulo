@@ -235,7 +235,11 @@ CI: green | red | pending — pasted `gh pr checks` tail, and the head sha it ra
 Verify: rc=<n> (pasted: `pnpm verify; echo $?` — including its `verify root:` line,
   which must name this worktree and branch)
 
-Review loop: VERDICT APPROVE | CAP-REACHED — cycles <c>/3
+Review loop: VERDICT APPROVE | CAP-REACHED | CAP-REACHED+CONFIRMED-APPROVE — cycles <c>/3
+  Confirmation pass (mandatory whenever the cap was reached): scope <the fix commits the
+    last cycle never saw>, rounds <n>, verdict APPROVE | ITERATE, findings <n>. It is not
+    a cycle, so it never moves the /3 above. Report bare CAP-REACHED only if the pass has
+    not returned APPROVE — that is what routes the PR to human review.
   FIX-NOW found/resolved: <n>/<n>
   Demoted at cap (pure-quality, logged to tech-debt): <titles | none>
   Correctness residue: NONE (mandatory NONE — a known bug never reaches this report as DONE)
@@ -287,7 +291,8 @@ field as PARTIAL — a template hole is a claim withheld, not a default-pass.
 Plan accuracy: chunks as planned <n>/<k>; re-planned: <ids + one line why | none>
   (batch: one line per member, including dropped members and their drop cause)
 Escalations: BLOCKED <n>, STRUGGLING <n> (consultant verdicts, one line each | none)
-Review loop: cycles <c>/3; findings a standards-index trigger should have caught
+Review loop: cycles <c>/3 (+ confirmation pass: <rounds, verdict> | none needed —
+  the loop closed on APPROVE); findings a standards-index trigger should have caught
   earlier: <finding → the trigger that under-fired | none>
 Bounce rounds after first TASK REPORT: <n> (cause of each | none)
 Wasted work: <duplicated/discarded effort and its cause | none>

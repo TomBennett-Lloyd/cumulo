@@ -74,7 +74,7 @@ Reading 2 is what is deployed, and it is defensible: the row is what the user se
 
 **Evidence (this PR's own review cycle 1).** The pass added a **scoped confirmation pass on the final fix diff** to `review-loop`, because a capped loop had no way to earn the APPROVE `reviewedSourceRule` demands — four PRs (#391, #395, #398, #400) had already invented that route independently. The rule landed, and the sentences stating the old bound did not move with it. The reviewer found the contradiction inside the same PR: an orchestrator reading "Hard cap: 3 cycles" stops exactly where the new rule says it must not.
 
-Eight carriers were trued up in this PR — `review-loop`'s frontmatter and its opening bound, `.claude/agents/task-orchestrator.md`'s stop-list, and four sites in `docs/design/task-orchestrator.md` — and the bound now carries a **restatement ledger** beside its owner in `review-loop`, naming every site including this one. One carrier is out of reach:
+Every non-gated carrier the sweep found was trued up in this PR — `review-loop`'s frontmatter and its opening bound, `.claude/agents/task-orchestrator.md`'s stop-list and its two report templates, and the ownership-split role table, one-review-loop-per-batch paragraph, bounce-round item, risk-table row and mirrored templates in `docs/design/task-orchestrator.md` — and the bound now carries a **restatement ledger** beside its owner in `review-loop`, which states the sweep it came from and classes what it excludes. One carrier is out of reach:
 
 > `CLAUDE.md`, the Workflow bullet: "Review loop (`/review-loop`): max 3 cycles. Systemic findings go to `docs/tech-debt.md`, not into endless iteration. Correctness bugs always block merge."
 
@@ -84,7 +84,7 @@ Eight carriers were trued up in this PR — `review-loop`'s frontmatter and its 
 
 **Why it is here rather than in the diff**: `CLAUDE.md` is `humanAlways`. Note that `.claude/workflow.json` does **not** state the bound (swept, no match), so this is the only gated carrier.
 
-**This is also the worked example P3 asks about**, which is why the two should be decided together. Every non-gated carrier could be — and was — trued up by a PR that never touched `CLAUDE.md`, leaving the repo in a state where seven documents say one thing and the gated one says another. Nothing gated that divergence. If P3 is answered "no" (a reading is not a change), the same shape recurs on the next amendment to any rule `CLAUDE.md` restates; if "yes", this PR itself would have tripped the gate, which is the cost side of that answer stated concretely.
+**This is also the worked example P3 asks about**, which is why the two should be decided together. Every non-gated carrier could be — and was — trued up by a PR that never touched `CLAUDE.md`, leaving `review-loop` and both `task-orchestrator` documents saying one thing and the gated one saying another. Nothing gated that divergence. If P3 is answered "no" (a reading is not a change), the same shape recurs on the next amendment to any rule `CLAUDE.md` restates; if "yes", this PR itself would have tripped the gate, which is the cost side of that answer stated concretely.
 
 **Until it is decided**, the divergence is live and one-directional: `CLAUDE.md` understates the loop. That is the safe direction — an agent following it stops early and hands a PR to the confirmation pass late, rather than merging something unreviewed — but it is a contradiction, and the ledger in `review-loop` now names it as a known one rather than leaving it to be rediscovered.
 
