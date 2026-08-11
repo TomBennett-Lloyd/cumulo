@@ -102,6 +102,36 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * produces a number nobody can act on. It is stated instead of implied, and
  * `docs/tech-debt.md` carries the residual — gating the prefix per command
  * would close it, at the cost of a deadline check in front of the limiter.
+ *
+ * **Restatement ledger (`docs/standards/architecture.md` rule 9).** This header
+ * owns the admission invariant — every admitted unit bounded by one
+ * {@link STORAGE_COMMAND_WORST_MS} of wall clock, plus the per-route ungated
+ * straight-line prefix counted above. (The millisecond figure itself is
+ * `@cumulo/storage`'s, as **The unit** says; what is owned here is what an
+ * admission buys.) These sites carry the claim rather than pointing at it, and
+ * move with it in the same commit:
+ *
+ * - `apps/api/README.md`, the 504 bullet of the error-contract section —
+ *   *paraphrasing*: it restates the bound, the fan-out's overlap and the
+ *   ungated-prefix residual for API callers.
+ * - `apps/api/src/openapi/responses.ts`, the `commonFailures` docblock —
+ *   *paraphrasing*: "between admitted units", and the same residual.
+ * - `apps/api/src/forecast/fleet-series-read.ts`, the "Why one admission prices
+ *   one command" docblock — *arguing*: the batch-costs-its-maximum argument is
+ *   about this bound and quotes it to reason from.
+ * - `infra/api/lambda.tf`, the header comment above the `timeout` attribute on
+ *   `aws_lambda_function.api` — *arguing*: the 504 residual it states turns on a
+ *   unit being a bound on wall clock rather than being one command.
+ *
+ * None of them quotes this header's wording — even the *arguing* pair, which
+ * name the constant, state the claim in their own words — so a sweep keyed to
+ * the phrasing here finds none of them. Shape it around the claim (rule 10).
+ * The one behind this list:
+ * `command grep -rnE 'admitted unit|straight-line prefix|STORAGE_COMMAND_WORST_MS|wall clock' apps/api infra/api`,
+ * run 2026-08-11. The list is a **floor**, not a census: a claim of completeness
+ * is falsified by one more carrier, and this claims only what that sweep found.
+ * That sweep also reaches `request-budget.test.ts`, which imports the constant
+ * and computes with it rather than restating anything, so it needs no entry.
  */
 
 /**

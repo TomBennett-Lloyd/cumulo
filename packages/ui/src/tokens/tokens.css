@@ -64,6 +64,32 @@
  * stops being legible over dark basemap ink; raise it and the map stops showing
  * through, which is the whole purpose of a veil. Re-run the measurement before
  * changing it.
+ *
+ * Restatement ledger (`docs/standards/architecture.md` rule 9). This block owns
+ * the ratios above and the mix they were measured at. These sites quote them to
+ * argue from — rule 9's *arguing* carrier — and move with them in the same
+ * commit:
+ *
+ *   * docs/design/map-treatment.md, `## Attribution`, the first placement
+ *     bullet: quotes the muted and hover/focus figures to state the legibility
+ *     floor the band's placement rests on.
+ *   * ../attribution/attribution.css's module docblock: quotes the accent
+ *     figures — both modes on the veil, light on the opaque surface — as the
+ *     reason that credit's link is muted ink rather than accent.
+ *   * apps/web/src/header/header.css's `.about-dialog a` docblock: quotes the
+ *     light and dark accent figures on --color-surface to argue the dialog's
+ *     links are a weaker, mode-dependent case of the same defect.
+ *
+ * Sweep behind this list, run 2026-08-11: the ratio literals
+ * (`4\.91|12\.16|3\.49|3\.76|4\.30|4\.40`) and the claim family
+ * (`clears AA|below AA|legibility floor`) across *.css, *.md, *.ts and *.tsx.
+ * It is a FLOOR, not a census — completeness here is falsified by one more
+ * carrier, so this claims only what that sweep found. Sites the claim sweep
+ * reaches that carry no figure of their own (apps/web/src/map/map.css,
+ * docs/tech-debt.md, map-treatment.md's later accent note) restate nothing and
+ * are deliberately unlisted: they state the verdict, not the measurement, so a
+ * re-measurement that moved a figure without flipping a verdict leaves them
+ * true.
  */
 
 :root {
