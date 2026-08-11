@@ -1,7 +1,8 @@
-import type { Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { layoutBoxOf, maybeBoxOf } from './layout-box';
+import { PHONE_VIEWPORT } from './viewports';
 
 /*
  * The shipping composition, asserted once.
@@ -16,7 +17,9 @@ import { routeBasemap } from './hermetic-basemap';
  * Kept small on purpose. This lane is slow (a cold production build per run)
  * and it is not where behaviour gets tested; `src/**` owns that. A case earns
  * its place here only if assembling the app is what makes it true — with one
- * documented exception, at the foot of this file.
+ * documented exception, which is `layout-box.spec.ts` rather than anything in
+ * this file: it asserts the lane's own measuring instruments, assembles nothing,
+ * and says why it lives in this directory anyway (#404).
  */
 
 /**
@@ -30,118 +33,6 @@ import { routeBasemap } from './hermetic-basemap';
  * whole strip-height clear of the map's bottom.
  */
 const EDGE_TOLERANCE_PX = 2;
-
-/**
- * A laid-out box in client space — what `Locator.boundingBox` yields once it has
- * one.
- *
- * Derived from the locator's own return type rather than hand-written, so this
- * cannot drift from what Playwright actually hands back (`typing.md` rule 3's
- * principle, applied to a library boundary instead of a schema).
- */
-type LayoutBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
-
-/**
- * The one capability `layoutBoxOf` needs of the thing it measures.
- *
- * Derived from `Locator` rather than restated, on the same principle as
- * `LayoutBox` above: the helper cannot drift from Playwright's signature
- * because it does not own it. Narrowing to the single method is also the seam
- * the regression case below needs — a real `Locator` cannot be asked to flicker
- * on demand, and what the helper does when its source flickers is the whole
- * behaviour under test.
- */
-type BoxSource = Pick<Locator, 'boundingBox'>;
-
-/**
- * One element's box, once the browser has laid it out.
- *
- * Polled rather than read once, and that is a correctness fix rather than a
- * tolerance: this helper used to throw on the first `null`, which made every
- * caller a race against layout. It lost on CI while passing on every local run
- * (#274 — "The map canvas is on the page but has no layout box", 862ms, so it
- * raced rather than hung). The window is real and specific. `.map-canvas` is
- * worn by both the pending shell and the live map — that is `MapSurface`'s whole
- * point, the same box either side of the swap — so a `toBeVisible` before the
- * measurement can be satisfied by the *placeholder*, and the box read that
- * follows can land in the instant the placeholder has gone and maplibre's
- * container has not yet been laid out. A faster machine simply never loses that
- * instant.
- *
- * So the readiness handling is the poll and nothing else: no `waitForTimeout`,
- * no retry budget, no tolerance on the measurements the callers then make. The
- * state being waited on is "this element has a box", which is exactly the
- * precondition of measuring one.
- *
- * `boundingBox` returning `null` therefore stops meaning "not yet" and starts
- * meaning "never" — an element with no layout at all, which is a different
- * defect from a box in the wrong place and still deserves its own message
- * rather than a `NaN` comparison downstream (`error-handling.md` rule 1). The
- * poll's timeout is what reports it now, so an element that genuinely never
- * gets a box still fails, and fails naming itself.
- *
- * The sample the poll settles on is the sample returned. `expect.poll` reports
- * whether the condition held rather than the value it held, and this helper
- * used to answer that by reading the box a second time — which re-opened at the
- * other end the race #274 closed at this one. A box read is a state, and a
- * state worth observing is a state worth keeping: between the two reads the
- * element was free to lose its layout again, and it was the second read that
- * owned the assertion. Three consecutive CI failures over one byte-identical
- * tree measured the window a contended runner opens — rotating victims across
- * two tests and two elements, with this helper and its message constant in all
- * three, against 30/30 green locally (#367). That invariance is what convicted
- * the shared helper rather than either test: what the three failures had in
- * common was the code below, not the case that happened to run it. Capturing
- * what the poll saw closes the window by construction: there is no second read
- * left to disagree with the first.
- *
- * Captured, but deliberately not *settled* — no second matching reading, no
- * stability window. The callers compare geometry rather than aiming pointer
- * events at the box — mostly under `EDGE_TOLERANCE_PX`, and where not, across
- * gaps far larger than any jitter: the chart-under-map case below compares raw
- * edges precisely because the chart section's own padding and its controls row
- * stand between the two boxes. So "a box existed, and this is it" is the entire
- * precondition being established here.
- * Waiting for a box to stop moving would be scope bought against no measurement
- * flake anyone has seen.
- *
- * The sample lands in a one-property holder rather than a plain `let`, and that
- * is the compiler's requirement rather than a preference. TS never follows an
- * assignment made inside the poll's closure, so a `let` initialised to `null`
- * is still narrowed to `null` at the guard below, which reduces the guard to a
- * comparison the checker can discharge — `no-unnecessary-condition` is right to
- * call that decoration. A property of an object whose type is not a union is
- * not narrowed by its initialiser, so `latest.box` keeps its honest
- * `LayoutBox | null` and the guard stays a check the compiler admits.
- *
- * What that guard reports is an invariant, not a race: it can fire only if
- * `expect.poll` resolved on a `null` sample, which its contract rules out. So
- * it names a violated invariant rather than a failed measurement
- * (`error-handling.md` rule 1).
- *
- * The name is a parameter rather than something reached in from the enclosing
- * test (`structure.md` rule 1), and it is what makes both messages point at the
- * element that actually failed.
- */
-const layoutBoxOf = async (source: BoxSource, name: string): Promise<LayoutBox> => {
-  const latest: { box: LayoutBox | null } = { box: null };
-
-  await expect
-    .poll(
-      async () => {
-        latest.box = await source.boundingBox();
-        return latest.box;
-      },
-      { message: `${name} never acquired a layout box.` },
-    )
-    .not.toBeNull();
-
-  if (latest.box === null) {
-    throw new Error(`${name}'s layout-box poll resolved without a non-null sample to return.`);
-  }
-
-  return latest.box;
-};
 
 /**
  * The size `generateFleet` (packages/shared/src/fleet.ts) produces for the demo
@@ -183,17 +74,20 @@ test('swaps the loading placeholder for a laid-out WebGL canvas', async ({ page 
   await expect(canvas).toBeVisible();
 
   /*
-   * Visibility alone would pass on a canvas collapsed to nothing, which is what
-   * a map that never got its GL context or its container size looks like from
-   * the DOM. The box is the difference between "maplibre mounted" and "maplibre
-   * is drawing".
+   * "Laid out" in this case's name is granted by the line above rather than by
+   * any measurement under it. A canvas collapsed to nothing — a map that never
+   * got its GL context or its container size — is already excluded by that
+   * `toBeVisible`, on this same element: Playwright grants visibility only to a
+   * non-empty box. So the `width > 0` and `height > 0` pair that used to sit here
+   * restated the gate that let it run, and the bare box read that briefly stood
+   * in for them asserted less still — a read whose value nothing looked at (#404).
+   *
+   * Nor is that visibility check standing in for the placeholder-swap poll #274
+   * bought. That window belongs to `.map-canvas`, worn by both the pending shell
+   * and the live map, and the reads later in this file are where it is waited
+   * out. `.maplibregl-canvas` exists only on the far side of the swap, so its
+   * being visible is the swap having happened.
    */
-  const box = await canvas.boundingBox();
-  if (box === null) {
-    throw new Error('The maplibre canvas is visible but has no layout box.');
-  }
-  expect(box.width).toBeGreaterThan(0);
-  expect(box.height).toBeGreaterThan(0);
 
   /*
    * And the pending shell is gone rather than stacked behind it. `MapSurface`
@@ -384,7 +278,7 @@ test('drops the credits’ prose to keep the band one row when the window narrow
    * `undefined` and passing.
    */
   await expect
-    .poll(async () => (await attribution.boundingBox())?.height ?? Number.POSITIVE_INFINITY, {
+    .poll(async () => (await maybeBoxOf(attribution))?.height ?? Number.POSITIVE_INFINITY, {
       message: 'The credits band never settled to a single row after the window narrowed.',
     })
     .toBeLessThanOrEqual(oneRow.height + EDGE_TOLERANCE_PX);
@@ -433,10 +327,12 @@ test('drops the credits’ prose to keep the band one row when the window narrow
    * The rule is the map band's alone. The footer gives the credit a row to
    * itself, so that row is composed of this phrase and nothing else and holds its
    * full form here — never meeting the condition CLAUDE.md attaches to the
-   * compact form, as `docs/design/map-treatment.md`'s Attribution section reads
-   * that condition (#356). That is why the media query lives in `map.css` rather than beside the
-   * component in `@cumulo/ui`, and a rule that leaked to every surface would fail
-   * right here.
+   * compact form. Which rows meet that condition is
+   * `docs/design/map-treatment.md`'s Attribution section's to say: it measures
+   * the row **as composed**, and a row composed of one credit's full form and
+   * nothing else can always hold it (#356, #415). That is why the media query
+   * lives in `map.css` rather than beside the component in `@cumulo/ui`, and a
+   * rule that leaked to every surface would fail right here.
    */
   await expect(page.locator('.dashboard-footer .cumulo-attribution-prefix')).toBeVisible();
 });
@@ -514,16 +410,6 @@ test('meets the map band with the chart band, no page showing between them', asy
     EDGE_TOLERANCE_PX,
   );
 });
-
-/**
- * A phone, and the width the never-wrap rule is claimed at.
- *
- * 390x844 is a real device size rather than a number chosen just under a fold,
- * and it is the same one `header.spec.ts` measures the bar's own fold at —
- * shared on purpose, so a platform whose fonts run a few pixels wide shows up in
- * both places at once rather than only in whichever picked the tighter width.
- */
-const PHONE_VIEWPORT = { width: 390, height: 844 };
 
 /*
  * The window selectors never wrap (#344, `design.md` rule 7).
@@ -617,35 +503,4 @@ test.describe('the fleet chart’s controls row at phone width', () => {
       sectionBox.x + sectionBox.width + EDGE_TOLERANCE_PX,
     );
   });
-});
-
-/*
- * The lane's own measuring instrument, asserted deterministically.
- *
- * The charter above would exclude this on its face — nothing here assembles the
- * app — and it is here anyway because `layoutBoxOf` is here, and because the
- * unit lane's include boundary deliberately stops at this directory
- * (`apps/web/vite.config.ts` — "Vitest owns `src/` and nothing else"). Any other
- * home for the case would mean moving the helper out of the file whose specs
- * are its only callers.
- *
- * A source that has a box exactly once is #367's race made repeatable: the poll
- * settles on reading one, and the pre-fix helper then re-read, got `null`, and
- * threw. Three CI runs produced that by luck; this produces it by construction,
- * which is what `testing.md` rule 4 asks of a regression test. The `beforeEach`
- * still boots the page for it — the cost of living in this file, and it buys
- * this case nothing.
- */
-test('layoutBoxOf returns the box its poll observed rather than re-reading it', async () => {
-  const settled: LayoutBox = { x: 0, y: 0, width: 640, height: 480 };
-  let readings = 0;
-  const flickering: BoxSource = {
-    /* Not `async`: there is nothing to await, and `require-await` is right to say so. */
-    boundingBox: () => {
-      readings += 1;
-      return Promise.resolve(readings === 1 ? settled : null);
-    },
-  };
-
-  expect(await layoutBoxOf(flickering, 'The flickering element')).toEqual(settled);
 });

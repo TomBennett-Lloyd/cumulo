@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { layoutBoxOf } from './layout-box';
 import { revealSiteMarker } from './marker-reveal';
 
 /*
@@ -107,11 +108,7 @@ interface MarkerShape {
  * click, which is exactly the shape the overlay change surfaced.
  */
 const basemapPoint = async (page: Page): Promise<ViewportPoint> => {
-  const box = await page.locator('.map-canvas').boundingBox();
-
-  if (box === null) {
-    throw new Error('The map container is on the page but has no layout box.');
-  }
+  const box = await layoutBoxOf(page.locator('.map-canvas'), 'The map container');
 
   const left = box.x + EDGE_INSET_PX;
   const right = box.x + box.width - EDGE_INSET_PX;

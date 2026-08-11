@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 
 import { CHART_VIEW_BOX_HEIGHT } from '../src/charts/chart-geometry';
 import { routeBasemap } from './hermetic-basemap';
+import { layoutBoxOf, maybeBoxOf, settledBoxOf } from './layout-box';
 import { openSiteTable } from './site-table';
 
 /*
@@ -222,8 +223,8 @@ const FILLS_PANEL = 'fills its section';
  * and read differently in the message.
  */
 const panelFit = async (page: Page): Promise<string> => {
-  const panel = await page.locator(CHART_SECTION).boundingBox();
-  const plot = await page.locator(`${CHART_SECTION} ${PLOT_SVG}`).boundingBox();
+  const panel = await maybeBoxOf(page.locator(CHART_SECTION));
+  const plot = await maybeBoxOf(page.locator(`${CHART_SECTION} ${PLOT_SVG}`));
 
   if (panel === null || plot === null) {
     return 'the fleet chart section or its plot has no layout box';
@@ -248,15 +249,24 @@ const expectChartLaidOut = async (figure: Locator): Promise<void> => {
   await expect(figure).toBeVisible();
 
   /*
-   * The zero-height class of defect. Visibility alone would pass on a plot
-   * collapsed to nothing, which is what a chart mounted into a container with
-   * no measured size looks like from the DOM — and a chart drawing nothing is
-   * the one thing a `role="img"` with a good accessible name still hides.
+   * The zero-height class of defect — a chart mounted into a container with no
+   * measured size, which is the one thing a `role="img"` with a good accessible
+   * name still hides.
+   *
+   * The pair earns its place here, and the reason is which element the gate
+   * above is on. `toBeVisible` was asserted of the *figure*, and Playwright's
+   * visibility is a claim about that element's own box: an ancestor with a
+   * perfectly good box says nothing whatever about a descendant's, and the plot
+   * inside a laid-out figure is exactly the thing that can be collapsed to
+   * nothing here. So this is not the same assertion twice, as it would be if the
+   * gate and the measurement named one element (#404 — `composition.spec.ts` had
+   * that shape and lost the pair).
+   *
+   * The read is polled because the plot's box arrives as the column settles, and
+   * it is the poll that makes the gate the element actually measured.
    */
-  const box = await figure.locator(PLOT_SVG).boundingBox();
-  if (box === null) {
-    throw new Error('The chart figure is visible but its plot has no layout box.');
-  }
+  const box = await layoutBoxOf(figure.locator(PLOT_SVG), 'The chart figure’s plot');
+
   expect(box.width).toBeGreaterThan(0);
   expect(box.height).toBeGreaterThan(0);
 
@@ -443,8 +453,8 @@ test.describe('the first viewport', () => {
     await expect
       .poll(
         async () => {
-          const chartBox = await chart.boundingBox();
-          const controlsBox = await page.locator('.fleet-chart-controls').boundingBox();
+          const chartBox = await maybeBoxOf(chart);
+          const controlsBox = await maybeBoxOf(page.locator('.fleet-chart-controls'));
 
           if (chartBox === null || controlsBox === null) {
             return 'the chart or the section’s controls row has no layout box';
@@ -554,14 +564,6 @@ test('keeps the fleet chart laid out once a selected site is drawn over it', asy
 });
 
 /**
- * The plot's rendered box, named by deriving it rather than by restating it —
- * Playwright gives `boundingBox` an anonymous return type with no exported name,
- * and a hand-written `{ x, y, width, height }` here would be a second copy of a
- * shape this file does not own (`architecture.md` rule 9).
- */
-type PlotBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
-
-/**
  * Where the pointer arrives on the plot, and where it parks, as shares of the
  * plot's rendered width.
  *
@@ -614,54 +616,6 @@ const tooltipAnchor = async (figure: Locator): Promise<number> =>
     return anchor === undefined ? Number.NaN : Number(anchor);
   });
 
-/** One reading of the plot's box, comparable to the last one — `null` when it has none. */
-const boxSignature = async (plot: Locator): Promise<string | null> => {
-  const box = await plot.boundingBox();
-
-  return box === null ? null : `${String(box.x)},${String(box.y)},${String(box.width)}`;
-};
-
-/** What `settledPlotBox` says once the column has stopped moving. */
-const BOX_SETTLED = 'settled';
-
-/**
- * The plot's box, once two reads across a poll interval agree about it.
- *
- * The one measurement in this file that cannot simply be re-taken. Every other
- * assertion here polls until a reading is right, but `page.mouse.move` is an
- * *event* rather than a state: a coordinate computed from a box read while the
- * map above the panel was still taking its band would put the pointer where the
- * plot no longer is, and no later frame would correct it — the case would then
- * fail on a tooltip that was never summoned, blaming the hover layer for a
- * mis-aimed cursor.
- */
-const settledPlotBox = async (plot: Locator): Promise<PlotBox> => {
-  let previous: string | null = null;
-
-  await expect
-    .poll(
-      async () => {
-        const current = await boxSignature(plot);
-        const settled = current !== null && current === previous;
-        previous = current;
-
-        return settled
-          ? BOX_SETTLED
-          : `the plot's box is still moving (now ${current ?? 'absent'})`;
-      },
-      { message: 'The plot never held still long enough to aim a pointer at it.' },
-    )
-    .toBe(BOX_SETTLED);
-
-  const box = await plot.boundingBox();
-
-  if (box === null) {
-    throw new Error('The plot settled and then reported no layout box.');
-  }
-
-  return box;
-};
-
 /**
  * How far the panel's travel may differ from the pointer's, in pixels.
  *
@@ -707,7 +661,7 @@ test('follows a real pointer across the plot and lands where it stops', async ({
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(plot).toBeVisible();
 
-  const box = await settledPlotBox(plot);
+  const box = await settledBoxOf(plot, 'The plot');
   const pointerY = box.y + box.height / 2;
   const pointerXAt = (share: number): number => box.x + box.width * share;
   const pointerTravel = box.width * (SWEEP_PARKING - SWEEP_ARRIVAL);

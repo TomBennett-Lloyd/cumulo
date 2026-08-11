@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 
 import { DEFAULT_CHART_WIDTH } from '../src/charts/use-chart-width';
 import { routeBasemap } from './hermetic-basemap';
+import { PHONE_VIEWPORT } from './viewports';
 
 /*
  * The frames before the chart knows how wide it is — the one question no jsdom
@@ -34,10 +35,11 @@ import { routeBasemap } from './hermetic-basemap';
  * The defect is invisible at a width where the seeded default happens to be
  * right, so the viewport is load-bearing rather than incidental — and the last
  * assertion below proves this one really is wrong-by-default rather than
- * trusting the arithmetic. 390x844 is a common phone logical size, and a phone
- * column is far narrower than the seeded default.
+ * trusting the arithmetic. The lane's phone size is `viewports.ts`'s to state;
+ * what matters here is only that a phone column is far narrower than the seeded
+ * default, which no width in that file could fail to be.
  */
-test.use({ viewport: { width: 390, height: 844 } });
+test.use({ viewport: PHONE_VIEWPORT });
 
 declare global {
   interface Window {

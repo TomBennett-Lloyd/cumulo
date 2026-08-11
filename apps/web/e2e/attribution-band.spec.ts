@@ -2,7 +2,10 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import type { LayoutBox } from './layout-box';
+import { boxOf } from './layout-box';
 import { revealSiteMarker } from './marker-reveal';
+import { SMALL_PHONE_VIEWPORT } from './viewports';
 
 /*
  * The credits band's contested pixels, measured.
@@ -98,60 +101,10 @@ const MAP_CANVAS = '.map-canvas';
 const WEATHER_CREDIT = 'Open-Meteo.com';
 const TILE_CREDIT = '© OpenStreetMap contributors';
 
-/**
- * A small phone, chosen for being one.
- *
- * 360x740 is a canonical small-phone size, and mobile is a first-class viewing
- * context rather than an afterthought (`design.md` rule 1). That is the whole
- * derivation, deliberately: this width is **not** picked relative to the compact
- * row's own floor, and nothing here computes with that measurement or restates
- * it. `map.css` owns the numbers behind the band's compaction and
- * `composition.spec.ts` is what measures against them; this case joins neither
- * ledger, because its claim is the one that holds at every width regardless —
- * no width loses a link.
- *
- * So the band is *expected* to have wrapped here, and nothing below asserts a
- * row count. Wrapping is the honest last resort the treatment sanctions; hiding
- * a credit is what is forbidden.
- */
-const SMALL_PHONE_VIEWPORT = { width: 360, height: 740 };
-
-/**
- * A laid-out box in client space — what `Locator.boundingBox` yields.
- *
- * Derived from the locator's own return type rather than hand-written, so it
- * cannot drift from what Playwright hands back (`typing.md` rule 3's principle
- * at a library boundary).
- */
-type LayoutBox = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>;
-
 interface ViewportPoint {
   readonly x: number;
   readonly y: number;
 }
-
-/**
- * One element's box, or a loud failure naming the element that had none.
- *
- * Read once rather than polled, which is `map-regressions.spec.ts`'s idiom and
- * not `composition.spec.ts`'s `layoutBoxOf`. The difference is intent rather
- * than rigour: that helper polls because it measures immediately after
- * navigation or a resize, where "has a box yet" is genuinely in flight (#274).
- * Every read here happens after `revealSiteMarker` has zoomed the fleet apart —
- * several camera moves and marker remounts later — so layout is long settled,
- * and a `null` at that point means an element with no layout at all rather than
- * one that has not been given layout yet. That is a different failure, and it
- * says so (`error-handling.md` rule 1).
- */
-const boxOf = async (locator: Locator, name: string): Promise<LayoutBox> => {
-  const box = await locator.boundingBox();
-
-  if (box === null) {
-    throw new Error(`${name} is on the page but has no layout box.`);
-  }
-
-  return box;
-};
 
 const centreOf = (box: LayoutBox): ViewportPoint => ({
   x: box.x + box.width / 2,
