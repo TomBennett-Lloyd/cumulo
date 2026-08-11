@@ -8,7 +8,6 @@ import type { ChartCopy } from './fleet-panel-copy';
 import { EMPTY_FLEET_AGGREGATE, type FleetChartAggregate } from './fleet-series';
 import { PanelEmpty, PanelError, PanelPending } from './panel-states';
 import {
-  aggregatedFromCaption,
   EMPTY_FLEET_MESSAGE,
   FLEET_ACTUALS_FAILURE_NOTICE,
   fleetForecastFailureMessage,
@@ -20,14 +19,16 @@ import {
 } from './state-copy';
 
 /*
- * What the fleet panel puts under its heading, in every state it can be in.
+ * What the fleet chart section puts under its controls, in every state it can
+ * be in.
  *
  * Cut out of `FleetPanel.tsx` when the restructure below took that file past
  * `structure.md` rule 4's 300-line ceiling — the second cut from the same wall,
  * after `fleet-panel-copy.ts`. The body builders were the right thing to move
  * rather than the nearest thing: every function here is pure, takes what it
  * reads (rule 1), and returns markup, so the file that is left is the component
- * — its props, its queries and its header — with no rendering arithmetic in it.
+ * — its props, its queries and its controls row — with no rendering arithmetic
+ * in it.
  *
  * ## One chart, in every state, and nothing that swaps around it
  *
@@ -105,7 +106,7 @@ export interface FleetChartContext {
 }
 
 /**
- * The completeness line, stated in both directions.
+ * The completeness line, stated in the one direction that is news.
  *
  * `minContributing` and `siteCount` are both rendered because "partial" without
  * the two numbers is a shrug: the reader needs to know whether one site is
@@ -116,13 +117,19 @@ export interface FleetChartContext {
  * says the aggregate is short of every site rather than leaving the missing
  * forecast half unremarked beside a chart that still draws the measured hours
  * (`error-handling.md` rule 5).
+ *
+ * **The complete arm is `null`, and that is the whole of #323's change here.**
+ * It used to render "Aggregated from n sites" in a `.panel-caption` — a sentence
+ * restating what the chart beside it draws, which is description rather than
+ * state and so does not earn its line (`design.md` rule 2). What the panel says
+ * about its state is unchanged: an aggregate that is short still says so, in the
+ * same notice, in the same place. Only the case with no news left stopped
+ * speaking, and `.panel-caption` went with it — this was its one caller.
  */
-const completenessNote = (minContributing: number, siteCount: number): ReactElement =>
+const completenessNote = (minContributing: number, siteCount: number): ReactElement | null =>
   minContributing < siteCount ? (
     <p className="panel-notice">{partialAggregateNotice(minContributing, siteCount)}</p>
-  ) : (
-    <p className="panel-caption">{aggregatedFromCaption(siteCount)}</p>
-  );
+  ) : null;
 
 /**
  * The chart, with the overlay prop present only when there is an overlay.

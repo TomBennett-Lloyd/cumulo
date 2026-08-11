@@ -13,7 +13,7 @@
  *
  * Its own sheet rather than a corner of `header.css` or `dashboard.css`, because
  * the component is neither surface's: the header opened one beside the brand and
- * the fleet panel opens one beside its heading, and a sheet living in either
+ * the fleet chart opens one in its controls row, and a sheet living in either
  * place would make the other a borrower. The header's went in #284 D13, so the
  * fleet panel is the only opener today — which changes who borrows nothing:
  * `InfoTip` is still a component two surfaces may use rather than a part of the
@@ -27,12 +27,13 @@
   display: inline-flex;
 }
 
-/* Small, quiet and round: this sits beside a heading or a brand and must not
-   compete with it. The muted ink is the resting state and full ink is the
-   pressed one, alongside the border colour — two channels rather than one,
-   because a control whose only state cue is a hue is a control some readers
-   never see change. The platform focus ring is @cumulo/ui's and is not
-   suppressed here. */
+/* Small, quiet and round: an (i) annotates something else and must not compete
+   with it — today the fleet chart it shares a controls row with, and the brand
+   mark on the header bar until #284 D13 took that one. The muted ink is the
+   resting state and full ink is the pressed one, alongside the border colour —
+   two channels rather than one, because a control whose only state cue is a hue
+   is a control some readers never see change. The platform focus ring is
+   @cumulo/ui's and is not suppressed here. */
 .info-tip-button {
   display: inline-flex;
   width: var(--space-6);

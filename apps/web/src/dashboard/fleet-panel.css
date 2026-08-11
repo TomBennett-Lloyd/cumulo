@@ -1,121 +1,93 @@
 /*
- * The fleet panel: the first thing under the map, and the page's one chart.
+ * The fleet chart section: a full-width band under the map, and the page's one
+ * chart.
  *
- * The same chrome as the site table below it, deliberately — surface,
- * `--radius-md`, `--space-4` of padding — because this panel is one of the
- * reading's cards and should not announce itself as a different kind of thing
- * from its neighbour. (Until #265 both took it from a `.dashboard-slot` wrapper
- * in dashboard.css; the section that wrapper existed for became a disclosure
- * that carries its own card, so the two panels now state the shared chrome
- * rather than inherit it from a box neither of them is in.) What is its own is
- * the internal rhythm: one header row carrying everything the panel says about
- * itself, then the body — whatever the panel's current state has to say, and the
- * chart — at the column's normal gap.
+ * It was a card until #323 — the same chrome as the site table below it,
+ * surface plus `--radius-md` plus `--space-4` of padding, so that the two read
+ * as siblings in one reading. What that arrangement got wrong is what #323
+ * fixed: the chart's neighbour is the *map*, not the table. They are the same
+ * fleet drawn twice, and a rounded card inset in a centred measure put a border,
+ * a gap and a page margin between two things that should touch (design.md rule
+ * 4). So the radius goes, the measure goes, and the surface stays — the map's
+ * band and this one are one continuous run of `--color-surface`, with no seam
+ * for a reader to read a separation into. The site table keeps its own card and
+ * is now the only one; it is genuinely a separate thing, and its rule says so
+ * (site-table.css).
  *
- * These `.fleet-panel*` classes are this panel's and nothing else's. The async
- * states it renders wear `panel-states.css`'s `.panel-*` classes, which are the
- * column's shared vocabulary and are not extended here (react.md, "Async surface
- * convention").
+ * These `.fleet-chart-*` classes are this section's and nothing else's. The
+ * async states it renders wear `panel-states.css`'s `.panel-*` classes, which
+ * are the column's shared vocabulary and are not extended here (react.md, "Async
+ * surface convention"). `.fleet-panel-body` keeps its name because what it names
+ * did not change.
  *
  * Every value is a token — the gate in stylelint.config.mjs, not a style choice
  * (react.md rule 5).
  */
 
-/* One step tighter than the padding around it (#284 D15). The panel's internal
-   gap and its padding were the same step, which read as one rhythm and cost a
-   full step of height between the header row and the chart — height that decides
-   whether the whole plot clears the fold under a 60svh map. A card's gap need not
-   equal its inset, and here it should not: the header and the body are two parts
-   of one panel, closer to each other than either is to the world outside the
-   card. Not lower than `--space-2` anywhere in this panel — below that the header
-   row stops reading as a row separate from the body. */
-.fleet-panel {
-  display: grid;
-  gap: var(--space-3);
-  align-content: start;
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
+/* Padding, not inset. The vertical step is `--space-2` rather than the
+   `--space-4` a card wanted, because there is no longer a card edge for the
+   contents to clear — only the map above and the reading below, and the whole
+   argument for the band is that the chart sits close under the map. The
+   horizontal step stays a full `--space-4` so the plot's left edge is not flush
+   against the viewport. That vertical saving is height the plot gets back, which
+   is what `design.md` rule 3's one-viewport acceptance is measured in
+   (`e2e/chart-surfaces.spec.ts`).
+
+   No `border-radius` and no `display: grid` any more. The radius belonged to a
+   card; the grid existed to space a header row from a body, and with the header
+   gone the two remaining children stack in normal flow with their own margins
+   and the controls row's own box. */
+.fleet-chart-section {
+  padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
 }
 
-/* No `[hidden]` restatement here any more. This panel used to be hidden while a
-   site panel held the context region, and `display: grid` above beats the user
+/* No `[hidden]` restatement here any more. This section used to be hidden while
+   a site panel held the context region, and its `display: grid` beat the user
    agent's `[hidden] { display: none }`, so the rule had to be written out. #265
    anchored the site's card to its own marker on the map instead: nothing
-   displaces this panel, it is never handed `hidden`, and a rule for a state that
-   cannot occur is a rule nobody can tell has stopped working. */
+   displaces this section, it is never handed `hidden`, and a rule for a state
+   that cannot occur is a rule nobody can tell has stopped working. */
 
-/* Everything the panel says about itself, on one baseline: the heading, the
-   fleet's own numbers, the (i) carrying the description, and the window picker
-   (#284 D4). They were a stack of rows, which spent four lines above the chart
-   that is the reason anyone is here — and each of the four is short enough that
-   a row holds them all at the measures this reading is set in. `flex-wrap` is
-   what keeps that honest where it does not: the picker drops to a line of its
-   own rather than squeezing the numbers out of shape. */
-.fleet-panel-header {
+/* The controls row: the (i) carrying the description, and the window picker.
+
+   Two items where there were four (#284 D4 put a heading and the fleet's own
+   numbers on this line; #323 removed both — the heading became the section's
+   accessible name and the numbers were a restatement of the chart below them).
+   With nothing on the row that is *content*, there is nothing for the controls
+   to be spaced against, so they go to the row's end rather than sitting over the
+   plot's left edge with a void beside them.
+
+   `flex-wrap` survives the cut, and keeps doing the job #284 D4 gave it: at a
+   width that cannot hold both controls the picker takes a line of its own rather
+   than being crushed (design.md rule 7 — controls have wrap priority, and the
+   window selectors stay on one line at every screen size).
+
+   There is no `flex: 1 1 0%` item on this row any more. It was `.fleet-panel-stats`'
+   and its whole purpose was to be the item that yielded when the row ran out of
+   width; with no auxiliary text left on the row, nothing has to yield and
+   `justify-content` is the whole of the layout. */
+.fleet-chart-controls {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
+  justify-content: flex-end;
 }
 
-/* There is no `.fleet-panel-titles` rule any more. It existed to keep the
-   heading and its tip on one baseline inside a stacked header; the header is
-   that baseline now, so a wrapper around two of its four items would only be a
-   box that stops the other two from wrapping past them. */
+/* There is no `.fleet-panel-title`, `.fleet-panel-stats` or `.fleet-panel-titles`
+   rule any more, and no `.fleet-panel-subtitle` either. The subtitle's sentence
+   moved inside an `InfoTip` in #265 (info.css carries it); the title and the
+   stats line went in #323, the first into the section's `aria-label` and the
+   second into nothing at all. A rule kept for a class nothing renders is a claim
+   about a shape the page does not have. */
 
-.fleet-panel-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--leading-tight);
-}
-
-/* Tabular figures so the count and the capacity do not shuffle sideways when a
-   site is added and the numbers change width.
-
-   The flex half of this rule is what decides *who* yields when the header row
-   runs out of width, and it is the text (design.md rule 7: controls have wrap
-   priority over auxiliary text, and the window selectors stay on one line at
-   every screen size; rule 2: the auxiliary line is what gives way). The
-   mechanism is worth spelling out because the obvious spelling does not work:
-   flex line-breaking is decided on *hypothetical* main sizes — every item's size
-   before any shrinking is applied — so an item that is merely shrinkable still
-   books its full width against the line and bumps its neighbours onto the next
-   one. `flex-basis: 0%` is what takes these numbers out of that decision
-   altogether: their hypothetical size is zero, so the summary can never be the
-   thing that pushes the picker down. The shrinking then happens on the line that
-   already exists, with `min-width: 0` releasing the automatic min-content floor
-   a flex item otherwise keeps, and the ellipsis saying out loud that the line
-   was cut.
-
-   `flex-grow: 1` hands the same item the line's slack, which at wide widths
-   carries the (i) and the picker over to the row's end. Deliberate rather than a
-   side effect (design.md rule 4): the heading and the numbers are one reading
-   unit and stay touching, and the two controls read as the row's other end
-   rather than as three unrelated things spaced along it. */
-.fleet-panel-stats {
-  flex: 1 1 0%;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* There is no `.fleet-panel-subtitle` rule any more. The sentence it styled
-   moved inside an `InfoTip`, which brings its own panel treatment (info.css), so
-   a rule left here would be styling a class nothing renders. */
-
-/* The completeness line and the chart are one statement — how complete the
-   aggregate is, and the aggregate — so they sit tighter than the panel's gap.
-   That relationship is why this step moved with the panel's in #284 D15 rather
-   than staying put: the panel came down to `--space-3`, which would have left
-   the two equal and the sentence above false. `--space-2` is the floor for both
-   — below it the header row stops reading as a row apart from the body. */
+/* Whatever the section has to say and the chart it says it about are one
+   statement, so they sit at the tightest step this reading uses. `--space-2` was
+   chosen in #284 D15 as one step under the card's own gap, to buy the plot
+   height under a 60svh map; the card's gap is gone and the step stands on its
+   own argument now — a notice and the chart it annotates are as close as two
+   elements on this page ever get. */
 .fleet-panel-body {
   display: grid;
   gap: var(--space-2);

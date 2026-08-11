@@ -7,7 +7,7 @@ import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import {
   advanceBy,
   firstListedSite,
-  fleetPanel,
+  fleetChartSection,
   renderDashboard,
   settle,
   sitePopover,
@@ -54,7 +54,7 @@ describe('Dashboard deep links', () => {
     // anything (#265).
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
     expect(sitePopover(container)).not.toBeNull();
-    expect(fleetPanel(container)).not.toBeNull();
+    expect(fleetChartSection(container)).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await settle();
@@ -114,7 +114,7 @@ describe('Dashboard deep links', () => {
     // The listing has answered, so the id is now known to name nobody: no card
     // opens, and the URL stops advertising a site that is not there.
     expect(sitePopover(container)).toBeNull();
-    expect(fleetPanel(container)).not.toBeNull();
+    expect(fleetChartSection(container)).not.toBeNull();
     expect(window.location.search).toBe('');
 
     const pollsSoFar = getSiteForecast.mock.calls.length;

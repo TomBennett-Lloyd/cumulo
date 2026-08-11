@@ -24,15 +24,22 @@ import {
 } from './state-copy';
 
 /*
- * The shape of the fleet panel, as opposed to what it says.
+ * The shape of the fleet chart section, as opposed to what it says.
  *
  * Split from `FleetPanel.test.tsx` when #284's restructure took that file past
  * the 300-line ceiling (`structure.md` rule 4), on the same subject line the
- * overlay suite was split on: that file owns the panel's *copy* — which window
+ * overlay suite was split on: that file owns the section's *copy* — which window
  * the chart names, what is and is not said about simulated actuals — and this
- * one owns its furniture. One heading row holding everything the panel knows
- * about itself, one (i), a picker on every arm that has a window to choose, and
- * one chart present in every state the panel can be in.
+ * one owns its furniture. One slim controls row, one (i), a picker on every arm
+ * that has a window to choose, and one chart present in every state the section
+ * can be in.
+ *
+ * Since #323 the furniture includes an *absence*: there is no visible heading
+ * over the chart, and the name a reader of assistive technology gets comes from
+ * the section's `aria-label` instead (`design.md` rule 2). Both halves of that
+ * are asserted together below, because either alone is satisfiable by a bug —
+ * a missing name looks like a successful deletion, and a heading that came back
+ * looks like a successful naming.
  *
  * The messages below are imported from `state-copy.ts` rather than written out,
  * which is the opposite of what the copy suite does and for the same reason: a
@@ -43,15 +50,15 @@ import {
 
 afterEach(cleanup);
 
-/** The heading row, as an element the queries can be scoped to. */
-const fleetHeader = (container: HTMLElement): HTMLElement => {
-  const header = container.querySelector('.fleet-panel-header');
+/** The controls row, as an element the queries can be scoped to. */
+const fleetControls = (container: HTMLElement): HTMLElement => {
+  const controls = container.querySelector('.fleet-chart-controls');
 
-  if (!(header instanceof HTMLElement)) {
-    throw new Error('The fleet panel rendered no heading row at all.');
+  if (!(controls instanceof HTMLElement)) {
+    throw new Error('The fleet chart section rendered no controls row at all.');
   }
 
-  return header;
+  return controls;
 };
 
 /**
@@ -79,14 +86,19 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  * The furniture every state owes the reader, whatever that state has to say.
  *
  * #284 D3 asks for three things in every state and not only for the figure: the
- * panel's heading, the chart, and the chart's legend. The figure alone is the
+ * section's name, the chart, and the chart's legend. The figure alone is the
  * weakest of the three to assert, because the states that used to return *in
- * place of* the chart took the heading's siblings and the key down with it — and
+ * place of* the chart took the name's siblings and the key down with it — and
  * a figure that came back without its legend reads as a plot of anonymous lines,
  * which is the regression this pair exists to catch.
  *
- * The heading is queried by role over the whole document rather than by class,
- * because what the criterion is about is a heading a reader can navigate to.
+ * The name is queried by role over the whole document rather than by class,
+ * because what the criterion is about is a landmark a reader can navigate to.
+ * It was a `heading` until #323 and is the labelled `region` the `<section>`
+ * itself exposes now — the same claim about the same criterion, made about the
+ * element the name moved to (`design.md` rule 2). Which element carries it is
+ * the subject of the dedicated case below; what is asserted here is only that no
+ * *state* takes it away.
  *
  * The legend's entries are counted rather than read: *which* series it names is
  * copy, and this suite owns furniture (see the file header), so a rewording must
@@ -109,12 +121,12 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
  * actuals-only arm carries measured hours alone. That is a fact about the
  * states, not about the fixtures: two of the arms are built on `FULL_FLEET`,
  * whose rows do carry bands, and those bands do reach the chart in the settled
- * heading-row cases above. A state that returned early past the legend still
+ * controls-row cases above. A state that returned early past the legend still
  * fails here, which is the regression the clause exists for; a series that
  * honestly has no band no longer does.
  */
 const expectPanelFurniture = (container: HTMLElement): void => {
-  expect(screen.getByRole('heading', { name: 'Fleet forecast', level: 2 })).toBeDefined();
+  expect(screen.getByRole('region', { name: 'Fleet forecast' })).toBeDefined();
 
   const legend = within(chartFigure(container)).getByRole('list');
 
@@ -128,26 +140,59 @@ const expectChartWith = (container: HTMLElement, message: string | RegExp): void
   expectPanelFurniture(container);
 };
 
-describe('FleetPanel’s heading row', () => {
-  it('holds the title, the fleet’s numbers, the description and the window control', async () => {
+describe('FleetPanel’s controls row', () => {
+  it('renders the chart section with an accessible name and no visible heading', async () => {
+    /*
+     * #323's copy half, as one case, because the two clauses only mean anything
+     * together. `design.md` rule 2 converts a label whose only job is naming
+     * into an accessible name rather than deleting the name outright — so a
+     * section that lost the `<h2>` *and* the name would satisfy the second
+     * assertion below while failing the ticket, and a section that kept both
+     * would satisfy the first.
+     *
+     * The `getByRole('region')` is therefore the positive control for the null:
+     * it proves the words "Fleet forecast" are still on the section, so the
+     * absent heading reads as "the name is not visible" rather than "the name
+     * was deleted". This is the same pairing the window-control case at the foot
+     * of this block uses, for the same rule.
+     *
+     * Queried at *any* level rather than level 2, because what the ticket
+     * removed is a visible heading over this chart and not one particular tag:
+     * an `<h3>` grown back in the same place would be the same defect.
+     */
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
-    const header = fleetHeader(container);
+    const section = screen.getByRole('region', { name: 'Fleet forecast' });
 
-    expect(within(header).getByRole('heading', { name: 'Fleet forecast', level: 2 })).toBeDefined();
-    expect(within(header).getByRole('button', { name: 'About this chart' })).toBeDefined();
-    expect(within(header).getByRole('group', { name: 'Aggregation range' })).toBeDefined();
+    expect(section.className).toBe('fleet-chart-section');
+    expect(within(section).queryByRole('heading')).toBeNull();
+    expect(screen.queryByText('Fleet forecast')).toBeNull();
+    // The line that used to sit beside that heading. It restated the fleet's
+    // size next to a chart of exactly that fleet, and the count survives where a
+    // reader goes to count it — the site table's own summary, which is not this
+    // component's and so is not asserted here.
+    expect(container.textContent).not.toMatch(/\d+ sites? · /u);
+  });
 
-    // Order, because the row reads left to right: the fleet's own numbers are
-    // content and the (i) is an annotation on the heading beside them, so a tip
-    // that drifted ahead of the numbers would put the aside before the fact.
-    // `querySelectorAll` returns document order, which is what a reader tabbing
-    // through and a screen reader reading out both follow.
-    expect(
-      Array.from(
-        header.querySelectorAll('.fleet-panel-stats, .info-tip-button'),
-        (element) => element.className,
-      ),
-    ).toEqual(['fleet-panel-stats', 'info-tip-button']);
+  it('holds the description and the window control, pushed to the row’s end', async () => {
+    const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
+    const controls = fleetControls(container);
+
+    expect(within(controls).getByRole('button', { name: 'About this chart' })).toBeDefined();
+    expect(within(controls).getByRole('group', { name: 'Aggregation range' })).toBeDefined();
+
+    // Order, because the row reads left to right: the (i) explains the chart and
+    // the picker changes it, so the annotation comes before the control that
+    // acts. `querySelectorAll` returns document order, which is what a reader
+    // tabbing through and a screen reader reading out both follow.
+    //
+    // Two items, asserted as an exact list rather than a pair of presence
+    // checks: #323 emptied this row of everything that was not a control, and a
+    // third child appearing here is the header row growing back one item at a
+    // time.
+    expect(Array.from(controls.children, (element) => element.className.split(' ')[0])).toEqual([
+      'info-tip',
+      'range-picker',
+    ]);
   });
 
   it('carries exactly one (i), against a source that once had two', async () => {
@@ -192,7 +237,7 @@ describe('FleetPanel’s heading row', () => {
     const container = await renderSettled(dataSource);
 
     expect(
-      within(fleetHeader(container)).getByRole('group', { name: 'Aggregation range' }),
+      within(fleetControls(container)).getByRole('group', { name: 'Aggregation range' }),
     ).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: '48 h' }));
@@ -224,7 +269,7 @@ describe('FleetPanel’s heading row', () => {
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
 
     expect(
-      within(fleetHeader(container)).getByRole('group', { name: 'Aggregation range' }),
+      within(fleetControls(container)).getByRole('group', { name: 'Aggregation range' }),
     ).toBeDefined();
     expect(screen.queryByText('Aggregation range')).toBeNull();
   });
@@ -242,14 +287,15 @@ describe('FleetPanel’s chart', () => {
      * because a chart that stayed while the explanation went missing would be
      * the opposite defect.
      *
-     * D3's two other clauses — every heading exists whether or not there is
-     * data, and the legend renders in every state — are asserted per arm by
-     * `expectPanelFurniture` rather than left implied by the figure count. Both
-     * hold by construction and that is the point of pinning them: the heading
-     * row is rendered outside the state switch in `FleetPanel.tsx` and the
-     * legend unconditionally inside the figure in `ForecastChart.tsx`, so a
-     * future state that returns early past either would be exactly the
-     * regression these clauses were written against.
+     * D3's two other clauses — the section's name survives whether or not there
+     * is data, and the legend renders in every state — are asserted per arm by
+     * `expectPanelFurniture` rather than left implied by the figure count; its
+     * docblock is where the element that name sits on since #323 is stated. Both
+     * hold by construction and that is the point of pinning them: the name is an
+     * attribute of the `<section>` that wraps the state switch in
+     * `FleetPanel.tsx`, and the legend is unconditional inside the figure in
+     * `ForecastChart.tsx`, so a future state that returns early past either
+     * would be exactly the regression these clauses were written against.
      */
     const loading = render(panel(new CountingFleetSource(FULL_FLEET))).container;
 

@@ -1,5 +1,5 @@
 import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
-import { useId, useMemo, useState, type ReactElement } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
@@ -14,7 +14,6 @@ import {
 } from './fleet-panel-body';
 import {
   chartCopy,
-  fleetStatsLine,
   SUBTITLE_FORECAST_ONLY,
   SUBTITLE_WITH_ACTUALS,
   windowLabel,
@@ -96,16 +95,24 @@ import { siteOverlaySeries } from './site-overlay';
  *
  * ## Description behind a press, state on the page
  *
- * One of this panel's sentences is a description — what the chart is a sum of —
- * and it sits behind an (i) (`info/InfoTip.tsx`, #265). It was read once and
+ * One of this section's sentences is a description — what the chart is a sum of
+ * — and it sits behind an (i) (`info/InfoTip.tsx`, #265). It was read once and
  * then occupied a line on every render, above a chart that is the reason anyone
  * is here. There was a second (i) beside it, naming the window for the arm with
  * no picker; #284 D5 deleted it rather than moving it, because the picker now
  * renders on that arm and states the window as a control the reader can act on.
- * What has never moved is everything the panel says about its current state: the
- * completeness note, and the notice that a selected site's line failed. A reader
- * cannot press for news they do not know has happened, so state stays where it
- * can be seen and description is one press away.
+ * What has never moved is everything the section says about its current state:
+ * the partial-aggregate notice, and the notice that a selected site's line
+ * failed. A reader cannot press for news they do not know has happened, so state
+ * stays where it can be seen and description is one press away.
+ *
+ * #323 is the same line drawn once more, and this time against text that was
+ * neither: the `<h2>` and the "60 sites · 332 kW" line described the chart under
+ * them rather than reporting anything, so they went — the heading into this
+ * section's accessible name, the numbers into nothing, because the site table
+ * below already counts the fleet. The completeness note lost its complete arm
+ * for the same reason (`fleet-panel-body.tsx`): "every site contributed" is not
+ * news, and only the partial direction is.
  *
  * ## Attribution
  *
@@ -122,9 +129,9 @@ const DEFAULT_RANGE: RangeHours = 24;
  * Collapse the two queries into the one state the panel renders.
  *
  * **The two failures are not symmetrical, and that asymmetry is the whole of
- * this function.** Nothing takes the panel down any more: since #284 D3 the
- * heading row, the figure and its legend are on screen in every state, so a
- * failure changes what the panel *says* and what the plot *has on it*, never
+ * this function.** Nothing takes the section down any more: since #284 D3 the
+ * controls row, the figure and its legend are on screen in every state, so a
+ * failure changes what the section *says* and what the plot *has on it*, never
  * whether there is a chart. What survives is the difference in weight — a failed
  * forecast is the answer itself not arriving, so it is an `alert` over a plot
  * with nothing drawn on it; a failed actuals read is an addition to an answer
@@ -244,7 +251,6 @@ export const FleetPanel = ({
   selectionReady,
   refreshToken,
 }: FleetPanelProps): ReactElement => {
-  const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
   /*
    * Retrying is a new question, so it is a new query key rather than an
@@ -359,20 +365,39 @@ export const FleetPanel = ({
   };
 
   return (
-    <section className="fleet-panel" aria-labelledby={headingId}>
+    /*
+     * A section named for assistive technology and headed by nothing visible.
+     *
+     * The `<h2>Fleet forecast</h2>` that used to carry this name sat directly
+     * above a chart whose own accessible name begins "Fleet forecast" — a label
+     * whose only remaining job was naming, which `design.md` rule 2 turns into
+     * an accessible name rather than visible text (the window label in #329 and
+     * the word "close" in #340 are the same move). The section keeps the name so
+     * the landmark is still navigable and still announced; what a sighted reader
+     * loses is a line of chrome restating the chart under it.
+     *
+     * `aria-label` rather than `aria-labelledby` now, because there is no longer
+     * an element in the tree to point at — which is also why `useId` left with
+     * the heading.
+     */
+    <section className="fleet-chart-section" aria-label="Fleet forecast">
       {/*
-       * One row, and everything the panel knows about itself is in it: what it
-       * is, how big the fleet is, the description behind an (i), and the window
-       * control. Four stacked lines used to sit between the top of the panel and
-       * the chart; a wrapping flex row spends one (#284 D4), and `flex-wrap` is
-       * what makes that safe — at a width that cannot hold all four the picker
-       * drops to its own line instead of crushing the numbers.
+       * The slim controls row: the description behind an (i), and the window
+       * control, pushed to the row's end.
+       *
+       * What is *not* here is the point of #323. This was a four-item header —
+       * a heading, the fleet's own numbers, the (i) and the picker — sitting on
+       * a padded card between the map and the chart. The heading became this
+       * section's accessible name and the numbers went entirely (the site table
+       * counts the fleet, `SiteTable.tsx`), so what is left is two controls and
+       * nothing to space them against; `justify-content: flex-end` puts them
+       * where the reader's eye leaves the row rather than stranding them over
+       * the plot's left edge. `flex-wrap` survives the cut for the reason #284
+       * D4 added it: at a width that cannot hold both, the picker takes its own
+       * line rather than being crushed (`design.md` rule 7 — controls have wrap
+       * priority).
        */}
-      <header className="fleet-panel-header">
-        <h2 className="fleet-panel-title" id={headingId}>
-          Fleet forecast
-        </h2>
-        <p className="fleet-panel-stats">{fleetStatsLine(sites)}</p>
+      <div className="fleet-chart-controls">
         {/*
          * The subtitle, behind an (i) since #265. It was a paragraph under the
          * heading that every reader read once and then scrolled past on every
@@ -405,7 +430,7 @@ export const FleetPanel = ({
         {fleetLookback || fleetActuals ? (
           <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
         ) : null}
-      </header>
+      </div>
       {sites.length === 0
         ? emptyFleetBody(context)
         : fleetBody(fleet, aggregate, context, retryFleet)}

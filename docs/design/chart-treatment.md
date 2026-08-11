@@ -550,7 +550,7 @@ Every token this treatment uses. Values, and the reasoning behind each value, ar
 | `--color-chart-actuals`                                  | measured actuals line (near-ink, not a categorical slot)     |
 | `--color-chart-grid`                                     | gridlines, forecast-horizon rule (dashed)                    |
 | `--color-chart-axis-label`                               | axis ticks, axis labels, horizon label                       |
-| `--color-surface`                                        | 2px marker rings, chart card background, tooltip panel fill  |
+| `--color-surface`                                        | 2px marker rings, chart section ground, tooltip panel fill   |
 | `--color-border`                                         | tooltip panel hairline                                       |
 | `--color-shadow`                                         | tooltip panel drop shadow (elevation ink)                    |
 | `--radius-sm`                                            | tooltip panel corner                                         |

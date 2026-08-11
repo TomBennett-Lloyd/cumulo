@@ -21,7 +21,6 @@ import {
   rowCells,
   settle,
   SIMULATED_ACTUALS_CAPABILITIES,
-  SITE_A,
   type StubFleet,
 } from './fleet-panel-test-fixture';
 import { EMPTY_FLEET_MESSAGE } from './state-copy';
@@ -32,8 +31,9 @@ import { EMPTY_FLEET_MESSAGE } from './state-copy';
  * Two of its other subjects have suites of their own, both split off when this
  * file reached the 300-line ceiling (`structure.md` rule 4). What a *selected
  * site* adds to the same chart is `FleetPanel.overlay.test.tsx`'s. The panel's
- * own furniture — one heading row, one (i), and one chart present in every
- * state — is `FleetPanel.structure.test.tsx`'s. All three share
+ * own furniture — one slim controls row, one (i), one chart present in every
+ * state, and no visible heading over any of it — is
+ * `FleetPanel.structure.test.tsx`'s. All three share
  * `fleet-panel-test-fixture.tsx`, which is where the canned fleets and the two
  * lines every test writes to get a panel on screen live.
  */
@@ -111,24 +111,22 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     expect(subtitle).toContain('simulated actuals');
     expect(subtitle).toContain('simulated P10–P90 band');
-    // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
-    // value, because restating the sum here would only prove that two copies of it agree.
-    expect(container.querySelector('.fleet-panel-stats')?.textContent).toMatch(
-      /^60 sites · \d+(\.\d)? kW$/u,
-    );
     expectForecastPlotted(container);
   });
 
-  it('says "site" once and "sites" otherwise', async () => {
-    const oneSite = await renderSettled(new CountingFleetSource(FULL_FLEET), [SITE_A]);
-
-    expect(oneSite.querySelector('.fleet-panel-stats')?.textContent).toBe('1 site · 4.0 kW');
-
-    cleanup();
-    const twoSites = await renderSettled(new CountingFleetSource(FULL_FLEET));
-
-    expect(twoSites.querySelector('.fleet-panel-stats')?.textContent).toBe('2 sites · 8.0 kW');
-  });
+  /*
+   * There is no "60 sites · 332 kW" case here any more, and no pluralisation
+   * case under it. #323 deleted the line and `fleetStatsLine` with it: it
+   * restated the size of the fleet beside a chart of exactly that fleet, which
+   * is text stating what the UI already shows (`design.md` rule 2). The count
+   * survives in the site table's own summary, and `SiteTable.test.tsx` is where
+   * a case about it belongs — asserting it from this suite would be this
+   * component's tests pinning a sentence another component renders.
+   *
+   * Its absence is pinned rather than merely un-asserted, in
+   * `FleetPanel.structure.test.tsx`'s accessible-name case, so a stats line
+   * growing back fails a gate rather than only a review.
+   */
 
   it('asks the source for 168 hours when the 7 d control is pressed', async () => {
     const dataSource = new CountingFleetSource(FULL_FLEET);
@@ -181,11 +179,32 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
     ]);
   });
 
-  it('states the fleet size when every displayed hour has the whole fleet in it', async () => {
+  it('renders no completeness caption when every site contributes', async () => {
+    /*
+     * The inverse of the partial case above, and #323's change to it. This used
+     * to assert "Aggregated from 2 sites" in a `.panel-caption`; the complete
+     * arm of `completenessNote` is `null` now, because a chart drawing every
+     * site is what the reader already expects to be looking at and a sentence
+     * saying so describes the chart rather than reporting anything
+     * (`design.md` rule 2). The partial direction is untouched — it is news,
+     * and the case above still pins it word for word.
+     *
+     * **The figure assertion is what makes the two nulls mean anything.** Both
+     * absences are satisfied by a component that rendered nothing at all, or
+     * that threw past the notice and left the tree half-built, so the chart is
+     * asserted present *in the same render* — the state being pinned is "a
+     * complete aggregate, drawn, saying nothing about its completeness", and
+     * every clause of that has to be checked at once.
+     */
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
 
-    expect(container.querySelector('.panel-caption')?.textContent).toBe('Aggregated from 2 sites');
+    expect(container.querySelector('.panel-caption')).toBeNull();
     expect(container.querySelector('.panel-notice')).toBeNull();
+    expect(container.querySelector('.forecast-chart-figure')).not.toBeNull();
+    // Belt to the figure's braces: the chart is not merely mounted but has the
+    // complete fleet's hours on it, which is the state the two nulls are a claim
+    // about.
+    expectForecastPlotted(container);
   });
 });
 
@@ -382,7 +401,7 @@ describe('FleetPanel with nothing to show', () => {
     await renderSettled(new CountingFleetSource(FULL_FLEET), []);
 
     expect(screen.getByText(EMPTY_FLEET_MESSAGE)).toBeDefined();
-    // The heading row is what it is in every other state, picker included. A
+    // The controls row is what it is in every other state, picker included. A
     // control that materialises when the first site lands is the reading
     // rearranging itself under a reader who was already looking at it (#284
     // D3/D5) — and an empty fleet still asks the source nothing, because the

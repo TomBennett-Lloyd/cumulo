@@ -99,8 +99,9 @@ type BoxSource = Pick<Locator, 'boundingBox'>;
  * stability window. The callers compare geometry rather than aiming pointer
  * events at the box — mostly under `EDGE_TOLERANCE_PX`, and where not, across
  * gaps far larger than any jitter: the chart-under-map case below compares raw
- * edges precisely because a whole panel gap separates the two boxes. So "a box
- * existed, and this is it" is the entire precondition being established here.
+ * edges precisely because the chart section's own padding and its controls row
+ * stand between the two boxes. So "a box existed, and this is it" is the entire
+ * precondition being established here.
  * Waiting for a box to stop moving would be scope bought against no measurement
  * flake anyone has seen.
  *
@@ -235,6 +236,37 @@ test('credits Open-Meteo visibly, as CC BY 4.0 requires', async ({ page }) => {
   const credits = page.getByRole('link', { name: 'Open-Meteo.com' }).filter({ visible: true });
 
   await expect.poll(async () => credits.count()).toBeGreaterThanOrEqual(MINIMUM_WEATHER_CREDITS);
+});
+
+test('keeps the footer’s Open-Meteo credit followable where the page ends', async ({ page }) => {
+  /*
+   * The other half of the licence obligation, held to the same bar as the map
+   * band's. CC BY 4.0 asks for a credit that can be *followed*, and the count
+   * above cannot tell a link from a link with something painted over it — nor
+   * can the `toBeVisible` on the prefix span that the compact-form case below
+   * makes, which is a claim about a `<span>` beside the link rather than about
+   * the link. `toBeEnabled` would be vacuous here too: an anchor has no disabled
+   * state to report. The trial click is the assertion with the hit test in it —
+   * Playwright's full actionability sequence, including `elementFromPoint` at
+   * the link's centre resolving to the link, stopping short of navigating. The
+   * band's credit has had that hit test since #265; the footer's has not, and
+   * `pointer-events: none` or a neighbour overlapping this row would read as
+   * compliant from every other assertion in this file.
+   *
+   * Scrolled to first, and that is the page's shape rather than a defect: the
+   * map band takes the top of the viewport and the reading runs under it, so the
+   * footer is below the fold at this lane's viewport. `scrollIntoViewIfNeeded`
+   * is how this file reaches something down the page already (the range picker
+   * at phone width). The trial click would scroll on its own; doing it
+   * explicitly keeps a failure to *reach* the footer separate from a failure to
+   * hit the link once it is on screen.
+   */
+  const credit = page.locator('.dashboard-footer').getByRole('link', { name: 'Open-Meteo.com' });
+
+  await credit.scrollIntoViewIfNeeded();
+
+  await expect(credit).toBeVisible();
+  await credit.click({ trial: true });
 });
 
 test('runs the map edge to edge, with its credits overlaid on its own bottom edge', async ({
@@ -418,11 +450,19 @@ test('stacks the fleet chart under the map rather than beside it', async ({ page
    * at every width.
    *
    * `>=` on the raw edges rather than a tolerance: these two boxes are in
-   * different, non-overlapping parts of the flow, separated by a `--space-4`
-   * gap and the panel's own padding, so there is nothing here for sub-pixel
-   * rounding to decide. A tolerance would only be admitting an overlap.
+   * different, non-overlapping parts of the flow, separated by the chart
+   * section's top padding and the whole of its controls row, so there is nothing
+   * here for sub-pixel rounding to decide. The `--space-4` gap that used to sit
+   * between them is gone with #323 — the map band and this section are one
+   * continuous surface now — and the claim is unaffected, because what it forbids
+   * is the chart being *beside* the map rather than a particular distance under
+   * it. A tolerance would only be admitting an overlap.
+   *
+   * Which means this case says nothing about how far under the map the chart
+   * sits, and a reintroduced gutter would pass it untouched. That distance is
+   * #323's own claim and it is the next case's, not this one's.
    */
-  const chart = page.locator('.fleet-panel .forecast-chart-figure');
+  const chart = page.locator('.fleet-chart-section .forecast-chart-figure');
 
   await expect(chart).toBeVisible();
 
@@ -430,6 +470,49 @@ test('stacks the fleet chart under the map rather than beside it', async ({ page
   const chartBox = await layoutBoxOf(chart, 'The fleet chart figure');
 
   expect(chartBox.y).toBeGreaterThanOrEqual(mapBox.y + mapBox.height);
+});
+
+test('meets the map band with the chart band, no page showing between them', async ({ page }) => {
+  /*
+   * #323's whole point, as a measurement: the map and the fleet's chart are one
+   * reading unit — the same fleet in space, then in time — so they touch, and a
+   * band of page between them would say they were unrelated (`design.md` rule 4,
+   * and `.dashboard`'s own rule in dashboard.css). Nothing else asserts it. The
+   * case above forbids a side-by-side arrangement and permits any distance; the
+   * jsdom lane applies no stylesheet, so it cannot see a `gap` at all
+   * (`testing.md` rule 10).
+   *
+   * The two boxes are the flex children the gutter would open between: the map's
+   * own painted bottom edge and the chart section's top. `.fleet-chart-section`
+   * rather than the figure inside it, because the section's top padding stands
+   * between the figure and the seam and would absorb exactly what is being
+   * measured. `.map-canvas` rather than `.dashboard-map`, which is this file's
+   * idiom and is also the stronger reading of the claim — the canvas fills the
+   * band (map.css), so a band grown taller than the map it holds would show page
+   * under the tiles and fail here, which is the same defect by another route.
+   *
+   * `EDGE_TOLERANCE_PX` for the reason that constant documents — two
+   * `getBoundingClientRect` reads of a laid-out page — and it cannot hide the
+   * regression this guards. No step on the spacing scale is as small as this
+   * tolerance (`tokens.css` owns those values), so no gutter written in tokens
+   * fits inside it; the one #323 removed was a `--space-4`.
+   *
+   * One viewport, honestly: there is no breakpoint in this layout — the same
+   * flow at every width, which is the claim `.dashboard` is written to make — so
+   * a second width would re-measure the same declaration rather than a second
+   * arrangement. A gutter reintroduced inside a media query is the case this
+   * does not cover.
+   */
+  const section = page.locator('.fleet-chart-section');
+
+  await expect(section).toBeVisible();
+
+  const mapBox = await layoutBoxOf(page.locator('.map-canvas'), 'The map canvas');
+  const sectionBox = await layoutBoxOf(section, 'The fleet chart section');
+
+  expect(Math.abs(sectionBox.y - (mapBox.y + mapBox.height))).toBeLessThanOrEqual(
+    EDGE_TOLERANCE_PX,
+  );
 });
 
 /**
@@ -454,33 +537,37 @@ const PHONE_VIEWPORT = { width: 390, height: 844 };
  * It belongs in this lane rather than beside the component for the reason
  * `testing.md` rule 10 gives: wrapping is layout, and jsdom applies no
  * stylesheet, so a jsdom twin of this case would assert nothing at all. It
- * belongs in *this file* because it is a claim about the assembled header — the
- * heading, the numbers, the (i) and the picker sharing one flex line, at a width
- * where the page is also carrying a real map.
+ * belongs in *this file* because it is a claim about the assembled controls row —
+ * the (i) and the picker sharing one flex line, at a width where the page is also
+ * carrying a real map. #344 wrote that row as four items; #323 left two, the
+ * heading having become the section's accessible name and the fleet's numbers
+ * having gone entirely.
  *
  * Honest scope, because the routing above would otherwise imply more coverage
  * than the case carries (`testing.md` rule 10's closing rule: where the lane owns
  * a criterion no spec in it yet asserts, say so beside the code). What is
  * asserted below is that the *picker group* does not wrap internally, and that
- * is all. The fix #344 shipped has two halves — the summary yielding
- * (`.fleet-panel-stats`' `flex: 1 1 0%` and its truncation set) and the picker
- * refusing to shrink or break (`.range-picker`'s `flex-shrink: 0`,
- * `.range-picker-button`'s `white-space: nowrap`) — and reverting *either* of
- * them leaves this case, and the whole suite in both lanes, green. What actually
- * killed the gate while it was being written was a seeded `flex-direction:
- * column`, which none of those declarations control.
+ * is all. The fix #344 shipped had two halves and only one of them still exists:
+ * the auxiliary text that yielded is gone with the stats line, so all that now
+ * holds the group together is the picker refusing to shrink or break
+ * (`.range-picker`'s `flex-shrink: 0`, `.range-picker-button`'s
+ * `white-space: nowrap`) — and reverting either of those leaves this case, and
+ * the whole suite in both lanes, green. What actually killed the gate while it
+ * was being written was a seeded `flex-direction: column`, which neither
+ * declaration controls.
  *
  * The assertion that would close the gap is the one this file does not make: that
- * the picker still shares `.fleet-panel-title`'s line rather than being pushed to
- * a second row. It is deliberately not added here rather than forgotten — it is
- * filed on issue 346 (the P7 gate candidates) because it needs a measured
- * pre/post reading first. The pre-fix measurement taken while planning this batch
- * had the tip and the picker together at 242px inside a 326px row, which is close
- * enough that the picker may legitimately sit on a second line at 390px even with
- * the fix in, and a case asserting otherwise on an assumption would be a gate
- * asserting the wrong thing rather than a gate with a gap.
+ * the picker still shares the (i)'s line rather than being pushed to a second row.
+ * It is deliberately not added here rather than forgotten — it is filed on issue
+ * 346 (the P7 gate candidates) because it needs a measured pre/post reading first,
+ * and #323 changed the row it would be measured in: the pre-fix reading taken
+ * while planning that batch had the tip and the picker together at 242px inside a
+ * 326px row it was then sharing with a heading and a stats line, so it says
+ * nothing about the two-item row shipping now. A case asserting one on an
+ * assumption would be a gate asserting the wrong thing rather than a gate with a
+ * gap.
  */
-test.describe('the fleet panel’s header at phone width', () => {
+test.describe('the fleet chart’s controls row at phone width', () => {
   test.use({ viewport: PHONE_VIEWPORT });
 
   test('keeps the range picker one button tall at phone width (issue 344, P7)', async ({
@@ -488,14 +575,14 @@ test.describe('the fleet panel’s header at phone width', () => {
   }) => {
     /*
      * The map first, as every case here does. Nothing about the picker depends
-     * on the canvas, but the panel's position on the page does: the map is the
+     * on the canvas, but the section's position on the page does: the map is the
      * tallest thing above it and acquires its height late, so a box read before
      * that settles is a read of a page still about to move.
      */
     await expect(page.locator('.maplibregl-canvas')).toBeVisible();
 
-    const panel = page.locator('.fleet-panel');
-    const picker = panel.locator('.range-picker');
+    const section = page.locator('.fleet-chart-section');
+    const picker = section.locator('.range-picker');
 
     await picker.scrollIntoViewIfNeeded();
 
@@ -517,14 +604,17 @@ test.describe('the fleet panel’s header at phone width', () => {
 
     /*
      * And it fits, rather than merely staying short. A group kept on one line by
-     * running off the side of its card would satisfy the height above with the
-     * `7 d` chip unreachable, so the right edges are compared too — the panel is
-     * the container the fit is proven from inward (`design.md` rule 7).
+     * running off the side of its band would satisfy the height above with the
+     * `7 d` chip unreachable, so the right edges are compared too — the chart
+     * section is the container the fit is proven from inward (`design.md` rule 7).
+     * It is the full width of the page since #323, which makes the claim weaker
+     * than it was against a card and still the right one: the container a control
+     * must fit is whichever one it is in.
      */
-    const panelBox = await layoutBoxOf(panel, 'The fleet panel');
+    const sectionBox = await layoutBoxOf(section, 'The fleet chart section');
 
     expect(groupBox.x + groupBox.width).toBeLessThanOrEqual(
-      panelBox.x + panelBox.width + EDGE_TOLERANCE_PX,
+      sectionBox.x + sectionBox.width + EDGE_TOLERANCE_PX,
     );
   });
 });

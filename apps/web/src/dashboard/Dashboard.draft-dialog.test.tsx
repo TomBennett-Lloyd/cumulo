@@ -10,7 +10,7 @@ import {
   clickMap,
   CREATED_SITE_NAME,
   firstListedSite,
-  fleetPanel,
+  fleetChartSection,
   fleetRows,
   renderDashboard,
   settle,
@@ -95,7 +95,7 @@ describe('Dashboard draft dialog', () => {
      * fleet panel has no `hidden` prop any more (#265), so an attribute check
      * would pass on a panel that had been unmounted outright and prove nothing.
      */
-    expect(fleetPanel(container)).not.toBeNull();
+    expect(fleetChartSection(container)).not.toBeNull();
     expect(fleetRows()).toHaveLength(60);
   });
 

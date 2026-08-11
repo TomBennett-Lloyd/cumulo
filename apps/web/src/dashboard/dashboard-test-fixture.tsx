@@ -179,8 +179,13 @@ export const visit = (url: string): void => {
   window.history.replaceState(null, '', url);
 };
 
-/** The fleet's panel, which is on screen in every state of the page since #265. */
-export const fleetPanel = (root: HTMLElement): Element | null => root.querySelector('.fleet-panel');
+/**
+ * The fleet's chart section, which is on screen in every state of the page since
+ * #265 — and since #323 is a full-width band under the map rather than the first
+ * card in the centred reading below it.
+ */
+export const fleetChartSection = (root: HTMLElement): Element | null =>
+  root.querySelector('.fleet-chart-section');
 
 /** The selected site's card, as the map draws it — `null` when nothing is selected. */
 export const sitePopover = (root: HTMLElement): Element | null =>

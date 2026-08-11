@@ -44,24 +44,36 @@ export interface PlotRect {
  * imports this rather than restating it (`architecture.md` rule 9).
  *
  * **The value is what fits, measured rather than chosen.** #284 D15 asks that a
- * desktop viewport hold the map, the panel's heading row and the whole plot
- * without scrolling, and the chart gets whatever the stack above it leaves. On
- * the demo fleet at the viewport that case pins, that stack — the header bar,
- * the map band (`dashboard.css`'s `.dashboard-map`) and the fleet panel's own
- * chrome and gaps (`dashboard/fleet-panel.css`) — puts the chart's top at 702px
- * of the 900 that viewport is tall (`e2e/chart-surfaces.spec.ts`'s
- * `D15_VIEWPORT`, which owns both numbers), leaving 198px. 184 therefore leaves
- * 14px of slack, which is the margin an image whose `system-ui` sets those
- * text-driven boxes a little taller needs.
+ * desktop viewport hold the map, the row of chrome over the chart and the whole
+ * plot without scrolling, and the chart gets whatever the stack above it leaves.
+ * On the demo fleet at the viewport that case pins
+ * (`e2e/chart-surfaces.spec.ts`'s `D15_VIEWPORT`, which owns both numbers), that
+ * stack is the header bar, the map band (`dashboard.css`'s `.dashboard-map`) and
+ * the chart section's own top padding and controls row
+ * (`dashboard/fleet-panel.css`) — and it puts the plot's top at 636px of the 900
+ * that viewport is tall, leaving 264.
  *
- * **The 200 that overflowed was measured on a taller stack**, and saying so is
- * what makes the arithmetic above close: it overflowed by 6px against a chart
- * top of 706px, before the gaps above the panel were tightened. Against today's
- * 702 the same 200 would overflow by 2 — still an overflow, so the choice
- * stands, but a reader checking 900 − 702 − 200 against "6px" is checking two
- * different stacks. The arithmetic here is the reasoning;
- * `e2e/chart-surfaces.spec.ts` measuring a rendered page is the evidence, and it
- * imports this constant rather than restating it.
+ * **Re-measured for #323, which took a heading row, a padding step and a gap out
+ * of that stack.** The derivation this docblock used to carry was made against
+ * the taller one and read 702px and 198px left; both are history now, and the
+ * plot's bottom sits 80px clear of the fold rather than 14.
+ *
+ * **Those 80px are not headroom the plot may grow into, which is why 184 stayed
+ * put.** The plot is not the bottom of the figure — the legend and the folded
+ * data table's disclosure hang below it, and at the same reading the figure ends
+ * at 894px, 6px short of the fold, with the section's own bottom padding
+ * finishing 2px past it. So what fits is about 190; the slack is 6px rather than
+ * the 14 it was, and 184 remains very nearly the measured answer. The 200 that
+ * overflowed on the old stack still overflows on this one, by 10px of the figure
+ * where it used to be 6px of the plot. #323 was asked for width and not height,
+ * and nothing above asks the height to change.
+ *
+ * The arithmetic here is the reasoning; `e2e/chart-surfaces.spec.ts` measuring a
+ * rendered page is the evidence, and it imports this constant rather than
+ * restating it. What that case pins is the *plot's* bottom against the fold,
+ * which is the looser of the two readings above and only gained room in #323;
+ * the tighter one — the figure's own bottom, legend and disclosure included — is
+ * asserted by no spec in either lane today (`testing.md` rule 10's closing rule).
  */
 export const CHART_VIEW_BOX_HEIGHT = 184;
 

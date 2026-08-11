@@ -36,8 +36,18 @@ breakpoint, because the stacked arrangement a narrow screen already got is now t
 
 ## A selection changes what is drawn, not what is on screen
 
-**Nothing under the map swaps.** The reading is a plain flow, top to bottom: the fleet's chart,
-the site table, the page footer. All three are present in every state the page can be in.
+**Nothing under the map swaps.** The page is a plain flow, top to bottom: the map band, the
+fleet's chart, the site table, the page footer. All four are present in every state the page can
+be in.
+
+The chart is a full-width band rather than the first item of the centred reading, which is what
+#323 changed. It sits directly against the map with no gap and on the same `--color-surface`, so
+the two read as one continuous unit — which is what they are, the same fleet drawn in space and
+then in time, and a card edge with a page margin around it was claiming a separation nobody meant
+([`../standards/design.md`](../standards/design.md) rule 4). The measure picks up again below,
+around the site table and the footer, where the reading genuinely is a separate thing from the two
+bands above it. The chart is better for the extra width in its own right: its axis is time, and a
+time axis has more to say the wider it is drawn.
 
 The table is folded away behind a `<details>` disclosure whose summary counts the fleet
 (`apps/web/src/dashboard/SiteTable.tsx`). Sixty rows open under the chart are the tallest thing
@@ -158,7 +168,7 @@ reader actually sees is the browser lane's, and there it is two specs rather tha
 over a real network; `e2e/pointer-focus.spec.ts` keeps the other clause, that no ring appears where
 the reader did not ask for one. Deleting either leaves half a rule standing.
 
-## The fleet panel is never hidden, and always paid for
+## The fleet chart is never hidden, and always paid for
 
 `FleetPanel` is rendered unconditionally, with no `hidden` prop and no reveal latch. A fleet sum in
 live mode is **one metered request** — `GET /v1/fleet/forecast`, with `GET /v1/fleet/actuals`
@@ -174,8 +184,8 @@ Deselection is not an event, and neither is selection — a selected site is one
 request for its own line, not a re-sum.
 
 **The trade accepted in #265, stated because it is a real cost.** #178 deferred the first fleet
-read until the panel was first revealed, so a `?site=` deep-linked reader who never looked at the fleet
-never paid for it. That saving depended on the panel being hideable, and nothing hides it now: the
+read until the chart was first revealed, so a `?site=` deep-linked reader who never looked at the fleet
+never paid for it. That saving depended on the chart being hideable, and nothing hides it now: the
 fleet chart is on screen from first paint in every state, with the selected site drawn over it. A
 deferral would therefore buy no reader anything — there is no longer a reader who does not look at
 the fleet — and would cost every deep link a spinner where the chart already is. So the deep link
@@ -188,9 +198,9 @@ keys, so a creation re-asks the forecasts and the simulated actuals alike. Bound
 `CreationThrottle`'s three-per-minute allowance.
 
 Two implementation notes that went with the hiding. `fleet-panel.css` no longer restates
-`[hidden] { display: none }` — it had to, because `.fleet-panel` sets `display: grid` and beats
-the user agent rule, and a panel that kept its state but not its invisibility would have been
-worse than one that unmounted. And the panel no longer withholds its children while hidden, which
+`[hidden] { display: none }` — it had to, because the section then set `display: grid` and beat
+the user agent rule, and a surface that kept its state but not its invisibility would have been
+worse than one that unmounted. And it no longer withholds its children while hidden, which
 was the #161 fix for a `role="alert"` mounting inside a `display: none` subtree with nothing to
 announce. Both were answers to a state the page can no longer be in.
 

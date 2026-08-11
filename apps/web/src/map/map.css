@@ -153,7 +153,17 @@
  *
  * `flex-wrap: wrap` is still the last resort below the compact row's own width
  * (see the compact-form rule further down); what it is no longer is the *first*
- * answer to a narrow window. */
+ * answer to a narrow window.
+ *
+ * The vertical padding is one step below the horizontal one, deliberately. This
+ * band is the least-read text on the page (`design.md` rule 8), and every row of
+ * it is a row the map does not get; a step of veil above and below the line box
+ * is enough to keep the ink off the tiles' own edge, and the band still sizes to
+ * its content, so the link keeps its full line box and stays clickable. The
+ * horizontal padding is untouched: that axis is what holds the credits clear of
+ * the map's left and right edges. Nothing here moves the compact-form
+ * breakpoint below — that threshold is typographic, measured from the row's
+ * inline width, and vertical padding is not an input to it. */
 .map-attribution {
   position: absolute;
   inset: auto 0 0 0;
@@ -161,7 +171,7 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   background: var(--color-surface-veil);
 }
 

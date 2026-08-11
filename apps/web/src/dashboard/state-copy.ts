@@ -112,17 +112,22 @@ export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
  */
 
 /**
- * The aggregate is short of sites for some hours, stated in both directions.
+ * The aggregate is short of sites for some hours — the one direction worth
+ * stating.
  *
  * Both numbers are rendered because "partial" on its own is a shrug: the reader
  * needs to know whether one site is missing or fifty.
+ *
+ * It used to have a complement, `aggregatedFromCaption`, which said "Aggregated
+ * from n sites" whenever the aggregate was whole. #323 deleted it rather than
+ * rewording it: a complete aggregate is what a reader already expects to be
+ * looking at, so the sentence described the chart above it instead of reporting
+ * anything that had happened — description rather than state, and therefore not
+ * this module's subject at all (`design.md` rule 2). Completeness is stated in
+ * one direction now, which is the direction that is news.
  */
 export const partialAggregateNotice = (contributing: number, total: number): string =>
   `Partial aggregate: some hours include only ${String(contributing)} of ${String(total)} sites.`;
-
-/** The complementary answer: every displayed hour holds the whole fleet. */
-export const aggregatedFromCaption = (siteCount: number): string =>
-  `Aggregated from ${String(siteCount)} sites`;
 
 /**
  * The fleet chart is complete; the selected site's line over it is not.

@@ -1,6 +1,11 @@
 /*
- * Dashboard layout: one column, top to bottom — a full-bleed map, then
- * everything the map is about.
+ * Dashboard layout: one column, top to bottom — a full-bleed map, the fleet's
+ * chart in a full-width band under it, then everything the two are about.
+ *
+ * Two bands and then a measure, rather than one band and then a measure. #323
+ * moved the chart out of the centred reading and up against the map: the two are
+ * one unit and the page now says so by letting them touch, on one continuous
+ * surface, at the full width the chart's time axis is worth drawing at.
  *
  * Tokens only (stylelint.config.mjs). Lengths that no token category covers —
  * the content measure and the map's height — are the documented residual of the
@@ -19,10 +24,18 @@
  * keep true. `app.css` owns the shell this sits in.
  */
 
+/* No gap, and that is a claim rather than a saving (#323, design.md rule 4).
+   The map and the fleet chart under it are one reading unit — the same fleet in
+   space, then in time — so they touch, and a band of page between them would
+   have said they were unrelated. The two share one continuous `--color-surface`
+   run because `.fleet-chart-section` carries the same surface the map does. The
+   reading below has its own separation to make and makes it in its own padding
+   (`.dashboard-content`), which is why the gap moved there rather than being
+   deleted from the page. */
 .dashboard {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 0;
 }
 
 /* Full bleed: no padding here and none on any ancestor, so the map runs edge to
@@ -56,11 +69,19 @@
   min-height: 24rem;
 }
 
-/* The reading, in one measure under the map. Centred rather than left-aligned
- * because the map above it is the full width and has no edge to align to, and
- * bounded because a chart and a sixty-row list stretched across a wide monitor
- * are both harder to read than the same content at a book's width. The measure
- * is where the map's padding went: full bleed is the map's, not the page's. */
+/* The reading, in one measure under the map and the chart. Centred rather than
+ * left-aligned because the two full-width bands above it have no edge to align
+ * to, and bounded because a sixty-row list stretched across a wide monitor is
+ * harder to read than the same content at a book's width. The measure is where
+ * the map's padding went: full bleed is the band's, not the page's.
+ *
+ * The chart left this box in #323 and took the argument for the measure with
+ * it — what is bounded here is the reading, and a chart is better for the width
+ * it can get. The padding is a full step on all four sides now rather than open
+ * at the top: `.dashboard` no longer supplies a gap above this box (see its
+ * rule), so this is where the separation between the chart band and the reading
+ * is made, and it is this box's to make because it is this box that is a
+ * separate thing from the two above it. */
 .dashboard-content {
   display: flex;
   box-sizing: border-box;
@@ -69,7 +90,7 @@
   flex-direction: column;
   gap: var(--space-4);
   margin: 0 auto;
-  padding: 0 var(--space-4) var(--space-4);
+  padding: var(--space-4);
 }
 
 /* There is no `.dashboard-slot` card here any more, and no heading rule with
@@ -98,8 +119,11 @@
    the map rather than sixty rows below it, and scroll position simply stays
    where the reader put it.
 
-   No top margin any more: the heading it used to clear is gone, and the gap to
-   the panel above is `.dashboard-content`'s to give. */
+   No top margin any more: the heading it used to clear is gone, and the space
+   above this box is `.dashboard-content`'s top padding to give — this is its
+   first child, and what sits above it is the full-width chart band outside it
+   entirely (see that rule, and `.dashboard`'s for why the band itself gets no
+   gap). */
 .dashboard-fleet {
   display: grid;
   gap: var(--space-3);

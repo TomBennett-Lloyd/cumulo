@@ -13,12 +13,24 @@
  * second vocabulary. Selection and hover additionally change weight and border,
  * because colour never carries a state alone.
  *
- * The disclosure is the card the reading's other sections are — the same
- * surface, radius and padding as `.fleet-panel` above it — so a folded table
- * reads as a panel that is closed rather than as a stray line of text. It is
- * also the whole box: there is no wrapper section around it any more, because a
- * `<summary>` names the disclosure the way a heading named the section it
- * replaced (dashboard.css says what went with it).
+ * The disclosure is a card — `--color-surface` at `--radius-md`, padded a full
+ * step on every side — so a folded table reads as a panel that is closed rather
+ * than as a stray line of text.
+ *
+ * It is the page's only one since #323, and the sentence that used to stand here
+ * — claiming this box shared its surface, radius and padding with the card above
+ * it — is no longer true of anything. The chart is a full-width band now: it
+ * kept the surface and gave up the radius, the centred measure and a step of its
+ * vertical padding so that it and the map read as one unit (fleet-panel.css makes
+ * the same statement from its end). So this box is deliberately *not* that box's
+ * sibling any more — it is a separate thing below the two bands, and the card is
+ * how it says so. The shared `--color-surface` is all that is left of the old
+ * pairing, and it is doing a different job: keeping this one page rather than
+ * claiming these two are peers.
+ *
+ * It is also the whole box: there is no wrapper section around it any more,
+ * because a `<summary>` names the disclosure the way a heading named the section
+ * it replaced (dashboard.css says what went with it).
  */
 
 .site-table {
@@ -28,9 +40,12 @@
 }
 
 /* The affordance and the section's name in one. It takes the heading's own type
-   scale, because that is what it replaced — the reading below the map is a flow
-   of peers, and a summary set smaller than the panel title above it would read
-   as a footnote to that panel rather than as the next thing. `cursor: pointer`
+   scale, because that is what it replaced — and since #323 it is the only visible
+   heading anywhere below the map, the chart band's name having become an
+   `aria-label` on the section (FleetPanel.tsx). A summary set below the heading
+   scale would leave the whole reading under the map with no landmark a sighted
+   reader can see, which is a heavier job than the one this scale was originally
+   defending against. `cursor: pointer`
    and the platform focus ring (@cumulo/ui's styles.css, which lists `summary`
    among the elements it rings) are the whole of its interaction treatment: the
    marker triangle, the open/closed state and the keyboard operation are the
