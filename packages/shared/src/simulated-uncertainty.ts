@@ -67,11 +67,14 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  *
  * Restatement ledger (`architecture.md` rule 9): the base half-width is *derived* from
  * `simulated-actual.ts`'s bounds rather than restating `0.12`, so the two cannot drift. The copies
- * that do carry literals are these. In `simulated-uncertainty.test.ts`, because a test that reads
- * the value it is proving moves with it and proves nothing (the same pattern as
+ * that do carry literals include these. In `simulated-uncertainty.test.ts`, because a test that
+ * reads the value it is proving moves with it and proves nothing (the same pattern as
  * `simulated-actual.test.ts`'s bounds sweep): the calibration case asserts `0.88` and `1.12`, the
- * saturation case asserts a half-width of `0.5`, and the two grid-snap cases assert `0.902`, which
- * rides the base half-width, and `23.124`, which rides the half-width ceiling. In
+ * saturation case asserts a half-width of `0.5`, the scaling case asserts `3.52` and `4.48`, the
+ * ceiling case asserts `44`, and the grid-snap cases assert `0.902` and `1.148`, which ride the
+ * base half-width, and `23.124` and `7.708`, which ride the half-width ceiling. Retuning either
+ * owned constant moves all of them; the sub-watt literals and the clamp's `50` are floor/ceil
+ * dominated and do not move, which is why they are absent. In
  * {@link DECIMAL_GRID_TOLERANCE}'s comment: the worked example reads `0.88` and `1.12` off the
  * derived base to locate where the representation error enters. In the lead bullet above: `26 h`
  * is solved from the three width constants below, not measured, so it moves when any of them
@@ -134,8 +137,10 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * {@link SIMULATED_UNCERTAINTY_BASE_HALF_WIDTH} is *derived* from the actuals bounds rather than
  * written as a decimal, so `1 + base` sits a hair under the `1.12` it reads as, and a `1 kW`
  * estimate under a clear sky at issue time scales to `1119.9999999999998` rather than `1120`.
- * That one is harmless: `Math.ceil` of a value a hair *below* a grid point already lands on it.
- * The multiply is the step that bites, and it is an independent one — `1 − base` *is* exactly
+ * That one is harmless *on this side*: `Math.ceil` of a value a hair *below* a grid point already
+ * lands on it. Either step can bite on either side, though — a `1 − halfWidth` landing a hair
+ * below a grid point costs a watt at `Math.floor` by the identical mechanism — so the example
+ * below is one instance rather than a rule about which step is dangerous. `1 − base` *is* exactly
  * `0.88`, yet `1.025 × 0.88 × 1000` comes out `901.9999999999999` against an exact `902`, so a
  * raw `Math.floor` publishes a p10 of `0.901`: a watt taken off the band by nothing but the last
  * bit of a product. Snapping first makes the outward rounding a function of the value rather than
@@ -143,13 +148,21 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  *
  * The tolerance is *relative* because the error it absorbs is: an ulp scales with the value
  * carrying it, so a relative tolerance holds one constant multiple of an ulp across the whole
- * range instead of running slack at the top of it and tight at the bottom. It is not the only
- * workable choice — the error never exceeds a few ulps of a value the parse caps at
- * {@link MAX_PLAUSIBLE_RESIDENTIAL_KW}, so a fixed absolute tolerance from those few ulps up to a
- * small fraction of a watt would hold at every magnitude too — it is the one that means the same
- * thing at both ends. At every magnitude this module sees, `1e-9` sits about seven orders of
- * magnitude above a single ulp of the scaled value and at least four below the watt it must never
- * cross.
+ * range instead of running slack at the top of it and tight at the bottom.
+ *
+ * It is also the choice that needs no lower bound on the estimate, and that is the load-bearing
+ * part. A *relative* tolerance can never snap a non-zero value onto zero: `|s − 0| ≤ 1e-9 · s`
+ * is impossible for any `s > 0`. A fixed *absolute* tolerance `t` can, and does — it snaps p90
+ * onto zero for every median whose scaled value falls below `t`, and `ceil(0)` then publishes a
+ * `{0, 0}` band around a positive estimate, which `uncertaintyBandSchema` accepts without
+ * complaint. That is precisely the quiet unbracketed band outward rounding exists to remove. So
+ * an absolute tolerance is workable only inside a range bounded at *both* ends — roughly `1e-9`
+ * to `1e-6` scaled units — and not, as it might seem, anywhere up to a fraction of a watt: at
+ * `t = 1e-3` a `1e-7 kW` estimate already comes back `{0, 0}`. Nothing floors a non-zero
+ * `acPowerKw` away from zero (`z.number().gte(0)`, and the physics chain does not quantise), so
+ * there is no lower bound to lean on. At every magnitude this module sees, `1e-9` sits about
+ * seven orders of magnitude above a single ulp of the scaled value and at least four below the
+ * watt it must never cross.
  */
 const DECIMAL_GRID_TOLERANCE = 1e-9;
 
@@ -183,9 +196,11 @@ const ceilTo = (value: number, decimals: number): number =>
  * onto it. Unclamped, a stray reading fails quietly rather than loudly: a cover just above `100 %`
  * returns a *narrower* band, which the band's own parse accepts without complaint, and the
  * half-width — the one failure a parse could catch — does not go negative until around `111 %`.
- * Clamping degrades a stray reading to the nearest settled sky instead, and for every *finite*
+ * Clamping degrades a stray reading to the nearest settled sky instead, and for every *non-`NaN`*
  * cover it is what makes `halfWidth >= 0`, which the schema's `p10 <= p90` refinement rests on, a
- * property of this code rather than of its caller.
+ * property of this code rather than of its caller. The infinities are absorbed like any other
+ * out-of-range cover — `Math.max(0, -Infinity)` is `0` and `Math.min(1, Infinity)` is `1`, both
+ * settled skies — so `NaN` is the only cover the clamp cannot answer for.
  *
  * `NaN` is the one cover the clamp cannot absorb: `Math.max(0, NaN)` is `NaN`, which carries
  * through both quantiles and surfaces as a `ZodError` from the band's own parse. It is documented
@@ -226,9 +241,9 @@ const leadHours = (forecast: Forecast): number =>
  *
  * The result is parsed rather than asserted, and the three things the parse re-proves have three
  * different guarantors, worth separating because the previous note credited the clamps with all
- * of it: the `p10 ≤ p90` refinement holds because `halfWidth` is never negative for a finite
- * cover ({@link cloudVariability}'s clamp is what keeps it so, and its note owns the non-finite
- * case); the `0` floor holds because a
+ * of it: the `p10 ≤ p90` refinement holds because `halfWidth` is never negative for a non-`NaN`
+ * cover ({@link cloudVariability}'s clamp is what keeps it so, and its note owns the `NaN` case);
+ * the `0` floor holds because a
  * non-negative estimate times a non-negative factor cannot floor below zero, so there is
  * deliberately no `Math.max(0, …)` here — a clamp that can never bind is defence a reader has to
  * disprove; and the {@link MAX_PLAUSIBLE_RESIDENTIAL_KW} ceiling holds because of the one clamp
