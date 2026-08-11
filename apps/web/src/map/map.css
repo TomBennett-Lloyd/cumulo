@@ -214,11 +214,11 @@
  * the DOM text is identical either way and only the painting changes, which is
  * also why `MapAttributionStrip`'s wording tests never had to learn about this.
  * The Open-Meteo half is the compact form CLAUDE.md sanctions "at widths where
- * the row cannot hold it" (owner-amended 2026-08-09), read against the row *as
- * composed* — both credits' full forms — rather than against that phrase's own
- * length. That is a reading of the amended sentence and not its literal object;
- * `docs/design/map-treatment.md`'s Attribution section owns the reading and says
- * why, and this is a pointer rather than a second statement of it.
+ * the row as composed cannot hold its credits' full forms" (owner-amended
+ * 2026-08-09; composed-row reading owner-confirmed 2026-08-11). That
+ * composed-row condition is the constraint's own wording as of 2026-08-11, not a
+ * reading of it; `docs/design/map-treatment.md`'s Attribution section owns which
+ * rows meet it, and this is a pointer rather than a second statement of it.
  *
  * The rule lives here, scoped to `.map-attribution`, rather than beside
  * `.cumulo-attribution-prefix`'s own component in `@cumulo/ui`. What runs out is
