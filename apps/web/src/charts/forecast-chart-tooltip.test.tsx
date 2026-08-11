@@ -34,10 +34,10 @@ import {
 import type * as TooltipGeometry from './tooltip-geometry';
 
 /**
- * The drawn tooltip's shape and its motion — #284 D6 and D7. Separate from
- * `forecast-chart-hover.test.tsx`, which proves which *sample* a pointer or a
- * keystroke selects; this file proves what the panel then looks like and how it
- * moves (`structure.md` rule 4).
+ * The drawn tooltip's shape and its motion — #284 D6 as #330 left it, and D7.
+ * Separate from `forecast-chart-hover.test.tsx`, which proves which *sample* a
+ * pointer or a keystroke selects; this file proves what the panel then looks
+ * like and how it moves (`structure.md` rule 4).
  *
  * The render probe below is the reason these live in a file of their own. D7's
  * claim is that moving the panel does not re-render its content, and "did not
@@ -56,9 +56,9 @@ vi.mock('./tooltip-geometry', async (importOriginal) => {
   const actual = await importOriginal<typeof TooltipGeometry>();
   return {
     ...actual,
-    tooltipPanelHeight: (visibleRowCount: number): number => {
+    tooltipPanelHeight: (drawnRowCount: number): number => {
       probe.contentRenders += 1;
-      return actual.tooltipPanelHeight(visibleRowCount);
+      return actual.tooltipPanelHeight(drawnRowCount);
     },
   };
 });
@@ -97,7 +97,7 @@ const column = (container: HTMLElement, columnClass: string): readonly Element[]
 ];
 
 describe('ForecastChart tooltip shape', () => {
-  it('omits the Actual row from the drawn tooltip for an unmeasured hour', () => {
+  it('dashes the Actual row for an unmeasured hour, and only there', () => {
     const container = renderChart(SERIES);
     const svg = requireSvg(container);
     const measuredKeys = (): readonly Element[] => [
@@ -107,20 +107,21 @@ describe('ForecastChart tooltip shape', () => {
       svg.focus();
     });
 
-    // Positive control, in this test rather than in a sibling: a measured hour
-    // draws the row and its key stroke, so the absence asserted below is the
-    // chart dropping a row rather than a selector that never matched.
+    // Control, in this test rather than in a sibling: a measured hour draws
+    // every value as a number, so the em dash asserted below is this chart
+    // marking one hour's absence rather than a panel that dashes everything.
     expect(measuredKeys()).toHaveLength(1);
-    expect(tooltipText(container)).toContain('Actual');
+    expect(tooltipValues(container)).toStrictEqual(['0.9', '1.0', '0.0–2.0']);
 
     // SERIES[4] is past the horizon: forecast, no measurement.
     fireEvent.keyDown(svg, { key: 'End' });
 
-    // Drawn and spoken now agree. The em dash the row used to carry showed a
-    // reader nothing and said nothing at all to a screen reader (#284 D6).
-    expect(measuredKeys()).toHaveLength(0);
-    expect(tooltipText(container)).not.toContain('Actual');
-    expect(tooltipValues(container)).toStrictEqual(['2.0', '1.0–3.0']);
+    // The row stays and carries `formatKw`'s em dash — missing data reads as
+    // missing (`design.md` rule 5, owner 2026-08-10 / #330), and the series a
+    // reader was reading a moment ago does not leave the panel under them.
+    expect(measuredKeys()).toHaveLength(1);
+    expect(tooltipText(container)).toContain('Actual');
+    expect(tooltipValues(container)).toStrictEqual(['—', '2.0', '1.0–3.0']);
   });
 
   it('lays the rows out in name and value columns', () => {
@@ -296,7 +297,7 @@ describe('ForecastChart tooltip shape', () => {
     );
   });
 
-  it('pads the panel equally above the time and below the last visible row', () => {
+  it('pads the panel equally above the time and below the last row, at a height that holds still', () => {
     const container = renderChart(SERIES);
     const svg = requireSvg(container);
     act(() => {
@@ -316,14 +317,15 @@ describe('ForecastChart tooltip shape', () => {
     // the air below the last row come out the same number.
     expect(panelAttribute(container, 'height') - (rows.at(-1) ?? Number.NaN)).toBe(timeY);
 
-    // Height follows the *visible* rows, so an unmeasured hour draws a shorter
-    // panel rather than one carrying a gap where a row used to be.
-    const tallHeight = panelAttribute(container, 'height');
+    // And the height is a fact about the chart, not about the sample: every
+    // series the chart carries has a row at every hour, so an unmeasured hour
+    // dashes its cell instead of shortening the panel under a reader who is
+    // moving along the series (`design.md` rule 6, #330).
+    const openingHeight = panelAttribute(container, 'height');
     fireEvent.keyDown(svg, { key: 'End' });
 
-    expect(rowCentreLines(container)).toHaveLength(2);
-    expect(panelAttribute(container, 'height')).toBe(tooltipPanelHeight(2));
-    expect(panelAttribute(container, 'height')).toBeLessThan(tallHeight);
+    expect(rowCentreLines(container)).toHaveLength(3);
+    expect(panelAttribute(container, 'height')).toBe(openingHeight);
   });
 });
 
@@ -423,7 +425,9 @@ describe('ForecastChart tooltip motion', () => {
     // Crossing the midpoint is the one thing that is a data change, and it
     // costs exactly one render of the content.
     expect(probe.contentRenders).toBe(2);
-    expect(tooltipText(container)).toBe(`15:00Median5.0P10–P904.0–6.0${OVERLAY_LABEL}2.2`);
+    // Sample 3 is past the horizon, so its Actual cell is the em dash rather
+    // than a row the panel drops (#330).
+    expect(tooltipText(container)).toBe(`15:00Actual—Median5.0P10–P904.0–6.0${OVERLAY_LABEL}2.2`);
   });
 
   it('applies one pointer position per frame, and never drops the last one', () => {
