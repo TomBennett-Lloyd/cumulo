@@ -22,10 +22,19 @@ export interface PointerSampleParams {
    * drawn 1:1 with its measured width (`use-chart-width.ts`), so in the settled
    * state this equals the rendered width and the conversion below is the
    * identity — but only in the settled state, which is why it stays a parameter
-   * rather than becoming an assumption. On the frame before the first
-   * measurement, and wherever there is no `ResizeObserver` to measure with, the
-   * view box is `DEFAULT_CHART_WIDTH` inside a box of some other width, and this
-   * is what keeps the crosshair under the pointer there too.
+   * rather than becoming an assumption. Wherever nothing has measured the chart
+   * the view box is `DEFAULT_CHART_WIDTH` inside a box of some other width, and
+   * this is what keeps the crosshair under the pointer there too. Since #343 a
+   * browser is no longer one of those places at first paint — the first
+   * measurement lands before the frame it belongs to — so the unsettled states
+   * this parameter exists for are jsdom, where every hover test in this package
+   * feeds the conversion a rendered box twice the view box on purpose
+   * (`forecast-chart-test-fixture.tsx`), any environment without a
+   * `ResizeObserver` to answer a later resize, and, in a browser, the frames
+   * after a container resize: the observer's new measurement reaches `setWidth`
+   * inside that frame's rendering update, but React commits the re-render in a
+   * later task, so the resized box paints against the previous measurement's
+   * view box and a pointer move in that window converts through it.
    */
   readonly viewBoxWidth: number;
   readonly scale: ChartScale;
