@@ -5,8 +5,10 @@
  * CLAUDE.md's frontend gate says "no arbitrary colors, sizes, or spacing
  * values". This config is the mechanical half of that rule for CSS (the ESLint
  * half, covering .ts/.tsx, lives in eslint.config.mjs). The single exemption is
- * packages/ui/src/tokens/*.css — the one file in the repo allowed to hold raw
- * values, because it is where the tokens are defined.
+ * packages/ui/src/tokens/*.css — the one file this gate exempts from the ban on
+ * raw values, because it is where the tokens are defined. What files outside
+ * this gate's reach may hold is a separate question, and that file's own header
+ * owns the answer.
  *
  * The second gate here is not about values at all: it is
  * docs/standards/design.md rule 11's, and it governs *when* a ring paints. It
@@ -223,7 +225,8 @@ export default {
 
   overrides: [
     {
-      // The tokens source is the single home of raw values in this repo.
+      // The tokens source is the one file this gate exempts from the raw-value
+      // rules; that file's own header owns the wider claim.
       files: ['packages/ui/src/tokens/*.css'],
       rules: {
         'scale-unlimited/declaration-strict-value': null,

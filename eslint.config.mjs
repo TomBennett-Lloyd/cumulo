@@ -80,8 +80,8 @@ export default tseslint.config(
      * Frontend gate (CLAUDE.md): UI code consumes design tokens only. Raw
      * colours and inline styles are caught here; the CSS half of the same rule
      * lives in stylelint.config.mjs. Values are exempted by file, never by
-     * comment — packages/ui/src/tokens/tokens.css is the one place raw values
-     * exist, and tokens.ts only ever references them as `var(--…)` strings.
+     * comment — packages/ui/src/tokens/tokens.css is the one file this gate
+     * exempts, and tokens.ts only ever references them as `var(--…)` strings.
      *
      * The colour-function list below is the same set stylelint refuses in
      * `declaration-property-value-disallowed-list`; the two must stay in step,
