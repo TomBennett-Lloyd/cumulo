@@ -85,17 +85,26 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * low-sensitivity, not as fixed.
  *
  * Prose carries these constants too, and a paraphrase is invisible to a grep keyed to the literal
- * (`architecture.md` rule 10), so the restatements in words are listed with the assertions. Riding
- * {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}: the lead bullet above says the far horizon "sits
- * flat at exactly ±50 %", which reads `±60 %` at `0.6`; and in `simulated-uncertainty.test.ts`,
- * the p90 snap case calls its expectation "half again the estimate" and spells `1.5`, while the
- * saturation case's name says "half the estimate" and its comment "the `0.5` cap". Riding the base
+ * (`architecture.md` rule 10), so the restatements in words are listed with the assertions.
+ * **Read the list below as a floor, not a census**: it is what a sweep for the claim families —
+ * the literals themselves, plus `half again|half the estimate|spans|±\d+ ?%|flat at|saturat` —
+ * turned up, and the next paraphrase nobody thought to grep for is exactly the copy this ledger
+ * cannot promise to hold. Where a figure could be *eliminated* rather than listed it was: the two
+ * width constants' own docblocks state their meaning as an expression now, so they no longer
+ * quote the numbers they own.
+ *
+ * Riding {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}: the lead bullet above says the far horizon
+ * "sits flat at exactly ±50 %", which reads `±60 %` at `0.6`; and in
+ * `simulated-uncertainty.test.ts` the p90 snap case calls it "half again the estimate" and spells
+ * `1.5`, while the saturation case's name says "half the estimate" and its comment "the `0.5`
+ * cap". Riding the base
  * half-width: that file's p10 snap case works through `1 − halfWidth` as `0.88` and reads
- * `901.9999999999999`, `902` and `0.901` off it. In {@link DECIMAL_GRID_TOLERANCE}'s comment: the
- * worked example reads `0.88` and `1.12` off the derived base to locate where the representation
- * error enters. Also in the lead bullet: `26 h` is *solved*, not measured, from all four width
- * constants — base, cloud, per-hour lead, and the ceiling it is solved against — so it moves
- * with any of them, and reads `46 h` at a ceiling of `0.6`. Change either actuals bound, or
+ * `901.9999999999999`, `902` and `0.901` off it; and {@link DECIMAL_GRID_TOLERANCE}'s comment
+ * works the same derivation through `0.88`, `1.12`, `1119.9999999999998`, `1120`,
+ * `901.9999999999999`, `902` and `0.901` to locate where the representation error enters. Also in
+ * the lead bullet: `26 h` is *solved*, not measured, from all four width constants — base, cloud,
+ * per-hour lead, and the ceiling it is solved against — so it moves with any of them, and reads
+ * `46 h` at a ceiling of `0.6`. Change either actuals bound, or
  * {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}, and every copy above is one to change with it.
  *
  * A precondition rather than a copy, listed here for the same reason — it is a fact about another
@@ -113,7 +122,9 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * {@link SIMULATED_ACTUAL_FACTOR_MAX}`)`, centred on 1, so its floor sits half a range below the
  * unit midpoint. Its P90 sits `0.9` of the range above that floor, which is `(0.9 − 0.5) = 0.4`
  * of a range above the midpoint — a relative half-width of `0.4 × range`. P10 is the mirror
- * image. With the bounds as they stand that is `0.12`, i.e. quantiles at `0.88` and `1.12`.
+ * image. The figures that follow from today's bounds are in the restatement ledger above, not
+ * repeated here: this is the owner, and an owner that also quotes its own output is one more copy
+ * to keep in step.
  */
 const SIMULATED_UNCERTAINTY_BASE_HALF_WIDTH =
   (SIMULATED_ACTUAL_FACTOR_MAX - SIMULATED_ACTUAL_FACTOR_MIN) * 0.4;
@@ -124,7 +135,9 @@ const SIMULATED_UNCERTAINTY_CLOUD_HALF_WIDTH = 0.25;
 /** Extra half-width per hour of forecast lead, before the cap. */
 const SIMULATED_UNCERTAINTY_LEAD_WIDENING_PER_HOUR = 0.005;
 
-/** The ceiling on relative half-width: at `0.5` the band spans half to 1.5× the estimate. */
+/**
+ * The ceiling on relative half-width: the band spans `1 − max` to `1 + max` times the estimate.
+ */
 const SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX = 0.5;
 
 /**
@@ -175,10 +188,12 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * complaint. That is precisely the quiet unbracketed band outward rounding exists to remove.
  *
  * The failure is scale-free in `t`, so there is no safe absolute tolerance — not a small one, not
- * any. The boundary is `t / (1000 × (1 + h))`, so it moves with the half-width and any figure
- * quoted without one is only true in the regime it was computed in; anything below `t / 1500`
- * breaks at *every* half-width this model produces. `t = 1e-3` fails a `5e-7 kW` estimate,
- * `t = 1e-9` fails `5e-13 kW`, and so on down. Nothing floors a non-zero
+ * any. The boundary is `t / (1000 × (1 + h))`, so it moves with the half-width, and any figure
+ * quoted without one is only true in the regime it was computed in — the worst case being
+ * `10 **`{@link POWER_DECIMALS}` × (1 + `{@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}`)`, below
+ * which an estimate fails at *every* half-width this model produces. `t = 1e-3` fails a `5e-7 kW`
+ * estimate, `t = 1e-9` fails `5e-13 kW`, and so on down; those two clear the worst case by enough
+ * to survive any ceiling up to `1.0`. Nothing floors a non-zero
  * `acPowerKw` away from zero (`z.number().gte(0)`, and the physics chain does not quantise), so
  * there is no smallest estimate for such a bound to sit under, and the invariant this module
  * leads with is "at every magnitude". Relative is not the better of two workable choices here; it
