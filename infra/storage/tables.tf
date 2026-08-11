@@ -76,11 +76,28 @@
 # the day it was written and go stale the first time a stack is added — the
 # precise failure a ledger exists to prevent. So: change a billing mode or a
 # metered estimate, and the two sites above move in the same commit, together
-# with every driver row convention 3 requires. Every remaining mention in the
-# repo points here without a number, with two named prose exceptions (ADRs are
-# a third, exempt as immutable): infra/README.md's ingestion teardown paragraph
-# and its "a forgotten stack is nearly free" cost note both carry the ≈ $0.30
-# and ≈ $1.48 estimates, and move with them.
+# with every driver row convention 3 requires. Two further prose sites carry
+# figures of their own rather than pointing here without one:
+# infra/README.md's ingestion teardown paragraph and its "a forgotten stack is
+# nearly free" cost note both carry the ≈ $0.30 and ≈ $1.48 estimates, and move
+# with them.
+#
+# ADRs are carriers here like anything else. An ADR's decision and its
+# reasoning are immutable, and that is where the exemption stops: a figure an
+# ADR quotes from this stack sits inside this ledger like any other carrier
+# (docs/standards/architecture.md rule 9; docs/adr/README.md § Amendments, "the
+# backwards case", is the side that puts the list here rather than there — read
+# the reasoning at either, it is not restated here). What an ADR is owed
+# differs from what a mutable carrier is owed: not an inline true-up, but an
+# as-it-stood annotation on the quotation plus its own dated entry, so a
+# billing-mode change reaches an ADR as an amendment. Known ADR carriers of the
+# capacity posture: ADR 0004's option E read-back rejection and ADR 0007's
+# "Ceiling 2 — capacity", each reasoning from a table's former read or write
+# allocation; ADR 0005's Consequences paragraph "The cost guard is not a
+# capacity guard"; ADR 0006's §1 "Which routes are limited" and its §2
+# `**Sites:**` bullet, which lands a site cap on ADR 0002's fleet-headroom row;
+# and ADR 0002's own capacity table, whose 2026-08-03 (#156) and 2026-08-09
+# (#258) entries record both moves out of the pool.
 #
 # The `series` section below also owns the per-dashboard-load read arithmetic:
 # #264 doubled it by giving a load a second fleet fan-out, and ADR 0002's
@@ -91,8 +108,32 @@
 # `listSites` docblock in apps/web/src/data/fleet-data-source.ts, the
 # `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts and
 # the fleet-vs-poll comment in apps/web/src/data/use-first-forecast.test.tsx.
-# So: change the per-load read arithmetic, and those five sites move in the
-# same commit.
+# One ADR carrier joins them: ADR 0002's 2026-08-10 (#264) Amendments entry,
+# which states the current per-load figure and halves every read-side figure
+# derived from its predecessor — a quoter of this stack's arithmetic rather
+# than an owner of it, and owed the ADR treatment described above rather than
+# an inline true-up. So: change the per-load read arithmetic, and every site
+# named here moves in the same commit.
+#
+# Both member lists are a floor rather than a census: one more carrier does not
+# falsify them. The sweep behind the ADR members, run 2026-08-11 with
+# `command grep -E` over docs/adr/*.md, is claim-shaped rather than keyed to
+# any literal (architecture rule 10), on two arms —
+# `[0-9] ?(WCU|RCU)|25/25|provisioned` for the capacity posture, and
+# `read units? (a|per) load|per-dashboard-load|per-load read` for the read
+# arithmetic — with every hit read to sort a citation that names its owner and
+# carries no figure, which is owed nothing, from one that computes with,
+# asserts or argues from the figure, which is a member. Two kinds were set
+# aside by that reading: a citation that names one of these figures without
+# repeating it (docs/adr/README.md's description of ADR 0002's #264 entry), and
+# ADR 0002's own in-body per-load figures, which that entry has already
+# declared historical wholesale — the inline half docs/adr/README.md
+# § Amendments says is owed to them. Every sweep of this
+# ledger joins each file's lines before matching (`tr '\n' ' '`), because a
+# comment sentence wrapping across two lines is invisible to a line-scoped
+# grep: that is how the blanket ADR exemption this ledger used to claim
+# survived the sweeps that should have retired it, and a sweep that cannot see
+# its own members is not a floor (#401).
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:

@@ -47,10 +47,10 @@ name: Deploy Pages (interim)
 # Vite does process `og:image` content, and excludes external absolute URLs
 # from that rewrite. The comment beside those tags owns the mechanism.
 #
-# Pointer sites — six committed paragraphs whose claim about who populates
+# Pointer sites — committed paragraphs whose claim about who populates
 # `web_origins`, or about where the demo is served from, this interim makes
-# false. None carries a copy of the URL; each names this file instead, and they
-# split by how much of the paragraph comes out:
+# false. None carries a copy of the URL, and they split by who owes the true-up
+# and when:
 #
 #   Step 3, the whole paragraph: the #285 block in the `web_origins` comment of
 #   `infra/api/api.auto.tfvars.example`. It carries the `gh api … --jq
@@ -64,14 +64,30 @@ name: Deploy Pages (interim)
 #   `CUMULO_WEB_ORIGINS` paragraph in `apps/api/README.md`'s Configuration
 #   section, and the `web` stack paragraph in `infra/README.md`.
 #
-# Two files are deliberately absent from both lists, because neither is a
-# teardown site. `docs/adr/0006-demo-abuse-protection.md` makes the same kind of
-# claim about origins without citing this file: ADRs are immutable, and rule 9
-# exempts them.
-# The setup-block entry in `docs/tech-debt.md` counts this workflow among the
-# copies of a duplicated block, but writes that count as of the day it was
-# logged and quotes `deploy-web.yml` rather than this file, so deleting this one
-# leaves it true — and `/triage` empties that log on its own schedule anyway.
+#   Owed now, by #285, and by no teardown step: the origin-friction section of
+#   `docs/adr/0006-demo-abuse-protection.md`, whose `CUMULO_WEB_ORIGINS`
+#   sentence names #144's CloudFront URL and #21's custom domain as the
+#   populators, and this interim added an origin it does not name. So the
+#   populator list is incomplete for as long as the interim stands, and
+#   `docs/standards/architecture.md` rule 11 — "rule 9 gives a claim's carriers
+#   to the change that moves the claim" — puts the amendment on the change that
+#   added the origin, which is #285 rather than the one that removes it again.
+#   It is outstanding: 0006 carries no #285 entry today. Writing it is #285's
+#   work and not this ledger's, to the form in `docs/adr/README.md`
+#   § Amendments. Teardown owes it nothing — 0006 names no file here, so step 1
+#   dangles nothing in it, and step 2 takes the interim origin back out, which
+#   leaves that sentence describing the populators again. Being an ADR buys it
+#   no exemption from being *listed* here: `docs/standards/architecture.md`
+#   rule 9, and the backwards case in `docs/adr/README.md` § Amendments.
+#
+# One file is deliberately absent from both lists, because it is not a teardown
+# site: `docs/tech-debt.md`. By its own opening paragraph it is where findings
+# are logged, and a finding recorded *about* this arrangement is not a claim
+# made *on its behalf* — which is what both lists above take. That is a
+# property of the log's kind rather than of its current contents, so no entry
+# landing there or being captured out of it can change the answer; and the
+# log's own maintenance owns those entries in any case — `/triage` deletes the
+# dated ones, and a redirect row dies with its capturing issue.
 #
 # The one literal this file does carry is the `/cumulo/` base path on the build
 # step below, and it dies with this file.
