@@ -27,9 +27,11 @@
 # One case deliberately runs the gate with NO argument, against the real repo:
 # every other case pins REPO_ROOT to a fixture, so without it the shipped default
 # path could be broken and the suite would still be green (testing.md rule 7).
-# That case is also the only one that asserts the real census, and it is meant to
-# go red the day a manifest joins or leaves the workspace without this count
-# following it.
+# That case is also the only one that asserts the real count, and the count is
+# narrower than "the workspace": it is the manifests DECLARING a range. So what it
+# goes red on is one of those joining, leaving, or dropping its declaration. A
+# package added with neither a range nor a vite/vitest dependency does not move it
+# and is not meant to — that package is outside everything this gate claims.
 #
 # Usage: bash .claude/scripts/check-node-types.test.sh  (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
@@ -95,17 +97,19 @@ end
 # 2. the real repo, via the shipped default path (no argument)
 # ==========================================================================================
 # The production configuration: no REPO_ROOT override, so this is the only case that can
-# catch a broken default path — and it is what `pnpm verify` actually runs. The manifest
-# count is asserted because a census is only as good as its size: a manifest that stopped
-# being enumerated, or one that joined without declaring a range, is invisible in an OK line
-# that says only "OK". The full success prefix is asserted, never a bare "OK" (#219).
-begin "the repo's own workspace passes with no argument, over the whole manifest census"
+# catch a broken default path — and it is what `pnpm verify` actually runs. The count is
+# asserted because a census is only as good as its size: a manifest that stopped being
+# enumerated, or that quietly dropped its declaration, is invisible in an OK line saying only
+# "OK". Read the number for exactly what its label says — manifests DECLARING the range, not
+# manifests scanned — because that is the only claim it supports. The full success prefix is
+# asserted, never a bare "OK" (#219).
+begin "the repo's own workspace passes with no argument, over every declaring manifest"
 for interpreter in $BASHES; do
   case_ctx="$interpreter"
   run_check_with "$interpreter"
   expect_rc 0 "$rc"
   expect_stdout "check-node-types: OK — "
-  expect_stdout "9 manifests"
+  expect_stdout "9 manifest(s) declaring it"
   expect_not_out "ERROR"
   expect_not_out "unbound variable"
 done
@@ -134,7 +138,7 @@ for interpreter in $BASHES; do
   case_ctx="$interpreter"
   run_check_with "$interpreter" "$FIXTURE"
   expect_rc 0 "$rc"
-  expect_stdout "check-node-types: OK — ^22.20.1, 2 manifests, .nvmrc major 22"
+  expect_stdout "check-node-types: OK — ^22.20.1 in 2 manifest(s) declaring it, .nvmrc major 22"
   expect_not_out "ERROR"
   expect_not_out "unbound variable"
 done
@@ -254,7 +258,7 @@ must write_pkg apps/consumer <<'EOF'
 EOF
 run_check "$FIXTURE"
 expect_rc 0 "$rc"
-expect_stdout "check-node-types: OK — ^22.20.1, 1 manifests, .nvmrc major 22"
+expect_stdout "check-node-types: OK — ^22.20.1 in 1 manifest(s) declaring it, .nvmrc major 22"
 expect_not_out "apps/consumer"
 end
 
@@ -273,6 +277,38 @@ EOF
 run_check "$FIXTURE"
 expect_rc 1 "$rc"
 expect_stderr "apps/consumer/package.json declares vite and no @types/node"
+end
+
+# The tell standing entirely alone, with NOTHING in the workspace declaring a range. Every
+# other tool case above keeps an aligned sibling around, which quietly hides an ordering the
+# gate got wrong at first: the census-death guard (case group 9) fired on the zero
+# declarations before this verdict was ever reached, so the one workspace whose only defect
+# is the shape this verdict exists for got an exit-2 refusal advising the reader to DELETE
+# THE GATE — with the offender already collected and thrown away. The guard's claim is "an
+# empty scan is a broken scan", and a scan that found a vitest dependency and no range is not
+# empty in that sense; it is the defect, diagnosed. Hence rc 1 and a named offender here,
+# while the genuinely empty workspace two case groups down still gets its rc 2.
+begin "a workspace whose ONLY manifest declares vitest and no @types/node fails, not refuses"
+must fixture tool_alone
+must write_nvmrc 22
+must write_pkg packages/tested <<'EOF'
+{
+  "name": "@fixture/tested",
+  "devDependencies": { "vitest": "^4.1.10" }
+}
+EOF
+for interpreter in $BASHES; do
+  case_ctx="$interpreter"
+  run_check_with "$interpreter" "$FIXTURE"
+  expect_rc 1 "$rc"
+  expect_stderr "1 manifest(s) depend on vite or vitest without declaring @types/node"
+  expect_stderr "packages/tested/package.json declares vitest and no @types/node"
+  # The refusal must not be what the reader gets: it names no offender and its advice is to
+  # remove the check that just found one.
+  expect_not_out "refuses to pass on an empty census"
+  expect_not_out "unbound variable"
+done
+case_ctx=""
 end
 
 # ==========================================================================================
@@ -318,7 +354,7 @@ must write_nvmrc 'v22.11.0'
 must typed_pkg packages/store '^22.20.1'
 run_check "$FIXTURE"
 expect_rc 0 "$rc"
-expect_stdout "check-node-types: OK — ^22.20.1, 1 manifests, .nvmrc major 22"
+expect_stdout "check-node-types: OK — ^22.20.1 in 1 manifest(s) declaring it, .nvmrc major 22"
 end
 
 # ==========================================================================================
@@ -346,7 +382,7 @@ must typed_pkg packages/store '22.x'
 must typed_pkg apps/consumer '22.x'
 run_check "$FIXTURE"
 expect_rc 0 "$rc"
-expect_stdout "check-node-types: OK — 22.x, 2 manifests, .nvmrc major 22"
+expect_stdout "check-node-types: OK — 22.x in 2 manifest(s) declaring it, .nvmrc major 22"
 end
 
 # ==========================================================================================
@@ -357,7 +393,12 @@ end
 # spelled @types/node. Those are the ways this gate could stop covering anything without
 # stopping running, and they all look like this fixture from the inside (#101: a dead gate
 # is green).
-begin "a workspace where nothing declares @types/node exits 2, not 0"
+#
+# The boundary this guard must not cross is the `tool_alone` case in group 6: a workspace
+# with no declarations but a vitest dependency has an explanation for its emptiness, and gets
+# the verdict rather than the refusal. Here there is no such explanation — nothing declares a
+# range and nothing needs one — so an empty result really is unaccounted for.
+begin "a workspace where nothing declares @types/node and nothing needs to exits 2, not 0"
 must fixture no_declarations
 must write_nvmrc 22
 must write_pkg packages/store <<'EOF'
@@ -435,7 +476,7 @@ must mkdir -p "$FIXTURE/apps/scratch/src"
 must touch "$FIXTURE/apps/README.md"
 run_check "$FIXTURE"
 expect_rc 0 "$rc"
-expect_stdout "check-node-types: OK — ^22.20.1, 1 manifests, .nvmrc major 22"
+expect_stdout "check-node-types: OK — ^22.20.1 in 1 manifest(s) declaring it, .nvmrc major 22"
 end
 
 # ==========================================================================================

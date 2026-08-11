@@ -266,8 +266,14 @@ fi
 # about which major is named.
 SPEC_RE='^[~^]?[0-9]+(\.([0-9]+|x)){0,2}$'
 
+# declaring_manifests counts the manifests that DECLARE a range — not the
+# manifests scanned. The two differ by every workspace package that neither
+# declares @types/node nor pulls in vite or vitest, which this gate has nothing
+# to say about; the OK line names the count for what it is so that nobody reads
+# it as a workspace census. Census death is the guard's job below, not this
+# number's.
 declaration_count=0
-manifest_count=0
+declaring_manifests=0
 last_manifest=''
 distinct_specs=''
 distinct_count=0
@@ -284,7 +290,7 @@ while IFS=$'\t' read -r kind rel detail spec; do
   case "$kind" in
     D)
       if [ "$rel" != "$last_manifest" ]; then
-        manifest_count=$((manifest_count + 1))
+        declaring_manifests=$((declaring_manifests + 1))
         last_manifest="$rel"
       fi
       declaration_count=$((declaration_count + 1))
@@ -335,7 +341,16 @@ EOF
 # @types/node — the three ways this gate could stop covering anything without
 # stopping running. Every workspace package here declares a range today, so an
 # empty scan is a broken scan, not a clean repo.
-if [ "$declaration_count" -eq 0 ]; then
+#
+# UNLESS the scan already explains its own emptiness. A workspace where nothing
+# declares a range and something depends on vite or vitest is not a mystery about
+# a broken scan — it is precisely the shape the third verdict below exists for,
+# fully diagnosed, with the offenders already collected. Refusing there would
+# answer the reader's real defect with "delete the gate", which is both wrong and
+# the most expensive kind of wrong: it argues for removing the check at the one
+# moment it has something true to say. So the guard fires only when the scan
+# found NEITHER a declaration nor a reason one should exist.
+if [ "$declaration_count" -eq 0 ] && [ ${#tool_offenders[@]} -eq 0 ]; then
   printf 'check-node-types: no manifest under %s declares @types/node\n' "$ROOT" >&2
   printf '\n  This gate refuses to pass on an empty census. A workspace that genuinely\n' >&2
   printf '  has no TypeScript and no vite/vitest does not need it — delete the gate and\n' >&2
@@ -363,7 +378,7 @@ fi
 
 if [ "$distinct_count" -gt 1 ]; then
   printf '\ncheck-node-types: %d different @types/node ranges across %d manifest(s)\n' \
-    "$distinct_count" "$manifest_count" >&2
+    "$distinct_count" "$declaring_manifests" >&2
   for entry in "${all_declarations[@]}"; do
     printf '  ERROR %s\n' "$entry" >&2
   done
@@ -391,5 +406,5 @@ if [ "$failed" -ne 0 ]; then
   exit 1
 fi
 
-printf 'check-node-types: OK — %s, %d manifests, .nvmrc major %s\n' \
-  "$distinct_specs" "$manifest_count" "$NVMRC_MAJOR"
+printf 'check-node-types: OK — %s in %d manifest(s) declaring it, .nvmrc major %s\n' \
+  "$distinct_specs" "$declaring_manifests" "$NVMRC_MAJOR"
