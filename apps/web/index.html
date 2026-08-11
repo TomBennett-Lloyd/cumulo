@@ -4,6 +4,68 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cumulo — solar fleet forecasting</title>
+
+    <!--
+      Icons. Both point at the same mark: `public/favicon.svg` is the drawing,
+      and `public/brand-512.png` is rendered from it. The header comment in
+      `favicon.svg` owns the mark's provenance and carries the recipe for
+      regenerating the PNG from it. The PNG is listed
+      first and the typed SVG second because engines differ on which of two
+      `rel="icon"` links wins; Safari renders no SVG favicon at all, and
+      `apple-touch-icon` accepts nothing but a raster. One 512×512 PNG serves
+      the Safari tab, the home-screen icon and the social card below, which is
+      why there is no `.ico` and no size ladder.
+    -->
+    <link rel="icon" href="/brand-512.png" type="image/png" sizes="512x512" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/brand-512.png" />
+
+    <!--
+      The description and `og:description` restate `PRODUCT_TAGLINE` from
+      `apps/web/src/header/header-copy.ts`, which owns the sentence
+      (architecture.md rule 9); `og:title` restates this file's own `<title>`
+      element. Both are literal copies because a `content` attribute holds no
+      expression — the carrying site rule 9 ledgers rather than forbids.
+
+      The owner-side half of that ledger is missing: several docblocks beside
+      `PRODUCT_TAGLINE`, and beside the brand mark this head also now carries,
+      still argue that no such carrier exists. #423 owns truing them, and
+      enumerates the family as a floor rather than a census — the members share
+      no literal and each phrases the claim differently, so a sweep written for
+      one misses the others. Deferred rather than done here only because every
+      one of them is under `apps/web/src/**`, frozen by an in-flight batch.
+    -->
+    <meta
+      name="description"
+      content="Residential solar fleet forecasting — per-site forecasts with uncertainty, summed across a fleet you can add to."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cumulo" />
+    <meta property="og:title" content="Cumulo — solar fleet forecasting" />
+    <meta
+      property="og:description"
+      content="Residential solar fleet forecasting — per-site forecasts with uncertainty, summed across a fleet you can add to."
+    />
+
+    <!--
+      These two absolute URLs carry the interim GitHub Pages origin. They must
+      be absolute because scrapers do not resolve a relative URL against the
+      page it came from — that is the requirement, and it is also what keeps
+      them literal through the build. Worth stating precisely, because the
+      obvious reading is wrong: Vite does process meta content. `og:image` is in
+      its HTML asset table (`ALLOWED_META_PROPERTY` in `assetSource.ts`), so a
+      relative `content="/brand-512.png"` here would be base-rewritten to
+      `/cumulo/brand-512.png` exactly like the icon hrefs above — verified
+      against Vite 8.1.5 by building that mutation. What spares these two is
+      `isExcludedUrl`, which drops external absolute URLs from the rewrite; and
+      `og:url` is not in that table at all. `.github/workflows/deploy-pages.yml`'s
+      header owns that origin and lists this file among the sites carrying it;
+      its teardown step 5 repoints both when #144's CloudFront distribution
+      lands.
+    -->
+    <meta property="og:url" content="https://tombennett-lloyd.github.io/cumulo/" />
+    <meta property="og:image" content="https://tombennett-lloyd.github.io/cumulo/brand-512.png" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <div id="root"></div>

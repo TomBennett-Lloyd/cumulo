@@ -1,0 +1,91 @@
+<!--
+  The tab glyph — and the document `brand-512.png` is rendered from.
+
+  COPIED, NOT OWNED (architecture.md rules 9 and 11). The `viewBox` and the two
+  shapes below are a mechanical copy of the mark in
+  `apps/web/src/header/Brand.tsx`, which owns them. That component's docblock
+  says the glyph is a placeholder drawn inline rather than commissioned, and
+  argues that swapping it is a change to that component's internals and nothing
+  else, because nobody imports the paths. Nobody still does: this file is a
+  second drawing of them rather than an import, which is exactly why that swap
+  cannot reach it. #424 owns the replacement and redraws this file and
+  regenerates `brand-512.png` in the same change; #423 owns truing the docblocks
+  that still argue no such carrier exists.
+
+  Two notes that belong in this header sit in CSS comments inside the `style`
+  element below instead — the recipe for regenerating the PNG, and the colour
+  literals. An XML comment may not contain a double hyphen, and both a command's
+  flags and a custom property's name are spelled with one. That is a parse
+  error, not a style preference, so do not move them up here: the first draft of
+  this file did, and rendered as a Chromium XML error page.
+
+  The mark is `aria-hidden` in the header because the wordmark beside it names
+  the product. Here there is no wordmark, so the glyph carries the name alone
+  and the `title` below is what announces it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img">
+  <title>Cumulo</title>
+  <style>
+    /*
+     * REGENERATING brand-512.png — the one raster, serving the Safari tab, the
+     * apple-touch icon and the og card. It is this file's LIGHT arm at 512x512,
+     * flattened onto opaque white. The white is load-bearing rather than an
+     * artefact of the tool's default: the same file is the apple-touch icon,
+     * and a transparent one composites to black on iOS. From the repo root:
+     *
+     *   pnpm --filter @cumulo/web exec playwright screenshot \
+     *     --viewport-size=512,512 \
+     *     "file://$PWD/apps/web/public/favicon.svg" \
+     *     "$PWD/apps/web/public/brand-512.png"
+     *
+     * No new dependency: @playwright/test is already declared for the e2e lane.
+     *
+     * BOTH paths are absolute through $PWD, and that is not tidiness. The shell
+     * expands $PWD at the repo root, but `pnpm --filter` runs the binary with
+     * its cwd set to the package directory, so a *relative* output path lands
+     * at apps/web/apps/web/public/ — while the command still prints the path
+     * you typed, and the stale PNG still sits where you expected one. Writing
+     * this recipe with a relative output cost exactly that on #282.
+     *
+     * Then confirm the render: check the file's timestamp moved, and read it
+     * back to see the glyph fill the frame. Both halves are load-bearing. An
+     * invalid SVG renders as an error page at exactly the right size, so `file`
+     * reporting "PNG 512 x 512" proves nothing — that is how the double-hyphen
+     * parse error above was caught. And a misdirected write leaves the previous
+     * PNG untouched, so reading the file back without checking its mtime
+     * inspects the old render and reports success either way.
+     */
+
+    /*
+     * These four hexes restate --color-accent and --color-text-muted from
+     * packages/ui/src/tokens/tokens.css — light values here, dark values in the
+     * media query, matching that file's own order and verified against it when
+     * this was written. They are literals because there is no mechanism that
+     * would let them be anything else: a favicon is fetched as a standalone
+     * document with no stylesheet context, so var(--color-accent) resolves to
+     * nothing here. No gate is being dodged, and none is watching either — this
+     * file's type is outside the scope of every one of them, stylelint's
+     * included, since stylelint here only ever reads CSS files. The restatement
+     * ledger beside those two definitions in tokens.css, plus this note, are
+     * therefore the only controls in either direction. When either token's
+     * value moves, this file moves with it.
+     */
+    .sun {
+      fill: #2a78d6;
+    }
+    .cloud {
+      fill: #58626d;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .sun {
+        fill: #3987e5;
+      }
+      .cloud {
+        fill: #9aa5b1;
+      }
+    }
+  </style>
+  <circle class="sun" cx="22.5" cy="9" r="5.5" />
+  <path class="cloud" d="M8 26a5.5 5.5 0 0 1 0-11 7 7 0 0 1 13.2-2 6.6 6.6 0 0 1 .8 13z" />
+</svg>

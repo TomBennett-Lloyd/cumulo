@@ -177,14 +177,15 @@ jobs:
       # rather than convenience. Only `dist/assets/` is content-hashed by Vite,
       # so only it earns a year of `immutable` — a given URL's bytes there never
       # change, which makes the header simply true. Syncing all of `dist` with
-      # that header would be true today only because `apps/web/public/` does not
-      # exist yet; the day someone adds a favicon, a `robots.txt` or an OG image
-      # there, an unhashed file at a fixed URL would be pinned in every cache
-      # for a year with no way to update it. The second sync forecloses that
-      # trap by construction: anything appearing at the root of `dist` ships
-      # `no-cache`, the safe default for bytes that can change under a stable
-      # name. Today it uploads nothing, which is the point — it is the guard,
-      # not a step with work to do. `index.html`, the one mutable object that
+      # that header would pin the unhashed files too, and `apps/web/public/` now
+      # holds two of them: the brand `favicon.svg` and the `brand-512.png` that
+      # #282 added, which land at the root of `dist` at fixed URLs. A year of
+      # `immutable` would leave a redrawn mark stuck in every cache with no way
+      # to update it. The second sync forecloses that trap by construction:
+      # anything appearing at the root of `dist` ships `no-cache`, the safe
+      # default for bytes that can change under a stable name. It was written as
+      # a guard, against a directory that had not been created yet, and it now
+      # does the job it was built for. `index.html`, the one mutable object that
       # certainly exists, is last and also `no-cache`, which does not mean "do
       # not cache" but "revalidate before use": deploys take effect at once
       # instead of waiting out a TTL, while the invalidation below handles the

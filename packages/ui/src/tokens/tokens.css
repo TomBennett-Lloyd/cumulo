@@ -1,9 +1,19 @@
 /*
  * Cumulo design tokens — direction B "Meridian" (approved on issue #15).
  *
- * This file is the ONLY place in the repo where raw colour, size and spacing
- * values are allowed to exist. Everything else — components, apps, docs —
- * references these custom properties by name (see CLAUDE.md, frontend gate).
+ * This file defines the design tokens, and is the one file the frontend gate
+ * exempts from its ban on raw colour, size and spacing values. Every gated
+ * stylesheet and component references these custom properties by name instead
+ * of repeating what they resolve to (CLAUDE.md's frontend gate; the mechanical
+ * halves are stylelint.config.mjs and eslint.config.mjs).
+ *
+ * That is a claim about the gate's reach, not about the repository. Files the
+ * gate does not lint have always been free to hold a literal — a design
+ * exploration record under docs/ is the long-standing example — and a document
+ * fetched with no stylesheet context around it cannot reference a custom
+ * property even in principle. Where such a file carries a copy of a value
+ * defined here, the restatement ledger below names it. That ledger is the list;
+ * this paragraph deliberately is not.
  *
  * Colour selection followed the bundled `dataviz` skill. The categorical slots
  * are the skill's fixed hue order (blue, orange, aqua, yellow, magenta, green)
@@ -65,6 +75,66 @@
   --color-border: #dbe2e9;
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
+
+  /* Restatement ledger (`architecture.md` rule 9) for `--color-accent` and
+     `--color-text-muted`. One file outside this package carries all four of
+     their values — this block's two and the dark block's two — and cannot
+     import its way out of holding them:
+
+     - `apps/web/public/favicon.svg` (added by #282) — the browser-tab mark,
+       painted with the two light hexes and, inside a `prefers-color-scheme`
+       media query, the two dark ones. A favicon is fetched as a standalone
+       document with no stylesheet context, so `var()` resolves to nothing
+       there; a literal is the only form that paints, which makes this the
+       carrying site rule 9 ledgers rather than forbids. Nothing mechanical
+       reaches it either — no gate in `pnpm verify` reads that file, stylelint
+       included, since stylelint here only ever reads CSS files — so
+       this entry and that file's own header comment are the whole control.
+       Change either value above without it and the tab keeps the old colour,
+       silently, for as long as nobody looks at a tab. #424 (the final logo)
+       redraws that file; #423 covers the docblocks elsewhere that still deny
+       this carrier exists.
+
+     Also a carrier, inside this file and owned by the paragraph holding it: the
+     accent-contrast argument in this file's own header states `#2a78d6` and
+     `#3987e5` with measured ratios against named surfaces. It computes with the
+     values, so it is a restatement to be re-measured rather than re-typed when
+     either moves — see #273, the open owner decision on this very blue.
+
+     A floor, not a census, and keyed to the claim rather than to one literal:
+     established by `git grep -nE "#2a78d6|#58626d|#3987e5|#9aa5b1" -- :/` on
+     2026-08-11 — `git grep` rather than a recursive `grep` so that the sweep
+     covers tracked files and not build output, and `-- :/` so that it covers
+     the whole repository wherever it is run from. Without that operand, run
+     from beside this file, it reports only this file and silently drops the
+     carrier named above. Two families it returns are
+     deliberately NOT carriers, named so the next reader does not re-adjudicate
+     them.
+
+     `--color-focus-ring`, `--color-chart-1` and `--color-map-marker` below
+     merely coincide in value with accent today, and their distinctness is
+     argued in two different places rather than beside each of them. All three
+     are declared twice, and the per-token commentary sits entirely in the light
+     block — the dark block is a bare list of re-declarations carrying only two
+     comments of its own — so "beside it" here always means beside the light
+     declaration. `--color-focus-ring` makes the case there: focus is a distinct
+     job from accent, so a ring that later diverges must not drag every accented
+     border with it. The chart and marker slots make it nowhere —
+     `--color-chart-1` has a section divider above it in the light block and
+     nothing at all in the dark, and `--color-map-marker`'s light-block comment
+     derives which slot it takes rather than why it is a token of its own. Their
+     distinctness is owned
+     by this file's header instead, which states that the categorical slots are
+     the `dataviz` skill's fixed hue order (slot 1 of it being blue) and that the
+     marker triad is validated as slots 1–3. They hold this blue because the
+     skill fixes it, not because accent does — so in all three cases a swap that
+     drags them along is the bug.
+
+     And `docs/design/exploration/design-directions.html` is a snapshot of the
+     candidates considered, not a live surface; it ages as a record, correctly.
+     Consumers that reference these tokens rather than copying them — the header
+     mark's own `apps/web/src/header/header.css` among them — are not carriers
+     at all. */
 
   /* Elevation ink: the colour a panel floated over data casts beneath itself —
      a chart tooltip over its own marks, and anything else that has to read as

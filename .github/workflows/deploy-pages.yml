@@ -23,7 +23,8 @@ name: Deploy Pages (interim)
 #      the step 4 group. They only exist to stop a reader taking the
 #      surrounding paragraph as current, and they cite this file, so step 1
 #      dangles every one of them.
-#   5. Point the README's Status demo link at the CloudFront URL — the web
+#   5. Point the README's Status demo link, and the `og:url` and `og:image`
+#      meta tags in `apps/web/index.html`, at the CloudFront URL — the web
 #      stack's "Phase B — apply, publish, and prove the edge" runbook in
 #      infra/README.md prints it.
 #   6. Disable Pages on the repository:
@@ -35,9 +36,16 @@ name: Deploy Pages (interim)
 # list it works from.
 #
 # Sites carrying the URL/origin literal. It is server-assigned by GitHub, so
-# nothing predicts it — it is read back and written down in exactly two places,
-# which is what steps 2 and 5 have to find: `README.md`'s Status demo link, and
-# the operator's gitignored `infra/api/api.auto.tfvars`.
+# nothing predicts it — it is read back and written down in exactly three
+# places, which is what steps 2 and 5 have to find: `README.md`'s Status demo
+# link, the operator's gitignored `infra/api/api.auto.tfvars`, and the social
+# meta in `apps/web/index.html`. The third is one site holding two tags,
+# `og:url` and `og:image`, and it joined this list with #282's favicon and
+# social card: scrapers do not resolve relative URLs, so those two have to be
+# absolute rather than the `--base` path below, and step 5 repoints them by
+# hand. Being absolute is also what carries them through the build unchanged —
+# Vite does process `og:image` content, and excludes external absolute URLs
+# from that rewrite. The comment beside those tags owns the mechanism.
 #
 # Pointer sites — six committed paragraphs whose claim about who populates
 # `web_origins`, or about where the demo is served from, this interim makes
