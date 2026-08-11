@@ -153,6 +153,17 @@ export const hoverKeyAction = ({
  *     each move in its pointer sweep advances by to commit exactly one frame.
  *   - `docs/design/chart-treatment.md`: the D7 bullet, which owns the decision
  *     and states it as a rate rather than as this interval.
+ *   - `docs/design/design-principles.md`: the P12 narrative and the §3.3 fenced
+ *     draft of `standards/design.md`, which both state the rate as "throttled
+ *     ~30/s". Both are preserved review-time records, frozen verbatim — the
+ *     fence especially — so the ledger reaches them from here rather than them
+ *     being edited to point back.
+ *
+ * The list is a floor rather than a census (`architecture.md` rule 10). It is
+ * what `grep -rE '30 ?(a second|/s|per second)|POINTER_FRAME_MS|ONE_FRAME_MS'`
+ * over `apps`, `packages` and `docs` found; re-run it before moving this value,
+ * and widen it, because a carrier phrasing the rate some other way is invisible
+ * to those arms.
  */
 const POINTER_FRAME_MS = 33;
 
