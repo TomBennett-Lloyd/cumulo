@@ -22,10 +22,11 @@
     //
     // So the entry is explicitness, not capability. It makes the ambient Node
     // globals something this package opts into — alongside the `@types/node`
-    // devDependency, which is what pins *which* copy wins (every workspace
-    // manifest declares the same `@types/node` range, so vite and vitest
-    // peer-resolve against a single copy; the `check-node-types` gate in
-    // `verify` holds that alignment)
+    // devDependency, which is what pins *which* copy wins (the workspace
+    // manifests that declare an `@types/node` range all declare the same one,
+    // so vite and vitest peer-resolve against a single copy; the
+    // `check-node-types` gate in `verify` holds that alignment, and requires a
+    // range of anything depending on vite or vitest)
     // — rather than something inherited from a vendor reference that a vite
     // upgrade could withdraw without a word. `src/**` still must not use those
     // globals; `import.meta.env` is the app's only env. That has always been a

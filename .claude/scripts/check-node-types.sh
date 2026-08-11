@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# @types/node alignment gate: every workspace manifest must declare the SAME
-# `@types/node` range, that range's major must be the Node major `.nvmrc` pins,
-# and a manifest that pulls in vite or vitest must declare a range at all.
+# @types/node alignment gate: the manifests that declare an `@types/node` range
+# must all declare the SAME one, its major must be the Node major `.nvmrc` pins,
+# and anything depending on vite or vitest must be among them.
+#
+# Nothing here obliges a manifest to declare a range. A package that neither
+# declares one nor depends on vite or vitest resolves no optional peer and is
+# outside every claim this gate makes — the root manifest is the standing
+# example, and the third clause above is exactly the rule for who cannot opt out.
 #
 # The shape this exists for (#407). `@types/node` had drifted to five ranges
 # across two majors while `.nvmrc` pinned Node 22, so two packages type-checked
