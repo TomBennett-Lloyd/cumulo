@@ -225,7 +225,10 @@ Placement:
   muted ink, not a taste setting**: a lower one stops the credit reading over dark basemap ink, and
   a higher one stops the map showing through, which is the whole point. The numbers and the ratio
   live in [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation header, which owns
-  them; this document names the decision and does not restate the value.
+  them. This bullet quotes two of them because the argument needs them — "floor" is a claim about
+  those measurements, and without them it is an assertion of taste — which makes it an _arguing_
+  carrier under `architecture.md` rule 9. That header's restatement ledger names this bullet, so a
+  re-measurement finds it.
 
   What forced the question was the map going full bleed
   ([`dashboard-composition.md`](dashboard-composition.md)): a strip below an edge-to-edge map is

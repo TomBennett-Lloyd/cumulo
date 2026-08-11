@@ -16,7 +16,10 @@
  * have rescued it there either; dark accent does clear AA on its own opaque
  * surfaces, and the veil is what it fails. Muted ink survives both. The
  * measured record lives in `../tokens/tokens.css`'s header, which owns those
- * numbers.
+ * numbers; they are quoted here because the argument turns on how far under the
+ * bar accent falls and on which surfaces — an *arguing* carrier under
+ * `architecture.md` rule 9 — and that header's restatement ledger names this
+ * docblock, so a re-measurement finds it.
  *
  * The underline is what pays for dropping the colour. WCAG 1.4.1 wants a link
  * distinguishable from surrounding text by more than colour alone, and with the

@@ -46,7 +46,8 @@
    this doc rather than in a reviewer's head.
 
 3. **The CSP3 fallback table.** Enumerate the dependants from here, in writing, in the change that
-   touches the policy:
+   touches the policy — in its plan or PR body, the transient venue rule 1's carve-out ascribes to
+   this evidence, and never as a standing comment or doc, which is the copy that rule bans:
 
    | directive                                                                                                  | resolves through                                     |
    | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |

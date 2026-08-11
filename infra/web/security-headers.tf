@@ -98,6 +98,71 @@
 # `https://open-meteo.com` entry — there is nothing to fix, and adding those
 # origins to `connect-src` would grant a real capability (background fetch to
 # them) that the app does not have and must not acquire quietly.
+#
+# Restatement ledger (`docs/standards/architecture.md` rule 9;
+# `docs/standards/security.md` rule 1) for the directive values. Rule 1 bans a
+# standing *copy* of the policy and owns rather than forbids prose that argues
+# from a directive — an argument has to name what it argues about — so the
+# sites below are the ones a directive change has to true in the same change.
+# Each is classified *arguing* (it reasons from the value) or *asserting* (it
+# has to spell the value out or it would assert nothing):
+#
+#   * `apps/web/src/zod-jitless.ts` — arguing, from `script-src`'s denial of
+#     `'unsafe-eval'`. The note on why zod is configured `jitless` rests
+#     entirely on that denial; grant the eval and its justification goes with
+#     it, leaving a standing argument for a constraint that no longer exists.
+#   * `apps/web/vite.config.ts` — arguing, from `style-src`'s refusal of
+#     `'unsafe-inline'`. The note on why the built `dist` under `preview` gets
+#     the header and the dev server deliberately does not reasons that a dev
+#     policy would have to grant it, because HMR injects inline `<style>`
+#     elements, and that a policy relaxed until it stops complaining asserts
+#     nothing about the one that ships. Grant the inline styles here and that
+#     argument stops distinguishing the two servers — which is the entire reason
+#     the Playwright lane runs against the built bundle.
+#   * `apps/web/e2e/security-headers.spec.ts` — asserting. Its per-case
+#     criteria comments spell out the directive values each case is genuinely
+#     the check for, and the mutant that would fail it; move a directive and
+#     the case is left documenting a criterion it no longer holds.
+#   * `apps/web/src/map/basemap.ts` — arguing, in the entry its own restatement
+#     ledger gives the tiles origin riding both `img-src` and `connect-src`.
+#     That ledger owns the origin itself and the `img-src` bullet above defers
+#     to it; the deferral stands. What is ledgered here is the directive pair
+#     that entry argues from, not the host.
+#   * `infra/README.md` — arguing. The web stack's Phase B browser-visit
+#     readback, the paragraph after the header readback, argues that the manual
+#     visit is the only standing check `img-src`'s `data:` and tiles entries
+#     have, because CI stubs the provider.
+#
+# A floor, not a census. It tracks sites quoting a directive value in standing
+# prose. The sweep that produces it greps `apps/web`, `infra` and `docs` for
+# every directive name *and* for the keyword values a directive can be argued
+# from without ever being named — `'unsafe-inline'` and `'unsafe-eval'`. Banked
+# here 2026-08-11 by #415's confirmation pass as a directive-name grep alone,
+# and widened the same day when review found that grep returning nothing at all
+# in `vite.config.ts`, which argues from `style-src` while spelling only what
+# `style-src` refuses. That miss is the standing evidence for the floor: a
+# carrier can quote what a directive denies and never write the directive.
+#
+# The same sweep returns sites that are *not* carriers, named here so the next
+# reader does not re-adjudicate them each time:
+#
+#   * `content-security-policy.tftpl`, the owner itself, and this file, which is
+#     where the ledger lives;
+#   * `apps/web/e2e/content-security-policy.ts`, the second renderer, which
+#     names `connect-src` only as the seam the leading space belongs to and
+#     renders every value from the owner;
+#   * `infra/web/variables.tf`, `infra/web/cloudfront.tf`,
+#     `infra/web/web.auto.tfvars.example` and `infra/api/outputs.tf`, which name
+#     `connect-src` as a pointer and carry no value of it;
+#   * `docs/standards/security.md`, the co-owning discipline, whose rule 1
+#     adjudicates its own `child-src 'self'` as the subject of a worked example
+#     rather than a statement of the policy's text, and whose fallback table
+#     names directives without any of this policy's values;
+#   * `docs/review-feedback.md`, a past-tense record of what PR #393 did, which
+#     truing would falsify rather than correct.
+#
+# A quoting site not listed is a gap in this ledger rather than an exemption
+# from it: add it in the change that finds it.
 
 locals {
   # The API origin, ready to concatenate onto the end of the `connect-src` line
