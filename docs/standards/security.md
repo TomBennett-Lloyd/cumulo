@@ -11,23 +11,25 @@
 
    The repo's worked example is the CloudFront response-headers policy. `infra/web/security-headers.tf`
    holds that per-directive rationale in prose; `infra/web/content-security-policy.tftpl` is the policy
-   text's one owner, rendered by every consumer rather than re-declared in any of them. The rationale
-   is the one place that quotes the values back, deliberately — an argument for a grant has to name
+   text's one owner, and `security-headers.tf`'s own header names the readers that render it. That
+   rationale quotes the values it argues about, deliberately — an argument for a grant has to name
    what it argues for — and the next paragraph says on what terms it may.
 
    So do not keep a **standing** copy of the policy's current directive values — not here, not in a
    second config, not in a doc or README that states the policy at rest. A security value with two
    carriers drifts in whichever direction nobody was watching. Name the owning file and let the
-   reader open it. The ban does not reach two things, and for two different reasons. Rules 2 and 3
-   require a change to state what each dependant resolves to, in its plan or PR body; that is the
-   change's own transient evidence and outlives nothing. The per-directive rationale beside the grant
-   in the exemplar pair above is the opposite — a standing carrier of the values, sanctioned as one
-   for the reason the paragraph above gives. It is not exempt, though; it is owned:
-   `architecture.md` rules 9 and 11 govern it, so whoever changes a directive trues the rationale
-   beside it in the same change. What the ban targets is the standing copy carrying no such
-   obligation — a second config, or a doc stating the policy at rest with nobody answerable for it.
-   (`child-src 'self'` appears in rule 2 as the subject of a worked example about an unenumerated hop
-   — not as a statement of what the policy's text is, today or ever. For that, read the template.)
+   reader open it. The ban does not reach two kinds of writing, and for two different reasons. Rules 2
+   and 3 require a change to state what each dependant resolves to, in its plan or PR body; that is
+   the change's own transient evidence and outlives nothing. The other kind is standing and is meant
+   to be: an argument has to name what it argues about, so a comment or docblock reasoning from a
+   directive quotes it. The exemplar's per-directive rationale is the worked case; #415's sweep
+   returned others, `apps/web/src/zod-jitless.ts`'s note on why zod runs interpreted among them, so
+   treat any list of them as a floor. None is exempt; they are owned. `architecture.md` rules 9 and 11
+   govern them, so whoever changes a directive trues every argument that reasons from it in the same
+   change. What the ban targets is the standing copy carrying no such obligation — typically a second
+   config, or a doc stating the policy at rest with nobody answerable for it. (`child-src 'self'`
+   appears in rule 2 as the subject of a worked example about an unenumerated hop — not as a statement
+   of what the policy's text is, today or ever. For that, read the template.)
 
 2. **Adding, changing or removing a directive means naming every directive that inherits from it, and
    stating what each one resolves to after the change.** The question is not "what does this directive
