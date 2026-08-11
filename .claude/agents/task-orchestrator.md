@@ -62,7 +62,14 @@ your issue's comments; the top-level never posts them for you.
    the final fix diff, per `review-loop` — and the review-feedback entry are yours: the entry
    lives on the branch and each piece of feedback updates it in the commit that responds,
    which only this worktree's git-writer can make — the merge owner never edits an
-   in-flight worktree, and at merge takes the label off and nothing more.
+   in-flight worktree, so the **Category and Verdict** owed at merge (both placeholders and
+   never just one, in the shape
+   `docs/review-feedback.md`'s `## Entry format` declares) reaches you as a bounce like any
+   other feedback, a clean approval included; you commit it on the branch — necessarily
+   before the merge, it being a branch commit — after which the merge owner merges and only
+   then takes the label off, and nothing more. That order, because every label event re-runs
+   the whole CI workflow: firing it against a just-merged PR is the edge `.github/workflows/ci.yml`
+   accepts, while unlabelling first reddens nothing but costs a full round on a still-open PR.
    3a. **On `RELEASE`**: finalize your RETRO NOTES comment into the full RETRO HANDOVER
    template — the comment is the sole authoritative record — then emit the same content
    plus the comment URL as your final message, which is a courtesy copy only; that

@@ -51,8 +51,12 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    cross-check the classification against the changed-file list; check the changed files
    against other in-flight tasks. Then the merge chain of review-loop step 5 (which owns
    update-branch, the tech-debt union routine, the settle-then-watch, and all of the
-   ritual still owed at merge time — taking the label off, the review-feedback entry
-   having landed on the branch before the label ever went on), one PR
+   ritual still owed at merge time — filling that PR's review-feedback entry
+   **Category and Verdict**, both placeholders and never just one, on
+   the branch, in the shape `docs/review-feedback.md`'s `## Entry format` declares, which
+   being a branch commit necessarily precedes the merge; then the merge; then taking the
+   label off, last of the three, the entry itself having landed on the branch before the
+   label ever went on), one PR
    at a time — merges are serialized, always. Single-issue PRs merge `--squash` as today;
    batch PRs merge `--rebase` AFTER the mechanical curated-history check passes — the
    report's branch commit list must show commit count == surviving-member count, each
@@ -78,7 +82,8 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
 5. **Bounce, don't do**: anything ticket-shaped that surfaces before release — owner
    feedback on an awaiting-review PR (relay verbatim; the warm agent folds it into the
    branch's docs/review-feedback.md entry in the commit that responds — an on-branch
-   edit, so it is never yours to make), branch-side merge fallout beyond the sanctioned
+   edit, so it is never yours to make; an approval with no changes relays the same way,
+   as the Category and Verdict to fill), branch-side merge fallout beyond the sanctioned
    tech-debt union routine, a post-merge verification failure, or a question from you or the owner —
    goes to the warm agent by SendMessage. You never edit an in-flight worktree. Each
    mutating bounce ends in a refreshed TASK REPORT; re-verify it as in step 4.
