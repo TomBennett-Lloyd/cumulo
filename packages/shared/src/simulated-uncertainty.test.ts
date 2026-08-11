@@ -196,11 +196,13 @@ describe('simulatedUncertaintyBand', () => {
   });
 
   it('refuses a NaN cover at its own parse rather than returning a quiet band', () => {
-    // The clamp absorbs every *finite* cover, but `Math.max(0, NaN)` is `NaN`, which carries
-    // through both quantiles. Pinned because the module's note claims this failure is loud, and a
-    // claim about how something fails is worth exactly as much as the test under it. Unreachable
-    // from the app — `weatherReadingSchema` rejects a `NaN` reading well upstream — so this is
-    // the documented edge standing in for a `Number.isFinite` guard, not a path the fleet takes.
+    // The clamp absorbs every *non-`NaN`* cover, the infinities included — `Math.max(0,
+    // -Infinity)` is `0` and `Math.min(1, Infinity)` is `1`, both settled skies. `NaN` is the one
+    // it cannot: `Math.max(0, NaN)` is `NaN`, which carries through both quantiles. Pinned because
+    // the module's note claims this failure is loud, and a claim about how something fails is
+    // worth exactly as much as the test under it. Unreachable from the app —
+    // `weatherReadingSchema` rejects a `NaN` reading well upstream — so this is the documented
+    // edge standing in for a `Number.isFinite` guard, not a path the fleet takes.
     expect(() => simulatedUncertaintyBand(aForecast({ acPowerKw: 1 }), Number.NaN)).toThrow(
       ZodError,
     );

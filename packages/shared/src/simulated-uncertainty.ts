@@ -69,12 +69,20 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * `simulated-actual.ts`'s bounds rather than restating `0.12`, so the two cannot drift. The copies
  * that do carry literals include these. In `simulated-uncertainty.test.ts`, because a test that
  * reads the value it is proving moves with it and proves nothing (the same pattern as
- * `simulated-actual.test.ts`'s bounds sweep): the calibration case asserts `0.88` and `1.12`, the
- * saturation case asserts a half-width of `0.5`, the scaling case asserts `3.52` and `4.48`, the
- * ceiling case asserts `44`, and the grid-snap cases assert `0.902` and `1.148`, which ride the
- * base half-width, and `23.124` and `7.708`, which ride the half-width ceiling. Retuning either
- * owned constant moves all of them; the sub-watt literals and the clamp's `50` are floor/ceil
- * dominated and do not move, which is why they are absent. In
+ * `simulated-actual.test.ts`'s bounds sweep). The two owned constants move *disjoint* sets, so
+ * they are listed apart rather than together. Riding the base half-width, and therefore the
+ * actuals bounds: the calibration case's `0.88` and `1.12`, the scaling case's `3.52` and `4.48`,
+ * the ceiling case's `44`, and the grid-snap cases' `0.902` and `1.148`. Riding
+ * {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}: the saturation case's `5` and `15`, and the
+ * grid-snap cases' `23.124` and `7.708`. Retuning one constant leaves the other's set untouched —
+ * `0.5 → 0.6` moves `5`/`15` to `4`/`16` and does not touch `0.88`/`1.12`.
+ *
+ * Two absences, for different reasons, because "it did not move when I tried it" is not a reason.
+ * The ceiling case's `50` is *clamp*-dominated: `Math.min(`{@link MAX_PLAUSIBLE_RESIDENTIAL_KW}`,
+ * …)` binds before the rounding, so it moves with that cap and with nothing else here. The
+ * sub-watt cases' `0`, `0.001` and `0.003` are stable at today's constants but are *not*
+ * invariant — a base half-width of `0.088` flips one of them — so they are omitted as
+ * low-sensitivity, not as fixed. In
  * {@link DECIMAL_GRID_TOLERANCE}'s comment: the worked example reads `0.88` and `1.12` off the
  * derived base to locate where the representation error enters. In the lead bullet above: `26 h`
  * is solved from the three width constants below, not measured, so it moves when any of them
@@ -155,14 +163,17 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * is impossible for any `s > 0`. A fixed *absolute* tolerance `t` can, and does — it snaps p90
  * onto zero for every median whose scaled value falls below `t`, and `ceil(0)` then publishes a
  * `{0, 0}` band around a positive estimate, which `uncertaintyBandSchema` accepts without
- * complaint. That is precisely the quiet unbracketed band outward rounding exists to remove. So
- * an absolute tolerance is workable only inside a range bounded at *both* ends — roughly `1e-9`
- * to `1e-6` scaled units — and not, as it might seem, anywhere up to a fraction of a watt: at
- * `t = 1e-3` a `1e-7 kW` estimate already comes back `{0, 0}`. Nothing floors a non-zero
+ * complaint. That is precisely the quiet unbracketed band outward rounding exists to remove.
+ *
+ * The failure is scale-free in `t`, so there is no safe absolute tolerance — not a small one, not
+ * any. Whatever `t` is, a median whose scaled value falls below it comes back `{0, 0}`: `t = 1e-3`
+ * breaks at `7.5e-7 kW`, `t = 1e-9` at `7.5e-13 kW`, and so on down. Nothing floors a non-zero
  * `acPowerKw` away from zero (`z.number().gte(0)`, and the physics chain does not quantise), so
- * there is no lower bound to lean on. At every magnitude this module sees, `1e-9` sits about
- * seven orders of magnitude above a single ulp of the scaled value and at least four below the
- * watt it must never cross.
+ * there is no smallest estimate for such a bound to sit under, and the invariant this module
+ * leads with is "at every magnitude". Relative is not the better of two workable choices here; it
+ * is the only one. At every magnitude this module sees, `1e-9` sits about seven orders of
+ * magnitude above a single ulp of the scaled value and at least four below the watt it must never
+ * cross.
  */
 const DECIMAL_GRID_TOLERANCE = 1e-9;
 
