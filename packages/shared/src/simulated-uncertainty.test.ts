@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ZodError } from 'zod';
 
 import { forecastSchema, type Forecast, type UncertaintyBand } from './forecast';
 import { simulatedUncertaintyBand } from './simulated-uncertainty';
@@ -92,6 +93,32 @@ describe('simulatedUncertaintyBand', () => {
     expect(unbracketed).toEqual([]);
   });
 
+  // The two cases below are the only ones in the repo that discriminate the grid snap in
+  // `onDecimalGrid`: with the snap removed, every other test here and in `location-forecasts` and
+  // the web suites still passes. One case per rounding direction, kept as separate tests so each
+  // direction is exercised even when the other is failing, and both at ordinary production
+  // magnitudes rather than contrived ones.
+
+  it('floors p10 onto the watt its product missed only by representation error', () => {
+    // `1 - halfWidth` is exactly 0.88 at clear sky and zero lead, yet 1.025 * 0.88 * 1000
+    // evaluates to 901.9999999999999 rather than 902 — so an unsnapped `Math.floor` would publish
+    // 0.901, a watt taken off the band by nothing but the last bit of a product.
+    expect(simulatedUncertaintyBand(aForecast({ acPowerKw: 1.025 }), CLEAR_SKY)).toStrictEqual({
+      p10AcPowerKw: 0.902,
+      p90AcPowerKw: 1.148,
+    });
+  });
+
+  it('raises p90 onto the watt its product overshot only by representation error', () => {
+    // The mirror case, which needs the error to land just *above* a grid point. A lead this long
+    // pins the half-width to its ceiling whatever the sky, so the exact p90 is half again the
+    // estimate: 15.416 * 1.5 is 23.124, but scales to 23124.000000000004 — an unsnapped
+    // `Math.ceil` would publish 23.125, a watt the band has not earned.
+    expect(
+      simulatedUncertaintyBand(aForecast({ acPowerKw: 15.416, leadHours: 99 }), CLEAR_SKY),
+    ).toStrictEqual({ p10AcPowerKw: 7.708, p90AcPowerKw: 23.124 });
+  });
+
   it('brackets a clear-sky forecast at issue time with the P10–P90 of the simulated actuals', () => {
     // 0.88 and 1.12 are asserted as literals, not derived from SIMULATED_ACTUAL_FACTOR_MIN/MAX: a
     // test that reads the value it is proving moves with it and proves nothing (restatement ledger
@@ -165,6 +192,17 @@ describe('simulatedUncertaintyBand', () => {
     );
     expect(simulatedUncertaintyBand(forecast, -20)).toStrictEqual(
       simulatedUncertaintyBand(forecast, CLEAR_SKY),
+    );
+  });
+
+  it('refuses a NaN cover at its own parse rather than returning a quiet band', () => {
+    // The clamp absorbs every *finite* cover, but `Math.max(0, NaN)` is `NaN`, which carries
+    // through both quantiles. Pinned because the module's note claims this failure is loud, and a
+    // claim about how something fails is worth exactly as much as the test under it. Unreachable
+    // from the app — `weatherReadingSchema` rejects a `NaN` reading well upstream — so this is
+    // the documented edge standing in for a `Number.isFinite` guard, not a path the fleet takes.
+    expect(() => simulatedUncertaintyBand(aForecast({ acPowerKw: 1 }), Number.NaN)).toThrow(
+      ZodError,
     );
   });
 

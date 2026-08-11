@@ -503,7 +503,8 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   columns are there only where some hour in the series carries a band, on the column-versus-cell
   rule above ([#295](https://github.com/TomBennett-Lloyd/cumulo/issues/295)); and an overlay takes
   the last, headed by the series' own name — the sixth column over a banded series, the fourth
-  over one with no band at all. `forecast-chart-table.tsx` owns the columns and their order. The extra column is not only symmetry with the legend: the contrast
+  over one with no band at all. `forecast-chart-table.tsx` owns the columns and
+  their order. The extra column is not only symmetry with the legend: the contrast
   WARN above obligates a relief channel for a light-mode chart reaching slot 3, and a chart that
   drew a fourth series without a fourth way to read it would be shipping the sub-threshold case
   the WARN refuses. An overlay sits in slot 2, which clears the threshold, so the column is not
