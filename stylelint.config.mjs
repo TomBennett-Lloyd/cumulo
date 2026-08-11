@@ -39,7 +39,16 @@ export default {
   // is deliberately no node_modules entry: stylelint always ignores
   // node_modules itself (ALWAYS_IGNORED_GLOBS in lib/standalone.mjs), and an
   // entry that can never fire reads as protection nobody ever tested.
-  ignoreFiles: ['**/dist/**', '**/coverage/**'],
+  //
+  // playwright-report/ and test-results/ are the browser lane's own output —
+  // Playwright's vendored trace-viewer stylesheet, not ours. Without them a
+  // local `pnpm --filter @cumulo/web test:e2e` leaves ~4,795 hex-colour and
+  // raw-length errors in the next `pnpm verify`, so the two commands a task
+  // runs most often could not be run in sequence in one worktree; both dirs
+  // are already gitignored and already ignored by eslint. It bites hardest
+  // when the lane is red, because `retain-on-failure` is what writes them
+  // (#269, #381).
+  ignoreFiles: ['**/dist/**', '**/coverage/**', '**/playwright-report/**', '**/test-results/**'],
 
   rules: {
     /*
