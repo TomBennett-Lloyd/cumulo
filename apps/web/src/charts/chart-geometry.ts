@@ -149,39 +149,93 @@ const X_AXIS_BAND = 48;
  *
  * Measured for the pair rather than for the label alone, which is what moved it
  * from 48 in #284 D10. The title is rotated `--text-xs` text, so its *height*
- * is its width on screen — about 13 user units against the canvas edge — and
- * `axisTicks` can produce a four-character label (`0.25`, `1000`) which the
- * width model in `chart-axis-ticks.ts` puts at ~25. 13 + 25 + `Y_LABEL_GAP`
- * leaves the title kissing the label at 48; at 56 the two clear each other by
- * about 6 units, which is the slack an image whose `system-ui` sets wider
- * glyphs needs. The plot loses those 8 units from its left edge and nothing
- * else moves.
+ * is its width on screen, and `axisTicks` can produce a four-character label
+ * (`0.25`, `1000`) that has to fit beside it with a gap to the plot's edge.
+ *
+ * **Re-measured on a rendered page for #430, and the model it was chosen from
+ * was optimistic in both terms.** At the shipping type (`--text-xs`,
+ * `system-ui`) the rotated title's box is 14 units wide and sits at canvas
+ * x −0.34 … 13.66; the widest label `axisTicks` can print is `1000` at 30.23,
+ * not the ~25 the mean-advance model in `chart-axis-ticks.ts` predicts, because
+ * tabular digits are wider than the mean of prose. So the real pair is
+ * 13.66 + 30.23 = 43.9 before either a gap or a clearance, and at 56 the label's
+ * left edge lands at 15.77 — clearing the title by 2.1 units rather than the 6
+ * this docblock used to claim. Nothing was wrong on screen; the slack was
+ * simply a third of what the arithmetic said.
  */
-const PLOT_LEFT = 56;
+const PLOT_LEFT_WIDE = 56;
+/**
+ * The same gutter on a chart too narrow to spend 56 units on it.
+ *
+ * The owner's 2026-08-11 round: on a phone the gutter "takes up too much of the
+ * screen", and it does — the chart is 358 units wide at a 390px viewport
+ * (measured), so 56 of gutter and 32 of right margin were a quarter of the
+ * canvas before a mark was drawn.
+ *
+ * 50 is the floor the measurement above leaves, not a taste. The pair is
+ * 43.9 units of ink positions that cannot move — the title is already 0.34
+ * units past the canvas edge, and a clipped `1000` is the #19 defect — so what
+ * a thinner gutter can spend is the *gap* between the label and the plot, and
+ * that is what it spends: `forecast-chart-axes.tsx`'s `KW_LABEL_END_FLOOR`
+ * holds the label's end at the same 46 the wide gutter puts it at, so the six
+ * units come out of a gap of 10 and leave one of 4, with the title's ~2 units
+ * of clearance untouched. Below 50 the label would have to move left into the
+ * title, and there is nothing else left to take.
+ */
+const PLOT_LEFT_NARROW = 50;
+/**
+ * The chart width at or below which the thinner gutter is used.
+ *
+ * **Measured, and a container width rather than a viewport one** — the chart
+ * already asks its own column how wide it is (`use-chart-width.ts`), so this is
+ * `design.md` rule 7's container-inward default implemented in the geometry
+ * rather than a media query bolted beside it. The section is a full-bleed band
+ * with one `--space-4` step of padding each side, so the readings are: 358 at a
+ * 390px phone, 468 at the 500px window `e2e/chart-surfaces.spec.ts` calls
+ * narrow, 1248 at a 1280px desktop, and 640 wherever nothing can measure at all
+ * (`DEFAULT_CHART_WIDTH`, which is every jsdom suite).
+ *
+ * 520 is between the two clusters with room on both sides: 52 units above the
+ * widest narrow reading and 120 below the narrowest wide one, which is more
+ * than a scrollbar or a platform's own padding can move either. A threshold in
+ * the gap is what keeps this from being a cliff a real window can sit on.
+ */
+const NARROW_GUTTER_MAX_CHART_WIDTH = 520;
 /**
  * Room to the right of the plot for half of the last time-axis label, which is
  * centred on `plot.right` rather than tucked inside it.
  *
- * Half a label and not a whole one, which is why this is narrower than
- * `PLOT_LEFT` — the kW labels hang entirely to the left of the plot, the time
- * labels straddle their sample.
+ * Half a label and not a whole one, which is why this is narrower than the left
+ * gutter — the kW labels hang entirely to the left of the plot, the time labels
+ * straddle their sample.
  *
- * The requirement fell with #284 D9 and the number deliberately did not. The
- * widest label the axis could put on `plot.right` used to be a weekday-prefixed
- * `Wed 12:00`, about 52px, so 26 was the bare half; the two tiers print `18` and
- * `Wed 16` instead, and the widest of those is ~38px, needing 19. Keeping 32
- * spends the difference on slack rather than on plot width — the last label is
- * the one that gets clipped, and the failure is silent until somebody looks at
- * the right edge of the canvas.
+ * **32 until #430, where the owner named the leftover as a gap "equivalent to
+ * the width of the y axis".** It was: the requirement fell with #284 D9 when the
+ * axis split into two tiers and the number deliberately did not follow it, so
+ * the plot was stopping 32 units short of a section it otherwise fills, for a
+ * label that needs less. 24 is what the label actually needs, measured rather
+ * than modelled: the widest thing either tier can centre on `plot.right` is a
+ * day label, and `Wed 29` renders at 44.375 units at the shipping type — half
+ * of it is 22.19, and the remaining 1.81 is the slack. (`Wed` is the widest
+ * weekday and the digits are tabular, so `Wed NN` is the whole family's ceiling
+ * at 44.375; the times tier's `18` is 15.12 and never binds.)
  *
- * It matters now in a way it did not before #284 D15. The chart used to be drawn
- * in a fixed view box and scaled up, so a margin of 12 user units became ~28
- * rendered pixels in a wide panel and the label fitted by accident of the scale;
- * at 1:1 a user unit is a pixel and 12 clipped the last label by 13.8px —
- * measured on the demo fleet, and the exact defect `e2e/chart-surfaces.spec.ts`
- * exists to catch.
+ * The slack is thin on purpose — this is the margin the owner asked to get back
+ * — and it is thin in *modelled* terms only, because the number above is a
+ * measurement of the glyphs rather than a mean advance. What an image whose
+ * `system-ui` sets wider glyphs costs is the label reaching the canvas edge, and
+ * that is what `e2e/chart-surfaces.spec.ts`'s containment poll exists to catch:
+ * it fails once a label escapes by more than a quarter of its own height, which
+ * is 8% of glyph growth past this margin rather than the first hundredth.
+ *
+ * It matters at all in a way it did not before #284 D15. The chart used to be
+ * drawn in a fixed view box and scaled up, so a margin of 12 user units became
+ * ~28 rendered pixels in a wide panel and the label fitted by accident of the
+ * scale; at 1:1 a user unit is a pixel and 12 clipped the last label by 13.8px —
+ * measured on the demo fleet, and the exact defect
+ * `e2e/chart-surfaces.spec.ts` exists to catch.
  */
-const PLOT_RIGHT_MARGIN = 32;
+const PLOT_RIGHT_MARGIN = 24;
 /**
  * Headroom above the plot's ceiling. It held the two axis titles until #284 D10
  * turned both of them parallel to the axis they name, and a line for the horizon
@@ -231,18 +285,26 @@ const padded = (value: number): string => value.toString().padStart(2, '0');
  * panel, 14px in a narrow one, so the chrome grew and shrank with the window
  * while nothing else on the page did. Measuring the width and drawing at 1:1 is
  * what fixes that, and it makes the margins below real distances rather than
- * ratios — `PLOT_LEFT` is 56px of room for the rotated axis title and a tick
- * label at every viewport, not a fraction of the width that means a different
- * distance in every panel.
+ * ratios — the left gutter is room for the rotated axis title and a tick label,
+ * in the units those are set in, not a fraction of the width that means a
+ * different distance in every panel.
  *
  * A function rather than a constant for the same reason: there is no one plot
  * any more, only the plot at the width the chart currently has. Callers that
  * need a plot without a measurement — tests, fixtures — ask for the one at
  * `DEFAULT_CHART_WIDTH` (`use-chart-width.ts`) rather than keeping a rect of
  * their own.
+ *
+ * **The left margin is width-dependent too since #430, and only that one is.**
+ * The right margin holds half a label whose width is a fact about the type
+ * rather than about the panel, so it is the same distance everywhere; the left
+ * gutter holds a fixed pair *plus* a gap, and the gap is the one thing in either
+ * margin a narrow chart can afford to spend. `PLOT_LEFT_NARROW` and
+ * `NARROW_GUTTER_MAX_CHART_WIDTH` carry that arithmetic and the measurements
+ * behind it.
  */
 export const chartPlot = (width: number): PlotRect => ({
-  left: PLOT_LEFT,
+  left: width <= NARROW_GUTTER_MAX_CHART_WIDTH ? PLOT_LEFT_NARROW : PLOT_LEFT_WIDE,
   right: width - PLOT_RIGHT_MARGIN,
   top: PLOT_TOP,
   bottom: CHART_VIEW_BOX_HEIGHT - X_AXIS_BAND,

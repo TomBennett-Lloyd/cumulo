@@ -152,7 +152,7 @@ export interface TooltipColumns {
  * will be drawn in.** `tooltipPanelWidth` caps the panel at the plot, so the
  * width the names *ask* for is not always the width they get, and a name column
  * measured without that ceiling puts `valueX` past the panel's right edge — at
- * the 120 characters `siteSchema` allows, 788 against a 552 cap, which draws the
+ * the 120 characters `siteSchema` allows, 788 against a 560 cap, which draws the
  * whole value column outside the panel and off the plot. Clamped, the name
  * column gives up its width first and the **name** is what overflows, which is
  * the arrangement `tooltipPanelWidth` below claims and the one the pre-column
@@ -188,7 +188,7 @@ export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): 
  *
  * **The ceiling is the point of the pair.** `siteSchema` accepts 120 characters
  * of name (`packages/shared/src/site.ts`), and an uncapped panel passes the
- * plot's own width at **75 of them, measured at the 552-unit plot a
+ * plot's own width at **76 of them, measured at the 560-unit plot a
  * default-width chart draws, over a forecast tooltip's four rows**. Both
  * qualifiers carry weight, and leaving them off is how this figure drifted into
  * two disagreeing numbers in two files: the threshold moves with the plot it is

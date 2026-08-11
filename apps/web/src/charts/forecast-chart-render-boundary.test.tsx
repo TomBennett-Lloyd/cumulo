@@ -206,10 +206,20 @@ describe('ForecastChart render boundary', () => {
       movePointerTo(container, sampleX(2) + step * SWEEP_STEP);
     }
 
-    // The panel really did travel — two more frames committed, each landing the
-    // pointer somewhere new. Without this the counts below would hold just as
-    // well for a chart that stopped responding after the first move.
-    expect(tooltipAnchor(container)).toBe(openingAnchor + STEPS_WITHIN_SPAN * SWEEP_STEP);
+    /*
+     * The panel really did travel — two more frames committed, each landing the
+     * pointer somewhere new. Without this the counts below would hold just as
+     * well for a chart that stopped responding after the first move.
+     *
+     * To a tolerance rather than exactly, and #430 is what made that necessary:
+     * the plot is 560 units wide now rather than 552, so `SWEEP_STEP` is a sixth
+     * of 140 and no longer terminates in binary. The pointer reaches this
+     * position by adding that step twice through a client-x round trip while the
+     * expectation multiplies it by two, and the two disagree in the last bits.
+     * Six decimal places is orders finer than the pixel these units become, and
+     * orders coarser than the travel a frozen panel would be short by.
+     */
+    expect(tooltipAnchor(container)).toBeCloseTo(openingAnchor + STEPS_WITHIN_SPAN * SWEEP_STEP, 6);
     // And the data stayed put, which is the half of "the panel follows the
     // pointer; the data snaps" that makes those frames pure movement.
     expect(tooltipText(container)).toBe(SAMPLE_2_TEXT);

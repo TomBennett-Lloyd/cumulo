@@ -38,8 +38,31 @@ describe('chartPlot', () => {
     // `Power (kW)` title running up the canvas edge as well as the widest kW
     // tick label, and 48 left the two touching.
     expect(plot.left).toBe(56);
-    expect(plot.right).toBe(968);
+    // 24 of right margin, not the 32 that stood from #284 D9 until #430: half
+    // the widest label either time tier can centre on this edge, measured on a
+    // rendered page rather than modelled, plus slack.
+    expect(plot.right).toBe(976);
     expect(plot.top).toBe(12);
+  });
+
+  /*
+   * The other regime, and the reason `chartPlot` takes a width at all now
+   * (#430). The pair in the left gutter is a fixed cost in pixels, so on a
+   * phone-width chart it was a quarter of the canvas; the gap between the widest
+   * kW label and the plot is the one part of it a narrow chart can spend, and
+   * this is where it is spent.
+   *
+   * Both regimes are asserted at widths a real page produces — 358 is the chart
+   * a 390px phone gives, 1000 is an ordinary desktop panel — rather than either
+   * side of the threshold, so a case fails when a *rendered* chart changes
+   * gutter and not merely when the threshold is retuned.
+   */
+  it('spends the kW label gap, and only that, on a chart too narrow for the wide gutter', () => {
+    expect(chartPlot(358).left).toBe(50);
+    expect(chartPlot(1000).left).toBe(56);
+    // The right margin is the same distance in both: it holds half a label, and
+    // a label is the width the type makes it whatever the panel is doing.
+    expect(chartPlot(358).right).toBe(334);
   });
 
   it('gives the time axis a fixed band under the plot, whatever the width', () => {
@@ -51,9 +74,13 @@ describe('chartPlot', () => {
     expect(CHART_VIEW_BOX_HEIGHT - chartPlot(400).bottom).toBe(48);
   });
 
-  it('widens only rightwards, so the plot grows with the column it is drawn in', () => {
-    const narrow = chartPlot(400);
-    const wide = chartPlot(1600);
+  it('widens only rightwards within one gutter regime', () => {
+    // Both wide, so the only thing varying is the width itself. The left edge
+    // does move across the narrow/wide threshold since #430 — deliberately, and
+    // by the six units the case above pins — so a claim that it never moves
+    // would now be false rather than conservative.
+    const narrow = chartPlot(640);
+    const wide = chartPlot(1840);
 
     expect(wide.left).toBe(narrow.left);
     expect(wide.right - narrow.right).toBe(1200);
