@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { chartPlot, type PlotRect } from './chart-geometry';
+import { chartPlot, sampleXs, type PlotRect, type TimedSample } from './chart-geometry';
 import { ForecastChart, type ChartOverlaySeries, type ForecastChartPoint } from './ForecastChart';
 import { DEFAULT_CHART_WIDTH } from './use-chart-width';
 
@@ -89,6 +89,29 @@ export const renderChartWithOverlay = (
  * a copy of the four numbers here would be a second definition to keep true.
  */
 export const JSDOM_PLOT: PlotRect = chartPlot(DEFAULT_CHART_WIDTH);
+
+/**
+ * Where the chart draws sample `index` of `points`, under jsdom.
+ *
+ * The series is the argument and the index is a lookup into it, because since
+ * #325 the x axis is time-proportional: a position is a fact about *when* a
+ * sample is, so it cannot be worked out from an index and a count the way the
+ * suites used to (`xForIndex(index, points.length, JSDOM_PLOT)`). Every fixture
+ * in this package is evenly spaced in time, so every coordinate these suites
+ * already asserted comes out unchanged — which is the property that makes this a
+ * change of spelling rather than of expectation.
+ *
+ * It throws on an index the series does not have rather than answering `NaN`,
+ * which would quietly compare unequal to whatever the chart drew and read as a
+ * geometry failure instead of the fixture mistake it is.
+ */
+export const xOfSample = (points: readonly TimedSample[], index: number): number => {
+  const x = sampleXs(points, JSDOM_PLOT)[index];
+  if (x === undefined) {
+    throw new Error(`no sample at index ${String(index)} of ${String(points.length)}`);
+  }
+  return x;
+};
 
 /** Deliberately not 1:1 with the view box — see `stubRenderedSize`. */
 export const RENDERED_BOUNDS = { left: 100, top: 50, width: 1280, height: 400 };

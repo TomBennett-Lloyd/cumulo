@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { snapToNearestIndex } from './chart-geometry';
+import { snapToNearestX } from './chart-geometry';
 import type { ChartScale } from './chart-series';
 
 /**
@@ -76,7 +76,7 @@ export const pointerSample = ({
   }
   const pointerX = ((clientX - bounds.left) / bounds.width) * viewBoxWidth;
   return {
-    activeIndex: snapToNearestIndex({ pointerX, plot: scale.plot, count: scale.pointCount }),
+    activeIndex: snapToNearestX({ pointerX, xs: scale.xs }),
     pointerX,
   };
 };

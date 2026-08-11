@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { chartPlot, xForIndex, yForKw } from './chart-geometry';
+import { chartPlot, sampleXs, yForKw } from './chart-geometry';
 import {
   curvedBandPath,
   curvedLinePath,
   highestOverlayKw,
   overlayReadingAt,
   overlayValuesByIndex,
+  xAt,
   type ChartOverlaySeries,
   type ChartScale,
   type ForecastChartPoint,
@@ -164,17 +165,20 @@ const CURVE_PLOT_WIDTH = 608;
  */
 const CURVE_AXIS_MAX_KW = 8;
 
-const scaleOver = (pointCount: number): ChartScale => ({
-  plot: chartPlot(CURVE_PLOT_WIDTH),
-  axisMaxKw: CURVE_AXIS_MAX_KW,
-  pointCount,
-});
+/**
+ * The scale a series is drawn at here — built from the points themselves, since
+ * #325 made an x a fact about *when* a sample is rather than about how many
+ * there are. The fixtures below are hourly on a fixed step, so every coordinate
+ * these cases assert is the one the index-spaced scale produced.
+ */
+const scaleOver = (points: readonly ForecastChartPoint[]): ChartScale => {
+  const plot = chartPlot(CURVE_PLOT_WIDTH);
+  return { plot, axisMaxKw: CURVE_AXIS_MAX_KW, xs: sampleXs(points, plot) };
+};
 
 /** One expected coordinate, in the form d3 writes it: `x,y`. */
 const vertexAt = (index: number, kilowatts: number, scale: ChartScale): string =>
-  `${String(xForIndex(index, scale.pointCount, scale.plot))},${String(
-    yForKw(kilowatts, scale.axisMaxKw, scale.plot),
-  )}`;
+  `${String(xAt(scale, index))},${String(yForKw(kilowatts, scale.axisMaxKw, scale.plot))}`;
 
 /** A ramp: 0 kW, then 2, then 6 — enough curvature for the curve to show. */
 const RAMP_KW: readonly number[] = [0, 2, 6];
@@ -188,7 +192,7 @@ const bandOf = (hour: number, p10Kw: number, p90Kw: number): ForecastChartPoint 
 
 describe('curvedLinePath', () => {
   it('curves through a run of three or more samples', () => {
-    const scale = scaleOver(RAMP_KW.length);
+    const scale = scaleOver(domain([6, 9, 12]));
     const path = curvedLinePath([0, 1, 2], (index) => RAMP_KW[index] ?? 0, scale);
 
     expect(path.startsWith(`M${vertexAt(0, 0, scale)}`)).toBe(true);
@@ -201,7 +205,7 @@ describe('curvedLinePath', () => {
   it('draws a two-sample run as the straight segment between them', () => {
     // Two samples fix no curvature, so anything but a segment here would be
     // shape the data does not contain.
-    const scale = scaleOver(2);
+    const scale = scaleOver(domain([6, 9]));
     const path = curvedLinePath([0, 1], (index) => (index === 0 ? 2 : 6), scale);
 
     expect(path).toBe(`M${vertexAt(0, 2, scale)}L${vertexAt(1, 6, scale)}`);
@@ -209,18 +213,15 @@ describe('curvedLinePath', () => {
   });
 
   it('draws nothing at all for a run with no samples in it', () => {
-    expect(curvedLinePath([], () => 0, scaleOver(0))).toBe('');
+    expect(curvedLinePath([], () => 0, scaleOver([]))).toBe('');
   });
 });
 
 describe('curvedBandPath', () => {
   it('closes one shape out along P90 and back along P10', () => {
-    const scale = scaleOver(3);
-    const path = curvedBandPath(
-      [bandOf(6, 1, 3), bandOf(9, 2, 6), bandOf(12, 3, 7)],
-      { startIndex: 0, indices: [0, 1, 2] },
-      scale,
-    );
+    const banded = [bandOf(6, 1, 3), bandOf(9, 2, 6), bandOf(12, 3, 7)];
+    const scale = scaleOver(banded);
+    const path = curvedBandPath(banded, { startIndex: 0, indices: [0, 1, 2] }, scale);
 
     // Out along the upper edge first, so the shape starts at the first P90.
     expect(path.startsWith(`M${vertexAt(0, 3, scale)}`)).toBe(true);

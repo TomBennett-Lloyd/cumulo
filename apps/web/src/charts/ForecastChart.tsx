@@ -1,5 +1,5 @@
 import { useMemo, useRef, type ReactElement } from 'react';
-import { chartPlot, niceAxisMax } from './chart-geometry';
+import { chartPlot, niceAxisMax, sampleXs } from './chart-geometry';
 import {
   contiguousRuns,
   highestOverlayKw,
@@ -43,13 +43,18 @@ import { useChartWidth } from './use-chart-width';
  * (every visual value is a class consuming a token, in `charts.css`), and the
  * numbers below are geometry — SVG user units and kW — not styling.
  *
- * **Gaps break lines, they are never bridged.** A missing band or a missing
- * measurement inside the series is a partial result and reads as one: band and
- * actuals are drawn once per contiguous run, so a straight segment is never
- * painted across a gap to imply a value that was never modelled or measured
- * (`error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31). A run left
- * with a single sample has no path to stroke and becomes a marker instead of
- * disappearing — `forecast-chart-marks.tsx` holds that rule and its reasoning.
+ * **A null value breaks its line, and is never bridged.** A missing band or a
+ * missing measurement inside the series is a partial result and reads as one:
+ * band and actuals are drawn once per contiguous run, so a straight segment is
+ * never painted across a gap to imply a value that was never modelled or
+ * measured (`error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31). A run
+ * left with a single sample has no path to stroke and becomes a marker instead
+ * of disappearing — `forecast-chart-marks.tsx` holds that rule and its
+ * reasoning. A rule about *nulls* rather than about gaps in general, because
+ * that is its reach: an hour absent from the series carries no null for a run to
+ * break at, so the marks are still drawn across it. `contiguousRuns` in
+ * `chart-series.ts` says why, and `docs/tech-debt.md` (2026-08-11,
+ * "`contiguousRuns` splits on array adjacency, not on time adjacency") owns it.
  *
  * **An overlay is one more series, not a second chart.** The optional `overlay`
  * prop puts a second series on the same kW axis in slot 2 — the treatment's
@@ -151,10 +156,15 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     highestValueKw(points),
     overlay === undefined ? 0 : highestOverlayKw(overlay.values),
   );
+  const plot = chartPlot(width);
+  // The x mapping, computed once here and read by everything below it through
+  // `xAt`. Once, because it is time-proportional (#325) and therefore a property
+  // of the series rather than of each mark's index — a second consumer deriving
+  // it again is a second chance to derive it differently.
   const scale: ChartScale = {
-    plot: chartPlot(width),
+    plot,
     axisMaxKw: niceAxisMax(peakKw),
-    pointCount: points.length,
+    xs: sampleXs(points, plot),
   };
   const spanHours = seriesSpanHours(points);
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);

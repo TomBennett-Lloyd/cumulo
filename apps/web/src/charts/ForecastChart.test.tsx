@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { xForIndex, yForKw } from './chart-geometry';
+import { yForKw } from './chart-geometry';
 import type { ChartOverlaySeries } from './chart-series';
 import {
   anchorCount,
@@ -18,6 +18,7 @@ import {
   requireSvg,
   SERIES,
   tableCells,
+  xOfSample,
 } from './forecast-chart-test-fixture';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
@@ -98,12 +99,8 @@ describe('ForecastChart', () => {
     // would draw a measurement nobody took (docs/tech-debt.md, 2026-07-31).
     // The first measurement is left alone by the gap after it, so it is a dot
     // rather than the one-vertex path SVG would decline to paint.
-    const container = renderChart([
-      banded(6, 1, 0.9),
-      banded(9, 4, null),
-      banded(12, 6, 5.9),
-      banded(15, 5, 4.8),
-    ]);
+    const series = [banded(6, 1, 0.9), banded(9, 4, null), banded(12, 6, 5.9), banded(15, 5, 4.8)];
+    const container = renderChart(series);
     const actuals = marks(container, '.forecast-chart-actuals');
     const markers = marks(container, '.forecast-chart-actuals-marker');
 
@@ -111,19 +108,15 @@ describe('ForecastChart', () => {
     expect(actuals.map(anchorCount)).toStrictEqual([2]);
     // The isolated hour, then the end dot at the horizon.
     expect(markers).toHaveLength(2);
-    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, 4, JSDOM_PLOT)));
-    expect(markers[1]?.getAttribute('cx')).toBe(String(xForIndex(3, 4, JSDOM_PLOT)));
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xOfSample(series, 0)));
+    expect(markers[1]?.getAttribute('cx')).toBe(String(xOfSample(series, 3)));
   });
 
   it('breaks the band at a gap in the modelled uncertainty', () => {
-    const container = renderChart([
-      banded(6, 1, null),
-      banded(9, 4, null),
-      bare(12, 4, null),
-      banded(15, 6, null),
-    ]);
+    const series = [banded(6, 1, null), banded(9, 4, null), bare(12, 4, null), banded(15, 6, null)];
+    const container = renderChart(series);
     const interval = requireMark(container, '.forecast-chart-band-interval');
-    const intervalX = String(xForIndex(3, 4, JSDOM_PLOT));
+    const intervalX = String(xOfSample(series, 3));
 
     expect(marks(container, '.forecast-chart-band')).toHaveLength(1);
     expect(marks(container, '.forecast-chart-band-bound')).toHaveLength(2);
@@ -138,17 +131,18 @@ describe('ForecastChart', () => {
   });
 
   it('renders an isolated measured hour between two gaps as a ring-marked dot', () => {
-    const container = renderChart([
+    const series = [
       banded(6, 1, null),
       banded(9, 4, 3.8),
       banded(12, 6, null),
       banded(15, 5, 4.9),
       banded(18, 4, 4.1),
-    ]);
+    ];
+    const container = renderChart(series);
     const markers = marks(container, '.forecast-chart-actuals-marker');
 
     expect(markers).toHaveLength(2);
-    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(1, 5, JSDOM_PLOT)));
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xOfSample(series, 1)));
     expect(marks(container, '.forecast-chart-actuals')).toHaveLength(1);
   });
 
@@ -247,7 +241,7 @@ describe('ForecastChart', () => {
     expect(marks(container, '.forecast-chart-overlay')).toHaveLength(1);
     expect(anchorCount(requireMark(container, '.forecast-chart-overlay'))).toBe(2);
     expect(markers).toHaveLength(1);
-    expect(markers[0]?.getAttribute('cx')).toBe(String(xForIndex(0, SERIES.length, JSDOM_PLOT)));
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xOfSample(SERIES, 0)));
   });
 
   it('names the overlay in the legend, after the three fixed entries', () => {

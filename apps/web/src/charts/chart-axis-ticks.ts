@@ -1,5 +1,5 @@
-import { utcWeekdayLabel, xForIndex, type PlotRect } from './chart-geometry';
-import type { ForecastChartPoint } from './chart-series';
+import { utcWeekdayLabel } from './chart-geometry';
+import { xAt, type ChartScale, type ForecastChartPoint } from './chart-series';
 import { TOOLTIP_CHAR_WIDTH } from './tooltip-geometry';
 
 /**
@@ -28,11 +28,19 @@ import { TOOLTIP_CHAR_WIDTH } from './tooltip-geometry';
  * everything `tickLabelFor`'s long form says, in a third of the width, which is
  * what makes the invariant satisfiable at a narrow chart at all.
  *
+ * **A label's position is not this file's to decide.** Every x here comes from
+ * the scale's own sample positions (`chart-series.ts`'s `xAt`), which since #325
+ * are proportional to time rather than to array position — so a tick sits over
+ * the sample it names on an axis with a missing hour in it exactly as it does on
+ * a complete one. What this file decides is *which* instants get a label and
+ * whether the ones it kept can coexist; where each one lands is the same mapping
+ * every mark on the canvas uses.
+ *
  * Pure: no React, no DOM, no clock. The tiers are a function of the samples and
- * the rect they are drawn in, so the overlap claim is provable by arithmetic
- * over a sweep of widths rather than by looking at a rendered page — which is
- * the point, since a browser can only ever be asked about the widths somebody
- * thought to try (`testing.md` rule 10).
+ * the scale they are drawn against, so the overlap claim is provable by
+ * arithmetic over a sweep of widths rather than by looking at a rendered page —
+ * which is the point, since a browser can only ever be asked about the widths
+ * somebody thought to try (`testing.md` rule 10).
  */
 
 /** One label of one tier: the text, and the x its middle sits on. */
@@ -142,18 +150,19 @@ const thinnedToFit = (labels: readonly TierLabel[]): readonly TierLabel[] => {
  */
 const labelXOnCanvas = (x: number, text: string): number => Math.max(labelWidth(text) / 2, x);
 
-/** Named rather than positional: `index` and `count` are interchangeable numbers. */
-interface TierLabelParams {
-  readonly text: string;
-  readonly index: number;
-  /** Samples in the series — the axis is index-spaced, not time-proportional. */
-  readonly count: number;
-  readonly plot: PlotRect;
-}
-
-const tierLabel = ({ text, index, count, plot }: TierLabelParams): TierLabel => ({
+/**
+ * One label, at the position its own sample was already placed at.
+ *
+ * The x is passed in rather than derived here, and since #325 that is the whole
+ * of what keeps this tier honest: the axis is time-proportional, so a sample's
+ * position is a fact about *when* it is and not about where it sits in the
+ * array. Two params rather than a named object, because a string and a number
+ * cannot be swapped for each other at a call site — which is exactly what the
+ * `index`/`count` pair this replaced could do.
+ */
+const tierLabel = (text: string, x: number): TierLabel => ({
   text,
-  x: labelXOnCanvas(xForIndex(index, count, plot), text),
+  x: labelXOnCanvas(x, text),
 });
 
 const twoDigitHour = (instant: Date): string => instant.getUTCHours().toString().padStart(2, '0');
@@ -180,19 +189,22 @@ const utcDayNumber = (validTimeIso: string): number =>
  */
 const timeLabelsAtStep = (
   points: readonly ForecastChartPoint[],
-  plot: PlotRect,
+  scale: ChartScale,
   stepHours: number,
 ): readonly TierLabel[] =>
   points.flatMap((point, index) => {
     const instant = new Date(point.validTimeIso);
     return instant.getUTCMinutes() === 0 && instant.getUTCHours() % stepHours === 0
-      ? [tierLabel({ text: twoDigitHour(instant), index, count: points.length, plot })]
+      ? [tierLabel(twoDigitHour(instant), xAt(scale, index))]
       : [];
   });
 
 /** The finest hour step this plot can hold, or the coarsest one thinned further. */
-const timesTier = (points: readonly ForecastChartPoint[], plot: PlotRect): readonly TierLabel[] => {
-  const candidates = HOUR_STEPS.map((stepHours) => timeLabelsAtStep(points, plot, stepHours));
+const timesTier = (
+  points: readonly ForecastChartPoint[],
+  scale: ChartScale,
+): readonly TierLabel[] => {
+  const candidates = HOUR_STEPS.map((stepHours) => timeLabelsAtStep(points, scale, stepHours));
   return candidates.find(labelsFit) ?? thinnedToFit(candidates.at(-1) ?? []);
 };
 
@@ -207,30 +219,27 @@ const timesTier = (points: readonly ForecastChartPoint[], plot: PlotRect): reado
  * crosses nothing and gets exactly that opening label, at the plot's left edge,
  * naming the day the whole axis is in.
  */
-const dayLabels = (points: readonly ForecastChartPoint[], plot: PlotRect): readonly TierLabel[] =>
+const dayLabels = (
+  points: readonly ForecastChartPoint[],
+  scale: ChartScale,
+): readonly TierLabel[] =>
   points.flatMap((point, index) => {
     const previous = points[index - 1];
     const opensADay =
       previous === undefined ||
       utcDayNumber(previous.validTimeIso) !== utcDayNumber(point.validTimeIso);
-    return opensADay
-      ? [
-          tierLabel({
-            text: dayText(new Date(point.validTimeIso)),
-            index,
-            count: points.length,
-            plot,
-          }),
-        ]
-      : [];
+    return opensADay ? [tierLabel(dayText(new Date(point.validTimeIso)), xAt(scale, index))] : [];
   });
 
 /**
- * Both tiers for a series drawn into `plot`. The result satisfies the invariant
+ * Both tiers for a series drawn at `scale`. The result satisfies the invariant
  * at the top of this file in each tier independently — the two are drawn on
  * separate rows and have no reason to clear each other.
  */
-export const xAxisTiers = (points: readonly ForecastChartPoint[], plot: PlotRect): XAxisTiers => ({
-  times: timesTier(points, plot),
-  days: thinnedToFit(dayLabels(points, plot)),
+export const xAxisTiers = (
+  points: readonly ForecastChartPoint[],
+  scale: ChartScale,
+): XAxisTiers => ({
+  times: timesTier(points, scale),
+  days: thinnedToFit(dayLabels(points, scale)),
 });

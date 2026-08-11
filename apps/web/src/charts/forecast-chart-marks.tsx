@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { xForIndex, yForKw } from './chart-geometry';
+import { yForKw } from './chart-geometry';
 import {
   actualAt,
   contiguousRuns,
@@ -9,6 +9,7 @@ import {
   overlayAt,
   p10At,
   p90At,
+  xAt,
   type ChartRun,
   type ChartScale,
   type ForecastChartPoint,
@@ -56,7 +57,7 @@ const bandInterval = (
   run: ChartRun,
   scale: ChartScale,
 ): ReactElement => {
-  const x = xForIndex(run.startIndex, scale.pointCount, scale.plot);
+  const x = xAt(scale, run.startIndex);
   return (
     <line
       key={run.startIndex}
@@ -116,7 +117,7 @@ const actualsMarker = (
   <circle
     key={key}
     className="forecast-chart-actuals-marker"
-    cx={xForIndex(index, scale.pointCount, scale.plot)}
+    cx={xAt(scale, index)}
     cy={yForKw(actualAt(points, index), scale.axisMaxKw, scale.plot)}
     r={MARKER_RADIUS}
   />
@@ -161,9 +162,19 @@ export const actualsElements = (
  * and actual hours (`dashboard/fleet-series.ts`), and in live mode those two
  * windows do not overlap at all — the hours behind the horizon were measured and
  * never forecast. So the median obeys the same two rules the actuals and the
- * overlay obey, for the same reasons: a gap is never bridged, because a segment
- * drawn across it is a forecast nobody made, and a run left holding one sample
- * becomes a ringed dot rather than the one-vertex path SVG declines to paint.
+ * overlay obey, for the same reasons: an hour carrying `medianKw: null` breaks
+ * the line rather than being bridged, because a segment drawn across it is a
+ * forecast nobody made, and a run left holding one sample becomes a ringed dot
+ * rather than the one-vertex path SVG declines to paint.
+ *
+ * **An hour missing from the series is the case that rule does not reach.** The
+ * union domain has no row at all for an hour that was neither forecast nor
+ * measured, so there is no `null` for `contiguousRuns` to break on and the two
+ * hours either side of it are joined by one segment — at the hole's full width
+ * since #325, which is what makes the bridge visible rather than compressed
+ * away. Systemic and not fixed here, because every mark in this file inherits
+ * it: `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits on array
+ * adjacency, not on time adjacency") owns it.
  */
 export const medianElements = (
   points: readonly ForecastChartPoint[],
@@ -185,7 +196,7 @@ export const medianElements = (
       <circle
         key={`lone-${String(run.startIndex)}`}
         className="forecast-chart-median-marker"
-        cx={xForIndex(run.startIndex, scale.pointCount, scale.plot)}
+        cx={xAt(scale, run.startIndex)}
         cy={yForKw(medianAt(points, run.startIndex), scale.axisMaxKw, scale.plot)}
         r={MARKER_RADIUS}
       />
@@ -225,7 +236,7 @@ export const overlayElements = (
         <circle
           key={`lone-${String(run.startIndex)}`}
           className="forecast-chart-overlay-marker"
-          cx={xForIndex(run.startIndex, scale.pointCount, scale.plot)}
+          cx={xAt(scale, run.startIndex)}
           cy={yForKw(overlayAt(values, run.startIndex), scale.axisMaxKw, scale.plot)}
           r={MARKER_RADIUS}
         />
