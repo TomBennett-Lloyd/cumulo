@@ -94,4 +94,4 @@ Every non-gated carrier the sweep found was trued up in this PR — `review-loop
 
 If P1/P2/P4/P5 are approved, the applying PR edits `CLAUDE.md` (and creates `docs/standards/security.md` for P1), deletes this file, and carries its own `docs/review-feedback.md` entry under the on-branch merge ritual. If any is declined, the decision is recorded in `docs/review-feedback.md` with the reason, and this file is deleted just the same — a declined proposal is a decision, not a backlog item. P3, if answered "yes" in either form, is a separate `.claude/workflow.json` PR.
 
-**P5 is the one with a clock on it**: until it lands, `CLAUDE.md` and seven other documents disagree about where the review loop ends. P5 and P3 want deciding together — P5 is the concrete instance of the question P3 asks in the abstract.
+**P5 is the one with a clock on it**: until it lands, `CLAUDE.md` disagrees with `review-loop` and both `task-orchestrator` documents about where the review loop ends. P5 and P3 want deciding together — P5 is the concrete instance of the question P3 asks in the abstract.
