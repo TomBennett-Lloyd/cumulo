@@ -33,6 +33,7 @@ Policy:
 - Writing or modifying a React component, hook, or `useEffect`? → `docs/standards/react.md`
 - Adding a module, package, service, or cross-package dependency, or restating an owned value (infrastructure, schema ceiling, cost) in code or prose — **or changing one**, which means enumerating its carriers _and_ the figures derived from it before you edit? → `docs/standards/architecture.md`
 - Changing behaviour that a comment beside it argues for or defends — which makes that comment part of the change surface? → `docs/standards/architecture.md`
+- Writing a worked or derived figure into a comment or doc — a computed example, a counterfactual's result, a count, or an input tuned to make an example land? → `docs/standards/architecture.md`
 - Creating or splitting a file, extracting/naming a helper, choosing function vs class, or copy-pasting code? → `docs/standards/structure.md`
 - Writing a `catch`, or deciding what happens when something fails? → `docs/standards/error-handling.md`
 - Writing or changing a security policy whose directives have fallback semantics — a CSP, a CORS policy, any response header where an omitted directive inherits from another? → `docs/standards/security.md`

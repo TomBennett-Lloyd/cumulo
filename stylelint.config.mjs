@@ -44,10 +44,10 @@ export default {
   //
   // playwright-report/ and test-results/ are the browser lane's own output —
   // Playwright's vendored trace-viewer stylesheet, not ours. Without them a
-  // local `pnpm --filter @cumulo/web test:e2e` leaves ~4,795 hex-colour and
-  // raw-length errors in the next `pnpm verify`, so the two commands a task
-  // runs most often could not be run in sequence in one worktree. Both dirs
-  // are gitignored. eslint has no matching entry — `isPathIgnored` on a file
+  // local `pnpm --filter @cumulo/web test:e2e` leaves thousands of hex-colour
+  // and raw-length errors in the next `pnpm verify`, so the two commands a
+  // task runs most often could not be run in sequence in one worktree. Both
+  // dirs are gitignored. eslint has no matching entry — `isPathIgnored` on a file
   // in either returns FALSE — and does not flag them for the weaker reason
   // that no config object's `files` pattern reaches a bare `.js` there, so
   // zero rules apply (measured, not assumed). It bites hardest when the lane
