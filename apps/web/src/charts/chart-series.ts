@@ -1,5 +1,5 @@
 import { area, curveMonotoneX, line } from 'd3-shape';
-import { spanHoursBetween, xForIndex, yForKw, type PlotRect } from './chart-geometry';
+import { spanHoursBetween, yForKw, type PlotRect } from './chart-geometry';
 
 /**
  * The chart's data model and the string-and-number layer beneath its JSX: point
@@ -12,8 +12,10 @@ import { spanHoursBetween, xForIndex, yForKw, type PlotRect } from './chart-geom
  * sees the series, the nulls, or the runs, because `contiguousRuns` below has
  * already cut the series into pieces that are all ink. Each run becomes its own
  * path, so `line.defined()` has no gap left to be told about and the rule that a
- * gap is never bridged stays where it was rather than moving into a library
- * callback (`docs/design/chart-treatment.md`).
+ * null value is never bridged stays where it was rather than moving into a
+ * library callback (`docs/design/chart-treatment.md`). Which absences that rule
+ * currently reaches — and the one it does not, an hour missing from the series
+ * rather than carrying nulls — is `contiguousRuns`' own docblock below.
  */
 
 export interface ForecastChartBand {
@@ -89,7 +91,18 @@ export interface ChartOverlayReading {
 export interface ChartScale {
   readonly plot: PlotRect;
   readonly axisMaxKw: number;
-  readonly pointCount: number;
+  /**
+   * Where each sample sits horizontally, in sample order — `sampleXs`, computed
+   * once by `ForecastChart.tsx` and read by every consumer through `xAt` below.
+   *
+   * A list rather than the count it replaced (#325), because the axis is
+   * time-proportional and a count no longer determines a position: two series of
+   * five hours put their samples in different places if one of them is missing
+   * an hour. It doubles as the count — `xs.length` is the number of samples, and
+   * carrying both would be two spellings of one fact that a caller could set
+   * into disagreement (`architecture.md` rule 9).
+   */
+  readonly xs: readonly number[];
 }
 
 /** A maximal run of adjacent sample indices that all carry the same kind of value. */
@@ -101,6 +114,21 @@ export interface ChartRun {
 const VALUE_DECIMALS = 1;
 const AXIS_LABEL_DECIMALS = 2;
 const MISSING_VALUE = '—';
+
+/**
+ * Where sample `index` sits horizontally — the one seam every mark, every tick
+ * and the crosshair read their x through, so nothing on this canvas can place a
+ * sample differently from anything else.
+ *
+ * An index with no position falls back to the middle of the plot, which is
+ * `sampleXs`' own answer for a sample it cannot place. It is unreachable while
+ * `xs` and the points it was built from stay the same length — which is the
+ * contract `ChartScale` above states — and exists because the compiler cannot
+ * see that under `noUncheckedIndexedAccess` and an assertion here would be a
+ * suppression rather than a proof (`typing.md` rule 2).
+ */
+export const xAt = (scale: ChartScale, index: number): number =>
+  scale.xs[index] ?? (scale.plot.left + scale.plot.right) / 2;
 
 export const medianAt = (points: readonly ForecastChartPoint[], index: number): number =>
   points[index]?.medianKw ?? 0;
@@ -153,8 +181,22 @@ export const overlayReadingAt = (
   overlay === undefined ? undefined : { label: overlay.label, kw: overlay.values[index] ?? null };
 
 /**
- * Maximal runs of adjacent indices satisfying `includes`. This is what keeps a
- * gap a gap: each run becomes its own path, so no mark spans the hole.
+ * Maximal runs of adjacent indices satisfying `includes`. Each run becomes its
+ * own path, so a sample the predicate rejects — a null value, an hour with no
+ * band — ends the run rather than being drawn through.
+ *
+ * **Adjacent in the array, which is not the same as adjacent in time.** An hour
+ * missing from the series entirely has no index for the predicate to reject, so
+ * its two neighbours stay adjacent here and every consumer draws across it.
+ * `joinFleetSeries` produces exactly that shape for an hour neither forecast nor
+ * measured, and since #325 the axis gives that hole its full width
+ * (`chart-geometry.ts`'s `sampleXs`) — so the mark spanning it is now a visible
+ * bridge rather than a compressed one. The fix wants a predicate that also
+ * breaks on an interval larger than the series' modal step, and it is systemic
+ * rather than local because every mark on the canvas keys off this function:
+ * recorded in `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits on array
+ * adjacency, not on time adjacency"). `forecast-chart-context.tsx`'s night wash
+ * is the one layer that does not inherit it, and says there why.
  */
 export const contiguousRuns = (
   count: number,
@@ -256,7 +298,7 @@ export const curvedLinePath = (
 ): string =>
   curvedLine(
     indices.map((index) => ({
-      x: xForIndex(index, scale.pointCount, scale.plot),
+      x: xAt(scale, index),
       y: yForKw(valueAt(index), scale.axisMaxKw, scale.plot),
     })),
   ) ?? '';
@@ -269,7 +311,7 @@ export const curvedBandPath = (
 ): string =>
   curvedBand(
     run.indices.map((index) => ({
-      x: xForIndex(index, scale.pointCount, scale.plot),
+      x: xAt(scale, index),
       upperY: yForKw(p90At(points, index), scale.axisMaxKw, scale.plot),
       lowerY: yForKw(p10At(points, index), scale.axisMaxKw, scale.plot),
     })),

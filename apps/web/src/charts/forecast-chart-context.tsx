@@ -1,6 +1,11 @@
 import type { ReactElement } from 'react';
-import { xForIndex } from './chart-geometry';
-import { contiguousRuns, type ChartScale, type ForecastChartPoint } from './chart-series';
+import {
+  contiguousRuns,
+  xAt,
+  type ChartRun,
+  type ChartScale,
+  type ForecastChartPoint,
+} from './chart-series';
 
 /**
  * The plot's context layers: the night wash behind the series, and a hairline at
@@ -23,16 +28,37 @@ import { contiguousRuns, type ChartScale, type ForecastChartPoint } from './char
  * the predicate below is `=== true` rather than a truthiness test precisely so
  * that a future third behaviour has the distinction still available to it.
  *
- * **Accepted imprecision: an edge lands on a sample.** Both layers place their
- * geometry at sample positions, and the series is hourly, so a twilight crossing
- * or a midnight that falls between two samples is drawn at the nearer of them —
- * within half an hour of the truth. That is inside the tolerance the layer is
- * for: it explains the shape of a curve, and nothing reads a sunset or a date
- * off it. The same follows for placement in general — these marks use the axis's
- * own index mapping, so they are index-spaced today and would become
- * time-proportional along with everything else if #325 lands. There is exactly
- * one seam where that mapping happens ({@link xOf}), so the rewire is one line
- * rather than a hunt.
+ * **Accepted imprecision: an edge lands on a sample — and neither layer rounds
+ * to the nearer one.** Both place their geometry at sample positions and neither
+ * interpolates, but they miss in different ways, and the difference is
+ * load-bearing rather than pedantic.
+ *
+ * The wash covers each run of dark samples from its first to its last, so its
+ * edges are always samples *inside* the dark set. A twilight crossing between
+ * two samples therefore goes unshaded until the next sample — late by up to a
+ * full sampling step, and **always in that one direction**: fewer hours shaded
+ * than are dark, never more. That one-signedness is the property
+ * `dashboard/fleet-night.ts`'s whole argument rests on, since the wash sits
+ * behind a curve that is non-zero wherever any site still has light. Rounding to
+ * the nearer sample would be symmetric, and a symmetric rule can shade an hour
+ * the classifier called daylight — the contradiction the intersection definition
+ * exists to make impossible. It is not an improvement waiting to be made.
+ *
+ * The midnight hairline misses the other way: `startsUtcDay` below marks a
+ * sample that *is* 00:00 UTC and nothing else, so a midnight falling between two
+ * samples draws no line at all rather than one at the nearer sample. Nothing is
+ * missing today, because everything upstream samples hourly (`modalStepMs`
+ * below) and every midnight is therefore a sample; a cadence whose samples
+ * stepped over midnight would lose the boundary rather than misplace it, which
+ * is the direction the whole file takes — where the data cannot answer, draw
+ * nothing.
+ *
+ * Both misses are inside the tolerance these layers are for: they explain the
+ * shape of a curve, and nothing reads a sunset or a date off them. The same
+ * follows for placement in general — these marks read the axis's own mapping
+ * (`chart-series.ts`'s `xAt`), which since #325 is proportional to time, so a
+ * wash and a boundary keep their place over the series on an axis with a missing
+ * hour in it. There is no second mapping here to keep in step with that one.
  *
  * **Decoration, as far as assistive technology is concerned.** Every element
  * here is drawn inside the chart's `role="img"` svg, which collapses to its
@@ -43,23 +69,120 @@ import { contiguousRuns, type ChartScale, type ForecastChartPoint } from './char
 
 /**
  * A run this short has no horizontal extent to wash — the two edges of the rect
- * would coincide and SVG would paint nothing — and it is not a real case either:
- * the series is hourly, so a single dark hour flanked by two light ones does not
- * happen on this planet. Skipped rather than drawn as a hairline, which would
- * read as one more vertical line on a canvas that already has three meanings for
- * one.
+ * would coincide and SVG would paint nothing. Skipped rather than drawn as a
+ * hairline, which would read as one more vertical line on a canvas that already
+ * has three meanings for one.
+ *
+ * Two ways a run gets this short, and neither wants a mark. A single dark
+ * sample flanked by two light ones does not happen on an hourly series on this
+ * planet; a dark sample left alone by `withinOneStep` below — its neighbour in
+ * the array is not its neighbour in time — is the ordinary case at the edge of a
+ * hole, and shading one sample's worth of nothing is not what would fix it.
  */
 const MINIMUM_SHADED_SAMPLES = 2;
 
 /**
- * The one place either layer turns a sample index into a position.
+ * The series' sampling step, as the interval that occurs most often between
+ * consecutive samples — `null` for a series with no two samples it can measure
+ * one from.
  *
- * Deliberately a named function over a single call: when the x axis becomes
- * time-proportional this is the seam that changes, and a mapping inlined at each
- * of the four use sites below would make that a search instead of an edit.
+ * **Derived rather than assumed to be an hour.** Everything upstream today
+ * samples hourly, but nothing in this module's types pins it: `sampleXs` places
+ * samples by elapsed time and would happily draw a half-hourly or daily series,
+ * and a constant here would then cut every run of it. The modal interval is what
+ * the series itself says its cadence is, which is the same question the code
+ * below is really asking — *is this sample the next one, or the one after a
+ * hole?*
+ *
+ * Ties go to the shorter interval, so an ambiguous four-sample series (one step,
+ * one double step) reads the double step as the hole it is rather than as the
+ * cadence. Insertion order therefore decides nothing.
+ *
+ * Non-positive and unparseable intervals are not counted: a `NaN` difference
+ * fails `> 0`, so a series whose timestamps will not parse yields `null` and —
+ * by `withinOneStep`'s answer for it — no wash at all. That is the same
+ * direction `startsUtcDay` takes above, and the direction the whole layer takes:
+ * where the data cannot answer the question, draw nothing.
  */
-const xOf = (scale: ChartScale, index: number): number =>
-  xForIndex(index, scale.pointCount, scale.plot);
+const modalStepMs = (points: readonly ForecastChartPoint[]): number | null => {
+  const counts = new Map<number, number>();
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1];
+    const to = points[index];
+    if (from === undefined || to === undefined) {
+      continue;
+    }
+    const stepMs = Date.parse(to.validTimeIso) - Date.parse(from.validTimeIso);
+    if (stepMs > 0) {
+      counts.set(stepMs, (counts.get(stepMs) ?? 0) + 1);
+    }
+  }
+
+  let modal: { readonly stepMs: number; readonly count: number } | null = null;
+  for (const [stepMs, count] of counts) {
+    if (modal === null || count > modal.count || (count === modal.count && stepMs < modal.stepMs)) {
+      modal = { stepMs, count };
+    }
+  }
+  return modal?.stepMs ?? null;
+};
+
+/**
+ * Whether the sample at `index` is the one that follows its array predecessor in
+ * *time* as well as in the array — no more than one sampling step later.
+ *
+ * `<=` rather than `===` so a series sampled slightly unevenly stays one run;
+ * what this is looking for is the sample that is two or more steps out, which is
+ * a sample with a hole in front of it. A `NaN` difference fails the comparison,
+ * as does a `null` step, so an unanswerable question breaks the run.
+ */
+const withinOneStep = (
+  points: readonly ForecastChartPoint[],
+  index: number,
+  stepMs: number | null,
+): boolean => {
+  const previous = points[index - 1];
+  const current = points[index];
+  if (previous === undefined || current === undefined || stepMs === null) {
+    return false;
+  }
+  return Date.parse(current.validTimeIso) - Date.parse(previous.validTimeIso) <= stepMs;
+};
+
+/**
+ * One array-adjacent run, cut wherever the series skips a sample.
+ *
+ * `contiguousRuns` breaks on *array* adjacency, which is the right cut for a
+ * value that is present and null and the wrong one for an hour that is absent
+ * from the series entirely: the survivors either side of the hole stay adjacent
+ * in the array, so the run is not broken (recorded in `docs/tech-debt.md`,
+ * 2026-08-11, "`contiguousRuns` splits on array adjacency, not on time
+ * adjacency"). Every other mark on this canvas still inherits that. This layer
+ * does not, because a wash is a *claim about the hours it covers* — one rect
+ * spanning the hole would assert darkness at an hour nobody classified, which is
+ * the same claim this file's `nightElements` docblock refuses to make half an
+ * hour either side of a run's ends.
+ *
+ * Each segment is still a stretch of consecutive indices, since a cut of a
+ * consecutive run is consecutive — which is what keeps the width arithmetic
+ * below a subtraction rather than a lookup.
+ */
+const splitAtTimeGaps = (
+  run: ChartRun,
+  points: readonly ForecastChartPoint[],
+  stepMs: number | null,
+): readonly ChartRun[] => {
+  const segments: { startIndex: number; indices: number[] }[] = [];
+  for (const index of run.indices) {
+    const open = segments.at(-1);
+    if (open !== undefined && withinOneStep(points, index, stepMs)) {
+      open.indices.push(index);
+    } else {
+      segments.push({ startIndex: index, indices: [index] });
+    }
+  }
+  return segments;
+};
 
 /**
  * Whether a sample sits exactly on a UTC day boundary. An unparseable timestamp
@@ -73,34 +196,49 @@ const startsUtcDay = (validTimeIso: string): boolean => {
 };
 
 /**
- * The fleet's night, as one rect per contiguous run of dark hours, spanning the
- * full height of the plot from the run's first sample to its last.
+ * The fleet's night, as one rect per run of dark hours that are consecutive in
+ * time, spanning the full height of the plot from the run's first sample to its
+ * last.
  *
  * The wash stops at the samples rather than reaching half an hour past them in
  * each direction: the shading is a claim about the hours it covers, and widening
  * it to the midpoints would claim darkness at an hour classified as daylight.
+ *
+ * **In time, not in the array, and the difference is a whole hour wide.** A
+ * series can be missing an hour outright rather than carrying it with null
+ * values — `joinFleetSeries` builds its x-domain from the hours either source
+ * knows about, so an hour neither forecast nor measured is simply not there.
+ * Since #325 that hour still costs its width on the axis, so the two samples
+ * either side of it are drawn an hour apart while remaining neighbours in the
+ * array. Shading straight across would be the widening this docblock's second
+ * paragraph refuses, only larger and about an hour whose classification is not
+ * merely daylight but unknown. `splitAtTimeGaps` above is what stops it.
  */
 export const nightElements = (
   points: readonly ForecastChartPoint[],
   scale: ChartScale,
-): readonly ReactElement[] =>
-  contiguousRuns(points.length, (index) => points[index]?.night === true)
+): readonly ReactElement[] => {
+  const stepMs = modalStepMs(points);
+  return contiguousRuns(points.length, (index) => points[index]?.night === true)
+    .flatMap((run) => splitAtTimeGaps(run, points, stepMs))
     .filter((run) => run.indices.length >= MINIMUM_SHADED_SAMPLES)
     .map((run) => {
-      // A run's indices are adjacent by construction, so its last index is its
-      // first plus its length — no lookup, and no `undefined` to answer for.
-      const startX = xOf(scale, run.startIndex);
+      // A segment's indices are consecutive by construction, so its last index
+      // is its first plus its length — no lookup, and no `undefined` to answer
+      // for.
+      const startX = xAt(scale, run.startIndex);
       return (
         <rect
           key={run.startIndex}
           className="forecast-chart-night"
           x={startX}
           y={scale.plot.top}
-          width={xOf(scale, run.startIndex + run.indices.length - 1) - startX}
+          width={xAt(scale, run.startIndex + run.indices.length - 1) - startX}
           height={scale.plot.bottom - scale.plot.top}
         />
       );
     });
+};
 
 /**
  * Where the days turn: one full-height hairline at every sample that is exactly
@@ -121,7 +259,7 @@ export const dayBoundaryElements = (
     if (!startsUtcDay(point.validTimeIso)) {
       return [];
     }
-    const x = xOf(scale, index);
+    const x = xAt(scale, index);
     return [
       <line
         key={point.validTimeIso}

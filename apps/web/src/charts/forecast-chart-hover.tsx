@@ -1,7 +1,8 @@
 import { memo, useMemo, type ReactElement } from 'react';
-import { tickLabelFor, tooltipAnchorX, xForIndex } from './chart-geometry';
+import { tickLabelFor, tooltipAnchorX } from './chart-geometry';
 import {
   formatKw,
+  xAt,
   type ChartOverlayReading,
   type ChartScale,
   type ForecastChartBand,
@@ -436,7 +437,7 @@ export const ForecastChartHoverLayer = (
     return null;
   }
 
-  const crosshairX = xForIndex(activeIndex, scale.pointCount, scale.plot);
+  const crosshairX = xAt(scale, activeIndex);
   const plotWidth = scale.plot.right - scale.plot.left;
   const panelWidth = tooltipPanelWidth(
     tickLabelFor(point.validTimeIso, spanHours),

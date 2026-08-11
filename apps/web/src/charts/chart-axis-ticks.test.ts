@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { AXIS_CHAR_WIDTH, MIN_LABEL_GAP, xAxisTiers, type TierLabel } from './chart-axis-ticks';
-import { chartPlot } from './chart-geometry';
-import type { ForecastChartPoint } from './chart-series';
+import {
+  AXIS_CHAR_WIDTH,
+  MIN_LABEL_GAP,
+  xAxisTiers,
+  type TierLabel,
+  type XAxisTiers,
+} from './chart-axis-ticks';
+import { chartPlot, sampleXs, type PlotRect } from './chart-geometry';
+import type { ChartScale, ForecastChartPoint } from './chart-series';
 
 /*
  * The axis's one contract is that two labels in a tier never crowd each other,
@@ -33,6 +39,25 @@ const hourlySeries = (spanHours: number): readonly ForecastChartPoint[] =>
     medianKw: 1,
     actualKw: null,
   }));
+
+/**
+ * Nothing here is a kW: the tiers read the scale for its sample positions and
+ * for nothing else, so this stands in for the one field they never touch.
+ */
+const UNREAD_AXIS_MAX_KW = 1;
+
+/**
+ * The tiers a series gets in a plot of that shape.
+ *
+ * The scale is assembled here rather than passed in because the x mapping is the
+ * series' own since #325 — `sampleXs` over these points is what decides where a
+ * label goes, and building it beside the points keeps the two from drifting
+ * apart in a case that meant them to match.
+ */
+const tiersOf = (points: readonly ForecastChartPoint[], plot: PlotRect): XAxisTiers => {
+  const scale: ChartScale = { plot, axisMaxKw: UNREAD_AXIS_MAX_KW, xs: sampleXs(points, plot) };
+  return xAxisTiers(points, scale);
+};
 
 /** The windows the fleet panel's range picker can ask for, in hours of span. */
 const SWEPT_SPANS: readonly number[] = [24, 48, 168];
@@ -83,7 +108,7 @@ describe('xAxisTiers', () => {
   it('never lets two labels in a tier crowd each other, at any width or span the chart is drawn at', () => {
     const failures = SWEPT_WIDTHS.flatMap((width) =>
       SWEPT_SPANS.flatMap((spanHours) => {
-        const tiers = xAxisTiers(hourlySeries(spanHours), chartPlot(width));
+        const tiers = tiersOf(hourlySeries(spanHours), chartPlot(width));
         return [
           ...crowdedPairs(tiers.times).map(
             (pair) => `${String(width)}px/${String(spanHours)}h times: ${pair}`,
@@ -107,7 +132,7 @@ describe('xAxisTiers', () => {
   it('still labels every width and span it was swept at', () => {
     const silent = SWEPT_WIDTHS.flatMap((width) =>
       SWEPT_SPANS.flatMap((spanHours) => {
-        const tiers = xAxisTiers(hourlySeries(spanHours), chartPlot(width));
+        const tiers = tiersOf(hourlySeries(spanHours), chartPlot(width));
         return tiers.times.length > 0 && tiers.days.length > 0
           ? []
           : [
@@ -120,7 +145,7 @@ describe('xAxisTiers', () => {
   });
 
   it('prints hours as two bare digits, with no minutes to read past', () => {
-    const { times } = xAxisTiers(hourlySeries(48), chartPlot(640));
+    const { times } = tiersOf(hourlySeries(48), chartPlot(640));
 
     expect(times.length).toBeGreaterThan(1);
     for (const label of times) {
@@ -136,7 +161,7 @@ describe('xAxisTiers', () => {
    * bare `14:00` appeared twice, one level up.
    */
   it('names every day of a week-long window distinctly', () => {
-    const { days } = xAxisTiers(hourlySeries(168), chartPlot(1600));
+    const { days } = tiersOf(hourlySeries(168), chartPlot(1600));
     const texts = days.map((label) => label.text);
 
     expect(texts.length).toBeGreaterThan(1);
@@ -147,7 +172,7 @@ describe('xAxisTiers', () => {
     // Noon to 23:00 — inside one UTC day, crossing no midnight, so the only
     // thing that can name the day is the label the window opens with.
     const plot = chartPlot(640);
-    const { days } = xAxisTiers(hourlySeries(11), plot);
+    const { days } = tiersOf(hourlySeries(11), plot);
 
     expect(days).toHaveLength(1);
     expect(days[0]?.text).toBe('Thu 23');
@@ -155,7 +180,7 @@ describe('xAxisTiers', () => {
   });
 
   it('names the day a full-day window opens in as well as the one it crosses into', () => {
-    const { days } = xAxisTiers(hourlySeries(24), chartPlot(640));
+    const { days } = tiersOf(hourlySeries(24), chartPlot(640));
 
     expect(days.map((label) => label.text)).toStrictEqual(['Thu 23', 'Fri 24']);
   });
@@ -168,7 +193,7 @@ describe('xAxisTiers', () => {
    */
   it('thins the hours it labels rather than shrinking them, at the width the old axis overlapped at', () => {
     const points = hourlySeries(24);
-    const { times } = xAxisTiers(points, chartPlot(MEASURED_OVERLAP_WIDTH));
+    const { times } = tiersOf(points, chartPlot(MEASURED_OVERLAP_WIDTH));
 
     expect(times.length).toBeGreaterThan(1);
     expect(times.length).toBeLessThan(points.length);
@@ -176,7 +201,7 @@ describe('xAxisTiers', () => {
   });
 
   it('has no tiers to draw for a series with no samples', () => {
-    const tiers = xAxisTiers([], chartPlot(640));
+    const tiers = tiersOf([], chartPlot(640));
 
     expect(tiers.times).toStrictEqual([]);
     expect(tiers.days).toStrictEqual([]);
@@ -185,7 +210,7 @@ describe('xAxisTiers', () => {
   it('labels a lone sample where that sample is drawn, in the middle of the plot', () => {
     const plot = chartPlot(640);
     const middle = (plot.left + plot.right) / 2;
-    const tiers = xAxisTiers(hourlySeries(0), plot);
+    const tiers = tiersOf(hourlySeries(0), plot);
 
     expect(tiers.times.map((label) => label.text)).toStrictEqual(['12']);
     expect(tiers.times[0]?.x).toBe(middle);

@@ -123,6 +123,9 @@ Composition rules that keep both legible where they overlap:
   confidence of the values on either side of it — partial data is labelled partial, in the chart as
   much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
+  Every case here is an hour the series **has**, carrying a null; an hour the series does not carry
+  at all is a different case with a different answer today, and "Settled, then reversed" below is
+  where it is stated.
 - **A run that would be a degenerate path is drawn in the marker vocabulary instead.** Breaking a
   series at every gap can leave a run holding a single sample, and a path with one vertex paints
   nothing at all — so an isolated hour between two gaps would vanish and the chart would silently
@@ -323,19 +326,55 @@ time axis. Both used to sit side by side in the band above the plot, where `kW` 
 time axis as to the one it belonged to. Position is most of what makes an axis title unambiguous,
 and a rotated title costs nothing but the gutter width it already needed.
 
-**Settled: the axis is index-spaced, and the seam is marked rather than left as a gap**
-([#290](https://github.com/TomBennett-Lloyd/cumulo/issues/290)). Samples are placed at even
-intervals by their position in the series, not by their distance in time. Time-proportional
-placement was considered and declined: the product's series are hourly and regular, so the two
-agree everywhere except across the join between measured hours and forecast ones, where the partial
-current hour is elided by construction rather than drawn as a hole the reader would have to
-interpret. The horizon rule already stands exactly at that join — it is where the measurements stop
-— so the seam is marked by a mark that is there for other reasons, and no second one is drawn for
-the elided hour. That puts real weight on the horizon rule being _seen_, which is why it is dashed
+**Settled, then reversed: the axis is time-proportional, and an hour with no data still costs its
+width** ([#325](https://github.com/TomBennett-Lloyd/cumulo/issues/325), owner 2026-08-10). A
+sample's x is a fact about _when_ it is, not about where it sits in the array. The mapping belongs
+to `sampleXs` in
+[`apps/web/src/charts/chart-geometry.ts`](../../apps/web/src/charts/chart-geometry.ts) and reaches
+every mark through the single seam `xAt`, so nothing on this canvas holds a second opinion about
+where a sample goes.
+
+What that overturns was decided deliberately under
+[#290](https://github.com/TomBennett-Lloyd/cumulo/issues/290): samples placed at even intervals by
+their position in the series, with time-proportional placement considered and declined. The
+argument ran on frequency. The product's series are hourly and regular, so the two placements agree
+everywhere except across the join between measured hours and forecast ones, where the partial
+current hour was elided by construction rather than drawn as a hole the reader would have to
+interpret — and the reopen condition asked for a source producing genuinely irregular sampling,
+which would make the two disagree about every point rather than about one.
+
+Frequency was the wrong question. What decides it is not how often the placements disagree but what
+the disagreement asserts: eliding an hour draws two instants that are not adjacent in time as
+neighbours on the axis, and that compression is itself a shape — a steeper segment — a reader can
+take for data. It is index compression, which `docs/standards/design.md` rule 5 names as one of the
+things never done to an absent value; and the gap-breaks-the-line bullet above had already refused
+the same move vertically, where an hour whose value is null ends the run instead of being drawn
+through. One canvas cannot honour an absence down the y axis and compress it away along the x.
+
+**What #325 delivers is the hole's width, not the break across it.** The bullet above cuts a mark at
+a null, so it can only cut at an hour the series has a row for. An hour missing from the series
+outright — which is what the fleet's join produces for an hour that was neither forecast nor
+measured — has no null to be cut at, and its two neighbours stay adjacent in the array that
+`contiguousRuns` reads. The curve is therefore still drawn across the hole; what changed is that the
+hole now has its full width, so the marks no longer draw two instants two hours apart as though they
+were an hour apart. That is the compression artefact gone and the bridge left standing, and it is
+recorded rather than quietly implied away: `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits
+on array adjacency, not on time adjacency") owns the fix. One layer is already exempt — the night
+wash in [`apps/web/src/charts/forecast-chart-context.tsx`](../../apps/web/src/charts/forecast-chart-context.tsx),
+which cuts its runs on time because shading across a hole would assert darkness at an unclassified
+hour.
+
+The old argument was **right about the seam**, and that half stands. What changed at the join is
+that an hour the old placement elided now costs its width on the axis — a full hour of it. Nothing
+is ever drawn at a sub-hour width: readings are hour-ending
+([`packages/shared/src/generation-reading.ts`](../../packages/shared/src/generation-reading.ts)), so
+every sample this chart carries sits on an hour boundary, and `sampleXs` places only the samples
+that exist. And the horizon rule stands exactly at the join, because that is where the measurements
+stop. So the seam is still marked by a mark that is there for other reasons, and no second one is
+drawn for it. That still puts real weight on the horizon rule being _seen_, which is why it is
+dashed
 ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11, in the horizon bullet above): a
 seam marked by a line indistinguishable from the grid is a seam marked in name only.
-Reopen this only if a data source ever produces genuinely irregular sampling,
-which would make the two placements disagree about every point rather than about one.
 
 ## Context layers
 
@@ -371,12 +410,19 @@ answer to "whose night" and that this is the one chosen. No metered request is s
 solar geometry over the site coordinates, computed with the same NREL SPA port the physics chain
 runs on.
 
-**An edge lands on a sample.** Both layers place their geometry at sample positions, so a twilight
-crossing or a midnight falling between two hourly samples is drawn at the nearer one — within half
-an hour. That is inside tolerance for a layer nobody reads a sunset or a date off, and it is the
-same imprecision the index-spaced axis already accepts. Placement follows the axis: index-spaced
-today, time-proportional along with everything else if
-[#325](https://github.com/TomBennett-Lloyd/cumulo/issues/325) lands.
+**An edge lands on a sample, and neither layer rounds to the nearer one.** The wash covers each run
+of dark samples from its first to its last, so its edges are samples inside the dark set: a twilight
+crossing between two samples goes unshaded until the next sample — late by up to a full sampling
+step, and only ever late. That single direction is the point. The wash under-claims darkness by
+construction, and a rule that picked the nearer sample would be symmetric, so it could shade an hour
+classified as daylight — the contradiction with the curve above it that the definition of night
+exists to prevent. The midnight hairline misses the other way: it is drawn only at a sample that is
+exactly 00:00 UTC, so a midnight falling between two samples draws nothing at all rather than a line
+at the nearer sample. On the hourly series this app plots, every midnight is such a sample. Both
+misses are inside tolerance for layers nobody reads a sunset or a date off. Placement otherwise
+follows the axis, which is time-proportional (see "the axis is time-proportional" above): these
+marks read the axis's own mapping rather than deriving a second one, so a wash and a boundary keep
+their place over the series on an axis with a missing hour in it.
 
 **A run of one sample is not shaded.** Two samples are the minimum with any width between them; a
 lone dark hour would be a zero-width rect SVG paints nothing for, and drawn as a hairline instead it

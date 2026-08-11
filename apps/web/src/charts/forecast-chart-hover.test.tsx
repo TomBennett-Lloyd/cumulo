@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { xForIndex } from './chart-geometry';
+import type { ForecastChartPoint } from './chart-series';
 import {
   banded,
   bare,
@@ -20,6 +20,7 @@ import {
   tooltipAnchor,
   tooltipText,
   tooltipValues,
+  xOfSample,
 } from './forecast-chart-test-fixture';
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup
@@ -27,12 +28,16 @@ import {
 afterEach(cleanup);
 
 /** Client x that lands the pointer exactly on a sample of the rendered chart. */
-const clientXForIndex = (index: number, count: number): number =>
-  clientXFor(xForIndex(index, count, JSDOM_PLOT));
+const clientXForSample = (points: readonly ForecastChartPoint[], index: number): number =>
+  clientXFor(xOfSample(points, index));
 
-const hoverSample = (container: HTMLElement, index: number, count: number): void => {
+const hoverSample = (
+  container: HTMLElement,
+  points: readonly ForecastChartPoint[],
+  index: number,
+): void => {
   fireEvent.pointerMove(requireMark(container, '.forecast-chart-pointer-target'), {
-    clientX: clientXForIndex(index, count),
+    clientX: clientXForSample(points, index),
   });
 };
 
@@ -159,10 +164,10 @@ describe('ForecastChart hover layer', () => {
     const container = renderChart(SERIES);
     stubRenderedSize(requireSvg(container));
 
-    hoverSample(container, 2, SERIES.length);
+    hoverSample(container, SERIES, 2);
     const crosshair = requireMark(container, '.forecast-chart-crosshair');
 
-    expect(crosshair.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, JSDOM_PLOT)));
+    expect(crosshair.getAttribute('x1')).toBe(String(xOfSample(SERIES, 2)));
     expect(crosshair.getAttribute('x1')).toBe(crosshair.getAttribute('x2'));
     expect(tooltipText(container)).toBe(READOUT[2]);
   });
@@ -174,8 +179,8 @@ describe('ForecastChart hover layer', () => {
     // A quarter of a step past sample 1 — nowhere near a drawn mark.
     fireEvent.pointerMove(requireMark(container, '.forecast-chart-pointer-target'), {
       clientX:
-        clientXForIndex(1, SERIES.length) +
-        (clientXForIndex(2, SERIES.length) - clientXForIndex(1, SERIES.length)) / 4,
+        clientXForSample(SERIES, 1) +
+        (clientXForSample(SERIES, 2) - clientXForSample(SERIES, 1)) / 4,
     });
 
     expect(tooltipText(container)).toBe(READOUT[1]);
@@ -184,7 +189,7 @@ describe('ForecastChart hover layer', () => {
   it('clears the readout when the pointer leaves the plot', () => {
     const container = renderChart(SERIES);
     stubRenderedSize(requireSvg(container));
-    hoverSample(container, 2, SERIES.length);
+    hoverSample(container, SERIES, 2);
 
     fireEvent.pointerLeave(requireMark(container, '.forecast-chart-pointer-target'));
 
@@ -197,7 +202,7 @@ describe('ForecastChart hover layer', () => {
     const svg = requireSvg(container);
     stubRenderedSize(svg);
 
-    hoverSample(container, 2, SERIES.length);
+    hoverSample(container, SERIES, 2);
     const hovered = tooltipText(container);
     fireEvent.pointerLeave(requireMark(container, '.forecast-chart-pointer-target'));
 
@@ -216,7 +221,7 @@ describe('ForecastChart hover layer', () => {
   it('reads every tooltip value back out of the table twin', () => {
     const container = renderChart(SERIES);
     stubRenderedSize(requireSvg(container));
-    hoverSample(container, 2, SERIES.length);
+    hoverSample(container, SERIES, 2);
 
     const [measured, median, range] = tooltipValues(container);
     const [p10, tableMedian, p90, tableActual] = tableCells(container, 2);
@@ -267,7 +272,7 @@ describe('ForecastChart hover layer', () => {
     fireEvent.keyDown(svg, { key: 'End' });
 
     expect(tooltipAnchor(container)).toBeGreaterThanOrEqual(JSDOM_PLOT.left);
-    expect(tooltipAnchor(container)).toBeLessThan(xForIndex(4, SERIES.length, JSDOM_PLOT));
+    expect(tooltipAnchor(container)).toBeLessThan(xOfSample(SERIES, 4));
   });
 
   it('gives every tooltip row a key of its own when an overlay shares a row’s name', () => {
@@ -326,7 +331,7 @@ describe('ForecastChart hover layer', () => {
   it('positions the whole readout with SVG attributes and no inline style', () => {
     const container = renderChart(SERIES);
     stubRenderedSize(requireSvg(container));
-    hoverSample(container, 3, SERIES.length);
+    hoverSample(container, SERIES, 3);
 
     // Inline styles are a lint error in UI code (react.md rule 5); this is the
     // runtime half of that gate, over the one layer that computes positions.

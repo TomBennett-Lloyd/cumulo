@@ -2,10 +2,16 @@
 
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { xForIndex } from './chart-geometry';
 import type { ForecastChartPoint } from './chart-series';
 import { HORIZON_LABEL_WIDTH } from './forecast-chart-axes';
-import { JSDOM_PLOT, marks, renderChart, requireMark, SERIES } from './forecast-chart-test-fixture';
+import {
+  JSDOM_PLOT,
+  marks,
+  renderChart,
+  requireMark,
+  SERIES,
+  xOfSample,
+} from './forecast-chart-test-fixture';
 
 /**
  * The plot's chrome, rendered: the horizon rule and the words naming it, the two
@@ -60,7 +66,7 @@ describe('the forecast horizon', () => {
     const container = renderChart(SERIES);
     const horizon = requireMark(container, '.forecast-chart-horizon');
 
-    expect(horizon.getAttribute('x1')).toBe(String(xForIndex(2, SERIES.length, JSDOM_PLOT)));
+    expect(horizon.getAttribute('x1')).toBe(String(xOfSample(SERIES, 2)));
     expect(horizon.getAttribute('x1')).toBe(horizon.getAttribute('x2'));
     expect(container.textContent).toContain('forecast horizon');
   });
@@ -83,10 +89,11 @@ describe('the forecast horizon', () => {
    * inside the plot with the words running out of it is the defect.
    */
   it('flips the horizon label inwards when the horizon sits late in the window', () => {
-    const container = renderChart(weekRangeSeries());
+    const series = weekRangeSeries();
+    const container = renderChart(series);
     const label = horizonLabel(container);
     const anchorX = Number(label.getAttribute('x'));
-    const ruleX = xForIndex(WEEK_RANGE_LAST_MEASURED_INDEX, WEEK_RANGE_POINT_COUNT, JSDOM_PLOT);
+    const ruleX = xOfSample(series, WEEK_RANGE_LAST_MEASURED_INDEX);
 
     expect(requireMark(container, '.forecast-chart-horizon').getAttribute('x1')).toBe(
       String(ruleX),

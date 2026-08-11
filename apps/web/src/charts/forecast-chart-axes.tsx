@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { xAxisTiers, type TierLabel } from './chart-axis-ticks';
 import { TIME_COLUMN_HEADER } from './chart-copy';
-import { axisTicks, horizonLabelAnchor, xForIndex, yForKw, type PlotRect } from './chart-geometry';
-import { axisTickText, type ChartScale, type ForecastChartPoint } from './chart-series';
+import { axisTicks, horizonLabelAnchor, yForKw, type PlotRect } from './chart-geometry';
+import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './chart-series';
 
 /**
  * The plot's chrome: the kW grid and its labels, the forecast-horizon rule, the
@@ -110,7 +110,7 @@ export const horizonElements = (
   lastMeasuredIndex: number,
   scale: ChartScale,
 ): readonly ReactElement[] => {
-  const x = xForIndex(lastMeasuredIndex, scale.pointCount, scale.plot);
+  const x = xAt(scale, lastMeasuredIndex);
   const label = horizonLabelAnchor({
     ruleX: x,
     labelWidth: HORIZON_LABEL_WIDTH,
@@ -175,7 +175,7 @@ export const xAxisElements = (
   points: readonly ForecastChartPoint[],
   scale: ChartScale,
 ): readonly ReactElement[] => {
-  const tiers = xAxisTiers(points, scale.plot);
+  const tiers = xAxisTiers(points, scale);
   return [
     ...tierElements(
       tiers.times,

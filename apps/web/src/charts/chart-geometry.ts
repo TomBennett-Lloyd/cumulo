@@ -202,13 +202,80 @@ export const chartPlot = (width: number): PlotRect => ({
 });
 
 /**
- * Horizontal position of sample `index` of `count`. A lone sample has no extent
- * to spread across the plot, so it sits in the middle of it.
+ * The one thing the x mapping asks of a sample: when it is.
+ *
+ * A structural minimum rather than `ForecastChartPoint`, and deliberately so —
+ * that type lives in `chart-series.ts`, which imports this module, so naming it
+ * from here would be a cycle. Every series point satisfies it by shape.
  */
-export const xForIndex = (index: number, count: number, plot: PlotRect): number =>
-  count <= 1
-    ? (plot.left + plot.right) / 2
-    : plot.left + ((plot.right - plot.left) * index) / (count - 1);
+export interface TimedSample {
+  /** A UTC ISO-8601 instant — `packages/shared`'s `UtcIsoTimestamp` form. */
+  readonly validTimeIso: string;
+}
+
+/** The middle of the plot: where a sample with no extent to sit in goes. */
+const plotCentreX = (plot: PlotRect): number => (plot.left + plot.right) / 2;
+
+/**
+ * Where every sample of a series sits horizontally — **proportional to time,
+ * not to position in the array**:
+ *
+ *     x_i = left + (right − left) · (t_i − t_0) / (t_n − t_0)
+ *
+ * **An hour with no data still costs its width on the axis** (#325). The axis
+ * used to be index-spaced, which meant a series missing 03:00 drew 02:00 and
+ * 04:00 as neighbours: the gap in the marks closed up, and the compression was
+ * itself a shape the reader could mistake for data. Time-proportional placement
+ * leaves the hole where the hole is, so the marks no longer draw two instants
+ * two hours apart as if they were an hour apart.
+ *
+ * **What that does not do is break the line across the hole, and the difference
+ * is worth being exact about.** An hour that is *present* in the series carrying
+ * null values does break its marks, because the run predicate rejects its index.
+ * An hour *absent from the series* does not: `contiguousRuns`
+ * (`chart-series.ts`) cuts runs on adjacency in the array, and the two survivors
+ * either side of a missing hour are still array-adjacent, so the curve is drawn
+ * straight through. Under index spacing that bridge had no width and the claim
+ * was harmless; this mapping is what gives it one. So what #325 removes is the
+ * compression artefact, not the bridge — recorded in `docs/tech-debt.md`
+ * (2026-08-11, "`contiguousRuns` splits on array adjacency, not on time
+ * adjacency"), which owns the fix for the half that is left.
+ *
+ * **The arithmetic is on epoch milliseconds, and is therefore DST-safe.**
+ * `Date.parse` on a UTC ISO-8601 instant answers an absolute offset from the
+ * epoch, so a difference of two of them is elapsed time with no calendar in it —
+ * which is what the UK/Ireland fleet needs, since its clocks change twice a year
+ * and the axis must not gain or lose an hour of width when they do. It pairs
+ * with the file's UTC labelling above rather than duplicating it: this decides
+ * *where* a sample goes, `tickLabelFor` decides what it is called, and both read
+ * the same instant the same way.
+ *
+ * Two degenerate answers, both the plot's middle: a lone sample has no extent to
+ * spread across the plot, and neither does a series whose first and last samples
+ * are the same instant. A sample whose own timestamp will not parse gets the
+ * middle too — a position had to be chosen, and the middle is the same answer
+ * this module already gives whenever time cannot order the samples.
+ */
+export const sampleXs = (points: readonly TimedSample[], plot: PlotRect): readonly number[] => {
+  const first = points[0];
+  const last = points.at(-1);
+  if (first === undefined || last === undefined) {
+    return [];
+  }
+  const startMs = Date.parse(first.validTimeIso);
+  const spanMs = Date.parse(last.validTimeIso) - startMs;
+  // Negated rather than `<= 0`, so a NaN span — unparseable ends — lands here
+  // instead of dividing every sample into one.
+  if (!(spanMs > 0)) {
+    return points.map(() => plotCentreX(plot));
+  }
+  return points.map((point) => {
+    const elapsedMs = Date.parse(point.validTimeIso) - startMs;
+    return Number.isFinite(elapsedMs)
+      ? plot.left + ((plot.right - plot.left) * elapsedMs) / spanMs
+      : plotCentreX(plot);
+  });
+};
 
 /** Vertical position of a kW value. `axisMaxKw` comes from `niceAxisMax`, so > 0. */
 export const yForKw = (kilowatts: number, axisMaxKw: number, plot: PlotRect): number =>
@@ -279,36 +346,49 @@ export const spanHoursBetween = (startIso: string, endIso: string): number =>
   (Date.parse(endIso) - Date.parse(startIso)) / MS_PER_HOUR;
 
 /**
- * Named rather than positional: `snapToNearestIndex(x, 46, 452, 5)` is four
- * interchangeable numbers at the call site, and swapping two of them is a bug
- * no type can catch.
+ * Named rather than positional: a pointer position and a list of sample
+ * positions are both "x in plot space", and nothing but the parameter name
+ * distinguishes the one being aimed from the ones being aimed at.
  */
-export interface SnapToIndexParams {
+export interface SnapToXParams {
   /** Pointer position in SVG user units — the space the plot rect lives in. */
   readonly pointerX: number;
-  readonly plot: PlotRect;
-  readonly count: number;
+  /** Sample positions, in sample order — `sampleXs` above. */
+  readonly xs: readonly number[];
 }
 
 /**
- * The sample index nearest `pointerX`, clamped into `[0, count - 1]` so a
- * pointer drifting into the axis margins keeps reading the end sample instead
- * of dropping the readout. Readers aim at a time, not at a 2px line.
+ * The index of the sample nearest `pointerX`, by absolute distance.
  *
- * **A pointer exactly halfway between two samples snaps to the later one.**
- * `Math.round` breaks the tie upward; the direction matters less than the fact
- * that it is fixed, because a pixel that reported two different hours on two
- * passes would make the crosshair look broken.
+ * Distance and not arithmetic on the plot rect, which is what makes this work on
+ * an axis whose samples are unevenly spread: with a gap in the series the
+ * midpoint between two neighbours is no longer halfway across the plot, so the
+ * old index-space rounding would have handed back the wrong hour on either side
+ * of every hole (#325). A pointer beyond either end is nearest to that end
+ * sample and reads it, which is the clamping the previous version did
+ * explicitly — readers aim at a time, not at a 2px line.
+ *
+ * **A pointer exactly halfway between two samples snaps to the later one.** The
+ * comparison below is `<=` rather than `<` precisely so that it does, and the
+ * direction is specified rather than incidental: a pixel that reported two
+ * different hours on two passes would make the crosshair look broken. A `NaN`
+ * distance never wins either comparison, so an unplaceable sample is skipped
+ * rather than swallowing the readout.
+ *
+ * An empty series answers 0 — there is no sample to name, and the callers that
+ * could ask have no readout to draw at that index anyway.
  */
-export const snapToNearestIndex = ({ pointerX, plot, count }: SnapToIndexParams): number => {
-  const lastIndex = count - 1;
-  const plotWidth = plot.right - plot.left;
-  // A lone sample (or a plot with no width to divide by) has one answer.
-  if (lastIndex <= 0 || plotWidth <= 0) {
-    return 0;
+export const snapToNearestX = ({ pointerX, xs }: SnapToXParams): number => {
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const [index, x] of xs.entries()) {
+    const distance = Math.abs(pointerX - x);
+    if (distance <= nearestDistance) {
+      nearestIndex = index;
+      nearestDistance = distance;
+    }
   }
-  const exactIndex = ((pointerX - plot.left) / plotWidth) * lastIndex;
-  return Math.min(lastIndex, Math.max(0, Math.round(exactIndex)));
+  return nearestIndex;
 };
 
 export interface TooltipAnchorParams {

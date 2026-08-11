@@ -5,16 +5,23 @@ import {
   chartPlot,
   horizonLabelAnchor,
   niceAxisMax,
-  snapToNearestIndex,
+  sampleXs,
+  snapToNearestX,
   spanHoursBetween,
   tickLabelFor,
   tooltipAnchorX,
-  xForIndex,
   yForKw,
   type PlotRect,
+  type TimedSample,
 } from './chart-geometry';
 
 const PLOT: PlotRect = { left: 40, right: 440, top: 20, bottom: 160 };
+
+/** A series from UTC hours of one day — the only thing the x mapping reads. */
+const hours = (utcHours: readonly number[]): readonly TimedSample[] =>
+  utcHours.map((hour) => ({
+    validTimeIso: `2026-07-30T${hour.toString().padStart(2, '0')}:00:00Z`,
+  }));
 
 describe('chartPlot', () => {
   /*
@@ -54,19 +61,80 @@ describe('chartPlot', () => {
   });
 });
 
-describe('xForIndex', () => {
+describe('sampleXs', () => {
+  const PLOT_WIDTH = PLOT.right - PLOT.left;
+  const PLOT_MIDDLE = 240;
+
   it('puts the first sample on the left plot edge and the last on the right', () => {
-    expect(xForIndex(0, 5, PLOT)).toBe(PLOT.left);
-    expect(xForIndex(4, 5, PLOT)).toBe(PLOT.right);
+    const xs = sampleXs(hours([0, 1, 2, 3, 4]), PLOT);
+
+    expect(xs.at(0)).toBe(PLOT.left);
+    expect(xs.at(-1)).toBe(PLOT.right);
   });
 
-  it('spaces intermediate samples evenly across the plot width', () => {
-    expect(xForIndex(1, 5, PLOT)).toBe(140);
-    expect(xForIndex(2, 5, PLOT)).toBe(240);
+  it('spaces an unbroken hourly series evenly, as the index mapping it replaced did', () => {
+    // The invariant the #325 refactor rests on: on a gapless series the two
+    // mappings agree exactly, which is why every existing coordinate assertion
+    // in this package came through the change untouched.
+    expect(sampleXs(hours([0, 1, 2, 3, 4]), PLOT)).toStrictEqual([40, 140, 240, 340, 440]);
+  });
+
+  /*
+   * The ticket, in one case. 03:00 is absent from the series, and the axis owes
+   * that hour its width anyway: 04:00 is four fifths of the way through a
+   * five-hour window and belongs four fifths across the plot. Placed by index it
+   * would be the fourth of five samples and land at three quarters — the gap
+   * closed up, and the two hours either side of it drawn as neighbours they are
+   * not.
+   */
+  it('a missing hour keeps its width on the axis', () => {
+    const xs = sampleXs(hours([0, 1, 2, 4, 5]), PLOT);
+
+    expect(xs[3]).toBe(PLOT.left + 0.8 * PLOT_WIDTH);
+    // The negative half, and the whole point of the pair: a refactor that
+    // quietly kept index spacing satisfies the line above only if this fails.
+    expect(xs[3]).not.toBe(PLOT.left + 0.75 * PLOT_WIDTH);
   });
 
   it('centres a lone sample, which has no extent to spread across the plot', () => {
-    expect(xForIndex(0, 1, PLOT)).toBe(240);
+    expect(sampleXs(hours([6]), PLOT)).toStrictEqual([PLOT_MIDDLE]);
+  });
+
+  it('centres every sample of a series that spans no time at all', () => {
+    // Two readings of one instant order nothing, so there is no fraction to
+    // place them by and no reason to prefer either end of the plot.
+    expect(sampleXs(hours([6, 6]), PLOT)).toStrictEqual([PLOT_MIDDLE, PLOT_MIDDLE]);
+  });
+
+  it('has no positions to give for a series with no samples', () => {
+    expect(sampleXs([], PLOT)).toStrictEqual([]);
+  });
+
+  it('centres a sample whose own instant will not parse, and places the rest as usual', () => {
+    const xs = sampleXs([...hours([0]), { validTimeIso: 'not a time' }, ...hours([2])], PLOT);
+
+    expect(xs).toStrictEqual([PLOT.left, PLOT_MIDDLE, PLOT.right]);
+  });
+
+  /*
+   * The clock the fleet actually lives under. 2026-10-25T01:00Z is the instant
+   * UK/Ireland clocks go back, so a series across it has two local 01:00s and
+   * one of them is an hour that local arithmetic would place on top of the
+   * other. Epoch milliseconds have no such hour: four samples an hour apart are
+   * four evenly spaced samples through the transition, exactly as they are on
+   * any other night.
+   */
+  it('spaces a series evenly across a DST transition, which local time would not', () => {
+    const acrossTheChange = [
+      '2026-10-25T00:00:00Z',
+      '2026-10-25T01:00:00Z',
+      '2026-10-25T02:00:00Z',
+      '2026-10-25T03:00:00Z',
+    ].map((validTimeIso) => ({ validTimeIso }));
+
+    expect(sampleXs(acrossTheChange, PLOT)).toStrictEqual([
+      40, 173.33333333333334, 306.6666666666667, 440,
+    ]);
   });
 });
 
@@ -169,39 +237,55 @@ describe('tickLabelFor', () => {
   });
 });
 
-describe('snapToNearestIndex', () => {
-  // PLOT spans 40..440 over five samples, so they sit at 40, 140, 240, 340, 440.
+describe('snapToNearestX', () => {
+  /** Five unbroken hours: PLOT spans 40..440, so they sit 100 apart. */
+  const EVEN_XS = sampleXs(hours([0, 1, 2, 3, 4]), PLOT);
+
   it('reads the sample under the pointer at each sample position', () => {
-    expect(snapToNearestIndex({ pointerX: PLOT.left, plot: PLOT, count: 5 })).toBe(0);
-    expect(snapToNearestIndex({ pointerX: 240, plot: PLOT, count: 5 })).toBe(2);
-    expect(snapToNearestIndex({ pointerX: PLOT.right, plot: PLOT, count: 5 })).toBe(4);
+    expect(snapToNearestX({ pointerX: PLOT.left, xs: EVEN_XS })).toBe(0);
+    expect(snapToNearestX({ pointerX: 240, xs: EVEN_XS })).toBe(2);
+    expect(snapToNearestX({ pointerX: PLOT.right, xs: EVEN_XS })).toBe(4);
   });
 
   it('reads the nearer sample when the pointer falls between two', () => {
-    expect(snapToNearestIndex({ pointerX: 160, plot: PLOT, count: 5 })).toBe(1);
-    expect(snapToNearestIndex({ pointerX: 220, plot: PLOT, count: 5 })).toBe(2);
+    expect(snapToNearestX({ pointerX: 160, xs: EVEN_XS })).toBe(1);
+    expect(snapToNearestX({ pointerX: 220, xs: EVEN_XS })).toBe(2);
   });
 
   it('breaks an exact midpoint towards the later sample', () => {
     // 190 is exactly between index 1 (140) and index 2 (240). The direction
     // matters less than it being fixed: one pixel must not report two hours.
-    expect(snapToNearestIndex({ pointerX: 190, plot: PLOT, count: 5 })).toBe(2);
-    expect(snapToNearestIndex({ pointerX: 189, plot: PLOT, count: 5 })).toBe(1);
+    expect(snapToNearestX({ pointerX: 190, xs: EVEN_XS })).toBe(2);
+    expect(snapToNearestX({ pointerX: 189, xs: EVEN_XS })).toBe(1);
   });
 
-  it('clamps a pointer outside the plot to the nearest end sample', () => {
-    expect(snapToNearestIndex({ pointerX: -1000, plot: PLOT, count: 5 })).toBe(0);
-    expect(snapToNearestIndex({ pointerX: 1000, plot: PLOT, count: 5 })).toBe(4);
+  /*
+   * The gap case, which is where index-space rounding got the answer wrong.
+   * Hours 00, 01, 02, 04, 05 put samples at 40, 120, 200, 360 and 440, so the
+   * hole between index 2 and index 3 is 160 wide and its midpoint is 280 —
+   * nowhere near the 290 an evenly divided plot would have put it. A pointer at
+   * 285 is therefore past the middle of the gap and belongs to the later hour,
+   * which is precisely the reading the old mapping would have got backwards.
+   */
+  it('snaps to the nearer sample across an uneven gap', () => {
+    const gappy = sampleXs(hours([0, 1, 2, 4, 5]), PLOT);
+
+    expect(snapToNearestX({ pointerX: 279, xs: gappy })).toBe(2);
+    expect(snapToNearestX({ pointerX: 281, xs: gappy })).toBe(3);
+    expect(snapToNearestX({ pointerX: 285, xs: gappy })).toBe(3);
+  });
+
+  it('reads the nearest end sample for a pointer outside the plot', () => {
+    expect(snapToNearestX({ pointerX: -1000, xs: EVEN_XS })).toBe(0);
+    expect(snapToNearestX({ pointerX: 1000, xs: EVEN_XS })).toBe(4);
   });
 
   it('reads the only sample of a single-point series wherever the pointer is', () => {
-    expect(snapToNearestIndex({ pointerX: 400, plot: PLOT, count: 1 })).toBe(0);
+    expect(snapToNearestX({ pointerX: 400, xs: sampleXs(hours([6]), PLOT) })).toBe(0);
   });
 
-  it('has nothing to divide by when the plot has no width', () => {
-    const degenerate: PlotRect = { ...PLOT, right: PLOT.left };
-
-    expect(snapToNearestIndex({ pointerX: 400, plot: degenerate, count: 5 })).toBe(0);
+  it('answers the first index for a series with no samples to snap to', () => {
+    expect(snapToNearestX({ pointerX: 400, xs: [] })).toBe(0);
   });
 });
 
