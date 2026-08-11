@@ -53,8 +53,8 @@ import { routeBasemap } from './hermetic-basemap';
  * under the canvas passes it while being unreadable in fact.
  *
  * The fifth is the search folding behind an icon on a bar too narrow to hold it
- * (#284 D17), which is a media query and therefore invisible to jsdom in the
- * most literal way available: `AppHeader` renders the field and the icon at
+ * (#284 D17), which is a container query and therefore invisible to jsdom in
+ * the most literal way available: `AppHeader` renders the field and the icon at
  * every width, and which of them a reader is looking at is a computed `display`
  * nothing under `src/` can read. The case drives the whole transition rather
  * than the two ends of it, because what is worth catching is a search that
@@ -515,14 +515,21 @@ test('hangs the menu over the map rather than under it', async ({ page }) => {
 });
 
 /**
- * A phone, and specifically one below `header/header.css`'s 27.4375rem — the
- * width that file measured as the point where the brand, the field and the menu
- * stop fitting on one line.
+ * A phone, and specifically one below the width at which `header/header.css`
+ * measured the brand, the field and the menu stopping fit on one line: a 439px
+ * window and narrower.
  *
- * 390x844 rather than a width picked just under the breakpoint: it is a real
- * device size, it is 49px clear of the fold, and the clearance is what keeps
- * this case from turning red over a platform whose fonts lay the bar out a few
- * pixels wider than the measurement.
+ * That file states the threshold as a container width now, not a viewport one —
+ * #326 converted the fold to `@container (max-width: 25.4375rem)` against the
+ * bar's own content box, which is the window less the bar's inline padding, so
+ * 439px of window is 407px of container and the fold flips exactly where it did
+ * before. This viewport is the window-side reading of it, which is what a spec
+ * that sets viewports needs; the stylesheet owns the derivation.
+ *
+ * 390x844 rather than a width picked just under the fold: it is a real device
+ * size, it is 49px clear of it, and the clearance is what keeps this case from
+ * turning red over a platform whose fonts lay the bar out a few pixels wider
+ * than the measurement.
  */
 const PHONE_VIEWPORT = { width: 390, height: 844 };
 
@@ -907,7 +914,8 @@ test('caps the search at 500px and centres it in the logo–menu gap', async ({ 
 /**
  * A window narrow enough that the gap the brand and the menu leave is under the
  * cap, and still comfortably above `header/header.css`'s fold — 640px is 201px
- * clear of it, so the field is the bar's own here and no media query is in play.
+ * clear of it, so the field is the bar's own here and no container query is in
+ * play.
  */
 const UNDER_CAP_VIEWPORT = { width: 640, height: 720 };
 

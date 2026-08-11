@@ -245,7 +245,12 @@ inside the canvas stop meaning a fixed distance. Height does not follow width. I
 constant `CHART_VIEW_BOX_HEIGHT` (`apps/web/src/charts/chart-geometry.ts`, which carries the
 reasoning for the value), because a kW axis rescaling on every resize would make one series a
 different chart at every window size — and because the height is what decides whether the whole
-plot clears the fold under the map, which is what D15 is actually about.
+plot clears the fold under the map, which is what D15 is actually about. #326 went looking for
+surfaces to convert to `design.md` rule 7's container-inward pattern and found this axis already
+satisfying it end to end — `use-chart-width.ts` measures the real container, `chartPlot`
+(`chart-geometry.ts`) turns that measurement into the plot's geometry, and the per-pair fit
+inequality in `chart-axis-ticks.ts` picks the tick format from it — so the conversion that issue
+expected to make here was already made, by #343 and #284 wave C, and it made none.
 
 ## The time axis
 

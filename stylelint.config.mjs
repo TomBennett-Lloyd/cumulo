@@ -135,17 +135,26 @@ export default {
      * `flex-basis`, `border-width`, `letter-spacing`, `stroke-width`,
      * `grid-template-columns`, among others. Committed CSS already relies on
      * this (e.g. `max-width: 44rem` in apps/web/src/app.css). The same open half
-     * covers *media features*, which every rule here misses for a stronger
-     * reason: a media feature is not a declaration at all, so no
-     * declaration-scoped rule can see one however the property list grows. The
-     * app's two breakpoints — `apps/web/src/map/map.css` and
-     * `apps/web/src/header/header.css` — are therefore raw lengths by
-     * construction; each is measured and argued where it is written, which is
-     * the whole of what stands in for a gate there. This paragraph is also where
-     * that census is kept: the stylesheets point here rather than counting each
-     * other, so a third breakpoint is added to this list and to nothing else. And
-     * a third is a signal in its own right — one shared scale becomes worth
-     * having at about the point a third surface needs a width. There
+     * covers the widths in *at-rule preludes* — media features and container
+     * features alike — which every rule here misses for a stronger reason: a
+     * query feature is not a declaration at all, so no declaration-scoped rule
+     * can see one however the property list grows. Those widths are therefore
+     * raw lengths by construction; each is measured and argued where it is
+     * written, which is the whole of what stands in for a gate there.
+     *
+     * This paragraph is also where the census of *viewport* breakpoints is kept
+     * — the stylesheets point here rather than counting each other, so a new one
+     * is added to this list and to nothing else. One remains:
+     * `apps/web/src/map/map.css`, the attribution band. `apps/web/src/header`'s
+     * left it at #326, which converted the header fold to a container query
+     * measuring the bar's own content box; that issue audited the app's other
+     * candidates too, and `docs/design/chart-treatment.md` records what it found.
+     * A container query's width is not a census entry — it needs no viewport to
+     * be true — but it is the same raw length and the same residual. And a
+     * second viewport breakpoint would be a signal in its own right: measuring
+     * the container is `docs/standards/design.md` rule 7's default and a
+     * breakpoint its documented escalation, so a new one owes an argument for
+     * why its surface cannot measure itself. There
      * is no property-agnostic mirror for lengths because a length is legal
      * syntax everywhere, and adding these properties to the list above would
      * demand tokens that do not exist: the set has spacing, type, and radii

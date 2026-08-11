@@ -100,8 +100,8 @@
  * This rule keeps applying below the breakpoint, to the copy inside the search
  * bar: what is hidden there is the *direct child* of `.app-header`, not every
  * `.site-search` on the page. That copy takes the cap and the margins too, and
- * neither can bite there: the bar exists only below 439px, so the widest it can
- * ever be is far under 500px, the cap never binds, and the margins are left
+ * neither can bite there: the bar exists only below the fold, so the widest it
+ * can ever be is far under 500px, the cap never binds, and the margins are left
  * nothing to split.
  */
 .site-search {
@@ -266,54 +266,113 @@
 }
 
 /*
- * A media query that exists because a row runs out of width rather than because
- * a device was named — which is `map/map.css`'s reason for its own, and the two
- * are counted as a set in `stylelint.config.mjs`'s residual paragraph rather
- * than by either of them keeping a tally of the other. The census is what that
- * paragraph keeps; the argument for each is made where the breakpoint is
- * written, and this comment is where this one's is made.
+ * The bar measures itself, which is the enabling half of the query below.
  *
- * 27.4375rem is measured, not picked. At this bar's own content — the brand
- * lockup at 113.625px, the search at its flex basis above, the menu button at
- * 38px, two `--space-4` gaps and the bar's own padding — 440px is the narrowest
- * viewport that holds all three on one line, and at 439px the menu wraps and the
- * bar goes from 63px tall to 114px. So the breakpoint sits exactly at the wrap:
- * 439px, which is 27.4375rem at the default root size. Below it the field is
- * replaced by the toggle, and the bar it opens costs a line only while it is up.
+ * A `@container` rule whose container established no containment simply never
+ * matches, and a fold that never fires looks exactly like a threshold set too
+ * low — so this declaration is not bookkeeping for the query, it *is* the query
+ * working. What comes with it costs this row nothing, and both halves were
+ * checked rather than assumed. Inline-size containment resolves this element's
+ * own inline size without consulting its contents, which a full-width block row
+ * already did. Layout containment makes it a containing block for positioned
+ * descendants — which changes nothing for the two popovers, since each hangs off
+ * its own `position: relative` parent inside the bar, and nothing for the About
+ * `<dialog>` mounted in this `<header>`: while it is open it is in the top layer
+ * and laid out against the viewport, measured to the pixel on both sides of this
+ * change (#326).
+ *
+ * Here rather than in `app.css` for the file header's reason, and this rule is
+ * the sharpest case of it: `app.css` owns the row the product and the token
+ * gallery share, so a `container-type` written there would put containment on a
+ * page that never asks a question about its own width. In this sheet it cannot
+ * — the gallery's entry (`preview/main.tsx`) loads `app.css` and never this
+ * file, so its `.app-header` stays `container-type: normal` and its box is
+ * unchanged to the pixel (measured at #326, not inferred from the import list).
+ *
+ * The query is unnamed because it cannot be ambiguous: every element the three
+ * rules inside it match is a direct child of this one (`AppHeader.tsx` renders
+ * all three on the bar itself), so the nearest ancestor container an unnamed
+ * query resolves to is this element by construction rather than by luck.
+ */
+.app-header {
+  container-type: inline-size;
+}
+
+/*
+ * A query that exists because a row runs out of width rather than because a
+ * device was named — and, since #326, one that asks the row instead of asking
+ * the window. This is `design.md` rule 7's default rather than its documented
+ * escalation: the bar measures its own content box, so the fold holds whatever
+ * happens outside it, and nothing here would need re-deriving if the header ever
+ * stopped being the full width of the viewport.
+ *
+ * 25.4375rem is measured, not picked, and it is the same measurement this rule
+ * has always carried. At this bar's own content — the brand lockup at 113.625px,
+ * the search at its flex basis above, the menu button at 38px, two `--space-4`
+ * gaps and the bar's own padding — 440px is the narrowest viewport that holds
+ * all three on one line, and at 439px the menu wraps and the bar goes from 63px
+ * tall to 114px. What the query measures is the content box, which is that
+ * viewport less two things: the bar's own `2 × var(--space-4)` of inline
+ * padding, and whatever a classic scrollbar takes out of the layout viewport.
+ * On an overlay-scrollbar platform the second term is zero, so 439px of window
+ * is 407px of container, and 407px is 25.4375rem at the default root size —
+ * which is the reading the fold was measured against in a real browser on both
+ * sides of the change (#326). Below it the field is replaced by the toggle, and
+ * the bar it opens costs a line only while it is up.
+ *
+ * **The second term is why the conversion is a conversion and not an identity,
+ * and why the behaviour did not move on the platform it was measured on rather
+ * than not moving at all.** A media feature matches the viewport where a
+ * container query matches the row — `map/map.css` states that same asymmetry
+ * from the other side of the same choice, for the band it kept on a media
+ * feature. So where the scrollbar is classic, the container reaches 407px at a
+ * window a scrollbar's width wider than 439px, and the fold fires there instead.
+ * The threshold does not move for it: 407px is a fact about this bar's own
+ * content box, and a scrollbar takes nothing out of that. What moves is the
+ * sliver of window widths the fold happens at — and it moves toward the row's
+ * actual need, since across exactly that sliver a viewport feature would leave
+ * the bar wrapped to two lines while declining to fold it. That last step is
+ * arithmetic on the numbers above rather than a second browser run: the #326
+ * measurement was taken on overlay scrollbars, where the sliver is empty. So it
+ * is the container query doing the job it was adopted for, not an error to
+ * absorb — but the platform that would show the difference is untested here.
  *
  * The number is derived from this header's content and belongs to this file
- * alone. It is deliberately not shared with the other one: each answers its own
- * row's arithmetic — that band's two credits, this bar's brand and controls — so
- * a single "mobile" width standing for both would be a number neither of them
- * measured.
+ * alone. It is deliberately not shared with `map/map.css`'s breakpoint: each
+ * answers its own row's arithmetic — that band's two credits, this bar's brand
+ * and controls — so a single "mobile" width standing for both would be a number
+ * neither of them measured.
  *
  * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
  * derived from the measurement above, each needing re-deriving if this bar's
  * content or typography moves it:
  *
- * - `apps/web/e2e/header.spec.ts`, `PHONE_VIEWPORT` — names this width and the
- *   clearance 390px has under it, to justify a viewport provably inside the
- *   folded range. A width derived from the stylesheet would assert nothing, so
- *   it spells it out: the asserting carrier rule 9 ledgers rather than forbids.
+ * - `apps/web/e2e/header.spec.ts`, `PHONE_VIEWPORT` — names the viewport this
+ *   threshold works out to and the clearance 390px has under it, to justify a
+ *   viewport provably inside the folded range. A width derived from the
+ *   stylesheet would assert nothing, so it spells it out: the asserting carrier
+ *   rule 9 ledgers rather than forbids.
  * - `apps/web/src/header/AppHeader.tsx`, the docblock section on the fold —
  *   carries the 63px-to-114px height it costs the bar, which is the measurement
- *   this breakpoint was chosen from and the reason the fold exists at all.
+ *   this threshold was chosen from and the reason the fold exists at all.
  *
  * Where a platform's fonts run wider than the measurement, this under-fires —
  * the wordmark is set in the system stack, so a stack with a wider face wraps
- * the row a few pixels above 439px and the reader sees the two-line bar for that
- * sliver of widths, which is exactly the behaviour this rule replaced rather
- * than a new failure. A container query would measure the bar instead of
- * inferring it from the viewport and would need no number at all; declined here
- * for `map.css`'s reason, and it is the escalation the moment a third surface
- * wants one.
+ * the row a few pixels before the query fires and the reader sees the two-line
+ * bar for that sliver of widths, which is exactly the behaviour this rule
+ * replaced rather than a new failure. Measuring the container did not fix that
+ * and was never going to: what it removes is the inference from the window to
+ * the row, not the dependence on how wide this bar's own content sets.
  *
- * Gate residual: the width is a raw length, and there is no breakpoint scale to
- * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
- * features are the part of the frontend gate's open half no declaration-scoped
- * rule can ever reach — so this is a pointer rather than a second copy of it.
+ * Census and gate residual: this is no longer a viewport breakpoint, so it has
+ * left the census `stylelint.config.mjs`'s residual paragraph keeps — that list
+ * names `map/map.css` alone now. The residual itself still applies, because the
+ * width is a raw length and there is no breakpoint scale to reach for: a
+ * container feature is as far out of a declaration-scoped rule's reach as a
+ * media feature, which is the half of the frontend gate that paragraph owns. A
+ * pointer, then, rather than a second copy of it.
  */
-@media (max-width: 27.4375rem) {
+@container (max-width: 25.4375rem) {
   /*
    * The direct child only. The bar's copy of the search is nested inside
    * `.header-search-bar` and is the one thing on this bar that must stay
@@ -333,8 +392,9 @@
    *
    * One auto margin per width, in other words, and this is the one below the
    * fold. It used to have to switch a second one off as well — the menu's own,
-   * with an `.app-header >` selector, because a media query contributes nothing
-   * to specificity and a bare `.header-menu` here would merely tie with the base
+   * with an `.app-header >` selector, because a conditional block contributes
+   * nothing to specificity — a media query then, a container query now, and
+   * neither — and a bare `.header-menu` here would merely tie with the base
    * rule further down this file and lose to it on source order, at every width,
    * silently. #327 removed the menu's margin outright: the search below the fold
    * is hidden, and above it the search's own pair of auto margins centres the
@@ -368,8 +428,8 @@
  * space is absorbed once per width instead. Above the fold the search's own
  * right margin is what pushes this button flush right; below it the field is
  * hidden and `.header-search-toggle`'s `margin-left: auto` does the same job for
- * the pair, unchanged and argued in that media query above. The menu ends up in
- * the same place at every width; what changes is which item pushed it there.
+ * the pair, unchanged and argued in that container query above. The menu ends up
+ * in the same place at every width; what changes is which item pushed it there.
  */
 .header-menu {
   position: relative;

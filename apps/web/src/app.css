@@ -49,14 +49,16 @@ body {
  * Wrapping was this shell's whole answer to a narrow window until #284 D17.
  * Below the width where those three stop fitting on one line, the search now
  * folds behind an icon rather than costing the bar a permanent second line, and
- * the breakpoint that decides it — with the measurement behind the number — is
- * `header/header.css`'s, next to the rules it switches. This rule is untouched
- * by that and still describes the row: what changed is how often the row has
- * reason to wrap. Each breakpoint in this app is owned by the surface that
- * measured its own content, and they are counted in one place —
- * `stylelint.config.mjs`'s residual paragraph, which owns why their widths are
- * raw lengths at all. There is still no shared breakpoint scale, and nothing
- * here to inherit one from.
+ * the query that decides it — with the measurement behind the number — is
+ * `header/header.css`'s, next to the rules it switches. Since #326 that query
+ * measures the bar's own content box instead of the window, so the header is not
+ * a viewport breakpoint any more and is not counted as one. This rule is
+ * untouched by either change and still describes the row: what changed is how
+ * often the row has reason to wrap. Each width in this app is owned by the
+ * surface that measured its own content, and the viewport breakpoints among them
+ * are counted in one place — `stylelint.config.mjs`'s residual paragraph, which
+ * owns why their widths are raw lengths at all. There is still no shared
+ * breakpoint scale, and nothing here to inherit one from.
  *
  * A centreline rather than a baseline, and that is the fix rather than a taste
  * (#284 D1). `baseline` is the right-sounding value for a row of text and the
@@ -93,7 +95,7 @@ body {
  *
  * The bar carries two controls: the search that finds a site by name, and the
  * disclosure everything else hides behind — with an icon standing in for the
- * first of them below the breakpoint above, which is one control in two forms
+ * first of them below the fold described above, which is one control in two forms
  * rather than a third thing earning a place on the row. The theme toggle was once bare here
  * and is inside that disclosure now (`header/HeaderMenu.tsx`), which is also
  * where the rule for what earns a place out here rather than behind a press is
