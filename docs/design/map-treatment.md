@@ -265,7 +265,8 @@ Placement:
   `Weather data by` — and reads `© OpenStreetMap contributors · OpenFreeMap` and
   `Open-Meteo.com`. Both links, the `©` and the `·` survive at every width, and the shortened
   weather credit is the compact form CLAUDE.md sanctions for a row that, as composed, cannot hold
-  both credits' full forms (owner-amended 2026-08-09, under CC BY 4.0 §3(a)(2)).
+  both credits' full forms (owner-amended 2026-08-09,
+  composed-row reading owner-confirmed 2026-08-11, under CC BY 4.0 §3(a)(2)).
 
   **That condition is now the constraint's own wording, not a reading of it.** It began as this
   section's judgement on the 2026-08-09 amendment, whose sentence measured the row against the

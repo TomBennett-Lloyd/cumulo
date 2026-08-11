@@ -15,8 +15,9 @@
 
    So do not restate the policy's current directive values — not here, not in a plan, not in a PR body,
    not in a second config. A security value with two carriers drifts in whichever direction nobody was
-   watching. Name the owning file and let the reader open it. (`child-src 'self'` appears in rule 2 in
-   the past tense, as #176's historical defect; it is not a statement of what the policy says today.)
+   watching. Name the owning file and let the reader open it. (`child-src 'self'` appears in rule 2 as
+   the subject of a worked example about an unenumerated hop — not as a statement of what the policy's
+   text is, today or ever. For that, read the template.)
 
 2. **Adding, changing or removing a directive means naming every directive that inherits from it, and
    stating what each one resolves to after the change.** The question is not "what does this directive
@@ -38,14 +39,24 @@
    | directive                                                                                                  | resolves through                                     |
    | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
    | `script-src`, `style-src`, `img-src`, `connect-src`, `font-src`, `media-src`, `object-src`, `manifest-src` | `default-src`                                        |
+   | `script-src-elem`, `script-src-attr`                                                                       | `script-src` → `default-src`                         |
+   | `style-src-elem`, `style-src-attr`                                                                         | `style-src` → `default-src`                          |
    | `child-src`                                                                                                | `default-src`                                        |
    | `frame-src`                                                                                                | `child-src` → `default-src`                          |
    | `worker-src`                                                                                               | `child-src` → `script-src` → `default-src`           |
    | `base-uri`, `form-action`, `frame-ancestors`, `sandbox`                                                    | **nothing** — omitted means unrestricted, not denied |
 
+   **The table is a floor, not a census.** Its source is the fallback list in the CSP3 specification
+   (W3C, _Content Security Policy Level 3_, the fetch directives and their "fallback" wording), and
+   that list is what a change enumerates against — a directive missing from the rows above is a gap in
+   this table, not evidence that nothing inherits from it. A directive the spec adds, or one nobody
+   here had reason to write down, is found by reading the source and is added as a row in the same
+   change that needs it.
+
    Read the chains in both directions. Downwards they say what an omitted directive falls back to.
-   Upwards they say which directives a change to `child-src`, `script-src` or `default-src` has just
-   moved underneath you.
+   Upwards they say which directives a change to `child-src`, `script-src`, `style-src` or
+   `default-src` has just moved underneath you — `script-src` alone moves `worker-src`,
+   `script-src-elem` and `script-src-attr`.
 
 4. **Omission has a meaning; state it when you touch the policy.** An absent CSP directive is never
    simply "not configured". It either inherits per the table above, or — for the bottom row — leaves
