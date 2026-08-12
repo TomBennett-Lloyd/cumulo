@@ -9,6 +9,7 @@ import type {
   ForecastChartProps,
 } from '../charts/ForecastChart';
 import type { QueryState } from '../data/use-fleet-query';
+import type { ChartUnit } from './chart-unit';
 import type { ChartCopy } from './fleet-panel-copy';
 import { EMPTY_FLEET_AGGREGATE, type FleetChartAggregate } from './fleet-series';
 import { PanelEmpty } from './panel-states';
@@ -194,6 +195,17 @@ export type OverlayState =
 export interface FleetChartContext {
   readonly siteCount: number;
   readonly chart: ChartCopy;
+  /**
+   * Which unit the points in this context's arms are already in (#291).
+   *
+   * The values arrive normalised — the panel's seam is `fleet-series.ts` and
+   * `site-overlay.ts`, both above this file — so what travels here is only the
+   * chart's need to say which unit it is drawing. It is the panel's whole state
+   * rather than the chart's one-member `'percent'`, because this is still the
+   * dashboard side of that seam; `fleetChart` below is where the two-state value
+   * becomes the by-presence prop.
+   */
+  readonly unit: ChartUnit;
   readonly overlay: OverlayState;
   /** Re-asks for the selected site's hours, and only those. */
   readonly onRetryOverlay: () => void;
@@ -254,10 +266,20 @@ const DRAWN_AS_LOADING: Pick<Required<ForecastChartProps>, 'loading'> = { loadin
  * three facts that barely interact, which is the shape rule 7 exists to refuse.
  * (`loading` and `error` are in fact exclusive, but that is a property of the
  * arms below rather than of this call, and the chart's own docblock says so.)
+ *
+ * `unit` is the fourth member of that set and the one that reads oddest, so it
+ * is worth saying why it is spelled this way (#291). The chart's prop is the
+ * one-member `'percent'` rather than a `'kw' | 'percent'` pair, so kW is its
+ * *absence* and no caller has to pass the default — which is what keeps a chart
+ * rendered without it emitting what it emitted before the toggle existed. The
+ * spread is therefore a translation across the panel seam rather than a
+ * forwarding of an optional flag: `?? 'kw'` here would be `testing.md` rule 9's
+ * defect, restating the chart's own default at the call site and retiring every
+ * test that exercises it.
  */
 const fleetChart = (
   points: readonly ForecastChartPoint[],
-  { chart, overlay }: FleetChartContext,
+  { chart, overlay, unit }: FleetChartContext,
   loading: boolean,
   error: ChartErrorNotice | null,
 ): ReactElement => {
@@ -267,6 +289,7 @@ const fleetChart = (
     tableCaption: chart.tableCaption,
     ...(loading ? DRAWN_AS_LOADING : {}),
     ...(error === null ? {} : { error }),
+    ...(unit === 'percent' ? { unit: 'percent' as const } : {}),
   };
 
   return overlay.kind === 'series' ? (

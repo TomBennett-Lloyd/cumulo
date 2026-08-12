@@ -31,9 +31,11 @@ import {
  * overlay suite was split on: that file owns the section's *copy* — which window
  * the chart names, what is and is not said about simulated actuals — and this
  * one owns its furniture. One slim controls row, one (i) — carrying the chart's
- * legend as well as its description since 2026-08-11 — a picker on every arm
- * that has a window to choose, and one chart present in every state the section
- * can be in.
+ * legend as well as its description since 2026-08-11 — a unit toggle on every
+ * arm, a picker on every arm that has a window to choose, and one chart present
+ * in every state the section can be in. What the toggle *does* is
+ * `FleetPanel.unit-toggle.test.tsx`'s, on this file's own subject line: that it
+ * is on the row, in its place, is furniture.
  *
  * The furniture includes a visible heading again. #323 deleted it and moved the
  * name onto the section's `aria-label`; the owner reversed that on 2026-08-11,
@@ -324,34 +326,40 @@ describe('FleetPanel’s controls row', () => {
     expect(container.querySelector('.fleet-chart-stats')).not.toBeNull();
   });
 
-  it('holds the name, the numbers, the description and the window control, in that order', async () => {
+  it('holds the name, the numbers, the description and the two controls, in that order', async () => {
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
     const controls = fleetControls(container);
 
     expect(within(controls).getByRole('button', { name: 'About this chart' })).toBeDefined();
+    expect(within(controls).getByRole('group', { name: 'Chart unit' })).toBeDefined();
     expect(within(controls).getByRole('button', { name: 'Aggregation range' })).toBeDefined();
 
     // Order, because the row reads left to right and is tabbed through in the
     // same direction: the section's name, then what it is a summary of, then the
-    // annotation, then the control that acts. `querySelectorAll` returns
+    // annotation, then the controls that act. `querySelectorAll` returns
     // document order, which is what a reader tabbing through and a screen reader
     // reading out both follow.
     //
-    // Four items, asserted as an exact list rather than four presence checks.
-    // #323 emptied this row down to the last two and the owner put the first two
-    // back on 2026-08-11; an exact list is what catches the row drifting in
-    // either direction — a fifth item appearing, or one of the four quietly
-    // going again.
+    // Five items, asserted as an exact list rather than five presence checks.
+    // #323 emptied this row down to two and the owner put the first two back on
+    // 2026-08-11; an exact list is what catches the row drifting in either
+    // direction — a sixth item appearing, or one of the five quietly going
+    // again.
     //
-    // The fourth is still `.range-picker` after the same day's fold: the picker
+    // `.unit-toggle` is #291's, and its place in this list is the claim rather
+    // than its presence: the two controls sit together at the row's end, in the
+    // order a reader meets them, with the description still ahead of both.
+    //
+    // The last is still `.range-picker` after the 2026-08-11 fold: the picker
     // kept its root class and its place on the row, and what changed is what
     // that root holds — a calendar trigger, with the three windows in a popover
-    // hung off it rather than laid out on this line. So this list is untouched
+    // hung off it rather than laid out on this line. So that member is untouched
     // by the fold, which is the point of the class having stayed.
     expect(Array.from(controls.children, (element) => element.className.split(' ')[0])).toEqual([
       'fleet-chart-title',
       'fleet-chart-stats',
       'info-tip',
+      'unit-toggle',
       'range-picker',
     ]);
   });

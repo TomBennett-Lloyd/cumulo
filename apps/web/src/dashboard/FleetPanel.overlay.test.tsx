@@ -32,6 +32,16 @@ afterEach(cleanup);
  * `site-overlay.test.ts`'s, and the join onto the fleet's hours is `chart-series.test.ts`'s. What
  * is left for this suite is the panel's part: when the request is spent, what it is asked for,
  * and whether the answer reaches the chart.
+ *
+ * **Every case here selects a site, so every case here is in percent of capacity** (#291). That is
+ * not a fixture detail this suite works around — it is the reason the overlay exists at all: a
+ * ~4 kW roof against a ~330 kW fleet is a flat line on an absolute axis, so a selection switches
+ * the panel to the unit both curves are comparable in (`chart-unit.ts`). The captions below end
+ * `% of capacity` and the rows are percentages for exactly that reason, and a suite that pinned
+ * kW here would be pinning a state a reader never sees with a site selected. What the toggle
+ * *does* — the auto-switch, a manual choice outranking it, the revert on deselect — is
+ * `FleetPanel.unit-toggle.test.tsx`'s subject; this suite only has to be in the unit the panel
+ * puts it in.
  */
 describe('FleetPanel with a site selected', () => {
   const overlayHeader = (): HTMLElement | null =>
@@ -58,25 +68,40 @@ describe('FleetPanel with a site selected', () => {
     expect(dataSource.siteForecastRequests).toEqual([`${SITE_A.id}@24`]);
   });
 
-  it('puts the site’s own kW beside the fleet’s in the table, hour for hour', async () => {
+  it('puts the site’s own output beside the fleet’s in the table, hour for hour', async () => {
     render(panel(new CountingFleetSource(FULL_FLEET), SITE_A_SELECTED));
     await settle();
 
     const table = await screen.findByRole('table', {
-      name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
+      name: 'Table view — fleet forecast and simulated actuals, 24 h range, % of capacity',
     });
 
     /*
-     * The fixture's own arithmetic, stated rather than computed. Site A forecasts 2 and 3 kW at
-     * 06:00 and 07:00; the fleet's medians at those hours are 6 and 8, because site B contributes
-     * 4 and 5. The site's column being *under* the fleet's median in both rows is what says the
-     * overlay is a component of the sum rather than a second copy of it.
+     * The fixture's own arithmetic, stated rather than computed, and in the unit a selection puts
+     * the panel in. Both sites are 4 kW, so the fleet's divisor is 8 kW at both hours and the
+     * site's own is 4.
+     *
+     * At 06:00 the fleet forecasts 2 + 4 = 6 kW (75.0%), its band is 1+3 = 4 (50.0%) to 3+6 = 9
+     * (112.5%), and its measured hour is 1.5 + 3.5 = 5 kW (62.5%); site A's own 2 kW is half its
+     * own nameplate (50.0%). At 07:00 the fleet forecasts 3 + 5 = 8 kW (100.0%), band 2+4 = 6
+     * (75.0%) to 4+7 = 11 (137.5%), no measured hour at all, and site A's 3 kW is 75.0% of its
+     * own.
+     *
+     * **The 112.5 and the 137.5 are the no-clamping rule visible in a suite.** A fleet outrunning
+     * the nameplate its inverters are rated at is a real reading, and flattening it to 100 would
+     * hide exactly the hour worth looking at (`fleet-series.ts` owns that rule; this is where it
+     * shows up as a number).
+     *
+     * The site's column being *under* the fleet's median at 06:00 and equal to neither at 07:00
+     * is the same claim the kW rows used to make, and it survives the unit change: the two
+     * divisors differ, so a site at 75% of its own roof under a fleet at 100% of its own is still
+     * the overlay being a component of the sum rather than a second copy of it.
      */
     await waitFor(() => {
       expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
         ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual', SITE_A.name],
-        ['06:00', '4.0', '6.0', '9.0', '5.0', '2.0'],
-        ['07:00', '6.0', '8.0', '11.0', '—', '3.0'],
+        ['06:00', '50.0', '75.0', '112.5', '62.5', '50.0'],
+        ['07:00', '75.0', '100.0', '137.5', '—', '75.0'],
       ]);
     });
   });
@@ -138,7 +163,7 @@ describe('FleetPanel with a site selected', () => {
     expect(overlayHeader()).toBeNull();
     expect(
       screen.getByRole('table', {
-        name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
+        name: 'Table view — fleet forecast and simulated actuals, 24 h range, % of capacity',
       }),
     ).toBeDefined();
   });
@@ -194,18 +219,20 @@ describe('FleetPanel with a site selected', () => {
     });
     expect(dataSource.siteForecastRequests).toEqual([`${SITE_A.id}@24`, `${SITE_B.id}@24`]);
 
-    // Site B forecasts 4 and 5 kW at these hours where site A forecast 2 and 3. The fleet's own
-    // columns are unchanged, which is the other half of "a selection redraws one line, not the
-    // chart".
+    // Site B forecasts 4 and 5 kW at these hours where site A forecast 2 and 3 — 100.0% and
+    // 125.0% of its own 4 kW roof, where site A read 50.0 and 75.0. The fleet's own columns are
+    // unchanged, which is the other half of "a selection redraws one line, not the chart", and
+    // the unit is unchanged too: a site-to-site move is one continuous selection episode, so no
+    // second courtesy switch fires and nothing about the fleet's rows moves under it.
     const table = screen.getByRole('table', {
-      name: 'Table view — fleet forecast and simulated actuals, 24 h range, kW',
+      name: 'Table view — fleet forecast and simulated actuals, 24 h range, % of capacity',
     });
 
     await waitFor(() => {
       expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
         ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual', SITE_B.name],
-        ['06:00', '4.0', '6.0', '9.0', '5.0', '4.0'],
-        ['07:00', '6.0', '8.0', '11.0', '—', '5.0'],
+        ['06:00', '50.0', '75.0', '112.5', '62.5', '100.0'],
+        ['07:00', '75.0', '100.0', '137.5', '—', '125.0'],
       ]);
     });
   });

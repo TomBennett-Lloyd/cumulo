@@ -51,10 +51,15 @@ more to say the wider it is drawn.
 #323 also took the visible `<h2>` and the "60 sites · 332 kW" line off that band, moving the name
 into the section's accessible name and deleting the numbers outright; the owner reversed that half
 on 2026-08-11 and both are visible text again, on the reasoning that a band with no card edge left
-around it needs a heading to say where the fleet's section begins, and that a plot of summed kW
-never states how many roofs it is a sum of (`apps/web/src/dashboard/FleetPanel.tsx` carries the
-argument; `fleet-panel.css` owns the container width below which the numbers hide). The rest of
+around it needs a heading to say where the fleet's section begins, and that a plot of the fleet's
+output never states how many roofs it is a sum of (`apps/web/src/dashboard/FleetPanel.tsx` carries
+the argument; `fleet-panel.css` owns the container width below which the numbers hide). The rest of
 #323 stands unchanged — this is a reversal of one clause, not of the ticket.
+
+That line stays in kW whatever unit the chart beside it is drawn in, which #291 made a live
+question rather than a hypothetical one. It states installed capacity, which is the divisor the
+chart's percentages are taken against — in percent mode it is the thing 100% means — so following
+the toggle would leave it restating a capacity as a percentage of itself.
 
 **The Sites section is gone, and its three jobs went three different ways.** The owner removed it
 on 2026-08-12 (round 3, item 4): _"i actually don't think we need the `Sites` section at the
@@ -67,7 +72,9 @@ and never opened by default. Where each thing it did now lives:
   that had justified the rows being on the page at all.
 - **Saying how big the fleet is** is the chart band's stats line — the "60 sites · 332 kW" the
   paragraph above records the owner restoring on 2026-08-11. The summary's count and that line
-  were two statements of one number for a day; one of them is left.
+  were two statements of one number for a day; one of them is left. It is also the page's only
+  statement of the fleet's installed capacity, which is what #291's percent mode is a percentage
+  _of_ — one more reason for it to be in kW there.
 - **Being a non-colour channel for marker state** went back to the markers.
   [`map-treatment.md`](map-treatment.md) had leaned on the table as the table view — every marker
   state with a row equivalent — and re-derives its relief from the tooltip, the card, the size
@@ -118,9 +125,13 @@ its expensive fleet read survived being displaced.
   anchored through `MapMarkerAnchor`). The answer to "which site is this" is drawn where the
   question was asked, and it rides the camera, so panning keeps it over its site.
 - **A selected site's forecast is a second series on the fleet chart**
-  (`apps/web/src/dashboard/site-overlay.ts`, drawn by `ForecastChart`'s `overlay` prop on one kW
-  axis). The comparison that used to need two charts and a memory is now one chart with two lines
-  on it — which is the whole reason the card carries no chart of its own.
+  (`apps/web/src/dashboard/site-overlay.ts`, drawn by `ForecastChart`'s `overlay` prop on one value
+  axis, in whichever unit the panel is showing). The comparison that used to need two charts and a
+  memory is now one chart with two lines on it — which is the whole reason the card carries no
+  chart of its own. #291 is what finished the job: a ~4 kW roof against a ~330 kW fleet is a flat
+  line on an absolute axis, so selecting a site switches that axis to percent of capacity, where
+  the two curves are comparable. A reader can move it back, and a reader who does keeps it
+  (`apps/web/src/dashboard/chart-unit.ts` holds the whole rule).
 
 What the card carries instead is the site's identity and physical facts, and the state of its
 first forecast: the `checking`/`generating`/`failed`/`halted` arms of the dashboard's poll, in the
