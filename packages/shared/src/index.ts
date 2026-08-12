@@ -1,9 +1,11 @@
 export {
+  type SiteHourEntry,
   aggregateFleetForecast,
   type FleetForecastPoint,
   aggregateFleetActuals,
   type FleetActualsPoint,
   fleetCapacityKw,
+  contributingCapacityKwByHour,
   fleetCentroid,
 } from './aggregation';
 export { apiErrorCodeSchema, type ApiErrorCode, apiErrorSchema, type ApiError } from './api-error';
