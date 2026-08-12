@@ -124,13 +124,36 @@
    a container query — delete the query when the stats line stops hiding, and a
    panel silently escapes to the page box on the next phone that opens it. The
    declaration says what is being promised, and costs a row in normal flow
-   nothing else. */
+   nothing else.
+
+   `margin-bottom` is the owner's round-3 item 2 (#449): the row and
+   `.fleet-panel-body` below it touched at 0px, and the chrome read as stuck to
+   the chart it introduces. What was asked for is "~5px", and 4px is what
+   shipped — `margin` and `/^margin-/` are on stylelint.config.mjs's
+   strict-value list with `ignoreFunctions: false`, so the only value this
+   declaration may take is a bare `var(--space-*)`, and a `calc()` contrived to
+   land on a literal 5px is refused by the gate rather than merely discouraged.
+   The scale's quantum here is 4px (`--space-1`), one step under the
+   `--space-2` the body uses between its own children, which is the right
+   direction anyway: the row is closer to the chart than the chart's parts are
+   to each other.
+
+   Two things it deliberately does not move. The container query above measures
+   the *inline* axis, so a bottom margin cannot reach the 20.375rem threshold;
+   and both of this row's overlays — `.info-tip-panel` (info.css) and
+   `.range-picker-popover` (range-picker.css) — are absolutely positioned at
+   `top: 100%` of this row, so they resolve against its padding box, which a
+   margin sits outside of. Neither overlay shifts by the 4px and neither
+   position needs re-deriving. What it does move is the
+   fold arithmetic in `charts/chart-geometry.ts`, by exactly 4px, and that
+   docblock's 2026-08-12 paragraph states the new stack. */
 .fleet-chart-controls {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
+  margin-bottom: var(--space-1);
   container-type: inline-size;
 }
 
