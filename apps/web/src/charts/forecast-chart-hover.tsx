@@ -515,8 +515,10 @@ export interface ForecastChartHoverLayerProps {
 
 /**
  * Drawn above every mark and below nothing: the crosshair and the readout are
- * chrome, so they sit on top, and the pointer target that summons them is the
- * one element after them.
+ * chrome, so they sit on top, and the one element after them is the plot's
+ * pointer target — a hit surface over the marks rather than the thing that
+ * summons this layer, since #421 moved the handlers that do up to the `<svg>`
+ * (`forecast-chart-hover-boundary.tsx`).
  *
  * The crosshair marks the **snapped** sample and the panel follows the
  * **pointer**, clamped into the plot by the same `tooltipAnchorX` that has

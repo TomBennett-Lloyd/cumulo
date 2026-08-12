@@ -90,7 +90,27 @@ export const ForecastChartHoverBoundary = (
     hover.selectSample(null);
   };
 
-  const readAtPointer = (event: ReactPointerEvent<SVGRectElement>): void => {
+  /**
+   * A mouse leaving the figure clears the readout; a finger lifting off it does
+   * not — #421's "a lifted finger keeps what it revealed".
+   *
+   * The two pointer types leave for opposite reasons, which is why one handler
+   * cannot answer both. A mouse that has left is a reader who has moved on and
+   * is still there to see the chart go quiet. A touch pointer *always* leaves,
+   * at the end of every tap and every drag, because the finger is the pointer:
+   * clearing on that event would undo the selection the tap just made, in the
+   * same frame, and no touch reader could ever see a readout at all.
+   *
+   * So a tap has no leave event to dismiss it, and needs none — dismissal is the
+   * existing blur path (`onBlur` below), which a tap anywhere else fires.
+   */
+  const clearReadoutForMouse = (event: ReactPointerEvent<SVGSVGElement>): void => {
+    if (event.pointerType === 'mouse') {
+      clearReadout();
+    }
+  };
+
+  const readAtPointer = (event: ReactPointerEvent<SVGSVGElement>): void => {
     hover.trackPointer(
       pointerSample({
         clientX: event.clientX,
@@ -144,6 +164,18 @@ export const ForecastChartHoverBoundary = (
         onFocus={readAtFocus}
         onBlur={clearReadout}
         onKeyDown={readAtKey}
+        /* The pointer listens on the whole figure — plot *and* both axis
+           gutters — because #421's tap contract is that the target is the graph,
+           not the drawing inside it: a thumb aimed at the start of the day lands
+           on the y axis as often as beside it, and a tap that summons nothing is
+           a chart that looks broken. Selection is still by x alone, and
+           `pointerSample` clamps that x into the plot, so a gutter tap reads the
+           end of the range it is nearest rather than a sample off the canvas.
+           `onPointerDown` as well as `onPointerMove`: a finger produces no hover
+           stream to be tracked, so the press *is* the reading. */
+        onPointerDown={readAtPointer}
+        onPointerMove={readAtPointer}
+        onPointerLeave={clearReadoutForMouse}
       >
         {children}
         <ForecastChartHoverLayer
@@ -154,17 +186,21 @@ export const ForecastChartHoverBoundary = (
           spanHours={spanHours}
           overlay={overlayReading}
         />
-        {/* Last child, and the whole plot: the readout must never depend on the
-            pointer hitting a 2px line. `charts.css` gives it the pointer-events
-            it needs and no fill. */}
+        {/* Last child, and the plot exactly — two jobs since #421 moved the
+            handlers up to the `<svg>`, neither of which is being the listener.
+            It is the plot's geometry marker: `e2e/chart-surfaces.spec.ts`
+            measures this rect as the drawn plot, and
+            `forecast-chart-details.test.tsx` pins its four edges to `scale.plot`.
+            And it is a hit surface over the marks — `charts.css` gives it the
+            pointer-events it needs and no fill, so a pointer inside the plot has
+            something solid to land on and bubbles from here into the handlers
+            above, rather than depending on hitting a 2px line. */}
         <rect
           className="forecast-chart-pointer-target"
           x={scale.plot.left}
           y={scale.plot.top}
           width={scale.plot.right - scale.plot.left}
           height={scale.plot.bottom - scale.plot.top}
-          onPointerMove={readAtPointer}
-          onPointerLeave={clearReadout}
         />
       </svg>
 

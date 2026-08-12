@@ -35,10 +35,32 @@
    box. The height is deliberately not here — it is the owned constant
    `CHART_VIEW_BOX_HEIGHT` (`chart-geometry.ts`), written onto the element as an
    attribute because it is geometry rather than styling, and the token scale has
-   no length that means "how tall a chart is". */
+   no length that means "how tall a chart is".
+
+   `touch-action` is what makes #421's drag-to-scrub possible without taking the
+   page away from the reader. The whole figure is the tap target now
+   (`forecast-chart-hover-boundary.tsx`), and at the default `auto` the browser
+   claims a horizontal drag on it for panning and cancels the pointer stream
+   partway through — the scrub stops mid-gesture with the readout stranded.
+   `none` would fix that and cost far more: the chart is a full-width band in a
+   scrolling column, so a finger that happened to start on it could no longer
+   scroll the page at all. `pan-y` is both at once — vertical panning stays the
+   browser's, horizontal movement is the chart's — which is exactly the split
+   this surface wants, since a selection here is by x alone. Measured on a device
+   in #404. It is a behaviour keyword rather than a length or a colour, so no
+   token applies.
+
+   `pinch-zoom` is named beside it because this property is an allow-list rather
+   than a list of exceptions: `pan-y` on its own permits vertical panning and
+   nothing else, so a two-finger zoom starting anywhere on this band would be
+   refused — on the largest data surface on the page, in a product `design.md`
+   rule 1 makes first-class on a phone, and to a reader magnifying a chart rather
+   than fighting it. It costs the scrub nothing: a pinch is two pointers and the
+   scrub is one, so the gesture the paragraph above is about is untouched. */
 .forecast-chart {
   display: block;
   width: 100%;
+  touch-action: pan-y pinch-zoom;
 }
 
 .forecast-chart-grid {
@@ -194,10 +216,15 @@
  *
  * It does land on the same value as `--color-chart-actuals` in both modes —
  * near-ink is what both mean — so crosshair and actuals are the same colour at
- * the same weight where they meet. Accepted rather than overlooked: they meet at
- * a crossing, not along a run (one is vertical, the other broadly horizontal),
- * and the crosshair exists only while a pointer is on the plot, so there is no
- * state in which a reader is asked to tell a stationary pair apart. Two tokens
+ * the same weight where they meet. Accepted rather than overlooked, and the
+ * whole of the argument is the crossing: they meet at a point, not along a run
+ * (one is vertical, the other broadly horizontal), so what a reader is asked to
+ * separate is a junction of two directions rather than two strokes lying on top
+ * of each other. That argument was carrying a second half until #421 — that the
+ * crosshair only ever exists under a live pointer, so the pair was never
+ * stationary — and a tap now pins the crosshair where the finger left it, over
+ * actuals that were stationary all along. So the stationary pair is a state the
+ * chart reaches, and it is the crossing alone that makes it legible. Two tokens
  * agreeing today is also not a reason to make one reference the other — they
  * mean different things and are free to diverge (chart-treatment.md reserves
  * near-ink for one *series*; this is chrome). */
@@ -206,9 +233,18 @@
   stroke-width: 2;
 }
 
-/* Invisible, but the entire plot is a target — readers aim at a time, not at a
- * 2px line. `fill: none` alone would make the rect untargetable; the
- * `pointer-events` declaration is what does the work. */
+/* Invisible, and what a pointer over the marks lands on — readers aim at a time,
+ * not at a 2px line. `fill: none` alone would make the rect untargetable; the
+ * `pointer-events` declaration is what does the work.
+ *
+ * It is no longer the listener, and since #421 no longer the whole target
+ * either: the handlers sit on the `<svg>` above it
+ * (`forecast-chart-hover-boundary.tsx`), so the figure hears a tap on either
+ * axis gutter as well, and what this rect does is give the plot's own interior a
+ * solid surface to be hit on before bubbling there. It stays plot-sized because
+ * that is the other thing it is — the drawn plot's geometry, which
+ * `e2e/chart-surfaces.spec.ts` measures and `forecast-chart-details.test.tsx`
+ * pins. */
 .forecast-chart-pointer-target {
   fill: none;
   pointer-events: all;

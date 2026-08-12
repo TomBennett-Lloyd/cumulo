@@ -234,9 +234,15 @@ const FILLS_PANEL = 'fills its section';
  * "equivalent to the width of the y axis" — is the second one: the svg was
  * filling the section perfectly while the plot stopped 32px inside it.
  *
- * This element is the plot rect exactly: `forecast-chart-hover-boundary.tsx`
- * sizes it from `scale.plot` because a reader has to be able to aim anywhere in
- * the plot, so measuring it is measuring where the marks may go.
+ * This element is the plot's geometry and nothing else:
+ * `forecast-chart-hover-boundary.tsx` sizes it from `scale.plot`, so measuring
+ * it is measuring where the marks may go. It used to be sized that way so a
+ * reader could aim anywhere in the plot; since #421 the pointer is heard by the
+ * `<svg>` around it — plot *and* both axis gutters — with an x the plot does not
+ * contain clamped into the one it does, so aiming is the canvas's business and
+ * these four edges are held here purely as the drawn plot's box. The widened
+ * target is measured in `e2e/chart-tap.spec.ts`; what is measured here is
+ * unchanged by it.
  */
 const PLOT_RECT = '.forecast-chart-pointer-target';
 
@@ -800,10 +806,14 @@ test('keeps the fleet chart laid out once a selected site is drawn over it', asy
  * Where the pointer arrives on the plot, and where it parks, as shares of the
  * plot's rendered width.
  *
- * Both are well inside the plot's own box, because the thing that hears a
- * pointer is the plot rect and not the whole svg (`.forecast-chart-pointer-target`,
- * `src/charts/forecast-chart-hover-boundary.tsx`) — a share near either edge would land in an
- * axis gutter and summon nothing at all. Both are also on the same side of the
+ * Both are well inside the plot's own box, and since #421 that is no longer
+ * because it is the only place a pointer is heard: the `<svg>` hears one across
+ * the whole figure, both axis gutters included, and an x the plot does not
+ * contain is clamped into the one it does
+ * (`src/charts/forecast-chart-hover-boundary.tsx`, measured in
+ * `e2e/chart-tap.spec.ts`). Both values stand unchanged all the same — a share
+ * out in a gutter now reads the clamped edge sample, so a sweep between two of
+ * them would travel nowhere and prove nothing. Both are also on the same side of the
  * point where the panel flips to the *left* of the pointer to stay on the canvas
  * (`tooltipAnchorX`, `src/charts/chart-geometry.ts`): that flip moves the anchor
  * backwards by the panel's whole width, and a sweep straddling it would be
