@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import { CHART_VIEW_BOX_HEIGHT } from '../src/charts/chart-geometry';
 import { routeBasemap } from './hermetic-basemap';
 import { layoutBoxOf, maybeBoxOf, settledBoxOf } from './layout-box';
-import { openSiteTable } from './site-table';
+import { revealSiteMarker } from './marker-reveal';
 import { PHONE_VIEWPORT } from './viewports';
 
 /*
@@ -494,8 +494,10 @@ test('fills the panel and folds the raw data away', async ({ page }) => {
    * is a panel *after* the figure instead of a row inside it, so a figure-scoped
    * locator would resolve to nothing and every assertion below would fail on a
    * chart that is behaving perfectly (`charts/ForecastChart.tsx` carries the
-   * move). The band is still the right scope — the page draws other disclosures,
-   * and the fleet table's is one of them.
+   * move). The band is kept as the scope even so, though the reason weakened on
+   * 2026-08-12: the fleet's table was the page's other disclosure and #451 took
+   * it away, so this now guards against a second chart arriving rather than
+   * against a neighbour that is there today.
    */
   const summary = page.locator(`${CHART_SECTION} .forecast-chart-summary`);
   const table = page.locator(`${CHART_SECTION} .forecast-chart-table`);
@@ -511,14 +513,15 @@ test('fills the panel and folds the raw data away', async ({ page }) => {
 
   /*
    * Opened with a *keystroke*, because "one keystroke away" is what the
-   * treatment promises and a click would prove only the pointer half of it. This
-   * is the argument `keyboard-focus.spec.ts` makes for the fleet table's
-   * identical fold — a `<details>` that cannot be opened from the keyboard puts
-   * the entire table view out of a keyboard reader's reach, with every other
-   * assertion unable to see it — applied to the chart's twin, which carries the
-   * same relief obligation (`docs/design/chart-treatment.md`). `press` focuses
-   * the summary before pressing, so a summary that stopped being
-   * keyboard-operable fails here rather than being activated anyway.
+   * treatment promises and a click would prove only the pointer half of it. A
+   * `<details>` nothing can open from the keyboard puts the entire table view
+   * out of a keyboard reader's reach, with every other assertion here unable to
+   * see it — and that view is the chart's own relief obligation
+   * (`docs/design/chart-treatment.md`), so reaching it is the obligation rather
+   * than a convenience. The fleet's table made the identical argument for its
+   * identical fold until #451 removed it, and this is the case that carries it
+   * now. `press` focuses the summary before pressing, so a summary that stopped
+   * being keyboard-operable fails here rather than being activated anyway.
    */
   await summary.press('Enter');
 
@@ -759,26 +762,28 @@ test.describe('a phone', () => {
 
 test('keeps the fleet chart laid out once a selected site is drawn over it', async ({ page }) => {
   /*
-   * The same contract in the other state of the same chart. A seeded row, so the
-   * site's forecast is answered on the first poll; the first-forecast delay
-   * named above belongs to sites this session creates, and nothing here creates
-   * one. The row is behind the fleet table's disclosure since #265, so reaching
-   * it means opening that first — `site-table.ts` is where that gesture lives.
+   * The same contract in the other state of the same chart. A seeded site, so
+   * its forecast is answered on the first poll; the first-forecast delay named
+   * above belongs to sites this session creates, and nothing here creates one.
+   * The map is where a site is selected since #451, and the demo fleet starts
+   * clustered — so reaching one marker means zooming in first, which is what
+   * `marker-reveal.ts` owns. The marker's `aria-label` is the site's name
+   * (`src/map/MarkerButton.tsx`), which is what the legend below is checked for.
    */
-  const row = await openSiteTable(page);
-  const siteName = await row.textContent();
+  const marker = await revealSiteMarker(page);
+  const siteName = await marker.getAttribute('aria-label');
 
   if (siteName === null) {
-    throw new Error('The first site row has no name in it.');
+    throw new Error('The revealed site marker has no name on it.');
   }
 
-  await row.click();
+  await marker.click();
 
   const figure = page.locator(CHART_FIGURE);
 
   /*
    * The mark, and then the name. Polled rather than read once because the
-   * overlay is a second request that lands after the row is pressed — and both
+   * overlay is a second request that lands after the marker is pressed — and both
    * halves are asserted because either alone is satisfiable by a broken chart: a
    * mark with no legend row is a line the reader cannot identify (the treatment's
    * rule that colour never names a series alone), and a legend row with no mark

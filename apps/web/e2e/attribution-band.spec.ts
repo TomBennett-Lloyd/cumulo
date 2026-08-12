@@ -16,11 +16,17 @@ import { SMALL_PHONE_VIEWPORT } from './viewports';
  * there — accepted, not worked around. And what makes that acceptable is a
  * **relief rule**: the map pans, markers keep their place in the tab order and
  * stay keyboard-operable, where Enter selects exactly as a click would, and the
- * site table and the header's search reach every site without touching the map.
- * This file is the executable form of two of those: the occlusion is asserted as
+ * header's search reaches a site by name without touching the map.
+ * This file is the executable form of the first two: the occlusion is asserted as
  * a fact rather than tolerated as a mystery, and the keyboard relief beside it is
- * what stops the fact being a defect. The site table and the header's search are
- * not reached from here.
+ * what stops the fact being a defect. The search is not reached from here.
+ *
+ * That family had a fourth member — the fleet's site table — until the owner
+ * removed it on 2026-08-12 (#451). Nothing in this file changes, and that is a
+ * fact rather than a convenience: the two members it measures are properties of
+ * the map itself, so neither was ever discharged by a surface elsewhere on the
+ * page. The Attribution section of `map-treatment.md` re-derives the family and
+ * says plainly which part of it the removal cost.
  *
  * Since #428 the band is a chip in the map's bottom-right corner rather than a
  * strip across the whole bottom edge, and every claim here survives that
@@ -209,7 +215,7 @@ const reachableSiteMarkerName = async (page: Page): Promise<string> => {
 /**
  * The one site marker answering to this name — by role and accessible name, so
  * the locator says what a reader would say, and narrowed to the map's own
- * markers so a row elsewhere on the page carrying the same site cannot match it.
+ * markers so nothing else on the page carrying the same site's name can match it.
  */
 const siteMarkerNamed = (page: Page, name: string): Locator =>
   page.getByRole('button', { name, exact: true }).and(page.locator(SITE_MARKER));

@@ -18,7 +18,7 @@ import { useTheme } from './use-theme';
  * any more.
  *
  * The header went with it. The bar carries a site search, which needs the fleet
- * and selects into the very `selectedSiteId` the markers and rows read, so
+ * and selects into the very `selectedSiteId` the markers read, so
  * `Dashboard` renders `AppHeader` above its map (`header/AppHeader.tsx` has the
  * argument, and the cost). What is left here is genuinely the frame: the
  * outermost box, the boundary, the data source, and the theme.

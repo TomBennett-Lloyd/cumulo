@@ -2,17 +2,16 @@
  * The fleet chart section: a full-width band under the map, and the page's one
  * chart.
  *
- * It was a card until #323 — the same chrome as the site table below it,
- * surface plus `--radius-md` plus `--space-4` of padding, so that the two read
- * as siblings in one reading. What that arrangement got wrong is what #323
+ * It was a card until #323 — the same chrome as the site table that sat below it
+ * then, surface plus `--radius-md` plus `--space-4` of padding, so that the two
+ * read as siblings in one reading. What that arrangement got wrong is what #323
  * fixed: the chart's neighbour is the *map*, not the table. They are the same
  * fleet drawn twice, and a rounded card inset in a centred measure put a border,
  * a gap and a page margin between two things that should touch (design.md rule
  * 4). So the radius goes, the measure goes, and the surface stays — the map's
  * band and this one are one continuous run of `--color-surface`, with no seam
- * for a reader to read a separation into. The site table keeps its own card and
- * is now the only one; it is genuinely a separate thing, and its rule says so
- * (site-table.css).
+ * for a reader to read a separation into. The table itself left the page on
+ * 2026-08-12, so there is no card below this band to be a sibling of.
  *
  * These `.fleet-chart-*` classes are this section's and nothing else's. The
  * async states it renders wear `panel-states.css`'s `.panel-*` classes, which

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { MapRegionComponent } from './dashboard/MapRegion';
+import { DemoFleetDataSource } from './data/demo-fleet-data-source';
 import { PRODUCT_TAGLINE } from './header/header-copy';
 import { MapSurface } from './map/MapSurface';
 import { THEME_STORAGE_KEY } from './theme';
@@ -84,17 +85,28 @@ const stubSystemPrefersDark = (prefersDark: boolean): void => {
 /**
  * Render the app and wait until its one surface is on screen.
  *
- * The fleet's own table is the marker: it belongs to the dashboard rather than
- * to the shell, so finding it proves the shell mounted the surface — and it is
- * rendered only once the fleet listing has answered, so awaiting it settles the
- * request the dashboard kicks off and nothing resolves after the test. It
- * replaced the `Sites` heading that used to serve here, which the disclosure's
- * own summary took over from (#265); the summary would have done as well, and
- * the table is picked because it is the half that waits on the listing.
+ * The marker is the fleet chart's own size line, waited on until it stops
+ * reporting an empty fleet. It has to satisfy two things at once: belong to the
+ * dashboard rather than to the shell, so that finding it proves the shell
+ * mounted the surface, and change when the listing answers, so that awaiting it
+ * settles the request the dashboard kicks off and nothing resolves after the
+ * test. The fleet's own table served here until 2026-08-12 and is gone with the
+ * rest of the `Sites` section; what replaced it had to be chosen rather than
+ * substituted, because most of this page is on screen from the first frame. The
+ * chart's table twin in particular is *not* a candidate — since #284 D3 the
+ * panel renders its figure in every state, twin included, so it is present
+ * before the listing resolves and awaiting it would prove nothing.
+ *
+ * Read by class, as `FleetPanel.test.tsx` reads the same line: it is the one
+ * element wearing it (`fleet-panel.css` says so beside the rule), and the text
+ * itself is `fleet-panel-copy.ts`'s to word. The assertion is only that the line
+ * has stopped saying "0 sites" — the fleet's actual size is not restated here.
  */
 const renderApp = async (mapRegion: MapRegionComponent): Promise<void> => {
   render(<App mapRegion={mapRegion} />);
-  await screen.findByRole('table', { name: 'Fleet sites' });
+  await waitFor(() => {
+    expect(document.querySelector('.fleet-chart-stats')?.textContent).not.toMatch(/^0 sites/u);
+  });
 };
 
 /**
@@ -115,25 +127,43 @@ const openHeaderMenu = (): void => {
 const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark theme' });
 
 /**
- * The name of the first site the page listed, read off the page itself.
+ * The name of the first site the fleet holds, asked of the source itself.
  *
- * The search and the site table are fed by one fleet — that is the whole point
- * of the bar being rendered by `Dashboard` — so a name the table is showing is a
- * name the search must be able to find. Reading it here rather than importing
- * the demo fleet's generator keeps the two from agreeing by construction, which
- * is the same reason `dashboard-test-fixture.tsx` asks the *source* for a site
- * rather than deriving one from the seed.
+ * It was read off the page until 2026-08-12, out of the site table the app no
+ * longer has — the search was the only other surface naming a site, and taking
+ * the name from the search to then look it up in the search would have been a
+ * test agreeing with itself. So the read moves to the source, which is the
+ * precedent `dashboard-test-fixture.tsx` already sets: ask the *source* for a
+ * site rather than deriving one from the seed.
+ *
+ * What that keeps is the property the case is for. Neither the app nor this file
+ * spells a site name, so a search fed an empty array — the failure this is the
+ * only guard against — still cannot pass, and a fleet whose names changed shape
+ * moves both sides together. What it costs is the last step of the old chain:
+ * this no longer witnesses that the page *listed* the name, only that the source
+ * holds it and the search offers it back. The dashboard listing at all is
+ * `renderApp`'s wait, above.
+ *
+ * A second `DemoFleetDataSource` rather than the app's own instance, which is
+ * module-private to `App.tsx` — `fleetDataSource` there, passed down as
+ * `Dashboard`'s `dataSource`, so the dashboard's own default is never the one
+ * this path runs against. They agree because the demo fleet is
+ * generated from `canonicalFleetSeed` and nothing here creates a site.
  */
-const firstListedSiteName = (): string => {
-  const name = screen
-    .getByRole('table', { name: 'Fleet sites' })
-    .querySelector('.site-table-select')?.textContent;
+const firstListedSiteName = async (): Promise<string> => {
+  const listed = await new DemoFleetDataSource().listSites();
 
-  if (name === undefined || name === '') {
-    throw new Error('The fleet listed no site for the search to find.');
+  if (listed.kind !== 'ok') {
+    throw new Error('The demo fleet refused to list its sites.');
   }
 
-  return name;
+  const [site] = listed.value;
+
+  if (site === undefined) {
+    throw new Error('The demo fleet is empty; the search has no site to find.');
+  }
+
+  return site.name;
 };
 
 beforeEach(() => {
@@ -297,12 +327,12 @@ describe('App shell', () => {
     await renderApp(StandInMapRegion);
 
     /*
-     * A name taken off the fleet the page actually listed, rather than one
+     * A name taken from the fleet source the app runs against, rather than one
      * spelled out here or regenerated from the seed. Both alternatives would
      * still pass if the app and the test drifted together, which is the failure
      * this case is the only guard against.
      */
-    const siteName = firstListedSiteName();
+    const siteName = await firstListedSiteName();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Search sites by name' }), {
       target: { value: siteName },

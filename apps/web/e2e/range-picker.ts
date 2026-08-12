@@ -2,9 +2,10 @@
  * The fleet panel's window picker, as the browser lane addresses it.
  *
  * One module rather than a selector written out per spec, for the reason
- * `site-table.ts` gives about the fleet's disclosure (`structure.md` rule 7): a
- * spec reaching for this control reaches for it as one fact, so a change to how
- * the picker states that should be a one-file change rather than a hunt. The
+ * `marker-reveal.ts` gives about reaching a site on the map (`structure.md`
+ * rule 7): a spec reaching for this control reaches for it as one fact, so a
+ * change to how the picker states that should be a one-file change rather than
+ * a hunt. The
  * 2026-08-11 fold is what that reasoning was banking: the picker became a
  * calendar trigger over a popover, and the two exports below are what absorbed
  * it.

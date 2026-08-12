@@ -125,14 +125,15 @@ test('boots the dashboard and map with zero CSP violations', async ({ page }) =>
    * the placeholder being gone rather than stacked behind it, and the fleet
    * rendering at all.
    *
-   * At least one row, not the fleet size — `composition.spec.ts` owns that
+   * At least one marker, not the fleet size — `composition.spec.ts` owns that
    * number and asserting it twice would give it two owners (`architecture.md`
-   * rule 9). What this case needs from the table is only that the app got far
-   * enough to render one.
+   * rule 9). What this case needs from the fleet is only that the app got far
+   * enough to draw it. Either kind of marker serves: a cluster is as much a
+   * listing that resolved as a site is.
    */
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(page.locator('.map-placeholder')).toHaveCount(0);
-  await expect(page.locator('[data-site-id]').first()).toBeAttached();
+  await expect(page.locator('.map-cluster-marker, .map-site-marker').first()).toBeAttached();
 
   const violations = await page.evaluate(() => window.cumuloCspViolations);
 

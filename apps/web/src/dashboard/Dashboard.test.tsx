@@ -16,8 +16,7 @@ import {
   clickMap,
   CREATED_SITE_NAME,
   fleetChartTable,
-  fleetRows,
-  fleetTable,
+  mapMarkers,
   fleetChartSection,
   renderDashboard,
   settle,
@@ -184,24 +183,25 @@ describe('Dashboard', () => {
 
     await settle();
 
-    expect(fleetRows()).toHaveLength(60);
+    expect(mapMarkers()).toHaveLength(60);
 
     // The read-capacity rule from ADR 0002's review of this ticket: the fleet is
     // listed once. A dashboard that re-listed on a cadence would show up here as
-    // a second call, and in production as three tabs saturating the table.
+    // a second call, and in production as three tabs saturating the fleet API.
     await advanceBy(CREATION_TO_FORECAST_BUDGET_MS);
 
     expect(listSites).toHaveBeenCalledTimes(1);
   });
 
-  it('answers a site selected on the map with its card, and marks its row', async () => {
+  it('answers a site selected on the map with its card, and marks the marker', async () => {
     const site = firstSeededSite();
     const container = renderDashboard(new DemoFleetDataSource());
     await settle();
 
     expect(sitePopover(container)).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+    const marker = screen.getByRole('button', { name: `Marker: ${site.name}` });
+    fireEvent.click(marker);
 
     expect(sitePopover(container)).not.toBeNull();
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
@@ -209,21 +209,25 @@ describe('Dashboard', () => {
     // nothing displaces it now, which is what lets the site be drawn *over* the
     // fleet rather than instead of it (#265).
     expect(fleetChartSection(container)).not.toBeNull();
-    expect(
-      within(fleetTable())
-        .getByRole('button', { name: (name) => name.startsWith(site.name) })
-        .getAttribute('aria-current'),
-    ).toBe('true');
+    // The marker says which site is selected, not only the card. This half used
+    // to be asserted on the site table's row for the same site — the table view
+    // of the same state — and the marker is where that state is announced now
+    // that the table has gone.
+    expect(marker.getAttribute('aria-current')).toBe('true');
   });
 
-  it('marks the map marker for a site selected in the list', async () => {
+  it('marks the map marker for a site picked out of the header’s search', async () => {
     const site = firstSeededSite();
     renderDashboard(new DemoFleetDataSource());
     await settle();
 
-    fireEvent.click(
-      within(fleetTable()).getByRole('button', { name: (name) => name.startsWith(site.name) }),
-    );
+    // Selected somewhere other than the map, which is what this case is for: one
+    // `selectedSiteId` is what makes two surfaces agree rather than two copies
+    // that happen to. The search is the surviving off-map selector — it was the
+    // site table's row until 2026-08-12 — and it reaches the same handler.
+    const search = screen.getByRole('combobox', { name: 'Search sites by name' });
+    fireEvent.change(search, { target: { value: site.name } });
+    fireEvent.keyDown(search, { key: 'Enter' });
 
     expect(
       screen.getByRole('button', { name: `Marker: ${site.name}` }).getAttribute('aria-current'),
@@ -314,7 +318,7 @@ describe('Dashboard', () => {
     // and would wait out the whole deadline on it.
     expect(created.name).toBe(CREATED_SITE_NAME);
     expect(getSiteForecast).toHaveBeenCalledWith(created.id);
-    expect(fleetRows()).toHaveLength(61);
+    expect(mapMarkers()).toHaveLength(61);
   });
 
   it('refuses a fourth site inside the minute and does not send it', async () => {
@@ -338,7 +342,7 @@ describe('Dashboard', () => {
     // can only be re-counted by pressing it again (see the recovery test below).
     expect(screen.getByText(/wait \d+s before adding another site/)).toBeDefined();
     expect(createSite).toHaveBeenCalledTimes(3);
-    expect(fleetRows()).toHaveLength(63);
+    expect(mapMarkers()).toHaveLength(63);
     // 15 s for the reason given at the first poll-driven case above.
   }, 15_000);
 
@@ -367,7 +371,7 @@ describe('Dashboard', () => {
     await settle();
 
     expect(createSite).toHaveBeenCalledTimes(4);
-    expect(fleetRows()).toHaveLength(64);
+    expect(mapMarkers()).toHaveLength(64);
     // 15 s for the reason given at the first poll-driven case above.
   }, 15_000);
 
@@ -396,18 +400,21 @@ describe('Dashboard', () => {
     expect(screen.getByText(/Generating first forecast/u)).toBeDefined();
   });
 
-  it('says why the fleet is missing rather than showing an empty table', async () => {
+  it('says why the fleet is missing rather than showing an empty fleet', async () => {
     renderDashboard(new FlakyFleetSource());
     await settle();
 
     expect(screen.getByRole('alert').textContent).toContain('Fleet unavailable');
-    expect(screen.queryByRole('table', { name: 'Fleet sites' })).toBeNull();
+    // Nothing is drawn as if it had arrived. This was asserted on the fleet's
+    // table until 2026-08-12 — "no empty table" — and the map is where an
+    // unlisted fleet would now be visible as an absence of markers.
+    expect(mapMarkers()).toHaveLength(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
 
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(fleetRows()).toHaveLength(60);
+    expect(mapMarkers()).toHaveLength(60);
   });
 });
 
@@ -550,7 +557,7 @@ describe('Dashboard attribution', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
 
-    expect(fleetRows()).toHaveLength(60);
+    expect(mapMarkers()).toHaveLength(60);
     expect(attributionLinks()).toHaveLength(1);
   });
 });

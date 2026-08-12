@@ -93,12 +93,6 @@
   padding: var(--space-4);
 }
 
-/* There is no `.dashboard-slot` card here any more, and no heading rule with
-   it. The one section that wore them was the fleet's, and its heading is now
-   the `<summary>` of the disclosure the table sits behind (site-table.css),
-   which carries the card itself. A rule kept for a class nothing renders is a
-   claim about a shape the page does not have. */
-
 /* There is no context-region box here any more. One region under the map showed
    either a selected site's panel or the fleet's, and it existed as an addressable
    box mainly so a scroll effect could bring it back into view. #265 put a
@@ -106,18 +100,17 @@
    forecast on the fleet's chart, so the reading below the map is a plain flow
    with nothing that swaps and nothing to scroll to. */
 
-/* The fleet's own box: the table's disclosure, with the listing's pending and
-   failure states stacked above it when there are any.
+/* The fleet's own box: the listing's pending and failure states, and nothing
+   else since the fleet's table left the page on 2026-08-12.
 
    It used to be a scroller of its own — sixty rows are taller than the map, and
    the old column put the site detail panel *after* this section, so an
    unbounded list pushed the thing a selection was for below the fold. The
    context swap (#148) moved that panel above it, which removed *that* reason,
    and a scroller nested inside another scroller was only ever the cost of the
-   old order. One scroller now, and since #265 it is the document's — with the
-   rows folded away behind a summary by default, so the page ends a screen below
-   the map rather than sixty rows below it, and scroll position simply stays
-   where the reader put it.
+   old order. One scroller now, and it is the document's — the box is empty in
+   the state the page is usually in, so scroll position simply stays where the
+   reader put it.
 
    No top margin any more: the heading it used to clear is gone, and the space
    above this box is `.dashboard-content`'s top padding to give — this is its

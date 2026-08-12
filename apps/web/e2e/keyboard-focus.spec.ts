@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
 import { settledBoxOf } from './layout-box';
-import { openSiteTable } from './site-table';
+import { revealSiteMarker } from './marker-reveal';
+import { firstSiteIdentity } from './site-identity';
 
 /*
  * Where the focus is when a site opens, driven by a real keyboard and a real
@@ -17,19 +18,35 @@ import { openSiteTable } from './site-table';
  * Under jsdom that is provable only as far as `document.activeElement` — the
  * assertion `Dashboard.focus.test.tsx` already makes. What it cannot show is the
  * half a reader actually experiences: whether the ring `@cumulo/ui` paints on
- * `:focus-visible` is still on the row they pressed. `:focus-visible` is a
+ * `:focus-visible` is still on the marker they pressed. `:focus-visible` is a
  * browser heuristic over *how* focus arrived, jsdom implements no heuristic and
  * paints nothing, and no amount of unit testing can substitute for one.
  *
  * That ring is the half of WCAG 2.4.7 the rings-only-for-keyboards change (#339)
  * has to keep: rings came off *pointer* flows, and a keyboard reader who presses
- * Enter on a row must still be able to see where they are afterwards. So the
+ * Enter on a site must still be able to see where they are afterwards. So the
  * first case is one interaction performed the way a keyboard user performs it:
- * Tab to the fleet table's summary, open it with Enter, Tab until a row has
- * focus, press Enter again, and measure what the browser then decided to paint.
- * Every step is a real key event — `Locator.press` on the row would reach the
- * same handler while telling us nothing about whether the row is reachable by
- * tabbing at all.
+ * Tab until a site's marker holds the focus, press Enter, and measure what the
+ * browser then decided to paint. Every step is a real key event —
+ * `Locator.press` on the marker would reach the same handler while telling us
+ * nothing about whether the marker is reachable by tabbing at all.
+ *
+ * The marker is where that claim lives since #451 took the fleet's table off the
+ * page (the owner's round-3 decision; `docs/design/dashboard-composition.md`
+ * records it). It used to be a table row, and the table was the *second* way to
+ * select a site — so the row carrying the ring and the marker carrying it were
+ * two routes to the same state and this case measured the easier one. Two routes
+ * remain and they are not interchangeable: the header's search reaches a site
+ * *by name* and keeps the focus in its own input, which is the combobox's own
+ * discipline (`header.spec.ts` drives it that way), so the marker is the only
+ * route that ever hands a keyboard reader the focus out onto the map. A marker
+ * nothing can tab to would shut the map — the page's primary surface, and the
+ * only way to reach a site spatially rather than by name — to a keyboard reader
+ * entirely (WCAG 2.1.1), and a marker that takes focus without painting is that
+ * reader standing somewhere they cannot see (WCAG 2.4.7). Both are what the
+ * first case fails on, and no other spec in either lane can: jsdom paints no
+ * ring, and `pointer-focus.spec.ts` is satisfied by a page with no rings
+ * anywhere.
  *
  * What it leaves uncovered is worth naming here rather than leaving to be
  * inferred. The card's hand-back on the way out is owed only to a reader who has
@@ -37,19 +54,12 @@ import { openSiteTable } from './site-table';
  * is `document.activeElement` again, so `map/SitePopoverCard.test.tsx` and
  * `Dashboard.focus.test.tsx` keep it in the lane that can see it rather than
  * this one re-proving it slowly. But the *journey* into the card is exactly this
- * lane's kind of question and no case here asks it: the map precedes the reading
- * column in DOM order, and the card is portaled into maplibre's marker overlay,
- * so a reader standing on a row has to travel *backwards* out of the table and
- * through the map's own controls to reach the answer they just opened. Only a
- * real tab order can say whether they arrive. `docs/tech-debt.md` carries that
- * gap; this comment is not a claim that it is covered.
- *
- * The disclosure is part of that claim rather than a preamble to it. The rows
- * are folded away by default since #265, so a `<details>` that could not be
- * opened from the keyboard would put the entire table view — the relief
- * `map-treatment.md` requires for a marker palette that cannot carry state by
- * colour alone — out of a keyboard reader's reach, with every other assertion
- * here unable to see it.
+ * lane's kind of question and no case here asks it. The card is portaled into
+ * maplibre's marker overlay, as the markers themselves are, so where it lands
+ * relative to the marker that opened it is decided by the order maplibre
+ * appended the two elements in rather than by anything this repo writes down.
+ * Only a real tab order can say whether a reader arrives. `docs/tech-debt.md`
+ * carries that gap; this comment is not a claim that it is covered.
  *
  * The second case measures the same ring on the fleet chart, and it exists
  * because #440 gave that chart the only pointer-ring suppression on this page
@@ -85,15 +95,15 @@ import { openSiteTable } from './site-table';
  */
 
 /**
- * How many Tab presses to allow before calling the row unreachable.
+ * How many Tab presses to allow before calling the target unreachable.
  *
  * A ceiling, not a measurement of the tab order: the map's marker buttons come
  * before the content column in DOM order — the map is the first thing in the
  * dashboard and the column follows it down the page (#265) — and their number
- * moves with the clustering, so pinning an exact count would make this case
- * fail on a camera change rather than on a defect. Generous enough to cross
- * every marker, small enough that a site table nothing can tab into fails loudly
- * here rather than as an unexplained Playwright timeout.
+ * moves with the clustering, so pinning an exact count would make a case fail on
+ * a camera change rather than on a defect. Generous enough to cross every
+ * marker, small enough that a control nothing can tab into fails loudly here
+ * rather than as an unexplained Playwright timeout.
  */
 const MAX_TAB_PRESSES = 100;
 
@@ -107,33 +117,54 @@ interface FocusRing {
   readonly widthPx: number;
 }
 
-/** The focused element's site id, or `null` when focus is elsewhere. */
-const focusedSiteId = async (page: Page): Promise<string | null> =>
-  page.evaluate(() => document.activeElement?.getAttribute('data-site-id') ?? null);
+/** One site's mark on the map — a real `<button>` (`src/map/MarkerButton.tsx`). */
+const SITE_MARKER = '.map-site-marker';
 
 /**
- * Tab to the fleet table's summary and open it with Enter.
+ * The marker for one named site.
  *
- * The first half of a keyboard reader's route to a row, and an assertion in its
- * own right: the disclosure is shut when the page loads, so every row below it
- * is unreachable unless a keystroke on the summary opens it. Visibility is what
- * says it opened — a closed `<details>` keeps its children in the DOM, so a
- * count would pass against a table nobody can see.
- *
- * Throws rather than returning quietly when the summary never takes focus: the
- * message names the element that failed, where a bare timeout on the row below
- * would blame the wrong one.
+ * By accessible name rather than by position, because "the marker I revealed" is
+ * what every caller here means and the drawn set is reordered by the clustering.
+ * The name is safe to interpolate: the demo fleet composes it from a place and
+ * an index (`packages/shared/src/fleet.ts`), so it carries no quote to close the
+ * attribute selector early.
  */
-const openSiteTableFromKeyboard = async (page: Page): Promise<void> => {
-  const summary = page.locator('.site-table-summary');
+const markerByName = (name: string): string => `${SITE_MARKER}[aria-label="${name}"]`;
 
-  await expect(summary).toBeVisible();
+/**
+ * The focused site marker's name, or `null` when focus is anywhere else.
+ *
+ * `matches` rather than `closest`: what the cases below are about is the reader
+ * standing on the marker itself, and a focus that had landed on something
+ * *inside* it would be a different state worth failing on rather than one to
+ * report as the marker's.
+ */
+const focusedMarkerName = async (page: Page): Promise<string | null> =>
+  page.evaluate((selector) => {
+    const active = document.activeElement;
+
+    return active?.matches(selector) === true ? active.getAttribute('aria-label') : null;
+  }, SITE_MARKER);
+
+/**
+ * Tab from wherever the focus is until one named site's marker is holding it.
+ *
+ * This is the reachability half of the case that calls it, not scaffolding for
+ * it: the map is the only way to select a site *spatially* since #451 — the
+ * header's search reaches one by name — so a marker that never takes focus is a
+ * map no keyboard reader can open a site from (WCAG 2.1.1) and the throw below
+ * is what that reads as. Visibility first, because a marker still
+ * inside its cluster is not in the tab order at all and the loop would report
+ * the unreachability of something that was never drawn.
+ *
+ * Throws with the site named rather than letting the ring measurement report a
+ * `none` on whatever else happened to hold the focus.
+ */
+const tabToMarker = async (page: Page, name: string): Promise<void> => {
+  await expect(page.locator(markerByName(name))).toBeVisible();
 
   for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
-    if (await summary.evaluate((element) => element === document.activeElement)) {
-      await page.keyboard.press('Enter');
-      await expect(page.locator('[data-site-id]').first()).toBeVisible();
-
+    if ((await focusedMarkerName(page)) === name) {
       return;
     }
 
@@ -141,41 +172,16 @@ const openSiteTableFromKeyboard = async (page: Page): Promise<void> => {
   }
 
   throw new Error(
-    `The fleet table's summary took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
+    `The marker for ${name} took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
   );
-};
-
-/**
- * Tab until a site row holds focus, and hand back which site it is.
- *
- * Called with the disclosure already open, so the Tab that leaves the summary
- * lands on the first row's button: the column headers are not focusable and
- * nothing else sits between the two.
- *
- * Throws rather than returning null when no row is ever reached: a caller has
- * nothing to do with "no row", and the message names the reason where a bare
- * timeout would not.
- */
-const tabToSiteRow = async (page: Page): Promise<string> => {
-  for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
-    const siteId = await focusedSiteId(page);
-
-    if (siteId !== null) {
-      return siteId;
-    }
-
-    await page.keyboard.press('Tab');
-  }
-
-  throw new Error(`No site row took focus within ${String(MAX_TAB_PRESSES)} Tab presses.`);
 };
 
 /**
  * Tab from wherever the focus is until the fleet chart is holding it.
  *
- * The same ceiling idiom as `openSiteTableFromKeyboard`, for the same reason: the
- * map precedes the content column in DOM order, so the route to the chart crosses
- * every marker button and that count moves with the clustering. Throws with the
+ * The same ceiling idiom as `tabToMarker`, for the same reason: the map precedes
+ * the content column in DOM order, so the route to the chart crosses every
+ * marker button and that count moves with the clustering. Throws with the
  * element named rather than letting the measurement below report a `none` on
  * whatever else happened to hold the focus — a chart nothing can tab into is a
  * WCAG 2.1.1 failure and should read as one, not as a puzzling ring result.
@@ -217,60 +223,75 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('leaves a keyboard selection standing on the row it was made from, ring and all', async ({
+test('leaves a keyboard selection standing on the marker it was made from, ring and all', async ({
   page,
 }) => {
   /*
-   * Both halves of the page first. The table is what this tabs to; the map is
-   * what it tabs *through*, and starting before its markers have mounted would
-   * mean tabbing through a document that is still growing in front of the
-   * cursor. The summary rather than a row, because a row is not on screen yet —
-   * opening the disclosure is the next step and is this case's to perform.
+   * The map first: it is both what this tabs to and what it tabs *through*, and
+   * starting before its markers have mounted would mean tabbing through a
+   * document that is still growing in front of the cursor.
    */
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
-  await expect(page.locator('.site-table-summary')).toBeVisible();
 
-  await openSiteTableFromKeyboard(page);
+  /*
+   * One site drawn on its own, which the demo fleet's camera does not start
+   * with: at `INITIAL_CAMERA` the seeded sites read as clusters, and a cluster
+   * is not a site (`marker-reveal.ts` argues the zoom and owns the gesture).
+   * That gesture is a pointer one and nothing whatever is claimed about it — the
+   * keyboard route is what this case then performs, from a fresh focus, and it
+   * is asserted from the Tab below onwards. The deep-link case at the foot of
+   * this file reads its id the same way and for the same reason.
+   */
+  const marker = await revealSiteMarker(page);
+  const siteName = await marker.getAttribute('aria-label');
 
-  const siteId = await tabToSiteRow(page);
+  if (siteName === null) {
+    throw new Error('The revealed site marker carries no accessible name to tab to.');
+  }
+
+  await tabToMarker(page, siteName);
 
   await page.keyboard.press('Enter');
 
   /*
-   * The row answered, and answered for the site whose row it was. Without this
-   * the case would still pass if Enter had selected some other site — the row
-   * keeps the focus whichever site was chosen, so everything asserted below
-   * would be green while the reader looked at a site they never asked for.
-   * Checked on the URL because the id is what the row and the address bar have
-   * in common; the card names the site but not the id.
+   * The marker answered. `?site=` is how a selection states itself — the URL is
+   * the selection's owner (`dashboard/selection-origin.ts`), so a press that
+   * lit a marker up without selecting anything fails here rather than surviving
+   * to the focus assertions, which a merely-focused marker would satisfy.
    */
-  await expect.poll(() => new URL(page.url()).searchParams.get('site')).toBe(siteId);
+  await expect.poll(() => new URL(page.url()).searchParams.get('site')).not.toBeNull();
 
   /*
-   * The card really opened, asserted before anything about focus: a selection
-   * that drew no card would leave the reader standing on the row too, so the
-   * assertions below would be green against a page carrying no answer at all.
+   * And answered for the site whose marker it was. Without this the case would
+   * still pass if Enter had opened a neighbour — the marker keeps the focus
+   * whichever site was chosen, so everything below would be green while the
+   * reader looked at a site they never asked for. Checked on the card's title
+   * rather than on the id, because the name is what the marker and the card have
+   * in common; the marker carries no identifier for a reader or for this case to
+   * compare (`site-identity.ts` is where a spec needing the id goes).
    */
   await expect(page.locator('.site-popover')).toBeVisible();
+  await expect(page.locator('.site-popover-title')).toHaveText(siteName);
 
   /*
    * And the reader is exactly where they left themselves. Nothing on this page
    * moves the focus on a selection any more (#328, `design.md` rule 11), so the
-   * row that was pressed is still the active element — compared by site id
-   * rather than by locator, because "the row I pressed" is what the rule is
-   * about and a locator would let a different row of the same shape satisfy it.
+   * marker that was pressed is still the active element — compared by name
+   * rather than by locator, because "the marker I pressed" is what the rule is
+   * about and a locator would let a different marker of the same shape satisfy
+   * it.
    */
-  await expect.poll(() => focusedSiteId(page)).toBe(siteId);
+  await expect.poll(() => focusedMarkerName(page)).toBe(siteName);
 
   /*
    * And the ring is still on it, which is the half of WCAG 2.4.7 that survived
    * #339: rings were taken off *pointer* interaction only, and this focus was
    * arrived at by Tab and held through a keystroke, so the browser's
    * `:focus-visible` heuristic must still be painting one. If this ever reads
-   * `none`, a keyboard reader is pressing Enter on a page that then gives them
-   * no visible sign of where they are standing.
+   * `none`, a keyboard reader is pressing Enter on the map's only route into a
+   * site, and getting no visible sign of where they are standing.
    */
-  const ring = await focusRing(page, `[data-site-id="${siteId}"]`);
+  const ring = await focusRing(page, markerByName(siteName));
 
   expect(ring.style).toBe('solid');
   expect(ring.widthPx).toBeGreaterThan(0);
@@ -340,18 +361,14 @@ test('takes no focus at all when ?site= opens the card (issue 260)', async ({ pa
    * An id read off the running page rather than a constant, for the reason
    * `dashboard-test-fixture.ts` gives about the same thing: a link's id comes
    * from a real fleet, and one derived the way the demo fleet derives its own
-   * would still pass if both drifted together. Opening the table to read it is
-   * a pointer gesture here and nothing is being claimed about it — the keyboard
-   * route to the same rows is the case above.
+   * would still pass if both drifted together. Reading it is a pointer gesture
+   * on the map and nothing is being claimed about it — the keyboard route to a
+   * marker is the case above — and `site-identity.ts` hands back a freshly
+   * loaded page, which is what the `body` reading below needs.
    */
-  const row = await openSiteTable(page);
-  const siteId = await row.getAttribute('data-site-id');
+  const { id } = await firstSiteIdentity(page);
 
-  if (siteId === null) {
-    throw new Error('The first site row carries no data-site-id to deep-link with.');
-  }
-
-  await page.goto(`/?site=${siteId}`);
+  await page.goto(`/?site=${id}`);
 
   // The card really did open. Asserted first and deliberately: a card that
   // failed to mount at all would leave focus on `body` too, and would pass the

@@ -1,8 +1,8 @@
 /**
  * How the current selection came to be — the fact the card's hand-back turns on.
  *
- * - `reader` — somebody did something: pressed a marker, pressed a row, added a
- *   site. Their focus is not moved for it (#328, `design.md` rule 11): they are
+ * - `reader` — somebody did something: pressed a marker, picked a site out of
+ *   the header's search, added a site. Their focus is not moved for it (#328, `design.md` rule 11): they are
  *   still on the control they pressed. What `reader` decides is that the card
  *   captures whatever held focus as it opened and returns it on close *if the
  *   card is holding it by then* — the reader who tabs or presses into the card

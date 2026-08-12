@@ -475,10 +475,11 @@
  *    click — so the button holds a `--space-6` minimum and paints nothing
  *    itself. Every painted state is smaller than the area that responds to it.
  * 2. No state is carried by hue alone. Hover and selection each change the
- *    diameter as well as the fill, hover and focus both name the site in a
- *    tooltip, and the site table under the map is the table view of the same
- *    states — the relief the light palette's contrast warning on slot 3
- *    requires.
+ *    diameter as well as the fill, and hover and focus both name the site in a
+ *    tooltip — the relief the light palette's contrast warning on slot 3
+ *    requires. A site table under the map used to be a fourth channel, the same
+ *    states rendered as rows; it left the page on 2026-08-12, so the relief is
+ *    now entirely the marker's own.
  * 3. Crowding is answered by clustering, never by fading: there is deliberately
  *    no `opacity` anywhere below. On this platform a faded mark reads as an
  *    uncertain one, which means something specific and different.

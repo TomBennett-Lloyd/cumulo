@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { Site } from '@cumulo/shared';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
@@ -11,7 +11,6 @@ import {
   clickMap,
   CREATED_SITE_NAME,
   firstListedSite,
-  fleetTable,
   renderDashboard,
   settle,
   visit,
@@ -25,14 +24,13 @@ import {
  * split off the same mount (`structure.md` rule 4), through the same fixture.
  *
  * The rule it proves is `design.md` rule 11 as #328 settled it, and it has
- * three clauses that only make sense together. **A
- * selection moves focus nowhere**: whoever pressed a marker is still on that
- * marker, whoever pressed a row is still on that row, and whoever picked a site
- * out of the header's search is still in the search input, which is the
- * combobox discipline that pattern owes anyway. What answers the selection is
- * structure the reader can already reach — the card's own accessible name, the
- * chart legend's row for the site — rather than a page that takes their place
- * away to tell them something. **A `?site=` selection additionally captures no
+ * three clauses that only make sense together. **A selection moves focus
+ * nowhere**: whoever pressed a marker is still on that marker, and whoever
+ * picked a site out of the header's search is still in the search input, which
+ * is the combobox discipline that pattern owes anyway. What answers the
+ * selection is structure the reader can already reach — the card's own
+ * accessible name, the chart legend's row for the site — rather than a page that
+ * takes their place away to tell them something. **A `?site=` selection additionally captures no
  * opener**: the card mounts when the fleet listing resolves, which on a deep
  * link is not page load and can be seconds later, so nothing about that instant
  * identifies a control anybody chose (WCAG 3.2.5, #260). **Closing returns
@@ -202,10 +200,10 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     // to unmount under them and the landing is owed again.
     press(screen.getByRole('button', { name: 'Close' }));
 
-    // The opener, not a row: the card remembers the element that actually held
-    // focus when it opened, so it lands a marker press back on the marker. The
-    // panel this replaced searched the site list instead, which was the right
-    // answer only for the one opener it knew about.
+    // The card remembers the element that actually held focus when it opened, so
+    // it lands a marker press back on the marker. The panel this replaced
+    // searched the site list instead, which was the right answer only for the
+    // one opener it knew about — and is why the list leaving cost this nothing.
     expect(document.activeElement).toBe(marker);
   });
 
@@ -245,51 +243,43 @@ describe('Dashboard focus on a reader-initiated selection', () => {
 
   it('leaves focus where the reader themselves moved it, rather than on the opener', async () => {
     const dataSource = new DemoFleetDataSource();
-    const site = await firstListedSite(dataSource);
+    const [siteA, siteB] = await twoListedSites(dataSource);
     renderDashboard(dataSource);
     await settle();
 
-    press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
+    press(screen.getByRole('button', { name: `Marker: ${siteA.name}` }));
 
-    const row = within(fleetTable()).getByRole('button', {
-      name: (name) => name.startsWith(site.name),
-    });
-    // The reader leaves the marker for a row of their own accord and dismisses
-    // from there. Escape is fired on the card because that is what still owns
-    // the handler; where the *focus* is is the point.
-    row.focus();
-    fireEvent.keyDown(screen.getByRole('heading', { name: site.name }), { key: 'Escape' });
+    // Somewhere the opener is not: a *second* site's marker, which the reader
+    // tabs to without selecting it. This was a row of the site table until
+    // 2026-08-12; what the case needs from it is only that it is a focusable
+    // control elsewhere on the page, so the nearest surviving one stands in.
+    // Escape is fired on the card because that is what still owns the handler;
+    // where the *focus* is is the point.
+    const elsewhere = screen.getByRole('button', { name: `Marker: ${siteB.name}` });
+    elsewhere.focus();
+    fireEvent.keyDown(screen.getByRole('heading', { name: siteA.name }), { key: 'Escape' });
 
-    // Not the marker. A card that does not hold the focus is not entitled to
-    // move it, and yanking a reader back to a control they deliberately left is
-    // the same defect as taking their place away in the first place. This is
+    // Not site A's marker. A card that does not hold the focus is not entitled
+    // to move it, and yanking a reader back to a control they deliberately left
+    // is the same defect as taking their place away in the first place. This is
     // also the case that separates "focus did not move" from "focus was moved
-    // back to where it started", which the marker cases cannot: the reader is
+    // back to where it started", which the opener cases cannot: the reader is
     // demonstrably somewhere the opener is not.
-    expect(document.activeElement).toBe(row);
+    expect(document.activeElement).toBe(elsewhere);
   });
 
-  it('leaves focus on the row that opened the card, and returns to it from inside', async () => {
-    const dataSource = new DemoFleetDataSource();
-    const site = await firstListedSite(dataSource);
-    renderDashboard(dataSource);
-    await settle();
-
-    const row = within(fleetTable()).getByRole('button', {
-      name: (name) => name.startsWith(site.name),
-    });
-    press(row);
-
-    expect(document.activeElement).toBe(row);
-
-    press(screen.getByRole('button', { name: 'Close' }));
-
-    // The hand-back reaching a different opener, which is what makes the marker
-    // cases above and this one one rule rather than special cases per opener:
-    // the card does not need to be told who opened it, and nothing had to be
-    // told where a row press should have landed.
-    expect(document.activeElement).toBe(row);
-  });
+  /*
+   * There is no row-opener case here any more, and both halves of what it proved
+   * have surviving carriers — which is why it went rather than being re-pointed
+   * at a marker, where it would have been a verbatim copy of an existing case.
+   *
+   * "Focus lands on the opener and comes back to it from inside the card" is
+   * `hands focus back to the marker when the reader closes the card from inside
+   * it`, above. "And the card does not need to be told *which* opener" — the
+   * generality a second kind of opener was what demonstrated — is `returns a
+   * created site's card to the control the draft was opened with`, below, where
+   * the hand-back lands on the map's add-site control rather than on any marker.
+   */
 
   it('closes on Escape from inside the card, and lands the same way', async () => {
     const dataSource = new DemoFleetDataSource();
@@ -338,8 +328,8 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * (`design.md` rule 11) — so a selection that moved focus to a control
      * elsewhere on the page was taking a reader out of the field they were still
      * typing in, mid-search, on every hit. Nothing here is a special case for
-     * the search: it selects through `selectSiteForReader` like a marker and a
-     * row do, and no selection moves anybody now.
+     * the search: it selects through `selectSiteForReader` exactly as a marker
+     * does, and no selection moves anybody now.
      *
      * The heading assertion is what stops this from passing over a search that
      * selected nothing at all, which would leave focus in the input too.
@@ -418,17 +408,17 @@ describe('Dashboard focus on a deep link', () => {
     renderDashboard(dataSource);
     await settle();
 
-    const row = within(fleetTable()).getByRole('button', {
-      name: (name) => name.startsWith(site.name),
-    });
-    row.focus();
+    // Reached under the reader's own steam, which is all this needs of it — the
+    // site table's row until 2026-08-12, the site's own marker since.
+    const reached = screen.getByRole('button', { name: `Marker: ${site.name}` });
+    reached.focus();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     // A card that never took the focus has none to give back, so it does not
     // move any: the reader keeps whatever they had reached under their own
     // steam. Without the guard, the close would send them to the element that
     // happened to be focused when the listing resolved.
-    expect(document.activeElement).toBe(row);
+    expect(document.activeElement).toBe(reached);
   });
 });
 

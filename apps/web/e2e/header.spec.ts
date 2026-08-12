@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
 import { layoutBoxOf, maybeBoxOf, polledSample } from './layout-box';
+import { firstSiteIdentity } from './site-identity';
 import { PHONE_VIEWPORT } from './viewports';
 
 /*
@@ -246,11 +247,12 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
    * tabbing into a document that is still growing would be tabbing through a
    * moving target.
    *
-   * The fleet table's summary is the thing waited on rather than a row: the
-   * table renders only once the listing has answered, and its rows are folded
-   * away behind that summary until somebody opens it (#265).
+   * Which makes the markers both what is waited for and the reason for waiting.
+   * Either kind serves: the fleet draws as clusters at the opening camera and as
+   * sites further in, and all this needs is that the listing has answered and
+   * the overlay has stopped growing.
    */
-  await expect(page.locator('.site-table-summary')).toBeVisible();
+  await expect(page.locator('.map-cluster-marker, .map-site-marker').first()).toBeVisible();
 
   // The header is the first thing in the document and carries two controls, in
   // this order: the site search, then the menu. So two Tabs from a fresh page
@@ -353,29 +355,20 @@ test('finds a site by name and brings the camera to it when it is off screen', a
   const popover = page.locator('.site-popover');
 
   /*
-   * The row is read before anything moves, and both halves come off the same
-   * element: the id the URL will have to carry, and the name a reader would
-   * type. Read off the running page rather than restated from the seed, for the
-   * reason `keyboard-focus.spec.ts` gives about the same thing — a name derived
-   * the way the demo fleet derives its own would still pass if both drifted.
+   * The site is read before anything this case does, and both halves come off
+   * the same real site: the id the URL will have to carry, and the name a reader
+   * would type. Read off the running page rather than restated from the seed,
+   * for the reason `site-identity.ts` argues at length — a name derived the way
+   * the demo fleet derives its own would still pass if both drifted.
    *
-   * Read through the closed disclosure rather than by opening it (#265). Both
-   * reads are DOM reads — an attribute and a text node — which Playwright
-   * performs on any attached element, and neither of them presses anything. The
-   * alternative costs this case its precondition: opening the table means
-   * clicking a summary below the fold, Playwright scrolls it into view to click
-   * it, and the pan below then drags at a `boundingBox` the map has scrolled out
-   * of. That is a real red, seen here rather than reasoned about.
+   * That helper reaches the map and presses a marker, which moves the camera and
+   * opens a card; it also reloads `/` on its way out, and that is what makes it
+   * usable *here*. The pan below is a drag aimed at a `boundingBox`, so it needs
+   * the page a reader loads rather than one some earlier gesture left zoomed in
+   * and scrolled — and `panFleetOutOfView` needs the fleet inside the bounds to
+   * begin with, which only the opening camera guarantees.
    */
-  const row = page.locator('[data-site-id]').first();
-  await expect(row).toBeAttached();
-
-  const siteId = await row.getAttribute('data-site-id');
-  const siteName = await row.textContent();
-
-  if (siteId === null || siteName === null) {
-    throw new Error('The first site row names neither a site nor an id to search for.');
-  }
+  const { id: siteId, name: siteName } = await firstSiteIdentity(page);
 
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await panFleetOutOfView(page);
@@ -595,10 +588,18 @@ test.describe('the search on a bar too narrow to hold it', () => {
     const barInput = bar.locator('.site-search-input');
 
     /*
-     * The listing first, for the reason the menu case waits on it: the fleet
-     * resolves after first paint and everything read below comes off a row.
+     * The site to look for, read off the page before this case touches
+     * anything, for the two reasons the wide search case above gives: a name
+     * regenerated from the seed would still pass if the app and the spec drifted
+     * together, and the helper hands back a freshly loaded `/` — so the fold
+     * measured below is the one a reader arrives at rather than one left over
+     * from reading the site.
+     *
+     * It also waits out the listing, which this case needs anyway and which the
+     * menu case waits for in its own words: the fleet resolves after first
+     * paint, and there is no site to name until it does.
      */
-    await expect(page.locator('.site-table-summary')).toBeVisible();
+    const { id: siteId, name: siteName } = await firstSiteIdentity(page);
 
     /*
      * The fold itself. `toBeHidden` on the field is a computed-style read, which
@@ -648,23 +649,6 @@ test.describe('the search on a bar too narrow to hold it', () => {
         message: 'The bar’s controls are not flush with the end of the header row.',
       })
       .toBeLessThanOrEqual(ICON_GAP_TOLERANCE_PX);
-
-    /*
-     * The site to look for, read off the page before anything is pressed and
-     * through the closed disclosure, exactly as the search case above reads it
-     * and for the same two reasons: a name regenerated from the seed would still
-     * pass if the app and the test drifted together, and opening the table would
-     * scroll the surface this case is about out from under itself.
-     */
-    const row = page.locator('[data-site-id]').first();
-    await expect(row).toBeAttached();
-
-    const siteId = await row.getAttribute('data-site-id');
-    const siteName = await row.textContent();
-
-    if (siteId === null || siteName === null) {
-      throw new Error('The first site row names neither a site nor an id to search for.');
-    }
 
     await toggle.click();
 

@@ -22,10 +22,10 @@ import { formatKw, type ChartOverlayColumn, type ForecastChartPoint } from './ch
  * **Folded away by default** (#284 D3). Every row of a 193-hour window under the
  * plot pushed the rest of the page out of sight, and the chart itself was held
  * to a measure narrower than its panel to leave the table somewhere to sit. So
- * the twin lives behind a closed `<details>`, the same native disclosure the
- * fleet's own table uses (`dashboard/SiteTable.tsx`): the platform owns the
- * open/closed semantics, the keyboard operation and the announcement, and none
- * of it is ours to get wrong. A closed `<details>` keeps its children in the
+ * the twin lives behind a closed `<details>`, a native disclosure rather than a
+ * button toggling state of ours: the platform owns the open/closed semantics,
+ * the keyboard operation and the announcement, and none of it is ours to get
+ * wrong. A closed `<details>` keeps its children in the
  * *document* but not in the *accessibility tree* — a browser does not render
  * them, and unrendered content is excluded — so a screen reader meets the
  * collapsed disclosure, not the table behind it. The treatment's "reachable from

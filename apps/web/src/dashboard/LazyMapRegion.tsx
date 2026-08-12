@@ -10,10 +10,14 @@ import { LOADING_MAP_LABEL, MAP_LOAD_FAILURE_MESSAGE } from './state-copy';
  *
  * Below this boundary sits maplibre: ~949 kB of minified WebGL renderer plus its
  * own stylesheet, none of which the first paint needs — the fleet chart and the
- * site table are both reachable before a tile is drawn. (A selected site's own
- * card is *not*, since #265 anchored it to the site's marker; that is the price
- * of the card being on the map, and it is paid only by a `?site=` link that
- * arrives while the chunk is still in flight.)
+ * header's search are both reachable before a tile is drawn. (A selected site's
+ * own card is *not*, since #265 anchored it to the site's marker; that is the
+ * price of the card being on the map, and it is paid only by a `?site=` link
+ * that arrives while the chunk is still in flight. Since the site table left the
+ * page on 2026-08-12 the search is also the only way to *reach* a site while the
+ * chunk is in flight, which raises the stakes on it being in the entry chunk —
+ * it is, being ordinary React beside the dashboard rather than behind this
+ * boundary.)
  * Statically imported it was 75% of a 1,254 kB entry chunk that every visitor
  * downloaded before anything rendered; behind `import()` it is a chunk the
  * browser fetches while the rest of the dashboard is already interactive.
@@ -78,7 +82,7 @@ interface MapRegionBoundaryState {
  *
  * Without it a rejected `import()` throws during render with no boundary
  * anywhere above it, and React answers an uncaught render error by unmounting
- * the whole root: the fleet chart, the site table, the theme toggle and the
+ * the whole root: the fleet chart, the header's search, the theme toggle and the
  * attribution strip all disappear because one 949 kB fetch blipped. That is
  * reachable in production without any bug of ours — an `index.html` cached from
  * before a redeploy points at a hashed chunk that no longer exists, and every

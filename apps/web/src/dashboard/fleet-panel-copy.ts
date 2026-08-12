@@ -80,6 +80,11 @@ const siteCountLabel = (count: number): string =>
  * size was being sent to the site table's summary at the bottom of the page to
  * get it. The words are #323's own, restored rather than rewritten — they had an
  * owner and a history, and re-inventing the phrasing would have thrown both away.
+ * That summary left the page with its table on 2026-08-12, so this line is now
+ * the only chrome that states the fleet's size unprompted. It is not the only
+ * place the number can appear: `state-copy.ts`'s `partialAggregateNotice` writes
+ * the same total out too, but only over the hours the aggregate falls short of
+ * it, which is a state rather than a standing fact.
  *
  * Capacity comes from `@cumulo/shared` rather than a sum written here, because
  * fleet arithmetic lives there (`architecture.md` rule 3) and a second sum would

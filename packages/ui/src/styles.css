@@ -10,7 +10,7 @@
 /*
  * The one focus treatment every app inherits (issue #93). `:where()` holds the
  * selector at zero specificity, so this only ever replaces the user agent's
- * default ring: any component rule that wants more — `.site-table-select:focus-visible`,
+ * default ring: any component rule that wants more —
  * `.map-site-marker:focus-visible::before` — still wins without needing to
  * out-specify the design system.
  *

@@ -139,7 +139,10 @@ import { siteOverlaySeries } from './site-overlay';
  * of roofs, and sending the reader to the site table at the foot of the page for
  * it was making them leave the chart to read the chart. So the name is visible
  * again and points at the section by `aria-labelledby` rather than being spelled
- * a second time in an `aria-label`, and the numbers sit beside it.
+ * a second time in an `aria-label`, and the numbers sit beside it. That table
+ * left the page on 2026-08-12, which retires the alternative the owner was
+ * arguing against rather than the argument: there is no longer anywhere else on
+ * the page a reader could have been sent for the count.
  *
  * What did *not* come back with them is the rest of #323, which stands on its
  * own arguments: this is still a full-width band on the map's surface rather

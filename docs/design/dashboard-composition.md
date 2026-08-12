@@ -37,17 +37,16 @@ breakpoint, because the stacked arrangement a narrow screen already got is now t
 ## A selection changes what is drawn, not what is on screen
 
 **Nothing under the map swaps.** The page is a plain flow, top to bottom: the map band, the
-fleet's chart, the site table, the page footer. All four are present in every state the page can
-be in.
+fleet's chart, the page footer. All three are present in every state the page can be in.
 
 The chart is a full-width band rather than the first item of the centred reading, which is what
 #323 changed. It sits directly against the map with no gap and on the same `--color-surface`, so
 the two read as one continuous unit — which is what they are, the same fleet drawn in space and
 then in time, and a card edge with a page margin around it was claiming a separation nobody meant
 ([`../standards/design.md`](../standards/design.md) rule 4). The measure picks up again below,
-around the site table and the footer, where the reading genuinely is a separate thing from the two
-bands above it. The chart is better for the extra width in its own right: its axis is time, and a
-time axis has more to say the wider it is drawn.
+around the footer, where the reading genuinely is a separate thing from the two bands above it.
+The chart is better for the extra width in its own right: its axis is time, and a time axis has
+more to say the wider it is drawn.
 
 #323 also took the visible `<h2>` and the "60 sites · 332 kW" line off that band, moving the name
 into the section's accessible name and deleting the numbers outright; the owner reversed that half
@@ -57,12 +56,27 @@ never states how many roofs it is a sum of (`apps/web/src/dashboard/FleetPanel.t
 argument; `fleet-panel.css` owns the container width below which the numbers hide). The rest of
 #323 stands unchanged — this is a reversal of one clause, not of the ticket.
 
-The table is folded away behind a `<details>` disclosure whose summary counts the fleet
-(`apps/web/src/dashboard/SiteTable.tsx`). Sixty rows open under the chart are the tallest thing
-this page can hold, and they were carrying a job the header's search took over — finding one site
-by name. What the rows are still for is the equivalence
-[`map-treatment.md`](map-treatment.md) requires, every marker state having a row that says the
-same thing, and a closed disclosure keeps that a keystroke away rather than removing it.
+**The Sites section is gone, and its three jobs went three different ways.** The owner removed it
+on 2026-08-12 (round 3, item 4): _"i actually don't think we need the `Sites` section at the
+bottom of the page. the list of sites is visualised on the map and listed as part of the search
+bar."_ The section was a table of every site, folded behind a `<details>` disclosure since #265
+and never opened by default. Where each thing it did now lives:
+
+- **Finding one site by name** left first. The header's search took that over in #265, which is
+  what made folding the rows away affordable at the time; the disclosure then outlived the job
+  that had justified the rows being on the page at all.
+- **Saying how big the fleet is** is the chart band's stats line — the "60 sites · 332 kW" the
+  paragraph above records the owner restoring on 2026-08-11. The summary's count and that line
+  were two statements of one number for a day; one of them is left.
+- **Being a non-colour channel for marker state** went back to the markers.
+  [`map-treatment.md`](map-treatment.md) had leaned on the table as the table view — every marker
+  state with a row equivalent — and re-derives its relief from the tooltip, the card, the size
+  change and the tab order there. That section also records what the removal costs, which is
+  worth reading before the marker palette moves again: the map is now the page's only enumeration
+  of the fleet.
+
+What is left under the chart is the footer. The reading column that held the table is one band
+shorter, which is the change a reader actually sees.
 
 That is the second answer this composition has given. #148's answer was a **context region** —
 one box under the map showing either a selected site's panel or the fleet's, whichever the state
@@ -103,7 +117,7 @@ and is recorded there — [`map-treatment.md`](map-treatment.md)'s "Map chrome" 
 `apps/web/src/map/MapControls.tsx`.
 
 **The one thing that can still be out of view is the site**, not the reading. A selection can
-arrive from anywhere but the map — a row, the header's search, a link, a creation — and the camera
+arrive from anywhere but the map — the header's search, a link, a creation — and the camera
 has no reason to be pointing anywhere near what those name. `apps/web/src/map/SelectionCamera.tsx` eases the camera to a selected site that
 is outside the current bounds, and does nothing at all when it is already inside them — moving the
 map for a marker the reader just pressed would shove the one thing they were looking at. It keeps
@@ -121,7 +135,7 @@ not landing — is what the dashboard carries beside the selection itself
 (`apps/web/src/dashboard/selection-origin.ts`). The settled rule:
 
 - **A selection moves focus nowhere** — every opener, and whoever did the opening: a marker press,
-  a row press, a search hit, a creation. The reader keeps the control they pressed, and the search
+  a search hit, a creation. The reader keeps the control they pressed, and the search
   keeps the reader in its input, which is the ARIA combobox's own discipline. The landing was the
   card's own heading (`tabIndex={-1}`, a target without joining the tab order), then a control in
   the panel below the map; #328 removed it outright, on the rule that a page that grabs the focus
@@ -142,8 +156,8 @@ not landing — is what the dashboard carries beside the selection itself
   not reopen the landing question — a line appearing on the page's one chart is a visible answer to
   a press, and the argument above was never that the legend row in particular was the answer. What went with the landing is a cost rather than a benefit
   lost: a reader on the picker reached Escape — which only works from inside the card — by tabbing
-  _backwards_ past six stops, because the map precedes the reading column. From a marker or a row
-  the card is where the reader already is.
+  _backwards_ past six stops, because the map precedes the reading column. From a marker the card
+  is where the reader already is.
 
 - **A `?site=` selection additionally captures no opener.** This is what survives of the settlement
   of [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260) now that neither arm moves focus
@@ -157,7 +171,7 @@ not landing — is what the dashboard carries beside the selection itself
 - **Closing returns focus to whatever held it when the card opened, if the card is holding it**,
   captured on the way in. The panel this replaced reconstructed the landing instead — it searched
   the site list for the row naming its site — which was the right answer only for the one opener it
-  knew about. Capturing covers every opener with no case analysis — a marker, a row, a search hit,
+  knew about. Capturing covers every opener with no case analysis — a marker, a search hit,
   a creation, and whatever is added next — and an opener that has since left the document is simply
   not chased. With nothing landing a reader inside the card, the guard is what usually answers: a
   card the reader was never inside stands aside and leaves them where they already were. The

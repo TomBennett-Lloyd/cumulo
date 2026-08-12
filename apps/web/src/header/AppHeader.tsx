@@ -37,7 +37,7 @@ export interface AppHeaderProps {
  *
  * A component of its own, and rendered by `Dashboard` rather than by `App`,
  * because of the middle item. `SiteSearch` needs the fleet and it selects into
- * the same `selectedSiteId` the markers and the rows read, and both of those
+ * the same `selectedSiteId` the markers read, and both of those
  * live in the dashboard — so either the bar moves down to the state or the state
  * moves up to the bar. Moving the state up would put the fleet listing, the
  * selection and the first-forecast poll in the shell purely so a text input
