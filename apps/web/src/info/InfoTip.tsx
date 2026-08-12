@@ -61,10 +61,12 @@ export interface InfoTipProps {
  * asked for by moving the chart's selection. Two of these in that panel would
  * make three regions competing to be heard, and the reader would get whichever
  * won. The budget is also already at its limit there in one state: `react.md`
- * sanctions `PanelError`'s `role="alert"` mounting beside that readout when the
- * fleet read fails, on the grounds that a failed chart has no sample to speak and
- * so cannot compete with it. A live-region tip would be the one that genuinely
- * does. So the change is announced the way a disclosure announces it: the button
+ * sanctions a second `role="alert"` mounting beside that readout when the fleet
+ * read fails — since #452 the chart's own in-figure failure overlay
+ * (`charts/forecast-chart-error.tsx`) rather than a `PanelError` above the plot,
+ * which changes where the alert is drawn and nothing about the budget. The
+ * grounds are unchanged too: a failed chart has no sample to speak and so cannot
+ * compete with it. A live-region tip would be the one that genuinely does. So the change is announced the way a disclosure announces it: the button
  * carries `aria-expanded`, which is state on the control the reader just pressed
  * rather than an interruption. (A `role="status"` mounted with its text already
  * inside it announces nothing anyway — it has no change to report, #161 — so the

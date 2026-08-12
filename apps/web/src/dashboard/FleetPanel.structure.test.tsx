@@ -17,7 +17,11 @@ import {
   settle,
   SIMULATED_ACTUALS_CAPABILITIES,
 } from './fleet-panel-test-fixture';
-import { EMPTY_FLEET_MESSAGE, NO_FLEET_FORECAST_MESSAGE } from './state-copy';
+import {
+  CHART_DATA_UNAVAILABLE_MESSAGE,
+  EMPTY_FLEET_MESSAGE,
+  NO_FLEET_FORECAST_MESSAGE,
+} from './state-copy';
 
 /*
  * The shape of the fleet chart section, as opposed to what it says.
@@ -206,8 +210,19 @@ const openFleetTip = (container: HTMLElement): HTMLElement => {
  * two swapping. It is asserted here rather than in a case of its own so that all
  * five states inherit the ratchet: a state that composed its own figure would
  * otherwise satisfy every count above.
+ *
+ * **#452 makes that list a prefix plus a stated suffix, and the parameter is
+ * how.** The failed state draws its account inside the figure now, so its
+ * children are the same two followed by `div.forecast-chart-error` — and a
+ * ratchet loosened to "two or more" would stop catching the drift it exists for.
+ * So each caller states what it expects beyond the pair, and the default is
+ * nothing at all, which leaves the four other states pinned to exactly the list
+ * they were pinned to before.
  */
-const expectPanelFurniture = (container: HTMLElement): void => {
+const expectPanelFurniture = (
+  container: HTMLElement,
+  extraFigureChildren: readonly string[] = [],
+): void => {
   expect(screen.getByRole('region', { name: 'Fleet forecast' })).toBeDefined();
 
   const legend = within(openFleetTip(container)).getByRole('list');
@@ -227,14 +242,18 @@ const expectPanelFurniture = (container: HTMLElement): void => {
       figure.children,
       (child) => `${child.tagName.toLowerCase()}.${child.getAttribute('class') ?? ''}`,
     ),
-  ).toStrictEqual(['svg.forecast-chart', 'p.forecast-chart-readout']);
+  ).toStrictEqual(['svg.forecast-chart', 'p.forecast-chart-readout', ...extraFigureChildren]);
   expect(figure.nextElementSibling?.getAttribute('class')).toBe('forecast-chart-details');
 };
 
 /** The pair every state owes the reader: whatever it has to say, over the furniture. */
-const expectChartWith = (container: HTMLElement, message: string | RegExp): void => {
+const expectChartWith = (
+  container: HTMLElement,
+  message: string | RegExp,
+  extraFigureChildren: readonly string[] = [],
+): void => {
   expect(screen.getByText(message)).toBeDefined();
-  expectPanelFurniture(container);
+  expectPanelFurniture(container, extraFigureChildren);
 };
 
 /**
@@ -513,10 +532,26 @@ describe('FleetPanel’s chart', () => {
     await settle();
     cleanup();
 
-    expectChartWith(
-      await renderSettled(new CountingFleetSource(FAILED_FLEET)),
-      /Could not load the fleet forecast/u,
-    );
+    /*
+     * The failed arm, re-subjected by #452: what stands over the plot is the
+     * one generic account of a total failure, and it stands *inside* the figure
+     * rather than in the notice slot above it. So the state's sentence and the
+     * figure's child list are checked together — the sentence proves the state
+     * is the failed one, and the suffix proves it is being drawn where the
+     * no-jump argument requires. A failure that reverted to a card above the
+     * chart would still find its sentence and would fail the list.
+     */
+    const failed = await renderSettled(new CountingFleetSource(FAILED_FLEET));
+
+    expectChartWith(failed, CHART_DATA_UNAVAILABLE_MESSAGE, ['div.forecast-chart-error']);
+    // The notice slot really is empty, which is the jsdom half of "nothing
+    // arrived above the plot": the figure is still the body's first element
+    // child, exactly as it is mid-load in the no-jump case below.
+    expect(panelBody(failed).firstElementChild).toBe(chartFigure(failed));
+    // And not a wait. The failure announces through its own alert, so the busy
+    // flag stays the loading arm's (`react.md`'s Pending bullet, as amended);
+    // marking this state busy would promise a reader something is arriving.
+    expect(panelBody(failed).getAttribute('aria-busy')).toBeNull();
 
     cleanup();
 

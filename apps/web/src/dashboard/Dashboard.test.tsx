@@ -116,6 +116,25 @@ const siteOverlayColumn = (siteName: string): HTMLElement | null =>
 const attributionLinks = (): readonly HTMLElement[] =>
   screen.getAllByRole('link', { name: 'Open-Meteo.com' });
 
+/**
+ * The reading under the two bands holds the credit and nothing else (#452).
+ *
+ * The DOM half of a layout claim `dashboard.css` makes and the browser lane
+ * would have to measure: with the listing's own states moved into the chart, the
+ * `.dashboard-fleet` box that used to sit here was an empty flex child adding a
+ * gap above the footer, and deleting it is what closed that gap. jsdom lays
+ * nothing out, so what it can honestly hold is the premise — that there is one
+ * child for a gap to be measured *from* — and it holds it in every fleet state,
+ * because the state that made the old box empty was the ordinary one.
+ */
+const expectCreditIsTheWholeReading = (container: HTMLElement): void => {
+  const reading = container.querySelector('.dashboard-content');
+
+  expect(Array.from(reading?.children ?? [], (child) => child.className)).toEqual([
+    'dashboard-footer',
+  ]);
+};
+
 beforeEach(() => {
   // Every wait in this suite — the pipeline's 45 seconds, the poll cadence, the
   // 90-second deadline, the throttle's minute — is simulated. Nothing sleeps.
@@ -404,7 +423,10 @@ describe('Dashboard', () => {
     renderDashboard(new FlakyFleetSource());
     await settle();
 
-    expect(screen.getByRole('alert').textContent).toContain('Fleet unavailable');
+    // The listing's failure is the chart's account of itself since #452 — one
+    // generic sentence in the graph area, where the owner asked for it, rather
+    // than a card in a section under the map that no longer exists (#451).
+    expect(screen.getByRole('alert').textContent).toContain('Site data unavailable');
     // Nothing is drawn as if it had arrived. This was asserted on the fleet's
     // table until 2026-08-12 — "no empty table" — and the map is where an
     // unlisted fleet would now be visible as an absence of markers.
@@ -545,19 +567,22 @@ describe('Dashboard attribution', () => {
     // renders correctly from a fresh mount can still be lost on a transition.
     // `FlakyFleetSource` is what makes the walk possible — loading, then a
     // failed listing, then a retried one that succeeds.
-    renderDashboard(new FlakyFleetSource());
+    const container = renderDashboard(new FlakyFleetSource());
 
     expect(attributionLinks()).toHaveLength(1);
+    expectCreditIsTheWholeReading(container);
 
     await settle();
 
-    expect(screen.getByRole('alert').textContent).toContain('Fleet unavailable');
+    expect(screen.getByRole('alert').textContent).toContain('Site data unavailable');
     expect(attributionLinks()).toHaveLength(1);
+    expectCreditIsTheWholeReading(container);
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
 
     expect(mapMarkers()).toHaveLength(60);
     expect(attributionLinks()).toHaveLength(1);
+    expectCreditIsTheWholeReading(container);
   });
 });

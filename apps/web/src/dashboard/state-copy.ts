@@ -53,8 +53,20 @@
 export const EMPTY_FLEET_MESSAGE =
   'No sites yet — press “Add a site” on the map, then click where it goes.';
 
-/** The site listing itself is loading — the fleet is not known yet. */
-export const LOADING_FLEET_LABEL = 'Loading the fleet…';
+/*
+ * The site listing's own pending label stood here until #452, and that round
+ * deleted it for a reason one step further along than #448's.
+ *
+ * #448 took the *fleet chart's* pending sentence out and let the plot draw the
+ * wait. #452 took the listing's states off the page altogether: the sites
+ * section they were the last occupant of is gone (#451), and what a reader is
+ * owed while the listing is in flight is the same thing they are owed while any
+ * other read is — the chart drawing its wait, which it does, because a panel
+ * with no sites yet has queries that have never run and therefore report
+ * `loading` (`data/use-fleet-query.ts`). So the label lost its surface rather
+ * than its wording. The retired phrase is deliberately not quoted, for the
+ * reason the other retired lines in this file are not.
+ */
 
 /*
  * The fleet chart's own pending label stood here until #448, and that round
@@ -162,8 +174,10 @@ export const siteOverlayFailureNotice = (siteName: string): string =>
  * The fleet's two reads are two requests over two windows — one metered
  * `/v1/fleet/forecast` call (#296) and one metered `/v1/fleet/actuals` call
  * (#264) — so either can fail without the other, and the panel used to answer a
- * failed actuals read by withdrawing the whole chart under
- * {@link fleetForecastFailureMessage}. That blamed the forecast for a failure
+ * failed actuals read by withdrawing the whole chart under the forecast read's
+ * own failure sentence — a line naming the forecast and the source's detail,
+ * which {@link CHART_DATA_UNAVAILABLE_MESSAGE} replaced in #452. That blamed
+ * the forecast for a failure
  * the forecast had nothing to do with, which is the wrong party named to a
  * reader who might go looking at the wrong thing (`error-handling.md` rule 1's
  * blame tiebreak), and it threw away a complete fleet sum that had already
@@ -206,25 +220,54 @@ export const firstForecastUnansweredMessage = (deadlineSeconds: number): string 
   `No answer from the fleet within ${String(deadlineSeconds)} seconds — whether a forecast exists yet is unknown. Try again to keep asking.`;
 
 /*
- * The failure sentences below all take the source's own message as `detail`
- * rather than paraphrasing it. The source names the operation that failed and is
- * the only account of what actually went wrong (`error-handling.md` rule 4);
- * what these add is the surface the reader is looking at, which the transport
- * knows nothing about.
+ * **No sentence in this module takes the source's own message any more, and
+ * #452 is where the last two went.**
+ *
+ * Two of them used to — the fleet forecast read's and the site listing's — on
+ * the argument that the source names the operation that failed and is the only
+ * account of what actually went wrong (`error-handling.md` rule 4). That
+ * argument was about the *log*, and it had quietly been applied to the *page*.
+ * Every other failure sentence in this file had already declined the detail on
+ * the ground {@link siteOverlayFailureNotice} states: the recourse a reader has
+ * is a button, not a diagnosis, and `fleetForecasts range=24: upstream timed
+ * out` tells them nothing they can act on. #452 finished the job from the other
+ * end — the owner ruled that a total failure needs no specificity at all
+ * (see {@link CHART_DATA_UNAVAILABLE_MESSAGE}) — so the two detail-bearing
+ * sentences went with the surfaces that rendered them.
+ *
+ * Rule 4 is untouched by this: the typed error still carries `code` and
+ * `message` all the way to the view (`data/use-fleet-query.ts`'s `QueryState`),
+ * so nothing is thrown away — it is simply not shown to a reader who cannot use
+ * it. A view that one day distinguishes a rate limit from a broken payload has
+ * everything it needs.
  */
-
-/** The fleet's forecast read failed — one sentence for both of the panel's two queries. */
-export const fleetForecastFailureMessage = (detail: string): string =>
-  `Could not load the fleet forecast: ${detail}`;
 
 /**
- * The site listing itself failed.
+ * The chart has nothing to draw and no way to get anything — one sentence for
+ * every total failure of its data path.
  *
- * Terser than its siblings on purpose: this one stands where the list would be,
- * so the reader has no other content to place it against and the subject has to
- * come first.
+ * The owner's own words, near enough to quote: *"Site data unavailable, please
+ * try again later"*, ruled generic on purpose — *"this can be the generic error
+ * message for anything that means we can't show data on the graph, no need to be
+ * too specific if the error state is basically just a total failure"* (#452).
+ * The source's detail therefore does not reach the reader by decision rather
+ * than by omission, and which failures route here is `dashboard/FleetPanel.tsx`'s
+ * to decide, not this sentence's.
+ *
+ * Three deliberate departures from the dictation. **The plea is dropped**: the
+ * quotation above is, after this change, the single occurrence of that word
+ * anywhere in `apps/web/src` — swept and verified in #452 — and it is a record
+ * of what was asked for rather than anything a reader is shown, so keeping it in
+ * the copy would have made this the one sentence in the product that pleads.
+ * **"Try again later"
+ * became the button**, which carries {@link RETRY_ACTION_LABEL} — one name, so
+ * it is one control — and the two could not both stand: a sentence counselling
+ * patience beside a button offering action contradicts itself, and the button is
+ * the half that can actually work. **No trailing period**, on
+ * {@link NO_FLEET_FORECAST_MESSAGE}'s precedent — it is a fragment stating a
+ * state, not a sentence addressed to anyone.
  */
-export const fleetListFailureMessage = (detail: string): string => `Fleet unavailable: ${detail}`;
+export const CHART_DATA_UNAVAILABLE_MESSAGE = 'Site data unavailable';
 
 /**
  * The map engine's chunk is never going to arrive.

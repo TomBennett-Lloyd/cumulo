@@ -24,19 +24,20 @@ import {
   SITE_A,
   type StubFleet,
 } from './fleet-panel-test-fixture';
-import { EMPTY_FLEET_MESSAGE } from './state-copy';
+import { CHART_DATA_UNAVAILABLE_MESSAGE, EMPTY_FLEET_MESSAGE } from './state-copy';
 
 /*
  * What the fleet panel says about the fleet.
  *
- * Two of its other subjects have suites of their own, both split off when this
+ * Three of its other subjects have suites of their own, each split off when this
  * file reached the 300-line ceiling (`structure.md` rule 4). What a *selected
  * site* adds to the same chart is `FleetPanel.overlay.test.tsx`'s. The panel's
  * own furniture — the controls row and its four items, one (i), the visible
  * heading the section is named by, and one chart present in every state — is
- * `FleetPanel.structure.test.tsx`'s. All three share
- * `fleet-panel-test-fixture.tsx`, which is where the canned fleets and the two
- * lines every test writes to get a panel on screen live.
+ * `FleetPanel.structure.test.tsx`'s. What the panel makes of the *listing's*
+ * status, which became a prop in #452, is `FleetPanel.listing.test.tsx`'s. All
+ * four share `fleet-panel-test-fixture.tsx`, which is where the canned fleets and
+ * the two lines every test writes to get a panel on screen live.
  */
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
@@ -353,9 +354,15 @@ describe('FleetPanel against a source with simulated actuals but no look-back', 
  * it is not symmetrical. The forecast is the answer; the actuals are an addition to it, and one
  * that costs a single metered request — as, since #296, the forecast does too. Before #264's
  * review both failures came out of one `combineFleetQueries` arm: a failed actuals read withdrew
- * a fleet sum that had arrived and reported it as "Could not load the fleet forecast", and its
+ * a fleet sum that had arrived and reported it under the forecast's own failure sentence, and its
  * "Try again" re-spent the 60-site fan-out the forecast read then was, to re-ask one request that
  * had never been the fleet's.
+ *
+ * #452 sharpened the asymmetry rather than changing it. A total failure is now one generic
+ * account inside the figure and carries no transport detail at all; a partial one still names the
+ * series that is missing, because that is the only thing distinguishing it from a chart that is
+ * simply complete. So the negative below is about the *treatment* — no in-figure error — which is
+ * the assertion that would fail if the partial states were ever folded into the total one.
  */
 describe('FleetPanel when the fleet’s actuals fail on their own', () => {
   const actualsFailurePattern = /simulated actuals could not be loaded/u;
@@ -368,7 +375,12 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     // the load-bearing half: it is exactly what the forecast-failure case below asserts the
     // absence of, so the two cases now differ in the plot rather than in a figure both states have.
     expectForecastPlotted(container);
-    expect(container.textContent).not.toContain('Could not load the fleet forecast');
+    // A partial answer must never reach the total-failure treatment (#452,
+    // `error-handling.md` rule 5): the actuals not arriving is not "we cannot show data on the
+    // graph", and the chart under this notice is drawing every forecast hour. Its positive
+    // control is the forecast-failure case below, which finds this exact node.
+    expect(container.querySelector('.forecast-chart-error')).toBeNull();
+    expect(container.textContent).not.toContain(CHART_DATA_UNAVAILABLE_MESSAGE);
     expect(screen.queryByRole('alert')).toBeNull();
 
     const notice = screen.getByText(actualsFailurePattern);
@@ -413,7 +425,7 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     // Scoped to the plot's own children: the legend draws a swatch in the same
     // class, so an unscoped sweep would find the key rather than the line.
     expect(container.querySelector('.forecast-chart > .forecast-chart-median')).toBeNull();
-    expect(screen.getByRole('alert').textContent).toContain('Could not load the fleet forecast');
+    expect(screen.getByRole('alert').textContent).toContain(CHART_DATA_UNAVAILABLE_MESSAGE);
     expect(screen.queryByText(actualsFailurePattern)).toBeNull();
   });
 });
@@ -462,13 +474,29 @@ describe('FleetPanel with nothing to show', () => {
     expect(screen.getByText('No fleet forecast available yet')).toBeDefined();
   });
 
-  it('frames the source failure with the surface that failed, and retries on request', async () => {
+  it('answers a failed fleet read generically, in the graph area, and retries on request', async () => {
+    /*
+     * #452 re-subjected this case rather than replacing it. What it used to pin was the sentence
+     * naming the forecast read *and the source's own message*; the owner ruled that a total
+     * failure needs neither — *"no need to be too specific if the error state is basically just a
+     * total failure"* — so the detail assertion went with the detail, and what is left is the
+     * generic account, in the figure, with the recourse still attached. The retry half is
+     * untouched and is the reason the recourse survives at all: re-asking a read that failed is
+     * exactly the case `react.md`'s **Failed** bullet offers a button for.
+     */
     const dataSource = new CountingFleetSource(FAILED_FLEET);
-    await renderSettled(dataSource);
+    const container = await renderSettled(dataSource);
 
-    expect(screen.getByRole('alert').textContent).toContain(
-      'Could not load the fleet forecast: fleetForecasts range=24: upstream timed out',
-    );
+    const alert = screen.getByRole('alert');
+
+    expect(alert.className).toBe('forecast-chart-error');
+    expect(alert.textContent).toContain(CHART_DATA_UNAVAILABLE_MESSAGE);
+    // The transport detail is gone from the page, not merely unasserted — this is the half a
+    // re-subjected assertion would otherwise drop silently. The fixture is the positive control
+    // for the phrase, so the absence below is a fact about the page rather than about a string
+    // nothing ever produced.
+    expect(JSON.stringify(FAILED_FLEET.forecasts)).toContain('upstream timed out');
+    expect(container.textContent).not.toContain('upstream timed out');
     expect(dataSource.forecastCallCount).toBe(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -520,6 +548,8 @@ describe('FleetPanel as the page keeps it mounted', () => {
       <FleetPanel
         dataSource={dataSource}
         sites={[]}
+        listing="ready"
+        onRetryListing={() => undefined}
         selectedSite={null}
         selectionReady={false}
         refreshToken={0}
@@ -540,9 +570,11 @@ describe('FleetPanel as the page keeps it mounted', () => {
     // A first mount into a tree that is already on screen — which is the one arrangement in which
     // `role="alert"` actually announces (#161). It is the only arrangement left: the panel is
     // never hidden, so an alert can no longer mount inside a `display: none` subtree that
-    // assistive technology never reads.
+    // assistive technology never reads. Since #452 the tree it mounts into is the chart's own
+    // `<figure>`, which is on screen from the first frame in every state (#284 D3) — so the
+    // property is if anything easier to satisfy than when the alert was a card above the plot.
     expect((await screen.findByRole('alert')).textContent).toContain(
-      'Could not load the fleet forecast: fleetForecasts range=24: upstream timed out',
+      CHART_DATA_UNAVAILABLE_MESSAGE,
     );
     expect(dataSource.forecastCallCount).toBe(1);
   });

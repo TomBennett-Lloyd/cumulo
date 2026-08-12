@@ -78,6 +78,30 @@ and never opened by default. Where each thing it did now lives:
 What is left under the chart is the footer. The reading column that held the table is one band
 shorter, which is the change a reader actually sees.
 
+**The listing's own account of itself followed the table a ticket later, into the chart.** The
+section outlived the rows by one ticket: `FleetSection` stayed behind to carry the listing's pending
+label and its failure card, so the reading column still held a box that appeared and disappeared
+with a request. The owner closed that on 2026-08-12
+([#452](https://github.com/TomBennett-Lloyd/cumulo/issues/452)) — _"the sites fetch error state
+should show in the graph area … this can be the generic error message for anything that means we
+can't show data on the graph"_ — and the section, the box and its CSS rule went together. What
+replaced them is not a smaller box in the same place. A listing still in flight is now drawn as the
+chart's own loading trace, and a listing that failed leaving nothing to sum is the chart's one
+generic unavailable account: both live inside the `<figure>` — one as a mark in the plot, one as an
+overlay over it — and neither can move the page arriving or leaving. [`chart-treatment.md`](chart-treatment.md)'s "Loading" and "Data unavailable"
+sections own the treatment, the one-generic-account rule and its boundary — only a _total_ failure
+of the chart's data path routes there, the partial states keep their own notices, and an empty fleet
+keeps its invitation because it is a finished answer rather than a failure.
+
+Two things fall out of that which are this composition's rather than the chart's. `FleetPanel` takes
+the listing's status as an input, for the single question of whether the fleet is known yet — the
+fleet endpoints never depended on the listing, so a listing that failed beside sites this session
+created still gets a chart, which is the owner's own degradation story: if the graph can show data
+it does, and the sites in hand are on the map regardless. And the false flash is gone — a reader
+whose listing was still in flight used to be shown the empty fleet's invitation for the length of
+the read, an answer the page did not have yet. `apps/web/src/dashboard/Dashboard.tsx` carries the
+note where `FleetSection` used to be.
+
 That is the second answer this composition has given. #148's answer was a **context region** —
 one box under the map showing either a selected site's panel or the fleet's, whichever the state
 called for. It kept the aggregate reachable by doing nothing, which was the issue's own
@@ -355,8 +379,10 @@ The Open-Meteo credit is a CC BY 4.0 licence condition wherever weather-derived 
 - **The map's own band**, overlaid on the bottom edge of the map and `MapRegion`'s obligation.
   Where it sits and what keeps it legible over tiles is
   [`map-treatment.md`](map-treatment.md)'s to say.
-- **The page footer**, one persistent credit under the chart and table sections, present in every
-  state a selection can put the page in.
+- **The page footer**, one persistent credit under the chart band and the whole of what is left of
+  the reading below it, present in every state a selection can put the page in — the fleet's failed
+  read included, which is exactly the state a credit kept inside the panel would be lost in
+  ([`chart-treatment.md`](chart-treatment.md)'s "Data unavailable").
 
 The arrangement the old views had — a credit inside each panel — is what this replaces. Those
 multiplied with the panels, and each one came and went with whatever mounted it, which meant the

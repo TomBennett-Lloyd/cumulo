@@ -15,10 +15,8 @@ import type { Theme } from '../theme';
 import { FleetPanel } from './FleetPanel';
 import { LazyMapRegion } from './LazyMapRegion';
 import type { MapRegionComponent } from './MapRegion';
-import { PanelError, PanelPending } from './panel-states';
 import type { SelectionOrigin } from './selection-origin';
 import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
-import { fleetListFailureMessage, LOADING_FLEET_LABEL } from './state-copy';
 
 /**
  * How the one-off fleet listing went.
@@ -72,52 +70,21 @@ const draftKey = (position: MapPosition): string =>
 const loadedSites = (load: FleetLoad): readonly Site[] =>
   load.status === 'ready' ? load.sites : [];
 
-interface FleetSectionProps {
-  readonly load: FleetLoad;
-  readonly onRetryLoad: () => void;
-}
-
-/**
- * The fleet listing's account of itself: that it is waiting, or why it failed.
+/*
+ * There is no `FleetSection` here any more, and #452 is where it went.
  *
- * A failed listing shows the reason and a retry (`error-handling.md` rule 5).
- * The fleet itself is not drawn here — the sites are on the map and in the
- * header's search, and a site created while the listing was failing is on both
- * of those for the same reason, because it exists.
- *
- * Both off-happy-path arms are the column's shared primitives rather than markup
- * of their own (`react.md`, "Async surface convention"). The waiting arm in
- * particular used to be a `role="status"` mounted with its text already inside
- * it, which announces nothing — it has no change to report — and only looked
- * accessible; `PanelPending` is a plain `aria-busy` container instead. That
- * leaves this section mounting exactly one live region of its own: the failure's
- * `role="alert"`, which really does arrive as a change. The chart readout that
- * now sits a panel above (`.forecast-chart-readout`, mounted empty with the
- * chart and filled only when a reader moves its selection) is *that* panel's
- * rather than a second one here — `react.md`'s live-region bullet budgets per
- * panel, which is exactly why the two stacked in one column compose.
- *
- * That panel can hold two of its own in one state, and it is the co-occurrence
- * the same bullet sanctions rather than a breach of it: since #284 D3 the chart
- * survives a failed fleet read, so `PanelError`'s alert mounts beside the
- * readout there. It is safe for the reason the bullet gives — a failed fleet
- * read leaves no points, so the readout is empty for as long as the alert is up
- * — and it does not change the composition here, because the budget is still per
- * panel and this section still mounts exactly one.
+ * It was the listing's own account of itself — a pending label, and a failure
+ * with the source's message and a retry — and it was the last occupant of the
+ * sites section after the fleet's table left the page in #451. The owner routed
+ * both states into the chart instead: *"the sites fetch error state should show
+ * in the graph area … this can be the generic error message for anything that
+ * means we can't show data on the graph"*. So the listing's status is a prop of
+ * `FleetPanel` now (`listing`, below), the failure is the chart's own in-figure
+ * alert, and the wait is the trace the chart already draws for a query that has
+ * not run. Nothing was dropped: what changed is that the reader is told where
+ * they are looking rather than in a box under it, and one fewer element arrives
+ * and leaves above the fold.
  */
-const FleetSection = ({ load, onRetryLoad }: FleetSectionProps): ReactElement => {
-  if (load.status === 'loading') {
-    return <PanelPending label={LOADING_FLEET_LABEL} />;
-  }
-
-  return (
-    <>
-      {load.status === 'failed' && (
-        <PanelError message={fleetListFailureMessage(load.message)} onRetry={onRetryLoad} />
-      )}
-    </>
-  );
-};
 
 export interface DashboardProps {
   readonly theme: Theme;
@@ -167,9 +134,12 @@ export interface DashboardProps {
  * Nothing under the map swaps any more. One region alternating between a site's
  * panel and the fleet's was the shape the reading had until #265; a site's
  * detail is now a card anchored to its own marker, so the reading below is a
- * plain flow — the fleet's chart, the listing's own states, the credit — and a
- * selection changes what is *drawn on* those surfaces rather than which of them
- * is there.
+ * plain flow — the fleet's chart, then the credit, since #451 and #452 took the
+ * fleet's table and then the listing's own states out of it — and a selection
+ * changes what is *drawn on* those surfaces rather than which of them is there.
+ * The flow is also the shortest it has been: every state the page can be in is
+ * now reported on a surface that is already there, so nothing arrives above the
+ * fold and pushes the chart down.
  * Placing a site is a modal over the whole page
  * (`add-site/AddSiteDialog.tsx`). `docs/design/dashboard-composition.md` records
  * the reasoning and what it is buying.
@@ -538,6 +508,10 @@ export const Dashboard = ({
           <FleetPanel
             dataSource={dataSource}
             sites={sites}
+            listing={load.status}
+            onRetryListing={() => {
+              setListAttempt((attempt) => attempt + 1);
+            }}
             selectedSite={selectedSite}
             selectionReady={forecast.status === 'ready'}
             refreshToken={createdSites.length}
@@ -552,29 +526,20 @@ export const Dashboard = ({
            */}
           <div className="dashboard-content">
             {/*
-             * What is left to say about the listing itself. The fleet used to be
-             * drawn here as a table — a `Sites` heading with sixty rows open
-             * under it until #265, then the same rows folded behind a summary —
-             * and the owner removed it on 2026-08-12: the sites are on the map
-             * and in the header's search, so a third listing of them was a third
-             * place to keep level with the other two.
+             * The credit is all that is left down here, and both removals that
+             * emptied the box were the owner's. The fleet was drawn as a table —
+             * a `Sites` heading with sixty rows open under it until #265, then
+             * the same rows folded behind a summary — and it went on 2026-08-12
+             * (#451): the sites are on the map and in the header's search, so a
+             * third listing of them was a third place to keep level with the
+             * other two. The listing's own pending and failure states outlived it
+             * by one ticket and went into the chart in #452 (see the note where
+             * `FleetSection` used to be).
              *
-             * What stays is the listing's own pending and failure states, which
-             * are about the *request* rather than about the fleet, and which no
-             * other surface accounts for yet. #452 is where they go, once the
-             * chart carries a failure of its own.
-             *
-             * No wrapper section, and none needed: a `<section>` whose heading
-             * had gone would have been a landmark with nothing to name it.
+             * The box stays because the credit is the page's rather than the
+             * chart band's, and the measure and padding that separate the two are
+             * this box's (`dashboard.css`).
              */}
-            <div className="dashboard-fleet">
-              <FleetSection
-                load={load}
-                onRetryLoad={() => {
-                  setListAttempt((attempt) => attempt + 1);
-                }}
-              />
-            </div>
 
             {/*
              * The page's one weather credit, at the foot of the content rather than

@@ -16,29 +16,39 @@ afterEach(cleanup);
 
 describe('PanelPending', () => {
   it('shows the label it was given', () => {
-    // Any label at all — the contract is that the component renders what it was
-    // handed, so this string is deliberately not one the app ships. It was the
-    // fleet chart's pending label until #448, which deleted that copy when the
-    // chart started drawing its wait instead of saying it; leaving the words
-    // here would have left a sweep for them matching a ghost.
+    /*
+     * Any label at all — the contract is that the component renders what it was
+     * handed, so this string is deliberately not one the app ships. It was the
+     * fleet chart's pending label until #448, which deleted that copy when the
+     * chart started drawing its wait instead of saying it; leaving the words
+     * here would have left a sweep for them matching a ghost.
+     *
+     * The other two cases below took the *listing's* pending label for the same
+     * reason and lost it the same way, in #452 — the sites section it announced
+     * is gone and the chart carries that wait too now — so they hold an invented
+     * label as well. The rule this file has arrived at, stated once here: a
+     * sample string in this suite is never a string the app ships, because a
+     * suite about a primitive's markup should not be one of the places a copy
+     * change has to visit.
+     */
     render(<PanelPending label="Fetching the readings…" />);
 
     expect(screen.getByText('Fetching the readings…')).toBeDefined();
   });
 
   it('marks its container busy', () => {
-    render(<PanelPending label="Loading the fleet…" />);
+    render(<PanelPending label="Fetching the readings…" />);
 
-    expect(screen.getByText('Loading the fleet…').getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByText('Fetching the readings…').getAttribute('aria-busy')).toBe('true');
   });
 
   // A live region mounted with its text already inside it announces nothing,
   // so the pending state deliberately claims no live semantics at all.
   it('mounts no live region', () => {
-    render(<PanelPending label="Loading the fleet…" />);
+    render(<PanelPending label="Fetching the readings…" />);
 
     expect(screen.queryByRole('status')).toBeNull();
-    expect(screen.getByText('Loading the fleet…').getAttribute('role')).toBeNull();
+    expect(screen.getByText('Fetching the readings…').getAttribute('role')).toBeNull();
   });
 });
 
@@ -56,11 +66,11 @@ describe('PanelEmpty', () => {
 
 describe('PanelError', () => {
   it('announces the failure as an alert', () => {
-    render(<PanelError message="Could not load the fleet forecast: network unreachable" />);
+    render(<PanelError message="The readings could not be fetched: network unreachable" />);
 
     const alert = screen.getByRole('alert');
 
-    expect(alert.textContent).toContain('Could not load the fleet forecast: network unreachable');
+    expect(alert.textContent).toContain('The readings could not be fetched: network unreachable');
   });
 
   // Retrying is offered only where it can work: a panel that omits the callback
@@ -73,7 +83,7 @@ describe('PanelError', () => {
 
   it('offers a retry that calls back when one is given', () => {
     const onRetry = vi.fn<() => void>();
-    render(<PanelError message="Could not load the fleet forecast" onRetry={onRetry} />);
+    render(<PanelError message="The readings could not be fetched" onRetry={onRetry} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
@@ -83,7 +93,7 @@ describe('PanelError', () => {
   // Inside a `role="alert"`, a button that submits an enclosing form would
   // reload the page instead of retrying (`type` defaults to "submit").
   it('gives the retry an explicit non-submitting type', () => {
-    render(<PanelError message="Could not load the fleet forecast" onRetry={vi.fn()} />);
+    render(<PanelError message="The readings could not be fetched" onRetry={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Try again' }).getAttribute('type')).toBe('button');
   });

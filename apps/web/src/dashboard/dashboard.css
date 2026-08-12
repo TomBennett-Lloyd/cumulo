@@ -100,31 +100,28 @@
    forecast on the fleet's chart, so the reading below the map is a plain flow
    with nothing that swaps and nothing to scroll to. */
 
-/* The fleet's own box: the listing's pending and failure states, and nothing
-   else since the fleet's table left the page on 2026-08-12.
+/* There is no `.dashboard-fleet` box here any more either. It held the fleet's
+   table until #451 and then only the listing's pending and failure states, which
+   #452 moved into the chart itself — so what was left was an empty flex child
+   contributing a `--space-4` gap above the footer and nothing else. Deleting it
+   is what closes that gap; the credit below is `.dashboard-content`'s only child
+   now, and the padding around it is that box's. The closing itself is a layout
+   fact and so the browser lane's (`testing.md` rule 10), and no spec in
+   `apps/web/e2e/` measures the seam above the footer today — said rather than
+   left implied by the deletion. What a fast test can see is the DOM the claim
+   rests on: this box has one element child in every state, since the only thing
+   inside it is `Dashboard.tsx`'s `<footer>`.
 
-   It used to be a scroller of its own — sixty rows are taller than the map, and
-   the old column put the site detail panel *after* this section, so an
-   unbounded list pushed the thing a selection was for below the fold. The
-   context swap (#148) moved that panel above it, which removed *that* reason,
-   and a scroller nested inside another scroller was only ever the cost of the
-   old order. One scroller now, and it is the document's — the box is empty in
-   the state the page is usually in, so scroll position simply stays where the
-   reader put it.
-
-   No top margin any more: the heading it used to clear is gone, and the space
-   above this box is `.dashboard-content`'s top padding to give — this is its
-   first child, and what sits above it is the full-width chart band outside it
-   entirely (see that rule, and `.dashboard`'s for why the band itself gets no
-   gap). */
-.dashboard-fleet {
-  display: grid;
-  gap: var(--space-3);
-}
+   It was once a scroller of its own — sixty rows are taller than the map, and
+   the old column put the site detail panel *after* this section, so an unbounded
+   list pushed the thing a selection was for below the fold. There has been one
+   scroller since, and it is the document's. */
 
 /* The credit at the foot of the page, belonging to the page rather than to
-   whichever panel is currently above it — so it takes the top margin that
-   separates it from the last card and nothing else. It used to carry
+   whichever surface is above it — so it takes the step that separates it from
+   the chart band and nothing else. That is now the only separation it has to
+   make: `.dashboard-content` holds this footer alone, so the padding above and
+   this step are what stand between the band and the credit. It used to carry
    `margin-top: auto` as well, which pinned it to the bottom of a column that
    had a fixed height to have a bottom of; on a document that ends where its
    content ends there is no space left over for `auto` to absorb, and the

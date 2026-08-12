@@ -14,7 +14,15 @@
  * neither can silently restyle the other.
  */
 
+/* `position: relative` earns its line here and is #452's: it makes this box the
+   containing block for `.forecast-chart-error` below, so the failure overlay
+   resolves its `inset: 0` against the figure rather than against the page. The
+   two declarations are one mechanism and useless apart — take this one away and
+   the overlay lands on the nearest positioned ancestor, which is the controls
+   row's own box or the viewport, neither of which is where the chart is.
+   `chart-css-contract.test.ts` reads them as a pair for that reason. */
 .forecast-chart-figure {
+  position: relative;
   margin: 0;
 }
 
@@ -360,6 +368,82 @@
     stroke-dashoffset: 0;
     opacity: 0.3;
   }
+}
+
+/* The total failure, over the plot rather than above it (#452).
+ *
+ * `position: absolute; inset: 0` inside the positioned figure above is the whole
+ * of the no-jump requirement, and it is structural rather than measured: an
+ * out-of-flow child contributes nothing to its parent's height, so this state
+ * cannot move the page arriving or leaving however tall its contents are. That
+ * is #448's discipline applied to the other end of the read — the wait is a mark
+ * inside the plot's box, and the failure is a panel over the same box. The two
+ * declarations plus the figure's `position` are what
+ * `chart-css-contract.test.ts` pins, because a claim about layout that no test
+ * can see is a claim about nothing.
+ *
+ * **`--color-danger`, not `--color-warning`, and the owner's "warning triangle"
+ * is not an argument against it.** `panel-states.css` owns this vocabulary —
+ * danger says a request failed, warning says the answer arrived but is
+ * incomplete — and this state is the first of those: there is no answer at all.
+ * The owner's phrase specifies the glyph's shape, which is what the icon draws;
+ * the ink is the vocabulary's to decide, and warning's token would fail
+ * non-text contrast on this surface besides.
+ *
+ * Centred in both axes because the overlay's box is the plot's box: the message
+ * belongs in the middle of the space where the chart would have been, not
+ * hanging off one of its corners. `place-content` centres the grid's tracks
+ * within that box and `justify-items` centres each row within its track — both
+ * are needed, since the rows are three different widths. */
+.forecast-chart-error {
+  position: absolute;
+  display: grid;
+  inset: 0;
+  gap: var(--space-2);
+  justify-items: center;
+  place-content: center;
+  color: var(--color-danger);
+  text-align: center;
+}
+
+/* The ink is inherited from the container above, so the sentence and the glyph
+   cannot end up two different reds. Only the margin reset and the type step are
+   this rule's, and the step is the one every other state sentence on the page
+   takes (`panel-states.css`). */
+.forecast-chart-error-message {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+/* The glyph, in `map.css`'s `.map-control-icon` idiom — strokes, no fill,
+   `currentColor` — at a size chosen against what it sits on rather than copied.
+   That icon's size is the copied one: its own comment in `map.css` says its
+   declarations are word-for-word `.header-menu-icon`'s, so it wears the header
+   bar's mark, and the square control around it is derived outward from the mark
+   rather than the mark from the control — `.map-control-reset`'s comment works
+   that step out a few rules above. This one joins no such family: it stands in
+   the middle of the page's largest surface with nothing but a short sentence
+   beside it, so it takes the step that reads at plot scale. Neither size is
+   restated here: both are worked figures nothing pins, and a copy of one rots
+   green (`architecture.md` rules 9 and 12).
+
+   `stroke-linecap: round` is load-bearing rather than styling: the exclamation's
+   dot is a subpath far shorter than the stroke is wide (`forecast-chart-error.tsx`
+   carries the length), which a butt cap paints as a sliver too thin to see and a
+   round cap paints as a dot of the full stroke width. The join is round for the same reason the icon
+   family's are — a stroked triangle's apex under a miter join at this weight is
+   a spike. Neither the width, the height nor `stroke-width` has a token to
+   spend; they are the documented length residual of the CSS gate
+   (stylelint.config.mjs), as `.map-control-icon`'s own are. */
+.forecast-chart-error-icon {
+  display: block;
+  width: 2rem;
+  height: 2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Invisible, and what a pointer over the marks lands on — readers aim at a time,
