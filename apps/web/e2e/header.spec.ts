@@ -279,17 +279,52 @@ test('opens the header menu, flips the theme and reads About, all from the keybo
   await expect(popover).toBeVisible();
   await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
 
-  // The toggle is the first thing inside the popover, and Enter on it is a
-  // press — a disclosure of ordinary buttons rather than an ARIA menu is
-  // exactly what makes that true without a roving tabindex to manage.
+  /*
+   * The divider is painted, not merely present. It is the whole of what says
+   * "below this line is the settings region" (`header/HeaderMenu.tsx` owns that
+   * reasoning), and a rule the cascade never reaches leaves the list looking
+   * exactly as unseparated as it did before — which is a computed style, so
+   * only this lane can tell the two apart.
+   */
+  await expect(popover.getByRole('separator')).toBeVisible();
+
+  /*
+   * Tab order is reading order in here, and that is what a disclosure of
+   * ordinary buttons buys over an ARIA menu: there is no roving tabindex to
+   * manage, so walking forwards is simply walking the popover's own DOM order.
+   *
+   * That order is About first and the theme switch last, behind the divider —
+   * the things that open something, then the setting. So the first Tab lands on
+   * About and the *second* on the switch, and the second press is also the only
+   * assertion anywhere that the `<hr>` between them takes no tab stop: a
+   * divider that had somehow become focusable would put itself between these
+   * two presses and fail the switch's `toBeFocused` by name.
+   */
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Dark theme' })).toBeFocused();
+  const aboutButton = page.getByRole('button', { name: 'About Cumulo' });
+  await expect(aboutButton).toBeFocused();
+
+  await page.keyboard.press('Tab');
+  const themeSwitch = page.getByRole('switch', { name: 'Dark Mode' });
+  await expect(themeSwitch).toBeFocused();
+
+  /*
+   * Read before it is flipped, and the read before is not ceremony: it is what
+   * makes the pair of assertions after the press a *change* rather than a state
+   * the page might have arrived in. A switch wired to report `true` however the
+   * theme stands would satisfy the second read on its own, and Enter on it is
+   * the native button's own activation rather than anything this component adds.
+   */
+  await expect(themeSwitch).toHaveAttribute('aria-checked', 'false');
 
   await page.keyboard.press('Enter');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(themeSwitch).toHaveAttribute('aria-checked', 'true');
 
-  await page.keyboard.press('Tab');
-  const aboutButton = page.getByRole('button', { name: 'About Cumulo' });
+  // And back to About the way a reader would come back to it. The dialog
+  // choreography below is untouched by the reorder: About is still the control
+  // that opens the dialog, and so still the one the browser restores focus to.
+  await page.keyboard.press('Shift+Tab');
   await expect(aboutButton).toBeFocused();
 
   await page.keyboard.press('Enter');
