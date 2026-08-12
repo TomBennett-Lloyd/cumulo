@@ -27,7 +27,7 @@ import type { UtcIsoTimestamp } from './timestamp';
  */
 
 /** The two fields aggregation groups on: one entry per site per hour. */
-interface SiteHourEntry {
+export interface SiteHourEntry {
   readonly siteId: string;
   readonly validTime: UtcIsoTimestamp;
 }
@@ -186,6 +186,57 @@ export const fleetCapacityKw = (sites: readonly Site[]): number => {
     capacityKw += site.capacityKw;
   }
   return capacityKw;
+};
+
+/**
+ * Which of two entries for the same site-hour survives, when the answer cannot matter: capacity is a
+ * property of the site, not of the entry, so duplicates for one site-hour carry identical capacity
+ * and the choice is arbitrary by construction. Deliberately not `readingSupersedes` reused — that
+ * one encodes a claim about readings having no vintage, which is a different reason to reach the
+ * same answer and is free to change without this one changing (`structure.md` rule 7).
+ */
+const eitherDuplicateSupersedes = (): boolean => true;
+
+/**
+ * The installed capacity actually behind each hour: for every hour present in `entries`, the sum of
+ * `capacityKw` over the distinct sites that reported that hour. Values are kW; hours absent from
+ * `entries` are absent from the map, and an empty input yields an empty map.
+ *
+ * This is the divisor for the web fleet chart's %-of-capacity mode, which is why it is per-hour
+ * rather than a single fleet number. A site with no matching entry in `sites` contributes `0`:
+ * capacity that cannot be evidenced is not asserted.
+ *
+ * **Exact, not the `fleetCapacityKw(sites) × contributingSiteCount / sites.length` proxy.** That
+ * proxy is mean capacity × count, so it is only right when every site is the same size. On a
+ * *partial* hour — dawn and dusk, a site added mid-window, a gap in one site's series — the
+ * reporting sites are a biased sample of the fleet whenever capacities are heterogeneous, and the
+ * mean then divides the hour's kW by capacity that was never behind it: a partial hour of large
+ * sites reads under 100% of a divisor it should saturate, one of small sites can read over 100%.
+ * Those partial hours are exactly what a per-hour divisor exists to get right, so the proxy fails
+ * precisely where the rule was needed. The entries are already in the caller's hand, so the exact
+ * sum costs one pass.
+ *
+ * Deduplicates per site-hour on the same rule as the aggregations above, so an hour's divisor and
+ * its summed kW are always drawn from the same set of sites.
+ */
+export const contributingCapacityKwByHour = (
+  entries: readonly SiteHourEntry[],
+  sites: readonly Site[],
+): ReadonlyMap<UtcIsoTimestamp, number> => {
+  const capacityKwBySiteId = new Map<string, number>();
+  for (const site of sites) {
+    capacityKwBySiteId.set(site.id, site.capacityKw);
+  }
+
+  const capacityKwByHour = new Map<UtcIsoTimestamp, number>();
+  for (const group of groupOnePerSitePerHour(entries, eitherDuplicateSupersedes)) {
+    let capacityKw = 0;
+    for (const entry of group.entries) {
+      capacityKw += capacityKwBySiteId.get(entry.siteId) ?? 0;
+    }
+    capacityKwByHour.set(group.validTime, capacityKw);
+  }
+  return capacityKwByHour;
 };
 
 /**
