@@ -63,6 +63,39 @@
   touch-action: pan-y pinch-zoom;
 }
 
+/* No ring for a finger, on the one element in this app that would otherwise
+   paint one (#440). The chart must keep taking focus on a tap — the spoken
+   readout and #421's blur-dismiss both hang off it — so the ring is what has to
+   go, and `outline: none` unconditionally would take the keyboard's with it
+   (WCAG 2.4.7). The attribute is the condition, written by
+   `forecast-chart-hover-boundary.tsx` only for a focus a pointer press brought,
+   and only while that press is recent enough to be its cause.
+
+   Deliberately no `:focus-visible` conjunct, and this is the whole reason the
+   rule is shaped like this. A `hasTouch` Chromium probe on #440 measured a
+   tapped chart holding the focus with `matches(':focus-visible')` **false**, and
+   a ring painted anyway. Whatever paints it, an author selector carrying that
+   conjunct is evaluated by the same engine that answered false, so it cannot
+   match and the suppression would simply stop working — which is all this rule's
+   shape needs, and all the probe can support: it read a computed style rather
+   than a paint, and read no stylesheet, so which rule painted is a question it
+   could not have answered. `:not(:focus-visible)` would be worse than inert — it
+   hands the ring back exactly when an engine's heuristic misjudges a pointer
+   focus, which is the case this rule exists for.
+
+   Keyboard focus never carries the attribute, so `@cumulo/ui`'s zero-specificity
+   `:where(…):focus-visible` ring (`packages/ui/src/styles.css`) is untouched on
+   that path — that is the 2.4.7 half, and `e2e/keyboard-focus.spec.ts` is what
+   proves it, as `e2e/pointer-focus.spec.ts` proves this one. `outline-style`
+   alone suffices: that spec's `paintsARing` reads a style of `none` as no ring.
+   And no pseudo-class appears here at all, so this is nowhere near the bare
+   `:focus` that `selector-pseudo-class-disallowed-list` bans in
+   `stylelint.config.mjs` — it is `design.md` rule 11's split, expressed against
+   the one focus an engine gets wrong by default. */
+.forecast-chart[data-focus-via-pointer='true'] {
+  outline-style: none;
+}
+
 .forecast-chart-grid {
   stroke: var(--color-chart-grid);
   stroke-width: 1;
