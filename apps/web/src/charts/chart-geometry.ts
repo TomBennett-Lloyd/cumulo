@@ -53,6 +53,12 @@ export interface PlotRect {
  * (`dashboard/fleet-panel.css`) — and it puts the plot's top at 636px of the 900
  * that viewport is tall, leaving 264.
  *
+ * **That pair, and every clearance figure in the paragraphs below it, is the
+ * stack as it stood before #449.** The row gained a 4px step beneath it on
+ * 2026-08-12 and each of those readings moves by exactly that; the dated
+ * paragraph at the end of this block does the arithmetic and says what 184 does
+ * about it. Read nothing here against the fold without it.
+ *
  * **Re-measured for #323, which took a heading row, a padding step and a gap out
  * of that stack.** The derivation this docblock used to carry was made against
  * the taller one and read 702px and 198px left; both are history now, and the
@@ -98,11 +104,13 @@ export interface PlotRect {
  * body grid's gap (`charts.css`); the legend went to the fleet panel's (i)
  * (`dashboard/FleetPanel.tsx`). Nothing above the plot moved, so the stack, the
  * 636 and the 264 are untouched and 184 still fits by exactly the argument
- * above. What moved is what the tighter reading was of: the figure ends at the
+ * above — true of that day's change and of nothing since, because #449 did move
+ * all three the next day (the dated paragraph at the end of this block). What
+ * moved on 2026-08-11 is what the tighter reading was of: the figure ends at the
  * plot's own visually hidden readout now, which takes no height at all, and what
  * actually finishes the section is the panel below it, which sits lower than the
- * figure's old bottom by the gap and the padding it gained. Those
- * pixels are deliberately not restated, because nothing has re-measured them on
+ * figure's old bottom by the gap and the padding it gained. Those pixels are
+ * deliberately not restated, because nothing has re-measured them on
  * a rendered page — the D15 case measures the *plot*, the reading that was never
  * in question here, and it passes unchanged across the move. So "894px, 6px
  * short of the fold" is a dated reading of a box that no longer exists; re-measure
@@ -117,10 +125,40 @@ export interface PlotRect {
  * The arithmetic here is the reasoning; `e2e/chart-surfaces.spec.ts` measuring a
  * rendered page is the evidence, and it imports this constant rather than
  * restating it. What that case pins is the *plot's* bottom against the fold,
- * which is the looser of the two readings above and only gained room in #323;
- * the tighter one — where the reading actually finishes, which since 2026-08-11
- * is the raw-data panel below the figure rather than the figure itself — is
- * asserted by no spec in either lane today (`testing.md` rule 10's closing rule).
+ * which is the looser of the two readings above; it gained room in #323 and
+ * gave 4px of that back in #449. The tighter one — where the reading actually
+ * finishes, which since 2026-08-11 is the raw-data panel below the figure rather
+ * than the figure itself — is asserted by no spec in either lane today
+ * (`testing.md` rule 10's closing rule).
+ *
+ * **#449, 2026-08-12: 4px of margin under the controls row, and the whole stack
+ * moves down by exactly that.** The owner asked for breathing room between the
+ * chrome and the chart it introduces; `dashboard/fleet-panel.css`'s
+ * `.fleet-chart-controls` owns the declaration, and the reason it is 4px rather
+ * than the ~5px asked for. A margin on a block in normal flow moves everything
+ * after it and nothing before it, so every reading above shifts by one step and
+ * by one step only: the plot's top goes 636 → **640** of the 900 that viewport
+ * is tall, what is left below it 264 → **260**, and the plot's bottom — that top
+ * plus this constant — 820 → **824**, which is **76px** clear of the fold where
+ * it was 80. The 80 the #323 paragraph reports and the "Those 80px" the
+ * paragraph after it argues from are the same clearance under two names, and
+ * both read 76 from here on.
+ *
+ * `CHART_VIEW_BOX_HEIGHT` does not move, on the argument it already had rather
+ * than a new one. 260 is still more room than 184 asks for, and that clearance
+ * was never headroom the plot may grow into — what finishes the section sits
+ * below the plot, so the 4px comes out of slack the plot was not entitled to
+ * spend either way. #449 was asked for spacing and not for height, and nothing
+ * in it asks the height to change.
+ *
+ * That is arithmetic on a measurement rather than a measurement. Nothing above
+ * was re-read on a rendered page for #449: one term of the sum changed by a
+ * known amount and the sum was re-added, which is sound exactly as long as the
+ * rest of the stack is still what the last reading of it found. The browser wave
+ * re-measures the D15 fold on a real page, which is the same discharge the
+ * paragraph above asks for; and `e2e/chart-surfaces.spec.ts`'s D15 case is what
+ * fails if this sum is wrong, because it measures the plot's bottom against
+ * `D15_VIEWPORT.height` and against no figure written here.
  */
 export const CHART_VIEW_BOX_HEIGHT = 184;
 

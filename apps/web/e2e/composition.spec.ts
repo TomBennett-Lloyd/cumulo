@@ -388,8 +388,8 @@ test('stacks the fleet chart under the map rather than beside it', async ({ page
    *
    * `>=` on the raw edges rather than a tolerance: these two boxes are in
    * different, non-overlapping parts of the flow, separated by the chart
-   * section's top padding and the whole of its controls row, so there is nothing
-   * here for sub-pixel rounding to decide. The `--space-4` gap that used to sit
+   * section's top padding, the whole of its controls row and the step under it
+   * (#449), so there is nothing here for sub-pixel rounding to decide. The `--space-4` gap that used to sit
    * between them is gone with #323 — the map band and this section are one
    * continuous surface now — and the claim is unaffected, because what it forbids
    * is the chart being *beside* the map rather than a particular distance under

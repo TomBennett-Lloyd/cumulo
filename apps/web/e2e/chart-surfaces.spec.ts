@@ -618,8 +618,15 @@ test.describe('the first viewport', () => {
      * down rather than over it, so that failure arrives as an overhang and is the
      * first arm's to report; what the second arm catches is the row leaving the
      * flow — positioned, overlapped, or drawn under the plot it introduces.
-     * Normal flow puts the plot's top exactly at the row's bottom, so the
-     * comparison is `>` and touching is the passing case.
+     * Normal flow puts the plot's top at the row's bottom plus whatever margin
+     * the row carries — 4px of it since #449 — so the comparison is `>` and
+     * touching is the passing case, which is what it takes for the arm to keep
+     * catching only that one defect whatever the step between them is. That
+     * leaves the 4px itself unowned *here*, deliberately, and it is owned:
+     * `chart-controls-gap.spec.ts` is the case that pins it, in its own file
+     * because this one is at `max-lines`' ceiling. The two are complementary —
+     * this arm survives any future decision about the size of the step, that one
+     * is meant to go red the day the step changes.
      */
     await expect
       .poll(
