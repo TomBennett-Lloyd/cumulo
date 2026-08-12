@@ -223,6 +223,34 @@ body {
   cursor: pointer;
 }
 
+/* The off state wears muted ink as a fill. It wore `--color-border` until #455's
+ * browser pass, and that is a hairline colour: against `--color-surface`, the
+ * popover this sits on, it lands far below the 3:1 WCAG 1.4.11 asks of the
+ * boundaries of a control that carries meaning — in both themes, and so did the
+ * thumb against it. A switch whose whole job is to show its state was a smudge
+ * in one of the two states it exists to tell apart.
+ *
+ * Ink rather than a data token, for the reason the on state's rule below gives:
+ * the chart and map slots carry data identity and this control may not borrow
+ * one. Base ink is unavailable for a neighbouring reason — a fill of
+ * `--color-text` is already what `[aria-pressed='true']` wears in two other
+ * control families (`dashboard/range-picker.css`, `map/map.css`), so spending it
+ * on this switch's *off* state would give one treatment two opposite meanings
+ * (`design.md` rule 9). Muted ink carries no such job: it is a step of rule 8's
+ * type-weight gradient, and the only shape filled with it today is the gallery's
+ * own swatch for it (`preview/preview.css`), which demonstrates the token rather
+ * than meaning anything. It is also the only neutral left that clears the bar —
+ * `--color-bg` and `--color-border` both sit within a hair of the surface in
+ * both themes, which is the whole defect.
+ *
+ * That leaves the gallery, where this switch sits on `--color-bg` instead
+ * (`preview/TokensHarness.tsx`, on the shared `.app-header`). The two backdrops
+ * are near-identical in luminance in both themes, so the pairing that clears the
+ * popover clears that header too, comfortably.
+ *
+ * No figures written down here: `theme-toggle-contrast.test.ts` recomputes them
+ * from this declaration, the thumb's below and the token file, in both themes,
+ * which is the only thing that can still be true after someone edits either. */
 .theme-toggle-track {
   display: inline-flex;
   flex: none;
@@ -230,7 +258,7 @@ body {
   width: var(--space-8);
   height: var(--space-4);
   border-radius: var(--radius-full);
-  background: var(--color-border);
+  background: var(--color-text-muted);
 }
 
 .theme-toggle-thumb {
@@ -251,13 +279,19 @@ body {
  * open state with it — so the switch is joining a meaning rather than claiming
  * a second treatment for one (`design.md` rule 9).
  *
- * The thumb keeps `--color-surface` in both states, which is what leaves it
- * legible against either track colour in either theme: the surface token is a
- * near-white in light and a near-black in dark, while `--color-border` is a
- * mid-grey and `--color-accent` a saturated blue in both, so the thumb never
- * approaches the thing behind it. The values themselves stay
- * `packages/ui/src/tokens/tokens.css`'s, which is also where their measured
- * contrast figures are argued. */
+ * The thumb keeps `--color-surface` in both states, and that is what collapses
+ * two obligations into one rather than merely being tidy: the thumb is painted
+ * in the very colour of the surface the switch sits on, so "the thumb reads
+ * against the track" and "the track reads against the popover" are the same
+ * inequality, and a track colour satisfying one satisfies the other. That is
+ * why #455 could be answered by moving the off track alone. It also means the
+ * claim to check when either track colour changes is a single one, which is the
+ * shape `theme-toggle-contrast.test.ts` asserts.
+ *
+ * The values themselves stay `packages/ui/src/tokens/tokens.css`'s, which is
+ * also where the accent's measured figures against both opaque surfaces are
+ * argued — including the light-mode shortfall it has *as ink*, which this
+ * control is unaffected by: it spends accent as a fill and puts no text on it. */
 .theme-toggle[aria-checked='true'] .theme-toggle-track {
   background: var(--color-accent);
 }
