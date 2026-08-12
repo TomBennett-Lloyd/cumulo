@@ -26,10 +26,16 @@
  * fresh marker elements *after* this card's, so without a value here the new
  * bubbles paint over a card the reader has open — the #284 defect.
  *
- * `1` is enough because the only competition is those siblings. It stays far
- * below the `10` the header's overlays and the info tip share (the census is in
- * header/header.css) deliberately: those hang over the whole map, and this card
- * belongs to the map rather than above it.
+ * `1` is what outranks those siblings — and outranking them is not the whole of
+ * what it does, which is worth stating because it read that way for a release.
+ * Nothing between this marker and the document root opens a stacking context, so
+ * the value is not confined to maplibre's pane: any positive number here also
+ * beats the map's own chrome, which carried none of its own. The map's controls
+ * therefore state `2` and paint above this card by design (`map.css` carries
+ * that argument), which is what stopped a panned card burying the reset button.
+ * It stays far below the `10` the header's overlays and the info tip share (the
+ * census is in header/header.css) deliberately: those hang over the whole map,
+ * and this card belongs to the map rather than above it.
  *
  * It leans on maplibre for the `position: absolute` that makes a stacking value
  * apply at all. Nothing else here can supply it — the element is maplibre's to

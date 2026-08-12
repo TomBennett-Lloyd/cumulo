@@ -127,9 +127,11 @@
 
 /*
  * The popup, stacked over the surface for the same reason the menu's popover is
- * — see that block below for the whole argument, for the third value that has
- * since joined these two, and for the one elsewhere that deliberately does not
- * match them. One value rather than a layer scale: the bar's
+ * — see that block below for the whole argument, for the values that have since
+ * joined these two, and for the ones elsewhere that deliberately do not match
+ * them. Pointers rather than counts here, because that block is the census and
+ * this is not: the count this sentence used to carry had already fallen a value
+ * behind it. One value rather than a layer scale: the bar's
  * popups hang off different parts of it and cannot overlap each other, so their
  * order between themselves is not a question anything has to answer.
  *
@@ -534,19 +536,25 @@
  * the one to read before assuming what the value buys there, because it says
  * plainly, by hit test with the declaration removed, that the value is not what
  * puts that sheet over the chart.
- * One further value exists and is deliberately unlike them: `.site-popover-anchor`
- * in `map/site-popover.css` is `1`, because the selected site's card rides a
- * maplibre marker and its only competition is the sibling markers in that pane,
- * which carry no value at all. It is not `10` because it must not clear this bar
- * — the card is a thing on the map, not an overlay over it. That file carries
- * the argument.
+ * Two further values exist, are deliberately unlike them, and are a pair — the
+ * second is there because the first reached further than it looked.
+ * `.site-popover-anchor` in `map/site-popover.css` is `1`, because the selected
+ * site's card rides a maplibre marker and has to outrank the sibling markers in
+ * that pane, which carry no value at all. `.map-controls` in `map/map.css` is
+ * `2`, because nothing between either element and the document root opens a
+ * stacking context, so that `1` was not confined to maplibre's pane: the card
+ * competed with the map's own chrome in the root context and beat it on any
+ * positive value at all, taking the reset button with it whenever a reader
+ * panned the card under the top-right corner. Neither is `10`, because neither
+ * must clear this bar — both are things on the map rather than overlays over it.
+ * Those two files carry the arguments.
  * This paragraph is the one place the values are read against each other, so it
  * states a floor and the sweep that found it rather than a count that the next
  * stylesheet falsifies (`architecture.md` rule 9) — which is exactly what
  * happened to its predecessor, a bare "those four" that the range-picker's fold
- * made wrong the day it landed. As of 2026-08-11,
+ * made wrong the day it landed. As of 2026-08-12,
  * `git grep -nE '^[[:space:]]*z-index[[:space:]]*:' -- ':/'` from a worktree
- * root returns the five named above and nothing else; a value written after that
+ * root returns the six named above and nothing else; a value written after that
  * date belongs in this list, added by whoever writes it. (maplibre's vendored
  * sheet has its own, which is what the values painted over its canvas have to
  * clear.)

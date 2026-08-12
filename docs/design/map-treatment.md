@@ -164,6 +164,18 @@ it happens to give. These carry full `--color-text`, and since #428 so do the cr
 down far enough that base ink is the only ink the veil still clears AA with, so the two now differ
 in weight and scale rather than in ink.
 
+Both are **glyph-only**, in the same stroked 20-unit box the header's own marks are drawn in, with
+the control's name moved to its accessible name. That is `design.md` rule 2's settled move — a
+label whose only job is naming a control for assistive technology becomes an accessible name rather
+than visible text — and the same one the card's Close (#340) and the range picker's trigger (#329)
+already make. The add control's mark is a pin carrying a plus and deliberately **not** a bare plus:
+a plus on its own beside a map is the zoom button every other map has, and this one places a site.
+
+The group paints **above** the selected site's card, and it says so with a stacking value rather
+than with document order, because the card carries a value of its own that tree order cannot reach
+past. `apps/web/src/map/map.css` holds the value and the reasoning; the app's one list of these
+values, read against each other, is the census in `apps/web/src/header/header.css`.
+
 - **Reset map view** returns the camera to the framing the map opened on. It takes that framing
   whole, from the one constant that also constructs the map (`apps/web/src/map/framing.ts`) — the
   point being that every reader-reachable axis comes back, rotation and tilt included (axes behind
@@ -184,8 +196,10 @@ The `--color-map-marker-*` family carries data identity, and a control borrowing
 
 That pressed fill is also why the mode is never carried by colour alone — the same relief rule the
 markers follow above. `aria-pressed` is the state a screen reader is given, the crosshair is the
-state a pointer user sees without looking away from the map, and the control's own label names what
-it does in either state.
+state a pointer user sees without looking away from the map, and the control's own accessible name
+— the label, since the label is now a glyph — says what it does in either state. That name names
+the action and never the mode: the mode is `aria-pressed`'s to report, and a name that moved with
+it would say the same thing twice and be free to disagree with itself.
 
 ## Dark mode
 

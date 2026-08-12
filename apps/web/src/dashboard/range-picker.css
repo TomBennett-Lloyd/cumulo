@@ -185,7 +185,7 @@
  * measurement taken while it hung off the trigger says nothing about it hanging
  * off the row. Same outcome either way, with and without the declaration.
  *
- * That makes this the fifth `z-index` in the app's own stylesheets. header.css's
+ * That adds one more `z-index` to the app's own stylesheets. header.css's
  * census — the one place the values are read against each other rather than each
  * counting the others — names this one, and states a dated floor rather than a
  * count now, because a count is what this sheet falsified on arrival.
