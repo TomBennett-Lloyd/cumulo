@@ -60,6 +60,17 @@ export interface PointerSample {
  * index and the continuous position are two readings of the same pointer, and
  * computing them apart would let them disagree about which sample the panel is
  * standing next to.
+ *
+ * **The x is clamped into the plot, because since #421 the pointer may be
+ * outside it.** The target is the whole figure — the plot and both axis gutters
+ * (`forecast-chart-hover-boundary.tsx`) — so a thumb aimed at the start of the
+ * day genuinely lands at an x the plot does not contain, and the reading has to
+ * be the nearest x the plot does. Clamping before the snap rather than after it
+ * is what makes both halves say so: `snapToNearestX` already answers the end
+ * sample for an x beyond either end, so the *index* would be right either way,
+ * and it is the continuous position the clamp is really for. Unclamped, the
+ * panel follows the pointer into the gutter and is anchored off the plot's left
+ * edge — a readout half over the y axis, naming a sample it is not beside.
  */
 export const pointerSample = ({
   clientX,
@@ -74,7 +85,8 @@ export const pointerSample = ({
   if (bounds.width <= 0) {
     return null;
   }
-  const pointerX = ((clientX - bounds.left) / bounds.width) * viewBoxWidth;
+  const viewBoxX = ((clientX - bounds.left) / bounds.width) * viewBoxWidth;
+  const pointerX = Math.min(Math.max(viewBoxX, scale.plot.left), scale.plot.right);
   return {
     activeIndex: snapToNearestX({ pointerX, xs: scale.xs }),
     pointerX,
@@ -151,6 +163,8 @@ export const hoverKeyAction = ({
  *     `PAST_ONE_FRAME_MS`, chosen to fall either side of this value.
  *   - `forecast-chart-render-boundary.test.tsx`: `PAST_ONE_FRAME_MS`, the wait
  *     each move in its pointer sweep advances by to commit exactly one frame.
+ *   - `forecast-chart-tap.test.tsx`: `PAST_ONE_FRAME_MS`, the wait its touch
+ *     scrub advances by so the held second position lands.
  *   - `docs/design/chart-treatment.md`: the D7 bullet, which owns the decision
  *     and states it as a rate rather than as this interval.
  *   - `docs/design/design-principles.md`: the P12 narrative and the §3.3 fenced

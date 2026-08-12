@@ -221,12 +221,16 @@ describe('ForecastChart hover layer', () => {
     expect(tooltipText(container)).toBe(READOUT[1]);
   });
 
-  it('clears the readout when the pointer leaves the plot', () => {
+  // A *mouse*, and the pointer type is the whole of what the guard reads: a
+  // finger leaves at the end of every tap, so clearing on any pointer type
+  // would undo a tap in the frame that made it (#421, `forecast-chart-tap.test.tsx`
+  // holds the other side).
+  it('clears the readout when a mouse leaves the figure', () => {
     const container = renderChart(SERIES);
     stubRenderedSize(requireSvg(container));
     hoverSample(container, SERIES, 2);
 
-    fireEvent.pointerLeave(requireMark(container, '.forecast-chart-pointer-target'));
+    fireEvent.pointerLeave(requireSvg(container), { pointerType: 'mouse' });
 
     expect(tooltipText(container)).toBeNull();
     expect(marks(container, '.forecast-chart-crosshair')).toHaveLength(0);
@@ -239,7 +243,7 @@ describe('ForecastChart hover layer', () => {
 
     hoverSample(container, SERIES, 2);
     const hovered = tooltipText(container);
-    fireEvent.pointerLeave(requireMark(container, '.forecast-chart-pointer-target'));
+    fireEvent.pointerLeave(svg, { pointerType: 'mouse' });
 
     act(() => {
       svg.focus();

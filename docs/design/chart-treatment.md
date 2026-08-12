@@ -514,8 +514,17 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   it from all three before ink or weight is asked to. Full ink at the data weight is what separates
   the crosshair from the other two at a glance, with the horizon's dash separating that pair, and
   the crosshair can
-  afford to be the loudest thing in the chrome because it exists
-  only while a pointer is held on the plot and leaves with it. No new token: `--color-text` is the
+  afford to be the loudest thing in the chrome because it is never in the chart's resting state:
+  nothing draws it until a reader asks for a sample, and it names the sample they asked for. How
+  long it then lasts is the pointer's to say, not this bullet's — a mouse's crosshair leaves with
+  the mouse, a finger's outlives the lift (the tap bullet below) — and the loudness argument holds
+  either way, because what earns it is that the mark is a reader's own and not the frame's. Pitched
+  that way deliberately: this sentence twice tied the mark's existence to a pointer still being
+  down on the plot, and was twice falsified — by
+  [#404](https://github.com/TomBennett-Lloyd/cumulo/issues/404), then again by
+  [#421](https://github.com/TomBennett-Lloyd/cumulo/issues/421) once a tap could pin it — because a
+  lifetime is precisely the part of this claim a new input device gets to change. No new token:
+  `--color-text` is the
   strong ink in both modes and already the validated body ink on these surfaces, so a stroke drawn
   in it inherits a measurement rather than owing one.
 - **One tooltip, every series the chart carries, read at one timestamp.** The readout lists the
@@ -619,6 +628,59 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   `prefers-reduced-motion` to reduce. Settled in
   [#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) (D7); a keyboard selection has no
   pointer, so the panel sits at the sample and steps with the arrow keys.
+- **A tap is a hover a reader can put down.** Touch gets the same readout by the same route rather
+  than a mode of its own, on the contract the owner set in
+  [#421](https://github.com/TomBennett-Lloyd/cumulo/issues/421) and amended the same evening.
+  **The tap-and-drag target is the whole graph figure — the plot _and_ both axes** — because the
+  figure's `<svg>` is the boundary that carries the pointer handlers, and the figure is what a
+  reader is aiming at in any case: a thumb going for the start of the day lands on the y axis about
+  as often as beside it, and a tap that summons nothing reads as a broken chart rather than as a
+  missed target. **Selection is by x alone**, and where the finger sits vertically is not a question
+  this chart asks — every series is read at one timestamp, per the tooltip bullet above, so the y
+  carries no information to select on. **An x the plot does not contain clamps to the nearest one it
+  does**, which is what makes the axes worth listening to: a tap on the y axis reads the _start_ of
+  the range, and a tap past the right edge reads the end (owner's amendment on #421, comment
+  5259485326). **A tap pins** — the reading survives the lift, and only a mouse's leave clears it.
+  That asymmetry is mechanism rather than preference: a touch pointer leaves at the end of every
+  tap, because the finger _is_ the pointer, so clearing on that event would undo the selection in
+  the same frame and no touch reader would ever see a readout at all. **A drag scrubs**, by x, the
+  way a mouse crossing the plot does. **A tap anywhere outside the figure dismisses**, through the
+  same blur path keyboard readers already have — no second way to dismiss was added and none is
+  wanted, because a readout with one way to go away is a readout every input can be reasoned about
+  together.
+
+  One thing does take a reading away without dismissing it, and the distinction is the contract
+  rather than an exception to it: a `pointercancel`, the browser claiming the gesture mid-flight —
+  a page scroll that began on the chart, which `touch-action` leaves it free to claim. The press
+  had already committed a reading, and it turns out nobody asked for one. A lift is the end of a
+  question and its answer stands; a cancel is the question being withdrawn, and the reading goes
+  with it. Nothing else could take it: the leave events that follow a cancel are a touch pointer's,
+  which the mouse-only clear ignores by design, and a scroll takes no focus, so there is no blur to
+  dismiss through. So every reading a reader _asked_ for still has exactly one way to go away.
+
+  Two costs this contract accepts out loud rather than designs around. **Fingertip precision is
+  accepted as it is**: no coarse-pointer geometry, no widened hit slots, no touch-only variant of
+  the plot — an hour is a broad target at the sizes this chart is drawn at, and a reader who lands
+  one hour off corrects it with a few pixels of drag, which is the same gesture they are already
+  making. And **the pinned panel covering the very hour it names is accepted, because the panel is
+  the readout** (owner, 2026-08-11). That sentence is a repair, and worth citing as one:
+  [#432](https://github.com/TomBennett-Lloyd/cumulo/issues/432) is the measurement that dropped #421
+  out of the [#404](https://github.com/TomBennett-Lloyd/cumulo/issues/404) batch, precisely because
+  the tap bullet this document carried then made an occlusion claim the measurement contradicted.
+  What resolves it is the owner's reframing rather than any new geometry — a reader who taps is
+  asking for the numbers, and the numbers are what arrives on top; the marks underneath are not what
+  the finger was reaching for, and they are back the moment it moves. So #432 stays open only as a
+  bound on that acceptance: it is a defect again if implementation shows something worse than the
+  occlusion described here.
+
+  **The figure-wide target belongs to every pointer type, not to touch.** The handlers sit on the
+  figure and are told nothing about what is pressing them, so a mouse hovering an axis gutter now
+  reads the clamped edge sample too, where before it read nothing at all. That is a behaviour change
+  for mouse readers that fell out of a touch ticket, and it is written here rather than left to be
+  discovered: it is defensible on the tap's own ground — a pointer in the gutter is a reader
+  indicating the nearest time the chart holds — but it is a change, and an unwritten change is one
+  nobody can disagree with.
+
 - **Keyboard focus shows exactly what hover shows — and says so out loud.** The plot's `<svg>`
   keeps `role="img"` with one `aria-label`: a reader arriving at the chart should hear its name,
   not wade through every text node inside it. That is also why the tooltip cannot carry the
