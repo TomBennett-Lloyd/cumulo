@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import { settledBoxOf } from './layout-box';
 import { openSiteTable } from './site-table';
 
 /*
@@ -50,7 +51,33 @@ import { openSiteTable } from './site-table';
  * colour alone — out of a keyboard reader's reach, with every other assertion
  * here unable to see it.
  *
- * The second case is the other half of the same rule, and it is the reason #260
+ * The second case measures the same ring on the fleet chart, and it exists
+ * because #440 gave that chart the only pointer-ring suppression on this page
+ * that the engine is not making for us. A tap on the chart leaves
+ * `:focus-visible` measurably false while a ring is painted anyway — whatever
+ * paints it, a rule carrying that conjunct is evaluated by the same engine that
+ * answered false and so cannot match — which is why `charts.css` suppresses on an
+ * attribute the component sets from the focus's *source* instead. An author rule
+ * that can take a ring off can take it off too widely, and this case stands at
+ * exactly that edge: tab to the chart, and the ring is still there.
+ * `e2e/pointer-focus.spec.ts` holds the other side of that split, on a real
+ * finger; neither half means anything alone.
+ *
+ * That edge has more sides than one case can stand on, which is what the touch
+ * describe at the foot of this file is for. Tabbing in from a fresh page proves
+ * the *selector* — a rule that dropped the attribute would fail it — and nothing
+ * else, because a chart no finger has been near has no attribute to be left set
+ * and no blur to fail to clear. The three cases there are the states in which it
+ * could be: a chart that was tapped and then driven by keyboard, a chart that was
+ * tapped and returned to by Tab, and a chart that was *scrubbed* — the gesture
+ * that fires no `click` at all. The boundary takes that focus itself at the lift
+ * (`endGestureAtLift`), for a scrub as for a tap wherever a reading stands,
+ * because a reading with no focus behind it has no blur to be dismissed by and no
+ * way at all to go away; what this lane can say about it that jsdom cannot is that the
+ * focus so taken paints no ring, and that the ring is waiting when the reader
+ * comes back to the chart by Tab.
+ *
+ * The last case is the other half of the same rule, and it is the reason #260
  * was routed to this lane at all. A `?site=` link is *not* a reader asking for
  * anything now, so the card must take no focus — and "no focus was taken" is a
  * claim about the whole assembled page arriving over HTTP, which is what this
@@ -69,6 +96,9 @@ import { openSiteTable } from './site-table';
  * here rather than as an unexplained Playwright timeout.
  */
 const MAX_TAB_PRESSES = 100;
+
+/** The fleet chart's canvas — since #421 the element a pointer lands on too. */
+const CHART_SVG = 'svg.forecast-chart';
 
 /** What the browser decided to paint around the focused element. */
 interface FocusRing {
@@ -138,6 +168,34 @@ const tabToSiteRow = async (page: Page): Promise<string> => {
   }
 
   throw new Error(`No site row took focus within ${String(MAX_TAB_PRESSES)} Tab presses.`);
+};
+
+/**
+ * Tab from wherever the focus is until the fleet chart is holding it.
+ *
+ * The same ceiling idiom as `openSiteTableFromKeyboard`, for the same reason: the
+ * map precedes the content column in DOM order, so the route to the chart crosses
+ * every marker button and that count moves with the clustering. Throws with the
+ * element named rather than letting the measurement below report a `none` on
+ * whatever else happened to hold the focus — a chart nothing can tab into is a
+ * WCAG 2.1.1 failure and should read as one, not as a puzzling ring result.
+ */
+const tabToChart = async (page: Page): Promise<void> => {
+  const chart = page.locator(CHART_SVG);
+
+  await expect(chart).toBeVisible();
+
+  for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
+    if (await chart.evaluate((element) => element === document.activeElement)) {
+      return;
+    }
+
+    await page.keyboard.press('Tab');
+  }
+
+  throw new Error(
+    `The forecast chart took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
+  );
 };
 
 /**
@@ -218,6 +276,48 @@ test('leaves a keyboard selection standing on the row it was made from, ring and
   expect(ring.widthPx).toBeGreaterThan(0);
 });
 
+test('paints the ring on the forecast chart when a keyboard reader tabs to it', async ({
+  page,
+}) => {
+  /*
+   * The guarded edge of #440's suppression, and the reason that suppression is
+   * allowed to exist. The chart is the one control on this page whose pointer
+   * ring is taken off by an author rule rather than by the engine's
+   * `:focus-visible` heuristic — `charts.css` keys `outline-style: none` on the
+   * `data-focus-via-pointer` attribute the boundary sets only when a press
+   * brought the focus in. What this case holds is the *selector*: a rule that
+   * dropped the attribute would suppress on the element itself and take the ring
+   * off a reader who tabbed here from a fresh page — a chart they can reach and
+   * then cannot see themselves standing on, which is a WCAG 2.4.7 failure and is
+   * what this case fails on. What it cannot hold is the attribute's *lifetime*,
+   * since nothing here ever sets it: no finger has been near this chart, so
+   * there is no attribute to be left behind and no blur to fail to clear. Those
+   * states are the touch describe's at the foot of this file, and the claim is
+   * split that way rather than made here on their behalf.
+   *
+   * `solid` specifically, and not merely "a ring". That is the style
+   * `@cumulo/ui` writes (`packages/ui/src/styles.css`,
+   * `:where(…, [tabindex]):focus-visible`), and it is the only outline any author
+   * rule in this repo paints — `charts.css`'s guarded rule writes `none`, and no
+   * other stylesheet here declares an `outline` at all. So demanding `solid` is
+   * demanding that the keyboard path is served by *our* ring rather than by
+   * anything else that might put an outline on this element; a ring of some other
+   * style would satisfy "visible" while saying nothing about which rule is still
+   * reaching it.
+   *
+   * The map first, as above: it is what this tabs through, and a document still
+   * growing in front of the cursor is not a tab order.
+   */
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+  await tabToChart(page);
+
+  const ring = await focusRing(page, CHART_SVG);
+
+  expect(ring.style).toBe('solid');
+  expect(ring.widthPx).toBeGreaterThan(0);
+});
+
 // The issue number is spelled out rather than written with a hash: the frontend
 // gate's hex-colour rule matches `#260` in a string literal, and a rule fighting
 // you is a design signal rather than a thing to suppress (CLAUDE.md).
@@ -268,4 +368,214 @@ test('takes no focus at all when ?site= opens the card (issue 260)', async ({ pa
   const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
 
   expect(focusedTag).toBe('BODY');
+});
+
+/*
+ * The states a finger leaves behind, and whether the ring comes back in them.
+ *
+ * `hasTouch` is a browser-context option rather than a per-action one, so it has
+ * to be scoped by a describe — and scoped rather than set file-wide, because
+ * everything above must keep arriving as a plain keyboard on a plain desktop
+ * context. Every case here is still a *keyboard* assertion: what changes is the
+ * state the keyboard arrives into, which is the half the case above cannot reach.
+ */
+test.describe('after a finger has been on the chart', () => {
+  test.use({ hasTouch: true });
+
+  /** Where a reading stands, and so whether a gesture reached the chart at all. */
+  const CROSSHAIR = '.forecast-chart-crosshair';
+
+  /**
+   * Where the scrub starts and the three positions it drags through, as shares
+   * of the chart's width.
+   *
+   * Inside the chart at every step, and far enough apart that the gesture is
+   * unambiguously a drag rather than a jittery tap — what Chromium does with it
+   * is the whole point, and a movement inside the tap slop would be a tap.
+   */
+  const SCRUB_SHARES = [0.25, 0.4, 0.55, 0.7];
+
+  /** Whether the canvas is what the document would send a key to. */
+  const chartHasFocus = async (page: Page): Promise<boolean> =>
+    page.evaluate(
+      (selector) => document.activeElement === document.querySelector(selector),
+      CHART_SVG,
+    );
+
+  /** A finger tapping the chart, with the focus it must take asserted. */
+  const tapChart = async (page: Page): Promise<void> => {
+    const chart = page.locator(CHART_SVG);
+
+    await expect(chart).toBeVisible();
+    await chart.scrollIntoViewIfNeeded();
+    await chart.tap();
+    await expect(chart).toBeFocused();
+  };
+
+  /**
+   * A finger dragged across the chart — a scrub, which is a tap that never
+   * completes.
+   *
+   * Driven through a raw CDP touch sequence, because Playwright's touchscreen API
+   * offers `tap` and nothing else: there is no primitive that holds a finger down
+   * and moves it, which is the same gap `chart-tap.spec.ts`'s header states. This
+   * is one level below `Locator.tap`, which dispatches through the same channel,
+   * and it is Chromium-only — which this lane already is, by the single project
+   * in `playwright.config.ts`.
+   *
+   * The y never changes, deliberately. `touch-action: pan-y pinch-zoom` leaves
+   * vertical movement to the browser, so a drag with any vertical component
+   * risks becoming a page scroll — which would be a `pointercancel`, a different
+   * gesture with a different clearing path (`clearAtCancel`), and not the one
+   * the case below is about.
+   *
+   * The box is read through `settledBoxOf` because these are coordinates a
+   * gesture is aimed by: the map above pushes the chart down the page after first
+   * paint, and a finger placed from a mid-reflow reading lands where the chart no
+   * longer is (`layout-box.ts`).
+   */
+  const scrubChart = async (page: Page): Promise<void> => {
+    const chart = page.locator(CHART_SVG);
+
+    await expect(chart).toBeVisible();
+    await chart.scrollIntoViewIfNeeded();
+
+    const box = await settledBoxOf(chart, 'The forecast chart');
+    const y = box.y + box.height / 2;
+    const session = await page.context().newCDPSession(page);
+
+    try {
+      for (const [step, share] of SCRUB_SHARES.entries()) {
+        await session.send('Input.dispatchTouchEvent', {
+          type: step === 0 ? 'touchStart' : 'touchMove',
+          touchPoints: [{ x: box.x + box.width * share, y }],
+        });
+      }
+
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } finally {
+      await session.detach();
+    }
+  };
+
+  test('paints the ring again when a reader who tapped starts driving by keyboard', async ({
+    page,
+  }) => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+    await tapChart(page);
+
+    /*
+     * The state being left, asserted rather than assumed. Without it the case is
+     * satisfied by a suppression that never happened — a chart that painted a
+     * ring under the finger too would sail through everything below while being
+     * exactly the defect #440 was opened for.
+     */
+    expect((await focusRing(page, CHART_SVG)).style).toBe('none');
+
+    // A reader who starts driving by keyboard earns the ring back, whatever
+    // brought them here. `readAtKey` drops the attribute ahead of its own action
+    // lookup, so this holds for a key the chart acts on and one it ignores alike.
+    await page.keyboard.press('ArrowRight');
+
+    /*
+     * A ring, rather than `solid` specifically. What this case is about is our
+     * attribute no longer suppressing; which stylesheet then paints is the
+     * engine's business, since whether its own heuristic flips on a keypress that
+     * moves no focus is exactly the judgement #440 stopped relying on. Either
+     * outcome is a reader who can see where they are standing, which is the
+     * WCAG 2.4.7 claim; neither is `none`.
+     */
+    const ring = await focusRing(page, CHART_SVG);
+
+    expect(ring.style).not.toBe('none');
+    expect(ring.widthPx).toBeGreaterThan(0);
+  });
+
+  test('paints the ring when a reader tabs back to a chart they had tapped', async ({ page }) => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+    await tapChart(page);
+
+    expect((await focusRing(page, CHART_SVG)).style).toBe('none');
+
+    // Out and back by keyboard. The leaving half is asserted because it is what
+    // makes the return a *fresh* focus: a Tab that never left would make the
+    // assertion below a re-read of the state above.
+    await page.keyboard.press('Tab');
+    expect(await chartHasFocus(page)).toBe(false);
+
+    await page.keyboard.press('Shift+Tab');
+    expect(await chartHasFocus(page)).toBe(true);
+
+    // `solid` here, unlike the case above: this focus arrived by Tab, so it is
+    // the same keyboard arrival the file's second case pins, reached through a
+    // state where the attribute had been set and had to be cleared on the way out.
+    const ring = await focusRing(page, CHART_SVG);
+
+    expect(ring.style).toBe('solid');
+    expect(ring.widthPx).toBeGreaterThan(0);
+  });
+
+  test('leaves a scrubbed chart focused without a ring, and rings when the reader tabs back', async ({
+    page,
+  }) => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    await scrubChart(page);
+
+    /*
+     * Both premises, and the case is hollow without either.
+     *
+     * The scrub reached the chart: a crosshair is what a reading looks like, and
+     * a gesture that missed would leave the press flag unset and every ring
+     * reading below decided for the wrong reason entirely.
+     *
+     * And the chart is holding the focus, which is the half only a real browser
+     * can settle. A drag past the tap slop fires no `click` here — that is
+     * Chromium's decision, not ours — so this focus is the boundary's own, taken
+     * at the lift because a reading behind no focus has no blur to be dismissed
+     * by. It is also this file's replacement for the premise this case used to
+     * carry: it once asserted *no* focus and reached the chart by tabbing, and
+     * what proved the press flag had been spent was the Tab that spent it. A
+     * scrub no longer leaves a flag pending for anything to consume, so that
+     * proof moved to jsdom, where the press-with-no-lift it needs can be
+     * dispatched (`src/charts/forecast-chart-focus-source.test.tsx`).
+     */
+    await expect(page.locator(CROSSHAIR)).toHaveCount(1);
+    expect(await chartHasFocus(page)).toBe(true);
+
+    /*
+     * And it carries no ring. This is the assertion that keeps the fix honest:
+     * the cheapest way to give a scrub a dismissal route would be a focus taken
+     * without the press stamp behind it, and that focus would paint the very ring
+     * under a finger #440 removed — green on dismissal, red on the reason #440
+     * exists. `pointer-focus.spec.ts` holds the same claim for a tap.
+     */
+    expect((await focusRing(page, CHART_SVG)).style).toBe('none');
+
+    /*
+     * Out by keyboard, which is the dismissal that focus bought: the blur takes
+     * the reading with it, and a crosshair still standing here means the reader
+     * is left with a reading they cannot get rid of — #421's contract broken on
+     * the one gesture that cannot inherit it.
+     */
+    await page.keyboard.press('Tab');
+    expect(await chartHasFocus(page)).toBe(false);
+    await expect(page.locator(CROSSHAIR)).toHaveCount(0);
+
+    /*
+     * And back in, which is the WCAG 2.4.7 half: a keyboard reader arriving at a
+     * chart a finger has been on must see where they are standing, so the
+     * attribute the scrub set has to have been cleared on the way out. `solid`
+     * rather than merely "a ring", for the reason the file's second case gives —
+     * it is the style `@cumulo/ui` writes, so demanding it demands that the
+     * keyboard path is served by our ring rather than by anything else.
+     */
+    await page.keyboard.press('Shift+Tab');
+    expect(await chartHasFocus(page)).toBe(true);
+
+    const ring = await focusRing(page, CHART_SVG);
+
+    expect(ring.style).toBe('solid');
+    expect(ring.widthPx).toBeGreaterThan(0);
+  });
 });

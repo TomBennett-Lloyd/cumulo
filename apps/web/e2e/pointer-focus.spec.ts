@@ -5,45 +5,70 @@ import { routeBasemap } from './hermetic-basemap';
 import { RANGE_TRIGGER } from './range-picker';
 
 /*
- * What the browser paints when the reader arrived by pointer: nothing.
+ * What the browser paints when the reader arrived by pointer — mouse or finger:
+ * nothing.
  *
  * `design.md` rule 11 (P11) splits focus into two interactions that look
  * identical to `document.activeElement` and completely different to a reader. A
  * keyboard reader needs the ring — it is the only thing telling them where they
- * are standing (WCAG 2.4.7). Someone who just clicked already knows where they
- * are, and a ring blooming under their cursor is the rule's named defect signal.
- * The CSS that tells the two apart is `:focus-visible`, never bare `:focus`.
+ * are standing (WCAG 2.4.7). Someone who just clicked or tapped already knows
+ * where they are, and a ring blooming under their finger is the rule's named
+ * defect signal. `:focus-visible` is normally the CSS that tells the two apart,
+ * and never bare `:focus`; where an engine's own heuristic gets a pointer focus
+ * wrong, the element observes how its focus arrived and suppresses the ring
+ * itself — which is what `charts.css` does, and what the chart case below is for.
  *
- * That distinction is a *browser heuristic over how focus arrived*, which is
+ * Either way the distinction is a *judgement about how focus arrived*, which is
  * exactly what `testing.md` rule 10 routes out of jsdom: jsdom implements no
  * heuristic, computes no styles and paints no ring, so a component test can
  * prove an element took focus and nothing whatever about what the reader sees.
- * Only a real Chromium reached by a real mouse can answer this one.
+ * Only a real Chromium reached by a real mouse or a real finger can answer this.
  *
  * Each case below is therefore two assertions rather than one, and the pairing
  * is the whole of why it means anything. Focus first, because "no ring painted"
  * is trivially true of an element that took no focus at all — a control that had
  * stopped being focusable would sail through the ring assertion on its own while
  * being thoroughly broken. Focus moved *and* nothing painted is the conjunction
- * that only `:focus-visible` produces.
+ * the rule is actually about.
  *
- * Honest scope, twice over.
+ * Two arms, because a mouse and a finger are different inputs and only one of
+ * them was measured here until #440. Everything above the `test.describe` at the
+ * foot of this file is a mouse; inside it `hasTouch` makes `Locator.tap`
+ * dispatch a real touch pointer. A spec that said "pointer" while only ever
+ * clicking is precisely what let the touch path go unmeasured, so the arms are
+ * named rather than merged.
  *
- * This passes on the tree that preceded it. Issue 339 audited every focus rule
- * in the repo and found `:focus-visible` throughout, so there was no bare
- * `:focus` here to fix and these cases assert a property the app already had.
- * They exist as a ratchet: a future bare `:focus`, or a ring hand-rolled in JS
- * and forced on regardless of how focus arrived, fails here. Lint is the fast
- * half of that catch — `selector-pseudo-class-disallowed-list` in
- * `stylelint.config.mjs`, added by the same issue — and this is the half that
- * still sees the regressions a linter reads as innocent.
+ * Honest scope, and the two kinds of case here are not the same kind of evidence.
+ *
+ * Most of them pass on the tree that preceded them. Issue 339 audited every focus
+ * rule in the repo and found `:focus-visible` throughout, so there was no bare
+ * `:focus` here to fix and those cases — both mouse cases, and the range picker's
+ * touch twin — assert a property the app already had. They exist as a ratchet: a
+ * future bare `:focus`, or a ring hand-rolled in JS and forced on regardless of
+ * how focus arrived, fails here. Lint is the fast half of that catch —
+ * `selector-pseudo-class-disallowed-list` in `stylelint.config.mjs`, added by the
+ * same issue — and this is the half that still sees the regressions a linter
+ * reads as innocent.
+ *
+ * The chart's tap case is the other kind, and it is worth reading as such: it
+ * asserts something that was measurably *false* before #440. A `hasTouch`
+ * Chromium probe on the tapped chart found the focus taken,
+ * `element.matches(':focus-visible')` false, and a ring painted anyway. Whatever
+ * paints that ring, an author selector carrying that conjunct is evaluated by the
+ * same engine that answered false, so it cannot match and the suppression would
+ * simply stop working — which is why the guard in
+ * `src/charts/forecast-chart-hover-boundary.tsx` observes the focus's source
+ * instead, and why the one rule it feeds in `src/charts/charts.css` carries no
+ * pseudo-class. Those two are what turned this case green, so it is a regression
+ * test rather than a ratchet.
  *
  * And this spec must never be read as covering keyboard rings. Every assertion
  * in it is satisfied by an app that paints no rings at all, which would be a
  * WCAG 2.4.7 failure of the worst kind. `keyboard-focus.spec.ts` holds that end
- * — it measures the same outline and demands `solid` at a non-zero width — and
- * the two bound rule 11 only together. Neither is meaningful alone, so a change
- * that deletes one should be read as deleting half a rule.
+ * — it measures the same outline and demands `solid` at a non-zero width, on a
+ * fleet table row and on this same chart — and the two bound rule 11 only
+ * together. Neither is meaningful alone, so a change that deletes one should be
+ * read as deleting half a rule.
  */
 
 /**
@@ -56,6 +81,12 @@ import { RANGE_TRIGGER } from './range-picker';
  * same point about the keyboard route).
  */
 const SITE_TABLE_SUMMARY = '.site-table-summary';
+
+/**
+ * The fleet chart's canvas — since #421 the element the pointer lands on, axis
+ * gutters included, rather than the plot rect inside it.
+ */
+const CHART_SVG = 'svg.forecast-chart';
 
 /** What the browser decided to paint around the focused element. */
 interface FocusRing {
@@ -111,6 +142,33 @@ const ringAfterPointerClick = async (page: Page, selector: string): Promise<Focu
 
   await target.scrollIntoViewIfNeeded();
   await target.click();
+  await expect(target).toBeFocused();
+
+  return focusRing(page, selector);
+};
+
+/**
+ * Press an element the way somebody with a finger presses it, and measure what
+ * the browser painted.
+ *
+ * A twin of the helper above rather than one function with a gesture flag, and
+ * deliberately (`structure.md` rule 7): the two arms have different intent and
+ * are free to diverge — a touch gesture that needed a settle, or a second finger,
+ * would change this one and leave the mouse one correct. `Locator.tap` is the
+ * whole point of it, since a click here would be the mouse case under another
+ * name; the tap needs `hasTouch` on the context, which is why every caller sits
+ * inside the describe that sets it.
+ *
+ * The focus assertion is the same precondition it is above, and on the chart it
+ * earns its keep twice: taking the focus a tap gives it is exactly what #440
+ * required the chart to keep doing, so a "fix" that stopped the ring by making
+ * the element unfocusable has to fail here rather than pass quietly.
+ */
+const ringAfterTap = async (page: Page, selector: string): Promise<FocusRing> => {
+  const target = page.locator(selector);
+
+  await target.scrollIntoViewIfNeeded();
+  await target.tap();
   await expect(target).toBeFocused();
 
   return focusRing(page, selector);
@@ -179,4 +237,60 @@ test('paints no ring on the fleet table disclosure when a pointer opens it', asy
     paintsARing(ring),
     `The fleet table's summary painted ${ring.style} at ${String(ring.widthPx)}px after a pointer click.`,
   ).toBe(false);
+});
+
+/*
+ * The touch arm. `hasTouch` is a browser-context option rather than a per-action
+ * one, so it has to be scoped by a describe — and scoped rather than set
+ * file-wide, because the mouse cases above must keep arriving as a mouse: a
+ * context with a touchscreen is not what a desktop reader has, and the two
+ * modalities are exactly what this file is separating.
+ */
+test.describe('under a finger', () => {
+  test.use({ hasTouch: true });
+
+  test('paints no ring on the forecast chart when a finger taps it', async ({ page }) => {
+    /*
+     * The case this arm was opened for, and the only element on the page that
+     * needed code written to satisfy it — see the header for what the probe
+     * measured before that code existed.
+     *
+     * That the tap also pins a tooltip is #421's contract and `chart-tap.spec.ts`
+     * measures it. Deliberately not restated here: this case would then fail on a
+     * change to what a tap reveals, a result that would say nothing about rings.
+     */
+
+    /*
+     * Waited for explicitly rather than left to the tap's own actionability. The
+     * chart draws when the forecast resolves, and `playwright.config.ts` sets no
+     * `actionTimeout` — so a chart that never arrived would hang the gesture
+     * indefinitely, where this gives up in seconds and names what was missing.
+     */
+    await expect(page.locator(CHART_SVG)).toBeVisible();
+
+    const ring = await ringAfterTap(page, CHART_SVG);
+
+    expect(
+      paintsARing(ring),
+      `The forecast chart painted ${ring.style} at ${String(ring.widthPx)}px after a tap.`,
+    ).toBe(false);
+  });
+
+  test('paints no ring on the range picker’s trigger when a finger taps it', async ({ page }) => {
+    /*
+     * The mouse case's twin, and the ratchet the rest of the sweep rests on. The
+     * trigger already painted nothing under a mouse, so a ring found here would
+     * mean the touch path reaches rings the mouse path does not — which is the
+     * exact shape of the defect #440 found on the chart, and the reason one
+     * measured element is not a sample. It keeps the properties that made it the
+     * right mouse subject: always on the row, a press toggles a disclosure rather
+     * than moving anything the selector depends on, and focus stays on it.
+     */
+    const ring = await ringAfterTap(page, RANGE_TRIGGER);
+
+    expect(
+      paintsARing(ring),
+      `The range picker’s trigger painted ${ring.style} at ${String(ring.widthPx)}px after a tap.`,
+    ).toBe(false);
+  });
 });

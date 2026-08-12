@@ -100,10 +100,15 @@ here that gets decided into a surface lands in that surface's record.
     their action and the change is where their next act lives. URL-driven state never moves
     focus; pattern widgets keep their own discipline (combobox selection stays in the input).
     A ring is painted only when it informs the current interaction — keyboard navigation or
-    typing; pointer interaction paints none (`:focus-visible`, never bare `:focus`). A ring
-    appearing where the reader didn't ask is a defect signal. The mechanics live in
-    `react.md`'s focus paragraphs; this rule is the taste they serve.
-    (#339; #328; #284 D14; #260)
+    typing; pointer interaction paints none. `:focus-visible` is the normal mechanism; where an
+    engine's heuristic gets a pointer focus wrong, the element carries a focus-source guard
+    instead — it observes how its focus arrived rather than asking the engine (#440's chart,
+    where a tap left `:focus-visible` measurably false and a ring painted anyway — so whatever
+    paints it, a rule carrying that conjunct is evaluated by the same engine that answered
+    false and cannot match). Never bare
+    `:focus` either way. A ring appearing where the reader didn't ask is a defect signal. The
+    mechanics live in `react.md`'s focus paragraphs; this rule is the taste they serve.
+    (#339; #328; #284 D14; #260; #440)
 
 12. **Interaction smoothness is a demonstrated feature.** Pointer-driven surfaces update
     position via transform at the throttled pointer rate — `docs/design/chart-treatment.md`'s D7

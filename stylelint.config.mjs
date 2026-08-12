@@ -182,7 +182,15 @@ export default {
      * argument for it. `:focus` matches however focus arrived, so styling it
      * paints a ring on a pointer interaction that asked for none; the browser
      * heuristic that tells the two arrivals apart is `:focus-visible`, and it is
-     * the only half of the pair this codebase may style.
+     * the only half of *that* pair this codebase may style.
+     *
+     * It is no longer the only way the two arrivals are told apart, which is what
+     * the message below says and this paragraph used to contradict. Since #440 an
+     * element whose focus the heuristic misreads may observe how its own focus
+     * arrived and publish that as an attribute, and a rule keyed on the attribute
+     * suppresses the ring for exactly that arrival (`charts.css`). That route is
+     * outside this rule rather than an exception to it: it carries no
+     * pseudo-class at all, so there is nothing here for the list to reach.
      *
      * The list matches pseudo-class *names*, which is what makes a one-entry
      * list sufficient: `focus-visible` and `focus-within` are different names,
@@ -207,7 +215,7 @@ export default {
       {
         reportDisables: true,
         message:
-          'Style focus with :focus-visible, never bare :focus — rings for keyboard interaction, none for pointer (design.md rule 11 / P11, issue 339).',
+          'Style focus with :focus-visible, never bare :focus — rings for keyboard interaction, none for pointer. Where an engine paints a pointer ring :focus-visible cannot reach, guard on the focus source instead — an attribute the component sets, no pseudo-class (charts.css; design.md rule 11 / P11, issues 339 and 440).',
       },
     ],
 

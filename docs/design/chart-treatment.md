@@ -649,14 +649,27 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   wanted, because a readout with one way to go away is a readout every input can be reasoned about
   together.
 
+  That one way has a precondition, and the scrub is where it has to be paid for: dismissal by blur
+  needs the chart to be holding the focus. **The chart takes that focus itself when the finger comes
+  up**, wherever the gesture leaves a reading standing (`endGestureAtLift` in
+  `forecast-chart-hover-boundary.tsx`) — for a tap as much as for a drag past the tap slop, which
+  fires no click at all; the `click` the browser synthesizes from a tap brings the focus only where
+  no reading stands for the lift to take it. Still one route out and not two: the
+  scrub is being given the tap's dismissal rather than a dismissal of its own. Without it a scrub's
+  reading sits behind no focus, so no blur can reach it, and it stands until the reader taps the
+  chart and then taps off — which is the stranded readout this contract exists to forbid, arriving
+  by the one path the `pointercancel` clear below does not cover.
+
   One thing does take a reading away without dismissing it, and the distinction is the contract
   rather than an exception to it: a `pointercancel`, the browser claiming the gesture mid-flight —
   a page scroll that began on the chart, which `touch-action` leaves it free to claim. The press
   had already committed a reading, and it turns out nobody asked for one. A lift is the end of a
   question and its answer stands; a cancel is the question being withdrawn, and the reading goes
   with it. Nothing else could take it: the leave events that follow a cancel are a touch pointer's,
-  which the mouse-only clear ignores by design, and a scroll takes no focus, so there is no blur to
-  dismiss through. So every reading a reader _asked_ for still has exactly one way to go away.
+  which the mouse-only clear ignores by design, and a cancel ends the gesture in place of the lift,
+  so the chart takes no focus for it and there is no blur to dismiss through. So every reading a
+  reader _asked_ for still has exactly one way to go away, and the one nobody asked for is gone
+  before it needs one.
 
   Two costs this contract accepts out loud rather than designs around. **Fingertip precision is
   accepted as it is**: no coarse-pointer geometry, no widened hit slots, no touch-only variant of
@@ -716,6 +729,39 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   twin below remains the canonical route** to every value — one press on its disclosure away, per
   the fold bullet below, which is where what a closed `<details>` does and does not withhold is
   set out.
+
+- **The plot takes the focus a tap gives it, and paints no ring for it.** Both halves are
+  deliberate, and the first is why the second is hard. The `<svg>` has to keep being focusable and
+  has to keep receiving focus from a finger: the bullet above hangs the spoken readout off
+  `focus`, and the tap bullet's dismissal is the blur that only a focused chart can produce — for a
+  scrub too, which is why the lift takes that focus itself wherever a reading stands, a scrub
+  having no `click` to bring it at all — so the obvious fix of taking the focus away would take a
+  screen-reader route and a dismissal with it. What is left to remove is the ring, and removing it
+  unconditionally is the other thing this chart may not do, because the keyboard reader's ring is
+  the one WCAG 2.4.7 is about ([#440](https://github.com/TomBennett-Lloyd/cumulo/issues/440)).
+
+  So the chart carries the source of its own focus. The boundary component records whether a
+  pointer press brought the focus that arrived, publishes it as an attribute on the `<svg>`, and a
+  single guarded rule in `charts.css` suppresses the outline for exactly that state; a keyboard
+  focus never carries the attribute, so the design system's ring paints there untouched. The
+  measurement is why the guard cannot be written as a refinement of `:focus-visible`, which is what
+  every other surface in this app relies on. A real touch-capable browser, probed on #440, holds a
+  tapped chart focused with `:focus-visible` reading **false** while a ring is painted anyway.
+  Which stylesheet paints it is neither answerable from that measurement — it read a computed style
+  rather than a paint, and read no stylesheet — nor needed: whatever paints it, an author selector
+  carrying that conjunct is evaluated by the same engine that answered false, so it cannot match
+  and the suppression would simply stop working. Its negation would be worse than inert, handing
+  the ring back precisely when the heuristic gets a pointer focus wrong, which is the whole of the
+  case this rule exists for.
+
+  This is `design.md` rule 11 — a ring only where it informs the current interaction — applied to
+  the one element whose focus arrives in a way the platform misreads. Every other surface is left
+  to the engine's own heuristic, because measurement showed it answering correctly there and a
+  guard where none is needed is a guard nobody can tell has stopped working. The chart is the
+  exception because its focus is half programmatic in spirit: nobody tabbed to it, they pointed at
+  a picture, and the readout they asked for is the answer rather than the outline around it. The
+  browser lane holds both halves, one spec each — no ring where the reader pointed, the full ring
+  where they used the keyboard — and neither half is meaningful without the other.
 
 - **Tooltips enhance, they never gate.** Every value in the tooltip is also reachable without a
   pointer, through direct labels or the table view. Every chart has a table-view twin — the

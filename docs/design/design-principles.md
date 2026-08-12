@@ -282,8 +282,16 @@ _and_ the change is where their next act lives. Deep links and URL-driven state 
 Pattern-conventional widgets keep their own focus discipline (a combobox selection keeps focus in
 the input). And a focus _ring_ is painted only when it informs the current interaction — keyboard
 navigation, or typing in a field; pointer interaction paints no rings (`:focus-visible`
-discipline, never bare `:focus`). A visible ring the reader didn't ask for is a defect signal,
-not a feature.
+discipline, never bare `:focus`). That parenthesis was the whole of the mechanism until #440 found
+the case it does not cover: a `hasTouch` Chromium probe measured a tapped chart holding focus with
+`:focus-visible` **false** and a ring painted anyway, so a rule carrying that conjunct is evaluated
+by the same engine that answered false and cannot match. Where an engine's heuristic gets a pointer
+focus wrong that way, the element now carries a **focus-source guard** instead — observing how its
+focus arrived rather than asking the engine, and suppressing the ring on what it observed, with no
+pseudo-class in the rule at all. `docs/standards/design.md` rule 11 is where that addition is
+operative; the sentence above is what this document reviewed, and the addition refines its
+mechanism rather than reversing its taste. A visible ring the reader didn't ask for is a defect
+signal, not a feature.
 
 **Why:** Four rounds of owner feedback on one theme, each moving toward less visible focus
 machinery: heading focus (#260 convention) → "that seems a bit wrong … perhaps the forecast
