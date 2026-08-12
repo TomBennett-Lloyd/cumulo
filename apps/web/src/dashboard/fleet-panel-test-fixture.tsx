@@ -6,7 +6,7 @@ import {
   type UncertaintyBand,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { expect } from 'vitest';
 
@@ -17,7 +17,6 @@ import type {
   RangeHours,
 } from '../data/fleet-data-source';
 import { FleetPanel } from './FleetPanel';
-import { LOADING_FLEET_FORECAST_LABEL } from './state-copy';
 
 /**
  * The shared way of feeding and mounting a `FleetPanel` in jsdom.
@@ -392,10 +391,24 @@ export const SITE_A_PENDING: FleetPanelSelection = {
 export const rowCells = (row: HTMLElement): readonly string[] =>
   Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent);
 
-/** Waits for both fleet reads to have answered, whatever they answered. */
+/**
+ * Waits for both fleet reads to have answered, whatever they answered.
+ *
+ * The signal is the body's `aria-busy`, which is the panel's own statement that
+ * a read is out (`fleet-panel-body.tsx`). This waited on the pending *label*
+ * until #448, when the loading state stopped saying anything at all — the owner
+ * asked for the wait to be shown rather than spelled — so the text it used to
+ * watch for no longer exists to disappear. The attribute is the better sync
+ * point besides: it is the same fact stated where a machine reads it, so a
+ * rewording of any copy cannot desynchronise every suite that shares this
+ * fixture.
+ *
+ * Read off the document rather than through a container, because the callers
+ * that have one and the callers that do not both go through here.
+ */
 export const settle = async (): Promise<void> => {
   await waitFor(() => {
-    expect(screen.queryByText(LOADING_FLEET_FORECAST_LABEL)).toBeNull();
+    expect(document.querySelector('.fleet-panel-body[aria-busy="true"]')).toBeNull();
   });
 };
 

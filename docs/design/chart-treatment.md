@@ -456,6 +456,42 @@ svg, which collapses to its `aria-label`: nothing here enters the tab order, and
 description is unchanged — the issue allowed at most one phrase and this needs none. Neither gets a
 legend row either: a legend names series, and the reader's night is not one.
 
+## Loading
+
+_Decided 2026-08-12 ([#448](https://github.com/TomBennett-Lloyd/cumulo/issues/448)), by the owner,
+out of four mockups._
+
+**A chart waiting for its numbers shows a self-tracing curve, not a sentence.** A stylised
+solar-day bell draws itself left to right inside the plot, holds briefly, fades, and restarts,
+looping until the data arrives. The owner's words for why it is this rather than the pending label
+that preceded it — the label _"is both misleading (most of the time is spent fetching not summing)
+and also not visually appealing. It also causes the page to jump"_ — and for the option chosen out
+of the four: _"i think i like option C for the loading state, the self tracing curve, it's nice and
+subtle and clean"_.
+
+- **The curve is fixed, and is not data.** It is a plausible day in the plot's own geometry —
+  `apps/web/src/charts/chart-loading-curve.ts` owns the shape — drawn through the same monotone
+  curve the real series use, so it reads as a rehearsal of the line about to appear rather than as a
+  second visual language on one canvas. A placeholder built from whatever partial data had arrived
+  would be a claim about the fleet made before the fleet answered.
+- **Slot 1's hue at the data weight, held well below full ink.** It stands where the forecast's
+  median line is about to be, so it takes that line's treatment; the opacity is the whole of the
+  difference between them, and it is what keeps the loudest mark on the plot from being the state
+  with nothing to say. `apps/web/src/charts/charts.css` owns the values and the timing.
+- **No page jump — the requirement, not a nicety.** The trace is a mark _inside_ the plot, so a
+  loading chart occupies the box the settled chart will occupy, from first paint. Nothing arrives
+  above the chart and nothing leaves it.
+  `apps/web/src/dashboard/FleetPanel.structure.test.tsx` holds the structural half — same view box,
+  chart still the panel body's first child, across the settle — and
+  `apps/web/e2e/chart-loading.spec.ts` holds the measured half, which needs a browser.
+- **`prefers-reduced-motion: reduce` replaces the animation with the finished curve, held still and
+  a step quieter again.** Not a slower loop and not a paused one: the request is for no motion.
+- **The state stays machine-readable, because the drawing is not.** The trace is `aria-hidden` — the
+  plot's `role="img"` keeps its one name, so nothing is offered to a reader about a curve that means
+  nothing — and the panel around it carries `aria-busy` for as long as the read is out.
+  `docs/standards/react.md`'s Pending bullet is where that trade is written down, amended by this
+  same decision.
+
 ## Categorical series order
 
 Multi-series charts — per-site comparison, per-cluster aggregation — take
@@ -823,7 +859,7 @@ Every token this treatment uses. Values, and the reasoning behind each value, ar
 | -------------------------------------------------------- | ------------------------------------------------------------ |
 | `--color-chart-band-fill`                                | uncertainty band area fill (slot-1 hue, 10% alpha, baked in) |
 | `--color-chart-band-stroke`                              | P10 / P90 bound hairlines (same hue, 35% alpha)              |
-| `--color-chart-1`                                        | median forecast line; first categorical slot                 |
+| `--color-chart-1`                                        | median forecast line; loading trace; first categorical slot  |
 | `--color-chart-2` … `-6`                                 | additional series, fixed order, never cycled                 |
 | `--color-chart-actuals`                                  | measured actuals line (near-ink, not a categorical slot)     |
 | `--color-chart-grid`                                     | gridlines, forecast-horizon rule (dashed), day boundaries    |

@@ -1,5 +1,6 @@
 import { useMemo, useRef, type ReactElement } from 'react';
 import { chartPlot, niceAxisMax, sampleXs } from './chart-geometry';
+import { loadingCurvePath } from './chart-loading-curve';
 import {
   contiguousRuns,
   highestOverlayKw,
@@ -78,6 +79,21 @@ import { useChartWidth } from './use-chart-width';
  * the label straight off the same `ChartOverlaySeries` this prop carries, so the
  * two still cannot disagree about what the overlay is *called*; what the join
  * decides is what the overlay *says at an hour*, and no legend row asks that.
+ *
+ * **Loading is a mark on the canvas, not a sentence over it.** The optional
+ * `loading` prop puts one more path inside the plot — a stylised solar day that
+ * traces itself and restarts, `chart-loading-curve.ts` for the shape and
+ * `charts.css` for the motion. The owner asked for it in those terms on
+ * 2026-08-12 (*"graph loading state needs to be visual not words"*), and what
+ * makes it this component's rather than the panel's is the thing they objected
+ * to next: a notice above the chart changes the panel's height when it arrives
+ * and again when it goes, so the page jumps twice per read. A mark *inside* the
+ * plot occupies the box the chart already has. It is decoration to assistive
+ * technology, and the state stays machine-readable where the panel can carry it
+ * without words — `aria-busy` on `.fleet-panel-body`
+ * (`dashboard/fleet-panel-body.tsx`, and `docs/standards/react.md`'s Pending
+ * bullet, amended by the same round). Absent, this prop draws nothing at all,
+ * which is the same contract `overlay` keeps.
  *
  * **The readout has one source of truth, and since #331 it is not this file.**
  * Pointer and keyboard both settle on an `activeIndex`, which
@@ -173,6 +189,19 @@ export interface ForecastChartProps {
    * and nothing in the readout.
    */
   readonly overlay?: ChartOverlaySeries;
+  /**
+   * The chart is waiting for its numbers, and says so by drawing rather than by
+   * saying anything (#448; the docblock's Loading paragraph above).
+   *
+   * `true` or absent, never `false`: under `exactOptionalPropertyTypes` an
+   * absent optional prop and one explicitly set to `undefined` are different
+   * values, and the contract this shares with `overlay` is about the *absent*
+   * one — a chart rendered without this prop emits exactly what it emitted
+   * before the loading state existed. So callers set it by presence
+   * (`dashboard/fleet-panel-body.tsx`'s `fleetChart`) rather than passing a flag
+   * that has a false value to forget to handle.
+   */
+  readonly loading?: true;
 }
 
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
@@ -237,8 +266,13 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
             straight past them — and, more to the point, never re-runs the
             producers below.
 
-            Draw order is back to front: night wash → grid → day boundaries →
-            band → bounds → horizon → median → overlay → actuals → marker. The
+            Draw order is back to front: night wash → grid → loading trace →
+            day boundaries → band → bounds → horizon → median → overlay →
+            actuals → marker. The trace is in that list rather than above it
+            because it is drawn among the marks and not over them, and its place
+            costs nothing to argue: the only state that renders it is the state
+            with no series yet, so there is nothing below it to hide and nothing
+            above it to be hidden by. The
             wash is the backmost thing on the canvas — it is what everything else
             is drawn *against*, so the grid reads over it rather than being
             tinted out by it — and the day boundaries sit immediately above the
@@ -257,6 +291,23 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         >
           {nightElements(points, scale)}
           {gridElements(scale)}
+          {/* The wait, drawn (#448). Immediately over the grid and under
+              everything else, which costs nothing to reason about because a
+              loading chart has no marks to compete with — the state that renders
+              this is the state whose series has not arrived. `pathLength` is
+              normalised to 1 so the dash pattern in `charts.css` is a fraction
+              of the path rather than a length that would have to be re-derived
+              at every column width, and the path itself is decoration: it is
+              `aria-hidden`, so the `role="img"` above keeps its one name and no
+              reader is told about a curve that means nothing. */}
+          {props.loading === undefined ? null : (
+            <path
+              className="forecast-chart-loading-trace"
+              d={loadingCurvePath(plot)}
+              pathLength={1}
+              aria-hidden
+            />
+          )}
           {dayBoundaryElements(points, scale)}
           {bandElements(points, bandRuns, scale)}
           {boundElements(points, bandRuns, scale)}

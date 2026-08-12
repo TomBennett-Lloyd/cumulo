@@ -56,18 +56,25 @@ export const EMPTY_FLEET_MESSAGE =
 /** The site listing itself is loading — the column has no rows to show yet. */
 export const LOADING_FLEET_LABEL = 'Loading the fleet…';
 
-/**
- * The aggregate is being computed, and the verb says so.
+/*
+ * The fleet chart's own pending label stood here until #448, and that round
+ * deleted it rather than rewording it.
  *
- * "Summing" rather than "Loading" because summing is what the wait is for: the
- * fleet's forecasts arrive one series per site and the panel adds them up. That
- * survived #296 unchanged — the series now come back from one metered
- * `/v1/fleet/forecast` request instead of a request per site, which moved where
- * they are fetched and not what is done with them — and the verb never named
- * the fetching anyway. A reader who is told what is happening waits more
- * happily than one watching a generic wait.
+ * Both halves of the owner's objection are why. The verb named the wrong thing —
+ * most of that wait is spent fetching, not summing — which is a rewording. But
+ * the sentence also arrived above the chart and left again, moving the page
+ * under a reader twice per read, and no wording fixes that. What they asked for
+ * instead is that the surface show its own wait: *"graph loading state needs to
+ * be visual not words"*. So the state left this module altogether rather than
+ * moving to a better sentence, and nothing replaces it here.
+ *
+ * Where it went: `charts/chart-loading-curve.ts` draws it, `charts/charts.css`
+ * animates it, and `aria-busy` on the panel body (`dashboard/fleet-panel-body.tsx`)
+ * is what a reader without eyes gets instead. The retired phrase is deliberately
+ * not quoted above, for the same reason the two retired lines further up are
+ * not: a comment naming a phrase is the one thing that keeps a sweep for it from
+ * ever going quiet.
  */
-export const LOADING_FLEET_FORECAST_LABEL = 'Summing the fleet’s forecasts…';
 
 /** One site's forecast is being fetched; the site is named because the selection can move. */
 export const loadingSiteSeriesLabel = (siteName: string): string =>

@@ -52,10 +52,14 @@ interface OpenBlock {
  * `([^{}]+)\{([^{}]*)\}` over the whole file, which cannot see nesting at all:
  * an `@media` block's prelude becomes a "selector" and its first inner rule's
  * body becomes that rule's declarations, so every assertion downstream is
- * reading the wrong text — the defect recorded as #311. `charts.css` has no
- * at-rule today, and this reader is written so that the day one arrives is a
- * loud failure rather than a silent misread: nesting is tracked, and the lookup
- * below refuses anything it does not model.
+ * reading the wrong text — the defect recorded as #311. It was written against a
+ * `charts.css` that had no at-rule at all, on the argument that the day one
+ * arrived should be a loud failure rather than a silent misread; that day is
+ * 2026-08-12, when #448's loading trace brought a `prefers-reduced-motion`
+ * override with it, and the nesting this parser already tracked is what let the
+ * lookups below simply name which scope they mean instead of being rewritten.
+ * What has not changed is the refusal: anything this reader does not model
+ * throws.
  *
  * Scope, stated rather than assumed: it models comment-stripped CSS with
  * balanced braces and no braces inside strings or `url()`. A brace inside a
@@ -113,44 +117,82 @@ const parseRules = (source: string): readonly CssRule[] => {
 
 const rules = parseRules(withoutComments);
 
+/** The rules for `selector` that sit inside at least one at-rule. */
+const conditionalRulesFor = (selector: string): readonly CssRule[] =>
+  rules.filter((rule) => rule.selectors.includes(selector) && rule.atRules.length > 0);
+
 /**
- * The declarations of the one unconditional rule whose selector list contains
- * `selector`.
+ * The declarations of the one rule for `selector` whose enclosing scope is
+ * `scope` — the empty array for the unconditional rule, or the prelude of the
+ * at-rule the override lives in.
  *
- * Every departure from "exactly one, at the top level" throws rather than
+ * Every departure from "exactly one rule in that scope" throws rather than
  * returning something an assertion could pass against vacuously
  * (error-handling.md rule 1). A missing rule is a violated invariant of this
- * test's own subject — the file is ours and these selectors are the contract. A
- * second rule for the same selector is the interesting case: an `@media`
- * override, or a duplicate further down the file, means the declarations below
- * are no longer the whole story, and reading only the first would report a
- * contract that a reader at some widths never gets.
+ * test's own subject — the file is ours and these selectors are the contract —
+ * and a duplicate means the declarations read here are no longer the whole
+ * story for that scope.
+ *
+ * **The scope is a parameter because it stopped being knowable from the
+ * selector.** Until #448 this lookup took no scope and threw on *any* second
+ * rule, which was the same guard stated as an impossibility: with no at-rule in
+ * the file, "exactly one rule" and "the unconditional rule" were the same
+ * sentence. The loading trace is deliberately a pair — a rule and a
+ * reduced-motion override of it — so a lookup that refused every second rule
+ * could not read either half of it. What the old shape was protecting is not
+ * lost, only moved somewhere it can be named: the case below asserts that the
+ * selectors read unconditionally really are unconditional, which is the claim
+ * the throw used to make in passing, and it makes it about a stated list rather
+ * than about whichever selector an assertion happened to ask for.
  */
-const declarationsFor = (selector: string): string => {
-  const matches = rules.filter((rule) => rule.selectors.includes(selector));
+const declarationsIn = (scope: readonly string[], selector: string): string => {
+  const matches = rules.filter(
+    (rule) =>
+      rule.selectors.includes(selector) &&
+      rule.atRules.length === scope.length &&
+      rule.atRules.every((prelude, index) => prelude === scope[index]),
+  );
   const [only] = matches;
+  const where = scope.length === 0 ? 'at the top level' : `inside ${scope.join(' / ')}`;
 
   if (only === undefined) {
-    throw new Error(`charts.css declares no rule for '${selector}'`);
+    throw new Error(`charts.css declares no rule for '${selector}' ${where}`);
   }
 
   if (matches.length > 1) {
     throw new Error(
-      `charts.css declares ${String(matches.length)} rules for '${selector}'; this contract reads one`,
-    );
-  }
-
-  if (only.atRules.length > 0) {
-    throw new Error(
-      `charts.css declares '${selector}' only inside ${only.atRules.join(' / ')}; this contract reads the unconditional rule`,
+      `charts.css declares ${String(matches.length)} rules for '${selector}' ${where}; this contract reads one`,
     );
   }
 
   return only.declarations;
 };
 
+/** The declarations every reader gets, whatever their preferences. */
+const declarationsFor = (selector: string): string => declarationsIn([], selector);
+
 const DASH = /stroke-dasharray\s*:/;
 const STROKE_WIDTH = /stroke-width\s*:\s*(?<width>[^;]+);/;
+
+/** #448's placeholder curve, and the file's one deliberately-overridden selector. */
+const LOADING_TRACE = '.forecast-chart-loading-trace';
+
+/** The scope the reduced-motion override lives in, as `parseRules` reports its prelude. */
+const REDUCED_MOTION = ['@media (prefers-reduced-motion: reduce)'];
+
+/**
+ * The selectors every other assertion in this file reads as the whole of what a
+ * reader gets.
+ *
+ * Listed rather than derived, because the claim is about these rules and a list
+ * derived from the file would agree with the file by construction.
+ */
+const UNCONDITIONAL_SELECTORS = [
+  '.forecast-chart-grid',
+  '.forecast-chart-horizon',
+  '.forecast-chart-day-boundary',
+  '.forecast-chart-crosshair',
+];
 
 /**
  * The stroke width a rule declares. A vertical mark with none is a violated
@@ -218,5 +260,85 @@ describe('charts.css tells the plot’s three verticals apart', () => {
     expect(strokeWidthOf('.forecast-chart-day-boundary')).toBe(
       strokeWidthOf('.forecast-chart-horizon'),
     );
+  });
+
+  /*
+   * The guard `declarationsFor` used to make by throwing on any second rule,
+   * stated as a case now that the file has a selector it is right to override.
+   * Every assertion above reads one rule and reports it as the contract; a
+   * conditional override of any of those four would make each of them a partial
+   * truth, true of some readers and not others, with nothing failing.
+   */
+  it('leaves the rules read above unconditional, which is what lets one rule be the contract', () => {
+    expect(
+      UNCONDITIONAL_SELECTORS.flatMap((selector) =>
+        conditionalRulesFor(selector).map(
+          (rule) => `${selector} inside ${rule.atRules.join(' / ')}`,
+        ),
+      ),
+    ).toEqual([]);
+
+    // The positive control for that emptiness, on the same filter: the loading
+    // trace really is overridden, so the list above is a fact about those four
+    // selectors rather than about a filter that never matches anything.
+    expect(conditionalRulesFor(LOADING_TRACE)).toHaveLength(1);
+  });
+});
+
+/*
+ * #448's loading state, which is a drawing rather than a sentence and therefore
+ * has a stylesheet's worth of obligation in it rather than a component's.
+ *
+ * Two things carry one: that the placeholder is drawn in the fleet line's own
+ * treatment — it stands where that line is about to be, so a different hue or
+ * weight would read as a series rather than as a rehearsal of one — and that a
+ * reader who has asked for no motion is given the curve without the sweep.
+ * Neither is visible to jsdom, which applies no stylesheet, and the second is
+ * not visible to the browser lane either without emulating a system preference,
+ * so this is where both are honestly assertable (testing.md rule 10).
+ *
+ * The timing is deliberately not asserted. "Unhurried, subtle over showy" is the
+ * owner's bar and a number pinned here would be a number nobody could argue
+ * with — the review is where taste is judged, and `charts.css` says so beside
+ * the rule.
+ */
+describe('charts.css draws the wait instead of spelling it', () => {
+  it('traces the placeholder in the fleet line’s own slot and weight', () => {
+    const trace = declarationsFor(LOADING_TRACE);
+
+    expect(trace).toContain('stroke: var(--color-chart-1);');
+    expect(strokeWidthOf(LOADING_TRACE)).toBe(strokeWidthOf('.forecast-chart-median'));
+  });
+
+  it('normalises the dash to the path, so the sweep is a fraction and not a length', () => {
+    // `pathLength="1"` on the element (`ForecastChart.tsx`) is the other half of
+    // this pair: a dash of 1 is the whole path only because the path was
+    // normalised to 1, and the two are useless apart.
+    expect(declarationsFor(LOADING_TRACE)).toMatch(/stroke-dasharray\s*:\s*1\s*;/);
+    expect(declarationsFor(LOADING_TRACE)).toMatch(/animation\s*:/);
+  });
+
+  it('gives a reader who asked for no motion the curve without the sweep', () => {
+    const reduced = declarationsIn(REDUCED_MOTION, LOADING_TRACE);
+
+    expect(reduced).toContain('animation: none;');
+    /*
+     * Drawn and quiet, both stated rather than inherited.
+     *
+     * The offset is redundant against today's unconditional rule — that rule
+     * declares none, so the initial 0 already draws the whole curve — and it is
+     * here because the redundancy is the fragile half: the first person to
+     * declare a starting `stroke-dashoffset` up there would leave every
+     * reduced-motion reader looking at a blank plot, and nothing else in this
+     * repo would notice.
+     *
+     * The opacity is not redundant at all. The unconditional rule sets none
+     * either, leaving the initial 1, and every faint frame the animated trace
+     * has comes out of its keyframes — so an override that removed the
+     * animation and stopped there would hand exactly the reader who asked for
+     * less the loudest version of this mark.
+     */
+    expect(reduced).toMatch(/stroke-dashoffset\s*:\s*0\s*;/);
+    expect(reduced).toMatch(/opacity\s*:\s*0\.\d+\s*;/);
   });
 });

@@ -2,16 +2,19 @@ import type { Forecast, GenerationReading } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
-import type { ChartOverlaySeries, ForecastChartPoint } from '../charts/ForecastChart';
+import type {
+  ChartOverlaySeries,
+  ForecastChartPoint,
+  ForecastChartProps,
+} from '../charts/ForecastChart';
 import type { QueryState } from '../data/use-fleet-query';
 import type { ChartCopy } from './fleet-panel-copy';
 import { EMPTY_FLEET_AGGREGATE, type FleetChartAggregate } from './fleet-series';
-import { PanelEmpty, PanelError, PanelPending } from './panel-states';
+import { PanelEmpty, PanelError } from './panel-states';
 import {
   EMPTY_FLEET_MESSAGE,
   FLEET_ACTUALS_FAILURE_NOTICE,
   fleetForecastFailureMessage,
-  LOADING_FLEET_FORECAST_LABEL,
   NO_FLEET_FORECAST_MESSAGE,
   partialAggregateNotice,
   RETRY_ACTION_LABEL,
@@ -32,9 +35,9 @@ import {
  *
  * ## One chart, in every state, and nothing that swaps around it
  *
- * The body is always the same two things in the same order: whatever the panel
+ * The body is always the same two slots in the same order: whatever the panel
  * has to *say* right now, and the chart. Loading, failed, empty, forecastless
- * and ready differ only in the first of those and in how many points the second
+ * and ready differ only in what fills the first of those and in what the second
  * one draws (#284 D3). Before this, three of those states returned in place of
  * the chart, so a reader watching a retry land saw the page's tallest element
  * appear under their pointer and everything below it jump — and a reader whose
@@ -42,6 +45,20 @@ import {
  * numbers, which is more than the failure took. `ForecastChart` draws bare
  * chrome for an empty series by contract, so "no points yet" is a chart with
  * nothing plotted on it rather than a hole where a chart goes.
+ *
+ * **The loading state fills the first slot with nothing, and #448 is why.** The
+ * owner's round of 2026-08-12 took the pending sentence out of it — *"graph
+ * loading state needs to be visual not words … It also causes the page to
+ * jump"* — so that arm now says nothing and the chart draws the wait instead, as
+ * a self-tracing curve inside the plot (`charts/chart-loading-curve.ts`,
+ * `docs/design/chart-treatment.md`'s Loading section). Which makes the claim
+ * this section owns *stronger* rather than weaker: the states no longer differ
+ * only in a sentence above a fixed chart, they differ in what is drawn on it,
+ * and the one state that used to change the body's height by arriving and
+ * leaving no longer changes anything. What the reader is owed while they wait is
+ * still stated, just not in words — `bodyLayout` marks the container `aria-busy`
+ * so the state stays machine-readable, and `docs/standards/react.md`'s Pending
+ * bullet was amended by the same round to say when a surface may do that.
  *
  * ### Restatement ledger (`architecture.md` rule 9)
  *
@@ -51,6 +68,13 @@ import {
  * because it asserts or reasons about it locally; changing what the states share
  * finds them here rather than one review cycle at a time. Banked on #403 and
  * written in #431, the first member since to touch this file.
+ *
+ * #448 is the second, and it is the case the ledger was for: taking the words
+ * out of the loading arm falsified the *phrasing* of several members without
+ * touching the claim — each of them said the states differ in what the panel
+ * *says* — so they were trued in that change rather than found a cycle at a
+ * time. What each gained is the same clause: the states differ in what is drawn
+ * as well as in what is said, and the loading one now differs only in that.
  *
  * - `bodyLayout`'s docblock below — "the one arrangement every state renders",
  *   which is this claim stated about the function that enforces it.
@@ -179,7 +203,17 @@ const completenessNote = (minContributing: number, siteCount: number): ReactElem
   ) : null;
 
 /**
- * The chart, with the overlay prop present only when there is an overlay.
+ * The loading flag as a value, so it can be spread in rather than branched on.
+ *
+ * Typed by the prop it fills rather than by inference: `{ loading: true }`
+ * written inline infers `boolean`, and `ForecastChart`'s prop is the literal
+ * `true` (its own docblock says why). A named constant is also the cheapest
+ * thing here that is not a `as const` assertion (`typing.md` rule 2).
+ */
+const DRAWN_AS_LOADING: Pick<Required<ForecastChartProps>, 'loading'> = { loading: true };
+
+/**
+ * The chart, with each optional prop present only when it has something to say.
  *
  * Two calls rather than `overlay={overlay}` with a possibly-`undefined` value:
  * under `exactOptionalPropertyTypes` an absent optional prop and one explicitly
@@ -187,12 +221,24 @@ const completenessNote = (minContributing: number, siteCount: number): ReactElem
  * that an *absent* overlay renders exactly what it rendered before overlays
  * existed — no mark, no legend row, no table column. Spreading the shared props
  * keeps the two arms from drifting (`structure.md` rule 7).
+ *
+ * `loading` keeps the same by-presence contract and reaches the chart by a
+ * conditional spread rather than by a third and fourth arm. The two flags are
+ * independent — a site's overlay can already have arrived while a range change
+ * re-asks the fleet — so branching on both would be four copies of one call for
+ * two facts that never interact, which is the shape rule 7 exists to refuse.
  */
 const fleetChart = (
   points: readonly ForecastChartPoint[],
   { chart, overlay }: FleetChartContext,
+  loading: boolean,
 ): ReactElement => {
-  const common = { points, ariaLabel: chart.ariaLabel, tableCaption: chart.tableCaption };
+  const common = {
+    points,
+    ariaLabel: chart.ariaLabel,
+    tableCaption: chart.tableCaption,
+    ...(loading ? DRAWN_AS_LOADING : {}),
+  };
 
   return overlay.kind === 'series' ? (
     <ForecastChart {...common} overlay={overlay.series} />
@@ -257,21 +303,52 @@ const actualsNote = (actuals: FleetActualsState, onRetry: () => void): ReactElem
   actuals.kind === 'failed' ? partialSeriesNote(FLEET_ACTUALS_FAILURE_NOTICE, onRetry) : null;
 
 /**
+ * What a state says, what it leaves the chart to draw, and whether it is still
+ * waiting — the only three things that vary.
+ *
+ * The third joined the other two in #448, when the wait stopped being something
+ * the panel *says*. `notice` is nullable for the same reason: a state with no
+ * news has no element to render, and a placeholder one would put an empty box in
+ * the grid above the chart — which is the page jump this round removed, spelled
+ * a different way.
+ */
+interface FleetBodyContent {
+  readonly notice: ReactElement | null;
+  readonly points: readonly ForecastChartPoint[];
+  readonly loading: boolean;
+}
+
+/**
  * The one arrangement every state renders: what the panel says, then the chart.
  *
  * One function rather than the same two lines in each arm, so a state cannot be
  * added that quietly drops the chart — which is the shape the restructure was
  * fixing. The notice is a fragment in the ready arm, so its children stay direct
  * children of the grid and keep the body's own gap.
+ *
+ * **What a state differs in is no longer only what it says.** Since #448 the
+ * loading arm says nothing at all: it is the chart that carries the wait, as a
+ * mark inside the plot (`charts/chart-loading-curve.ts`), and this container
+ * carries the same fact for anything that cannot see a drawing —
+ * `aria-busy="true"` while the read is out, and no attribute at all otherwise.
+ * The arrangement is unchanged and if anything more nearly one arrangement than
+ * before: every state renders the same two slots, and the state that used to
+ * fill the first with a sentence now leaves it empty rather than swapping the
+ * layout around it.
+ *
+ * `undefined` rather than `"false"` on the settled path, so the attribute is
+ * absent instead of present-and-negative. The two are equivalent to assistive
+ * technology and are not equivalent to a `[aria-busy="true"]` query, which is
+ * what `fleet-panel-test-fixture.tsx`'s `settle()` waits on and what
+ * `e2e/chart-loading.spec.ts` watches for.
  */
 const bodyLayout = (
-  notice: ReactElement,
-  points: readonly ForecastChartPoint[],
+  { notice, points, loading }: FleetBodyContent,
   context: FleetChartContext,
 ): ReactElement => (
-  <div className="fleet-panel-body">
+  <div className="fleet-panel-body" aria-busy={loading ? 'true' : undefined}>
     {notice}
-    {fleetChart(points, context)}
+    {fleetChart(points, context, loading)}
   </div>
 );
 
@@ -280,16 +357,18 @@ const bodyLayout = (
  *
  * The panel asks its source nothing in this state — there is nothing to sum —
  * so the chart is drawn from no points at all rather than from a query that was
- * never spent.
+ * never spent. Nothing is in flight either, which is why this arm is not busy:
+ * an empty fleet is a finished answer, not a wait.
  */
 export const emptyFleetBody = (context: FleetChartContext): ReactElement =>
-  bodyLayout(<PanelEmpty message={EMPTY_FLEET_MESSAGE} />, EMPTY_FLEET_AGGREGATE.points, context);
-
-/** What a state says, and what it leaves the chart to draw — the only two things that vary. */
-interface FleetBodyContent {
-  readonly notice: ReactElement;
-  readonly points: readonly ForecastChartPoint[];
-}
+  bodyLayout(
+    {
+      notice: <PanelEmpty message={EMPTY_FLEET_MESSAGE} />,
+      points: EMPTY_FLEET_AGGREGATE.points,
+      loading: false,
+    },
+    context,
+  );
 
 const readyContent = (
   data: FleetSeries,
@@ -302,7 +381,7 @@ const readyContent = (
   // statement about. It happened before this function was called, in the
   // panel's memo, which is the only thing #293 moved about it.
   if (points.length === 0) {
-    return { notice: <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />, points };
+    return { notice: <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />, points, loading: false };
   }
 
   return {
@@ -314,6 +393,7 @@ const readyContent = (
       </>
     ),
     points,
+    loading: false,
   };
 };
 
@@ -328,10 +408,24 @@ const stateContent = (
   // `EMPTY_FLEET_AGGREGATE` by construction, so the chart gets the same array
   // every render here too rather than a fresh empty literal per state.
   if (state.status === 'loading') {
-    return {
-      notice: <PanelPending label={LOADING_FLEET_FORECAST_LABEL} />,
-      points: aggregate.points,
-    };
+    /*
+     * No notice, and that is the state's whole content (#448).
+     *
+     * The owner asked for this one directly: the label that used to sit here
+     * "is both misleading (most of the time is spent fetching not summing) and
+     * also not visually appealing. It also causes the page to jump." Both
+     * complaints are answered by the same deletion — a sentence that arrives
+     * above the chart and leaves again is the jump, and a sentence naming the
+     * wrong half of the wait is the misleading part. What replaces it is drawn
+     * inside the plot, in the box the chart already occupies, so no reader is
+     * told anything and nothing moves.
+     *
+     * The wait is still machine-readable: `bodyLayout` marks this container
+     * `aria-busy`, which is the half of `react.md`'s Pending bullet that the
+     * amendment of 2026-08-12 kept. Completion is unchanged too — it is this
+     * busy container being replaced by content, never an announcement.
+     */
+    return { notice: null, points: aggregate.points, loading: true };
   }
   if (state.status === 'failed') {
     // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
@@ -348,6 +442,7 @@ const stateContent = (
         <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
       ),
       points: aggregate.points,
+      loading: false,
     };
   }
   return readyContent(state.data, aggregate, context);
@@ -369,8 +464,4 @@ export const fleetBody = (
   aggregate: FleetChartAggregate,
   context: FleetChartContext,
   onRetry: () => void,
-): ReactElement => {
-  const { notice, points } = stateContent(state, aggregate, context, onRetry);
-
-  return bodyLayout(notice, points, context);
-};
+): ReactElement => bodyLayout(stateContent(state, aggregate, context, onRetry), context);
