@@ -97,9 +97,13 @@ export type MapRegionComponent = (props: MapRegionProps) => ReactElement;
  *   to the same overlay container, so the later mount wins the pixels they
  *   share. A card the fleet's own markers could bury would be a card the reader
  *   cannot read exactly where the fleet is dense.
- * - **The controls last**, so the group paints over any marker or card that
- *   drifts under the top-right corner: a reset button a cluster could bury would
- *   be unreachable exactly when the reader most wants it.
+ * - **The controls last**, so the group paints over any *marker* that drifts
+ *   under the top-right corner: a reset button a cluster could bury would be
+ *   unreachable exactly when the reader most wants it. Document order is the
+ *   whole of what that position buys, though, and it does not reach the card —
+ *   which carries a `z-index` of its own and so beats tree order outright,
+ *   wherever it is mounted. The controls answer that with a value rather than a
+ *   position (`map/map.css`); this bullet is about the markers.
  *
  * `key={selectedSite.id}` on the card is not cosmetic. The card captures the
  * element that held focus when it opened and hands focus back to it when it

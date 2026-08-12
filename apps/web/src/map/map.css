@@ -83,10 +83,31 @@
  * the map stays continuous. These carry full `--color-text`, which since #428 is
  * what the credits carry too — the same ink on the same surface, because the mix
  * came down far enough that it is the only ink the veil still clears AA with
- * (`packages/ui/src/tokens/tokens.css`'s header owns that measurement). */
+ * (`packages/ui/src/tokens/tokens.css`'s header owns that measurement).
+ *
+ * `z-index: 2` is what keeps the group on top of the selected site's card, and it
+ * is a fix rather than a default. maplibre gives its own markers no stacking
+ * order — they are siblings in one pane, all `z-index: auto` — so a marker's
+ * hover tooltip has always painted under these controls on document order alone,
+ * this group being the later element. The card is the one that does not: its
+ * marker is told to outrank its siblings (`.site-popover-anchor`,
+ * map/site-popover.css), and that value is not confined to maplibre's pane,
+ * because nothing between either element and the document root opens a stacking
+ * context — `.map-view` above and maplibre's `.maplibregl-map` are both
+ * `position: relative` with no z-index, `.maplibregl-canvas-container` is static,
+ * and `app.css`/`dashboard.css` declare no position, transform, filter or
+ * opacity at all. So the two competed in the *root* stacking context, where any
+ * positive value beats `auto` whatever the document order, and a card panned
+ * under this corner took the reset button with it.
+ *
+ * `2` is the smallest value that clears the card's `1`, and it stays far under
+ * the `10` the header's overlays carry: this group belongs to the map rather
+ * than over it, exactly as the card does. `header/header.css` holds the census —
+ * the one place these values are read against each other. */
 .map-controls {
   position: absolute;
   inset: var(--space-3) var(--space-3) auto auto;
+  z-index: 2;
   display: flex;
   gap: var(--space-2);
 }
@@ -95,17 +116,26 @@
  * only one of them changed (structure.md rule 7). Deliberately its own pair of
  * classes rather than `.theme-toggle`'s or `.range-picker-button`'s: those are
  * page chrome and a data control respectively, and both are free to change
- * without dragging map chrome along. */
+ * without dragging map chrome along.
+ *
+ * One value of padding on all four sides since the labels became glyphs, which
+ * is the move `.site-popover-close` made at #340 and `.about-dialog-close` before
+ * it, for their reason: a word is wider than it is tall and wants the wider
+ * horizontal step to sit in, where a square mark in an oblong box reads as an
+ * icon shoved sideways. `--space-2` around a 20px mark is a 36px square, which is
+ * the hit target the words used to buy with their own width.
+ *
+ * No type properties either, and the same two rules say why: the only child left
+ * is a glyph sized by its own `width`/`height` below and set `display: block`, so
+ * it sits on no text baseline, and a font family, size or weight here would set
+ * nothing at all. */
 .map-control-reset,
 .map-control-add {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border: none;
   border-radius: var(--radius-md);
   background: var(--color-surface-veil);
   color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
   cursor: pointer;
 }
 
@@ -116,6 +146,33 @@
 .map-control-add[aria-pressed='true'] {
   background: var(--color-text);
   color: var(--color-bg);
+}
+
+/*
+ * The two marks. Six declarations that are word-for-word `.header-menu-icon`'s
+ * in `header/header.css`, restated here rather than added to that rule's
+ * selector list — the same call `.site-popover-close-icon` documents, on
+ * `structure.md` rule 7's test. That rule groups the burger and the magnifier
+ * *because they are adjacent on one bar*, where two visibly different weights
+ * would be the failure; these two sit on the map's own chrome, and header chrome
+ * restyling itself would not make them wrong. If one copy changed, the other
+ * would not be wrong until it changed the same way.
+ *
+ * What each declaration is doing is argued once, at `.header-menu-icon`. The
+ * `width`/`height` lengths are the CSS gate's documented length residual
+ * (`stylelint.config.mjs`), not a value slipping past it.
+ *
+ * `currentColor` is also what carries the pressed state onto the mark: the
+ * inversion above moves `color`, and the glyph follows it without a second
+ * declaration here or a second `[aria-pressed]` selector.
+ */
+.map-control-icon {
+  display: block;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
 /* The armed cursor, and the reason it is not written on `.map-canvas` itself.

@@ -76,13 +76,39 @@ export const MapControls = ({ armed, onToggleArmed }: MapControlsProps): ReactEl
 
   return (
     <div className="map-controls">
+      {/*
+       * A recentre mark, with the words moved to the accessible name.
+       *
+       * `design.md` rule 2: a label whose only job is naming a control for
+       * assistive technology becomes an accessible name rather than visible
+       * text. Nothing is lost to a screen reader — the button is still found by
+       * the name `Reset map view`, which is what `MapControls.test.tsx` queries
+       * by — and the map gets back the corner the two phrases were taking from
+       * the tiles they float on. The card's Close (#340) and the range picker's
+       * trigger (#329) are the settled instances of the same move.
+       *
+       * Both marks are drawn on the header's terms (`header/HeaderMenu.tsx`'s
+       * burger): a 20-unit `viewBox`, `aria-hidden` so the name is said once,
+       * and stroked in `currentColor` so they follow the button through both
+       * themes and through the pressed inversion below. `map.css` says why the
+       * drawing declarations are restated there rather than shared.
+       *
+       * A ring with four ticks rather than a circular arrow: what this control
+       * does is put the camera back where it was framed, and a recentre mark
+       * says that where an undo arrow would say "take back the last thing you
+       * did", which is not what pressing it does.
+       */}
       <button
         type="button"
         className="map-control-reset"
+        aria-label="Reset map view"
         disabled={map === null}
         onClick={resetView}
       >
-        Reset map view
+        <svg className="map-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="4" />
+          <path d="M10 1v3M10 16v3M1 10h3M16 10h3" />
+        </svg>
       </button>
 
       {/*
@@ -90,15 +116,26 @@ export const MapControls = ({ armed, onToggleArmed }: MapControlsProps): ReactEl
        * control with two states, and the pressed state is what a screen reader
        * has instead of the fill `map.css` paints. `map-treatment.md`'s rule that
        * colour never carries a state alone applies to the map's chrome as much
-       * as to its markers.
+       * as to its markers. It is why the name in `aria-label` says what the
+       * control does rather than what mode it is in: the mode is `aria-pressed`'s
+       * to report, and a name that moved with it would say it twice and disagree
+       * with itself the first time only one of them changed.
+       *
+       * A pin carrying a plus, and deliberately not a bare `+`: a plus on its own
+       * next to a map is the zoom-in button every other map has, and this one
+       * places a site. The pin is what says which.
        */}
       <button
         type="button"
         className="map-control-add"
+        aria-label="Add a site"
         aria-pressed={armed}
         onClick={onToggleArmed}
       >
-        Add a site
+        <svg className="map-control-icon" viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M10 17c3.2-4.2 4.5-6.6 4.5-8.5a4.5 4.5 0 0 0-9 0c0 1.9 1.3 4.3 4.5 8.5z" />
+          <path d="M10 6.5v4M8 8.5h4" />
+        </svg>
       </button>
     </div>
   );
