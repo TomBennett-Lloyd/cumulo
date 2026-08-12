@@ -19,6 +19,7 @@ import {
   xAxisElements,
 } from './forecast-chart-axes';
 import { dayBoundaryElements, nightElements } from './forecast-chart-context';
+import { chartErrorOverlay, type ChartErrorNotice } from './forecast-chart-error';
 import { ForecastChartHoverBoundary } from './forecast-chart-hover-boundary';
 import {
   actualsElements,
@@ -95,6 +96,26 @@ import { useChartWidth } from './use-chart-width';
  * bullet, amended by the same round). Absent, this prop draws nothing at all,
  * which is the same contract `overlay` keeps.
  *
+ * **A total failure is an overlay too, in the same box** (#452). The optional
+ * `error` prop puts the owner's one generic account of "we cannot show data on
+ * the graph" over the plot — a warning triangle, a sentence and the recourse —
+ * and it is positioned inside the figure rather than rendered above it for the
+ * reason the loading trace is drawn inside the plot: an absolutely positioned
+ * child cannot change the figure's height, so nothing on the page moves when the
+ * state arrives or leaves. That is #448's discipline extended rather than a
+ * second idea. `forecast-chart-error.tsx` draws it and holds the argument for why
+ * it is not `PanelError`; the wording is the caller's, because this folder spells
+ * no state copy of its own.
+ *
+ * `loading` and `error` are never both set. The caller's state arms are mutually
+ * exclusive by construction — a read is out, or it came back and failed — and
+ * that is deliberately *not* re-enforced here: this component would have to
+ * invent a resolution for a combination no caller can produce, and a mode flag
+ * over two independent by-presence props is the shape `structure.md` rule 7
+ * refuses. Two props rather than one `state` union for the same reason they are
+ * two different mechanisms: the wait is a `<path>` among the marks, and the
+ * failure is text-bearing HTML over the whole figure.
+ *
  * **The readout has one source of truth, and since #331 it is not this file.**
  * Pointer and keyboard both settle on an `activeIndex`, which
  * `forecast-chart-hover-boundary.tsx` holds — the child this component wraps
@@ -129,17 +150,27 @@ import { useChartWidth } from './use-chart-width';
  * the fold itself changed — there is one disclosure, closed by default, and
  * `forecast-chart-table.tsx` still owns the argument for it.
  *
- * **What the figure holds is now a two-element contract**, and both moves of
+ * **What the figure holds is a stated contract**, and both moves of
  * 2026-08-11 are what make it worth writing down: the table twin left for the
  * sibling slot and the legend left for the (i), so a `<figure>` that once held
- * four things holds the plot and the announcement about it and nothing else —
- * `[svg.forecast-chart, p.forecast-chart-readout]`, in that order, with
- * `.forecast-chart-details` as the figure's next sibling. The order is not
+ * four things holds the plot and the announcement about it wherever there is a
+ * chart to read — `[svg.forecast-chart, p.forecast-chart-readout]`, in that
+ * order, with `.forecast-chart-details` as the figure's next sibling, and the
+ * one exception stated in the paragraph below. The order is not
  * cosmetic. The readout is the region a reader meets *after* the plot it
  * describes, which is the arrangement `docs/design/chart-treatment.md`'s
  * live-region bullet states, and #410 asked for it to be pinned rather than left
  * to be read off this file. `dashboard/FleetPanel.structure.test.tsx` is where
  * it is pinned, in every state of the panel.
+ *
+ * #452 adds `div.forecast-chart-error` as a **suffix** to that pair, in the one
+ * state that has it, and a suffix is what keeps the contract a contract: the two
+ * elements above stay in their order and stay the whole of the figure wherever
+ * there is a chart to read, and the failure appends rather than displacing
+ * either. Last rather than first for the same reason it is an `alert` at all —
+ * it announces by arriving, so it does not need to be met first to be met, and
+ * putting it ahead of the plot would reorder the figure for every reader in
+ * order to serve a state most of them never reach.
  *
  * **Two names, because there are two things to name.** The standing aria
  * decision, written down as a decision rather than left to be read off the
@@ -176,6 +207,7 @@ export type {
   ForecastChartBand,
   ForecastChartPoint,
 } from './chart-series';
+export type { ChartErrorNotice } from './forecast-chart-error';
 
 export interface ForecastChartProps {
   /** May be empty — the chart then draws bare chrome; sorted ascending by `validTimeIso`. */
@@ -202,6 +234,20 @@ export interface ForecastChartProps {
    * that has a false value to forget to handle.
    */
   readonly loading?: true;
+  /**
+   * The chart's data path failed outright, and the figure says so over its own
+   * box (#452; the docblock's total-failure paragraph above).
+   *
+   * By presence, exactly as `overlay` and `loading` are, and for the same
+   * reason: under `exactOptionalPropertyTypes` an absent optional prop and one
+   * set to `undefined` are different values, and the contract is about the
+   * absent one — a chart rendered without this prop emits exactly what it
+   * emitted before the error state existed. Which failures reach it is the
+   * caller's question and deliberately not asked here: a partial answer still
+   * has a chart to draw and must not route into this (`error-handling.md` rule
+   * 5), and `dashboard/FleetPanel.tsx` is where that boundary is drawn.
+   */
+  readonly error?: ChartErrorNotice;
 }
 
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
@@ -318,6 +364,16 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           {xAxisElements(points, scale)}
           {axisTitleElements(scale.plot)}
         </ForecastChartHoverBoundary>
+        {/* The total failure, over everything above it and inside the same box
+            (#452). After the boundary rather than among the marks because it is
+            HTML and they are SVG, and over the plot rather than above it because
+            `charts.css` takes it out of flow — which is the whole of the no-jump
+            claim: an absolutely positioned child cannot alter the figure's
+            height, so this state costs the page no movement arriving or
+            leaving. It is the figure's own `role="alert"`, and it is inside the
+            figure so that a reader who has scrolled to the chart finds the
+            explanation where the chart is. */}
+        {props.error === undefined ? null : chartErrorOverlay(props.error)}
       </figure>
 
       {/* The twin, outside the figure since 2026-08-11 and a sibling of it: the

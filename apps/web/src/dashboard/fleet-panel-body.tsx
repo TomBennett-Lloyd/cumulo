@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
 import type {
+  ChartErrorNotice,
   ChartOverlaySeries,
   ForecastChartPoint,
   ForecastChartProps,
@@ -10,11 +11,11 @@ import type {
 import type { QueryState } from '../data/use-fleet-query';
 import type { ChartCopy } from './fleet-panel-copy';
 import { EMPTY_FLEET_AGGREGATE, type FleetChartAggregate } from './fleet-series';
-import { PanelEmpty, PanelError } from './panel-states';
+import { PanelEmpty } from './panel-states';
 import {
+  CHART_DATA_UNAVAILABLE_MESSAGE,
   EMPTY_FLEET_MESSAGE,
   FLEET_ACTUALS_FAILURE_NOTICE,
-  fleetForecastFailureMessage,
   NO_FLEET_FORECAST_MESSAGE,
   partialAggregateNotice,
   RETRY_ACTION_LABEL,
@@ -60,6 +61,20 @@ import {
  * so the state stays machine-readable, and `docs/standards/react.md`'s Pending
  * bullet was amended by the same round to say when a surface may do that.
  *
+ * **The failed state emptied the first slot too, and #452 is why.** The owner's
+ * follow-up asked for the fleet's failure to be shown where the chart is —
+ * *"the sites fetch error state should show in the graph area"* — and ruled it
+ * generic: one account for any total failure of the chart's data path, rather
+ * than a sentence per read. So the failed arm's `PanelError` card left this file
+ * and became an overlay inside the figure
+ * (`charts/forecast-chart-error.tsx`), which is #448's move made for the other
+ * end of the same read. Two of the five states now say nothing above the chart,
+ * and neither of them can move the page. What did *not* move is every **partial**
+ * state: a failed actuals read, a failed overlay and a short aggregate all still
+ * speak in the first slot, because each of them has a chart that arrived and an
+ * answer to keep (`error-handling.md` rule 5). Which failures are total is
+ * `FleetPanel.tsx`'s to decide and is decided there.
+ *
  * ### Restatement ledger (`architecture.md` rule 9)
  *
  * This section is the owner of the claim "one chart, in every state" — that the
@@ -75,6 +90,16 @@ import {
  * *says* — so they were trued in that change rather than found a cycle at a
  * time. What each gained is the same clause: the states differ in what is drawn
  * as well as in what is said, and the loading one now differs only in that.
+ *
+ * #452 is the third, and it is the same shape once more rather than a new one:
+ * the failed arm joined the loading arm in saying nothing above the chart, so
+ * members quoting the failed state's sentence — or counting the alert it used to
+ * mount here — were falsified in their phrasing while the claim held. They are
+ * trued in that change. The claim itself comes out stronger again: what is left
+ * speaking above the chart is only the states with something *partial* or
+ * *absent* to report, and the two states that used to swap the tallest element
+ * on the page for a sentence now differ from every other state in what the plot
+ * has on it and in nothing else.
  *
  * - `bodyLayout`'s docblock below — "the one arrangement every state renders",
  *   which is this claim stated about the function that enforces it.
@@ -222,22 +247,26 @@ const DRAWN_AS_LOADING: Pick<Required<ForecastChartProps>, 'loading'> = { loadin
  * existed — no mark, no legend row, no table column. Spreading the shared props
  * keeps the two arms from drifting (`structure.md` rule 7).
  *
- * `loading` keeps the same by-presence contract and reaches the chart by a
- * conditional spread rather than by a third and fourth arm. The two flags are
+ * `loading` and, since #452, `error` keep the same by-presence contract and reach
+ * the chart by a conditional spread rather than by further arms. The flags are
  * independent — a site's overlay can already have arrived while a range change
- * re-asks the fleet — so branching on both would be four copies of one call for
- * two facts that never interact, which is the shape rule 7 exists to refuse.
+ * re-asks the fleet — so branching on each would be eight copies of one call for
+ * three facts that barely interact, which is the shape rule 7 exists to refuse.
+ * (`loading` and `error` are in fact exclusive, but that is a property of the
+ * arms below rather than of this call, and the chart's own docblock says so.)
  */
 const fleetChart = (
   points: readonly ForecastChartPoint[],
   { chart, overlay }: FleetChartContext,
   loading: boolean,
+  error: ChartErrorNotice | null,
 ): ReactElement => {
   const common = {
     points,
     ariaLabel: chart.ariaLabel,
     tableCaption: chart.tableCaption,
     ...(loading ? DRAWN_AS_LOADING : {}),
+    ...(error === null ? {} : { error }),
   };
 
   return overlay.kind === 'series' ? (
@@ -268,12 +297,17 @@ const fleetChart = (
  * It is the same non-live treatment the completeness note above uses, for the
  * same reason — an incomplete answer is a caption on the answer, not an event.
  *
- * The single co-occurrence that budget sanctions lives in this file: the failed
- * arm's `PanelError` mounts a `role="alert"` beside that readout, which #284 D3
- * made possible by keeping the chart on screen through a failure rather than
- * returning in place of it. It is allowed because it cannot compete — a failed
+ * The single co-occurrence that budget sanctions is the panel's failed state,
+ * which #284 D3 made possible by keeping the chart on screen through a failure
+ * rather than returning in place of it. Since #452 that alert is no longer this
+ * file's: the failure is drawn inside the figure, so the `role="alert"` and the
+ * readout it sits beside are now both the chart's own
+ * (`charts/forecast-chart-error.tsx`). The sanctioning property is untouched by
+ * the move, because it was never about which file rendered the alert — a failed
  * fleet read leaves no points, so the readout renders empty for exactly as long
- * as the alert is up — and it is not licence for a third region here.
+ * as the alert is up, and the two provably cannot compete. It is not licence for
+ * a third region here either, and the partial states above deliberately take
+ * none: this arm's notice is a caption on an answer, not an event.
  *
  * The retry is offered because re-asking genuinely can work, which is the test
  * `react.md` sets for offering one at all: a series that did not arrive is a
@@ -303,20 +337,63 @@ const actualsNote = (actuals: FleetActualsState, onRetry: () => void): ReactElem
   actuals.kind === 'failed' ? partialSeriesNote(FLEET_ACTUALS_FAILURE_NOTICE, onRetry) : null;
 
 /**
- * What a state says, what it leaves the chart to draw, and whether it is still
- * waiting — the only three things that vary.
+ * What a state says, what it leaves the chart to draw, whether it is still
+ * waiting, and whether it has anything to draw *from* — the only four things
+ * that vary.
  *
- * The third joined the other two in #448, when the wait stopped being something
- * the panel *says*. `notice` is nullable for the same reason: a state with no
- * news has no element to render, and a placeholder one would put an empty box in
- * the grid above the chart — which is the page jump this round removed, spelled
- * a different way.
+ * The third joined the first two in #448, when the wait stopped being something
+ * the panel *says*, and the fourth in #452, when a total failure stopped being
+ * one either. Both moved the same way and for the same reason: a state that used
+ * to arrive as a sentence above the chart now arrives inside the chart's own box,
+ * so it changes what the reader sees without changing where anything sits.
+ * `notice` is nullable for that reason too — a state with no news has no element
+ * to render, and a placeholder one would put an empty box in the grid above the
+ * chart, which is the page jump these rounds removed, spelled a different way.
+ *
+ * `error` is `null` in every arm but one, and it is deliberately not a union with
+ * `loading`: the chart takes them as two independent by-presence props over two
+ * different mechanisms (a mark among the marks, and an HTML panel over the whole
+ * figure), so collapsing them here would only mean expanding them again at the
+ * call below.
  */
 interface FleetBodyContent {
   readonly notice: ReactElement | null;
   readonly points: readonly ForecastChartPoint[];
   readonly loading: boolean;
+  readonly error: ChartErrorNotice | null;
 }
+
+/**
+ * The one state in which the chart has nothing to draw and no prospect of
+ * anything: what it shows, and the single request that could change that.
+ *
+ * Shared by the two arms that reach it — the fleet's own forecast read having
+ * failed, and a listing that failed leaving the panel no fleet to sum
+ * (`FleetPanel.tsx` routes both, and owns the argument for which failures are
+ * total and which are merely partial). One builder rather than two identical
+ * literals, because they are one intent in two subjects and only the retry
+ * differs (`structure.md` rule 7): what changes is which counter the button
+ * bumps, so that is the parameter and nothing else is.
+ *
+ * `notice: null` is the whole of what is left above the chart, and it is the
+ * change #452 made to this arm: the sentence used to sit there in a `PanelError`
+ * card and now sits inside the figure, which is the same no-jump move #448 made
+ * for the wait. Nothing else in the body is above the plot any more in this
+ * state.
+ *
+ * The points come from {@link EMPTY_FLEET_AGGREGATE} rather than from the
+ * caller's aggregate, and that is not a shortcut: a non-ready state is handed
+ * exactly that aggregate by construction (`FleetPanel.tsx`'s `chartAggregateOf`),
+ * and a fleet with no sites has nothing to sum either, so both callers would
+ * pass the identical array. Naming the constant is what keeps the chart handed
+ * the *same* array on every render rather than an equal one.
+ */
+const unavailableContent = (onRetry: () => void): FleetBodyContent => ({
+  notice: null,
+  points: EMPTY_FLEET_AGGREGATE.points,
+  loading: false,
+  error: { message: CHART_DATA_UNAVAILABLE_MESSAGE, retryLabel: RETRY_ACTION_LABEL, onRetry },
+});
 
 /**
  * The one arrangement every state renders: what the panel says, then the chart.
@@ -341,16 +418,39 @@ interface FleetBodyContent {
  * technology and are not equivalent to a `[aria-busy="true"]` query, which is
  * what `fleet-panel-test-fixture.tsx`'s `settle()` waits on and what
  * `e2e/chart-loading.spec.ts` watches for.
+ *
+ * **`aria-busy` stays loading's alone, and #452's failure state deliberately
+ * does not touch it.** A failed read is not a wait, and the reason the wordless
+ * loading arm needs the attribute at all is that it has nothing to say — a
+ * drawing announces nothing. The failure has the opposite problem and the
+ * opposite solution: it is text-bearing, so it takes `react.md`'s **Failed**
+ * lane and announces through its own `role="alert"` inside the figure. Marking
+ * the body busy as well would tell a reader something is arriving when nothing
+ * is.
  */
 const bodyLayout = (
-  { notice, points, loading }: FleetBodyContent,
+  { notice, points, loading, error }: FleetBodyContent,
   context: FleetChartContext,
 ): ReactElement => (
   <div className="fleet-panel-body" aria-busy={loading ? 'true' : undefined}>
     {notice}
-    {fleetChart(points, context, loading)}
+    {fleetChart(points, context, loading, error)}
   </div>
 );
+
+/**
+ * The fleet's chart with nothing to draw on it and one request that might
+ * change that — the state a listing failure and a failed fleet read share.
+ *
+ * Exported for `FleetPanel.tsx`, which is the only surface that can tell a
+ * listing that failed with no sites in hand from one that failed beside sites
+ * this session created — a distinction this file has no way to see, and the
+ * whole of the owner's degradation story: if the graph *can* show data, it does.
+ */
+export const unavailableFleetBody = (
+  context: FleetChartContext,
+  onRetry: () => void,
+): ReactElement => bodyLayout(unavailableContent(onRetry), context);
 
 /**
  * A fleet with no sites in it: the demo's invitation, over the same bare chart.
@@ -366,6 +466,7 @@ export const emptyFleetBody = (context: FleetChartContext): ReactElement =>
       notice: <PanelEmpty message={EMPTY_FLEET_MESSAGE} />,
       points: EMPTY_FLEET_AGGREGATE.points,
       loading: false,
+      error: null,
     },
     context,
   );
@@ -381,7 +482,12 @@ const readyContent = (
   // statement about. It happened before this function was called, in the
   // panel's memo, which is the only thing #293 moved about it.
   if (points.length === 0) {
-    return { notice: <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />, points, loading: false };
+    return {
+      notice: <PanelEmpty message={NO_FLEET_FORECAST_MESSAGE} />,
+      points,
+      loading: false,
+      error: null,
+    };
   }
 
   return {
@@ -394,6 +500,7 @@ const readyContent = (
     ),
     points,
     loading: false,
+    error: null,
   };
 };
 
@@ -425,25 +532,29 @@ const stateContent = (
      * amendment of 2026-08-12 kept. Completion is unchanged too — it is this
      * busy container being replaced by content, never an announcement.
      */
-    return { notice: null, points: aggregate.points, loading: true };
+    return { notice: null, points: aggregate.points, loading: true, error: null };
   }
   if (state.status === 'failed') {
-    // The sentence is `state-copy.ts`'s; what this panel decides is the retry,
-    // which is offered because a fleet read that came back with nothing is
-    // exactly the failure a repeat can outlive. The rule is `react.md`'s
-    // **Failed** bullet ("a retry only when retrying can work"; no retry that
-    // "re-runs an identical metered request"), read as withholding one where
-    // re-running would deterministically return what it already returned — a
-    // read that failed being the opposite case. That reading is an
-    // interpretation, not the bullet's own words; `docs/tech-debt.md` has why
-    // the amendment belongs in `react.md` rather than here.
-    return {
-      notice: (
-        <PanelError message={fleetForecastFailureMessage(state.error.message)} onRetry={onRetry} />
-      ),
-      points: aggregate.points,
-      loading: false,
-    };
+    /*
+     * The forecast read is the answer itself, so its failure is total and takes
+     * the generic in-figure account (#452) rather than a sentence of its own.
+     * What is left of the old arm here is the *retry*, which survives on the
+     * same argument it always had: it is offered because a fleet read that came
+     * back with nothing is exactly the failure a repeat can outlive. The rule is
+     * `react.md`'s **Failed** bullet ("a retry only when retrying can work"; no
+     * retry that "re-runs an identical metered request"), read as withholding
+     * one where re-running would deterministically return what it already
+     * returned — a read that failed being the opposite case. That reading is an
+     * interpretation, not the bullet's own words; `docs/tech-debt.md` has why
+     * the amendment belongs in `react.md` rather than here.
+     *
+     * What the arm gave up is the source's own message, and it was the owner's
+     * call rather than this file's: a total failure gets one generic sentence,
+     * because a transport detail is not something the reader can act on
+     * (`state-copy.ts`'s `CHART_DATA_UNAVAILABLE_MESSAGE`). `state.error` is
+     * still carried this far — `use-fleet-query.ts` says why it stays typed.
+     */
+    return unavailableContent(onRetry);
   }
   return readyContent(state.data, aggregate, context);
 };

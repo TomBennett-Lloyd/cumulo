@@ -492,6 +492,101 @@ subtle and clean"_.
   `docs/standards/react.md`'s Pending bullet is where that trade is written down, amended by this
   same decision.
 
+## Data unavailable
+
+_Decided 2026-08-12 ([#452](https://github.com/TomBennett-Lloyd/cumulo/issues/452)), by the owner,
+as the follow-up to #448 — the same read's other end._
+
+**A chart with no data path left to draw from says so over the plot rather than above it, in one
+generic account rather than one per read.** The owner's ruling, in their words: _"the sites fetch
+error state should show in the graph area (something like a triangle with an exclaimation in it …
+this can be the generic error message for anything that means we can't show data on the graph, no
+need to be too specific if the error state is basically just a total failure. if it's just data and
+we have the sites they'll appear on the map and if we don't even have sites then the lack of
+anything on the map will be self evident i think"_.
+
+- **A glyph, a sentence and the recourse, centred in the plot's own box.** The overlay covers the
+  `<figure>`, so its middle is the middle of the space the drawing would have occupied — the account
+  belongs where the chart was, not hanging off one of its corners. The triangle is drawn in the
+  shipped icon idiom (`map.css`'s `.map-control-icon`: a 20-unit box, strokes rather than fills,
+  `currentColor` so the mark takes the ink of the text beside it) at a size chosen against the plot
+  rather than copied from the map's buttons. It is `aria-hidden` decoration — it says in a shape what
+  the sentence says in words, and the container is the `role="alert"` that announces by arriving, so
+  a reader who cannot see the glyph loses nothing. **No copy is written in this document or in
+  `charts/`**: the sentence and the recourse's name are `CHART_DATA_UNAVAILABLE_MESSAGE` and
+  `RETRY_ACTION_LABEL` in [`apps/web/src/dashboard/state-copy.ts`](../../apps/web/src/dashboard/state-copy.ts),
+  which hold the wording and the argument for it, and they reach the chart as props
+  (`docs/standards/react.md`'s async-surface convention).
+- **`--color-danger`, under a warning-shaped glyph, and the two are not in tension.**
+  `apps/web/src/dashboard/panel-states.css` owns the status vocabulary this page reads by — danger
+  says a request failed, warning says the answer arrived and is incomplete — and this state is the
+  first of those: there is no answer at all. The owner's phrase specifies the glyph's _shape_, which
+  is what the icon draws; the ink is the vocabulary's to decide, and warning's would say "partial"
+  over a plot with nothing on it. This is also the token map's "reserved status states, never series
+  identity" doing its job the intended way round: a failure is state, so it wears a status token and
+  spends no categorical slot.
+- **One account, and only for a total failure.** Total means the chart's data path has nothing left
+  to draw and no prospect of anything — the fleet forecast read failed, or the site listing failed
+  and there are no sites to sum. Everything short of that keeps the notice it already had, above a
+  chart that arrived: a failed actuals read, a failed overlay, an aggregate short of some of its
+  sites (`error-handling.md` rule 5 — a complete answer that did arrive is not thrown away because
+  an incomplete one did not). And an empty fleet is not a failure in the first place: a listing that
+  succeeded and returned nothing is a finished answer, and it keeps its invitation to add a site.
+  Which failures are total is [`apps/web/src/dashboard/FleetPanel.tsx`](../../apps/web/src/dashboard/FleetPanel.tsx)'s
+  to decide and is decided there; what this document owns is that there is one account for all of
+  them. One consequence beyond the ruling's literal text is worth recording as a decision rather
+  than left to be discovered: a listing still _in flight_ now draws #448's loading trace, where it
+  used to flash the empty fleet's invitation for the length of the read — an answer the page did not
+  have yet, stated as though it did.
+- **No page jump, and it is structural rather than measured.** The overlay is
+  `position: absolute; inset: 0` inside a `position: relative` figure, so it is out of flow and
+  contributes nothing to the figure's height: this state cannot move the page arriving or leaving,
+  however tall its contents are. That is the Loading section's discipline applied to the other end of
+  the same read — the wait is a mark inside the plot, the failure is a panel over the same box.
+  Three holders, and what each one actually holds:
+  - [`apps/web/src/charts/chart-css-contract.test.ts`](../../apps/web/src/charts/chart-css-contract.test.ts)
+    pins both declarations and the figure's `position: relative`. Drop `absolute` and the overlay
+    joins the flow and pushes the twin down; drop `inset` and it collapses into a corner; drop the
+    figure's `position` and it resolves against whatever is positioned further out.
+  - [`apps/web/src/dashboard/FleetPanel.structure.test.tsx`](../../apps/web/src/dashboard/FleetPanel.structure.test.tsx)
+    pins the figure's children in this state — the plot and the readout, then
+    `div.forecast-chart-error` — and pins the figure still being the panel body's first element
+    child, which is "nothing arrived above the plot" stated as structure.
+  - [`apps/web/e2e/chart-loading.spec.ts`](../../apps/web/e2e/chart-loading.spec.ts) measures a box
+    in a real browser, and the box it measures is the **loading** state's against the settled one.
+    It is named here because it is the browser-lane evidence that this figure's box survives a state
+    change; it does not measure this state, and no spec does.
+
+  None of the three proves the state _looks_ right. Between them they prove the box cannot move and
+  that the slot above the chart stays empty — which is the requirement, not the composition.
+
+- **The retry stayed; "try again later" did not.** The owner's suggested copy carried the phrase, and
+  it was escalated rather than quietly dropped: a sentence counselling patience beside a button
+  offering to act contradicts itself, and the button is the half that can actually work. The owner
+  ratified the recourse, so the words became a fragment stating a state and the waiting became a
+  control. It is `.panel-retry` — the same treatment every other failure on the page offers, because
+  it is the same act — and it re-asks whichever read left the chart with nothing, the caller
+  choosing which, since the two arms that reach this state have two different requests to re-run.
+- **The state displays no weather-derived data, so it owes no credit of its own.** There is no
+  forecast, no band and no measurement on the plot, so the Attribution section below has nothing to
+  attach an obligation to here. What matters is the other direction, and it is mechanical: the page's
+  credit belongs to the _page_ rather than to this panel
+  ([`dashboard-composition.md`](dashboard-composition.md)'s "Two credits"), so a failed fleet read
+  cannot take it down. `apps/web/src/dashboard/Dashboard.test.tsx`'s attribution walk asserts exactly
+  one credit across a loading → failed → retried-and-ready sequence, this state included. CLAUDE.md's
+  hard constraint is intact, and it is intact because of where the credit lives, not because of
+  anything this state does.
+- **Shipped browser-unviewed, which is a stated gap rather than an omission.** This state is
+  unreachable in the demo app: `DemoFleetDataSource` answers from memory, and the two reads that
+  route here — `listSites` and `fleetForecasts` — resolve `ok` unconditionally, so no browser-lane
+  route can fail them the way it can fail an HTTP call. (It does fail an unknown site id, but only
+  on per-site reads, which are never total failures of the chart's data path.) So the geometry above
+  is pinned mechanically while the visual composition — the glyph's size against a wide plot, the
+  air between the three rows, how the group reads centred in a full-bleed band — has not been looked
+  at by anyone in a browser. Closing that gap needs a failure-injection seam the demo source does not
+  have, which is a follow-up rather than part of this round. Until it lands, read this section as
+  designed rather than as seen.
+
 ## Categorical series order
 
 Multi-series charts — per-site comparison, per-cluster aggregation — take
@@ -744,13 +839,18 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   **Where it sits is now the whole of what the figure holds**, and that is a change of surroundings
   rather than of the region. The 2026-08-11 round emptied the `<figure>` from both sides: the
   disclosure moved out to become the figure's next sibling (the fold bullet below) and the legend
-  moved out to the (i) (the Legend section above). So the region is the figure's second and last
-  child, the plot is its first, and "between the plot and the legend" — which is how this bullet
-  read while the legend was under it — names no arrangement that exists. What the ordering is
+  moved out to the (i) (the Legend section above). So the region is the figure's second child, the
+  plot is its first, and "between the plot and the legend" — which is how this bullet
+  read while the legend was under it — names no arrangement that exists. Since #452 the pair is no
+  longer always the whole of the figure: the total-failure overlay appends _after_ the region in the
+  one state that has one ("Data unavailable" above), as a suffix rather than an insertion, so the
+  plot and the region keep their places and their order in every state. Last rather than first for
+  this bullet's own reason — an alert announces by arriving, so it does not have to be met before
+  the plot to be met. What the ordering is
   actually about survives all of it: a reader meets the plot and then the announcement about it, and
   a region that arrived before the thing it describes would be announcing a selection in a chart the
   reader has not reached yet. `apps/web/src/dashboard/FleetPanel.structure.test.tsx` pins the
-  figure's two children and their order, in every state of the panel.
+  figure's children and their order, in every state of the panel.
   **The announcement and the tooltip are composed from the same rows** — speech skipping the
   dashed ones, per the drop bullet above — so the spoken readout cannot drift from the drawn one
   about any series either of them carries; and pointer and keyboard both feed that single region,

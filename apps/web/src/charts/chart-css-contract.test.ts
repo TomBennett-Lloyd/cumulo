@@ -185,13 +185,24 @@ const REDUCED_MOTION = ['@media (prefers-reduced-motion: reduce)'];
  * reader gets.
  *
  * Listed rather than derived, because the claim is about these rules and a list
- * derived from the file would agree with the file by construction.
+ * derived from the file would agree with the file by construction. Membership is
+ * therefore hand-kept, by a stated rule: every selector an assertion below reads
+ * through `declarationsFor` — or through `strokeWidthOf`, which resolves through
+ * it — less `LOADING_TRACE`, whose override is deliberate and is the positive
+ * control for the case that reads this list. What re-checks the list against that
+ * rule is `command grep -nE "declarationsFor\(|strokeWidthOf\(" ` over this file,
+ * run 2026-08-12 — which is how `.forecast-chart-median` was found read below and
+ * missing here, leaving the weight comparison it appears in true of some readers
+ * and not others with nothing failing.
  */
 const UNCONDITIONAL_SELECTORS = [
   '.forecast-chart-grid',
   '.forecast-chart-horizon',
   '.forecast-chart-day-boundary',
   '.forecast-chart-crosshair',
+  '.forecast-chart-median',
+  '.forecast-chart-figure',
+  '.forecast-chart-error',
 ];
 
 /**
@@ -265,11 +276,12 @@ describe('charts.css tells the plot’s three verticals apart', () => {
   /*
    * The guard `declarationsFor` used to make by throwing on any second rule,
    * stated as a case now that the file has a selector it is right to override.
-   * Every assertion above reads one rule and reports it as the contract; a
-   * conditional override of any of those four would make each of them a partial
-   * truth, true of some readers and not others, with nothing failing.
+   * Every assertion in this file reads one rule and reports it as the contract; a
+   * conditional override of any selector in `UNCONDITIONAL_SELECTORS` would make
+   * each of them a partial truth, true of some readers and not others, with
+   * nothing failing.
    */
-  it('leaves the rules read above unconditional, which is what lets one rule be the contract', () => {
+  it('leaves the listed rules unconditional, which is what lets one rule be the contract', () => {
     expect(
       UNCONDITIONAL_SELECTORS.flatMap((selector) =>
         conditionalRulesFor(selector).map(
@@ -279,8 +291,8 @@ describe('charts.css tells the plot’s three verticals apart', () => {
     ).toEqual([]);
 
     // The positive control for that emptiness, on the same filter: the loading
-    // trace really is overridden, so the list above is a fact about those four
-    // selectors rather than about a filter that never matches anything.
+    // trace really is overridden, so the emptiness above is a fact about the
+    // listed selectors rather than about a filter that never matches anything.
     expect(conditionalRulesFor(LOADING_TRACE)).toHaveLength(1);
   });
 });
@@ -340,5 +352,45 @@ describe('charts.css draws the wait instead of spelling it', () => {
      */
     expect(reduced).toMatch(/stroke-dashoffset\s*:\s*0\s*;/);
     expect(reduced).toMatch(/opacity\s*:\s*0\.\d+\s*;/);
+  });
+});
+
+/*
+ * #452's failure state, and the one claim about it that is mechanical rather
+ * than visual: it cannot move the page.
+ *
+ * The owner's ask was that the error show *in the graph area*, and the batch's
+ * standing requirement — #448's, applied to the other end of the same read — is
+ * that a state arriving or leaving changes nothing about where anything sits.
+ * The mechanism for that is structural rather than measured: an absolutely
+ * positioned child contributes nothing to its parent's height, so an overlay
+ * pinned to `inset: 0` inside a `position: relative` figure occupies the box the
+ * chart already has and no other. Three declarations across two rules are the
+ * whole of it, and each is useless without the others: drop the figure's
+ * `position` and the overlay resolves against some ancestor that is not the
+ * chart; drop `absolute` and it joins the flow and pushes the twin down; drop
+ * `inset` and it collapses to its content in a corner.
+ *
+ * jsdom cannot see any of this — it applies no stylesheet and lays nothing out —
+ * and neither can the browser lane, because `DemoFleetDataSource` never fails so
+ * the state is unreachable in the shipped app (`testing.md` rule 10 asks for
+ * that to be said rather than left implied). Reading the declarations is
+ * therefore the only guard this state has, which is why it is a named case
+ * rather than a line in a comment.
+ */
+describe('charts.css keeps the failure inside the chart’s own box', () => {
+  it('takes the error overlay out of flow, so it cannot change the figure’s height', () => {
+    const error = declarationsFor('.forecast-chart-error');
+
+    expect(error).toContain('position: absolute;');
+    expect(error).toContain('inset: 0;');
+  });
+
+  it('positions the figure, which is what the overlay resolves against', () => {
+    // The other half of the pair above. Without it `inset: 0` is measured from
+    // whatever ancestor happens to be positioned — the controls row, or the
+    // initial containing block — and the overlay lands somewhere that is not the
+    // chart, with nothing else in the repo noticing.
+    expect(declarationsFor('.forecast-chart-figure')).toContain('position: relative;');
   });
 });

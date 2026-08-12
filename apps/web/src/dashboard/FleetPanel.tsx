@@ -8,6 +8,7 @@ import { InfoTip } from '../info/InfoTip';
 import {
   emptyFleetBody,
   fleetBody,
+  unavailableFleetBody,
   type FleetActualsState,
   type FleetChartContext,
   type FleetSeries,
@@ -54,9 +55,21 @@ import { siteOverlaySeries } from './site-overlay';
  * "In every state" is now structural rather than merely usual: the body renders
  * one `.forecast-chart-figure` whether the fleet is loading, failed, empty,
  * forecastless or ready, and the states differ in what is said above it and in
- * what is drawn inside it (#284 D3; #448 for the second half, which is where
- * the loading state went when it stopped being a sentence).
- * `fleet-panel-body.tsx` holds that arrangement and the reasoning.
+ * what is drawn inside it (#284 D3; #448 and #452 for the second half, which is
+ * where the loading state and then the failed one went when each stopped being a
+ * sentence). `fleet-panel-body.tsx` holds that arrangement and the reasoning.
+ *
+ * ## The listing is one of this panel's inputs now, and only for one question
+ *
+ * Since #452 the fleet listing has no surface of its own: the sites section that
+ * carried its pending and failure states left the page in #451, and the owner
+ * routed what was left into the chart — *"the sites fetch error state should show
+ * in the graph area"*. So this panel takes `listing` and answers the one question
+ * an empty `sites` array cannot answer on its own: whether there is nothing to
+ * show because the fleet is empty, or because the read that would have told us
+ * failed. It asks the source nothing extra to find out, and the two failing reads
+ * stay independent — a listing that failed beside sites already in hand still
+ * gets a chart, because the fleet endpoints never depended on the listing.
  *
  * ## The selected site is one more series, not a second chart
  *
@@ -184,9 +197,9 @@ const DEFAULT_RANGE: RangeHours = 24;
  * plot has on it (`fleet-panel-body.tsx`).
  * What survives is the difference in weight — a failed
  * forecast is the answer itself not arriving, so it is an `alert` over a plot
- * with nothing drawn on it; a failed actuals read is an addition to an answer
- * that did arrive, so it is a `panel-notice` over a plot still carrying every
- * forecast hour. These are two requests over two windows — one metered
+ * with nothing drawn on it, drawn *inside* that plot's own box since #452; a
+ * failed actuals read is an addition to an answer that did arrive, so it is a
+ * `panel-notice` over a plot still carrying every forecast hour. These are two requests over two windows — one metered
  * `/v1/fleet/forecast` call and one metered `/v1/fleet/actuals` call — so either
  * can fail alone, and a failed actuals read used to be returned here as *the*
  * failure: the panel then withdrew a fleet sum that had already arrived and
@@ -280,10 +293,35 @@ const overlayState = (
     : { kind: 'none' };
 };
 
+/**
+ * How the dashboard's one-off fleet listing went, as far as this panel needs it.
+ *
+ * A bare literal union rather than a mirror of the dashboard's own `FleetLoad`
+ * (`typing.md` rule 4 asks for a discriminated union where the arms *carry*
+ * different data; none of these do). The sites themselves arrive on
+ * {@link FleetPanelProps.sites}, already merged with whatever this session
+ * created, so a `ready` arm holding a list would be a second copy of a prop —
+ * and `FleetLoad['status']` is assignable straight to this, which keeps the
+ * dashboard from destructuring its own state to satisfy this panel.
+ */
+export type FleetListingStatus = 'loading' | 'ready' | 'failed';
+
 export interface FleetPanelProps {
   readonly dataSource: FleetDataSource;
   /** The dashboard's one site list — listing plus session-created sites. */
   readonly sites: readonly Site[];
+  /**
+   * How the fleet listing went — the read that produces {@link FleetPanelProps.sites}.
+   *
+   * The panel needs it because a listing failure and an empty fleet are the same
+   * `sites: []` and are not the same news: one is the demo's invitation and the
+   * other is the page having nothing to show (#452). It arrives as a prop rather
+   * than being asked for here because the listing is the dashboard's one request
+   * and this panel must not be a second caller of it.
+   */
+  readonly listing: FleetListingStatus;
+  /** Re-runs the fleet listing — the recourse the unavailable state offers. */
+  readonly onRetryListing: () => void;
   /** The site whose line is drawn over the fleet's, or `null` when none is selected. */
   readonly selectedSite: Site | null;
   /**
@@ -303,6 +341,8 @@ export interface FleetPanelProps {
 export const FleetPanel = ({
   dataSource,
   sites,
+  listing,
+  onRetryListing,
   selectedSite,
   selectionReady,
   refreshToken,
@@ -346,6 +386,13 @@ export const FleetPanel = ({
    * listing is briefly in flight with `sites` empty, and a fleet read fired then
    * would be a sum of nothing followed immediately by a second one over the real
    * fleet.
+   *
+   * Since #452 the *state* that gate leaves behind is load-bearing as well as
+   * frugal. A query that was never enabled reports its initial `loading`
+   * (`use-fleet-query.ts`), so a panel waiting on the listing draws the wait
+   * rather than announcing an empty fleet it has not been told about — which is
+   * what lets the body switch below leave that case to `fleetBody` instead of
+   * carrying an arm of its own.
    */
   const enabled = sites.length > 0;
 
@@ -587,9 +634,36 @@ export const FleetPanel = ({
           <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
         ) : null}
       </div>
-      {sites.length === 0
-        ? emptyFleetBody(context)
-        : fleetBody(fleet, aggregate, context, retryFleet)}
+      {/*
+       * Which body the state gets, and the two arms worth explaining.
+       *
+       * (a) **A listing still in flight with no sites falls to `fleetBody`, on
+       * purpose.** Its queries are gated off by `enabled` above, and a query
+       * that was never enabled reports its initial `loading`
+       * (`data/use-fleet-query.ts` states that outright), so the chart draws the
+       * wait as #448's trace and the body marks itself busy. That is the honest
+       * answer — the fleet is not known yet — and it is what retires the false
+       * "No sites yet" flash a reader used to get for the length of the listing
+       * read, which went with the listing's own pending state in #452.
+       *
+       * (b) **A failed listing beside sites this session created still gets the
+       * chart**, which is the owner's own degradation story: the fleet endpoints
+       * are independent of the listing, so if the graph *can* show data it does,
+       * and the sites in hand appear on the map regardless. Only a failure that
+       * leaves nothing to sum is total. That is what the `sites.length === 0`
+       * conjunct buys, and dropping it would paint the unavailable state over a
+       * fleet whose queries can answer.
+       *
+       * An empty fleet is not a failure and keeps its own arm: a listing that
+       * succeeded and returned nothing is a complete answer, and the demo's
+       * invitation is what it is owed (`error-handling.md` rule 5 — degrade
+       * honestly, in both directions).
+       */}
+      {listing === 'failed' && sites.length === 0
+        ? unavailableFleetBody(context, onRetryListing)
+        : listing === 'ready' && sites.length === 0
+          ? emptyFleetBody(context)
+          : fleetBody(fleet, aggregate, context, retryFleet)}
     </section>
   );
 };

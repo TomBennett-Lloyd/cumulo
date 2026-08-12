@@ -147,7 +147,11 @@ describe('state copy has one owner', () => {
   });
 
   it('keeps failure sentences out of the components that render them', () => {
-    const failurePrefix = /Could not load|unavailable: |could not be loaded/;
+    // `data unavailable` joined the list in #452, when the chart's total-failure
+    // sentence arrived: it is the one failure line with no verb in it, so none
+    // of the three patterns above would have caught a copy of it authored beside
+    // the JSX that renders it.
+    const failurePrefix = /Could not load|unavailable: |could not be loaded|data unavailable/;
 
     expect(failurePrefix.test(withoutComments(readSource(STATE_COPY)))).toBe(true);
 

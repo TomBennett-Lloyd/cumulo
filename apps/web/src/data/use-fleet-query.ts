@@ -11,8 +11,12 @@ import type { FleetDataError, FleetSourceResult } from './fleet-data-source';
  *
  * The failed arm carries the source's own {@link FleetDataError} rather than a flattened message,
  * so a view that wants to say something different about a rate limit than about a broken payload
- * still can. Today's views render only `error.message`; the code is there for the day one of them
- * offers a retry.
+ * still can. Since #452 no shipped view renders any of it: the fleet chart answers a total failure
+ * with one generic sentence, on the owner's ruling that a transport detail is not something the
+ * reader can act on (`dashboard/state-copy.ts`'s `CHART_DATA_UNAVAILABLE_MESSAGE`). The typed arm
+ * stays because that is a decision about what to *show*, not about what to carry — the day a view
+ * wants to tell a rate limit from a broken payload, the fact is already here rather than having
+ * been flattened away at the seam.
  */
 export type QueryState<T> =
   | { readonly status: 'loading' }

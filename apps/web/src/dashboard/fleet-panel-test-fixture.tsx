@@ -16,7 +16,7 @@ import type {
   FleetSourceResult,
   RangeHours,
 } from '../data/fleet-data-source';
-import { FleetPanel } from './FleetPanel';
+import { FleetPanel, type FleetListingStatus } from './FleetPanel';
 
 /**
  * The shared way of feeding and mounting a `FleetPanel` in jsdom.
@@ -424,14 +424,38 @@ export const settle = async (): Promise<void> => {
  * this panel now: it is never hidden and never unmounted (#265), so `hidden` stopped being a
  * parameter at the same time it stopped being a prop.
  */
+/**
+ * What the dashboard tells the panel about its *listing*, as one value (#452).
+ *
+ * The two travel together for {@link FleetPanelSelection}'s reason: a status
+ * without the recourse that clears it is half a state, and the failed arm is the
+ * only one either of them is interesting in. Both default to the settled case,
+ * so every case written before the listing was a prop keeps meaning what it
+ * meant — a fleet whose listing arrived, which is what those cases were always
+ * about.
+ */
+export interface FleetPanelListing {
+  readonly listing: FleetListingStatus;
+  readonly onRetryListing: () => void;
+}
+
+/** The listing arrived: the state every case that is not about the listing wants. */
+export const LISTED_FLEET: FleetPanelListing = {
+  listing: 'ready',
+  onRetryListing: () => undefined,
+};
+
 export const panel = (
   dataSource: FleetDataSource,
   selection: FleetPanelSelection = NO_SELECTION,
   refreshToken = 0,
+  listing: FleetPanelListing = LISTED_FLEET,
 ): ReactElement => (
   <FleetPanel
     dataSource={dataSource}
     sites={SITES}
+    listing={listing.listing}
+    onRetryListing={listing.onRetryListing}
     selectedSite={selection.selectedSite}
     selectionReady={selection.selectionReady}
     refreshToken={refreshToken}
@@ -442,11 +466,14 @@ export const panel = (
 export const renderSettled = async (
   dataSource: FleetDataSource,
   sites: readonly Site[] = SITES,
+  listing: FleetPanelListing = LISTED_FLEET,
 ): Promise<HTMLElement> => {
   const { container } = render(
     <FleetPanel
       dataSource={dataSource}
       sites={sites}
+      listing={listing.listing}
+      onRetryListing={listing.onRetryListing}
       selectedSite={null}
       selectionReady={false}
       refreshToken={0}
