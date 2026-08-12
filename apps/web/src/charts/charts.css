@@ -266,6 +266,102 @@
   stroke-width: 2;
 }
 
+/* The wait, drawn (#448). The owner asked for the fleet chart's loading state to
+ * be "visual not words" and chose the self-tracing curve out of four mockups —
+ * "it's nice and subtle and clean" — which is the bar this rule is written to
+ * rather than a style preference; `docs/design/chart-treatment.md`'s Loading
+ * section records the decision and `chart-loading-curve.ts` draws the path.
+ *
+ * Slot 1's hue at the data weight, because this stands where the fleet's own
+ * median line is about to be and reads as a rehearsal of it rather than as a
+ * different kind of thing (chart-treatment.md's median treatment: 2px, round
+ * cap and join, `--color-chart-1`). The opacity is the entire difference between
+ * the two, and it is the whole of "subtle": a placeholder at full ink would be
+ * the loudest mark this plot ever draws, for the one state that has nothing to
+ * say.
+ *
+ * `stroke-dasharray: 1` is a fraction rather than a length, because the element
+ * carries `pathLength="1"` (`ForecastChart.tsx`) — one dash and one gap of the
+ * whole path each. So `stroke-dashoffset: 1` is the undrawn curve and `0` is the
+ * drawn one, at every column width, with nothing to re-derive when the plot
+ * changes size. There is no dash-scale token for either to spend, so both reach
+ * the page through the documented allow-list residual in stylelint.config.mjs,
+ * exactly as `.forecast-chart-horizon`'s pattern above does.
+ *
+ * No dependency, and none wanted: a normalised path length plus a dash offset is
+ * plain SVG and CSS, and anything heavier here would be a library bought to
+ * animate one placeholder.
+ *
+ * The duration is unhurried on purpose — a fast loop reads as a spinner, which
+ * is the thing this replaced. `chart-css-contract.test.ts` asserts the pieces
+ * that carry an obligation (the token, the weight, and the reduced-motion
+ * override below); the timing is taste and is left to review, which is where the
+ * owner's own words put it. */
+.forecast-chart-loading-trace {
+  fill: none;
+  stroke: var(--color-chart-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  animation: forecast-chart-loading-trace 2.8s ease-in-out infinite;
+}
+
+/* Draw, hold, fade, restart — and the restart is invisible, which is what keeps
+ * the loop from reading as a snap. The offset returns to 1 at the same keyframe
+ * the opacity reaches 0, so the frame that throws the curve away and the frame
+ * that redraws it from the left edge are both fully transparent.
+ *
+ * The easing is per segment rather than across the loop, which is why the draw
+ * gets its own long stretch: a curve that eased in and out over the *whole*
+ * keyframe list would spend that easing on the hold and the fade instead of on
+ * the sweep, which is the part a reader watches. */
+@keyframes forecast-chart-loading-trace {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 0.45;
+  }
+
+  65% {
+    stroke-dashoffset: 0;
+    opacity: 0.45;
+  }
+
+  85% {
+    stroke-dashoffset: 0;
+    opacity: 0.45;
+  }
+
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* A reader who has asked their system for no motion gets the curve and not the
+ * sweep: fully drawn, held still, and a step quieter again because a static mark
+ * has no motion to carry the eye past it. `animation: none` rather than a longer
+ * duration or a paused state — a paused animation is still an animation, and the
+ * request is for none.
+ *
+ * The state is unchanged for them, and that is the point rather than a
+ * consolation: the machine-readable half is `aria-busy` on the panel
+ * (`dashboard/fleet-panel-body.tsx`), which owes nothing to whether anything
+ * moves. This is the first selector in this file written as a *pair*, which is
+ * why `chart-css-contract.test.ts` grew a lookup that names which of the two it
+ * means. */
+@media (prefers-reduced-motion: reduce) {
+  .forecast-chart-loading-trace {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 0.3;
+  }
+}
+
 /* Invisible, and what a pointer over the marks lands on — readers aim at a time,
  * not at a 2px line. `fill: none` alone would make the rect untargetable; the
  * `pointer-events` declaration is what does the work.

@@ -16,9 +16,14 @@ afterEach(cleanup);
 
 describe('PanelPending', () => {
   it('shows the label it was given', () => {
-    render(<PanelPending label="Summing the fleet’s forecasts…" />);
+    // Any label at all — the contract is that the component renders what it was
+    // handed, so this string is deliberately not one the app ships. It was the
+    // fleet chart's pending label until #448, which deleted that copy when the
+    // chart started drawing its wait instead of saying it; leaving the words
+    // here would have left a sweep for them matching a ghost.
+    render(<PanelPending label="Fetching the readings…" />);
 
-    expect(screen.getByText('Summing the fleet’s forecasts…')).toBeDefined();
+    expect(screen.getByText('Fetching the readings…')).toBeDefined();
   });
 
   it('marks its container busy', () => {

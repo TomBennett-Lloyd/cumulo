@@ -48,12 +48,15 @@ import { siteOverlaySeries } from './site-overlay';
  * saved that spend for a reader who never looked at the fleet, and a reader who
  * never looks at the fleet is exactly who no longer exists — the fleet chart is
  * on screen from first paint in every state of the page. Deferring a request for
- * a chart the reader is already looking at would buy nothing and cost a spinner.
+ * a chart the reader is already looking at would buy nothing and cost a wait
+ * they would have to watch.
  *
  * "In every state" is now structural rather than merely usual: the body renders
  * one `.forecast-chart-figure` whether the fleet is loading, failed, empty,
- * forecastless or ready, and the states differ only in what is said above it
- * (#284 D3). `fleet-panel-body.tsx` holds that arrangement and the reasoning.
+ * forecastless or ready, and the states differ in what is said above it and in
+ * what is drawn inside it (#284 D3; #448 for the second half, which is where
+ * the loading state went when it stopped being a sentence).
+ * `fleet-panel-body.tsx` holds that arrangement and the reasoning.
  *
  * ## The selected site is one more series, not a second chart
  *
@@ -171,8 +174,12 @@ const DEFAULT_RANGE: RangeHours = 24;
  * still there in every state too — since 2026-08-11 one press into the (i) on
  * that row rather than a row drawn under the plot, which is the same guarantee
  * discharged by reachability instead of by presence (`chart-treatment.md`'s
- * Legend section). So a failure changes what the section *says* and what the
- * plot *has on it*, never whether there is a chart. What survives is the difference in weight — a failed
+ * Legend section). So a state changes what the section *says* and what the plot
+ * *has on it*, never whether there is a chart — and since #448 the two are equal
+ * partners rather than the first with the second in support, because the loading
+ * arm says nothing at all and differs from every other state only in what the
+ * plot has on it (`fleet-panel-body.tsx`).
+ * What survives is the difference in weight — a failed
  * forecast is the answer itself not arriving, so it is an `alert` over a plot
  * with nothing drawn on it; a failed actuals read is an addition to an answer
  * that did arrive, so it is a `panel-notice` over a plot still carrying every
@@ -185,9 +192,12 @@ const DEFAULT_RANGE: RangeHours = 24;
  * to say so (rule 5). A failed actuals read is now a `ready` state carrying a
  * `failed` actuals arm, which the body draws as the chart plus a notice.
  *
- * Loading still waits for both. A chart that painted the forecast and then grew
- * a past half a moment later would be the panel reflowing under a reader who is
- * already reading it, which is a worse trade than one spinner.
+ * Loading still waits for both, and #448 sharpened rather than softened the
+ * reason. A chart that painted the forecast and then grew a past half a moment
+ * later would be the panel reflowing under a reader who is already reading it —
+ * and the single wait it is traded against no longer costs a reflow of its own,
+ * now that it is a mark drawn inside the plot's existing box rather than a
+ * sentence appearing above it.
  */
 const combineFleetQueries = (
   forecasts: QueryState<readonly Forecast[]>,

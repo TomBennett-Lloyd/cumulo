@@ -17,11 +17,7 @@ import {
   settle,
   SIMULATED_ACTUALS_CAPABILITIES,
 } from './fleet-panel-test-fixture';
-import {
-  EMPTY_FLEET_MESSAGE,
-  LOADING_FLEET_FORECAST_LABEL,
-  NO_FLEET_FORECAST_MESSAGE,
-} from './state-copy';
+import { EMPTY_FLEET_MESSAGE, NO_FLEET_FORECAST_MESSAGE } from './state-copy';
 
 /*
  * The shape of the fleet chart section, as opposed to what it says.
@@ -48,6 +44,18 @@ import {
  * case about structure should keep passing across a rewording, and a case about
  * wording must not. What is asserted here is that the sentence and the chart are
  * both on screen, not which sentence it is.
+ *
+ * **One state has no sentence, and since #448 that is deliberate.** The owner
+ * asked for the fleet chart's wait to be shown rather than spelled — *"graph
+ * loading state needs to be visual not words"* — so the loading arm renders no
+ * notice at all and carries its state two other ways: a traced curve inside the
+ * plot, and `aria-busy` on the body around it. Its case below therefore asserts
+ * the *absence* of the pending treatment beside the presence of both
+ * replacements, because "says nothing" and "forgot to say anything" are the same
+ * DOM without them. The other complaint that round answered was a page jump, and
+ * the jump has a case of its own: what jsdom can hold of it is that the two
+ * renders put the same chart in the same place, and the pixels are
+ * `e2e/chart-loading.spec.ts`'s (`testing.md` rule 10).
  */
 
 afterEach(cleanup);
@@ -82,6 +90,31 @@ const chartFigure = (container: HTMLElement): HTMLElement => {
   }
 
   return figure;
+};
+
+/**
+ * The body the states are rendered inside — the grid holding the notice slot and
+ * the chart, and the element carrying `aria-busy` while a read is out.
+ */
+const panelBody = (container: HTMLElement): HTMLElement => {
+  const body = container.querySelector('.fleet-panel-body');
+
+  if (!(body instanceof HTMLElement)) {
+    throw new Error('The fleet panel rendered no body at all.');
+  }
+
+  return body;
+};
+
+/** The plot itself, as the element whose view box the no-jump case compares. */
+const chartSvg = (container: HTMLElement): Element => {
+  const svg = container.querySelector('svg.forecast-chart');
+
+  if (svg === null) {
+    throw new Error('The fleet panel rendered no chart svg at all.');
+  }
+
+  return svg;
 };
 
 /**
@@ -202,6 +235,31 @@ const expectPanelFurniture = (container: HTMLElement): void => {
 const expectChartWith = (container: HTMLElement, message: string | RegExp): void => {
   expect(screen.getByText(message)).toBeDefined();
   expectPanelFurniture(container);
+};
+
+/**
+ * The loading state's own three clauses, which stand in for the sentence the
+ * other four states have (#448).
+ *
+ * All three together, because each is satisfiable by a bug the others catch. A
+ * panel that dropped the pending treatment and put nothing in its place passes
+ * the absence; one that drew the trace without marking the container busy is
+ * wordless *and* invisible to a screen reader, which is the failure the
+ * amendment to `react.md`'s Pending bullet was careful to rule out; and one that
+ * marked itself busy without drawing anything is a chart that looks settled and
+ * empty while a read is out — the state a reader would take for "no data".
+ *
+ * The trace is queried inside the plot rather than anywhere in the container,
+ * because inside the plot is the whole of why it does not move the page.
+ */
+const expectLoadingChart = (container: HTMLElement): void => {
+  expectPanelFurniture(container);
+
+  expect(panelBody(container).getAttribute('aria-busy')).toBe('true');
+  expect(
+    container.querySelectorAll('svg.forecast-chart .forecast-chart-loading-trace'),
+  ).toHaveLength(1);
+  expect(container.querySelector('.panel-pending')).toBeNull();
 };
 
 describe('FleetPanel’s controls row', () => {
@@ -448,7 +506,9 @@ describe('FleetPanel’s chart', () => {
      */
     const loading = render(panel(new CountingFleetSource(FULL_FLEET))).container;
 
-    expectChartWith(loading, LOADING_FLEET_FORECAST_LABEL);
+    // The one arm with no sentence to assert beside the figure. Its own three
+    // clauses stand in for it — see `expectLoadingChart`.
+    expectLoadingChart(loading);
 
     await settle();
     cleanup();
@@ -471,6 +531,60 @@ describe('FleetPanel’s chart', () => {
       await renderSettled(new CountingFleetSource(FULL_FLEET), []),
       EMPTY_FLEET_MESSAGE,
     );
+  });
+
+  it('leaves the chart in the same place and at the same scale once the read lands', async () => {
+    /*
+     * #448's other half, and the complaint the owner actually made: *"It also
+     * causes the page to jump."* The pending sentence sat above the chart, so
+     * it appeared, pushed everything below it down, and left again a moment
+     * later — twice per read, on the page's tallest element.
+     *
+     * What jsdom can hold of "no jump" is the structural half, and it is the
+     * half that would break first. Two things have to be true across the
+     * settle: the plot is drawn at the same scale, which is its view box; and
+     * nothing arrives above it, which is the figure still being the body's
+     * first element child. A notice appearing in that slot is exactly the
+     * defect, and it fails the second assertion whatever height it has.
+     *
+     * The pixel half — that the two boxes really do measure the same — is
+     * `e2e/chart-loading.spec.ts`'s, because jsdom lays nothing out and a
+     * height read here would be zero in both renders and prove nothing
+     * (`testing.md` rule 10). Said rather than left implied: neither case is
+     * the other's weaker copy, and neither alone is the criterion.
+     *
+     * One render carried across the settle rather than two, so the comparison
+     * is of one panel before and after its own read. Two renders would compare
+     * two mounts and could agree while a single panel still jumped between
+     * them.
+     */
+    const container = render(panel(new CountingFleetSource(FULL_FLEET))).container;
+
+    /*
+     * The premise, and it is not decoration — a mutation run put the panel into
+     * its settled state from the first commit and every line below still
+     * passed, because a settled render compared with itself agrees about
+     * everything. This is what makes the rest of the case a comparison of two
+     * states.
+     */
+    expect(panelBody(container).getAttribute('aria-busy')).toBe('true');
+
+    const loadingViewBox = chartSvg(container).getAttribute('viewBox');
+
+    // The positive control for the comparison below: there is a view box to
+    // compare, so equality afterwards is agreement rather than two nulls.
+    expect(loadingViewBox).toMatch(/^0 0 \d/u);
+    expect(panelBody(container).firstElementChild).toBe(chartFigure(container));
+
+    await settle();
+
+    // The settle really happened — without this the panel could still be in the
+    // loading state and every line below would be comparing it with itself.
+    expect(panelBody(container).getAttribute('aria-busy')).toBeNull();
+    expect(container.querySelector('.forecast-chart-loading-trace')).toBeNull();
+
+    expect(chartSvg(container).getAttribute('viewBox')).toBe(loadingViewBox);
+    expect(panelBody(container).firstElementChild).toBe(chartFigure(container));
   });
 
   it('draws the actuals when the forecast half summed to nothing, rather than calling it empty', async () => {
