@@ -74,9 +74,20 @@ export interface HeaderMenuProps {
  * this button is two ordinary controls, so it is a button with `aria-expanded`
  * revealing them, which is the smaller and more honest of the two patterns.
  *
- * The theme toggle lives in here now rather than bare in the header. It is the
+ * The theme switch lives in here now rather than bare in the header. It is the
  * same shared `ThemeToggle` the token gallery renders (which keeps its own, in
  * its own header) — this component decides where it sits, not what it is.
+ *
+ * Where it sits is last, behind an `<hr>`. The other things in this list are
+ * link-type items: press one and something opens. The theme switch is a
+ * *setting* — it changes how the app is, stays where it is put, and reads its
+ * own state back off itself — so a list that ran it first was mixing two kinds
+ * of item and letting the eye meet the odd one out on the way in. The rule at
+ * the top of this docblock decides what is behind the button; this one decides
+ * the order behind it, and the divider is what states it: below the line is the
+ * settings region, which is where a second setting joins rather than becoming a
+ * fourth thing to place. `header.css` owns the line's treatment and names the
+ * `.about-dialog-sources` rule it is copied from.
  *
  * ## Two dismissals, kept apart
  *
@@ -167,7 +178,6 @@ export const HeaderMenu = ({ theme, onToggleTheme }: HeaderMenuProps): ReactElem
 
         {menuOpen ? (
           <div className="header-menu-popover">
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
             <button
               type="button"
               className="header-menu-item"
@@ -177,6 +187,8 @@ export const HeaderMenu = ({ theme, onToggleTheme }: HeaderMenuProps): ReactElem
             >
               About Cumulo
             </button>
+            <hr className="header-menu-divider" />
+            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
           </div>
         ) : null}
       </div>
