@@ -118,19 +118,22 @@ test('lists the whole demo fleet, so the built app resolved the demo data source
 }) => {
   /*
    * `VITE_API_BASE_URL` is empty in the lane's build (see playwright.config.ts),
-   * and this row count is what proves the empty value actually reached
+   * and this count is what proves the empty value actually reached
    * `selectFleetDataSource` through the bundle. An HTTP source pointed at
-   * nothing would render an error state with no rows at all.
+   * nothing fails the listing, and the stats line then reads `0 sites` — so the
+   * number still says which source the bundle resolved, and says it in the one
+   * place on the page that states the fleet's size in words.
    *
-   * Counted through the fleet table's closed disclosure, deliberately and
-   * without opening it (#265): a closed `<details>` hides its children from
-   * layout but keeps them in the document, so `toHaveCount` — which matches
-   * elements rather than visible ones — reads the whole fleet either way. What
-   * is under test here is which data source the bundle resolved, and a gesture
-   * to reveal the rows would add a way for this case to fail that has nothing to
-   * do with that.
+   * Read off the stats line since #451 took the fleet's table away, which is
+   * where this was counted before: sixty rows in the document were a count
+   * without a gesture, and the line the panel already renders is the same count
+   * from the same listing. The regex shape is this file's own, matched by the
+   * stats case further down — anchored at both ends so a line that merely
+   * *contained* the number could not satisfy it.
    */
-  await expect(page.locator('[data-site-id]')).toHaveCount(DEMO_FLEET_SIZE);
+  await expect(page.locator('.fleet-chart-stats')).toHaveText(
+    new RegExp(String.raw`^${String(DEMO_FLEET_SIZE)} sites · [\d.]+ kW$`, 'u'),
+  );
 });
 
 test('credits Open-Meteo visibly, as CC BY 4.0 requires', async ({ page }) => {

@@ -155,10 +155,9 @@ export interface SitePopoverCardProps {
  * This card takes no focus when it opens, whoever asked for the selection. That
  * is `design.md` rule 11 — focus stays where the reader put it — as #328
  * settled it; `react.md`'s focus paragraphs are where the mechanics are written
- * down. A reader who pressed a marker is still on that marker, a reader who pressed a
- * row is still on that row, and a reader who picked a site out of the header's
- * search is still in the search input, which is the combobox discipline that
- * pattern owes anyway.
+ * down. A reader who pressed a marker is still on that marker, and a reader who
+ * picked a site out of the header's search is still in the search input, which
+ * is the combobox discipline that pattern owes anyway.
  *
  * What answers a selection instead is structure. This card is
  * `aria-labelledby` its own heading, so the surface names its site the moment it
@@ -215,7 +214,7 @@ export interface SitePopoverCardProps {
  * Since a selection lands nobody in here, that guard mostly declines by its own
  * terms, and deliberately so: a card the reader was never put inside is not
  * holding the focus it would be giving back, so a dismissal that happens from
- * outside it — another marker, a row, a search — leaves the reader exactly where
+ * outside it — another marker, a search hit — leaves the reader exactly where
  * they already were. What the machinery still answers is the reader who came
  * *into* the card: pressing Close focuses it, and tabbing to it does too, so the
  * control they are standing on is about to unmount under them. The mechanism is
@@ -272,7 +271,7 @@ export const SitePopoverCard = ({
        * own. Three cases make that concrete, and since #328 the first is the
        * ordinary one rather than an edge. **The reader was never inside this
        * card at all**: opening it moved nobody, so every dismissal that does not
-       * go through a control in here — another marker, a row, the search — finds
+       * go through a control in here — another marker, the search — finds
        * the focus somewhere this card never held it, and a restore would drag
        * them back to the map from wherever they actually are. **The reader left
        * of their own accord**, tabbing or clicking away and then dismissing from

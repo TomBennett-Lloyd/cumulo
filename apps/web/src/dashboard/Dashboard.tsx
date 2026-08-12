@@ -18,7 +18,6 @@ import type { MapRegionComponent } from './MapRegion';
 import { PanelError, PanelPending } from './panel-states';
 import type { SelectionOrigin } from './selection-origin';
 import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
-import { SiteTable } from './SiteTable';
 import { fleetListFailureMessage, LOADING_FLEET_LABEL } from './state-copy';
 
 /**
@@ -75,20 +74,16 @@ const loadedSites = (load: FleetLoad): readonly Site[] =>
 
 interface FleetSectionProps {
   readonly load: FleetLoad;
-  /** Everything known: the listing, plus anything created since. */
-  readonly sites: readonly Site[];
-  readonly selectedSiteId: Site['id'] | null;
-  readonly onSelectSite: (siteId: Site['id']) => void;
   readonly onRetryLoad: () => void;
 }
 
 /**
- * The fleet's own section: the table, or an honest account of why there is no
- * table.
+ * The fleet listing's account of itself: that it is waiting, or why it failed.
  *
- * A failed listing shows the reason and a retry rather than an empty table
- * (`error-handling.md` rule 5) — and still lists any site created since, because
- * that site exists, and hiding it would be the dishonest half of the same rule.
+ * A failed listing shows the reason and a retry (`error-handling.md` rule 5).
+ * The fleet itself is not drawn here — the sites are on the map and in the
+ * header's search, and a site created while the listing was failing is on both
+ * of those for the same reason, because it exists.
  *
  * Both off-happy-path arms are the column's shared primitives rather than markup
  * of their own (`react.md`, "Async surface convention"). The waiting arm in
@@ -110,13 +105,7 @@ interface FleetSectionProps {
  * — and it does not change the composition here, because the budget is still per
  * panel and this section still mounts exactly one.
  */
-const FleetSection = ({
-  load,
-  sites,
-  selectedSiteId,
-  onSelectSite,
-  onRetryLoad,
-}: FleetSectionProps): ReactElement => {
+const FleetSection = ({ load, onRetryLoad }: FleetSectionProps): ReactElement => {
   if (load.status === 'loading') {
     return <PanelPending label={LOADING_FLEET_LABEL} />;
   }
@@ -125,10 +114,6 @@ const FleetSection = ({
     <>
       {load.status === 'failed' && (
         <PanelError message={fleetListFailureMessage(load.message)} onRetry={onRetryLoad} />
-      )}
-
-      {sites.length > 0 && (
-        <SiteTable sites={sites} selectedSiteId={selectedSiteId} onSelectSite={onSelectSite} />
       )}
     </>
   );
@@ -167,10 +152,10 @@ export interface DashboardProps {
  * including what it costs when the tree below throws).
  *
  * This is where the pieces meet, and it owns exactly the state they share.
- * `selectedSiteId` is the clearest case — the markers, the table rows, the card
- * on the map and the chart's overlay all render from that one value, which is
- * what makes selecting a site on the map and selecting it in the table the same
- * act rather than views that agree by luck. That one value is also what `?site=`
+ * `selectedSiteId` is the clearest case — the markers, the card on the map, the
+ * header's search and the chart's overlay all render from that one value, which
+ * is what makes selecting a site on the map and picking it out of the search the
+ * same act rather than views that agree by luck. That one value is also what `?site=`
  * addresses: `selection-url.ts` is the whole of the deep link, and the dashboard
  * reads it once at mount and writes it whenever the selection moves.
  *
@@ -182,8 +167,9 @@ export interface DashboardProps {
  * Nothing under the map swaps any more. One region alternating between a site's
  * panel and the fleet's was the shape the reading had until #265; a site's
  * detail is now a card anchored to its own marker, so the reading below is a
- * plain flow — the fleet's chart, the site table, the credit — and a selection
- * changes what is *drawn on* those surfaces rather than which of them is there.
+ * plain flow — the fleet's chart, the listing's own states, the credit — and a
+ * selection changes what is *drawn on* those surfaces rather than which of them
+ * is there.
  * Placing a site is a modal over the whole page
  * (`add-site/AddSiteDialog.tsx`). `docs/design/dashboard-composition.md` records
  * the reasoning and what it is buying.
@@ -373,9 +359,10 @@ export const Dashboard = ({
    * the only way to open one that this dashboard could see. The card on the map
    * remembers the element that actually held focus when it opened and hands it
    * back on close (`map/SitePopoverCard.tsx`), which is the same answer for
-   * every opener — a marker, a row, the header's search, a creation — without
-   * the dashboard knowing which happened, and without needing an answer of its
-   * own the next time one is added. Since #328 a selection moves nobody into the
+   * every opener — a marker, the header's search, a creation — without the
+   * dashboard knowing which happened, and without needing an answer of its own
+   * the next time one is added. That generality is what made removing the list
+   * cost nothing here: one opener fewer, and not a line to change. Since #328 a selection moves nobody into the
    * card in the first place, so that hand-back is owed only to a reader who came
    * into it afterwards, and this component holds no focus target of its own at
    * all: the only landing left here is the dismissed draft's, below.
@@ -463,8 +450,10 @@ export const Dashboard = ({
       {/*
        * The bar, and the reason it is here rather than in the shell: its search
        * reads `sites` and selects through `selectSiteForReader`, which is the
-       * same selection a marker press and a row press make
-       * (`header/AppHeader.tsx`). A search hit is reader-initiated by
+       * same selection a marker press makes (`header/AppHeader.tsx`). Since the
+       * fleet's own listing left the page it is also one of only two ways to
+       * reach a site at all, the map being the other. A search hit is
+       * reader-initiated by
        * construction, so the reader keeps their place in the combobox while
        * `SelectionCamera` brings a site that is off screen into frame — neither
        * of which this component had to be told anything new to do.
@@ -563,25 +552,24 @@ export const Dashboard = ({
            */}
           <div className="dashboard-content">
             {/*
-             * The fleet as a table, folded away (#265). It used to be a section
-             * with a `Sites` heading and sixty rows open under it, which is the
-             * tallest thing this page could hold and the reason everything below
-             * it was off screen. Looking a site up by name is the header
-             * search's job now, so the table keeps the role
-             * `map-treatment.md` gives it — the map's table view, every marker
-             * state with a row equivalent — from behind its own summary, which
-             * names the section the way the heading did.
+             * What is left to say about the listing itself. The fleet used to be
+             * drawn here as a table — a `Sites` heading with sixty rows open
+             * under it until #265, then the same rows folded behind a summary —
+             * and the owner removed it on 2026-08-12: the sites are on the map
+             * and in the header's search, so a third listing of them was a third
+             * place to keep level with the other two.
              *
-             * No wrapper section, and none needed: the disclosure is its own
-             * labelled box, and a `<section>` whose heading had gone would have
-             * been a landmark with nothing to name it.
+             * What stays is the listing's own pending and failure states, which
+             * are about the *request* rather than about the fleet, and which no
+             * other surface accounts for yet. #452 is where they go, once the
+             * chart carries a failure of its own.
+             *
+             * No wrapper section, and none needed: a `<section>` whose heading
+             * had gone would have been a landmark with nothing to name it.
              */}
             <div className="dashboard-fleet">
               <FleetSection
                 load={load}
-                sites={sites}
-                selectedSiteId={selectedSiteId}
-                onSelectSite={selectSiteForReader}
                 onRetryLoad={() => {
                   setListAttempt((attempt) => attempt + 1);
                 }}

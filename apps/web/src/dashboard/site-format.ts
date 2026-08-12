@@ -3,12 +3,13 @@ import type { Site } from '@cumulo/shared';
 /**
  * How the dashboard spells the domain's numbers.
  *
- * One module rather than a formatter beside each component: the site table, the
- * site's card on the map and the header's search results display the same
- * capacity for the same site to the same reader, so a capacity that gained a
- * decimal place in one and not the others would be a defect, not a variation
- * (`structure.md` rule 7). Units are named once here and nowhere else, which is
- * also what keeps "kW" from drifting into "kw" across three files.
+ * One module rather than a formatter beside each component: the site's card on
+ * the map and the header's search results display the same capacity for the same
+ * site to the same reader, so a capacity that gained a decimal place in one and
+ * not the other would be a defect, not a variation (`structure.md` rule 7). The
+ * fleet's own table was a third consumer until it left the page on 2026-08-12,
+ * which changes the count and not the argument. Units are named once here and
+ * nowhere else, which is also what keeps "kW" from drifting into "kw".
  *
  * It is named for the dashboard and read from `header/` as well, which is the
  * shape a shared formatter takes when a second surface starts showing the same

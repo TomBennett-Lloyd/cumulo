@@ -162,8 +162,9 @@
  * A row per match: the name, and the capacity pushed to the far end.
  *
  * The left border is reserved on every option and painted only on the active
- * one, exactly as `.site-table-select` reserves it in the table below the map —
- * the highlight must not nudge the text sideways as it moves down the list.
+ * one: the highlight must not nudge the text sideways as it moves down the
+ * list. The fleet's own table rows reserved it the same way until that table
+ * left the page on 2026-08-12, which leaves this the only carrier of the idiom.
  */
 .site-search-option {
   display: flex;

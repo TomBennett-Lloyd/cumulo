@@ -1,5 +1,5 @@
 import type { Site } from '@cumulo/shared';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 
@@ -201,24 +201,26 @@ export const sitePopover = (root: HTMLElement): Element | null =>
 export const fleetChartTable = (): HTMLElement =>
   screen.getByRole('table', { name: /^Table view — fleet forecast/u });
 
-/** The fleet as rows — the map's table view, and where a closing card returns focus. */
-export const fleetTable = (): HTMLElement => screen.getByRole('table', { name: 'Fleet sites' });
-
 /**
- * One selection button per listed site, in site order.
+ * One marker per site the dashboard handed the map, in site order.
  *
- * The rows are counted through their buttons rather than through `role="row"`,
- * which would also count the header row and leave every fleet-size assertion in
- * the suites one out from the fleet it is about. A button per site is also the
- * claim worth making: a row a reader cannot press is not a table view of
- * anything (`map-treatment.md`).
+ * This is what the suites count a fleet by, and since 2026-08-12 it is the only
+ * thing they could: the page's site table is gone, and the map is where every
+ * site now has an element of its own. {@link StubMapRegion} renders one button
+ * per site in the `sites` prop — the same array the table was rendering — so a
+ * count here is a count of what the dashboard believes the fleet to be.
  *
- * The disclosure is deliberately not opened first: jsdom omits the `<details>`
- * shadow-tree styles, so its contents are queryable whether it is open or shut,
- * and what a reader can *see* through a closed one is the browser lane's
- * (`testing.md` rule 10).
+ * Matched on the `Marker: ` prefix rather than by a container, because the
+ * stand-in's other two buttons (add-site and the basemap) are its siblings and a
+ * bare `getAllByRole('button')` would count them too.
+ *
+ * A `query` rather than a `get`, so that an empty fleet answers `[]` instead of
+ * throwing: "the listing failed and nothing is on the map" is one of the states
+ * the suites assert, and a helper that threw there would force that one case to
+ * spell the selector out again.
  */
-export const fleetRows = (): readonly HTMLElement[] => within(fleetTable()).getAllByRole('button');
+export const mapMarkers = (): readonly HTMLElement[] =>
+  screen.queryAllByRole('button', { name: /^Marker: /u });
 
 /** Presses the map's add-site toggle, the control that decides what a click means. */
 export const armAddSite = (): void => {

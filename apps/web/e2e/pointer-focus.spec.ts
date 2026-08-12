@@ -66,21 +66,20 @@ import { RANGE_TRIGGER } from './range-picker';
  * in it is satisfied by an app that paints no rings at all, which would be a
  * WCAG 2.4.7 failure of the worst kind. `keyboard-focus.spec.ts` holds that end
  * — it measures the same outline and demands `solid` at a non-zero width, on a
- * fleet table row and on this same chart — and the two bound rule 11 only
- * together. Neither is meaningful alone, so a change that deletes one should be
+ * site's marker on the map and on this same chart — and the two bound rule 11
+ * only together. Neither is meaningful alone, so a change that deletes one should be
  * read as deleting half a rule.
  */
 
 /**
- * The fleet table's disclosure control.
+ * The chart's `Raw data` disclosure control (`charts/forecast-chart-table.tsx`).
  *
- * Spelled out rather than imported because `site-table.ts` keeps its own copy
- * private and exports only the open-the-table gesture, which is not what this
- * spec wants: the click *is* the measurement here, so a helper performing it
- * would be the assertion answering itself (that module's own comment makes the
- * same point about the keyboard route).
+ * The page's surviving `<summary>` since #451 took the fleet's table off it,
+ * which is what this case measured before. Written out here rather than reached
+ * through a helper: the click *is* the measurement, so a helper performing it
+ * would be the assertion answering itself.
  */
-const SITE_TABLE_SUMMARY = '.site-table-summary';
+const RAW_DATA_SUMMARY = '.forecast-chart-summary';
 
 /**
  * The fleet chart's canvas — since #421 the element the pointer lands on, axis
@@ -218,7 +217,9 @@ test('paints no ring on the range picker’s trigger when a pointer presses it',
   ).toBe(false);
 });
 
-test('paints no ring on the fleet table disclosure when a pointer opens it', async ({ page }) => {
+test('paints no ring on the chart’s Raw data disclosure when a pointer opens it', async ({
+  page,
+}) => {
   /*
    * A `<summary>`, which is the interesting second case rather than a repeat of
    * the first: it is focusable by platform default rather than by anything this
@@ -226,16 +227,22 @@ test('paints no ring on the fleet table disclosure when a pointer opens it', asy
    * from a user-agent stylesheet or from the zero-specificity default in
    * `@cumulo/ui`'s styles.css widening past `:focus-visible`.
    *
-   * That the click also opens the table is deliberately not asserted here. The
-   * disclosure's behaviour has its own owners (`site-table.ts` and the specs
-   * using it), and re-proving it would make this case fail on a change to the
-   * table's default state — a result that would say nothing about focus.
+   * The fleet's table carried that property until #451 removed it; the chart's
+   * table twin is the same platform element on the same page, so the reasoning
+   * above is unchanged rather than re-argued — what a `<summary>` does with
+   * focus is the platform's, not the disclosure's.
+   *
+   * That the click also opens the twin is deliberately not asserted here. The
+   * disclosure's behaviour has its own owners (`chart-surfaces.spec.ts` presses
+   * it and measures what unfolds), and re-proving it would make this case fail
+   * on a change to the twin's default state — a result that would say nothing
+   * about focus.
    */
-  const ring = await ringAfterPointerClick(page, SITE_TABLE_SUMMARY);
+  const ring = await ringAfterPointerClick(page, RAW_DATA_SUMMARY);
 
   expect(
     paintsARing(ring),
-    `The fleet table's summary painted ${ring.style} at ${String(ring.widthPx)}px after a pointer click.`,
+    `The chart's Raw data summary painted ${ring.style} at ${String(ring.widthPx)}px after a pointer click.`,
   ).toBe(false);
 });
 

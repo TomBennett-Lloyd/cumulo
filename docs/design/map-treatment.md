@@ -84,12 +84,31 @@ slots 3, 4 and 5 against the light surface — slot 3 is the hover fill — so t
 applies here directly: hover always brings a labelled tooltip naming the site, selection always
 opens the site's own card above the marker (`apps/web/src/map/SitePopover.tsx`), and both change
 the marker's size. A reader who cannot separate the hues still gets the state from the label and
-the geometry. The site table under the map is the table view: every marker state has a row
-equivalent, and the map is never the only way to reach a site. Since #265 that table is folded
-away behind a disclosure rather than open by default — the relief is a keystroke away instead of
-already on screen, which is what a page carrying a full-width map and a chart can afford, and the
-`<details>` is operable from the keyboard like anything else here. Reaching a site _by name_ is
-the header's search, which needs nothing opened at all.
+the geometry. Nor is any of that relief pointer-only: the markers are real buttons in the site's
+own order, so hover's tooltip has a focus twin and Enter opens the card exactly as a click does
+(the browser lane measures the ring and the selection together, `e2e/keyboard-focus.spec.ts`).
+Reaching a site _by name_ is the header's search, which needs nothing on the map opened at all.
+
+**The table view was a fourth channel and it is gone; the relief above is what remains.** The
+owner removed the Sites section on 2026-08-12 (round 3, item 4), in their words: _"i actually
+don't think we need the `Sites` section at the bottom of the page. the list of sites is
+visualised on the map and listed as part of the search bar."_ That section had been the table
+view — every marker state with a row equivalent, and a way to reach a site that never touched the
+map. Two halves of the old argument have to be separated rather than carried over wholesale.
+
+The **legibility** half is untouched. Nothing above depended on the table: the tooltip, the card
+and the size change are what always carried a state a reader could not get from the hue, and the
+row restated what those three already said. So the contrast warning on slots 3, 4 and 5 is still
+discharged, and by channels that are on the marker itself rather than a page-length away.
+
+The **redundancy** half is genuinely narrower, and this is the part worth stating plainly rather
+than absorbing into the list. The page had two surfaces enumerating the whole fleet and now has
+one. The header's search is not the second: it opens its list only once a query is typed and caps
+it at `MAX_VISIBLE_MATCHES` (`apps/web/src/header/SiteSearch.tsx` owns both), so it is a
+reach-by-name affordance and not a listing — excellent for a reader who knows what they are
+looking for, and no use at all to one who wants to see what is there. A reader who cannot read
+the map has no other enumeration of the fleet. That is the cost of the owner's decision, recorded
+here so a future change to the marker palette weighs the relief it actually has.
 
 **A selected site gets a card, anchored to its marker.** It carries the site's name, its physical
 configuration, and the state of its first forecast — and no chart, because the forecast itself is
@@ -101,8 +120,8 @@ a click on the basemap. It sits **above** the marker rather than over it: a card
 coordinate would cover the mark that says which site it is about.
 
 **A selection the camera cannot see brings the camera to it, and nothing else does.** A site
-selected anywhere but on the map itself — the table below it, the header's search, a link, a
-creation — may be well outside the current view, so `SelectionCamera` eases to it — at the
+selected anywhere but on the map itself — the header's search, a link, a creation — may be well
+outside the current view, so `SelectionCamera` eases to it — at the
 current zoom, and only when it is outside
 `map.getBounds()`. Re-centring on a marker the reader just pressed would move the one thing they
 were looking at, and changing the zoom would undo a framing they chose.
@@ -262,12 +281,23 @@ Placement:
   and what makes it acceptable is the relief family the marker states already rely on: the map
   pans, so one gesture moves any marker clear of the chip; markers keep their place in the tab
   order and stay keyboard-operable there, where Enter selects exactly as a click would; and the
-  site table under the map and the header's search reach every site without touching the map at
-  all. Shrinking the footprint takes contested pixels back; it does not retire that relief, which
-  is owed for as long as anything is painted over a marker at all.
+  header's search reaches a site by name without touching the map at all. Shrinking the footprint
+  takes contested pixels back; it does not retire that relief, which is owed for as long as
+  anything is painted over a marker at all.
+
+  That family lost a member on 2026-08-12 with the Sites section (the decision is recorded under
+  **Marker palette** above), and the argument survives the loss on the two that never depended on
+  it. Pan and tab order are properties of the map itself: neither was ever discharged by a surface
+  elsewhere on the page, and a marker under the chip is one drag or one `Tab` from being reachable
+  whatever else the page carries. The search is the weakened member — it reaches a named site
+  rather than enumerating the fleet — so a reader who cannot name what is under the chip is
+  relying on pan and tab order alone. Those two are enough for the occlusion, which is about
+  reaching a marker rather than about discovering one; they would not be enough if the chip ever
+  grew to occlude a meaningful share of the map, which is the condition this bullet is really
+  guarding.
 
   `e2e/attribution-band.spec.ts` is where the occlusion and the keyboard relief stop being claims;
-  it does not touch the site table or the header's search. It pans a marker under the chip, asks
+  it never touched the fleet's table or the header's search. It pans a marker under the chip, asks
   in both directions what the browser paints at the marker's centre — the credits, and not the
   marker — and then selects that site with Enter in exactly that state. The occlusion and that
   relief are measured against each other rather than either being asserted alone, which is the

@@ -11,7 +11,7 @@ import {
   CREATED_SITE_NAME,
   firstListedSite,
   fleetChartSection,
-  fleetRows,
+  mapMarkers,
   renderDashboard,
   settle,
   submitDraft,
@@ -96,7 +96,7 @@ describe('Dashboard draft dialog', () => {
      * would pass on a panel that had been unmounted outright and prove nothing.
      */
     expect(fleetChartSection(container)).not.toBeNull();
-    expect(fleetRows()).toHaveLength(60);
+    expect(mapMarkers()).toHaveLength(60);
   });
 
   it('cancels back to no draft without clearing the selection', async () => {
@@ -149,6 +149,6 @@ describe('Dashboard draft dialog', () => {
     expect(created.name).toBe(CREATED_SITE_NAME);
     expect(window.location.search).toBe(`?site=${created.id}`);
     expect(screen.getByRole('heading', { name: CREATED_SITE_NAME })).toBeDefined();
-    expect(fleetRows()).toHaveLength(61);
+    expect(mapMarkers()).toHaveLength(61);
   });
 });

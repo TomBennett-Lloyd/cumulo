@@ -53,7 +53,7 @@
 export const EMPTY_FLEET_MESSAGE =
   'No sites yet — press “Add a site” on the map, then click where it goes.';
 
-/** The site listing itself is loading — the column has no rows to show yet. */
+/** The site listing itself is loading — the fleet is not known yet. */
 export const LOADING_FLEET_LABEL = 'Loading the fleet…';
 
 /*

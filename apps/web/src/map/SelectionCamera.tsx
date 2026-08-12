@@ -11,9 +11,9 @@ export interface SelectionCameraProps {
 /**
  * Brings a selection into view when it is not already.
  *
- * A selection can arrive from somewhere that is not the map — a row in the list
- * below it, a `?site=` link, a creation, the header's search — and the
- * camera has no reason to be pointing anywhere near the site those name. Before
+ * A selection can arrive from somewhere that is not the map — the header's
+ * search, a `?site=` link, a creation — and the camera has no reason to be
+ * pointing anywhere near the site those name. Before
  * this, such a selection drew a card at a coordinate off screen: the marker
  * highlighted, the fleet chart gained a series, and the thing the reader asked
  * about was somewhere past the edge of the map with nothing saying which way.

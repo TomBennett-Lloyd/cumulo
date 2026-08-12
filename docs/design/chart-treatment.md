@@ -807,8 +807,10 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   and open by default they were the tallest thing on the page — while the plot above them was held
   to a measure narrower than its own panel to leave them somewhere to sit. Closed, the chart fills
   the panel it is in and the twin is one keystroke away. The disclosure is a native
-  `<details>`/`<summary>`, the same element the fleet's table uses (`dashboard/SiteTable.tsx`), so
-  the open/closed semantics, the keyboard operation and the announcement are the platform's.
+  `<details>`/`<summary>` — the element the fleet's own table used too until that table was
+  removed on 2026-08-12 ([`dashboard-composition.md`](dashboard-composition.md) records the
+  decision), leaving this the page's only one — so the open/closed semantics, the keyboard
+  operation and the announcement are the platform's.
   **It sits after the figure, as its own panel** — the owner's ask on 2026-08-11, in their words:
   _"i think the raw data could actually live in a collapsible panel rather than inline with the
   graph etc"_. It used to render inside the `<figure>`, under the legend, which filed the numbers

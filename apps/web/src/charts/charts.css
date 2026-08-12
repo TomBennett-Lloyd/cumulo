@@ -543,10 +543,12 @@
   background: var(--color-bg);
 }
 
-/* One step down from `.site-table-summary`, and deliberately: that summary names
-   a whole card in the reading's flow of peers and takes the heading scale, while
-   this one names a section *inside* a panel that already has a title, so it sits
-   at the small step in medium weight. `cursor: pointer` and the platform focus
+/* The small step in medium weight, which is a size chosen against what this
+   summary names: a section *inside* a panel that already has a visible title
+   (`.fleet-chart-title`, at `--text-lg`). A disclosure naming a whole card in
+   the reading's flow would take the heading scale instead — the fleet's own
+   table summary did, until that table left the page on 2026-08-12 — and this one
+   sits a step under the title it is subordinate to. `cursor: pointer` and the platform focus
    ring (@cumulo/ui's styles.css rings `summary`) are the whole of its
    interaction treatment; the marker, the state and the keyboard operation are
    the element's own. */

@@ -121,7 +121,7 @@ export interface SiteSearchProps {
  * separate two or three zooms in. Reaching one site therefore meant either
  * scrolling the list under the map or expanding clusters until the marker
  * appeared — so the header carries the fleet's index, and a selection made here
- * is the same selection a marker or a row makes.
+ * is the same selection a marker makes.
  *
  * ## The ARIA semantics, stated because nothing lints them
  *
@@ -165,7 +165,7 @@ export interface SiteSearchProps {
  *
  * Presentational (`react.md` rule 4): it holds the query and the highlight, which
  * are this control's own, and nothing else. Which site is selected belongs to the
- * dashboard, because the markers, the rows and the chart all read it.
+ * dashboard, because the markers and the chart both read it.
  */
 export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): ReactElement => {
   const [query, setQuery] = useState('');
