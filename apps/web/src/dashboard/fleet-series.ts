@@ -1,6 +1,7 @@
 import {
   aggregateFleetActuals,
   aggregateFleetForecast,
+  contributingCapacityKwByHour,
   type FleetActualsPoint,
   type FleetForecastPoint,
   type Forecast,
@@ -10,6 +11,7 @@ import {
 } from '@cumulo/shared';
 
 import type { ForecastChartPoint } from '../charts/ForecastChart';
+import type { ChartUnit } from './chart-unit';
 import { fleetNightClassifier } from './fleet-night';
 
 /*
@@ -28,7 +30,20 @@ import { fleetNightClassifier } from './fleet-night';
  * is stated in that module; this file *calls* them, joins their output to the
  * chart's shape and counts what went into it. There is deliberately no `+` over
  * a power value below — if one appears, a second definition of "the fleet
- * total" has been created.
+ * total" has been created. The percent arm added by #291 does not breach that
+ * rule and is not an exception to it: dividing an already-summed hour by an
+ * already-summed divisor rescales one total, it does not compute a second one,
+ * and the divisor itself is summed in `@cumulo/shared` too
+ * (`contributingCapacityKwByHour`). The `+`-free reading of this file still
+ * holds line by line.
+ *
+ * This is also the seam where the display unit is applied, and the only one.
+ * Below it — storage, the API, `@cumulo/shared` — everything is kW and stays
+ * kW; above it the chart is unit-agnostic apart from its axis title, its
+ * percent floor and the word its readout speaks. Percentages therefore travel
+ * in the `medianKw` / `p10Kw` / `p90Kw` / `actualKw` fields of
+ * `ForecastChartPoint`, whose own docblock states that contract: those fields
+ * carry the chart's *selected* display unit, not kW by definition.
  *
  * `fleetChartAggregate` at the bottom is the whole pipeline under one name, and
  * that is what makes it memoizable by the panel: two aggregations and a join
@@ -140,6 +155,110 @@ export interface FleetChartAggregate {
 export const EMPTY_FLEET_AGGREGATE: FleetChartAggregate = { points: [], minContributingSites: 0 };
 
 /**
+ * Whether an hour has a divisor worth dividing by.
+ *
+ * An hour absent from the divisor map, or one whose contributing capacity came to `0`, is not a
+ * fleet running at 0% — it is an hour whose capacity could not be evidenced, which
+ * `contributingCapacityKwByHour` reaches only for entries whose `siteId` matches no known site. A
+ * predicate rather than an inline comparison so the narrowing is visible to the compiler at both
+ * use sites (`typing.md` rule 2: a type guard, never an assertion).
+ */
+const isUsableDivisor = (capacityKw: number | undefined): capacityKw is number =>
+  capacityKw !== undefined && capacityKw > 0;
+
+/** The one place the percentage is computed, shared by the median, the band edges and the actual. */
+const percentOf = (kw: number, capacityKw: number): number => (kw / capacityKw) * 100;
+
+/**
+ * One value as a percentage of its hour's capacity — or `null`, which is the interesting answer.
+ *
+ * A `null` in stays `null` out: the gap rules `joinFleetSeries` establishes above survive the unit
+ * change untouched. A divisor that is missing or non-positive *produces* one, rather than a zero or
+ * a number divided by something that was not there — a break in the mark, on the same rule the rest
+ * of this file applies (`error-handling.md` rule 5). Values above 100 pass through unclamped: a
+ * fleet outrunning the nameplate its inverters are rated at is a real reading, and flattening it to
+ * 100 would hide exactly the hour worth looking at.
+ */
+const toPercent = (kw: number | null, capacityKw: number | undefined): number | null =>
+  kw === null || !isUsableDivisor(capacityKw) ? null : percentOf(kw, capacityKw);
+
+/**
+ * One joined hour, rescaled — the median and its band by the forecast's divisor, the actual by its
+ * own.
+ *
+ * **Two divisors, because two different sets of sites answered.** The forecast's contributors at an
+ * hour and the measurement's contributors at that same hour need not be the same sites: a site can
+ * forecast an hour it never reported, or report one nobody forecast (the disjoint live windows this
+ * file's join exists for). Dividing both series by one of them would put a percentage over capacity
+ * that was never behind it.
+ *
+ * **The band divides by the median's divisor, not by one of its own**, which is what keeps
+ * P10 ≤ median ≤ P90 true after the transform. The band is the same hour's uncertainty about the
+ * same summed sites; giving it a separate divisor could only unnest it. When that divisor is
+ * unusable the band is dropped whole — the key omitted, never `undefined`, exactly as the join does
+ * it — because half a band is not a narrower band, it is a wrong one.
+ */
+const inPercentOfCapacity = (
+  point: ForecastChartPoint,
+  forecastCapacityKw: number | undefined,
+  actualCapacityKw: number | undefined,
+): ForecastChartPoint => {
+  const { band, ...rest } = point;
+  const scaled = {
+    ...rest,
+    medianKw: toPercent(point.medianKw, forecastCapacityKw),
+    actualKw: toPercent(point.actualKw, actualCapacityKw),
+  };
+
+  return band === undefined || !isUsableDivisor(forecastCapacityKw)
+    ? scaled
+    : {
+        ...scaled,
+        band: {
+          p10Kw: percentOf(band.p10Kw, forecastCapacityKw),
+          p90Kw: percentOf(band.p90Kw, forecastCapacityKw),
+        },
+      };
+};
+
+/**
+ * The joined series in percent of the capacity actually behind each hour.
+ *
+ * The divisors come from the *unaggregated* per-site reads rather than from the aggregate, because
+ * the aggregate does not carry them: `contributingSiteCount` is a count, and a count times the mean
+ * site is only the right divisor on a fleet of identical sites. The exact per-hour sum is
+ * `@cumulo/shared`'s to compute and that module's docblock owns the reasoning; both reads are
+ * already in the caller's hand, so it costs one pass each.
+ *
+ * The maps are keyed by `UtcIsoTimestamp` and read here by the joined point's `validTimeIso`, which
+ * is the same string with the brand dropped at the chart's boundary — read through
+ * `ReadonlyMap<string, number>`, so the widening is a declaration rather than an assertion.
+ */
+const percentOfCapacitySeries = (
+  points: readonly ForecastChartPoint[],
+  forecasts: readonly Forecast[],
+  readings: readonly GenerationReading[],
+  sites: readonly Site[],
+): readonly ForecastChartPoint[] => {
+  const forecastCapacityKwByHour: ReadonlyMap<string, number> = contributingCapacityKwByHour(
+    forecasts,
+    sites,
+  );
+  const actualCapacityKwByHour: ReadonlyMap<string, number> = contributingCapacityKwByHour(
+    readings,
+    sites,
+  );
+
+  return points.map((point) =>
+    inPercentOfCapacity(
+      point,
+      forecastCapacityKwByHour.get(point.validTimeIso),
+      actualCapacityKwByHour.get(point.validTimeIso),
+    ),
+  );
+};
+
+/**
  * The fleet's two reads, summed and joined into what the chart draws — the pipeline under one name.
  *
  * One function rather than three calls at the use site, because the three are one intent and
@@ -159,17 +278,28 @@ export const EMPTY_FLEET_AGGREGATE: FleetChartAggregate = { points: [], minContr
  * walked once per hour of one answer rather than once per hour of every render (#293's reasoning,
  * extended to this layer) — and that walk short-circuits at the first daylit site, so the daylight
  * hours, which are most of them, cost one solar position each.
+ *
+ * `unit` is applied last of all and changes nothing about how the fleet is summed: both arms
+ * aggregate and join in kW, and `'percent'` then rescales the joined points. Two consequences worth
+ * stating, because both are load-bearing. `minContributingSites` is a count of sites and is the
+ * same number in either unit — the completeness notice does not move when the toggle does. And the
+ * night flag is a fact about the sun, so it is stamped on the rescaled points exactly as it was on
+ * the kW ones; the `'kw'` arm is today's pipeline unchanged, value for value.
  */
 export const fleetChartAggregate = (
   forecasts: readonly Forecast[],
   readings: readonly GenerationReading[],
   sites: readonly Site[],
+  unit: ChartUnit,
 ): FleetChartAggregate => {
   const forecastPoints = aggregateFleetForecast(forecasts);
+  const joined = joinFleetSeries(forecastPoints, aggregateFleetActuals(readings));
+  const scaled =
+    unit === 'kw' ? joined : percentOfCapacitySeries(joined, forecasts, readings, sites);
   const isNight = fleetNightClassifier(sites);
 
   return {
-    points: joinFleetSeries(forecastPoints, aggregateFleetActuals(readings)).map((point) => ({
+    points: scaled.map((point) => ({
       ...point,
       night: isNight(point.validTimeIso),
     })),

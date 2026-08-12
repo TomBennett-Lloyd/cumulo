@@ -1,6 +1,7 @@
 import type { Forecast, Site } from '@cumulo/shared';
 
 import type { ChartOverlaySeries } from '../charts/ForecastChart';
+import type { ChartUnit } from './chart-unit';
 
 /*
  * One site's forecast, as a series to draw over the fleet's.
@@ -36,14 +37,31 @@ import type { ChartOverlaySeries } from '../charts/ForecastChart';
  * nobody reads in order. An hour the fleet chart does not show is dropped by
  * that join, and an hour this series does not cover becomes a gap in the mark
  * rather than a zero.
+ *
+ * **In `'percent'` the divisor is the site's own capacity, and it is the same
+ * number at every hour.** The fleet's divisor moves hour to hour because which
+ * sites reported moves hour to hour; a single site is either present for an
+ * hour or has no point there at all, so there is nothing to vary. That capacity
+ * needs no guard before it divides: `siteSchema` declares `capacityKw` as
+ * `z.number().positive()` (`packages/shared/src/site.ts:47`), so a `Site` that
+ * reached this function cannot carry a zero or a negative one, and a check here
+ * would be asking a question the type already answered. Values above 100% are
+ * passed through: a site beating its nameplate is a real hour, and clamping it
+ * would erase the reading the reader most wants to see.
+ *
+ * The `kw` field carries whichever unit was asked for, per
+ * `ChartOverlayPoint`'s contract — the same seam rule the fleet series follows,
+ * where kW-spelled fields hold the chart's selected display unit and everything
+ * below the panel stays in kW.
  */
 export const siteOverlaySeries = (
   site: Site,
   forecasts: readonly Forecast[],
+  unit: ChartUnit,
 ): ChartOverlaySeries => ({
   label: site.name,
   points: forecasts.map((forecast) => ({
     validTimeIso: forecast.validTime,
-    kw: forecast.acPowerKw,
+    kw: unit === 'kw' ? forecast.acPowerKw : (forecast.acPowerKw / site.capacityKw) * 100,
   })),
 });
