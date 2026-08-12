@@ -152,14 +152,17 @@ and it needs a legend; it does not get to reuse the marker slots.
 ## Map chrome
 
 The map carries two permanent controls, grouped in the **top-right** corner over the tiles
-(`.map-controls`, `apps/web/src/map/MapControls.tsx`). The corner is not a preference: the bottom
-edge belongs to the credits band all the way across, and a control tucked beside it is a control
-the band can occlude.
+(`.map-controls`, `apps/web/src/map/MapControls.tsx`). The corner is not a preference: the credits
+hold the bottom-right one, and a control tucked beside them is a control they can occlude. The
+credits' retreat into that corner (#428) frees the bottom _left_ rather than the bottom edge, and
+splitting these two controls across opposite corners is not a composition worth having, so the
+choice stands unchanged.
 
 Both sit on `--color-surface-veil` — the same answer the Attribution section reaches for below, and
 for the same reason: a control painted straight onto tiles has whatever contrast the pixel beneath
-it happens to give. These carry full `--color-text` rather than the band's muted ink, so they sit
-well clear of the floor that mix was validated against.
+it happens to give. These carry full `--color-text`, and since #428 so do the credits: the mix came
+down far enough that base ink is the only ink the veil still clears AA with, so the two now differ
+in weight and scale rather than in ink.
 
 - **Reset map view** returns the camera to the framing the map opened on. It takes that framing
   whole, from the one constant that also constructs the map (`apps/web/src/map/framing.ts`) — the
@@ -208,10 +211,10 @@ absorbs the other.
 
 Placement:
 
-- Both credits live in a **persistent band across the bottom of the map**, backed by
+- Both credits live in a **persistent chip in the bottom-right corner of the map**, backed by
   `--color-surface-veil` and overlaid on the tiles.
 
-  This band used to be a strip _under_ the map, on `--color-surface`, and the argument for that
+  This used to be a strip _under_ the map, on `--color-surface`, and the argument for that
   was contrast: a caption floating on imagery has whatever contrast the pixel beneath it happens
   to give, while on a surface it has the contrast the palette was validated for. The veil is what
   carries that argument across the move (#265) — a mostly-opaque surface colour, so the ink reads
@@ -220,43 +223,56 @@ Placement:
 
   The veil is validated against the composite a reader actually sees — veil over marker fills,
   land, and basemap label ink — rather than against itself, because a translucent surface has no
-  contrast of its own. At the shipped mix the credit's muted ink measures 4.91:1 and its
-  hover/focus ink 12.16:1, both clearing AA for small text. **That mix is the legibility floor for
-  muted ink, not a taste setting**: a lower one stops the credit reading over dark basemap ink, and
-  a higher one stops the map showing through, which is the whole point. The numbers and the ratio
-  live in [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation header, which owns
-  them. This bullet quotes two of them because the argument needs them — "floor" is a claim about
-  those measurements, and without them it is an assertion of taste — which makes it an _arguing_
-  carrier under `architecture.md` rule 9. That header's restatement ledger names this bullet, so a
-  re-measurement finds it.
+  contrast of its own. At the shipped mix the credits' ink measures 9.14:1 in light mode and
+  6.22:1 in dark, both clearing AA for small text. **That mix and that ink are one decision, not
+  two**: the veil came down to 70% so more map shows through (#428), which is as far as it can go
+  while any palette ink still clears the bar, and the ink that clears it is `--color-text`. Muted
+  ink does not survive at this mix in either mode, which is why the credits' resting colour moved
+  with the veil rather than staying behind it. A lower mix stops the credit reading over dark
+  basemap ink; a higher one stops the map showing through, which is the whole point. The numbers
+  and the ratio live in [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s validation
+  header, which owns them. This bullet quotes two of them because the argument needs them —
+  "floor" is a claim about those measurements, and without them it is an assertion of taste —
+  which makes it an _arguing_ carrier under `architecture.md` rule 9. That header's restatement
+  ledger names this bullet, so a re-measurement finds it.
 
   What forced the question was the map going full bleed
   ([`dashboard-composition.md`](dashboard-composition.md)): a strip below an edge-to-edge map is
   a band of chrome across the page rather than part of the map, and it takes its height out of
   the map on every screen.
 
-- **The band is full width, and it paints above the markers.** It runs the whole width of the map
-  rather than tucking into a corner, and a site or cluster marker whose centre falls under it is
-  not pointer-reachable there. That is accepted rather than worked around (#356, on the
-  composition #265 introduced), and what makes it acceptable is the relief family the marker
-  states already rely on: the map pans, so one gesture moves any marker clear of the band; markers
-  keep their place in the tab order and stay keyboard-operable there, where Enter selects exactly
-  as a click would; and the site table under the map and the header's search reach every site
-  without touching the map at all.
+- **The chip is only as wide as its credits, and it paints above the markers.** It sizes to its
+  own row and pins to the map's bottom-right corner rather than running the whole width, and a
+  site or cluster marker whose centre falls under _that footprint_ is not pointer-reachable there.
+  The occlusion is accepted rather than worked around (#356, on the composition #265 introduced),
+  and what makes it acceptable is the relief family the marker states already rely on: the map
+  pans, so one gesture moves any marker clear of the chip; markers keep their place in the tab
+  order and stay keyboard-operable there, where Enter selects exactly as a click would; and the
+  site table under the map and the header's search reach every site without touching the map at
+  all. Shrinking the footprint takes contested pixels back; it does not retire that relief, which
+  is owed for as long as anything is painted over a marker at all.
 
   `e2e/attribution-band.spec.ts` is where the occlusion and the keyboard relief stop being claims;
-  it does not touch the site table or the header's search. It pans a marker under the band, asks
+  it does not touch the site table or the header's search. It pans a marker under the chip, asks
   in both directions what the browser paints at the marker's centre — the credits, and not the
   marker — and then selects that site with Enter in exactly that state. The occlusion and that
   relief are measured against each other rather than either being asserted alone, which is the
-  only shape in which "accepted" means anything.
+  only shape in which "accepted" means anything. That the target is now a corner rather than a
+  band is a fact about the pan, not about the claim: the spec aims at the chip's own measured box
+  on both axes, so it keeps proving the same thing about a smaller thing.
 
-  The inset corner chip was weighed and declined. It narrows the occluded strip without removing
-  it, so the relief rule above is owed either way; at narrow widths the band is licence-mandated
-  string from edge to edge, which makes a "corner" effectively full width anyway, so the corner
-  buys partial relief only at the widths where the map has the most room to spare; and it forfeits
-  the coherence the band has with the full-bleed map and with the Map chrome argument above, which
-  reads the bottom edge as the credits band's all the way across.
+  **The full-width band was declined on 2026-08-11, and the corner chosen in its place.** The
+  argument that had held the band across the whole edge was coherence — the map runs full bleed,
+  the Map chrome section reads the bottom edge as the credits', and a corner buys partial relief
+  only at the widths where the map has room to spare, since at narrow widths the row is
+  licence-mandated string from edge to edge and a "corner" is effectively full width anyway. The
+  owner weighed that against the map it costs and chose the chip; the occlusion-plus-relief
+  argument above survives the reversal intact, rescoped from the band's whole edge to the chip's
+  own footprint (`architecture.md` rule 11 — the prose that argued for the band moves with it).
+  The narrow-width observation survives too, and is now the reason the chip's exposed corner
+  gives its radius back rather than a reason not to have a corner:
+  [`map.css`](../../apps/web/src/map/map.css) owns the measured width at which the chip is full
+  width again, and this document does not restate it.
 
 - **Both are visible without interaction.** No "i" toggle, no hover-to-reveal, no collapsing the
   credits behind a control at narrow widths. Overlaying does not weaken this: the band is opaque
@@ -326,8 +342,15 @@ Placement:
   the map, then the data drawn on it.
 - The Open-Meteo credit's own styling belongs to the `OpenMeteoAttribution` component — muted ink
   at `--text-xs`, with the **link also in muted ink, underlined**, brightening to full text ink on
-  hover and keyboard focus. Map views do not restyle it, and do not hand-roll their own copy of
-  the string.
+  hover and keyboard focus. Map views do not hand-roll their own copy of the string, and restyle
+  the component in exactly one respect other than the compact-form rule the component delegates to
+  its surface: **the ink, and only on the veil**. At the mix this chip ships, muted ink is under AA
+  over the map's worst-case backdrops, so
+  [`map.css`](../../apps/web/src/map/map.css) overrides both credits to `--color-text` for this
+  band alone — which also makes the hover and focus brightening a no-op here, since the resting
+  ink is already what they brightened to. The four opaque surfaces the component also serves keep
+  the muted treatment, because none of them has the composite that forced the change. The size,
+  the underline and the wording are untouched.
 
   The link is not accent-coloured, and that is a legibility rule rather than a stylistic
   preference: on the veil, `--color-accent` is below AA for small text in **both** modes. Tuning

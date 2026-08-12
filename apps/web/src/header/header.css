@@ -702,10 +702,14 @@
  * independently because these are two surfaces free to diverge, not one
  * treatment in two places (`structure.md` rule 7).
  *
- * That freedom is being exercised as of #265: the map's pair sits on a
- * translucent veil over tiles and took underlined muted links to stay legible
- * there, while this pair sits on an opaque card and has not. Same words, same
- * obligations, different surfaces — which is what rule 7 predicted.
+ * That freedom is being exercised as of #265, and again as of #428: the map's
+ * pair sits on a translucent veil over tiles and took underlined links to stay
+ * legible there, then took full `--color-text` for both credits when the veil's
+ * mix came down past the point muted ink could survive. This pair sits on an
+ * opaque card, so neither move reaches it — muted ink is the right weight for
+ * the least-read line on a card and clears the bar there. Same words,
+ * same obligations, different surfaces — which is what rule 7 predicted, twice
+ * over now.
  */
 .about-dialog-basemap {
   color: var(--color-text-muted);
@@ -723,9 +727,11 @@
  * rather than by lint.
  *
  * These links are knowingly out of step with the credits' links since #265,
- * and the divergence is temporary. The map's two credits moved to muted
- * underlined ink because `--color-accent` is below AA for small text on the
- * translucent `--color-surface-veil` they now sit on, in both modes. This card
+ * and the divergence is temporary. The map's two credits moved to underlined
+ * ink of the palette's own — muted at first, and full `--color-text` since #428
+ * took the veil's mix down — because `--color-accent` is below AA for small text
+ * on the translucent `--color-surface-veil` they sit on, in both modes and at
+ * every mix that surface has worn. This card
  * is opaque, so it is a weaker case — and a mode-dependent one: in LIGHT mode
  * these links do fail, at 4.30:1 on `--color-surface`, while in DARK mode
  * accent clears AA here (4.89:1). They are not fixed locally because the light

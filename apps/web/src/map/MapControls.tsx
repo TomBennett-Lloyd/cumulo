@@ -36,7 +36,11 @@ export interface MapControlsProps {
  *
  * Rendered as a `MapView` child, so it lands inside `MapSurface`'s box and above
  * the canvas — `map.css` puts it in the top-right corner specifically, because
- * the bottom edge belongs to the credits band (`docs/design/map-treatment.md`).
+ * the credits hold the bottom-right one, and a control tucked beside them is a
+ * control they can occlude (`docs/design/map-treatment.md`). Their retreat into
+ * that corner (#428) freed the bottom *left* rather than the bottom edge, and
+ * splitting these two controls across opposite corners is not a composition
+ * worth having, so the corner they sit in is unchanged.
  *
  * The reset button is `disabled` until the map instance exists rather than
  * quietly doing nothing when pressed. That window is one frame — `MapView`

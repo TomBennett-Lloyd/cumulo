@@ -33,37 +33,44 @@
  * percentage, plus whatever the map drew underneath at the remainder. So it was
  * measured that way (#265, WCAG 2.x sRGB, small text ⇒ AA 4.5:1), over the
  * worst-case backdrops a credit can land on — the three marker fills,
- * --color-bg-ish land, and a basemap label in ink:
+ * --color-bg-ish land, and a basemap label in ink, each theme's own token values
+ * over that theme's own surface. Re-measured at 70% for #428:
  *
- *   veil 90% (shipped): --color-text-muted  4.91:1 PASS  (worst: light muted
- *                                                         over dark map ink)
- *                       --color-text       12.16:1 PASS  (the hover/focus ink)
- *                       --color-accent      3.49:1 FAIL  light  ← not used here
- *                                           3.76:1 FAIL  dark   ← not used here
+ *   veil 70% (shipped)   LIGHT           DARK
+ *     --color-text        9.14:1 PASS     6.22:1 PASS   ← the shipped ink
+ *     --color-text-muted  3.06:1 FAIL     2.80:1 FAIL   ← not used here
+ *     --color-accent      2.18:1 FAIL     1.92:1 FAIL   ← not used here
  *
- * The accent lines are the point of this record rather than a footnote. Accent
- * is NOT used as text over the veil, in either mode, and must not be
- * reintroduced: at the shipped mix it is below AA on the veil in both, which is
- * the operative fact on its own.
+ * Each figure is the worst of the five backdrops, and in every row that worst
+ * case is the basemap label ink — the darkest thing a light composite can be
+ * dragged towards and the lightest a dark one can. The land and marker backdrops
+ * all sit at least half a point higher.
  *
- * Why tuning the mix is not the answer differs by mode, and the distinction
- * matters to anyone tempted to try it. In LIGHT mode accent is below AA on the
- * opaque surfaces too — #2a78d6 is 4.30:1 on --color-surface and 3.92:1 on
- * --color-bg — so there is no mix ratio to find: the ink's own ceiling is under
- * the bar. In DARK mode accent does clear AA on its opaque surfaces (#3987e5 is
- * 4.89:1 on --color-surface, 5.28:1 on --color-bg), and it only reaches AA on
- * the veil at about 97%, which is a mix with no translucency left to give.
- * Either way the fix was the ink and not the background, which is why the
- * credits' links moved to muted ink with an underline
- * (../attribution/attribution.css). The light-mode opaque failure is app-wide
- * and predates the veil; it is tracked in docs/tech-debt.md.
+ * The muted and accent lines are the point of this record rather than a
+ * footnote. Neither is used as text over the veil, in either mode, and neither
+ * may be reintroduced: at the shipped mix both are below AA on the veil in both
+ * modes, which is the operative fact on its own.
  *
- * 90% is therefore the legibility floor for muted ink, not a taste setting:
- * 85% put muted at 4.40:1, which is a fail, and an earlier revision of this
- * header wrongly recorded that number as a pass. Lower it again and the credit
- * stops being legible over dark basemap ink; raise it and the map stops showing
- * through, which is the whole purpose of a veil. Re-run the measurement before
- * changing it.
+ * 70% is therefore a mix the *ink* pays for, and the pairing is what is load-
+ * bearing rather than either half. --color-text is the floor's currency now:
+ * it clears AA at every mix down to 70% in both modes, which is what let the
+ * veil come down this far at all. Muted ink could not have come with it — it
+ * fails from 85% (4.40:1 light) downward, and 90% was its floor for exactly that
+ * reason — so the credits' resting ink moved to --color-text as the mix moved
+ * (../attribution/attribution.css, and apps/web/src/map/map.css, which scopes
+ * that ink to the one surface that needs it). Put muted ink back on this surface
+ * and the credit stops being legible over dark basemap ink; raise the mix and
+ * the map stops showing through, which is the whole purpose of a veil. Re-run
+ * the measurement before changing either.
+ *
+ * Accent is a harder no than muted and stays one at any mix. In LIGHT mode it is
+ * below AA on the opaque surfaces too — #2a78d6 is 4.30:1 on --color-surface and
+ * 3.92:1 on --color-bg — so there is no mix ratio to find: the ink's own ceiling
+ * is under the bar. In DARK mode accent does clear AA on its opaque surfaces
+ * (#3987e5 is 4.89:1 on --color-surface, 5.28:1 on --color-bg), and on the veil
+ * it only reached AA at about 97% back when the mix was 90%, which was already a
+ * mix with no translucency left to give. The light-mode opaque failure is
+ * app-wide and predates the veil; it is tracked in docs/tech-debt.md.
  *
  * Restatement ledger (`docs/standards/architecture.md` rule 9). This block owns
  * the ratios above and the mix they were measured at. These sites quote them to
@@ -71,25 +78,41 @@
  * commit:
  *
  *   * docs/design/map-treatment.md, `## Attribution`, the first placement
- *     bullet: quotes the muted and hover/focus figures to state the legibility
- *     floor the band's placement rests on.
+ *     bullet: quotes the shipped ink's figures to state the legibility floor the
+ *     band's placement rests on.
  *   * ../attribution/attribution.css's module docblock: quotes the accent
  *     figures — both modes on the veil, light on the opaque surface — as the
- *     reason that credit's link is muted ink rather than accent.
+ *     reason that credit's link is not accent, and the muted figures as the
+ *     reason its ink is scoped per surface rather than chosen once.
  *   * apps/web/src/header/header.css's `.about-dialog a` docblock: quotes the
  *     light and dark accent figures on --color-surface to argue the dialog's
- *     links are a weaker, mode-dependent case of the same defect.
+ *     links are a weaker, mode-dependent case of the same defect. Those two are
+ *     opaque-surface figures and did not move with the mix.
  *
- * Sweep behind this list, run 2026-08-11: the ratio literals
- * (`4\.91|12\.16|3\.49|3\.76|4\.30|4\.40`) and the claim family
- * (`clears AA|below AA|legibility floor`) across *.css, *.md, *.ts and *.tsx.
- * It is a FLOOR, not a census — completeness here is falsified by one more
- * carrier, so this claims only what that sweep found. Sites the claim sweep
- * reaches that carry no figure of their own (apps/web/src/map/map.css,
- * docs/tech-debt.md, map-treatment.md's later accent note) restate nothing and
- * are deliberately unlisted: they state the verdict, not the measurement, so a
- * re-measurement that moved a figure without flipping a verdict leaves them
- * true.
+ * Sweep behind this list, re-run 2026-08-12 for #428: the ratio literals
+ * (`4\.91|12\.16|3\.49|3\.76|4\.30|4\.40|9\.14|6\.22|3\.06|2\.80|2\.18|1\.92`
+ * `|3\.92:1|4\.89:1|5\.28:1` — the accent-on-opaque figures, added 2026-08-12 so
+ * the arm reaches every figure this block owns, and written with the `:1` this
+ * family always gives a contrast ratio, which is what keeps unrelated decimals
+ * elsewhere in the repo out of the result)
+ * and the claim family (`clears AA|below AA|legibility floor`) across *.css,
+ * *.md, *.ts and *.tsx. It is a FLOOR, not a census — completeness here is
+ * falsified by one more carrier, so this claims only what that sweep found.
+ * Sites the claim sweep reaches that carry no figure of their own
+ * (apps/web/src/map/map.css, docs/tech-debt.md, map-treatment.md's later accent
+ * note) restate nothing and are deliberately unlisted: they state the verdict,
+ * not the measurement, so a re-measurement that moved a figure without flipping
+ * a verdict leaves them true.
+ *
+ * Some figures in this header are history rather than current measurement —
+ * taken at a mix this surface no longer ships, and kept because what a mix
+ * change could not rescue is the argument against retrying it. Each says so in
+ * the sentence carrying it, which is where a reader tells the two apart; the
+ * ratio arm of the sweep above carries the historical ratios alongside the
+ * current ones, while a historical *mix* is a percentage rather than a ratio and
+ * is not in that arm at all. This paragraph does not list them, on the same
+ * ground the ledger above is a floor: a list of survivals is falsified by one
+ * more.
  */
 
 :root {
@@ -199,8 +222,9 @@
      it costs here.
 
      Read the veil's contrast record in this file's header before changing the
-     percentage: the mix ratio is a legibility decision, not a taste one. */
-  --color-surface-veil: color-mix(in srgb, var(--color-surface) 90%, transparent);
+     percentage: the mix ratio is a legibility decision, not a taste one, and it
+     is measured jointly with the ink that sits on it. */
+  --color-surface-veil: color-mix(in srgb, var(--color-surface) 70%, transparent);
 
   /* Keyboard focus ring. Currently the accent hue in both modes, declared as a
      token of its own because focus is a distinct job from accent: a later
@@ -329,7 +353,7 @@
      resolves to this block's surface at use time. It is re-declared only to
      keep tokens.test.ts's "dark overrides every colour token" invariant
      mechanically true. */
-  --color-surface-veil: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  --color-surface-veil: color-mix(in srgb, var(--color-surface) 70%, transparent);
 
   --color-focus-ring: #3987e5;
 

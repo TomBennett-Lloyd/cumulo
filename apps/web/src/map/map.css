@@ -71,16 +71,19 @@
 /* ── Map controls ────────────────────────────────────────────────────────────
  *
  * The reset and add-site controls (`MapControls.tsx`), overlaid on the map's
- * *top* right. The corner is not a preference: the bottom edge is the credits
- * band's, all the way across (`.map-attribution` below), and a control tucked
- * beside it would be a control the band can occlude.
+ * *top* right. The corner is not a preference: the credits take the bottom-right
+ * one (`.map-attribution` below), and a control tucked beside them would be a
+ * control they can occlude. That the credits no longer run the whole bottom edge
+ * (#428) does not reopen the choice — it frees the bottom *left*, and splitting
+ * the two controls across opposite corners is not a composition worth having.
  *
- * `--color-surface-veil` is the same answer the credits band uses, for the same
+ * `--color-surface-veil` is the same answer the credits use, for the same
  * reason: a control sitting on tiles has whatever contrast the pixel under it
  * happens to give, and the veil puts a mostly-known colour behind the ink while
- * the map stays continuous. This one carries full `--color-text` rather than the
- * band's muted ink, so it sits well clear of the floor that mix was validated
- * against (docs/design/map-treatment.md, Attribution). */
+ * the map stays continuous. These carry full `--color-text`, which since #428 is
+ * what the credits carry too — the same ink on the same surface, because the mix
+ * came down far enough that it is the only ink the veil still clears AA with
+ * (`packages/ui/src/tokens/tokens.css`'s header owns that measurement). */
 .map-controls {
   position: absolute;
   inset: var(--space-3) var(--space-3) auto auto;
@@ -131,25 +134,44 @@
 }
 
 /* The credits, drawn over the bottom edge of the map rather than in a strip
- * under it. Pinned to all three lower edges (`inset: auto 0 0 0`) so the band
- * is as wide as the map and moves with it; out of flow, so the canvas keeps the
- * full height and the map gains back the ~34px the strip used to cost it.
+ * under it, and since #428 in its bottom-*right corner* rather than across the
+ * whole edge. Pinned to the bottom and the right with the left free (`inset:
+ * auto 0 0 auto`): an absolutely positioned box with `left: auto` takes its
+ * shrink-to-fit width, so the veil is as wide as the credits are and no wider,
+ * and the map shows through everywhere the credits are not. Out of flow either
+ * way, so the canvas keeps the full height and the map gains back the ~34px the
+ * strip used to cost it.
  *
- * `--color-surface-veil` is what makes that legal rather than merely nicer. The
- * treatment's rule is that a credit must have the contrast the palette was
- * validated for instead of whatever pixel lands under it, and the veil is that
- * answer in an overlay: a mostly-opaque surface between the ink and the tiles,
- * so the text is reading against a known colour while the map stays continuous
- * behind it. No `pointer-events` games — a CC BY 4.0 credit has to be
+ * `max-width: 100%` is the clamp on that. Shrink-to-fit is `min(max(preferred
+ * minimum, available), preferred)`, and the inner `max` is the part that can
+ * overflow: where the widest unbreakable run in the row — a licence-mandated
+ * string, so nothing here can shorten it — is wider than the map itself, the box
+ * would hang off the map's left edge without this. That needs a window narrower
+ * than any this app will realistically meet, which is a reason to state the
+ * clamp in one line rather than a reason to omit it.
+ *
+ * `--color-surface-veil` is what makes the overlay legal rather than merely
+ * nicer. The treatment's rule is that a credit must have the contrast the
+ * palette was validated for instead of whatever pixel lands under it, and the
+ * veil is that answer in an overlay: a mostly-opaque surface between the ink and
+ * the tiles, so the text is reading against a known colour while the map stays
+ * continuous behind it. No `pointer-events` games — a CC BY 4.0 credit has to be
  * clickable.
  *
- * What the band does cover is the markers under it: it paints above them, so a
- * site or cluster marker whose centre falls inside the band is not
- * pointer-reachable there. That is the accepted composition, together with the
- * relief that carries it — the map pans, markers stay in the tab order and
- * keyboard-operable, the site table and the header's search reach every site.
- * `docs/design/map-treatment.md`'s Attribution section decides it (#356) and is
- * where the argument lives; this is a pointer, not a second copy of it.
+ * What the chip does cover is the markers under it: it paints above them, so a
+ * site or cluster marker whose centre falls inside *its own footprint* is not
+ * pointer-reachable there. Shrinking to the corner narrows that footprint; it
+ * does not remove it, and the relief that carries it is owed exactly as before —
+ * the map pans, markers stay in the tab order and keyboard-operable, the site
+ * table and the header's search reach every site.
+ * `docs/design/map-treatment.md`'s Attribution section decides it (#356, #428)
+ * and is where the argument lives; this is a pointer, not a second copy of it.
+ *
+ * The corner it exposes is the top-left one, and `--radius-md` is what softens
+ * it — the same step the map's own controls take, since the two are now the same
+ * kind of object: a veiled chip floating on the tiles rather than an edge of the
+ * frame. The radius comes off again where the chip is full width; the rule below
+ * owns that width and its derivation.
  *
  * `flex-wrap: wrap` is still the last resort below the compact row's own width
  * (see the compact-form rule further down); what it is no longer is the *first*
@@ -161,48 +183,123 @@
  * is enough to keep the ink off the tiles' own edge, and the band still sizes to
  * its content, so the link keeps its full line box and stays clickable. The
  * horizontal padding is untouched: that axis is what holds the credits clear of
- * the map's left and right edges. Nothing here moves the compact-form
+ * the veil's own left and right edges. Nothing here moves the compact-form
  * breakpoint below — that threshold is typographic, measured from the row's
  * inline width, and vertical padding is not an input to it. */
 .map-attribution {
   position: absolute;
-  inset: auto 0 0 0;
+  inset: auto 0 0 auto;
   display: flex;
+  max-width: 100%;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
   padding: var(--space-1) var(--space-3);
+  border-top-left-radius: var(--radius-md);
   background: var(--color-surface-veil);
 }
 
+/* The width below which there is no corner left to round.
+ *
+ * `max-width: 100%` above stops the chip at the map's own width, and at that
+ * point its top-left corner *is* the map's left edge — so a radius there rounds
+ * against the window, which is the thing `.map-view`'s comment refuses at the
+ * top of this file. The radius goes off rather than the layout changing.
+ *
+ * 25.0625rem is measured rather than picked, the same way 37.25rem below is. At
+ * this band's own typography the compact row's box — both credits' compact
+ * forms, the separator, and the two `--space-3` of horizontal padding — comes to
+ * 401.30px, measured in Chromium against the built app (2026-08-12). So at 402px
+ * of layout width the chip still shrink-fits, by under a pixel, and at 401px and
+ * below it is clamped to the full width. The breakpoint sits exactly there, at
+ * 401px.
+ *
+ * Sitting *at* the floor rather than comfortably above it is the same choice the
+ * compact-form rule makes and carries the same acceptance: where a platform's
+ * fonts run wider than the measurement, the chip reaches full width a few pixels
+ * sooner than this fires, and wears a rounded corner against the map's left edge
+ * over those few pixels.
+ *
+ * There is deliberately no second arm for the *full* forms, and that is a
+ * measurement rather than an omission. The full row's box comes to 596.20px at
+ * the same typography, and the compact-form rule fires at 596px and below — so
+ * the full forms are only ever painted at 597px and up, where 596.20px still
+ * fits with room beside it. The chip never reaches full width while the full
+ * forms are on screen, so there is no band of widths between the two rules for a
+ * second query to cover. The one way to open one is a classic scrollbar: a media
+ * feature matches the viewport while the box measures the layout width, so at
+ * 597px of window less a scrollbar the full row no longer fits and the chip is
+ * full width with its radius on. That is the same error, in the same direction,
+ * that the compact-form rule below already weighs and accepts — absorbed there
+ * rather than chased with a query here. */
+@media (max-width: 25.0625rem) {
+  .map-attribution {
+    border-top-left-radius: 0;
+  }
+}
+
 /* The weather credit styles itself, from `@cumulo/ui`. This is only the tile
- * credit, matched to it so neither reads as the more important of the two. */
+ * credit, matched to it so neither reads as the more important of the two.
+ *
+ * Full `--color-text` and not muted ink since #428, and that is the veil's mix
+ * coming down rather than a change of emphasis. `tokens.css`'s header owns the
+ * measurement: at the shipped mix, muted ink is under AA on this surface and
+ * base ink is comfortably over it, so the ink is what moved to keep the credits
+ * legible. Both credits move together — the two carry the same obligation on the
+ * same surface and would be wrong if only one changed (`structure.md` rule 7). */
 .map-attribution-tiles {
-  color: var(--color-text-muted);
+  color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
 }
 
-/* Muted and underlined, matching `.cumulo-attribution a` in
- * `@cumulo/ui`'s attribution.css — which is where the reasoning lives, because
- * the two links carry the same obligation on the same surface and would be
- * wrong if only one of them changed (`structure.md` rule 7). In short:
- * `--color-accent` is below AA for small text on the veil this band now sits
- * on, muted ink is not, and the underline is what keeps the link findable once
- * it is the same colour as the prose beside it.
+/* The weather credit's ink on the veil — the only thing this band overrides in a
+ * component it otherwise composes untouched, other than the compact-form rule
+ * the component delegates to its surface, which is further down this file.
+ *
+ * `attribution.css` serves five surfaces and four of them are opaque — the
+ * dashboard footer, the About dialog, the app error boundary and the tokens
+ * preview — where muted ink is the right weight for the least-read line on the
+ * page (`design.md` rule 8) and clears the AA bar comfortably. This band is the
+ * fifth and the only one on `--color-surface-veil`, so it is the only one where
+ * the mix's legibility floor applies at all. Changing the component's own ink
+ * would repaint the other four to solve a problem none of them has.
+ *
+ * So the override is scoped to this band rather than pushed into the component,
+ * which is the same call the compact-form rule further down makes for the same
+ * reason: the surface owns what the surface's composite requires.
+ *
+ * Deliberately no hover or focus rule to go with it. `attribution.css` already
+ * brightens the link to `--color-text` on both, and that is now where it rests —
+ * so hover and keyboard focus change nothing about the ink. The state is not
+ * lost: the focus ring from `@cumulo/ui`'s styles.css is what marks focus, and
+ * the underline is what marks the link at rest. What is gone is the *extra*
+ * brightening, which had nowhere left to go once the resting ink was already the
+ * brightest the palette has. */
+.map-attribution .cumulo-attribution,
+.map-attribution .cumulo-attribution a {
+  color: var(--color-text);
+}
+
+/* Base ink and underlined, matching `.cumulo-attribution a` in
+ * `@cumulo/ui`'s attribution.css — which is where the underline's reasoning
+ * lives, because the two links carry the same obligation on the same surface and
+ * would be wrong if only one of them changed (`structure.md` rule 7). In short:
+ * neither `--color-accent` nor muted ink clears AA for small text on the veil at
+ * the mix this band now sits on, base ink does, and the underline is what keeps
+ * the link findable once it is the same colour as the prose beside it.
+ *
+ * Its hover and focus rule went with the ink, for the reason stated at the
+ * weather credit's override above: it brightened to `--color-text`, which is
+ * where this link now rests, so the rule had nothing left to say.
  *
  * The OSM credit is a licence condition of the tile data exactly as the
  * Open-Meteo one is of the weather data, so "it is only the tile credit" is
  * never a reason to hold it to a lower legibility bar. */
 .map-attribution-tiles a {
-  color: var(--color-text-muted);
-  text-decoration: underline;
-}
-
-.map-attribution-tiles a:hover,
-.map-attribution-tiles a:focus-visible {
   color: var(--color-text);
+  text-decoration: underline;
 }
 
 /* The compact credit row.
@@ -261,6 +358,12 @@
  *   carries no number: it names the decision and points here for the width.
  *   Ledgered so it stays that way, since a number is the tempting thing to add
  *   to a paragraph describing a range.
+ * - This file's own radius-off rule above (#428) — states both this row's box
+ *   width and the compact row's, because it derives its breakpoint from the
+ *   second and argues from the first that it needs no second arm. Same file,
+ *   still a carrier: a re-measurement that moves this band's typography moves
+ *   that breakpoint too, and the "no sliver" argument beside it has to be re-run
+ *   rather than assumed to survive.
  *
  * Measuring the container is the default and a viewport breakpoint is the
  * documented escalation (`design.md` rule 7). This is a breakpoint, and one

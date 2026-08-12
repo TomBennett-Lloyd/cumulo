@@ -2,8 +2,10 @@ import { OpenMeteoAttribution } from '@cumulo/ui';
 import type { ReactElement } from 'react';
 
 /**
- * The two credits every map view owes, in one persistent band across the bottom
- * of the map (`docs/design/map-treatment.md`, "Attribution").
+ * The two credits every map view owes, in one persistent chip in the map's
+ * bottom-right corner (`docs/design/map-treatment.md`, "Attribution"). It ran
+ * the whole width of the bottom edge until #428 took it into the corner, which
+ * is that document's decision to state and this file's only to compose.
  *
  * They are independent obligations and neither substitutes for the other: the
  * tile provider's credit comes from OpenFreeMap's use of OpenStreetMap data,
@@ -41,7 +43,13 @@ import type { ReactElement } from 'react';
  * not a nicety.
  *
  * The Open-Meteo credit's wording, link and styling belong to
- * `OpenMeteoAttribution`; this component composes it and does not restyle it.
+ * `OpenMeteoAttribution`; this component composes it and, since #428, restyles
+ * it in exactly one respect other than the compact-form rule the component
+ * delegates to its surface: the ink, and only on the veil. That override lives
+ * in `map.css` beside its reasoning — muted ink does not clear AA at the mix
+ * this surface now ships on, and none of the four opaque surfaces the component
+ * also serves has that problem. The wording, the size and the underline are
+ * untouched, and nothing here hand-rolls the string.
  */
 export const MapAttributionStrip = (): ReactElement => (
   <div className="map-attribution">
