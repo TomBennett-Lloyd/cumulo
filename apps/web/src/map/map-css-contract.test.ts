@@ -89,3 +89,33 @@ describe('map.css marker contract', () => {
     expect(withoutComments).not.toMatch(/opacity\s*:/);
   });
 });
+
+describe('map.css attribution contract', () => {
+  /*
+   * The credits' ink is a licence obligation rather than a preference, and since
+   * #428 it is one this file carries alone.
+   *
+   * The band sits on `--color-surface-veil` at a mix where muted ink is under AA
+   * for small text in both modes — and muted is exactly what both credits fall
+   * back to without the rules below: `attribution.css` gives the Open-Meteo
+   * credit muted ink for the four opaque surfaces it also serves, and the tile
+   * credit is matched to it. `docs/design/map-treatment.md`'s Attribution
+   * section carries the measured ratios and `tokens.css`'s header owns them.
+   *
+   * Delete either rule and nothing fails anywhere else: the ink changes, the
+   * markup does not, and the browser lane's `attribution-band.spec.ts` and
+   * `composition.spec.ts` ask whether the credits are present, boxed where they
+   * should be and clickable — never what colour they are. Until a lane spec
+   * measures rendered contrast (testing.md rule 10), this is the only observer
+   * the two declarations have, which is the same standing the marker rules above
+   * have and the same reason they are asserted as text.
+   */
+  it.each([
+    '.map-attribution-tiles',
+    '.map-attribution-tiles a',
+    '.map-attribution .cumulo-attribution',
+    '.map-attribution .cumulo-attribution a',
+  ])('gives %s base ink, the only ink that clears AA on the veil', (selector) => {
+    expect(declarationsFor(selector)).toContain('color: var(--color-text);');
+  });
+});

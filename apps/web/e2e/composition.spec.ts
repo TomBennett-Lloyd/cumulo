@@ -43,6 +43,21 @@ const EDGE_TOLERANCE_PX = 2;
  */
 const DEMO_FLEET_SIZE = 60;
 
+/**
+ * How much map has to show to the left of the credits strip before the strip
+ * counts as having shrunk to its corner (#428).
+ *
+ * A floor rather than a width, and chosen to be uninformative about the row: it
+ * has to be far enough past `EDGE_TOLERANCE_PX` that no rounding argument
+ * reaches it, and far enough below the real gap that a re-measured row cannot
+ * drift into it. At this lane's default viewport the shrink exposes something
+ * like 684px of map beside the strip, so a hundred leaves most of an order of
+ * magnitude either way. It computes with nothing `map.css` owns and therefore
+ * joins no restatement ledger — which is the point of not writing the row's
+ * actual width here.
+ */
+const SHRUNK_STRIP_CLEARANCE_PX = 100;
+
 /** The map overlay and the page footer each owe one. More surfaces may owe more. */
 const MINIMUM_WEATHER_CREDITS = 2;
 
@@ -209,6 +224,31 @@ test('runs the map edge to edge, with its credits overlaid on its own bottom edg
   expect(Math.abs(stripBox.y + stripBox.height - (mapBox.y + mapBox.height))).toBeLessThanOrEqual(
     EDGE_TOLERANCE_PX,
   );
+
+  /*
+   * And in the corner rather than across the whole edge (#428). The strip
+   * shrink-fits its content now, so two things are true at once and neither
+   * implies the other: its right edge *meets* the map's, which is what pins it
+   * to the corner, and its left edge is a long way in from the map's, which is
+   * what says it stopped being a full-width band.
+   *
+   * The right edge is an equality rather than the containment above it — that
+   * one passes on a strip anywhere inside the map — and it is what a lost
+   * `right: 0` would break.
+   *
+   * The left edge is deliberately a floor, not a measurement of the strip's
+   * width. `map.css` owns the width the row comes to and the breakpoint derived
+   * from it; restating either here would put this file in that ledger for a
+   * claim it does not need (`architecture.md` rule 9). What it needs is that the
+   * strip is not full width at a width where it has no reason to be, and this
+   * lane's viewport is far wider than the row: a hundred pixels is clear of any
+   * sub-pixel argument and nowhere near the ~684px of map the shrink actually
+   * exposes here, so a re-measured row moves the real gap without touching this.
+   */
+  expect(Math.abs(stripBox.x + stripBox.width - (mapBox.x + mapBox.width))).toBeLessThanOrEqual(
+    EDGE_TOLERANCE_PX,
+  );
+  expect(stripBox.x).toBeGreaterThan(mapBox.x + SHRUNK_STRIP_CLEARANCE_PX);
 
   /*
    * And the credit inside it is still a credit. Moving a CC BY 4.0 link onto

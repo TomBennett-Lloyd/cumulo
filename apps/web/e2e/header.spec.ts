@@ -198,9 +198,10 @@ const panelIsOnTop = async (panel: Locator): Promise<boolean> =>
  * Pan the map until the whole fleet is outside its bounds.
  *
  * The drag starts at the centre of the map's own box and moves sideways, which
- * keeps it clear of both things a drag must not begin on: the credits band along
- * the bottom edge (a licence obligation, and a link) and the control group in
- * the top-right corner.
+ * keeps it clear of both things a drag must not begin on: the credits (a licence
+ * obligation, and a link), which since #428 are a shrink-to-fit chip pinned in
+ * the bottom-right corner rather than a band along the whole bottom edge
+ * (`map/map.css`), and the control group in the top-right one.
  *
  * Markers are drawn only for what the current viewport contains
  * (`map/clustering.ts`), so "no marker of either kind" is exactly "no site is on

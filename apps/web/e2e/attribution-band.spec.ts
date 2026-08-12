@@ -11,16 +11,23 @@ import { SMALL_PHONE_VIEWPORT } from './viewports';
  * The credits band's contested pixels, measured.
  *
  * `docs/design/map-treatment.md`'s Attribution section decides two things this
- * lane can check and no other can (#356). The band is **full width and paints
- * above the markers**, so a marker whose centre falls under it is not
- * pointer-reachable there — accepted, not worked around. And what makes that
- * acceptable is a **relief rule**: the map pans, markers keep their place in the
- * tab order and stay keyboard-operable, where Enter selects exactly as a click
- * would, and the site table and the header's search reach every site without
- * touching the map. This file is the executable form of two of those: the
- * occlusion is asserted as a fact rather than tolerated as a mystery, and the
- * keyboard relief beside it is what stops the fact being a defect. The site
- * table and the header's search are not reached from here.
+ * lane can check and no other can (#356, #428). The band **paints above the
+ * markers**, so a marker whose centre falls under it is not pointer-reachable
+ * there — accepted, not worked around. And what makes that acceptable is a
+ * **relief rule**: the map pans, markers keep their place in the tab order and
+ * stay keyboard-operable, where Enter selects exactly as a click would, and the
+ * site table and the header's search reach every site without touching the map.
+ * This file is the executable form of two of those: the occlusion is asserted as
+ * a fact rather than tolerated as a mystery, and the keyboard relief beside it is
+ * what stops the fact being a defect. The site table and the header's search are
+ * not reached from here.
+ *
+ * Since #428 the band is a chip in the map's bottom-right corner rather than a
+ * strip across the whole bottom edge, and every claim here survives that
+ * unchanged because none of them was ever written against its width: the box is
+ * measured, never assumed, at each of the three places one is needed. What the
+ * shrink does change is the *pan*, which now has to aim on both axes — the
+ * arithmetic in `panTowardsBand` says how.
  *
  * The licence assertion is the point of the whole file, not a coda. CLAUDE.md's
  * Open-Meteo constraint (CC BY 4.0) says the link is visibly present and
@@ -220,19 +227,48 @@ const markerCentreIsInBand = async (page: Page, marker: Locator): Promise<boolea
 };
 
 /**
- * One pan, aimed: press the top-left of the map and drag straight down by
- * exactly the gap between the marker's centre and the band's.
+ * Where to press for a drag that has to carry the marker `wantedX` horizontally.
  *
- * Every part of that is about determinism. The press is at a fixed inset from
- * the map's own top-left rather than at a searched-for corner, and it is checked
- * for reaching the GL surface first, because a press that lands on a marker
- * swallows the gesture and a press on the band or the controls never reaches the
- * map — either of which would leave the loop above spinning with nothing moving.
- * The direction is straight down and the origin is the top, so the path cannot
- * leave the map's box on the way; the distance is clamped to the box's own
- * bottom inset for the same reason. And a distance that clamps to nothing throws
- * rather than dragging zero pixels, so "the marker is already below where a pan
- * from here can reach" reports itself instead of exhausting the attempts.
+ * The band shrank to a corner chip at #428, so a pan straight down no longer
+ * reaches it: the marker has to arrive at a box that spans part of the map's
+ * width rather than all of it, and which side of it the marker starts on decides
+ * which way the map has to move. The press therefore has to be somewhere with
+ * room in that direction — and not just anywhere, because two corners of this map
+ * are spoken for. The controls sit top-right and the chip sits bottom-right
+ * (`map.css`), and a press on either never reaches maplibre at all.
+ *
+ * So: dragging right presses the top-left, which has the whole width to its
+ * right and the whole height below it. Dragging left presses the right edge at
+ * mid-height, which is the one point on that side clear of both the controls
+ * above it and the chip below it — at the cost of half the downward room, which
+ * the caller's loop simply re-aims across.
+ */
+const pressPointFor = (map: LayoutBox, wantedX: number): ViewportPoint =>
+  wantedX >= 0
+    ? { x: map.x + EDGE_INSET_PX, y: map.y + EDGE_INSET_PX }
+    : { x: map.x + map.width - EDGE_INSET_PX, y: map.y + map.height / 2 };
+
+/**
+ * One pan, aimed at the chip's centre on both axes.
+ *
+ * Every part of that is about determinism. The press point is derived from the
+ * map's own box rather than searched for, and it is checked for reaching the GL
+ * surface first, because a press that lands on a marker swallows the gesture and
+ * a press on the credits or the controls never reaches the map — either of which
+ * would leave the loop above spinning with nothing moving. Each component of the
+ * drag is clamped to the room the press point has in that direction, so the path
+ * cannot leave the map's box on the way, and the loop re-measures and re-aims
+ * afterwards rather than assuming one gesture arrives.
+ *
+ * The vertical component is clamped at zero rather than allowed to go negative,
+ * and that is a fact about the chip rather than a convenience: its bottom edge
+ * *is* the map's bottom edge, so a marker already below the chip's vertical
+ * centre is already inside the chip's vertical span, and has nothing left to
+ * gain from moving up. Only the horizontal aim is left in that case.
+ *
+ * A pan that clamps to nothing on both axes throws rather than dragging zero
+ * pixels, so "the marker is already as close as a pan from here can put it"
+ * reports itself instead of exhausting the attempts.
  *
  * Panning does not change zoom, so the site marker stays a site marker
  * throughout: what moves is the camera, not what the overlay decides to draw.
@@ -241,26 +277,33 @@ const panTowardsBand = async (page: Page, marker: Locator): Promise<void> => {
   const map = await boxOf(page.locator(MAP_CANVAS), 'The map canvas');
   const band = await boxOf(page.locator(ATTRIBUTION), 'The credits band');
   const centre = centreOf(await boxOf(marker, 'The site marker'));
+  const target = centreOf(band);
 
-  const start = { x: map.x + EDGE_INSET_PX, y: map.y + EDGE_INSET_PX };
+  const wantedX = target.x - centre.x;
+  const start = pressPointFor(map, wantedX);
 
   if (!(await pressWouldPanTheMap(page, start))) {
-    throw new Error('The map’s top-left corner is covered, so there is nowhere to press to pan.');
+    throw new Error(
+      `The map is covered at (${String(Math.round(start.x))}, ${String(Math.round(start.y))}), so there is nowhere to press to pan.`,
+    );
   }
 
-  const wanted = band.y + band.height / 2 - centre.y;
-  const room = map.y + map.height - EDGE_INSET_PX - start.y;
-  const distance = Math.min(wanted, room);
+  const roomX =
+    wantedX >= 0 ? map.x + map.width - EDGE_INSET_PX - start.x : start.x - (map.x + EDGE_INSET_PX);
+  const roomY = map.y + map.height - EDGE_INSET_PX - start.y;
 
-  if (distance < MIN_PAN_PX) {
+  const dx = Math.sign(wantedX) * Math.min(Math.abs(wantedX), roomX);
+  const dy = Math.min(Math.max(target.y - centre.y, 0), roomY);
+
+  if (Math.hypot(dx, dy) < MIN_PAN_PX) {
     throw new Error(
-      `A pan from the map’s top edge cannot move the marker any further towards the band (${String(Math.round(distance))}px).`,
+      `A pan from (${String(Math.round(start.x))}, ${String(Math.round(start.y))}) cannot move the marker any further towards the credits (${String(Math.round(dx))}, ${String(Math.round(dy))}).`,
     );
   }
 
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  await page.mouse.move(start.x, start.y + distance, { steps: DRAG_STEPS });
+  await page.mouse.move(start.x + dx, start.y + dy, { steps: DRAG_STEPS });
 
   // Held still, then released: a pan rather than a fling (`DRAG_SETTLE_MS`).
   await page.waitForTimeout(DRAG_SETTLE_MS);

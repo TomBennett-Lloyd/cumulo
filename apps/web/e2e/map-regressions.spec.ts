@@ -81,19 +81,22 @@ interface MarkerShape {
  *
  * Three things are drawn over the basemap and take pointer events. Markers,
  * which is the question the production guard asks (`isMarkerClick`,
- * src/map/map-click.ts). The credits: the attribution band is overlaid on the
- * map's bottom edge rather than sitting in a strip beneath it, so both lower
- * corners are now under it at every viewport. A click landing there correctly
- * opens no draft — the band is content, not basemap — which arrived as this
- * helper silently returning a point the map never sees.
+ * src/map/map-click.ts). The credits: they are overlaid on the map's bottom edge
+ * rather than sitting in a strip beneath it, and since #428 they shrink to a
+ * chip in the bottom-*right* corner, so which lower corners they cover is now a
+ * function of the width — the right one always, the left one only where the chip
+ * has widened to the whole map. A click landing on them correctly opens no draft
+ * — the credits are content, not basemap — which arrived as this helper silently
+ * returning a point the map never sees.
  *
- * Listing `.map-attribution` here encodes an accepted product behaviour,
- * not a workaround for a bug. The band is full width and paints above the
- * markers by decision, and the relief rule that makes that acceptable — the
- * pan, the tab order, the table and the search — is what
- * `docs/design/map-treatment.md`'s Attribution section decides (#356). So a
- * corner this predicate rejects is the map behaving as designed, and nothing
- * here is waiting on a narrower band to delete the term.
+ * Listing `.map-attribution` here encodes an accepted product behaviour, not a
+ * workaround for a bug. The credits paint above the markers by decision, and the
+ * relief rule that makes that acceptable — the pan, the tab order, the table and
+ * the search — is what `docs/design/map-treatment.md`'s Attribution section
+ * decides (#356, #428). So a corner this predicate rejects is the map behaving
+ * as designed. The chip getting narrower does not delete the term either: the
+ * predicate asks what is painted at the point rather than assuming a shape, so
+ * it simply finds a free corner sooner than it used to.
  *
  * And the map's own controls, in the top-right (`.map-controls`, #265). That one
  * is the nastiest of the three because of *which* control sits there: hand the
