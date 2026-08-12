@@ -71,6 +71,16 @@ export interface ForecastChartHoverBoundaryProps {
   readonly spanHours: number;
   /** Required-and-nullable, per `ForecastChartHoverLayerProps`' precedent. */
   readonly overlay: ChartOverlayColumn | undefined;
+  /**
+   * The unit the values are in, spoken — `chart-copy.ts`'s two labels, chosen
+   * by `ForecastChart` from its own `unit` prop (#291).
+   *
+   * A string rather than the prop's own shape, because that is what this
+   * component does with it: it goes into the readout's frame and nothing here
+   * branches on it. It is also the memo-friendly shape — a primitive prop is one
+   * a shallow compare can see through, which the hover layer below depends on.
+   */
+  readonly unitLabel: string;
   /** The static chrome — grid, marks, axes — built once by `ForecastChart`. */
   readonly children: ReactNode;
 }
@@ -147,7 +157,7 @@ const PRESS_EXPLAINS_FOCUS_MS = 500;
 export const ForecastChartHoverBoundary = (
   props: ForecastChartHoverBoundaryProps,
 ): ReactElement => {
-  const { ariaLabel, children, overlay, points, scale, spanHours, width } = props;
+  const { ariaLabel, children, overlay, points, scale, spanHours, unitLabel, width } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   /**
    * How the focus the `<svg>` is holding arrived — #440's one hard case.
@@ -533,7 +543,9 @@ export const ForecastChartHoverBoundary = (
           change rather than text that was already there (`react.md`). Both
           input routes feed it, because both set the same `activeIndex`. */}
       <p className="forecast-chart-readout" aria-live="polite">
-        {activePoint === undefined ? '' : readoutText(activePoint, spanHours, overlayReading)}
+        {activePoint === undefined
+          ? ''
+          : readoutText(activePoint, spanHours, overlayReading, unitLabel)}
       </p>
     </>
   );

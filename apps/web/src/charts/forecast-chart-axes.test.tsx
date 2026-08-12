@@ -3,7 +3,14 @@
 import { cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ForecastChartPoint } from './chart-series';
-import { marks, renderChart, requireMark, SERIES, xOfSample } from './forecast-chart-test-fixture';
+import {
+  marks,
+  renderChart,
+  renderPercentChart,
+  requireMark,
+  SERIES,
+  xOfSample,
+} from './forecast-chart-test-fixture';
 
 /**
  * The plot's chrome, rendered: the horizon rule, the two tiers of the time axis,
@@ -101,6 +108,24 @@ describe('the axis chrome', () => {
     // Parallel to the axis it names, through a transform attribute — a `style`
     // prop is a lint error in UI code, and an unrotated title in the left
     // gutter would be a column of clipped words.
+    expect(titles[0]?.getAttribute('transform')).toContain('rotate(-90');
+  });
+
+  /*
+   * The other unit (#291). A percent chart's value axis is titled by what it
+   * counts and nothing else — `% of capacity` names the quantity as well as the
+   * unit, so there is no `Power (…)` to wrap it in — while the clock's title is
+   * untouched, because the unit toggle is a fact about one axis. Written out
+   * rather than imported for the reason the case above is: a test that imports
+   * the words it checks would follow a silent rename past the reader.
+   */
+  it('titles the value axis in percent of capacity when the chart is in that unit', () => {
+    const container = renderPercentChart(SERIES);
+    const titles = [...container.querySelectorAll('.forecast-chart-axis-title')];
+
+    expect(titles.map((title) => title.textContent)).toStrictEqual(['% of capacity', 'Time (UTC)']);
+    // Along the axis in both units, which is what makes the longer string free:
+    // a rotated title spends the plot's height, never the gutter's width.
     expect(titles[0]?.getAttribute('transform')).toContain('rotate(-90');
   });
 

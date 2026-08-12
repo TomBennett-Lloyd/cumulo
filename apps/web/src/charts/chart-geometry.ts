@@ -1,8 +1,17 @@
 /**
- * Pure chart geometry: kW → SVG user unit, axis choice, and the plot rect every
- * mark is placed in. No React, no DOM — every function here is a plain
+ * Pure chart geometry: value → SVG user unit, axis choice, and the plot rect
+ * every mark is placed in. No React, no DOM — every function here is a plain
  * input/output pair, so the chart's arithmetic is testable without rendering
  * one and the component is left holding only composition.
+ *
+ * **The `Kw` spellings below are historical, and since #291 the values are in
+ * whichever unit the panel is showing** — kW, or percent of capacity. The
+ * mapping is the same arithmetic either way, because a percent is normalised
+ * before it reaches this module (`dashboard/` owns that transform) and the axis
+ * only ever sees numbers; the one place the unit is a fact here is
+ * `percentAxisMax` below, which puts capacity on the axis whatever the series
+ * does. Renaming the `*Kw` symbols is filed as its own change rather than
+ * smuggled into a behaviour ticket.
  *
  * **Where the time axis's own labelling went.** Choosing which instants the x
  * axis labels, and proving that those labels cannot collide, is
@@ -200,6 +209,15 @@ const X_AXIS_BAND = 48;
  * left edge lands at 15.77 — clearing the title by 2.1 units rather than the 6
  * this docblock used to claim. Nothing was wrong on screen; the slack was
  * simply a third of what the arithmetic said.
+ *
+ * **The gutter is the worst case across both units and does not move with the
+ * one on show** (#291). `1000` is the widest label either mode can print — a
+ * percent axis tops out at `100` in any practical fleet, and a wider one would
+ * be a chart already drawn at 1000% — so the percent mode is strictly narrower
+ * here and this measurement still binds. Nothing in that ticket retunes this
+ * number, `PLOT_LEFT_NARROW`, `NARROW_GUTTER_MAX_CHART_WIDTH` or
+ * `forecast-chart-axes.tsx`'s `KW_LABEL_END_FLOOR`: a gutter that changed width
+ * with the unit would shift the plot under a reader who only pressed a toggle.
  */
 const PLOT_LEFT_WIDE = 56;
 /**
@@ -442,6 +460,37 @@ export const niceAxisMax = (maxValueKw: number): number => {
   // Nothing in the decade reaches the target — the next decade's 1 does.
   return mantissa === undefined ? decade * 10 : mantissa * decade;
 };
+
+/**
+ * Capacity, which a percent chart's axis always reaches (#291).
+ *
+ * 100 is the number a reader of a percent-of-capacity chart is comparing
+ * against, so it is the axis's floor rather than something the data has to earn.
+ * Without it a quiet day would be drawn to its own peak — a series topping out
+ * at 60% would fill the plot exactly as a series at capacity does, and the two
+ * charts would be indistinguishable at a glance, which is the whole reading the
+ * percent mode exists to give.
+ */
+export const PERCENT_AXIS_FLOOR = 100;
+
+/**
+ * The axis maximum for a chart drawn in percent of capacity: capacity always
+ * visible, and the nice ladder above it.
+ *
+ * **A floor under the axis, never a clamp on the marks.** A site can exceed its
+ * own capacity — a cold, bright hour on an array that outruns its inverter
+ * rating — and when it does the reader has to see it: a peak of 104 goes through
+ * `niceAxisMax` to 200 rather than being drawn on top of the 100 gridline. So
+ * this is `Math.max` of a floor and the existing ladder, and nothing here
+ * touches a value.
+ *
+ * `MINIMUM_AXIS_MAX_KW`'s degenerate-scale guard is subsumed rather than
+ * repeated: an all-zero percent series gets 100 like every other percent series,
+ * because the axis it is being read against is the capacity line and not its own
+ * maximum.
+ */
+export const percentAxisMax = (peakPercent: number): number =>
+  Math.max(PERCENT_AXIS_FLOOR, niceAxisMax(peakPercent));
 
 /** Evenly spaced tick values from 0 to `axisMaxKw` inclusive. */
 export const axisTicks = (axisMaxKw: number): readonly number[] =>

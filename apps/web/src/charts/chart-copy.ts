@@ -24,11 +24,22 @@
  * where the times are, and the two surfaces that state it read from one
  * constant rather than from two that agree (`architecture.md` rule 9).
  *
- * Out of scope on purpose: `Power (kW)` and the P10/Median/P90/Actual column
- * headers stay in the components that render them. Those name the data, not the
- * chrome — a chart that changed what it plots would have to change them anyway,
- * so centralising them would collect strings that share only a file, not an
- * intent (`structure.md` rule 7).
+ * **The unit's two spellings joined the clock here in #291, and the argument
+ * that used to decline them is what changed.** `kW` was a word about the data
+ * while it was the only answer: a chart that changed what it plots would have
+ * changed it anyway, so it stayed in the component that rendered it. A unit a
+ * reader can *switch* is not that — it is state-dependent chrome, and three
+ * surfaces have to agree about which one is showing or the same number reads as
+ * two different quantities: the value axis's title, the table twin's caption,
+ * and the spoken readout's frame. So the two labels have one owner here and
+ * each surface composes the words around them.
+ *
+ * Out of scope on purpose, and still: `Power (…)`'s *title* framing, which is
+ * how `forecast-chart-axes.tsx` arranges a label along an axis rather than a
+ * spelling of the unit, and the P10/Median/P90/Actual column headers, which
+ * name the data. Those are unchanged by the toggle — centralising them would
+ * collect strings that share only a file, not an intent (`structure.md` rule
+ * 7).
  *
  * `forecast horizon` was on that list until the owner's 2026-08-11 design round
  * ([#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)) deleted the
@@ -43,3 +54,23 @@
  * axis title under the chart's own time axis, and the table twin's time column.
  */
 export const TIME_COLUMN_HEADER = 'Time (UTC)';
+
+/**
+ * The unit a chart's numbers are in while the panel is showing absolute power —
+ * the axis title's `Power (kW)`, the table caption's units, and the unit word
+ * the spoken readout frames its rows with.
+ */
+export const UNIT_LABEL_KW = 'kW';
+
+/**
+ * The same, while the panel is showing each series against its own capacity.
+ *
+ * It names the quantity as well as the unit, which is why the axis title is
+ * this label alone where the kW title wraps it in `Power (…)`: a percentage of
+ * capacity *is* the reading, and `Power (% of capacity)` would name it twice.
+ * The reason there are two units to name at all is the site overlay — a ~4 kW
+ * site against a ~330 kW fleet is a flat line on an absolute axis — and the
+ * transform is presentation only: storage, the API and `@cumulo/shared` are kW
+ * throughout.
+ */
+export const UNIT_LABEL_PERCENT_OF_CAPACITY = '% of capacity';

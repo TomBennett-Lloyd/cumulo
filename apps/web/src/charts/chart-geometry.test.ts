@@ -4,6 +4,8 @@ import {
   CHART_VIEW_BOX_HEIGHT,
   chartPlot,
   niceAxisMax,
+  PERCENT_AXIS_FLOOR,
+  percentAxisMax,
   sampleXs,
   snapToNearestX,
   spanHoursBetween,
@@ -201,6 +203,36 @@ describe('niceAxisMax', () => {
   it('falls back to the floor for a non-finite maximum instead of hunting a decade', () => {
     expect(niceAxisMax(Number.NaN)).toBe(1);
     expect(niceAxisMax(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+});
+
+describe('percentAxisMax', () => {
+  /*
+   * Capacity is the reading (#291), so it is on the axis whatever the series
+   * did. Without the floor a 60% day would fill the plot exactly as a day at
+   * capacity does — `niceAxisMax(60)` is 80 — and the two charts would be
+   * indistinguishable at a glance, which is the whole reading percent mode
+   * exists to give.
+   */
+  it('a percent chart’s axis reaches 100 even when the series peaks below it', () => {
+    expect(percentAxisMax(60)).toBe(PERCENT_AXIS_FLOOR);
+    expect(percentAxisMax(99.9)).toBe(PERCENT_AXIS_FLOOR);
+    // A dark day is still read against capacity, not against its own maximum —
+    // so the kW floor's degenerate-scale answer of 1 is not the answer here.
+    expect(percentAxisMax(0)).toBe(PERCENT_AXIS_FLOOR);
+    expect(percentAxisMax(0)).not.toBe(niceAxisMax(0));
+  });
+
+  /*
+   * The other half, and the reason this is a floor rather than a fixed axis: a
+   * site can outrun its own capacity on a cold bright hour, and a mark drawn on
+   * top of the 100 gridline — or off the canvas — would hide exactly the hour
+   * worth seeing. The existing ladder takes it from there.
+   */
+  it('data above capacity raises the percent axis through the nice ladder', () => {
+    expect(percentAxisMax(104)).toBe(200);
+    expect(percentAxisMax(101)).toBe(200);
+    expect(percentAxisMax(420)).toBe(500);
   });
 });
 

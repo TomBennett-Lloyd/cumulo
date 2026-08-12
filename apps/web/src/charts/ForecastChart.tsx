@@ -1,5 +1,6 @@
 import { useMemo, useRef, type ReactElement } from 'react';
-import { chartPlot, niceAxisMax, sampleXs } from './chart-geometry';
+import { UNIT_LABEL_KW, UNIT_LABEL_PERCENT_OF_CAPACITY } from './chart-copy';
+import { chartPlot, niceAxisMax, percentAxisMax, sampleXs } from './chart-geometry';
 import { loadingCurvePath } from './chart-loading-curve';
 import {
   contiguousRuns,
@@ -50,11 +51,27 @@ import { useChartWidth } from './use-chart-width';
  * "Legend").
  *
  * Presentational only — no fetching, no domain imports. Points arrive as plain
- * ISO strings and kW numbers, which branded `UtcIsoTimestamp` values satisfy.
+ * ISO strings and numbers, which branded `UtcIsoTimestamp` values satisfy.
+ *
+ * **The numbers carry the chart's display unit, and the `unit` prop names it**
+ * (#291). Absent, they are kW, which is what every value in this product is
+ * stored, served and schema'd in. Present, they are percentages of capacity,
+ * already normalised by the caller at the panel seam — a ~4 kW site overlaid on
+ * a ~330 kW fleet is a flat line on an absolute axis, and re-expressing both
+ * against their own capacity is what makes the pair readable on one scale
+ * (`docs/design/chart-treatment.md`, "One value axis"). The unit is
+ * presentation and reaches this component's arithmetic exactly twice: the axis
+ * always shows 100 in percent mode, and the chrome says which unit is showing
+ * — the axis title and the spoken readout's frame. Everything between is
+ * unit-agnostic, which is why the `*Kw` field spellings on the points are
+ * unchanged: a rename is filed as its own change rather than smuggled in here,
+ * and the contract that the values carry the *selected* unit is stated on
+ * `ForecastChartPoint` (`chart-series.ts`).
  *
  * Two rules from the token preview carry over: no literal colours or sizes
  * (every visual value is a class consuming a token, in `charts.css`), and the
- * numbers below are geometry — SVG user units and kW — not styling.
+ * numbers below are geometry — SVG user units, and values in the display unit
+ * above — not styling.
  *
  * **A null value breaks its line, and is never bridged.** A missing band or a
  * missing measurement inside the series is a partial result and reads as one:
@@ -70,7 +87,7 @@ import { useChartWidth } from './use-chart-width';
  * "`contiguousRuns` splits on array adjacency, not on time adjacency") owns it.
  *
  * **An overlay is one more series, not a second chart.** The optional `overlay`
- * prop puts a second series on the same kW axis in slot 2 — the treatment's
+ * prop puts a second series on the same value axis in slot 2 — the treatment's
  * fixed categorical order, with slot 1 reserved for the forecast everywhere in
  * the product. One axis, never two: a second y-scale would invent a correlation
  * the data does not contain (`docs/design/chart-treatment.md`). It is joined
@@ -134,8 +151,10 @@ import { useChartWidth } from './use-chart-width';
  * measures the figure and the view box takes that width, so one SVG user unit
  * is one pixel and the chrome stops scaling with the panel — an axis label is
  * the same size here as everywhere else on the page. The height does not follow:
- * `CHART_VIEW_BOX_HEIGHT` is an owned constant, because a kW axis that rescaled
- * on every resize would be a different chart at every window size.
+ * `CHART_VIEW_BOX_HEIGHT` is an owned constant, because a value axis that
+ * rescaled on every resize would be a different chart at every window size. The
+ * unit is the one thing that *is* allowed to rescale it, because switching unit
+ * is a reader asking for a different reading rather than a window changing size.
  *
  * **The table twin is a panel of its own, after the figure** — the owner's
  * 2026-08-11 ask, in their words: *"i think the raw data could actually live in
@@ -215,8 +234,9 @@ export interface ForecastChartProps {
   readonly ariaLabel: string;
   readonly tableCaption: string;
   /**
-   * One more series on the same kW axis, in its own time base — the chart joins
-   * it onto `points`' x-domain. Omitted, the chart renders exactly what it
+   * One more series on the same value axis, in its own time base — the chart
+   * joins it onto `points`' x-domain, and the caller has already put both in the
+   * unit `unit` names. Omitted, the chart renders exactly what it
    * rendered before overlays existed: no mark, no legend row, no table column,
    * and nothing in the readout.
    */
@@ -248,6 +268,23 @@ export interface ForecastChartProps {
    * 5), and `dashboard/FleetPanel.tsx` is where that boundary is drawn.
    */
   readonly error?: ChartErrorNotice;
+  /**
+   * The values on `points` are percentages of capacity rather than kW, and the
+   * chart's chrome says so (#291; the display-unit paragraph above).
+   *
+   * By presence, exactly as `overlay`, `loading` and `error` are, and for the
+   * same reason: under `exactOptionalPropertyTypes` an absent optional prop and
+   * one set to `undefined` are different values, and the contract is about the
+   * absent one — a chart rendered without this prop emits what it emitted before
+   * the toggle existed, save for the unit word the readout gained.
+   *
+   * A one-member union rather than a `'kw' | 'percent'` pair or a boolean, so
+   * that kW stays the absence and no caller has to spell the default. The
+   * caller's own two-state type stops at the panel seam
+   * (`dashboard/`) — this folder learns only that a chart is in the other unit,
+   * which keeps the dependency direction dashboard → charts.
+   */
+  readonly unit?: 'percent';
 }
 
 export const ForecastChart = (props: ForecastChartProps): ReactElement => {
@@ -288,9 +325,14 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   // `xAt`. Once, because it is time-proportional (#325) and therefore a property
   // of the series rather than of each mark's index — a second consumer deriving
   // it again is a second chance to derive it differently.
+  // The one place the display unit reaches the arithmetic: a percent axis always
+  // shows capacity, where a kW axis has no such landmark and is drawn to its own
+  // series (`chart-geometry.ts`'s `percentAxisMax`). Everything else below is
+  // unit-agnostic, because the values arrive already normalised.
+  const percent = props.unit !== undefined;
   const scale: ChartScale = {
     plot,
-    axisMaxKw: niceAxisMax(peakKw),
+    axisMaxKw: percent ? percentAxisMax(peakKw) : niceAxisMax(peakKw),
     xs: sampleXs(points, plot),
   };
   const spanHours = seriesSpanHours(points);
@@ -334,6 +376,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           scale={scale}
           spanHours={spanHours}
           overlay={overlay}
+          unitLabel={percent ? UNIT_LABEL_PERCENT_OF_CAPACITY : UNIT_LABEL_KW}
         >
           {nightElements(points, scale)}
           {gridElements(scale)}
@@ -362,7 +405,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           {overlay === undefined ? null : overlayElements(overlay.values, scale)}
           {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
           {xAxisElements(points, scale)}
-          {axisTitleElements(scale.plot)}
+          {axisTitleElements(scale.plot, percent)}
         </ForecastChartHoverBoundary>
         {/* The total failure, over everything above it and inside the same box
             (#452). After the boundary rather than among the marks because it is

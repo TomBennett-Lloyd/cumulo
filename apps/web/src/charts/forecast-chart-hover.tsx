@@ -256,13 +256,38 @@ const spokenTooltipRows = (
  * present, so a dropped dash still reads ("0.0 2.0 P10 P90"), and respelling a
  * range for speech alone would fork this string from the tooltip it is
  * deliberately one producer with.
+ *
+ * **The frame carries the unit, and since #291 it has to** (the unit half of
+ * `docs/tech-debt.md`'s #235, which this closes). A chart a reader can switch
+ * between kW and percent of capacity announces `Median 74.2` in both modes
+ * otherwise — the same words for two different quantities, and nothing in
+ * speech to tell them apart. The drawn tooltip needs no such word because the
+ * visible axis title is right there carrying it; speech has no axis, so the
+ * sentence's own frame is where the unit goes.
+ *
+ * **Once in the frame, not once per row.** `06:00 (kW) — Actual 3.8, Median
+ * 4.0` states the unit for the whole sample, which is what it is a fact about:
+ * every row of one announcement is in one unit by construction. Per-row it
+ * would be four repetitions of the same word in a sentence a reader hears on
+ * every arrow press, and — more to the point — it would have to be threaded
+ * into the row producer, which is the one thing the drawn panel and speech
+ * share. This inserts a word into the sentence *around* the rows, so the
+ * one-producer/two-filters contract is untouched: no row's text differs between
+ * the two surfaces.
+ *
+ * The clock half of #235 stays open — the readout says `06:00` and never
+ * "UTC", where the axis title and the table twin both do.
  */
 export const readoutText = (
   point: ForecastChartPoint,
   spanHours: number,
   overlay: ChartOverlayReading | undefined,
+  unitLabel: string,
 ): string =>
-  `${tickLabelFor(point.validTimeIso, spanHours)} — ${spokenTooltipRows(point, overlay)
+  `${tickLabelFor(point.validTimeIso, spanHours)} (${unitLabel}) — ${spokenTooltipRows(
+    point,
+    overlay,
+  )
     .map((row) => `${row.name} ${row.value}`)
     .join(', ')}`;
 

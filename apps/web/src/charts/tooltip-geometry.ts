@@ -198,6 +198,13 @@ export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): 
  * margin change fails a case rather than ageing a sentence — and this docblock
  * is the one place it is written down (`architecture.md` rule 9).
  *
+ * The unit toggle (#291) instantiates that second qualifier rather than adding a
+ * fact: 76 is measured over kW-shaped rows, and a panel showing percent of
+ * capacity moves it, because those values are a different number of characters
+ * wide. No second boundary is asserted here on purpose — a threshold quoted per
+ * unit would be two numbers to keep true, where the hedge above already says the
+ * one number is conditional on what the panel is showing.
+ *
  * Past that length the readout would be wider
  * than the chart it is reading, blanketing the marks it exists to explain, and
  * `tooltipAnchorX` could only pin it to the left plot edge and let the rest hang

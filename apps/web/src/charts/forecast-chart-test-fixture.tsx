@@ -62,6 +62,29 @@ export const renderChart = (points: readonly ForecastChartPoint[]): HTMLElement 
   return container;
 };
 
+/**
+ * The same chart in the other display unit (#291) — the `unit` prop present,
+ * where `renderChart` above leaves it genuinely absent.
+ *
+ * Here rather than in each suite because two of them need it — the axis titles
+ * and the spoken readout's frame are the two surfaces the unit reaches — and a
+ * second copy would be a second definition of what a percent chart is
+ * (`structure.md` rule 7). The points are the caller's, in percent: the chart
+ * takes them already normalised, so a fixture in percent is a fixture of plain
+ * numbers and the builders above serve it unchanged.
+ */
+export const renderPercentChart = (points: readonly ForecastChartPoint[]): HTMLElement => {
+  const { container } = render(
+    <ForecastChart
+      points={points}
+      ariaLabel={ARIA_LABEL}
+      tableCaption={TABLE_CAPTION}
+      unit="percent"
+    />,
+  );
+  return container;
+};
+
 export const renderChartWithOverlay = (
   points: readonly ForecastChartPoint[],
   overlay: ChartOverlaySeries,

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   bare,
   renderChart,
+  renderPercentChart,
   requireSvg,
   SERIES,
   tooltipValues,
@@ -48,10 +49,14 @@ describe('ForecastChart readout', () => {
     const svg = requireSvg(container);
 
     fireEvent.focus(svg);
-    expect(readout(container).textContent).toBe('06:00 — Actual 0.9, Median 1.0, P10–P90 0.0–2.0');
+    expect(readout(container).textContent).toBe(
+      '06:00 (kW) — Actual 0.9, Median 1.0, P10–P90 0.0–2.0',
+    );
 
     fireEvent.keyDown(svg, { key: 'ArrowRight' });
-    expect(readout(container).textContent).toBe('09:00 — Actual 3.8, Median 4.0, P10–P90 3.0–5.0');
+    expect(readout(container).textContent).toBe(
+      '09:00 (kW) — Actual 3.8, Median 4.0, P10–P90 3.0–5.0',
+    );
 
     fireEvent.keyDown(svg, { key: 'Escape' });
     expect(readout(container).textContent).toBe('');
@@ -80,7 +85,7 @@ describe('ForecastChart readout', () => {
     fireEvent.focus(requireSvg(container));
 
     // An absent row says "not modelled", spoken as well as drawn.
-    expect(readout(container).textContent).toBe('06:00 — Actual 0.9, Median 1.0');
+    expect(readout(container).textContent).toBe('06:00 (kW) — Actual 0.9, Median 1.0');
   });
 
   it('an unmeasured hour announces without a measured row, not as bare punctuation', () => {
@@ -95,8 +100,37 @@ describe('ForecastChart readout', () => {
 
     const announced = readout(container).textContent;
 
-    expect(announced).toBe('18:00 — Median 2.0, P10–P90 1.0–3.0');
+    expect(announced).toBe('18:00 (kW) — Median 2.0, P10–P90 1.0–3.0');
     expect(announced).not.toContain('— —');
     expect(announced).not.toContain('Actual');
+  });
+
+  /*
+   * The unit half of tech-debt #235, which the unit toggle turned from an
+   * omission into a defect (#291). The drawn tooltip needs no unit word — the
+   * visible axis title carries it — but speech has no axis, so without this the
+   * two modes announce `Median 4.0` identically and a screen-reader user cannot
+   * tell which quantity they are hearing.
+   *
+   * Both modes are asserted over the same series on purpose: the numbers are
+   * deliberately identical, so the unit word is the *only* thing distinguishing
+   * the two sentences, which is exactly the claim. Once in the frame and never
+   * per row — the rows are the drawn panel's own, and speech must not respell
+   * them (`forecast-chart-hover.tsx`, one producer and two filters).
+   */
+  it('frames the announcement with the unit the chart is drawn in', () => {
+    const kilowatts = renderChart(SERIES);
+    fireEvent.focus(requireSvg(kilowatts));
+
+    expect(readout(kilowatts).textContent).toBe(
+      '06:00 (kW) — Actual 0.9, Median 1.0, P10–P90 0.0–2.0',
+    );
+
+    const percent = renderPercentChart(SERIES);
+    fireEvent.focus(requireSvg(percent));
+
+    expect(readout(percent).textContent).toBe(
+      '06:00 (% of capacity) — Actual 0.9, Median 1.0, P10–P90 0.0–2.0',
+    );
   });
 });
