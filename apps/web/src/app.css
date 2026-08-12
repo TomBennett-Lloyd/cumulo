@@ -191,23 +191,77 @@ body {
   font-size: var(--text-sm);
 }
 
+/* The switch's own treatment, and only that: a label beside a track, in the
+ * page's ordinary ink on no fill of its own. The surface that places it says
+ * where it sits and what padding it sits in — `header.css`'s
+ * `.header-menu-popover .theme-toggle` is the one that does — while
+ * `margin-left: auto` is the placement the gallery header still wants, that
+ * being a row this control ends (`preview/TokensHarness.tsx`).
+ *
+ * The radius outlives the fill it used to round: with no background left, what
+ * it shapes is the `:focus-visible` outline `@cumulo/ui` paints around the
+ * whole control.
+ *
+ * No `transition` on the thumb, deliberately. `design.md` rule 13 prefers a
+ * smooth state change to a jump cut, but it binds a transition twice over — to
+ * `prefers-reduced-motion` and to not delaying the interaction — and the token
+ * set has no motion category to state a duration or an easing in. These
+ * stylesheets carry zero `transition` declarations today, so the first one owes
+ * those tokens rather than a literal; the switch reads correctly without it. */
 .theme-toggle {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
   margin-left: auto;
-  padding: var(--space-2) var(--space-4);
   border: none;
   border-radius: var(--radius-md);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: transparent;
+  color: var(--color-text);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
 }
 
-/* Pressed state wears base ink, not a chart or map slot: those tokens carry
- * data identity, and a control borrowing one would make "selected site" and
- * "toggle is on" the same colour. */
-.theme-toggle[aria-pressed='true'] {
-  background: var(--color-text);
-  color: var(--color-bg);
+.theme-toggle-track {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  width: var(--space-8);
+  height: var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+}
+
+.theme-toggle-thumb {
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+
+  /* Half a space step in from the track's edge, and the same again at the other
+   * end: the track's width less the thumb's less that one inset. */
+  transform: translateX(calc(var(--space-1) / 2));
+}
+
+/* On wears the control accent, not a chart or map slot: those tokens carry data
+ * identity, and a control borrowing one would make "selected site" and "the
+ * switch is on" the same colour. The accent is already what this bar says "on"
+ * with — `header.css`'s `[aria-expanded='true']` rule paints both disclosures'
+ * open state with it — so the switch is joining a meaning rather than claiming
+ * a second treatment for one (`design.md` rule 9).
+ *
+ * The thumb keeps `--color-surface` in both states, which is what leaves it
+ * legible against either track colour in either theme: the surface token is a
+ * near-white in light and a near-black in dark, while `--color-border` is a
+ * mid-grey and `--color-accent` a saturated blue in both, so the thumb never
+ * approaches the thing behind it. The values themselves stay
+ * `packages/ui/src/tokens/tokens.css`'s, which is also where their measured
+ * contrast figures are argued. */
+.theme-toggle[aria-checked='true'] .theme-toggle-track {
+  background: var(--color-accent);
+}
+
+.theme-toggle[aria-checked='true'] .theme-toggle-thumb {
+  transform: translateX(calc(var(--space-8) - var(--space-3) - var(--space-1) / 2));
 }

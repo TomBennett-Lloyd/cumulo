@@ -123,8 +123,8 @@ const openHeaderMenu = (): void => {
   fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
 };
 
-/** The theme toggle, reached where a visitor reaches it. */
-const themeToggle = (): HTMLElement => screen.getByRole('button', { name: 'Dark theme' });
+/** The theme switch, reached where a visitor reaches it. */
+const themeToggle = (): HTMLElement => screen.getByRole('switch', { name: 'Dark Mode' });
 
 /**
  * The name of the first site the fleet holds, asked of the source itself.
@@ -196,7 +196,7 @@ describe('App theming', () => {
     openHeaderMenu();
 
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(themeToggle().getAttribute('aria-pressed')).toBe('true');
+    expect(themeToggle().getAttribute('aria-checked')).toBe('true');
   });
 
   it('follows the system preference when the visitor has never chosen', async () => {
@@ -235,11 +235,11 @@ describe('App theming', () => {
     openHeaderMenu();
     const toggle = themeToggle();
 
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
 
     fireEvent.click(toggle);
 
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
   });
 
   it('remembers a theme the visitor picked, and only one they picked', async () => {
@@ -308,7 +308,7 @@ describe('App shell', () => {
     // be bare here, and this is the assertion that notices if something bare
     // comes back.
     expect(screen.getByRole('combobox', { name: 'Search sites by name' })).toBeDefined();
-    expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
+    expect(screen.queryByRole('switch', { name: 'Dark Mode' })).toBe(null);
 
     // And nothing on the bar is a toggletip. Asserted as the absence of the
     // component's own class rather than of the name it used to carry, because a
@@ -319,7 +319,7 @@ describe('App shell', () => {
 
     openHeaderMenu();
 
-    expect(screen.getByRole('button', { name: 'Dark theme' })).toBeDefined();
+    expect(screen.getByRole('switch', { name: 'Dark Mode' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'About Cumulo' })).toBeDefined();
   });
 

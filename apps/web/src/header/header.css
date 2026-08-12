@@ -586,11 +586,32 @@
  * where its `margin-left: auto` put it at the end of a header bar. Inside a
  * stacked popover that margin would shove it to one side, so the *placement*
  * half is overridden by the surface that placed it — which is this one — while
- * the button's own treatment stays where it is owned.
+ * the switch's own treatment stays where it is owned.
+ *
+ * Placement here means a row rather than a position: the same padding
+ * `.header-menu-item` sits in, so the label starts on the same vertical line as
+ * "About Cumulo", and `space-between` to push the track out to the row's end.
  */
 .header-menu-popover .theme-toggle {
+  justify-content: space-between;
   margin-left: 0;
-  text-align: center;
+  padding: var(--space-2) var(--space-4);
+}
+
+/* The line above the settings region — `HeaderMenu.tsx` argues why the region
+ * exists and why the switch is below rather than above it. The rule is
+ * `.about-dialog-sources`'s in this same file, copied rather than shared
+ * because the two are alike in treatment only: a dialog's credits block and a
+ * menu's settings region would each be free to change without the other being
+ * wrong (structure.md rule 7). `margin: 0` because the popover's own `gap`
+ * already spaces this list, and the user agent's `<hr>` margins would space it
+ * a second time. */
+.header-menu-divider {
+  margin: 0;
+  border: none;
+  border-top-width: calc(var(--space-1) / 4);
+  border-top-style: solid;
+  border-top-color: var(--color-border);
 }
 
 .header-menu-item {

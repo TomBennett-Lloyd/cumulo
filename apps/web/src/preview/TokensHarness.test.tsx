@@ -58,15 +58,15 @@ describe('TokensHarness', () => {
 
   it('themes the document and stores the choice when the toggle is pressed', () => {
     render(<TokensHarness />);
-    const toggle = screen.getByRole('button', { name: 'Dark theme' });
+    const toggle = screen.getByRole('switch', { name: 'Dark Mode' });
 
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
 
     fireEvent.click(toggle);
 
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
   });
 
@@ -76,7 +76,7 @@ describe('TokensHarness', () => {
     render(<TokensHarness />);
 
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(screen.getByRole('button', { name: 'Dark theme' }).getAttribute('aria-pressed')).toBe(
+    expect(screen.getByRole('switch', { name: 'Dark Mode' }).getAttribute('aria-checked')).toBe(
       'true',
     );
   });
