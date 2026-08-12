@@ -1,6 +1,8 @@
 import { fleetCapacityKw, type Site } from '@cumulo/shared';
 
+import { UNIT_LABEL_KW, UNIT_LABEL_PERCENT_OF_CAPACITY } from '../charts/chart-copy';
 import type { RangeHours } from '../data/fleet-data-source';
+import type { ChartUnit } from './chart-unit';
 import { rangeLabel } from './range-picker';
 import { capacityLabel } from './site-format';
 
@@ -96,6 +98,15 @@ const siteCountLabel = (count: number): string =>
  * heading reading "Fleet forecast" is the fleet's capacity, and the unit says
  * which quantity it is.
  *
+ * **It does not follow the chart's unit, and that is a decision rather than an
+ * oversight** (#291). The chart's toggle moves the axis, the table's numbers and
+ * the caption that names them; this line states the fleet's *installed
+ * capacity*, which is the divisor those percentages are taken against — in
+ * percent mode it is the thing 100% means. A capacity restated as "100% of
+ * capacity" would say nothing, and one restated as a percentage of itself would
+ * be a number with no content. So kW here beside a percent axis is informative
+ * rather than inconsistent, and the count beside it was never in a unit at all.
+ *
  * **How it yields has changed with it, and the docblock has to say so.** Until
  * #323 this was the item the header row *shrank* first, ellipsis and all, so a
  * narrow row kept a truncated fraction of it. It does not truncate now: below a
@@ -153,14 +164,27 @@ export interface ChartCopy {
  * the copy easiest to leave promising something the data cannot show — and
  * "simulated" is load-bearing in it, because these hours are synthesised by the
  * forecast service (#264) rather than metered off an inverter.
+ *
+ * **The caption is the table's unit seam and the accessible name is not** (#291,
+ * the owner's routing). A table of numbers with no axis beside it has nowhere
+ * else to say what its columns are counted in, so the unit is the last clause of
+ * the caption in both arms — from `charts/chart-copy.ts`'s two labels, which are
+ * the same constants the value axis's title and the spoken readout's frame read,
+ * so the three surfaces cannot disagree about which unit is showing. The
+ * `ariaLabel` stays unit-less because the readout inside that chart speaks the
+ * unit with every sample it announces: naming it here as well would make a
+ * reader hear it twice on the way to a number they have not asked for yet.
  */
-export const chartCopy = (windowText: string, hasActuals: boolean): ChartCopy =>
-  hasActuals
+export const chartCopy = (windowText: string, hasActuals: boolean, unit: ChartUnit): ChartCopy => {
+  const unitLabel = unit === 'kw' ? UNIT_LABEL_KW : UNIT_LABEL_PERCENT_OF_CAPACITY;
+
+  return hasActuals
     ? {
         ariaLabel: `Fleet forecast and simulated actuals, ${windowText}`,
-        tableCaption: `Table view — fleet forecast and simulated actuals, ${windowText}, kW`,
+        tableCaption: `Table view — fleet forecast and simulated actuals, ${windowText}, ${unitLabel}`,
       }
     : {
         ariaLabel: `Fleet forecast, ${windowText}`,
-        tableCaption: `Table view — fleet forecast, ${windowText}, kW`,
+        tableCaption: `Table view — fleet forecast, ${windowText}, ${unitLabel}`,
       };
+};

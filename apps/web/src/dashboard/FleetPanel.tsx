@@ -5,6 +5,7 @@ import { forecastChartLegend } from '../charts/forecast-chart-legend';
 import type { FleetDataSource, FleetSourceResult, RangeHours } from '../data/fleet-data-source';
 import { useFleetQuery, type QueryState } from '../data/use-fleet-query';
 import { InfoTip } from '../info/InfoTip';
+import type { ChartUnit } from './chart-unit';
 import {
   emptyFleetBody,
   fleetBody,
@@ -28,6 +29,8 @@ import {
 } from './fleet-series';
 import { RangePicker } from './range-picker';
 import { siteOverlaySeries } from './site-overlay';
+import { useChartUnit } from './use-chart-unit';
+import { UnitToggle } from './unit-toggle';
 
 /*
  * The fleet's story, and — while a site is selected — that site's line over it.
@@ -74,12 +77,25 @@ import { siteOverlaySeries } from './site-overlay';
  * ## The selected site is one more series, not a second chart
  *
  * When a site is selected and its first forecast has arrived, this panel fetches
- * that site's forecasts and hands them to `ForecastChart` as an overlay. One kW
- * axis, never two (`docs/design/chart-treatment.md`) — the point of drawing the
- * site here at all is that a reader can see how much of the fleet's afternoon is
- * this one roof, and two axes would invent a correlation the numbers do not
- * contain. The chart is the site's *only* chart: its card on the map carries the
- * site's facts and the state of its first forecast, and nothing plotted.
+ * that site's forecasts and hands them to `ForecastChart` as an overlay. One
+ * value axis, never two (`docs/design/chart-treatment.md`) — the point of
+ * drawing the site here at all is that a reader can see how much of the fleet's
+ * afternoon is this one roof, and two axes would invent a correlation the
+ * numbers do not contain. The chart is the site's *only* chart: its card on the
+ * map carries the site's facts and the state of its first forecast, and nothing
+ * plotted.
+ *
+ * **What that one axis counts is the reader's to choose, and a selection chooses
+ * it for them once** (#291). A ~4 kW roof against a ~330 kW fleet is a flat line
+ * on an absolute scale, so selecting a site switches the panel to percent of
+ * capacity, where the two curves are comparable — and a reader who then presses
+ * the toggle themselves owns the unit for the rest of that selection. None of
+ * those rules live here: `chart-unit.ts` is the whole state machine and
+ * `use-chart-unit.ts` the wiring, and this panel holds only the seam. The unit
+ * reaches three places from that one value — the aggregate and the overlay,
+ * which are normalised before the chart sees them (`fleet-series.ts`,
+ * `site-overlay.ts`), and the chart's own chrome by way of `chartCopy` and the
+ * body's context.
  *
  * That second read fails on its own terms, and says so on its own terms. The
  * fleet's sum is not withdrawn because an addition to it did not arrive — but an
@@ -148,9 +164,9 @@ import { siteOverlaySeries } from './site-overlay';
  * and both are back as visible text.** The judgement that changed is about what
  * a heading over a chart is *for*: reviewing the headless row, the owner read it
  * as a chart floating without a name a sighted reader could see, and a fleet's
- * size as a fact the chart states nowhere — a plot of summed kW is not a count
- * of roofs, and sending the reader to the site table at the foot of the page for
- * it was making them leave the chart to read the chart. So the name is visible
+ * size as a fact the chart states nowhere — a plot of the fleet's output is not
+ * a count of roofs, in either unit, and sending the reader to the site table at
+ * the foot of the page for it was making them leave the chart to read the chart. So the name is visible
  * again and points at the section by `aria-labelledby` rather than being spelled
  * a second time in an `aria-label`, and the numbers sit beside it. That table
  * left the page on 2026-08-12, which retires the alternative the owner was
@@ -166,7 +182,7 @@ import { siteOverlaySeries } from './site-overlay';
  *
  * The stats line is the one thing here that is allowed to disappear, and it
  * disappears by *width* rather than by state: below a measured container width
- * the row cannot hold four items, and the numbers are the item that yields
+ * the row cannot hold every item, and the numbers are the item that yields
  * (`design.md` rule 7 — controls have wrap priority over auxiliary text).
  * `fleet-panel.css` owns that width and derives it; nothing here restates it.
  *
@@ -246,9 +262,10 @@ const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
 const chartAggregateOf = (
   state: QueryState<FleetSeries>,
   sites: readonly Site[],
+  unit: ChartUnit,
 ): FleetChartAggregate =>
   state.status === 'ready'
-    ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals), sites)
+    ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals), sites, unit)
     : EMPTY_FLEET_AGGREGATE;
 
 /**
@@ -281,6 +298,7 @@ const siteOverlayForecasts = (
 const overlayState = (
   site: Site | null,
   forecasts: QueryState<readonly Forecast[]>,
+  unit: ChartUnit,
 ): OverlayState => {
   if (site === null) {
     return { kind: 'none' };
@@ -289,7 +307,7 @@ const overlayState = (
     return { kind: 'failed', siteName: site.name };
   }
   return forecasts.status === 'ready'
-    ? { kind: 'series', series: siteOverlaySeries(site, forecasts.data) }
+    ? { kind: 'series', series: siteOverlaySeries(site, forecasts.data, unit) }
     : { kind: 'none' };
 };
 
@@ -349,6 +367,16 @@ export const FleetPanel = ({
 }: FleetPanelProps): ReactElement => {
   const headingId = useId();
   const [range, setRange] = useState<RangeHours>(DEFAULT_RANGE);
+  /*
+   * The unit the chart is drawn in, and the reader's or the panel's claim on it.
+   *
+   * The id rather than the site, because that is the whole of what the hook
+   * reads: it watches the *edges* of "something is selected" so a move from one
+   * site to another is one continuous episode, and a value that changed on every
+   * site would have to be compared for nullity anyway. Every rule about when the
+   * unit moves lives in `chart-unit.ts`; nothing here re-decides one.
+   */
+  const { unit, onToggle } = useChartUnit(selectedSite?.id ?? null);
   /*
    * Retrying is a new question, so it is a new query key rather than an
    * imperative refetch: `useFleetQuery` re-runs on key change and nothing else,
@@ -450,9 +478,16 @@ export const FleetPanel = ({
    * untouched too. It is a genuine input — where the fleet's sites are decides
    * which hours are shaded — so it is listed, which is the honest direction of
    * `react.md` rule 2 rather than the trimming one.
+   *
+   * `unit` joined it in #291 on exactly those terms. It is a genuine input —
+   * the same hours are summed either way and then rescaled, so what the chart
+   * draws differs — and it costs the memo nothing, because it changes only when
+   * a reader presses the toggle or a selection opens and closes. A re-sum on
+   * those is the point rather than a cost: an aggregate memoized past a unit
+   * change would leave the chart drawing kW under a percent axis.
    */
   const fleet = useMemo(() => combineFleetQueries(forecasts, actuals), [forecasts, actuals]);
-  const aggregate = useMemo(() => chartAggregateOf(fleet, sites), [fleet, sites]);
+  const aggregate = useMemo(() => chartAggregateOf(fleet, sites, unit), [fleet, sites, unit]);
   /*
    * Whether the legend gets its band row: exactly the question the chart asks of
    * the same points before drawing a band, asked once here because the legend no
@@ -492,8 +527,9 @@ export const FleetPanel = ({
   // be a second copy of a fact those values already carry (`react.md` rule 1).
   const context: FleetChartContext = {
     siteCount: sites.length,
-    chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals),
-    overlay: overlayState(selectedSite, overlayForecasts),
+    chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals, unit),
+    unit,
+    overlay: overlayState(selectedSite, overlayForecasts, unit),
     onRetryOverlay: retryOverlay,
     onRetryActuals: retryActuals,
   };
@@ -526,9 +562,10 @@ export const FleetPanel = ({
      */
     <section className="fleet-chart-section" aria-labelledby={headingId}>
       {/*
-       * The controls row, back to the four items #284 D4 wrote it with: the
-       * section's heading, the fleet's own numbers, the description — and, since
-       * 2026-08-11, the chart's legend — behind an (i), and the window control.
+       * The controls row: the four items #284 D4 wrote it with — the section's
+       * heading, the fleet's own numbers, the description (and, since
+       * 2026-08-11, the chart's legend) behind an (i), and the window control —
+       * plus the unit toggle #291 put between the last two.
        *
        * The row is also the positioned ancestor both of its overlays hang from
        * (`fleet-panel.css`), which is a contract the tip states in its own
@@ -564,6 +601,15 @@ export const FleetPanel = ({
          * is derived during render from the `sites` prop rather than mirrored
          * into state (`react.md` rule 1) — it is a function of a prop and
          * nothing else, so a second copy of it could only ever disagree.
+         *
+         * **It stays in kW while the toggle beside it is on percent** (#291).
+         * This line states the fleet's installed capacity, which is the divisor
+         * the percentages are taken against — in percent mode it is the thing
+         * 100% means — so kW here is informative rather than inconsistent, and a
+         * capacity restated as a percentage of itself would say nothing at all.
+         * `fleet-panel-copy.ts`'s `fleetStatsLine` carries the argument; this
+         * comment exists so a reader looking at a percent axis over a kW line
+         * does not read it as a bug the panel forgot to follow through.
          */}
         <p className="fleet-chart-stats">{fleetStatsLine(sites)}</p>
         {/*
@@ -609,6 +655,34 @@ export const FleetPanel = ({
           {fleetActuals ? SUBTITLE_WITH_ACTUALS : SUBTITLE_FORECAST_ONLY}
           {forecastChartLegend(overlayLabel, hasBand)}
         </InfoTip>
+        {/*
+         * What the value axis counts, as a control the reader can act on
+         * (#291).
+         *
+         * **Unconditional, where the picker beside it is not**, and the
+         * difference is what each control depends on. A window is only worth
+         * offering where a wider one would show more hours, which is a
+         * capability question; a unit is a way of reading numbers the chart
+         * already has, so every source that can draw a chart can draw it either
+         * way. Gating it on a capability would take the toggle away from the
+         * demo — the surface the site overlay was built for, and the one where a
+         * 4 kW roof against a 330 kW fleet is most visible.
+         *
+         * Outside the state switch below for the reason the (i) and the picker
+         * are: this row is the panel's furniture, and furniture that appeared
+         * when the first read landed would be the reading rearranging itself
+         * under a reader looking at it. A toggle pressed while the fleet is
+         * still loading changes the unit the arriving answer is drawn in, which
+         * is the honest thing for it to do.
+         *
+         * Between the (i) and the picker, so the row reads — and is tabbed
+         * through — as the section's name, what it is a summary of, the
+         * description, then the two things a reader can change about the chart.
+         * The `margin-left: auto` on the (i) carries everything after it to the
+         * row's end, so this arrives on that side without a rule of its own
+         * (`fleet-panel.css`).
+         */}
+        <UnitToggle unit={unit} onSelect={onToggle} />
         {/*
          * A control rather than a caption, on both arms that have a window to
          * choose. It stays visible for an empty fleet too: it is part of the

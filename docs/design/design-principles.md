@@ -74,7 +74,8 @@ an axis that shows the window, no written instructions for an affordance a contr
 `:00` on hourly ticks. A fourth example stood in that list — "aggregated from 60 sites" beside a
 chart said to show exactly that — until the owner reversed its deletion on 2026-08-11; §2 item 1
 records what that boundary case does and does not do to this rule, and the short version is that
-a chart of summed kW does not state how many sites it summed. If a
+a chart of the fleet's output does not state how many sites it summed — in either of the units
+#291 lets a reader put it in. If a
 label's only real job is naming something for assistive technology, it becomes an accessible
 name, not visible text — a move the owner has now made twice, which makes it a confirmed rule,
 not a one-off: the window label (#329) and the word "Close", which "should always be a close
@@ -358,7 +359,10 @@ Four concrete counterfactuals, for credibility:
    the counter-example it turned into, because a principle's boundary is worth more than a
    tidy count: P2 would have blocked at design time a line the owner has since asked for, and
    the reason it survives the test on re-reading is that the site count is not something the
-   plot states — a chart of summed kW never says how many roofs it is a sum of. What #344
+   plot states — a chart of the fleet's output never says how many roofs it is a sum of. #291
+   sharpened that rather than disturbing it: the line's capacity figure is the divisor the
+   chart's percent mode is taken against, so it states something the plot depends on and cannot
+   itself say. What #344
    actually objected to was the row's width, which is now answered by measurement rather than
    by deletion. Estimated avoided rework: parts of #284 C5/wave-B plus two 2026-08-10 tickets.
 

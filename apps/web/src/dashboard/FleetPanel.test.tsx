@@ -29,15 +29,18 @@ import { CHART_DATA_UNAVAILABLE_MESSAGE, EMPTY_FLEET_MESSAGE } from './state-cop
 /*
  * What the fleet panel says about the fleet.
  *
- * Three of its other subjects have suites of their own, each split off when this
+ * Four of its other subjects have suites of their own, each split off when this
  * file reached the 300-line ceiling (`structure.md` rule 4). What a *selected
  * site* adds to the same chart is `FleetPanel.overlay.test.tsx`'s. The panel's
- * own furniture — the controls row and its four items, one (i), the visible
+ * own furniture — the controls row and its five items, one (i), the visible
  * heading the section is named by, and one chart present in every state — is
  * `FleetPanel.structure.test.tsx`'s. What the panel makes of the *listing's*
- * status, which became a prop in #452, is `FleetPanel.listing.test.tsx`'s. All
- * four share `fleet-panel-test-fixture.tsx`, which is where the canned fleets and
- * the two lines every test writes to get a panel on screen live.
+ * status, which became a prop in #452, is `FleetPanel.listing.test.tsx`'s. What
+ * the newest of those items *does* — the unit toggle, the switch a selection
+ * makes and the reader's claim on it — is `FleetPanel.unit-toggle.test.tsx`'s
+ * (#291). All five share `fleet-panel-test-fixture.tsx`, which is where the
+ * canned fleets and the two lines every test writes to get a panel on screen
+ * live.
  */
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers

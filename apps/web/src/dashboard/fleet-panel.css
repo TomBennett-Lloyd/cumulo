@@ -51,13 +51,15 @@
    that cannot occur is a rule nobody can tell has stopped working. */
 
 /* The controls row: the section's heading, the fleet's own numbers, the (i)
-   carrying the description, and the window picker.
+   carrying the description, the unit toggle and the window picker.
 
-   Four items again. #284 D4 wrote the row with these four; #323 removed the
-   first two — the heading became the section's `aria-label` and the numbers were
-   read as a restatement of the chart below them — and the owner put both back on
-   2026-08-11 (`FleetPanel.tsx`'s docblock carries the argument). What that
-   reinstatement undoes here is the `justify-content: flex-end` #323 added, which
+   Five items since #291. #284 D4 wrote the row with four; #323 removed the first
+   two — the heading became the section's `aria-label` and the numbers were read
+   as a restatement of the chart below them — and the owner put both back on
+   2026-08-11 (`FleetPanel.tsx`'s docblock carries the argument). #291's toggle
+   is the fifth, and what it costs the row is the container query below, not
+   anything here. What the reinstatement undid here is the `justify-content:
+   flex-end` #323 added, which
    only made sense while the row held nothing but controls: spacing all four to
    the end would strand the heading in the middle of the row, and spacing them
    apart would break the heading off from the numbers it is read with (design.md
@@ -65,9 +67,11 @@
 
    `margin-left: auto` on the (i) does the job instead, and does exactly it: one
    auto margin absorbs the line's free space at that one point, so the heading
-   and the numbers sit at the row's start and the two controls at its end, with
-   nothing spread through the middle. It is on the (i) rather than on the picker
-   because the (i) and the picker are the pair being carried over together.
+   and the numbers sit at the row's start and everything after the (i) at its
+   end, with nothing spread through the middle. It is on the (i) rather than on
+   the picker because the (i) is where the row turns from content into controls —
+   which is why #291's toggle needed no rule of its own to arrive at the end: it
+   is on the far side of the one auto margin, like the picker beside it.
 
    `flex-wrap` keeps doing the job #284 D4 gave it: at a width that cannot hold
    the controls, the picker takes a line of its own rather than being crushed
@@ -138,7 +142,7 @@
    to each other.
 
    Two things it deliberately does not move. The container query above measures
-   the *inline* axis, so a bottom margin cannot reach the 20.375rem threshold;
+   the *inline* axis, so a bottom margin cannot reach the 25.5rem threshold;
    and both of this row's overlays — `.info-tip-panel` (info.css) and
    `.range-picker-popover` (range-picker.css) — are absolutely positioned at
    `top: 100%` of this row, so they resolve against its padding box, which a
@@ -194,41 +198,67 @@
 /*
  * The width below which the numbers go, asked of the row and not of the window.
  *
- * 20.375rem is measured, not picked. At this row's own content — the heading at
+ * 25.5rem is measured, not picked. At this row's own content — the heading at
  * 115.48px (`--text-lg`, `--font-weight-semibold`), the stats line at 126.09px
  * ("60 sites · 332.0 kW", `--text-sm`, tabular figures), the (i) at 24px, the
- * picker's trigger at 24px and three `--space-3` gaps at 12px each — the row's
- * max-content width is 325.58px, and a bisection on the container's width put
- * the one-line/two-line boundary at exactly that: at 325.58px the row is 24px
- * tall and at 325.57px it is 60px. 325.58px is 20.349rem at the default root
- * size, and the query fires at 20.375rem (326px), the next 1/16rem step above
+ * unit toggle at 70.31px (two chips and the `--space-1` between them), the
+ * picker's trigger at 24px and four `--space-3` gaps at 12px each — the row's
+ * max-content width is 407.88px, and a bisection on the container's width put
+ * the one-line/two-line boundary a rounding step above it: at 407.90px the row
+ * is 24px tall and at 407.89px it is 60px. 407.90px is 25.494rem at the default
+ * root size, and the query fires at 25.5rem (408px), the next 1/16rem step above
  * it. Rounding *up* rather than down is deliberate and is the safe direction:
  * the failure this rule exists to prevent is the numbers surviving into a
- * wrapped row, so at most half a pixel of width where they could still have
- * fitted is the price, and it buys the guarantee that they never outstay the
- * room for them.
+ * wrapped row, so at most a tenth of a pixel of width where they could still
+ * have fitted is the price, and it buys the guarantee that they never outstay
+ * the room for them.
  *
- * **It read 29.375rem until 2026-08-11, and the drop is the point of the change
- * rather than a consequence of it.** The owner folded the segmented picker into
- * a calendar trigger — *"perhaps if we made the time period selection into a
- * dropdown from a calendar icon there might always be space"* — and a 167.75px
- * control became a 24px one, taking 143.75px out of a row whose max-content
- * width was 469.33px. Every other term above is unchanged and re-measured to the
- * same figure. A threshold left at the old number would have kept hiding the
- * numbers across 144px of width that now holds them comfortably, which is the
- * same defect as never reinstating them: what was asked for is the fleet's own
- * count and capacity wherever there is room, and the fold is what made room.
+ * **It read 20.375rem until #291, and this time the threshold went up.** The
+ * unit toggle is a fifth item on the row (`unit-toggle.css`), so it costs its
+ * own 70.31px and one more `--space-3` — 82.31px in all — and every other term
+ * above is unchanged and re-measured to the hundredth of a pixel it had before.
+ * What that buys and what it costs are both worth stating plainly, because this
+ * is the direction of change the rule's own argument is least comfortable with:
+ * a reader gets a control for the unit at every width, and the fleet's count and
+ * capacity now leave at container widths that used to hold them. The band of
+ * widths between the two thresholds is where that trade is visible — a 390px
+ * phone is inside it, and shows the row's four controls and no numbers where it
+ * used to show all five items on one line. `design.md` rule 7 is what decides
+ * it: controls have wrap priority over auxiliary text, and the alternative is
+ * the picker or the toggle taking a second line at a width where the numbers
+ * could have yielded instead.
+ *
+ * **It read 29.375rem until 2026-08-11, and that drop was the point of that
+ * change rather than a consequence of it.** The owner folded the segmented
+ * picker into a calendar trigger — *"perhaps if we made the time period
+ * selection into a dropdown from a calendar icon there might always be space"* —
+ * and a 167.75px control became a 24px one, taking 143.75px out of a row whose
+ * max-content width was 469.33px. A threshold left at the old number would have
+ * kept hiding the numbers across 144px of width that then held them comfortably,
+ * which is the same defect as never reinstating them: what was asked for is the
+ * fleet's own count and capacity wherever there is room. The fold made room and
+ * #291 has spent some of it back; the ledger of the three readings is kept here
+ * because a threshold that has moved twice is one a reader will want the history
+ * of before moving it a third time.
  *
  * How it was obtained, stated because the number is only as good as its method:
  * a throwaway Chromium run over these stylesheets and this row's real markup —
- * tokens.css, info.css, range-picker.css and the two rules above — rather than a
- * reading of the rendered dashboard. So it is the row's own arithmetic, measured
- * in the engine that will lay it out, with the page around it absent. The same
- * harness re-measured the pre-fold row first and returned the four widths above
- * it to the hundredth of a pixel, so the two thresholds are comparable readings
- * and not two methods. The browser wave re-checks it on a real page; a reading a
- * few pixels off there is a correction to this literal, not a fault in the
- * mechanism.
+ * tokens.css, info.css, range-picker.css, unit-toggle.css, app.css's own body
+ * rule (which is where this row's text inherits `--font-sans` from) and the two
+ * rules above — rather than a reading of the rendered dashboard. So it is the
+ * row's own arithmetic, measured in the engine that will lay it out, with the
+ * page around it absent. The same harness re-measured the *pre-toggle* row first
+ * and returned all four of its widths and its 325.58px boundary to the hundredth
+ * of a pixel, so the two thresholds are comparable readings and not two methods —
+ * the control that makes the new number mean something. One detail of the
+ * harness is worth passing on: the row's own `container-type: inline-size`
+ * contains it on the inline axis, so a `width: max-content` parent sizes it to
+ * zero and every item wraps. The max-content figure above is the laid-out item
+ * boxes plus the gaps, and the boundary is bisected at explicit widths with the
+ * query below inert — a query that had already removed an item would make the
+ * row fit trivially and the boundary meaningless. The browser wave re-checks it
+ * on a real page; a reading a few pixels off there is a correction to this
+ * literal, not a fault in the mechanism.
  *
  * The query is unnamed because it cannot be ambiguous: `.fleet-chart-stats` is a
  * direct child of the one element declaring `container-type` above, so the
@@ -237,9 +267,10 @@
  * same reason.)
  *
  * Two residuals, both inherited from measuring text rather than boxes, and both
- * the same ones header.css records for its own threshold. Both got *larger* in
- * relative terms with the fold, because the row is shorter while the two text
- * items are not — they are now 74% of its max-content width rather than 51%:
+ * the same ones header.css records for its own threshold. They grew to 74% of
+ * the row's max-content width with the fold, because the row got shorter while
+ * the two text items did not; #291's fifth item takes them back to 59%, which
+ * moves neither residual's shape and only how much of the total they can move:
  *
  * - The heading and the numbers are set in `--font-sans`, which resolves to the
  *   platform's system stack. Where that stack runs wider than the measurement
@@ -252,11 +283,15 @@
  *   alternative — a threshold derived from a fleet nobody has — would be a
  *   number measured against nothing.
  *
- * The heading still does not make the row taller, and the row is now a pixel
- * shorter than it was: the heading's line box is 22.5px (`--text-lg` ×
- * `--leading-tight`) against a 24px (i) and a 24px trigger, where the picker it
- * replaced was 25px. Measured in the same run: the four-item row and the row
- * with the numbers hidden are both 24px. `charts/chart-geometry.ts` derives
+ * The heading still does not make the row taller, and neither does the toggle:
+ * the heading's line box is 22.5px (`--text-lg` × `--leading-tight`) against a
+ * 24px (i), a 24px trigger and a 24px toggle, where the picker the trigger
+ * replaced was 25px. Measured in the same run and at every width it was asked
+ * about: the five-item row, the row with the numbers hidden and the toggle's own
+ * box are all 24px. That the toggle joins the row without adding a pixel of
+ * height is `unit-toggle.css`'s claim, written down there and checked here
+ * because this is the file the height belongs to.
+ * `charts/chart-geometry.ts` derives
  * `CHART_VIEW_BOX_HEIGHT` from a stack that includes this row, on the argument
  * that the row does not get taller; a row that got *shorter* leaves that
  * constant standing with a pixel more clearance than its derivation claimed, so
@@ -272,7 +307,7 @@
  * stale the moment somebody fixes it — which is exactly what happened to the
  * sentence this replaces, inside the batch that fixed it.
  */
-@container (max-width: 20.375rem) {
+@container (max-width: 25.5rem) {
   .fleet-chart-stats {
     display: none;
   }

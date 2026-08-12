@@ -26,6 +26,7 @@ import './add-site/add-site.css';
 import './dashboard/panel-states.css';
 import './dashboard/fleet-panel.css';
 import './dashboard/range-picker.css';
+import './dashboard/unit-toggle.css';
 import './charts/charts.css';
 
 import { StrictMode } from 'react';

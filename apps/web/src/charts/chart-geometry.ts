@@ -83,16 +83,20 @@ export interface PlotRect {
  * where it used to be 6px of the plot. #323 was asked for width and not height,
  * and nothing above asks the height to change.
  *
- * **The row changed twice on 2026-08-11, and 184 stands because neither change
- * made it taller.** The owner reversed #323's heading-and-stats half, so the
- * controls row carries four items where it carried two, and then folded the
- * window picker into a calendar trigger (`dashboard/FleetPanel.tsx` and
- * `dashboard/range-picker.tsx` carry the two arguments). It is one flex line
+ * **The row changed twice on 2026-08-11 and once more in #291, and 184 stands
+ * because none of the three made it taller.** The owner reversed #323's
+ * heading-and-stats half, so the controls row carries four items where it
+ * carried two, then folded the window picker into a calendar trigger, and #291
+ * added a unit toggle between the (i) and that trigger (`dashboard/FleetPanel.tsx`,
+ * `dashboard/range-picker.tsx` and `dashboard/unit-toggle.css` carry the three
+ * arguments). It is one flex line
  * throughout, and a flex line is as tall as its tallest item. The heading was
  * never that item and still is not — its line box sits under the controls' on
  * both sides of the change. What did change is which control is tallest: the (i)
  * and the picker's trigger now are, level with each other and a pixel under what
- * the segmented picker used to be.
+ * the segmented picker used to be — and the toggle is boxed to exactly their
+ * 24px for that reason, which is a claim its own stylesheet makes and
+ * `fleet-panel.css` measures.
  *
  * So the row did not grow, which is the whole of what this derivation asks of it,
  * and none of the numbers above were re-derived here. The pixel it gave back

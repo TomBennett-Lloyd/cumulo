@@ -40,9 +40,10 @@
  * back with the owner's 2026-08-11 reversal — but the pairing did not, because
  * it no longer yields the same way. It shrank to an ellipsis then; it is hidden
  * whole below a measured container width now (`fleet-panel.css` owns that width
- * and derives it, and re-derived it against this trigger). So above the
- * threshold the row holds all four items and nothing has to give, and below it
- * the text is already gone before the question arises.
+ * and derives it, re-derived it against this trigger, and re-derived it again
+ * when #291 put a unit toggle on the row). So above the threshold the row holds
+ * every item and nothing has to give, and below it the text is already gone
+ * before the question arises.
  *
  * Written here rather than at the row, because it is the picker's own claim about
  * itself and travels with it to any second caller. */
