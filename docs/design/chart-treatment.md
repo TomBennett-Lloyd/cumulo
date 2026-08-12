@@ -264,6 +264,16 @@ worse than one overlapping its own rule.
   Two measures of different scale become two charts, small multiples, or both series indexed to a
   common base on one axis.
 
+  **The fleet panel's kW / % -of-capacity toggle is the third of those answers, not an exception to
+  the rule** ([#291](https://github.com/TomBennett-Lloyd/cumulo/issues/291), owner 2026-08-12). A
+  ~4 kW site overlaid on a ~330 kW fleet is a flat line against the bottom of an absolute axis, and
+  the fix is emphatically not a second scale for the site: percent mode re-expresses **both** series
+  against their own capacity, per hour, so what the plot shows is still one quantity on one axis and
+  the two curves are still comparable to each other. Selecting a site switches to it automatically,
+  because that is the moment the absolute reading stops being readable. The unit is presentation
+  only — storage, the API and `@cumulo/shared` are kW throughout, and the values are normalised at
+  the panel seam.
+
 **A chart is drawn 1:1 with the width it is rendered at, and text never scales with the panel.**
 The plot measures its own column and takes that width as its drawing space, so one unit of chart
 geometry is one pixel on screen. The alternative — a fixed drawing space stretched to fill the
@@ -272,9 +282,13 @@ marks: the same axis label is set at one size in a wide panel and another in a n
 chart's type drifts away from every other size on the page, and the margins that keep a label
 inside the canvas stop meaning a fixed distance. Height does not follow width. It is the owned
 constant `CHART_VIEW_BOX_HEIGHT` (`apps/web/src/charts/chart-geometry.ts`, which carries the
-reasoning for the value), because a kW axis rescaling on every resize would make one series a
+reasoning for the value), because a value axis rescaling on every resize would make one series a
 different chart at every window size — and because the height is what decides whether the whole
-plot clears the fold under the map, which is what D15 is actually about. #326 went looking for
+plot clears the fold under the map, which is what D15 is actually about. The percent axis holds the
+same reference frame one step more firmly: it is floored at 100 (`PERCENT_AXIS_FLOOR`), so capacity
+is on the axis whatever the day did and two percent charts of the same site are drawn to the same
+scale unless one of them genuinely ran past capacity. The floor never clamps a mark — a peak above
+100 raises the maximum through the same nice ladder the kW axis uses. #326 went looking for
 surfaces to convert to `design.md` rule 7's container-inward pattern and found this axis already
 satisfying it end to end — `use-chart-width.ts` measures the real container, `chartPlot`
 (`chart-geometry.ts`) turns that measurement into the plot's geometry, and the per-pair fit
@@ -348,6 +362,15 @@ turn and reads up the left gutter beside the values it counts; `Time (UTC)` sits
 time axis. Both used to sit side by side in the band above the plot, where `kW` was as close to the
 time axis as to the one it belonged to. Position is most of what makes an axis title unambiguous,
 and a rotated title costs nothing but the gutter width it already needed.
+
+**The value axis's title is per-unit, and it is what a drawn chart says its unit is** (#291). It
+reads `Power (kW)` or `% of capacity` — the latter alone, with no `Power (…)` around it, because it
+already names the quantity as well as the unit. Both spellings come from `UNIT_LABEL_KW` and
+`UNIT_LABEL_PERCENT_OF_CAPACITY` in `apps/web/src/charts/chart-copy.ts`, which the table twin's
+caption reads too, on the same argument that put the clock there: a unit a reader can switch is
+chrome, and the surfaces stating it have to agree or one number reads as two quantities. The
+rotation is what makes the longer string free — the title spends the plot's height, so the gutter is
+the same width in both units and the plot does not shift when the toggle is pressed.
 
 **Settled, then reversed: the axis is time-proportional, and an hour with no data still costs its
 width** ([#325](https://github.com/TomBennett-Lloyd/cumulo/issues/325), owner 2026-08-10). A
@@ -667,7 +690,15 @@ An SVG chart is interactive by default; the hover layer is part of the deliverab
   left ended — comparing two numbers was an eye-movement rather than a glance; the panel is a small
   table and now reads as one. The **name leads**, because a column of labels is what a reader scans
   down, and because the spoken readout is composed from the same rows and "Median 6.0" is how a
-  label reads aloud. Series are keyed with a short stroke of their
+  label reads aloud. **Spoken, the unit is stated once in the sentence's frame** — `06:00 (kW) —
+Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
+  [#235](https://github.com/TomBennett-Lloyd/cumulo/issues/235)). The rows are the drawn panel's,
+  which carries its unit in the axis title the reader can see; speech has no axis, so without a word
+  in the frame `Median 4.0` is the same announcement in both units for two different quantities. In
+  the frame rather than per row because the unit is a fact about the sample and not about a series,
+  because a reader hears this sentence on every arrow press, and above all because per-row would
+  mean threading the unit into the row producer the two surfaces share — the frame is the one place
+  speech can gain a word without forking from what is drawn. Series are keyed with a short stroke of their
   colour, not a filled box — shorter since D12, since a key beside a name column is read as a
   colour rather than as the start of a line of text. **The range row is keyed by the band's own
   swatch instead** — the wash with a bound hairline at its top and bottom edge, the legend's key

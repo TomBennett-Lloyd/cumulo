@@ -23,6 +23,18 @@ export interface ForecastChartBand {
   readonly p90Kw: number;
 }
 
+/**
+ * One hour of the forecast series, as the chart draws it.
+ *
+ * **The `*Kw` fields carry the chart's selected display unit, not kW by
+ * definition** (#291). A chart rendered with `ForecastChart`'s `unit` prop is
+ * given percentages of capacity in these same fields, normalised by the caller
+ * at the panel seam — storage, the API and `@cumulo/shared` stay in kW
+ * throughout, so nothing upstream of the panel sees a percentage. The spellings
+ * are unchanged deliberately: renaming them is a sweep across every chart
+ * surface and is filed as its own change rather than folded into the ticket that
+ * made the sentence necessary.
+ */
 export interface ForecastChartPoint {
   readonly validTimeIso: string;
   /**

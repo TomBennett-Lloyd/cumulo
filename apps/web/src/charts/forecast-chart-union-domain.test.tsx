@@ -100,6 +100,6 @@ describe('ForecastChart over hours that carry an actual and no forecast', () => 
     // Focus opens on the first sample, which is measured and unforecast. Screen readers at default
     // punctuation verbosity say nothing for an em dash, so a `Median` row kept here would announce
     // a labelled series with no value at all — the same reason an unmeasured hour drops `Actual`.
-    expect(readout()).toBe('06:00 — Actual 1.0');
+    expect(readout()).toBe('06:00 (kW) — Actual 1.0');
   });
 });

@@ -1,12 +1,14 @@
 import type { ReactElement } from 'react';
 import { xAxisTiers, type TierLabel } from './chart-axis-ticks';
-import { TIME_COLUMN_HEADER } from './chart-copy';
+import { TIME_COLUMN_HEADER, UNIT_LABEL_KW, UNIT_LABEL_PERCENT_OF_CAPACITY } from './chart-copy';
 import { axisTicks, yForKw, type PlotRect } from './chart-geometry';
 import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './chart-series';
 
 /**
- * The plot's chrome: the kW grid and its labels, the forecast-horizon rule, the
- * two tiers of the time axis, and the two axis titles. Each builder returns an
+ * The plot's chrome: the value grid and its labels, the forecast-horizon rule,
+ * the two tiers of the time axis, and the two axis titles — the value axis being
+ * in kW or in percent of capacity since #291, which is a fact the title carries
+ * and the grid is indifferent to. Each builder returns an
  * array that `ForecastChart.tsx` spreads straight into the plot — since #331 by
  * handing it down to `forecast-chart-hover-boundary.tsx`, which owns the `<svg>`
  * these land inside — exactly as `forecast-chart-marks.tsx` does for the data.
@@ -40,6 +42,13 @@ const Y_LABEL_GAP = 10;
  * measured on a rendered page, which has to sit whole or it is the #19 defect.
  * 13.66 + 30.23 leaves 2.1 units of clearance between the two at 46, and that is
  * this number.
+ *
+ * **`1000` is still the worst case once the axis can be drawn in percent**
+ * (#291): a percent axis prints `100` at most in any practical fleet, which is
+ * narrower, so this floor is sized for the kW mode and holds for both. It is
+ * deliberately not retuned per unit — a label end that moved when a reader
+ * pressed the toggle would slide the plot sideways under them, and the rotated
+ * title above it does not change width either way.
  *
  * A floor rather than a second gap because the wide gutter already sits exactly
  * on it: 56 − `Y_LABEL_GAP` is 46. So the two say one thing between them —
@@ -94,12 +103,23 @@ const X_TITLE_BASELINE = 41;
 const Y_TITLE_X = 8;
 
 /**
- * What the y axis counts. A literal here rather than in `chart-copy.ts`, which
- * scopes itself to the words a plot prints about its own *frame* and leaves the
- * ones naming the data to the component drawing them — this names the quantity
- * the plot is of, not something the plot says about itself.
+ * What the y axis counts, in each of the two units the panel can put it in
+ * (#291).
+ *
+ * **The title stopped being a constant and became one of two chosen by the
+ * caller.** It was a literal here on the argument that a unit names the data
+ * rather than the frame — true while `kW` was the only answer, and falsified the
+ * moment a reader could switch: the axis title, the table twin's caption and the
+ * spoken readout's frame now have to agree about which unit is showing, so the
+ * *words* have one owner (`chart-copy.ts`) and this file keeps only the
+ * arrangement of them (`architecture.md` rule 9).
+ *
+ * The two arrangements differ because the two labels do. `kW` is a unit and
+ * needs the quantity named around it; `% of capacity` already names both, and
+ * `Power (% of capacity)` would say it twice.
  */
-const POWER_AXIS_TITLE = 'Power (kW)';
+const POWER_AXIS_TITLE = `Power (${UNIT_LABEL_KW})`;
+const PERCENT_AXIS_TITLE = UNIT_LABEL_PERCENT_OF_CAPACITY;
 
 export const gridElements = (scale: ChartScale): readonly ReactElement[] =>
   axisTicks(scale.axisMaxKw).map((kilowatts) => {
@@ -228,8 +248,17 @@ export const xAxisElements = (
  * treatment's "every chart states its clock" obligation is now discharged —
  * under the axis it qualifies, rather than as a floating note in the top-right
  * corner.
+ *
+ * **`percent` picks which of the two value-axis titles is printed** (#291), and
+ * it is an explicit parameter rather than something read off the plot: the
+ * geometry is identical in both units, so there is nothing in a `PlotRect` that
+ * could answer the question, and a caller that forgot to pass it would draw a
+ * percent chart labelled in kW. The rotation is what makes the longer string
+ * free — the title runs *along* the axis, so `% of capacity` spends the plot's
+ * height rather than the gutter's width, and the gutter is unchanged by the
+ * unit (`chart-geometry.ts`'s `PLOT_LEFT_WIDE`).
  */
-export const axisTitleElements = (plot: PlotRect): readonly ReactElement[] => {
+export const axisTitleElements = (plot: PlotRect, percent: boolean): readonly ReactElement[] => {
   const middleY = (plot.top + plot.bottom) / 2;
   return [
     <text
@@ -241,7 +270,7 @@ export const axisTitleElements = (plot: PlotRect): readonly ReactElement[] => {
       dominantBaseline="middle"
       transform={`rotate(-90 ${String(Y_TITLE_X)} ${String(middleY)})`}
     >
-      {POWER_AXIS_TITLE}
+      {percent ? PERCENT_AXIS_TITLE : POWER_AXIS_TITLE}
     </text>,
     <text
       key="time"

@@ -286,12 +286,12 @@ describe('ForecastChart', () => {
     act(() => {
       svg.focus();
     });
-    expect(readout()).toBe('06:00 — Actual 0.9, Median 1.0, P10–P90 0.0–2.0, Baseline 2.5');
+    expect(readout()).toBe('06:00 (kW) — Actual 0.9, Median 1.0, P10–P90 0.0–2.0, Baseline 2.5');
 
     // Past the overlay's last hour: the row is dropped rather than spoken as an
     // em dash, which a screen reader says nothing for.
     fireEvent.keyDown(svg, { key: 'End' });
-    expect(readout()).toBe('18:00 — Median 2.0, P10–P90 1.0–3.0');
+    expect(readout()).toBe('18:00 (kW) — Median 2.0, P10–P90 1.0–3.0');
   });
 
   it('raises the axis so an overlay above the forecast still lands inside the plot', () => {
