@@ -597,34 +597,35 @@ test.describe('the fleet chart’s controls row at phone width', () => {
     await expect(popover.locator(PRESSED_RANGE_BUTTON)).toBeVisible();
   });
 
-  test('shows the fleet’s own numbers, because this width has room for them', async ({ page }) => {
+  test('drops the fleet’s numbers, because the toggle took the row’s spare width', async ({
+    page,
+  }) => {
     /*
-     * The visible arm of the stats line's rule, and the assertion this describe's
-     * docblock has been claiming in prose without making: at 390px of window the
-     * row has room for all four items, so the numbers are on screen.
+     * This case read the other way until #291. The controls row held four items
+     * and 390px of window had room for all of them; the unit toggle is a fifth,
+     * and `fleet-panel.css`'s measured threshold moved above every phone width
+     * this lane opens at, so the numbers go here too now. The owner accepted that
+     * trade knowingly — the row cannot hold both at this width without wrapping,
+     * and not wrapping is what `chart-geometry.ts`'s height derivation rests on.
      *
-     * Rendered visibility rather than the stylesheet, which is the whole point of
-     * the case being in this lane: a test that read the `@container` rule back
-     * would pass against a rule that had stopped matching anything. jsdom cannot
-     * host it either — it applies no stylesheet and lays nothing out, so a jsdom
-     * twin would assert nothing whatever it claimed (`testing.md` rule 10, which
-     * `FleetPanel.structure.test.tsx` says out loud at its own stats case).
+     * The showing arm is no longer a phone case at all: it is the default-viewport
+     * assertion this file makes further up, where the row has width to spare. Both
+     * arms still exist, which is the rule — they live at different widths than they
+     * did.
      *
-     * The text's *shape* is asserted beside its visibility, and the pair is what
-     * makes it a case about the numbers rather than about an element: a line that
-     * survived as an empty box would satisfy `toBeVisible` on its own. The count
-     * is tied to `DEMO_FLEET_SIZE` rather than to a spelled number, so this reads
-     * the fleet the built app actually assembled; the capacity is matched by
-     * shape, because what it sums is the generator's business and not this file's.
+     * Rendered visibility rather than the stylesheet, for the reason this case has
+     * always given: a test that read the `@container` rule back would pass against
+     * a rule that had stopped matching anything, and jsdom applies no stylesheet at
+     * all (`testing.md` rule 10). Hidden by *layout* rather than unrendered, so the
+     * count is asserted beside it — a panel that had stopped rendering the line is
+     * a different product from one whose container query took its box away.
      */
     await expect(page.locator('.maplibregl-canvas')).toBeVisible();
 
     const stats = page.locator('.fleet-chart-stats');
 
-    await expect(stats).toBeVisible();
-    await expect(stats).toHaveText(
-      new RegExp(String.raw`^${String(DEMO_FLEET_SIZE)} sites · [\d.]+ kW$`, 'u'),
-    );
+    await expect(stats).toHaveCount(1);
+    await expect(stats).toBeHidden();
   });
 });
 
@@ -633,21 +634,18 @@ test.describe('the fleet chart’s controls row at phone width', () => {
  * the numbers go — whole, rather than shrinking to an ellipsis.
  *
  * **Both arms or neither.** Each is satisfiable by a bug the other catches: a
- * stats line deleted outright passes the hiding case, and one that never hides
- * passes the showing case above. They are two describes rather than two cases in
+ * stats line deleted outright passes a hiding case, and one that never hides passes
+ * the showing assertion at this file's default viewport. They are two describes rather than two cases in
  * one because the claim is about a viewport and `test.use` is how this lane opens
  * a case at one — the reason the sibling describe above states at greater length.
  *
- * **Why a third viewport, and not `SMALL_PHONE_VIEWPORT`.** The threshold is
- * `fleet-panel.css`'s and is deliberately not restated here (`architecture.md`
- * rule 9), but where the two named phone widths fall relative to it is a fact
- * about *this case's* choice of viewport and has to be recorded somewhere: both
- * of them are on the *showing* side. Measured against the built app, the numbers
- * are still on screen at 390px and at 360px — the latter clearing the fold by
- * about two pixels of row — and go at 358px and below. So neither constant can
- * open this arm, and reaching for the nearer one would have produced a case that
- * passed for two pixels' worth of reason and turned red on any platform whose
- * fonts ran a hair wide.
+ * **Why a third viewport.** The threshold is `fleet-panel.css`'s and is
+ * deliberately not restated here (`architecture.md` rule 9). Until #291 both named
+ * phone widths sat on the showing side and this width was the only one that could
+ * open a hiding arm at all; the unit toggle moved the threshold above both of them,
+ * so 320px now agrees with its sibling rather than contrasting with it. What this
+ * width still holds alone is the row-height half below — the *point* of the hiding
+ * — asserted at the narrowest viewport in common use.
  *
  * 320px is chosen for being a real device width rather than for its distance
  * from the fold — it is the narrowest viewport in common use, and the same kind
