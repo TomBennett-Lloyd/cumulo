@@ -88,9 +88,12 @@ your issue's comments; the top-level never posts them for you.
    third party instead of arriving as the agent's own output. Synchronous dispatch is not a
    throughput loss: parallel chunks in one wave still go out as multiple tool calls in a
    single message, and you simply wait for the wave rather than for a notification that will
+   **When a return orphans anyway** — you were killed or resumed while a child ran, and its report surfaced at the top level — it arrives back as a relay: a scratchpad file holding the child's rendered final report, never the raw task output file (that file can be transcript JSONL and has overflowed a reader once; anyone writing a relay writes the rendered report). Read the relay from disk, reconcile against the worktree, and never re-dispatch work whose files already exist.
+
    not arrive. If a dispatch is refused rather than queued (the machine-wide concurrent
    sub-agent cap does refuse), sequence the remainder — check `git status` before assuming a
    refused dispatch left nothing behind.
+
 5. **Plan revisions that add files** post to the issue (per execute) with a leading
    `Footprint change: +<files>` line.
 6. **Report hygiene, and silence between reports**: every sha, exit code, and file list in
