@@ -309,19 +309,28 @@
  * happens outside it, and nothing here would need re-deriving if the header ever
  * stopped being the full width of the viewport.
  *
- * 25.4375rem is measured, not picked, and it is the same measurement this rule
- * has always carried. At this bar's own content — the brand lockup at 113.625px,
- * the search at its flex basis above, the menu button at 38px, two `--space-4`
- * gaps and the bar's own padding — 440px is the narrowest viewport that holds
- * all three on one line, and at 439px the menu wraps and the bar goes from 63px
- * tall to 114px. What the query measures is the content box, which is that
- * viewport less two things: the bar's own `2 × var(--space-4)` of inline
- * padding, and whatever a classic scrollbar takes out of the layout viewport.
- * On an overlay-scrollbar platform the second term is zero, so 439px of window
- * is 407px of container, and 407px is 25.4375rem at the default root size —
- * which is the reading the fold was measured against in a real browser on both
- * sides of the change (#326). Below it the field is replaced by the toggle, and
- * the bar it opens costs a line only while it is up.
+ * 25.75rem is measured, not picked. At this bar's own content — the brand
+ * lockup at 118.109px, the search at its flex basis above, the menu button at
+ * 38px, two `--space-4` gaps and the bar's own padding — 445px is the narrowest
+ * viewport that holds all three on one line, and at 444px the menu wraps and the
+ * bar goes from 63px tall to 114px. What the query measures is the content box,
+ * which is that viewport less two things: the bar's own `2 × var(--space-4)` of
+ * inline padding, and whatever a classic scrollbar takes out of the layout
+ * viewport. On an overlay-scrollbar platform the second term is zero, so 444px
+ * of window is 412px of container, and 412px is 25.75rem at the default root
+ * size — which is the reading the fold was measured against in a real browser on
+ * both sides of the change (#326). Below it the field is replaced by the toggle,
+ * and the bar it opens costs a line only while it is up.
+ *
+ * **It read 25.4375rem, off a 113.625px lockup, until #463**, and the same thing
+ * happened here as happened to `dashboard/fleet-panel.css`'s threshold: the
+ * self-hosted face behind `--font-sans` sets this wordmark 4.484px wider than SF
+ * Pro did, and every other term is font-independent and re-measured to the value
+ * it had. Two of this row's three items are boxes, so that one word is the whole
+ * of the move. The bar's two heights did not move with it — the lockup is 28px
+ * of mark against a 27.5px line box (`--text-xl` × `--leading-tight`, both
+ * explicit), so the mark still sets the line and a wider wordmark buys no
+ * height.
  *
  * **The second term is why the conversion is a conversion and not an identity,
  * and why the behaviour did not move on the platform it was measured on rather
@@ -360,13 +369,17 @@
  *   carries the 63px-to-114px height it costs the bar, which is the measurement
  *   this threshold was chosen from and the reason the fold exists at all.
  *
- * Where a platform's fonts run wider than the measurement, this under-fires —
+ * ~~Where a platform's fonts run wider than the measurement, this under-fires —
  * the wordmark is set in the system stack, so a stack with a wider face wraps
  * the row a few pixels before the query fires and the reader sees the two-line
- * bar for that sliver of widths, which is exactly the behaviour this rule
- * replaced rather than a new failure. Measuring the container did not fix that
- * and was never going to: what it removes is the inference from the window to
- * the row, not the dependence on how wide this bar's own content sets.
+ * bar for that sliver of widths.~~ **Retired by #463**, which is worth recording
+ * rather than deleting, because the sentence around it stays true and is the
+ * reason this one could go: measuring the container removed the inference from
+ * the window to the row and never touched the dependence on how wide this bar's
+ * own content sets — self-hosting the face is what removed *that*, by making the
+ * wordmark's width a property of a shipped file. What survives is a load-time
+ * transient rather than a platform difference, and `packages/ui/src/tokens/tokens.css`
+ * owns what the swap window costs and why no `size-adjust` corrects it.
  *
  * Census and gate residual: this is no longer a viewport breakpoint, so it has
  * left the census `stylelint.config.mjs`'s residual paragraph keeps — that list
@@ -376,7 +389,7 @@
  * media feature, which is the half of the frontend gate that paragraph owns. A
  * pointer, then, rather than a second copy of it.
  */
-@container (max-width: 25.4375rem) {
+@container (max-width: 25.75rem) {
   /*
    * The direct child only. The bar's copy of the search is nested inside
    * `.header-search-bar` and is the one thing on this bar that must stay

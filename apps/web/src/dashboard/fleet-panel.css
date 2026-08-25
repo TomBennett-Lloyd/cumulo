@@ -142,7 +142,7 @@
    to each other.
 
    Two things it deliberately does not move. The container query above measures
-   the *inline* axis, so a bottom margin cannot reach the 23.125rem threshold;
+   the *inline* axis, so a bottom margin cannot reach the 23.625rem threshold;
    and both of this row's overlays — `.info-tip-panel` (info.css) and
    `.range-picker-popover` (range-picker.css) — are absolutely positioned at
    `top: 100%` of this row, so they resolve against its padding box, which a
@@ -198,20 +198,31 @@
 /*
  * The width below which the numbers go, asked of the row and not of the window.
  *
- * 23.125rem is measured, not picked. At this row's own content — the heading at
- * 115.48px (`--text-lg`, `--font-weight-semibold`), the stats line at 126.09px
+ * 23.625rem is measured, not picked. At this row's own content — the heading at
+ * 119.64px (`--text-lg`, `--font-weight-semibold`), the stats line at 129.56px
  * ("60 sites · 332.0 kW", `--text-sm`, tabular figures), the (i) at 24px, the
  * unit toggle at 32px (one chip held at its `--space-8` floor in both units,
  * `unit-toggle.css`), the picker's trigger at 24px and four `--space-3` gaps at
- * 12px each — the row's max-content width is 369.57px. 369.57px is 23.098rem at
- * the default root size, and the query fires at 23.125rem (370px), the next
+ * 12px each — the row's max-content width is 377.20px. 377.20px is 23.575rem at
+ * the default root size, and the query fires at 23.625rem (378px), the next
  * 1/16rem step above it. Rounding *up* rather than down is deliberate and is the safe direction:
  * the failure this rule exists to prevent is the numbers surviving into a
  * wrapped row, so at most a tenth of a pixel of width where they could still
  * have fitted is the price, and it buys the guarantee that they never outstay
  * the room for them.
  *
- * **It read 20.375rem until #291, and this time the threshold went up.** The
+ * **It read 23.125rem until #463, and what changed is that this number now
+ * means the same thing on every machine.** That ticket put a self-hosted face
+ * behind `--font-sans` (`packages/ui/src/tokens/tokens.css` owns the choice and
+ * the licence), so the two text terms above are no longer readings of whatever
+ * the measuring platform happened to resolve. Inter sets this heading 4.16px
+ * wider than SF Pro did and this stats line 3.47px wider — 7.63px on the row,
+ * and the whole of the move from 369.57px. The three control boxes are
+ * font-independent and re-measured to the pixel they had; the toggle in
+ * particular stays at its 32px floor, because "kW" at `--text-sm` and
+ * `--font-weight-medium` plus its two `--space-1` pads still does not reach it.
+ *
+ * **It read 20.375rem until #291, and that time the threshold went up.** The
  * unit toggle is a fifth item on the row (`unit-toggle.css`), so it costs its
  * own 32px and one more `--space-3` — 44px in all — and every other term above
  * is unchanged and re-measured to the hundredth of a pixel it had before.
@@ -232,7 +243,12 @@
  * `sans-serif` fallback a Linux reader gets, and the one CI renders in — and a
  * wrapped row is what `charts/chart-geometry.ts` derives against. The 38.31px
  * that bought is the difference between a rule this row can keep at every width
- * in common use and one that holds only where the fonts are narrow.
+ * in common use and one that holds only where the fonts are narrow. #463 has
+ * since retired the condition that forced it: there is no wide-fallback platform
+ * left to lose at 320px on. The fold stands on its own merits and is not being
+ * revisited here — this note only records that the argument above is now history
+ * rather than a live constraint, so a future reader does not weigh a pressure
+ * that has gone.
  *
  * **It read 29.375rem until 2026-08-11, and that drop was the point of that
  * change rather than a consequence of it.** The owner folded the segmented
@@ -272,18 +288,21 @@
  * than by luck. (`.app-header` in header/header.css states the same test for the
  * same reason.)
  *
- * Two residuals, both inherited from measuring text rather than boxes, and both
- * the same ones header.css records for its own threshold. They grew to 74% of
- * the row's max-content width with the fold, because the row got shorter while
- * the two text items did not; #291's fifth item takes them back to 59%, which
- * moves neither residual's shape and only how much of the total they can move:
+ * One residual, where there were two. Both were inherited from measuring text
+ * rather than boxes, and both are the ones header.css records for its own
+ * threshold; #463 closed the first of them, which is the whole point of that
+ * ticket reaching this file:
  *
- * - The heading and the numbers are set in `--font-sans`, which resolves to the
- *   platform's system stack. Where that stack runs wider than the measurement
- *   this under-fires — the row wraps a few pixels before the numbers leave — and
- *   where it runs narrower the numbers leave with room to spare.
- * - The stats width is the demo fleet's line. A larger fleet sets it wider
- *   ("120 sites · 1332.0 kW" measures 143.44px, 17px more), so a fleet grown far
+ * - ~~The heading and the numbers resolve to the platform's system stack, so
+ *   where that stack runs wider this under-fires and where it runs narrower the
+ *   numbers leave with room to spare.~~ **Retired.** `--font-sans` now leads
+ *   with a self-hosted face, so both text terms are properties of the artefact
+ *   and this threshold is the same number everywhere it is evaluated. What is
+ *   left of it is a load-time transient rather than a platform difference: the
+ *   fallback paints during the swap window, and `tokens.css` records what that
+ *   mismatch costs and why it is not corrected with `size-adjust`.
+ * - The stats width is still the demo fleet's line. A larger fleet sets it wider
+ *   ("120 sites · 1332.0 kW" measures 147.72px, 18px more), so a fleet grown far
  *   past 60 sites wraps slightly before the query fires. The demo fleet is 60
  *   sites and session-created sites move it by ones, so the gap is small; the
  *   alternative — a threshold derived from a fleet nobody has — would be a
@@ -313,7 +332,7 @@
  * stale the moment somebody fixes it — which is exactly what happened to the
  * sentence this replaces, inside the batch that fixed it.
  */
-@container (max-width: 23.125rem) {
+@container (max-width: 23.625rem) {
   .fleet-chart-stats {
     display: none;
   }
