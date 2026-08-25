@@ -115,6 +115,98 @@
  * more.
  */
 
+/*
+ * The typeface, shipped rather than borrowed from the reader's machine (#463).
+ *
+ * Until this file carried a webfont, `--font-sans` named a *stack* and every
+ * glyph width on the page was therefore a function of the platform: macOS
+ * resolved SF Pro, Windows Segoe UI, and a Linux container — CI, and some
+ * readers — fell through to `sans-serif`, whose usual DejaVu Sans runs
+ * materially wider. That is ordinarily a cosmetic difference. Here it was a
+ * soundness problem, because this repo reasons in measured pixels: the row
+ * threshold below `.fleet-chart-stats` in `apps/web/src/dashboard/fleet-panel.css`,
+ * `TOOLTIP_CHAR_WIDTH` in `apps/web/src/charts/tooltip-geometry.ts` and the
+ * `AXIS_CHAR_WIDTH` aliased to it, and several e2e budgets were each a number
+ * measured on one machine and only approximately true anywhere else. Self-hosting
+ * one face makes every one of them a claim about the artefact instead of about
+ * the machine that measured it. #291 C7 is the case in point and the reason this
+ * was worth doing: the unit toggle was rebuilt as a single chip because the
+ * five-item row wrapped at 320px on the wide `sans-serif` fallback and not
+ * locally, which is a design decision taken under duress from a font.
+ *
+ * **Inter v4, SIL OFL 1.1** (`fonts/OFL.txt`, distributed beside the file as the
+ * licence requires). It is a UI sans drawn for screen text at small sizes in the
+ * same lineage as the system faces it replaces, which is what this choice was
+ * optimising for: measured in Chromium against the outgoing stack on macOS, its
+ * mean advance over the app's own proportional text at `--text-xs` is 6.080px
+ * where SF Pro's was 6.091px — 0.2% *narrower*, and narrower in the direction
+ * that leaves the margin in `TOOLTIP_CHAR_WIDTH` intact rather than spending it.
+ * The two derivations that did move, and by how much, are recorded where they
+ * live rather than restated here (`architecture.md` rule 9).
+ *
+ * One file, three weights. The `wght` axis is sliced to 400–600, which is exactly
+ * the span `--font-weight-regular|medium|semibold` below asks for, and the latin
+ * subset is the one the app's rendered text needs — every non-ASCII character
+ * that reaches a screen (`·`, the em and en dashes, the curly quotes, `°`, `±`,
+ * `×`, `−`) is inside it, and the arrows and set operators found alongside them
+ * in the source are all in comments. 48,256 bytes for the lot, against three
+ * static instances at roughly 25 KB each.
+ *
+ * `unicode-range` is deliberately absent even though the file is a subset. A
+ * browser already falls back per *character* for a glyph the face does not
+ * carry, so the descriptor would buy nothing here beyond a second copy of the
+ * subset's contents to keep in step with the file — and a stale one silently
+ * routes a glyph Inter does have to the system font, which is the exact defect
+ * this block exists to remove.
+ *
+ * **`font-display: swap`, and the fallback is not metric-matched.** Both halves
+ * are decisions rather than defaults, and the second is a finding:
+ *
+ * - `optional` was rejected outright. It gives the face a ~100ms block period
+ *   and then, if the font missed it, leaves that reader on the fallback for the
+ *   whole document lifetime — which reintroduces per-machine glyph widths, only
+ *   now nondeterministically. A ticket whose purpose is determinism cannot ship
+ *   the one `font-display` value that makes the final state a race.
+ * - `swap` therefore, which keeps text visible throughout and always ends in
+ *   Inter. Its cost is a reflow when the face arrives, and the usual answer to
+ *   that is a fallback `@font-face` over `local()` carrying `size-adjust` and
+ *   the ascent/descent overrides. **That answer is not available for the face
+ *   that matters most here, and the harness said so twice.** Chromium on macOS
+ *   resolves none of `local('SF Pro Text')`, `local('SF Pro')`, `local('.SF NS
+ *   Text')` or `local('.SFNS-Regular')` — each measured identical to a
+ *   deliberately-absent control family — so there is no way to name the outgoing
+ *   face in a descriptor at all. And even given a name, one `size-adjust` scalar
+ *   could not express the match: SF is optically sized, so the Inter/system width
+ *   ratio over the same corpus runs 100.21% at 12px, 102.44% at 14px, 106.04% at
+ *   18px and 111.00% at 36px. A single number fitted to any one of those is wrong
+ *   at the others.
+ *
+ *   So the swap-window mismatch is *bounded and recorded* instead of corrected:
+ *   the figures above are it, and they are smallest — a fifth of a percent — at
+ *   the `--text-xs` body of chart chrome where most of this page's text lives.
+ *   No `size-adjust` is shipped, because a scalar fitted to a size-dependent
+ *   ratio would be a number that looks like evidence and is not.
+ *
+ * The stack keeps its system fallback behind Inter, unchanged. It is what paints
+ * during the swap window and what paints if the file ever 404s, and both of those
+ * are strictly better in the reader's own platform face than in bare
+ * `sans-serif`. What it no longer is, is the thing anybody measures.
+ *
+ * The `url()` is relative on purpose. Vite resolves it against this file, hashes
+ * the asset and rewrites the reference, which is what makes the font survive the
+ * GitHub Pages `/cumulo/` base that `apps/web/index.html` documents; an absolute
+ * `/fonts/...` under `public/` would not be rewritten and would 404 there. The
+ * CSP needed no change — `infra/web/content-security-policy.tftpl` already says
+ * `font-src 'self'`, and a Vite-emitted asset is same-origin by construction.
+ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('./fonts/inter-latin-variable.woff2') format('woff2');
+}
+
 :root {
   /* ── Base surfaces & ink (cool quiet neutrals) ───────────────────────── */
   --color-bg: #eef2f6;
@@ -310,7 +402,10 @@
   --space-16: 4rem;
 
   /* ── Typography ──────────────────────────────────────────────────────── */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Inter first, then the stack that used to be the whole of this token. The
+     `@font-face` above owns why (#463): the face is what everything measures
+     against, and the tail is the swap window and the 404. */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
