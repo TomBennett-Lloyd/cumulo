@@ -80,6 +80,29 @@ export const FIRST_SERIES_ROW = 1;
  * for. Measured per column, each column's mean is taken over content of one
  * kind, and every value starts at one x rather than wherever the text to its
  * left happened to end.
+ *
+ * **#463 re-measured this on the self-hosted face and left the number alone**,
+ * which is the outcome worth recording rather than the change that did not
+ * happen. Everything above was a reading taken on whatever `--font-sans`
+ * resolved to on the measuring machine — SF Pro, as it happens — so until that
+ * ticket this constant was true there and approximately true elsewhere. Inter's
+ * mean advance over the same kind of content at `--text-xs`, measured in
+ * Chromium over the panel's own name strings, is **6.080px against SF Pro's
+ * 6.091px**: 0.2% narrower, and narrower in the only direction that matters
+ * here, since the 4.5% margin the paragraph above keeps is spent by a face that
+ * runs wide and not by one that runs narrow. What changed is the standing of the
+ * number rather than the number: it is now a claim about a file this repo ships
+ * (`packages/ui/src/tokens/tokens.css` owns the face and the licence) rather
+ * than about the platform the reader happens to be on.
+ *
+ * One thing that re-measurement found and deliberately did not fix, so the next
+ * reader does not have to find it again: the *value* column's content is tabular
+ * digits, whose mean advance at this size is 7.375px on Inter and was 7.186px on
+ * SF Pro — above this constant in both cases. So a value column has always been
+ * modelled narrow, by about 11%, and the panel absorbs the difference in
+ * `TOOLTIP_PADDING` rather than clipping. That predates #463, which moved it by
+ * 2.6% and did not cause it; a per-column constant is the fix and it is a
+ * decision about D12's model, not a font change. Tracked as #470.
  */
 export const TOOLTIP_CHAR_WIDTH = 6.3;
 
