@@ -331,7 +331,7 @@ describe('FleetPanel’s controls row', () => {
     const controls = fleetControls(container);
 
     expect(within(controls).getByRole('button', { name: 'About this chart' })).toBeDefined();
-    expect(within(controls).getByRole('group', { name: 'Chart unit' })).toBeDefined();
+    expect(within(controls).getByRole('button', { name: /^Chart unit:/u })).toBeDefined();
     expect(within(controls).getByRole('button', { name: 'Aggregation range' })).toBeDefined();
 
     // Order, because the row reads left to right and is tabbed through in the

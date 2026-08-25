@@ -81,9 +81,20 @@ const tableRows = (container: HTMLElement): readonly (readonly string[])[] => {
   return within(table).getAllByRole('row').map(rowCells);
 };
 
-/** One press on the unit the reader is choosing, by the label the row shows them. */
-const pressUnit = (container: HTMLElement, label: string): void => {
-  fireEvent.click(within(container).getByRole('button', { name: label }));
+/**
+ * One press of the unit control, named by the unit the reader is moving *to*.
+ *
+ * The control is one button labelled with the unit that is showing, so the
+ * destination is not in its visible text — it is in the accessible name, which
+ * says both. Querying on that half rather than clicking whatever button is there
+ * makes the press assert the control's state on the way through: a panel already
+ * in the target unit offers no button matching, and the case fails at the press
+ * rather than three assertions later.
+ */
+const pressUnitTo = (container: HTMLElement, target: string): void => {
+  fireEvent.click(
+    within(container).getByRole('button', { name: new RegExp(`Press to show ${target}$`, 'u') }),
+  );
 };
 
 describe('FleetPanel’s unit toggle', () => {
@@ -117,7 +128,7 @@ describe('FleetPanel’s unit toggle', () => {
      */
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
 
-    pressUnit(container, '%');
+    pressUnitTo(container, '% of capacity.');
 
     expect(valueAxisTitle(container)).toBe('% of capacity');
     expect(tableCaption(container)).toBe(`${CAPTION_STEM}, % of capacity`);
@@ -156,10 +167,10 @@ describe('FleetPanel’s unit toggle', () => {
 
     expectAgreement();
 
-    pressUnit(container, '%');
+    pressUnitTo(container, '% of capacity.');
     expectAgreement();
 
-    pressUnit(container, 'kW');
+    pressUnitTo(container, 'kW.');
     expectAgreement();
   });
 
@@ -207,7 +218,7 @@ describe('FleetPanel’s unit toggle', () => {
       expect(valueAxisTitle(container)).toBe('% of capacity');
     });
 
-    pressUnit(container, 'kW');
+    pressUnitTo(container, 'kW.');
 
     expect(valueAxisTitle(container)).toBe('Power (kW)');
 
@@ -242,27 +253,31 @@ describe('FleetPanel’s unit toggle', () => {
     expect(tableCaption(container)).toBe(`${CAPTION_STEM}, kW`);
   });
 
-  it('names the group and says which unit is showing, in both units', async () => {
+  it('says which unit is showing and what a press would do, in both units', async () => {
     /*
-     * What the control tells a reader who cannot see which chip is inked. `aria-pressed` is the
-     * same fact the pressed styling renders visually, and the group's name is what stops the two
-     * buttons being announced as a bare "kW" and "%" with nothing saying what they are of.
+     * What the control tells a reader who cannot see which unit is inked. The visible label is
+     * the unit that is showing; the accessible name carries that plus the destination, because a
+     * name reading only `kW` would announce a button whose effect is unstated, and one reading
+     * only the destination would announce percent on a chart drawn in kW.
      *
-     * Exactly one pressed in each state, asserted as the pair rather than as a single positive:
-     * a control that pressed both, or neither, would satisfy any assertion about the unit that is
-     * showing and would still be telling the reader nothing.
+     * Both states asserted, as the pair rather than as a single positive: a control whose name
+     * never changed would satisfy either assertion alone while telling the reader nothing about
+     * the press it just took.
      */
     const container = await renderSettled(new CountingFleetSource(FULL_FLEET));
-    const group = within(container).getByRole('group', { name: 'Chart unit' });
-    const pressedState = (): readonly (string | null)[] =>
-      within(group)
-        .getAllByRole('button')
-        .map((button) => button.getAttribute('aria-pressed'));
+    const toggle = (): HTMLElement =>
+      within(container).getByRole('button', { name: /^Chart unit:/u });
 
-    expect(pressedState()).toEqual(['true', 'false']);
+    expect(toggle().textContent).toBe('kW');
+    expect(toggle().getAttribute('aria-label')).toBe(
+      'Chart unit: kW. Press to show % of capacity.',
+    );
 
-    pressUnit(container, '%');
+    pressUnitTo(container, '% of capacity.');
 
-    expect(pressedState()).toEqual(['false', 'true']);
+    expect(toggle().textContent).toBe('%');
+    expect(toggle().getAttribute('aria-label')).toBe(
+      'Chart unit: % of capacity. Press to show kW.',
+    );
   });
 });
