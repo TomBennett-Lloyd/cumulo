@@ -53,7 +53,7 @@ describe('HeaderMenu at rest', () => {
     renderMenu();
 
     expect(menuButton().getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByRole('button', { name: 'Dark theme' })).toBe(null);
+    expect(screen.queryByRole('switch', { name: 'Dark Mode' })).toBe(null);
     expect(screen.queryByRole('button', { name: 'About Cumulo' })).toBe(null);
   });
 
@@ -82,8 +82,32 @@ describe('HeaderMenu when opened', () => {
     openMenu();
 
     expect(menuButton().getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Dark theme' })).toBeDefined();
+    expect(screen.getByRole('switch', { name: 'Dark Mode' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'About Cumulo' })).toBeDefined();
+  });
+
+  it('seats the theme setting last, behind a divider', () => {
+    renderMenu();
+    openMenu();
+
+    const about = screen.getByRole('button', { name: 'About Cumulo' });
+    const divider = screen.getByRole('separator');
+    const themeSwitch = screen.getByRole('switch', { name: 'Dark Mode' });
+
+    /*
+     * The order is the claim, so it is asserted as order rather than as three
+     * things all being on screen. About is a link-type item and the switch is a
+     * setting; the line between them is what says which of the two regions a
+     * reader is in (`HeaderMenu.tsx` argues the split). A version that kept all
+     * three elements and shuffled them satisfies every other case in this file,
+     * which is the reason this one exists.
+     */
+    expect(about.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(divider.compareDocumentPosition(themeSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it('hands a theme press through to the caller unchanged', () => {
@@ -91,9 +115,9 @@ describe('HeaderMenu when opened', () => {
     renderMenu(onToggleTheme);
     openMenu();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dark theme' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Dark Mode' }));
 
-    // The menu decides where the toggle sits, not what pressing it means.
+    // The menu decides where the switch sits, not what pressing it means.
     expect(onToggleTheme).toHaveBeenCalledTimes(1);
   });
 
@@ -109,7 +133,7 @@ describe('HeaderMenu when opened', () => {
   it('closes on Escape and gives focus back to the button', () => {
     renderMenu();
     const button = openMenu();
-    const toggle = screen.getByRole('button', { name: 'Dark theme' });
+    const toggle = screen.getByRole('switch', { name: 'Dark Mode' });
     toggle.focus();
 
     fireEvent.keyDown(toggle, { key: 'Escape' });
