@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
+import { PREVIEW_PORT } from './lane-ports';
+
 /*
  * The browser lane: the shipping composition, in a real Chromium.
  *
@@ -13,23 +15,27 @@ import { defineConfig } from '@playwright/test';
  * proves this lane's own measuring instrument.
  */
 
-/**
- * The port the preview server binds, written once — the server command, the
- * readiness probe and `baseURL` all read it from here.
+/*
+ * `PREVIEW_PORT` is imported rather than written here because it is no longer
+ * one number: `lane-ports.ts` derives it from which tree is being served, so
+ * this lane and a sibling worktree's lane can run at the same time instead of
+ * queueing on 4173 (#459). A plain checkout — CI's, every time — still gets
+ * 4173 exactly. The server command, the readiness probe and `baseURL` below all
+ * read that one value, as they always have.
  *
- * `--strictPort` makes a busy 4173 a loud failure instead of vite's silent hop
- * to 4174, which would leave `baseURL` pointing at nothing while the run
- * reported a healthy server.
+ * `--strictPort` is what keeps the derived port honest, and matters more now
+ * than it did: vite's silent hop to the next free port would leave `baseURL`
+ * pointing at nothing while the run reported a healthy server, and with lanes
+ * hashed rather than reserved, a busy port is a case that can genuinely happen.
  */
-const PREVIEW_PORT = 4173;
 
 /**
  * The loopback address, pinned on *both* ends — the server binds it, the tests
  * navigate to it.
  *
  * Not cosmetic. `vite preview`'s default host is the name `localhost`, and node
- * resolves that to `::1` on this machine and binds IPv6 only: a `baseURL` of
- * `http://127.0.0.1:4173` then gets ECONNREFUSED while Playwright's own
+ * resolves that to `::1` on this machine and binds IPv6 only: a `baseURL` on
+ * `127.0.0.1` then gets ECONNREFUSED while Playwright's own
  * readiness probe (which resolves the same name, and so reaches `::1`) reports
  * the server up. The whole suite fails at `page.goto` with a server that is
  * demonstrably running. Naming a literal address takes the resolver out of the
@@ -137,9 +143,11 @@ export default defineConfig({
     env: { VITE_API_BASE_URL: '' },
 
     /*
-     * Never adopt a stray. A server already on 4173 is some other build — an
-     * old `pnpm dev`, a sibling worktree — and reusing it would report on code
-     * that is not in this tree.
+     * Never adopt a stray. A server already on this lane's port is some other
+     * build — an old run of this same lane, or the rare sibling worktree that
+     * hashed here — and reusing it would report on code that is not in this
+     * tree. Deriving the port narrows how often that happens; it is not what
+     * decides the question, which is why this stays `false`.
      */
     reuseExistingServer: false,
 
