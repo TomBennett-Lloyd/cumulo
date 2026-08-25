@@ -1,5 +1,5 @@
 /*
- * The unit toggle's own sheet: two chips on the fleet chart's controls row.
+ * The unit toggle's own sheet: one chip on the fleet chart's controls row.
  *
  * The chip treatment is `range-picker.css`'s `.range-picker-button`, adapted
  * rather than shared — same idiom, different box. Sharing the selector would tie
@@ -7,19 +7,43 @@
  * `.range-picker-button`'s own note refuses against `.theme-toggle`: two data
  * controls that happen to look alike today are free to diverge, and a borrowed
  * class is what makes that expensive. What is genuinely one decision — a small
- * pressed/unpressed chip, base ink for the pressed state, never a chart slot —
- * is copied deliberately, and the reasoning is at that file rather than restated
- * here (`architecture.md` rule 9).
+ * chip, base ink for the inked state, never a chart slot — is copied
+ * deliberately, and the reasoning is at that file rather than restated here
+ * (`architecture.md` rule 9).
  *
  * Every value is a token — the gate in stylelint.config.mjs, not a style choice
  * (react.md rule 5).
  */
 
-/* The box is the two chips', and it must not make the row taller.
+/* One chip, boxed to `--space-6` on the block axis and to its widest label on
+   the inline one.
  *
- * `inline-flex` so the root is exactly as wide as its chips rather than a block
- * claiming the line. `flex-shrink: 0` is `.range-picker`'s reason at a second
- * address: this control's labels are two and three characters wide, so a chip
+ * The height is written rather than left to the type — and it is the whole of
+ * this control's claim on the row's height. `fleet-panel.css` derives the row's
+ * height as its tallest item's and `charts/chart-geometry.ts` derives
+ * `CHART_VIEW_BOX_HEIGHT` from a stack that includes that row, on the argument
+ * that the row does not get taller; a control that set its height from a padded
+ * line box would have made that argument this file's problem to re-derive at
+ * every step of the type scale. `--space-6` is the (i)'s box and the window
+ * trigger's box, so the row's tallest item is unchanged by this arrival.
+ *
+ * `box-sizing: border-box` is what makes that height mean the height: there is
+ * no global reset in this app, and a content-box chip would carry its padding
+ * outside the 24px (`info.css` and `range-picker.css` state the same for their
+ * own clamped boxes).
+ *
+ * **`min-width` is what makes the box one size in both units, and it is doing
+ * the padding's job as well as its own.** The two labels are two characters and
+ * one, so a box sized to its content would be narrower in percent than in kW,
+ * and every item after it on the row would shift sideways on a press — in a row
+ * whose whole arrangement is measured. The `--space-8` floor is wider than
+ * either label needs on any font stack the lane renders in, so it binds in both
+ * states and the press changes the chart rather than the layout. The inline
+ * padding is therefore only a guard against a font wide enough to reach the
+ * floor, rather than the thing setting the width, which is why it is a step
+ * below what a chip sizing itself to its text would take.
+ *
+ * `flex-shrink: 0` is `.range-picker`'s reason at a second address: a chip
  * squeezed below its content is not a cramped control but an illegible one, and
  * the row's wrap-priority rule (design.md rule 7) puts controls ahead of the
  * auxiliary text beside them.
@@ -28,45 +52,19 @@
  * ancestor here would sit between the row and the two overlays that anchor to
  * it (`fleet-panel.css`, `info/info.css`).
  *
- * The height is the chips' own, below. */
+ * The fill is `--color-bg` against the section's `--color-surface` ground, which
+ * is `.range-picker-button`'s inversion argument at a second address: a
+ * surface-on-surface chip has no edge, and a control that named a unit without
+ * looking like a control would read as a label. */
 .unit-toggle {
   display: inline-flex;
-  flex-shrink: 0;
-  gap: var(--space-1);
-}
-
-/* A chip, boxed to `--space-6` on the block axis and to its label on the inline
-   one.
- *
- * The height is written rather than left to the type — and it is the whole of
- * this control's claim on the row. `fleet-panel.css` derives the row's height as
- * its tallest item's and `charts/chart-geometry.ts` derives
- * `CHART_VIEW_BOX_HEIGHT` from a stack that includes that row, on the argument
- * that the row does not get taller; a control that set its height from a padded
- * line box would have made that argument this file's problem to re-derive at
- * every step of the type scale. `--space-6` is the (i)'s box and the window
- * trigger's box, so the row's tallest item is unchanged by this arrival —
- * measured, in the same Chromium run that re-derived the container query
- * (`fleet-panel.css`).
- *
- * `box-sizing: border-box` is what makes that height mean the height: there is
- * no global reset in this app, and a content-box chip would carry its padding
- * outside the 24px (`info.css` and `range-picker.css` state the same for their
- * own clamped boxes). The inline padding is a step narrower than the window
- * chips' `--space-3` for the reason those chips took a step down themselves:
- * every pixel this row is wide is a pixel the fleet's own numbers do not get,
- * and the numbers are what yields when it runs out (`fleet-panel.css`).
- *
- * The unpressed fill is `--color-bg` against the section's `--color-surface`
- * ground, which is `.range-picker-button`'s inversion argument at a second
- * address: a surface-on-surface chip has no edge, and the unit the reader has
- * *not* chosen would read as plain text rather than as the control it is. */
-.unit-toggle-button {
-  display: inline-flex;
   box-sizing: border-box;
+  min-width: var(--space-8);
   height: var(--space-6);
+  flex-shrink: 0;
   align-items: center;
-  padding: 0 var(--space-2);
+  justify-content: center;
+  padding: 0 var(--space-1);
   border: none;
   border-radius: var(--radius-md);
   background: var(--color-bg);
@@ -76,14 +74,4 @@
   font-weight: var(--font-weight-medium);
   line-height: var(--leading-tight);
   cursor: pointer;
-}
-
-/* Base ink for the pressed state, never an accent or a chart slot — the
-   convention `.range-picker-button` and `.theme-toggle` both follow, and for the
-   reason range-picker.css gives: those tokens carry data identity, and a control
-   borrowing one would make "this unit is showing" and "this site is selected"
-   the same colour. */
-.unit-toggle-button[aria-pressed='true'] {
-  background: var(--color-text);
-  color: var(--color-bg);
 }

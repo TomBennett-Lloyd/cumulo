@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import type { ChartUnit } from './chart-unit';
 
 /*
- * The chart's unit, as two buttons on the fleet panel's controls row.
+ * The chart's unit, as one button on the fleet panel's controls row.
  *
  * Its own module rather than a fragment inside `FleetPanel.tsx`, on
  * `range-picker.tsx`'s grounds and not merely by analogy with it: that file is
@@ -15,58 +15,82 @@ import type { ChartUnit } from './chart-unit';
  * Presentational (`react.md` rule 4): it owns no state at all, not even the
  * `open` the picker beside it keeps. Which unit is showing and what a press
  * means are `chart-unit.ts`'s and `use-chart-unit.ts`'s, and this control is the
- * two ends of that machine made visible — `aria-pressed` reading the unit out,
+ * two ends of that machine made visible — its label reading the unit out,
  * `onSelect` handing a press back.
  *
- * ## Two buttons, not a switch and not a select
+ * ## One button, and why it stopped being two
  *
- * `aria-pressed` on ordinary buttons is `range-picker.tsx`'s shape and the
- * app's standing answer to "one choice among a small fixed set" — the same
- * treatment `.theme-toggle` wears. A `<select>` would put two options behind a
- * gesture on a row whose whole design argument is that a control states its
- * value without being opened, and a single switch labelled "%" would leave the
- * unpressed state naming neither unit: a reader meeting a chart in kW would see
- * a control offering percent and no confirmation of what they are looking at.
- * Both units are therefore named on the row at all times, and exactly one of
- * them is pressed.
+ * This shipped as two `aria-pressed` chips — `range-picker.tsx`'s shape, and the
+ * app's standing answer to "one choice among a small fixed set". It was rebuilt
+ * as a single button on measurement, not on taste. Two chips cost 70.31px of a
+ * row that has four other items in it, and at 320px on a font stack whose glyphs
+ * run wide — Linux's `sans-serif` fallback, which CI renders in and some readers
+ * browse in — the row wrapped to a second line. It may not: `fleet-panel.css`
+ * derives the row's height as its tallest item's, and `chart-geometry.ts`
+ * derives `CHART_VIEW_BOX_HEIGHT` from a stack that includes that row on the
+ * argument that it stays one line. A control that breaks the derivation two
+ * files away at the narrowest width in common use is the control that yields.
+ *
+ * The old note argued that a single switch labelled `%` would leave the reader
+ * meeting a kW chart with a control offering percent and no confirmation of what
+ * they were looking at. That objection is answered rather than overruled: this
+ * button is labelled with the unit that **is showing**, not the one a press
+ * moves to, so the row still states the chart's unit at rest. What a press does
+ * is carried by the accessible name, which names both — the state and the
+ * destination — because a label that reads only `kW` tells a reader who cannot
+ * see the chart nothing about what pressing it would do.
  *
  * The visible labels are this file's own, and deliberately not
  * `charts/chart-copy.ts`'s pair. That module owns the words the *chart* says
  * about the unit it is drawing — the value axis's title, the table twin's
  * caption, the readout's frame — and those three have to agree with each other
  * or one number reads as two quantities. A button label is not a fourth member
- * of that set: it names a unit the reader can move *to*, in the space a 24px row
- * has, which is why the percent button reads `%` where the chart says
- * `% of capacity`. Importing half the pair — `kW`, which happens to coincide —
- * would make the two look shared while the half that matters diverged, which is
- * the shape `structure.md` rule 7 refuses.
+ * of that set: it names a unit in the space a 24px row has, which is why this
+ * button reads `%` where the chart says `% of capacity`. Importing half the
+ * pair — `kW`, which happens to coincide — would make the two look shared while
+ * the half that matters diverged, which is the shape `structure.md` rule 7
+ * refuses.
  */
 
 /**
- * What each button says, as a `Record` over the union.
+ * What the button says, as a `Record` over the union.
  *
- * A `Record` rather than a literal per button, so a third `ChartUnit` fails to
+ * A `Record` rather than a literal per unit, so a third `ChartUnit` fails to
  * compile until it has a label — the same construction `range-picker.tsx` uses
- * for its windows, and for the same reason: the list below is display order and
- * would only fall silently short.
+ * for its windows.
  */
 const UNIT_TOGGLE_LABELS: Record<ChartUnit, string> = { kw: 'kW', percent: '%' };
 
 /**
- * Absolute first, because it is the unit the panel opens in and the one the
- * fleet's own numbers beside it are stated in.
+ * The unit a press moves to, as a total map over the union.
+ *
+ * Total rather than a ternary, for the reason the labels are: a third unit is a
+ * compile error here rather than a silent two-thirds of a cycle.
  */
-const UNIT_OPTIONS: readonly ChartUnit[] = ['kw', 'percent'];
+const NEXT_UNIT: Record<ChartUnit, ChartUnit> = { kw: 'percent', percent: 'kw' };
 
 /**
- * Names the group for assistive technology, where the two buttons alone would be
- * announced as a bare `kW` and `%` with nothing saying what they are of.
+ * The unit named in full, for the accessible name alone.
  *
- * A visible label is not the alternative: `design.md` rule 2 sends a label whose
- * only job is naming for assistive technology to the accessible name, which is
- * the move the window control's own name already made (#329).
+ * `%` is legible on a row beside a chart whose axis is titled; read aloud with
+ * nothing around it, it is not. These are this control's own words for the same
+ * reason the labels are — and the percent spelling matches what the chart says
+ * so that a reader hearing both hears one quantity, not two.
  */
-const UNIT_GROUP_LABEL = 'Chart unit';
+const UNIT_SPOKEN: Record<ChartUnit, string> = { kw: 'kW', percent: '% of capacity' };
+
+/**
+ * Names the control for assistive technology: what is showing, and what a press
+ * would do.
+ *
+ * Both halves, because either alone misleads. A name that read only the current
+ * unit would announce a button whose effect is unstated; one that read only the
+ * destination would announce `% of capacity` on a chart drawn in kW. The visible
+ * label is contained in the name in both states, which is what WCAG 2.5.3 asks
+ * of a control whose visible text is shorter than its name.
+ */
+const unitToggleName = (unit: ChartUnit): string =>
+  `Chart unit: ${UNIT_SPOKEN[unit]}. Press to show ${UNIT_SPOKEN[NEXT_UNIT[unit]]}.`;
 
 export interface UnitToggleProps {
   readonly unit: ChartUnit;
@@ -75,19 +99,14 @@ export interface UnitToggleProps {
 }
 
 export const UnitToggle = ({ unit, onSelect }: UnitToggleProps): ReactElement => (
-  <div className="unit-toggle" role="group" aria-label={UNIT_GROUP_LABEL}>
-    {UNIT_OPTIONS.map((option) => (
-      <button
-        key={option}
-        type="button"
-        className="unit-toggle-button"
-        aria-pressed={option === unit}
-        onClick={() => {
-          onSelect(option);
-        }}
-      >
-        {UNIT_TOGGLE_LABELS[option]}
-      </button>
-    ))}
-  </div>
+  <button
+    type="button"
+    className="unit-toggle"
+    aria-label={unitToggleName(unit)}
+    onClick={() => {
+      onSelect(NEXT_UNIT[unit]);
+    }}
+  >
+    {UNIT_TOGGLE_LABELS[unit]}
+  </button>
 );
