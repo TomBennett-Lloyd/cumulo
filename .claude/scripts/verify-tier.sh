@@ -77,6 +77,16 @@
 # behaviour and would be wrong for a licence audit. Nothing in `verify` performs
 # one.
 #
+# IDENTIFIER MINIFICATION IS OFF (--minify-whitespace --minify-syntax, never
+# --minify). esbuild names mangled bindings from a character-frequency histogram
+# of the whole source text, comments included, so rewriting a docblock can
+# permute which letter each binding gets and two behaviourally identical files
+# emit differently — #480 caught exactly that on a comment-only batch. Whitespace
+# and syntax minification depend on the code alone, which is the property the
+# proof needs. A false positive here is safe (it runs the full composite) but is
+# documented to the author as "you changed code by accident", so it must not fire
+# on prose.
+#
 # esbuild is a dependency of vite already, and is RESOLVED, never installed —
 # $ROOT's node_modules first, then the repository holding this script, which is
 # the same directory in production and is what lets verify-tier.test.sh classify
@@ -394,12 +404,12 @@ prove_comment_only() {
     proof_reason="could not read the merge-base blob — $path"
     return 1
   fi
-  if ! "$ESBUILD" --minify "--loader=$loader" --legal-comments=none \
+  if ! "$ESBUILD" --minify-whitespace --minify-syntax "--loader=$loader" --legal-comments=none \
     <"$TMP/base.src" >"$TMP/base.min" 2>"$TMP/esbuild.err"; then
     proof_reason="esbuild could not minify the merge-base version — $path"
     return 1
   fi
-  if ! "$ESBUILD" --minify "--loader=$loader" --legal-comments=none \
+  if ! "$ESBUILD" --minify-whitespace --minify-syntax "--loader=$loader" --legal-comments=none \
     <"$ROOT/$path" >"$TMP/work.min" 2>"$TMP/esbuild.err"; then
     proof_reason="esbuild could not minify the working version — $path"
     return 1
