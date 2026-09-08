@@ -487,16 +487,21 @@
  * stacked over the same canvas and no spec measures it (`docs/tech-debt.md`).
  *
  * Restatement ledger (`architecture.md` rule 9) — every `z-index` in the repo,
- * read against each other here because nothing else does. Stated as a sweep and
- * a floor rather than a count, which the next stylesheet would falsify: as of
- * 2026-08-12, `git grep -nE '^[[:space:]]*z-index[[:space:]]*:' -- ':/'` from a
- * worktree root returns exactly these six, and a value written after that date
- * belongs in this list, added by whoever writes it.
+ * listed here because this is the only block that reads all six together. Stated
+ * as a sweep and a floor rather than a count, which the next stylesheet would
+ * falsify: as of 2026-08-12,
+ * `git grep -nE '^[[:space:]]*z-index[[:space:]]*:' -- ':/'` from a worktree root
+ * returns exactly these six, and a value written after that date belongs in this
+ * list, added by whoever writes it.
  *
- * The values are written out here, and only here: comparing them is this block's
- * whole job, and a ledger that made a reader open five stylesheets to do it would
- * discharge nothing. The arguing site carrying literals is what rule 9 ledgers
- * rather than forbids.
+ * The values are written out rather than pointed at, because comparing them is
+ * this block's whole job and a ledger that made a reader open five stylesheets to
+ * do it would discharge nothing. Two other sites quote them while arguing their
+ * own — `apps/web/src/map/map.css`'s `.map-controls` and
+ * `apps/web/src/map/site-popover.css`'s `.site-popover-anchor`, which is the pair
+ * that has to stay ordered against each other — so a change to `1` or `2` is a
+ * change to three files, and those two are ledgered here rather than forbidden
+ * their literals (rule 9). Every other referring site points without quoting.
  *
  * - `.header-menu-popover` and `.site-search-listbox`, this file — `10`, the two
  *   that must clear the bar.
