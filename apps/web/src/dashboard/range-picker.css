@@ -239,9 +239,8 @@
 
 /* Base ink for the pressed state, not an accent or a chart slot — the same
  * convention `.theme-toggle` follows in `apps/web/src/app.css`, and for the same
- * reason: those
- * tokens carry data identity, and a control borrowing one would make "this
- * window is selected" and "this site is selected" the same colour. */
+ * reason: those tokens carry data identity, and a control borrowing one would
+ * make "this window is selected" and "this site is selected" the same colour. */
 .range-picker-button[aria-pressed='true'] {
   background: var(--color-text);
   color: var(--color-bg);

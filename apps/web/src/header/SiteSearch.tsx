@@ -188,9 +188,10 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
    * The highlighted option's id — and only while the popup is on screen.
    * `aria-activedescendant` names an element, so an id resolving to nothing is
    * an invalid value rather than a harmless leftover, and the states it would
-   * dangle in are the ones this control spends most of its life in: first paint,
-   * after Escape with text still in the field, after a blur, and in the instant
-   * after a selection clears the query.
+   * dangle in are the ones this control spends most of its life in: first paint
+   * (an empty query matches every site, so there is a match with no list to hold
+   * it), after Escape with text still in the field, after a blur, and in the
+   * instant after a selection clears the query.
    */
   const activeOptionId = expanded && activeSite !== null ? optionId(activeIndexInRange) : undefined;
 

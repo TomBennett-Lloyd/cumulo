@@ -165,9 +165,8 @@ const percentOf = (kw: number, capacityKw: number): number => (kw / capacityKw) 
  * change untouched. A divisor that is missing or non-positive *produces* one, rather than a zero or
  * a number divided by something that was not there — a break in the mark, on the same rule the rest
  * of this file applies (docs/standards/error-handling.md rule 5). Values above 100 pass through
- * unclamped: a
- * fleet outrunning the nameplate its inverters are rated at is a real reading, and flattening it to
- * 100 would hide exactly the hour worth looking at.
+ * unclamped: a fleet outrunning the nameplate its inverters are rated at is a real reading, and
+ * flattening it to 100 would hide exactly the hour worth looking at.
  */
 const toPercent = (kw: number | null, capacityKw: number | undefined): number | null =>
   kw === null || !isUsableDivisor(capacityKw) ? null : percentOf(kw, capacityKw);

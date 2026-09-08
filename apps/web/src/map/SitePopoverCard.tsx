@@ -37,9 +37,9 @@ import {
  * `apps/web/src/data/use-first-forecast.ts`, which is module-private there. The
  * number is the reader's, not the transport's: the hook's own timeout message
  * names the site by uuid and says nothing about what to do next, so this card
- * says it in the app's words instead
- * (`apps/web/src/dashboard/state-copy.ts`) and needs the figure to do it.
- * Exporting the deadline from the hook would collapse the pair.
+ * says it in the app's words instead (`apps/web/src/dashboard/state-copy.ts`)
+ * and needs the figure to do it. Exporting the deadline from the hook would
+ * collapse the pair.
  */
 const FIRST_FORECAST_DEADLINE_SECONDS = 90;
 

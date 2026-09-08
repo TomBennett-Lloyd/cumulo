@@ -173,8 +173,8 @@ body {
  * whole control.
  *
  * No `transition` on the thumb, deliberately. docs/standards/design.md rule 13
- * prefers a
- * smooth state change to a jump cut, but it binds a transition twice over — to
+ * prefers a smooth state change to a jump cut, but it binds a transition twice
+ * over — to
  * `prefers-reduced-motion` and to not delaying the interaction — and the token
  * set has no motion category to state a duration or an easing in. These
  * stylesheets carry zero `transition` declarations today, so the first one owes

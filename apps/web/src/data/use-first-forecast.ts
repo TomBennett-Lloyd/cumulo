@@ -12,8 +12,10 @@ const MS_PER_SECOND = 1_000;
  * Two constraints meet here. The ticket promises a first forecast visible about
  * a minute after the visitor adds a site, and the client can only guarantee
  * "within one poll of the forecast existing" — so the interval is the slack the
- * pipeline does not get, and it leaves the demo pipeline's own latency intact
- * with room to spare.
+ * pipeline does not get: five seconds on top of
+ * `apps/web/src/data/demo-fleet-data-source.ts`'s
+ * `DEFAULT_FIRST_FORECAST_DELAY_MS` leaves that promise intact with room to
+ * spare.
  *
  * The other constraint is read capacity, and ADR 0002's review of this ticket
  * priced both sides of it. Each poll reads the watched site's own partition, one
@@ -43,7 +45,8 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
 /**
  * How long a first forecast is worth waiting for.
  *
- * Twice the demo pipeline's own latency: long enough that an ordinarily slow
+ * Twice `apps/web/src/data/demo-fleet-data-source.ts`'s
+ * `DEFAULT_FIRST_FORECAST_DELAY_MS`: long enough that an ordinarily slow
  * pipeline is not called broken, short enough that a visitor is not left
  * watching a spinner with no ending. Reaching it is a product event — the site's
  * card says the wait ended and offers a retry — not a silent stall.
@@ -59,8 +62,9 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
  * `apps/web/src/dashboard/Dashboard.test.tsx` and
  * `apps/web/src/dashboard/Dashboard.deep-link.test.tsx` each advance a fake
  * clock by the literal, which is the assertion this value has; and
- * `docs/design/dashboard-composition.md` argues from it in prose. Every other
- * mention in this module names the constant instead.
+ * `apps/web/src/dashboard/Dashboard.tsx`'s stale-id guard and
+ * `docs/design/dashboard-composition.md` both argue from it in prose. Every
+ * other mention in this module names the constant instead.
  */
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
