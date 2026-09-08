@@ -17,25 +17,20 @@ import { fleetNightClassifier } from './fleet-night';
 /*
  * The fleet aggregate, as the chart's point shape — and how complete it is.
  *
- * Lifted out of the old fleet aggregate view (deleted with the rest of them in
- * #148) so the content column can render the fleet
- * without importing a whole view (`structure.md` rule 1: these were always
- * standalone functions over explicit inputs, and only their file said
- * otherwise). Everything here is pure and takes what it reads, so it is
- * unit-testable without a DOM.
+ * Everything here is pure and takes what it reads
+ * (docs/standards/structure.md rule 1), so it is unit-testable without a DOM.
  *
  * The summing is not here. `aggregateFleetForecast` / `aggregateFleetActuals`
- * in `@cumulo/shared` own every kilowatt of arithmetic (`architecture.md`
- * rule 3), including the comonotonic band addition whose statistical position
- * is stated in that module; this file *calls* them, joins their output to the
- * chart's shape and counts what went into it. There is deliberately no `+` over
- * a power value below — if one appears, a second definition of "the fleet
- * total" has been created. The percent arm added by #291 does not breach that
- * rule and is not an exception to it: dividing an already-summed hour by an
- * already-summed divisor rescales one total, it does not compute a second one,
- * and the divisor itself is summed in `@cumulo/shared` too
- * (`contributingCapacityKwByHour`). The `+`-free reading of this file still
- * holds line by line.
+ * in `@cumulo/shared` own every kilowatt of arithmetic
+ * (docs/standards/architecture.md rule 3), including the comonotonic band
+ * addition whose statistical position is stated in that module; this file
+ * *calls* them, joins their output to the chart's shape and counts what went
+ * into it. There is deliberately no `+` over a power value below — if one
+ * appears, a second definition of "the fleet total" has been created. The
+ * percent arm is not an exception: dividing an already-summed hour by an
+ * already-summed divisor rescales one total rather than computing a second, and
+ * the divisor itself is summed in `@cumulo/shared`
+ * (`contributingCapacityKwByHour`).
  *
  * This is also the seam where the display unit is applied, and the only one.
  * Below it — storage, the API, `@cumulo/shared` — everything is kW and stays
@@ -45,10 +40,10 @@ import { fleetNightClassifier } from './fleet-night';
  * `ForecastChartPoint`, whose own docblock states that contract: those fields
  * carry the chart's *selected* display unit, not kW by definition.
  *
- * `fleetChartAggregate` at the bottom is the whole pipeline under one name, and
- * that is what makes it memoizable by the panel: two aggregations and a join
- * that used to run from scratch on every render of a component whose sibling
- * poll re-renders it once a second during add-a-site (#293).
+ * `fleetChartAggregate` at the bottom is the whole pipeline under one name,
+ * which is what makes it memoizable by the panel: two aggregations and a join,
+ * in a component whose sibling poll re-renders it once a second during
+ * add-a-site (#293).
  */
 
 /**
@@ -66,31 +61,26 @@ export const minimumContributingSites = (points: readonly FleetForecastPoint[]):
 /**
  * Every hour either series knows about, in time order, as the chart's point shape.
  *
- * **The x-domain is the union, and that is the whole point of this function.** It used to be the
- * forecast alone, with an actual whose hour had no forecast simply dropped — which was invisible
- * against the demo source, whose two windows overlap, and silently fatal against the deployed one.
- * The live fleet reads its forecasts as a forward horizon (`/v1/sites/{id}/forecast`, future hours
- * only) and its actuals as a look-back (`/v1/fleet/actuals`, `[now−h, now)`), so the two windows
- * are disjoint for every value of the clock: under the old rule every simulated actual was dropped
- * and the live chart could never draw one, under a legend and an accessible name that both
- * promised otherwise (#264).
+ * **The x-domain is the union, and that is the whole point of this function.** The live fleet reads
+ * its forecasts as a forward horizon (`/v1/sites/{id}/forecast`, future hours only) and its actuals
+ * as a look-back (`/v1/fleet/actuals`, `[now−h, now)`), so the two windows are disjoint for every
+ * value of the clock. Keying on the forecast alone dropped every simulated actual against the
+ * deployed source — invisible against the demo one, whose windows overlap — under a legend and an
+ * accessible name that both promised otherwise (#264).
  *
  * What a row missing half its series does *not* do is invent the missing half. A past hour carries
  * `medianKw: null` and no band; a future hour carries `actualKw: null`. Both read as gaps, on the
  * rule the chart already applied to the actuals and the overlay — a bridged line or a zero would
- * draw a forecast nobody made or a reading nobody took, which is the widening failure this whole
- * ticket is about (`error-handling.md` rule 5).
+ * draw a forecast nobody made or a reading nobody took (docs/standards/error-handling.md rule 5).
  *
  * Ordered by instant rather than by string: both inputs arrive sorted from `@cumulo/shared`'s
  * aggregation, but a merge of two sorted sequences still has to compare across them, and comparing
  * the parsed instants keeps the ordering rule out of the timestamp's spelling.
  *
- * Each hour is parsed **once**, before the sort, rather than twice per comparison — the change
- * #293 asked for, and it is a change of cost and shape only. These keys are same-format UTC ISO
- * strings, so their lexicographic and chronological orders coincide: no input distinguishes this
- * comparator from a string one, and no test can. What the epoch keys buy is O(n) parses instead of
- * O(n log n), while keeping the *stated* rule "by instant" true of the code rather than true by
- * luck of the spelling — which is why the parse stays at all.
+ * Each hour is parsed **once**, before the sort, rather than twice per comparison: O(n) parses
+ * instead of O(n log n). These keys are same-format UTC ISO strings, so no input distinguishes this
+ * comparator from a string one and no test can — the parse stays anyway, so the stated rule "by
+ * instant" is true of the code rather than true by luck of the spelling.
  */
 export const joinFleetSeries = (
   points: readonly FleetForecastPoint[],
@@ -130,11 +120,10 @@ export const joinFleetSeries = (
 /**
  * Everything the panel's body draws from the fleet's two reads, as one value.
  *
- * The two travel together because they come out of the same aggregation pass:
- * the completeness line quotes the thinnest hour of the *forecast* aggregate, which is the same
- * array the points were joined from. Returned as a pair rather than recomputed at each use so the
- * fleet is summed once per answer rather than once per reader (#293) — the reason it is a value at
- * all, and not two exported functions the body calls in turn.
+ * The two travel together because they come out of the same aggregation pass: the completeness line
+ * quotes the thinnest hour of the *forecast* aggregate, which is the array the points were joined
+ * from. Returned as a pair so the fleet is summed once per answer rather than once per reader
+ * (#293), which is why this is a value and not two exported functions called in turn.
  *
  * Not to be confused with `FleetSeries` in `fleet-panel-body.tsx`: that one is the two *source*
  * reads, this one is what the chart draws from them.
@@ -161,7 +150,7 @@ export const EMPTY_FLEET_AGGREGATE: FleetChartAggregate = { points: [], minContr
  * fleet running at 0% — it is an hour whose capacity could not be evidenced, which
  * `contributingCapacityKwByHour` reaches only for entries whose `siteId` matches no known site. A
  * predicate rather than an inline comparison so the narrowing is visible to the compiler at both
- * use sites (`typing.md` rule 2: a type guard, never an assertion).
+ * use sites (docs/standards/typing.md rule 2: a type guard, never an assertion).
  */
 const isUsableDivisor = (capacityKw: number | undefined): capacityKw is number =>
   capacityKw !== undefined && capacityKw > 0;
@@ -175,7 +164,8 @@ const percentOf = (kw: number, capacityKw: number): number => (kw / capacityKw) 
  * A `null` in stays `null` out: the gap rules `joinFleetSeries` establishes above survive the unit
  * change untouched. A divisor that is missing or non-positive *produces* one, rather than a zero or
  * a number divided by something that was not there — a break in the mark, on the same rule the rest
- * of this file applies (`error-handling.md` rule 5). Values above 100 pass through unclamped: a
+ * of this file applies (docs/standards/error-handling.md rule 5). Values above 100 pass through
+ * unclamped: a
  * fleet outrunning the nameplate its inverters are rated at is a real reading, and flattening it to
  * 100 would hide exactly the hour worth looking at.
  */
@@ -275,9 +265,8 @@ const percentOfCapacitySeries = (
  * The classifier is built once per aggregate and applied per hour, which is the whole reason
  * `fleetNightClassifier` returns a function: whether there is a fleet to answer about at all is a
  * fact about the fleet, not about the hour. This runs inside the panel's memo, so the sites are
- * walked once per hour of one answer rather than once per hour of every render (#293's reasoning,
- * extended to this layer) — and that walk short-circuits at the first daylit site, so the daylight
- * hours, which are most of them, cost one solar position each.
+ * walked once per hour of one answer rather than of every render — and that walk short-circuits at
+ * the first daylit site, so the daylight hours cost one solar position each.
  *
  * `unit` is applied last of all and changes nothing about how the fleet is summed: both arms
  * aggregate and join in kW, and `'percent'` then rescales the joined points. Two consequences worth

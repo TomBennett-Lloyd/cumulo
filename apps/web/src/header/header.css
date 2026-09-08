@@ -486,24 +486,31 @@
  * one the map is painted on top of. `.site-search-listbox` above is equally
  * stacked over the same canvas and no spec measures it (`docs/tech-debt.md`).
  *
- * Restatement ledger (`architecture.md` rule 9) — every `z-index` in the repo,
- * listed here because this is the only block that reads all six together. Stated
- * as a sweep and a floor rather than a count, which the next stylesheet would
- * falsify: as of 2026-08-12,
+ * Restatement ledger (docs/standards/architecture.md rule 9) — every `z-index`
+ * in the repo, listed here because this is the only block that reads all six
+ * together. Stated as a sweep and a floor rather than a count, which the next
+ * stylesheet would falsify: as of 2026-08-12,
  * `git grep -nE '^[[:space:]]*z-index[[:space:]]*:' -- ':/'` from a worktree root
  * returns exactly these six, and a value written after that date belongs in this
  * list, added by whoever writes it.
  *
  * The values are written out rather than pointed at, because comparing them is
  * this block's whole job and a ledger that made a reader open five stylesheets to
- * do it would discharge nothing. Two other sites quote them while arguing their
- * own — `apps/web/src/map/map.css`'s `.map-controls` and
- * `apps/web/src/map/site-popover.css`'s `.site-popover-anchor`, which is the pair
- * that has to stay ordered against each other. Both quote `10` as well, to say
- * they are under it — so a change to `1` or `2` is a change to three files, and a
- * change to `10` is a change to five: the three that declare it below, plus those
- * same two. They are ledgered here rather than forbidden their literals (rule 9),
- * and every other referring site points without quoting.
+ * do it would discharge nothing.
+ *
+ * The **arguing** carriers are a floor with a sweep of their own, for the reason
+ * the declarations are — an enumeration of them is falsified by the next file
+ * that quotes one. As of 2026-09-08, `git grep -nE 'z-index' -- ':/'` from a
+ * worktree root returns the declarations below plus every prose mention of them,
+ * and the mentions that quote a literal while arguing their own value are
+ * `apps/web/src/map/map.css`'s `.map-controls` and
+ * `apps/web/src/map/site-popover.css`'s `.site-popover-anchor`, the pair that has
+ * to stay ordered against each other. Both quote `10` as well, to say they are
+ * under it — so a change to `1` or `2` is a change to three files, and a change
+ * to `10` is a change to five: the three that declare it below, plus those same
+ * two. A quoting site written after that date belongs in this list, added by
+ * whoever writes it. They are ledgered here rather than forbidden their literals
+ * (rule 9); every other site the sweep returns points without quoting.
  *
  * - `.header-menu-popover` and `.site-search-listbox`, this file — `10`, the two
  *   that must clear the bar.
