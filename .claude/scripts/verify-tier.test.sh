@@ -12,13 +12,27 @@
 # the delegation itself is one `pnpm <script>` line, and a harness that ran the
 # real composite per case would take an hour to say so.
 #
+# That is also the limit of what the source-prose cases can claim. Whether the
+# compiler goes red on a `@ts-expect-error` hidden in a comment is tsc's verdict,
+# not this classifier's; what belongs here is that the emit proof did not see the
+# pragma — so the tier still comes out source-prose — and that `pnpm typecheck`
+# is in the leg list, which is the only way that verdict can ever be reached. The
+# red itself is evidence on the PR, run against this repository.
+#
 # The bias every case is written against: this script can only be wrong in one
 # direction. Classifying a markdown-only change as full costs a slow run;
 # classifying anything else as docs skips gates that could have caught a defect.
 # So the docs-tier cases assert the exact leg list (a docs tier that quietly
 # gained `pnpm test` would still say "docs"), and every fail-closed case asserts
 # rc AND the reason, because a tier that came out full for the wrong reason is a
-# case that will stop covering anything the day the reason changes.
+# case that will stop covering anything the day the reason changes. The
+# source-prose cases inherit both: one asserts its whole leg list, and the
+# selection cases name the observing tests they expect rather than counting them.
+#
+# The emit proof needs an esbuild binary, and the fixtures have no node_modules
+# of their own — the classifier resolves one from the repository holding it,
+# which is this one. A checkout that has not installed its dependencies cannot
+# run these cases, the same precondition `pnpm test:scripts` already carries.
 #
 # Every fixture carries a *.test.ts file in its base commit, and not for
 # decoration: the soundness guard refuses to certify a change set it could not
@@ -91,6 +105,14 @@ write_in() { # write_in <path under the worktree> <line>
 commit_all() { # commit_all <message> — a commit on the branch, never pushed
   must gitc "$WT" add -A
   must gitc "$WT" commit --quiet -m "$1"
+}
+
+# seed_origin <message> — commit AND publish, so what was just written lands in the merge-base
+# instead of the change set. Every case that needs a test file to already say something, or a
+# workspace package to already exist, needs it invisible to the classifier's diff.
+seed_origin() {
+  commit_all "$1"
+  must gitc "$WT" push --quiet origin main
 }
 
 run_tier() { # run_tier — the production invocation, --dry-run, against $WT
@@ -209,41 +231,45 @@ end
 # ==========================================================================================
 # 4. anything else is the full composite
 # ==========================================================================================
-begin "a source file alone is the full tier, and the offending path is named"
+begin "a source file whose emit changed is the full tier, and the offending path is named"
 must fixture edited_ts
 write_in src/app.ts 'export const a = 2;'
 run_tier
 expect_rc 0 "$rc"
 expect_stdout "verify tier: full"
-expect_stdout "not all markdown — e.g. src/app.ts"
+expect_stdout "the minified emit changed — src/app.ts"
 expect_stdout "would run: pnpm verify:full"
 expect_not_stdout "verify tier: docs"
+expect_not_stdout "verify tier: source-prose"
 end
 
-# The case the tier exists to get right in the dangerous direction: markdown present, so a
-# classifier that asked "does this touch markdown" instead of "is this ALL markdown" would
-# skip the compiler and the tests over a source edit.
-begin "markdown plus a source file is the full tier"
+# The case the docs tier exists to get right in the dangerous direction: markdown present, so
+# a classifier that asked "does this touch markdown" instead of "is this ALL markdown" would
+# skip the compiler and the tests over a source edit. The source-prose rung does not rescue
+# it either — that rung's question is about the emit, and this emit moved.
+begin "markdown plus a source file whose emit changed is the full tier"
 must fixture mixed
 write_in docs/tier-fixture-guide.md '# Guide, revised'
 write_in src/app.ts 'export const a = 2;'
 run_tier
 expect_rc 0 "$rc"
 expect_stdout "verify tier: full — 2 file(s)"
-expect_stdout "not all markdown — e.g. src/app.ts"
+expect_stdout "the minified emit changed — src/app.ts"
 expect_not_stdout "verify tier: docs"
+expect_not_stdout "verify tier: source-prose"
 end
 
 # Case matters, and this is the fail-closed direction: prettier and the link checker are
 # configured for the extension this repository actually writes, so a .MD file is not
-# self-evidently covered by the docs tier's four gates. It gets the composite.
+# self-evidently covered by the docs tier's four gates — and no esbuild loader claims it
+# either, so the source-prose rung cannot take it. It gets the composite.
 begin "an upper-case .MD extension is not the docs tier"
 must fixture upper_md
 write_in docs/TIER-FIXTURE.MD '# Shouty'
 run_tier
 expect_rc 0 "$rc"
 expect_stdout "verify tier: full"
-expect_stdout "not all markdown — e.g. docs/TIER-FIXTURE.MD"
+expect_stdout "neither markdown nor a source type the emit proof handles — docs/TIER-FIXTURE.MD"
 end
 
 begin "an empty change set is the full tier, not a free pass"
@@ -256,7 +282,150 @@ expect_not_stdout "verify tier: docs"
 end
 
 # ==========================================================================================
-# 5. THE SOUNDNESS GUARD: the docs tier's claim, checked rather than assumed
+# 5. THE SECOND RUNG: a source edit that changed no emitted code
+# ==========================================================================================
+# The rung's claim is "this edit changed no emitted code", proven by minifying the merge-base
+# blob and the working file and comparing bytes. Section 4 above holds its refutations — a
+# moved token, an unhandled extension — so what these cases own is the positive answer and
+# what it buys: the tier line, the legs that can still see a comment, and the observing set.
+#
+# One fail-closed path is missing from this section and cannot honestly be added: a checkout
+# with no esbuild binary. Constructing it means removing the node_modules the harness itself
+# resolves the binary from, so the case would break every other case in the file to assert
+# one line. It is covered by the same `if ! ESBUILD=$(find_esbuild)` shape as every other
+# guard here, and by nothing else.
+
+begin "a comment-only .ts edit is the source-prose tier, and runs exactly the legs that can see a comment"
+must fixture comment_only_ts
+write_in src/app.ts 'export const a = 1; // now with a note'
+for interpreter in $BASHES; do
+  case_ctx="$interpreter"
+  capture "$interpreter" "$TIER" --dry-run "$WT"
+  expect_rc 0 "$rc"
+  expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only; observing tests: none"
+  expect_stdout "  src/app.ts"
+  expect_stdout "would run: pnpm exec eslint --no-warn-ignored --max-warnings 0 -- src/app.ts && pnpm typecheck && pnpm check:aws-test-guard && pnpm exec prettier --check --ignore-unknown -- src/app.ts"
+  expect_not_out "verify:full"
+  expect_not_out "unbound variable"
+done
+case_ctx=""
+end
+
+# The pragma case, and the reason the compiler stays in the leg list. `@ts-expect-error` is a
+# comment: esbuild strips it, the two emits match, and the rung takes the change — which is
+# exactly right, because the pragma changes no behaviour and exactly wrong if the tier then
+# skipped tsc, the only gate that reads it. What tsc then says is tsc's business (see this
+# file's header).
+begin "a @ts-expect-error hidden in a comment does not defeat the proof, and typecheck still runs"
+must fixture pragma_in_comment
+write_in src/app.ts 'export const a = 1; // @ts-expect-error'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only"
+expect_stdout "pnpm typecheck"
+end
+
+# A .css comment is observable by stylelint and by nothing else in the composite, so the leg
+# list is the assertion: stylelint present, eslint absent (it was given no file it handles).
+begin "a comment-only .css edit is the source-prose tier, and stylelint is the leg that runs"
+must fixture comment_only_css
+write_in src/app.css '.a { color: red; }'
+seed_origin 'style: a stylesheet to comment on'
+write_in src/app.css '.a { color: red; } /* now with a note */'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only; observing tests: none"
+expect_stdout "would run: pnpm exec stylelint --max-warnings 0 -- src/app.css && pnpm typecheck"
+expect_not_stdout "eslint"
+expect_not_out "verify:full"
+end
+
+# A file with no emit to compare against is not a file with an unchanged emit. This is the
+# state a comment-only branch reaches the moment it also adds a module.
+begin "an untracked source file is the full tier"
+must fixture new_source
+write_in src/brand-new.ts 'export const b = 1;'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "verify tier: full"
+expect_stdout "new since the merge-base, so there is no emit to compare against — src/brand-new.ts"
+expect_not_stdout "verify tier: source-prose"
+end
+
+# THE OBSERVING SET, arm (a): a test that reads files as data can see a comment without ever
+# naming the file it lives in. Asserted as a delta in one repository rather than as two
+# fixtures, because the claim is about the test CHANGING — a selection that was already
+# correct before the change would pass a two-fixture version of this case.
+begin "a test that gains a readFileSync joins the observing set, and vitest runs it from its package"
+must fixture observing_data
+write_in pkg/package.json '{ "name": "@fixture/pkg", "private": true }'
+write_in pkg/src/reader.test.ts "it('reads nothing', () => {});"
+seed_origin 'test: a test that reads nothing'
+write_in src/app.ts 'export const a = 1; // now with a note'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "observing tests: none"
+expect_not_stdout "vitest"
+
+must gitc "$WT" checkout --quiet -- src/app.ts
+write_in pkg/src/reader.test.ts "it('reads', () => readFileSync('somewhere'));"
+seed_origin 'test: the test now reads a file'
+write_in src/app.ts 'export const a = 1; // now with a note'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only; observing tests: pkg/src/reader.test.ts"
+expect_stdout "pnpm --filter ./pkg exec vitest run src/reader.test.ts"
+end
+
+# Arm (b), and the reason it exists: a contract test that names the file it asserts about
+# observes a comment in it without reading anything at run time.
+begin "a test naming the changed file's basename joins the observing set"
+must fixture observing_basename
+write_in pkg/package.json '{ "name": "@fixture/pkg", "private": true }'
+write_in pkg/src/names.test.ts "it('knows app.ts', () => {});"
+seed_origin 'test: a test that names the module'
+write_in src/app.ts 'export const a = 1; // now with a note'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "observing tests: pkg/src/names.test.ts"
+expect_stdout "pnpm --filter ./pkg exec vitest run src/names.test.ts"
+end
+
+# The Playwright lane is outside `verify` (testing.md rule 10), so a *.spec.* file is never
+# selected to run however loudly it observes the change — a tier stricter than the composite
+# it stands in for is a spurious red, and a spurious red is how a gate gets bypassed. This
+# case is what goes red if the suffix filter is ever dropped as redundant.
+begin "a browser spec that reads files is not selected, because the composite never runs one"
+must fixture observing_spec
+write_in pkg/package.json '{ "name": "@fixture/pkg", "private": true }'
+write_in pkg/e2e/browser.spec.ts "test('reads', () => readFileSync('app.ts'));"
+seed_origin 'test: a browser spec that reads a file'
+write_in src/app.ts 'export const a = 1; // now with a note'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only; observing tests: none"
+expect_not_stdout "vitest"
+expect_not_stdout "browser.spec.ts"
+end
+
+# Markdown rides along: the count is what was PROVEN, not what changed, and the two gates that
+# can observe a .md rejoin the list. Without this, a prose PR that also touches one comment
+# would silently stop checking its own links.
+begin "markdown alongside a comment-only source edit keeps the markdown gates"
+must fixture prose_and_source
+write_in docs/tier-fixture-guide.md '# Guide, revised'
+write_in src/app.ts 'export const a = 1; // now with a note'
+run_tier
+expect_rc 0 "$rc"
+expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only"
+expect_stdout "  docs/tier-fixture-guide.md"
+expect_stdout "  src/app.ts"
+expect_stdout "pnpm check:adr-index && pnpm check:markdown-links"
+expect_stdout "pnpm exec prettier --check --ignore-unknown -- docs/tier-fixture-guide.md src/app.ts"
+end
+
+# ==========================================================================================
+# 6. THE SOUNDNESS GUARD: the docs tier's claim, checked rather than assumed
 # ==========================================================================================
 # The docs tier rests on "no test can observe this markdown". These two cases are what turn
 # that from an assumption into a checked fact — and they are the cases that go red if the
@@ -265,8 +434,7 @@ end
 begin "a test naming the changed markdown path forces the full tier, and the hit is printed"
 must fixture guard_path
 write_in src/copy.test.ts "const doc = 'docs/tier-fixture-guide.md';"
-commit_all 'test: read the guide'
-must gitc "$WT" push --quiet origin main
+seed_origin 'test: read the guide'
 write_in docs/tier-fixture-guide.md '# Guide, revised'
 run_tier
 expect_rc 0 "$rc"
@@ -282,8 +450,7 @@ end
 begin "a test naming only the changed file's basename forces the full tier"
 must fixture guard_basename
 write_in src/copy.spec.ts "const doc = join(root, 'docs', 'tier-fixture-guide.md');"
-commit_all 'test: join the guide path'
-must gitc "$WT" push --quiet origin main
+seed_origin 'test: join the guide path'
 write_in docs/tier-fixture-guide.md '# Guide, revised'
 run_tier
 expect_rc 0 "$rc"
@@ -298,8 +465,7 @@ end
 begin "a test naming an unrelated markdown file leaves the docs tier alone"
 must fixture guard_unrelated
 write_in src/copy.test.ts "const doc = 'docs/some-other-document.md';"
-commit_all 'test: read another document'
-must gitc "$WT" push --quiet origin main
+seed_origin 'test: read another document'
 write_in docs/tier-fixture-guide.md '# Guide, revised'
 run_tier
 expect_rc 0 "$rc"
@@ -324,7 +490,7 @@ expect_not_stdout "verify tier: docs"
 end
 
 # ==========================================================================================
-# 6. FAIL CLOSED: a change set the classifier cannot trust is a full run
+# 7. FAIL CLOSED: a change set the classifier cannot trust is a full run
 # ==========================================================================================
 # Both cases below would classify as markdown-only if the failure were swallowed — the
 # working tree holds one edited .md and nothing else — so each one is precisely the state in
@@ -351,7 +517,7 @@ expect_not_stdout "verify tier: docs"
 end
 
 # ==========================================================================================
-# 7. the report itself
+# 8. the report itself
 # ==========================================================================================
 # A branch can carry a hundred files since its merge-base, and a hundred-line dump before
 # every gate is noise nobody reads. The count is the load-bearing number; the list is a
@@ -370,7 +536,7 @@ expect_stdout "… and 2 more"
 end
 
 # ==========================================================================================
-# 8. invocations the classifier cannot give a verdict on
+# 9. invocations the classifier cannot give a verdict on
 # ==========================================================================================
 # Exit 2, never a tier: an invocation this script cannot make sense of is not evidence that
 # the change set is safe, and answering "full" would hide the typo behind a slow green run.
