@@ -79,7 +79,8 @@ your issue's comments; the top-level never posts them for you.
 4. **Sub-agent dispatch is yours, and every dispatch is synchronous**: planner (fable — first
    read ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus, note the
    downgrade in the plan comment), implementers (opus), reviewer (opus), consultant (fable,
-   same budget rule), browser-smoke (sonnet, sequenced — see its dispatch contract). Honour
+   same budget rule), browser-smoke (sonnet, sequenced against work in _your own_ worktree and
+   free to run while other worktrees' lanes do — see its dispatch contract). Honour
    every dispatch contract in the agent files you spawn. **`run_in_background: false` on all
    of them, without exception**: a backgrounded sub-agent's completion notification routes to
    the top-level session rather than to you, which on 2026-08-10 cost ~25 hand-relays across
