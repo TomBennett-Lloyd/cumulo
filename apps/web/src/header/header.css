@@ -499,9 +499,11 @@
  * do it would discharge nothing. Two other sites quote them while arguing their
  * own — `apps/web/src/map/map.css`'s `.map-controls` and
  * `apps/web/src/map/site-popover.css`'s `.site-popover-anchor`, which is the pair
- * that has to stay ordered against each other — so a change to `1` or `2` is a
- * change to three files, and those two are ledgered here rather than forbidden
- * their literals (rule 9). Every other referring site points without quoting.
+ * that has to stay ordered against each other. Both quote `10` as well, to say
+ * they are under it — so a change to `1` or `2` is a change to three files, and a
+ * change to `10` is a change to five: the three that declare it below, plus those
+ * same two. They are ledgered here rather than forbidden their literals (rule 9),
+ * and every other referring site points without quoting.
  *
  * - `.header-menu-popover` and `.site-search-listbox`, this file — `10`, the two
  *   that must clear the bar.
