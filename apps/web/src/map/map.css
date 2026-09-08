@@ -99,10 +99,10 @@
  * any positive value beats `auto` whatever the document order, and a card panned
  * under this corner took the reset button with it.
  *
- * It is the smallest value that clears the card's, and stays far under the
- * header's overlays: this group belongs to the map rather than over it, exactly
- * as the card does. `apps/web/src/header/header.css` holds the census — the one
- * place these values are read against each other. */
+ * `2` is the smallest value that clears the card's `1`, and it stays far under
+ * the `10` the header's overlays carry: this group belongs to the map rather than
+ * over it, exactly as the card does. `apps/web/src/header/header.css` holds the
+ * census — the one place these values are read against each other. */
 .map-controls {
   position: absolute;
   inset: var(--space-3) var(--space-3) auto auto;

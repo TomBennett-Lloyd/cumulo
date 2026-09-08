@@ -493,25 +493,30 @@
  * worktree root returns exactly these six, and a value written after that date
  * belongs in this list, added by whoever writes it.
  *
- * - `.header-menu-popover` and `.site-search-listbox`, this file — the two that
- *   must clear the bar.
- * - `.info-tip-panel`, `apps/web/src/info/info.css` — deliberately equal to
+ * The values are written out here, and only here: comparing them is this block's
+ * whole job, and a ledger that made a reader open five stylesheets to do it would
+ * discharge nothing. The arguing site carrying literals is what rule 9 ledgers
+ * rather than forbids.
+ *
+ * - `.header-menu-popover` and `.site-search-listbox`, this file — `10`, the two
+ *   that must clear the bar.
+ * - `.info-tip-panel`, `apps/web/src/info/info.css` — `10`, deliberately equal to
  *   them; that file argues for one value per component rather than one per
  *   placement.
- * - `.range-picker-popover`, `apps/web/src/dashboard/range-picker.css` — joined
- *   them on the same argument, and its own note is the one to read first: it
- *   says plainly, by hit test with the declaration removed, that the value is not
- *   what puts that sheet over the chart.
- * - `.site-popover-anchor`, `apps/web/src/map/site-popover.css` — deliberately
- *   lower: the selected site's card rides a maplibre marker and only has to
- *   outrank the sibling markers in that pane, which carry no value at all.
- * - `.map-controls`, `apps/web/src/map/map.css` — one step above that card,
- *   because nothing between either element and the document root opens a
- *   stacking context, so the card's value was not confined to maplibre's pane: it
+ * - `.range-picker-popover`, `apps/web/src/dashboard/range-picker.css` — `10`,
+ *   joined them on the same argument, and its own note is the one to read first:
+ *   it says plainly, by hit test with the declaration removed, that the value is
+ *   not what puts that sheet over the chart.
+ * - `.site-popover-anchor`, `apps/web/src/map/site-popover.css` — `1`, because
+ *   the selected site's card rides a maplibre marker and only has to outrank the
+ *   sibling markers in that pane, which carry no value at all.
+ * - `.map-controls`, `apps/web/src/map/map.css` — `2`, the smallest that clears
+ *   that card, because nothing between either element and the document root opens
+ *   a stacking context, so the card's `1` was not confined to maplibre's pane: it
  *   beat the map's own chrome in the root context on any positive value at all,
  *   taking the reset button with it whenever a reader panned the card under the
- *   top-right corner. Neither of these two clears this bar, because both are
- *   things on the map rather than overlays over it.
+ *   top-right corner. Neither of these two is `10`, because neither must clear
+ *   this bar — both are things on the map rather than overlays over it.
  *
  * (maplibre's vendored sheet has its own, which is what the values painted over
  * its canvas have to clear. `.map-attribution` in `apps/web/src/map/map.css` has
@@ -619,9 +624,11 @@
   margin: 0;
 }
 
-/* The title and the way out, on one line (#340). `align-items: center` sets the
- * X against the middle of the title's line box rather than its baseline — a
- * glyph has no baseline to share.
+/* The title and the way out, on one line (#340). `space-between` rather than a
+ * `margin-left: auto` on the button, because there are exactly two items and the
+ * claim is about the row: the heading starts it and the dismissal ends it.
+ * `align-items: center` sets the X against the middle of the title's line box
+ * rather than its baseline — a glyph has no baseline to share.
  *
  * A `div`, and deliberately not a `header`. The dialog is mounted inside
  * `.app-header`'s `<header>` and a `<dialog>` promoted to the top layer stays
