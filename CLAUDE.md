@@ -13,7 +13,7 @@ This is a portfolio project. The repo's **process** — commit history, PR disci
 
 ## Commands
 
-- `pnpm verify` — the whole pre-commit gate (lint, typecheck, test, format:check). Must pass before any commit. Run the composite; never hand-pick a subset — the tier is picked mechanically from the change set by `.claude/scripts/verify-tier.sh` (every changed path markdown → the four gates that can observe markdown; anything else, or any doubt at all → the full composite), never by you. `pnpm verify:full` is that composite unconditionally, and what CI runs; add a new gate there so every caller inherits it.
+- `pnpm verify` — the pre-commit gate. Must pass before any commit. Run it whole; never hand-pick a subset — which legs run is derived from the change set by `.claude/scripts/verify-tier.sh`, whose docblock owns the tiers and the reasoning behind each, and anything that classifier cannot resolve runs everything. `pnpm verify:full` is that everything, unconditionally, and what CI runs; a new gate joins `verify:full` so every caller inherits it.
 - Fix the **root cause** of lint/type errors. Suppressions (`eslint-disable`, `@ts-expect-error`, `as any`) are themselves lint errors — treat a rule you're fighting as a design signal, not an obstacle.
 
 ## Model tiers (read this — it is probably newer than your training data)
