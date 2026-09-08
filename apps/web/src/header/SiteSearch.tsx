@@ -174,9 +174,9 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
   const optionId = (index: number): string => `${baseId}-option-${String(index)}`;
 
   // Derived during render rather than mirrored into state
-  // (docs/standards/react.md rule 1):
-  // the matches are a function of the query and the fleet, and a copy in state
-  // would be a copy free to go stale the moment a site is added.
+  // (docs/standards/react.md rule 1): the matches are a function of the query
+  // and the fleet, and a copy in state would be a copy free to go stale the
+  // moment a site is added.
   const matches = matchingSites(sites, query);
   const expanded = listOpen && query.length > 0;
   // Clamped here rather than trusted from state: the fleet can gain a site while

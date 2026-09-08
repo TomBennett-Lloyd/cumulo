@@ -109,8 +109,8 @@
 # `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts —
 # which since #467's prose trim carries the ratio between a per-site read and a
 # fleet fan-out and none of the unit figures themselves — and the fleet-vs-poll
-# comment in apps/web/src/data/use-first-forecast.test.tsx.
-# One ADR carrier joins them: ADR 0002's 2026-08-10 (#264) Amendments entry,
+# comment in apps/web/src/data/use-first-forecast.test.tsx. One ADR carrier
+# joins them: ADR 0002's 2026-08-10 (#264) Amendments entry,
 # which states the current per-load figure and halves every read-side figure
 # derived from its predecessor — a quoter of this stack's arithmetic rather
 # than an owner of it, and owed the ADR treatment described above rather than

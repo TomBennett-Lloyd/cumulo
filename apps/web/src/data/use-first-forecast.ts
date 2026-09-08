@@ -12,7 +12,7 @@ const MS_PER_SECOND = 1_000;
  * Two constraints meet here. The ticket promises a first forecast visible about
  * a minute after the visitor adds a site, and the client can only guarantee
  * "within one poll of the forecast existing" — so the interval is the slack the
- * pipeline does not get: five seconds on top of
+ * pipeline does not get: one poll interval on top of
  * `apps/web/src/data/demo-fleet-data-source.ts`'s
  * `DEFAULT_FIRST_FORECAST_DELAY_MS` leaves that promise intact with room to
  * spare.
@@ -61,10 +61,10 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
  * `apps/web/src/data/use-first-forecast.unanswered.test.tsx`,
  * `apps/web/src/dashboard/Dashboard.test.tsx` and
  * `apps/web/src/dashboard/Dashboard.deep-link.test.tsx` each advance a fake
- * clock by the literal, which is the assertion this value has; and
- * `apps/web/src/dashboard/Dashboard.tsx`'s stale-id guard and
- * `docs/design/dashboard-composition.md` both argue from it in prose. Every
- * other mention in this module names the constant instead.
+ * clock by the literal, which is the assertion this value has, and three of them
+ * restate it in prose besides; and `apps/web/src/dashboard/Dashboard.tsx`'s
+ * stale-id guard and `docs/design/dashboard-composition.md` argue from it in
+ * prose alone. Every other mention in this module names the constant instead.
  */
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
