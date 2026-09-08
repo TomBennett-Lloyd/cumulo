@@ -53,18 +53,24 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
  *
  * Restatement ledger (docs/standards/architecture.md rule 9) — this constant is
  * the owner, and a **floor** rather than a count: as of 2026-09-08,
- * `git grep -nE '90_000|90000|ninety|FIRST_FORECAST_DEADLINE'` over `apps` and
- * `docs` returns these carriers, and one written after that date belongs here.
+ * `git grep -lE '90_000|90000|ninety|90[- ]seconds?|FIRST_FORECAST_DEADLINE'`
+ * over `apps` and `docs` returns these carriers, and one written after that date
+ * belongs here. The pattern carries a spaced-and-hyphenated arm as well as the
+ * literal, because the copy a reader is shown spells the value in words and a
+ * unit-anchored sweep cannot see it.
+ *
  * `apps/web/src/map/SitePopoverCard.tsx`'s `FIRST_FORECAST_DEADLINE_SECONDS`
  * computes the sentence the reader is shown from it, and its own docblock says
- * why the pair is not collapsed; `apps/web/src/data/use-first-forecast.test.tsx`,
+ * why the pair is not collapsed, while `apps/web/src/map/SitePopoverCard.test.tsx`
+ * asserts that sentence with the value spelled out in it.
+ * `apps/web/src/data/use-first-forecast.test.tsx`,
  * `apps/web/src/data/use-first-forecast.unanswered.test.tsx`,
  * `apps/web/src/dashboard/Dashboard.test.tsx` and
  * `apps/web/src/dashboard/Dashboard.deep-link.test.tsx` each advance a fake
- * clock by the literal, which is the assertion this value has, and three of them
- * restate it in prose besides; and `apps/web/src/dashboard/Dashboard.tsx`'s
- * stale-id guard and `docs/design/dashboard-composition.md` argue from it in
- * prose alone. Every other mention in this module names the constant instead.
+ * clock by the literal, which is the assertion this value has, and all four
+ * restate it in prose besides. `apps/web/src/dashboard/Dashboard.tsx`'s stale-id
+ * guard and `docs/design/dashboard-composition.md` argue from it in prose alone.
+ * Every other mention in this module names the constant instead.
  */
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
