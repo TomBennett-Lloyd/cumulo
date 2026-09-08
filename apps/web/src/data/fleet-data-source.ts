@@ -32,19 +32,15 @@ import type { CreateSiteInput, Forecast, GenerationReading, Site } from '@cumulo
  *   out its own deadline and report — deliberately pinned behaviour, not an
  *   invitation to hot-retry.
  * - `server-fault` — server → client: the fleet *answered*, and the answer is
- *   that it is broken (a 5xx). Recourse is to retry on a backoff, the same
- *   shape of recourse `network` has — but the two are separate arms because
- *   the question that decides blame is "who does the operator need to call?"
- *   and the answers differ: the fleet's operator here, the visitor's own
- *   connection there. That is why #162's "same recourse ⇒ same arm" principle
- *   does not collapse them, and it is what keeps `network`'s own doc true:
- *   only requests that never produced an answer land there.
- * - `forbidden` — the API refused this client on policy, not on content. The
- *   one failure a retry cannot fix: nothing the caller can add to the request
- *   makes it succeed, because what is wrong is *who is asking*. Its recourse is
- *   a deployment change (`CUMULO_WEB_ORIGINS`), which is why it is neither of
- *   the two data arms above — those are about the bytes, this one is about the
- *   identity behind them.
+ *   that it is broken (a 5xx). Recourse is a backoff retry, the same shape
+ *   `network` has, but the two stay separate arms because the question that
+ *   decides blame is "who does the operator need to call?" — the fleet's
+ *   operator here, the visitor's own connection there. That is why #162's "same
+ *   recourse ⇒ same arm" principle does not collapse them, and it is what keeps
+ *   `network`'s own doc true.
+ * - `forbidden` — the API refused this client on policy, not on content. The one
+ *   failure a retry cannot fix: what is wrong is *who is asking*, so the recourse
+ *   is a deployment change (`CUMULO_WEB_ORIGINS`).
  */
 export type FleetDataError =
   | { readonly code: 'network'; readonly message: string }
@@ -80,12 +76,10 @@ export type FleetDataError =
  * implementation of `FleetDataSource` is therefore a bug in that
  * implementation, not a failure mode callers are expected to handle.
  *
- * This is the app's *only* fleet result type. `apps/web` briefly carried a
- * second one, whose failure arm was a bare `string`, because the chart views and
- * the map dashboard were built in parallel against read surfaces that never met
- * (#105). The typed union won that decision: a string cannot say "not yet"
- * versus "not now", and those are exactly the two answers the first-forecast
- * poll has to tell apart.
+ * This is the app's *only* fleet result type; a second one whose failure arm was
+ * a bare `string` was retired at #105, because a string cannot say "not yet"
+ * versus "not now" and those are exactly the two answers the first-forecast poll
+ * has to tell apart.
  */
 export type FleetSourceResult<T> =
   | { readonly kind: 'ok'; readonly value: T }
@@ -131,18 +125,14 @@ export interface FleetSourceCapabilities {
    * Fleet-level *forecasts* honour {@link RangeHours} as a look-back. False ⇒
    * forward horizon only.
    *
-   * That used to be read here as "and therefore no window worth offering", on
-   * the grounds that a picker would move one half of the plot and not the
-   * other. #284 D5 overruled it for the case where
-   * {@link FleetSourceCapabilities.fleetActuals} is true: a wider window then
-   * buys the reader genuinely more measured hours behind the horizon, which is
-   * worth a control even though the forecast half only reaches as far as the
-   * pipeline has written. What that costs is a naming obligation rather than a
-   * missing control, and `dashboard/fleet-panel-copy.ts` discharges it — the
-   * chart names the past half with the chosen number of hours and the forecast
-   * half with none. This flag therefore decides what the panel may *say* about
-   * a look-back, and no longer decides on its own whether a window can be
-   * chosen; `dashboard/FleetPanel.tsx` owns that gate and states it.
+   * It decides what the panel may *say* about a look-back, and no longer decides
+   * on its own whether a window can be chosen: #284 D5 ruled that a wider window
+   * is worth a control wherever {@link FleetSourceCapabilities.fleetActuals} is
+   * true, because it buys genuinely more measured hours behind the horizon even
+   * though the forecast half reaches only as far as the pipeline has written. The
+   * naming obligation that leaves is discharged by
+   * `apps/web/src/dashboard/fleet-panel-copy.ts`, and
+   * `apps/web/src/dashboard/FleetPanel.tsx` owns the control's gate.
    */
   readonly fleetLookback: boolean;
   /** Fleet-level actuals can ever be non-empty. */
@@ -153,13 +143,11 @@ export interface FleetSourceCapabilities {
  * Everything `apps/web` needs from the fleet, with no commitment to where the
  * fleet lives.
  *
- * Every view talks to this interface and nothing else, so the same components
- * run against deterministic fixtures today and the Fleet API (#14) later with
- * no change above this line. Two implementations exist by design:
- * `DemoFleetDataSource` (deterministic, in-memory, what local development and
- * the whole test suite run against) and the HTTP source that talks to the
- * deployed API. The second one is not built here — this interface is the
- * contract it will have to satisfy.
+ * Every view talks to this interface and nothing else, so the same components run
+ * against deterministic fixtures and against the Fleet API (#14) with no change
+ * above this line. Two implementations exist by design: `DemoFleetDataSource`
+ * (deterministic, in-memory, what local development and the whole test suite run
+ * against) and `apps/web/src/data/http-fleet-data-source.ts`.
  *
  * ## Members are function-typed properties, not method signatures
  *
@@ -184,15 +172,9 @@ export interface FleetSourceCapabilities {
  *   whose first forecast does not exist yet; the poll treats both as "wait".
  * - **429** (a gateway throttle, or the API's own per-IP limiter) →
  *   `rate-limited`, with `retryAfterSeconds` taken from the `Retry-After` header
- *   when this client can read one. From a **cross-origin browser** it usually
- *   cannot: `Retry-After` is not a CORS-safelisted response header and
- *   `infra/api/gateway.tf`'s `cors_configuration` sets no `expose_headers`, so
- *   from a real deployment the header reads as absent even on the limiter's
- *   429s, which always put it on the wire. Absent therefore means "no wait this
- *   client could read", not "the server stated none" — which is why the field
- *   is optional and why the caller floors its own backoff instead of reading
- *   the absence as permission to retry at once. Exposing the header is #21's
- *   (`expose_headers = ["retry-after"]`).
+ *   when this client can read one — usually not, from a cross-origin browser, for
+ *   the reason `retryAfterSeconds` itself states. The caller floors its own
+ *   backoff rather than reading the absence as permission to retry at once.
  * - **400** (`validation_failed`) → `invalid-request`. The fleet refused what
  *   this client sent — a different answer needs a changed request, though a
  *   fixed-request consumer may still wait out its own deadline (see the arm
@@ -220,12 +202,11 @@ export interface FleetSourceCapabilities {
  *   this way, which is what makes its doc ("never produced an answer") true.
  *
  * A 200 carrying an empty series is **not** an error: the API answers a
- * forecast-less site with `200 { "forecasts": [], "attribution": {…} }` — the
- * body is an object rather than a bare array, so that it can carry the
+ * forecast-less site with an object rather than a bare array, so it can carry the
  * Open-Meteo credit beside the data it credits (`siteForecastResponseSchema`).
- * The HTTP source unwraps `forecasts` into `{ kind: 'ok', value: [] }` here.
- * Callers that need "nothing yet" as a distinct state derive it from the empty
- * array, which is what `useFirstForecast` does.
+ * The HTTP source unwraps it into an `ok` result holding an empty array, and
+ * callers that need "nothing yet" as a distinct state derive it from that —
+ * `apps/web/src/data/use-first-forecast.ts` does.
  *
  * The attribution travels with every weather-derived payload and must be
  * displayed wherever the data is (CC BY 4.0, CLAUDE.md). Today the UI renders
