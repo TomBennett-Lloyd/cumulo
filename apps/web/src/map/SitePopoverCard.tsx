@@ -16,31 +16,30 @@ import {
 /*
  * One site's card, as the map draws it.
  *
- * Presentational and DOM-only (`react.md` rule 4): the facts come from the
- * `Site` handed in, the forecast state is the dashboard's poll handed in, and
- * nothing here fetches anything. That is what lets it be rendered in jsdom —
- * `SitePopover.tsx` is the half that needs a live maplibre map, and it is this
- * card that it portals into a marker.
+ * Presentational and DOM-only (docs/standards/react.md rule 4): the facts come
+ * from the `Site` handed in, the forecast state is the dashboard's poll handed
+ * in, and nothing here fetches anything. That is what lets it be rendered in
+ * jsdom — `SitePopover.tsx` is the half that needs a live maplibre map, and it
+ * is this card that it portals into a marker.
  *
- * It replaced a panel in the reading column (`SitePanel`, #265). Two things went
- * with the move. The site's own chart is no longer here: one site's forecast is
- * now a second series on the fleet chart below the map (`site-overlay.ts`), so
+ * The site's own chart is not here: one site's forecast is a second series on
+ * the fleet chart below the map (`apps/web/src/dashboard/site-overlay.ts`), so
  * the card carries the site's identity and the state of its first forecast and
- * stops there — a chart at marker size would be a chart nobody could read.
- * And the reading column stopped swapping at all, which is why a selection has
- * nothing to announce by displacement and this card announces itself by its own
- * accessible name instead.
+ * stops there — a chart at marker size would be a chart nobody could read. No
+ * reading column swaps on selection either, which is why this card announces
+ * itself by its own accessible name rather than by displacement.
  */
 
 /**
  * The deadline the first-forecast poll enforces, in seconds.
  *
- * Restated from `FIRST_FORECAST_DEADLINE_MS` in `../data/use-first-forecast`,
- * which is module-private there. The number is the reader's, not the
- * transport's: the hook's own timeout message names the site by uuid and says
- * nothing about what to do next, so this card says it in the app's words
- * instead (`state-copy.ts`) and needs the figure to do it. Exporting the
- * deadline from the hook would collapse the pair — see the note on #148.
+ * Restated from `FIRST_FORECAST_DEADLINE_MS` in
+ * `apps/web/src/data/use-first-forecast.ts`, which is module-private there. The
+ * number is the reader's, not the transport's: the hook's own timeout message
+ * names the site by uuid and says nothing about what to do next, so this card
+ * says it in the app's words instead (`apps/web/src/dashboard/state-copy.ts`)
+ * and needs the figure to do it. Exporting the deadline from the hook would
+ * collapse the pair.
  */
 const FIRST_FORECAST_DEADLINE_SECONDS = 90;
 
@@ -58,7 +57,8 @@ type FailedForecast = Extract<ForecastViewState, { readonly status: 'failed' }>;
  * never heard back at all, so the same sentence would assert a pipeline state
  * nobody established; it says what it knows instead. A fault gets the source's
  * message verbatim — it is the only account of what actually failed, and
- * paraphrasing it would lose the detail (`error-handling.md` rule 4).
+ * paraphrasing it would lose the detail (docs/standards/error-handling.md
+ * rule 4).
  *
  * Every arm keeps the retry (its caller supplies one for the whole `failed`
  * state): re-asking is a real recourse for all three, and most obviously for
@@ -98,16 +98,12 @@ interface SiteForecastRegionProps {
  * A halt gets the source's message and **no retry**: `forbidden`'s recourse is
  * a deployment change, so a button re-running the identical refused request
  * would be telling the reader to do the one thing that cannot work
- * (`react.md`'s async-surface convention).
+ * (docs/standards/react.md's async-surface convention).
  *
- * `ready` renders nothing, which is the whole of what this card gained by
- * giving up its chart. The arrival of the forecast is not announced (`react.md`
- * — completion is the busy container being replaced), and where the forecast
- * went is on screen already: the fleet chart below the map has grown a series
- * for this site, with its own column in the table twin. The legend row naming it
- * is a press away rather than on screen, since #429 moved the legend behind that
- * panel's (i) — which costs this paragraph nothing, because what it is claiming
- * is that the forecast visibly arrived somewhere, not that its name did.
+ * `ready` renders nothing. The arrival of the forecast is not announced
+ * (docs/standards/react.md — completion is the busy container being replaced),
+ * and where the forecast went is on screen already: the fleet chart below the
+ * map has grown a series for this site, with its own column in the table twin.
  */
 const SiteForecastRegion = ({
   site,
@@ -153,11 +149,14 @@ export interface SitePopoverCardProps {
  * ## A selection moves focus nowhere
  *
  * This card takes no focus when it opens, whoever asked for the selection. That
- * is `design.md` rule 11 — focus stays where the reader put it — as #328
- * settled it; `react.md`'s focus paragraphs are where the mechanics are written
- * down. A reader who pressed a marker is still on that marker, and a reader who
- * picked a site out of the header's search is still in the search input, which
- * is the combobox discipline that pattern owes anyway.
+ * is docs/standards/design.md rule 11 — focus stays where the reader put it — as
+ * #328 settled it; docs/standards/react.md's focus paragraphs are where the
+ * mechanics are written down. A reader who pressed a marker is still on that
+ * marker, and a reader who picked a site out of the header's search is still in
+ * the search input, which is the combobox discipline that pattern owes anyway.
+ * The alternative is moving somebody to the answer: a page that grabs the focus
+ * takes the reader's place away to tell them something it could have told them
+ * where they stood.
  *
  * What answers a selection instead is structure. This card is
  * `aria-labelledby` its own heading, so the surface names its site the moment it
@@ -165,27 +164,16 @@ export interface SitePopoverCardProps {
  * as its hours arrive; and the header's search says so in its own status region.
  * Not the chart's readout — that region mounts empty and fills only when a
  * reader moves the chart's own selection, so at the moment of arrival it names
- * nothing at all (`react.md`'s live-region bullet).
- *
- * The chart's contribution used to be written here as its *legend* growing a row
- * under the site's name, and that stopped being the unprompted half on
- * 2026-08-11: #429 moved the legend behind the panel's (i), so the row still
- * exists and still carries the name (`dashboard/site-overlay.ts` supplies the
- * label) but it is one press away rather than on screen. The drawn line is what
- * a reader is shown without asking, which is what this paragraph is about.
- * The alternative is moving somebody to the answer, which this card did in two
- * different spellings before #328 and no longer does in either: a page that
- * grabs the focus takes the reader's place away to tell them something it could
- * have told them where they stood.
+ * nothing at all (docs/standards/react.md's live-region bullet). The chart's
+ * legend row for the site carries its name too, but behind the panel's (i) since
+ * #429, so the drawn line is the part a reader is shown without asking.
  *
  * {@link SitePopoverCardProps.selectionOrigin} therefore no longer decides
  * whether focus *moves* — nothing moves it. What it still decides is whether
- * this card captures an opener at all, which is the settlement of
- * [#260](https://github.com/TomBennett-Lloyd/cumulo/issues/260) surviving in the
- * one clause that outlived the landing. A `?site=` card returns nobody anywhere
- * on close, because nobody's press put a reader anywhere for it to return them
- * to: it mounts when the *fleet listing resolves*, which on a deep link is not
- * page load and can be seconds later.
+ * this card captures an opener at all (#260). A `?site=` card returns nobody
+ * anywhere on close, because nobody's press put a reader anywhere for it to
+ * return them to: it mounts when the *fleet listing resolves*, which on a deep
+ * link is not page load and can be seconds later.
  *
  * Escape is the cost that is left, and it is now the ordinary one. Escape closes
  * from anywhere *inside* the card, so a reader has to be in the card for it to
@@ -212,17 +200,13 @@ export interface SitePopoverCardProps {
  * have left it.
  *
  * Since a selection lands nobody in here, that guard mostly declines by its own
- * terms, and deliberately so: a card the reader was never put inside is not
- * holding the focus it would be giving back, so a dismissal that happens from
- * outside it — another marker, a search hit — leaves the reader exactly where
- * they already were. What the machinery still answers is the reader who came
- * *into* the card: pressing Close focuses it, and tabbing to it does too, so the
- * control they are standing on is about to unmount under them. The mechanism is
- * kept whole rather than deleted because that path is ordinary, not because the
- * landing might come back.
+ * terms, and deliberately so. What the machinery still answers is the reader who
+ * came *into* the card: pressing Close focuses it, and tabbing to it does too,
+ * so the control they are standing on is about to unmount under them.
  *
  * The document's focus is state no render owns and no re-render restores, so
- * this is exactly the external system an effect is for (`react.md` rule 1).
+ * this is exactly the external system an effect is for (docs/standards/react.md
+ * rule 1).
  *
  * ## No Open-Meteo credit here
  *
@@ -230,8 +214,8 @@ export interface SitePopoverCardProps {
  * physical configuration, and the forecast arms say only whether one exists yet.
  * The map's own credits band carries the obligation for everything drawn on the
  * tiles, and the page footer carries it for the reading below
- * (`map-treatment.md`, Attribution). A credit that came and went with a
- * selection is one that will eventually be missing when it matters.
+ * (`docs/design/map-treatment.md`, Attribution). A credit that came and went
+ * with a selection is one that will eventually be missing when it matters.
  */
 export const SitePopoverCard = ({
   site,
@@ -253,8 +237,8 @@ export const SitePopoverCard = ({
     const card = cardRef.current;
 
     // Nothing is focused on the way in: a selection moves focus nowhere
-    // (`design.md` rule 11, #328). This effect exists for the way *out* — the
-    // capture above and the guarded restore below.
+    // (docs/standards/design.md rule 11, #328). This effect exists for the way
+    // *out* — the capture above and the guarded restore below.
 
     return () => {
       // An opener that has left the document is not chased: focusing a detached
@@ -270,17 +254,16 @@ export const SitePopoverCard = ({
        * A leaving card is not entitled to move a focus that is no longer its
        * own. Three cases make that concrete, and since #328 the first is the
        * ordinary one rather than an edge. **The reader was never inside this
-       * card at all**: opening it moved nobody, so every dismissal that does not
-       * go through a control in here — another marker, the search — finds
-       * the focus somewhere this card never held it, and a restore would drag
-       * them back to the map from wherever they actually are. **The reader left
-       * of their own accord**, tabbing or clicking away and then dismissing from
-       * there, which is the same answer for the same reason. And **pressing
-       * marker B while site A's card is open** moves focus to marker B *before*
-       * the commit — so A's cleanup, if it restored unconditionally, would put
-       * focus back on marker A, B's mount effect would then capture marker A as
-       * its opener, and closing B would strand the reader on the marker of a
-       * site they stopped looking at two interactions ago.
+       * card at all**: opening it moved nobody, so a dismissal that does not go
+       * through a control in here — another marker, the search — finds the focus
+       * somewhere this card never held it, and a restore would drag them back to
+       * the map. **The reader left of their own accord**, which is the same
+       * answer for the same reason. And **pressing marker B while site A's card
+       * is open** moves focus to marker B *before* the commit — so an
+       * unconditional restore in A's cleanup would put focus back on marker A,
+       * B's mount effect would capture marker A as its opener, and closing B
+       * would strand the reader on the marker of a site they stopped looking at
+       * two interactions ago.
        *
        * "Still has it" is `body` or inside this card. `body` is the usual answer
        * on a real dismissal: React detaches this subtree during the mutation
@@ -304,17 +287,15 @@ export const SitePopoverCard = ({
    * Escape closes, from anywhere inside the card.
    *
    * On the container rather than on the close button, so that every control the
-   * reader can reach inside the card dismisses it. There are two of those and
-   * the second is the reason this is not just a handler on Close: the failed
-   * arms of {@link SiteForecastRegion} carry a `Try again`, so a reader who has
-   * moved on to the retry would otherwise be holding a control Escape does not
-   * answer from. The handler rides the React event, so every child is covered
-   * without any of them knowing.
+   * reader can reach inside the card dismisses it — the second of those is the
+   * reason this is not just a handler on Close: the failed arms of
+   * {@link SiteForecastRegion} carry a `Try again`, so a reader who has moved on
+   * to the retry would otherwise be holding a control Escape does not answer
+   * from. The handler rides the React event, so every child is covered without
+   * any of them knowing.
    *
-   * What it deliberately does not cover is a reader who has not come into the
-   * card — since #328 that is everybody a selection has just answered, standing
-   * wherever they pressed. The docblock above says why no document-level handler
-   * was added to reach them there.
+   * It deliberately does not cover a reader who has not come into the card. The
+   * docblock above says why no document-level handler was added to reach them.
    */
   const closeOnEscape = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') {
@@ -336,18 +317,17 @@ export const SitePopoverCard = ({
         {/*
          * An X, with the word moved to the accessible name.
          *
-         * `design.md` rule 2: a label whose only job is naming a control for
-         * assistive technology becomes an accessible name rather than visible
-         * text, and "close" is one of the two instances that rule settles.
-         * Nothing is lost to a screen reader — the button is still found by the
-         * name `Close` — and the card gets back the width the word was taking
-         * from a title that has a site name to fit.
+         * docs/standards/design.md rule 2: a label whose only job is naming a
+         * control for assistive technology becomes an accessible name rather
+         * than visible text, and "close" is one of the two instances that rule
+         * settles. Nothing is lost to a screen reader, and the card gets back
+         * the width the word was taking from a title that has a site name to fit.
          *
-         * The mark is drawn on the header's terms (`header/HeaderMenu.tsx`'s
-         * burger): a 20-unit `viewBox`, `aria-hidden` so the name is said once,
-         * and stroked in `currentColor` so it follows the button through both
-         * themes. `site-popover.css` says why the drawing declarations are
-         * restated there rather than shared.
+         * The mark is drawn on the header's terms
+         * (`apps/web/src/header/HeaderMenu.tsx`'s burger): a 20-unit `viewBox`,
+         * `aria-hidden` so the name is said once, and stroked in `currentColor`
+         * so it follows the button through both themes. `site-popover.css` says
+         * why the drawing declarations are restated there rather than shared.
          */}
         <button type="button" className="site-popover-close" aria-label="Close" onClick={onClose}>
           <svg className="site-popover-close-icon" viewBox="0 0 20 20" aria-hidden="true">

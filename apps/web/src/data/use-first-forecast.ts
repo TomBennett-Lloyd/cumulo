@@ -12,21 +12,23 @@ const MS_PER_SECOND = 1_000;
  * Two constraints meet here. The ticket promises a first forecast visible about
  * a minute after the visitor adds a site, and the client can only guarantee
  * "within one poll of the forecast existing" — so the interval is the slack the
- * pipeline does not get. Five seconds on top of the demo pipeline's 45 leaves
- * the promise intact with room to spare.
+ * pipeline does not get: one poll interval on top of
+ * `apps/web/src/data/demo-fleet-data-source.ts`'s
+ * `DEFAULT_FIRST_FORECAST_DELAY_MS` leaves that promise intact with room to
+ * spare.
  *
  * The other constraint is read capacity, and ADR 0002's review of this ticket
- * priced both sides of it. Each poll reads the watched site's own partition —
- * one Query, ~0.5 read units on `series`. The reads to stay away from are the
+ * priced both sides of it. Each poll reads the watched site's own partition, one
+ * Query, which is the cheap end of `series`. The reads to stay away from are the
  * fleet-level ones: `fleetForecasts` and `fleetActuals` each fan out over every
- * site's partition, ~25 read units on `series` a call, so a handful of tabs
- * re-polling one of those every five seconds saturates what this poll barely
- * touches. Re-listing is not the expensive part — `listSites` is one Query over
- * the `FLEET` partition, ~2 units on `sites` — it is simply not this loop's
- * business either. Since #258 these tables are on-demand, so what the expensive
- * version exhausts is the budget rather than a provisioned ceiling: it arrives
- * as a bill, not as a throttle, which ADR 0002 notes is the harder failure to
- * spot. This loop therefore calls `getSiteForecast` and nothing else.
+ * site's partition and cost tens of times as much a call, so a handful of tabs
+ * re-polling one of those on this cadence saturates what this poll barely
+ * touches. Re-listing is not the expensive part, and it is not this loop's
+ * business either. These tables are on-demand, so what the expensive version
+ * exhausts is the budget rather than a provisioned ceiling: it arrives as a
+ * bill, not as a throttle, which ADR 0002 notes is the harder failure to spot.
+ * This loop therefore calls `getSiteForecast` and nothing else; the units
+ * themselves are `infra/storage/tables.tf`'s.
  */
 const POLL_INTERVAL_MS = 5_000;
 
@@ -36,17 +38,39 @@ const POLL_INTERVAL_MS = 5_000;
  * `retryAfterSeconds` is the server's number and is honoured whenever it is
  * larger; the floor exists for the case where it is absent or small, so that a
  * "not now" can never make the loop poll *faster* than its ordinary cadence
- * (`error-handling.md` rule 3: back off, never hot-retry).
+ * (docs/standards/error-handling.md rule 3: back off, never hot-retry).
  */
 const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
 
 /**
  * How long a first forecast is worth waiting for.
  *
- * Twice the demo pipeline's 45-second latency: long enough that an ordinarily
- * slow pipeline is not called broken, short enough that a visitor is not left
+ * Twice `apps/web/src/data/demo-fleet-data-source.ts`'s
+ * `DEFAULT_FIRST_FORECAST_DELAY_MS`: long enough that an ordinarily slow
+ * pipeline is not called broken, short enough that a visitor is not left
  * watching a spinner with no ending. Reaching it is a product event — the site's
  * card says the wait ended and offers a retry — not a silent stall.
+ *
+ * Restatement ledger (docs/standards/architecture.md rule 9) — this constant is
+ * the owner, and a **floor** rather than a count: as of 2026-09-08,
+ * `git grep -lE '90_000|90000|ninety|90[- ]seconds?|FIRST_FORECAST_DEADLINE'`
+ * over `apps` and `docs` returns these carriers, and one written after that date
+ * belongs here. The pattern carries a spaced-and-hyphenated arm as well as the
+ * literal, because the copy a reader is shown spells the value in words and a
+ * unit-anchored sweep cannot see it.
+ *
+ * `apps/web/src/map/SitePopoverCard.tsx`'s `FIRST_FORECAST_DEADLINE_SECONDS`
+ * computes the sentence the reader is shown from it, and its own docblock says
+ * why the pair is not collapsed, while `apps/web/src/map/SitePopoverCard.test.tsx`
+ * asserts that sentence with the value spelled out in it.
+ * `apps/web/src/data/use-first-forecast.test.tsx`,
+ * `apps/web/src/data/use-first-forecast.unanswered.test.tsx`,
+ * `apps/web/src/dashboard/Dashboard.test.tsx` and
+ * `apps/web/src/dashboard/Dashboard.deep-link.test.tsx` each advance a fake
+ * clock by the literal, which is the assertion this value has, and all four
+ * restate it in prose besides. `apps/web/src/dashboard/Dashboard.tsx`'s stale-id
+ * guard and `docs/design/dashboard-composition.md` argue from it in prose alone.
+ * Every other mention in this module names the constant instead.
  */
 const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
@@ -62,11 +86,10 @@ const DEADLINE_SECONDS_TEXT = String(FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND)
 /**
  * The state every watch starts in, and stays in until the fleet answers.
  *
- * A module constant rather than a fresh object per run: re-entering it is then
- * a no-op for React (it bails out of re-rendering on an identical value), which
- * matters because every effect run begins by resetting to it — and because
- * every fault-poll before absence is confirmed re-enters it too, so a fleet
- * that is failing repeatedly re-renders the card zero times.
+ * A module constant rather than a fresh object per run, so re-entering it is a
+ * no-op for React: every effect run begins by resetting to it, and every
+ * fault-poll before absence is confirmed re-enters it, so a fleet that is
+ * failing repeatedly re-renders the card zero times.
  */
 const WATCH_START_STATE: ForecastViewState = { status: 'checking' };
 
@@ -80,8 +103,8 @@ const WATCH_START_STATE: ForecastViewState = { status: 'checking' };
  * as an error, so it is carried per-poll rather than recovered afterwards.
  *
  * `halt` is the third answer, and the one that makes waiting pointless: the
- * fleet has said something that the next ninety seconds cannot change, so the
- * loop stops now and reports it now.
+ * fleet has said something the rest of the deadline cannot change, so the loop
+ * stops now and reports it now.
  */
 type PollDecision =
   | { readonly kind: 'ready'; readonly forecasts: readonly Forecast[] }
@@ -98,15 +121,12 @@ const rateLimitBackoffMs = (retryAfterSeconds: number | undefined): number =>
 /**
  * The whole policy of the loop, as a pure function of one answer.
  *
- * An `ok` carrying no forecasts is treated as "not yet" rather than as success,
- * and what a premature `ready` costs moved with the surfaces in #265. It used to
- * be a per-site table drawn with no rows in it. Now `ready` is the state that
- * retires the card's visible wait *and* releases `FleetPanel`'s overlay request
- * (`selectionReady`), so an empty series would take the count off the screen and
- * put a named-but-empty line in the fleet chart's legend and table — the reader
- * is told the answer arrived and shown a gap where it should be. "Still
- * waiting" and "this site produces nothing" are different sentences, and only
- * one of them is true here.
+ * An `ok` carrying no forecasts is treated as "not yet" rather than as success.
+ * `ready` retires the card's visible wait *and* releases `FleetPanel`'s overlay
+ * request (`selectionReady`), so an empty series would put a named-but-empty
+ * line in the fleet chart's legend and table — the reader told the answer
+ * arrived and shown a gap where it should be. "Still waiting" and "this site
+ * produces nothing" are different sentences, and only one of them is true here.
  */
 const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecision => {
   if (result.kind === 'ok') {
@@ -130,26 +150,23 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
     case 'invalid-response':
     case 'invalid-request':
     case 'server-fault':
-      // A dropped connection comes back and a payload this client could not
-      // read can be a record the pipeline is still writing, so waiting is worth
-      // something for those two. `server-fault` joins them for the same reason
-      // its own arm states: a fleet that answered "I am broken" can be working
-      // again before the deadline, and the visitor has nothing else to do
-      // meanwhile. `invalid-request` is grouped with them rather than halted
-      // deliberately: halting is reserved for the one arm whose recourse is
-      // unambiguous, and a fault the loop cannot classify that confidently is
-      // better given the full wait than cut short. All four therefore keep the
-      // cadence and let the deadline decide when to stop — and the message is
-      // remembered, so a deadline reached this way is reported as an error
-      // rather than as a wait.
+      // All four can come right before the deadline does: a dropped connection
+      // comes back, a payload this client could not read can be a record the
+      // pipeline is still writing, and a fleet that answered "I am broken" can
+      // be working again. `invalid-request` is grouped with them rather than
+      // halted deliberately — halting is reserved for the one arm whose recourse
+      // is unambiguous, and a fault the loop cannot classify that confidently is
+      // better given the full wait than cut short. So all four keep the cadence
+      // and let the deadline decide when to stop, and the message is remembered,
+      // so a deadline reached this way is reported as an error, not as a wait.
       return { kind: 'keep-waiting', delayMs: POLL_INTERVAL_MS, fault: error.message };
     case 'forbidden':
       // The arm's own contract: what is wrong is *who is asking*, and its
       // recourse is a deployment change (`CUMULO_WEB_ORIGINS`). Nothing the
-      // loop can do changes the answer, so waiting out ninety seconds before
+      // loop can do changes the answer, so waiting out the deadline before
       // saying so buys the visitor nothing — and a view that then rendered it
       // as "try again" would be telling them to do the one thing that cannot
-      // work (the anti-pattern #150's review named).
+      // work.
       return { kind: 'halt', message: error.message };
   }
   // Every code is enumerated and there is no catch-all arm, so the declared
@@ -166,7 +183,7 @@ const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState 
 /**
  * What the card is told when the deadline passes.
  *
- * Three outcomes, because the run can reach ninety seconds having learned three
+ * Three outcomes, because the run can reach the deadline having learned three
  * different things — and the card has a different sentence for each:
  *
  * - a fault was seen, so the deadline is an `error` carrying the fleet's own
@@ -179,9 +196,10 @@ const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState 
  *   may well already exist (#177's review; the tech-debt entry this consumes).
  *
  * `absenceConfirmed` is a parameter rather than something read from the
- * enclosing run, so this stays legible on its own (`structure.md` rule 1).
- * Both messages carry the site the wait was about (`error-handling.md` rule 4)
- * so a screenshot of a failed card is diagnosable on its own.
+ * enclosing run, so this stays legible on its own (docs/standards/structure.md
+ * rule 1). Both messages carry the site the wait was about
+ * (docs/standards/error-handling.md rule 4) so a screenshot of a failed card is
+ * diagnosable on its own.
  */
 const deadlineState = (
   siteId: Site['id'],
@@ -209,8 +227,8 @@ export interface FirstForecastWatch {
   /**
    * The selection's forecast state, for the two surfaces that read it: the site's
    * card on the map renders the wait, the failure and the halt
-   * (`map/SitePopoverCard.tsx`), and `FleetPanel` reads `ready` as permission to
-   * fetch that site's own hours for the chart's overlay.
+   * (`apps/web/src/map/SitePopoverCard.tsx`), and `FleetPanel` reads `ready` as
+   * permission to fetch that site's own hours for the chart's overlay.
    */
   readonly state: ForecastViewState;
   /** Abandons the current wait and starts a fresh one, deadline included. */
@@ -221,14 +239,13 @@ export interface FirstForecastWatch {
  * Watches one site until its first forecast exists.
  *
  * `siteId` is the site created moments ago whose forecast the visitor is
- * waiting for — `null` while nothing is being watched, which reports the
- * neutral `checking` state and starts no timers. The id must be the
- * server-assigned one returned by `createSite`: polling a locally predicted id
- * addresses a site that does not exist, and this loop would wait out its whole
- * deadline on it.
+ * waiting for — `null` while nothing is being watched, which reports the neutral
+ * `checking` state and starts no timers. It must be the server-assigned id
+ * `createSite` returned: a locally predicted one addresses a site that does not
+ * exist, and this loop would wait out its whole deadline on it.
  *
  * The polling loop is the external system this hook synchronizes with
- * (`react.md` rule 1) — timers and in-flight requests are set up by the effect
+ * (docs/standards/react.md rule 1) — timers and in-flight requests are set up by the effect
  * and torn down by its cleanup, so an unmount, a change of site, or a `retry()`
  * all end the current run rather than leaving it writing to state it no longer
  * owns.
@@ -261,17 +278,16 @@ export const useFirstForecast = (
      * Whether the fleet has told this run the forecast does not exist yet.
      *
      * `decidePoll` already encodes exactly that: a `keep-waiting` with
-     * `fault === null` is a `not-found`, or an `ok` carrying an empty series —
-     * both of which are the fleet answering "there is nothing here", which is
+     * `fault === null` is the fleet answering "there is nothing here", which is
      * the only evidence a client has that a first forecast is genuinely being
-     * generated. A `keep-waiting` *with* a fault is the fleet failing to
-     * answer, and says nothing about existence, so it must not promote the
-     * watch out of `checking` (#177). Latched rather than recomputed per poll:
-     * once absence is confirmed, a later network blip does not un-confirm it.
+     * generated. A `keep-waiting` *with* a fault is the fleet failing to answer
+     * and says nothing about existence, so it must not promote the watch out of
+     * `checking` (#177). Latched rather than recomputed per poll: once absence is
+     * confirmed, a later network blip does not un-confirm it.
      *
-     * The deadline asks the same question at the end: ninety seconds reached
-     * without this ever being set means no poll established anything, which is
-     * `unanswered` rather than a pipeline timeout.
+     * The deadline asks the same question at the end: reached without this ever
+     * being set means no poll established anything, which is `unanswered`
+     * rather than a pipeline timeout.
      */
     let absenceConfirmed = false;
 
@@ -285,7 +301,7 @@ export const useFirstForecast = (
 
     // Both bindings are read when the timer fires, not when it is registered:
     // they are this run's own `let`s, so the deadline is decided on everything
-    // the run had learned by the ninetieth second.
+    // the run had learned by the time it passes.
     const deadlineTimer = setTimeout(() => {
       stopPolling();
       setState(deadlineState(siteId, lastFault, absenceConfirmed));
@@ -314,9 +330,9 @@ export const useFirstForecast = (
       }
 
       // A halt ends the run exactly like an arrival does — the answer is final,
-      // so the deadline has nothing left to decide and the card is told now
-      // rather than in ninety seconds. It reports in its own arm rather than as
-      // a failure, so the card can drop the retry no retry can change.
+      // so the deadline has nothing left to decide and the card is told now. It
+      // reports in its own arm rather than as a failure, so the card can drop
+      // the retry no retry can change.
       if (decision.kind === 'halt') {
         stopWatching();
         setState({ status: 'halted', message: decision.message });
@@ -341,7 +357,7 @@ export const useFirstForecast = (
   }, [dataSource, siteId, attempt]);
 
   const retry = useCallback(() => {
-    // Both halves belong to the interaction (`react.md` rule 1): the state
+    // Both halves belong to the interaction (docs/standards/react.md rule 1): the state
     // reset so the card leaves its failed rendering in the same commit the
     // visitor clicked in, and the token bump so the effect starts a new run.
     setState(WATCH_START_STATE);

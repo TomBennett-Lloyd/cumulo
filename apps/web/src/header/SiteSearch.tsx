@@ -14,19 +14,17 @@ import { capacityLabel } from '../dashboard/site-format';
  *
  * That the cap is silent — nothing says how many matched — is recorded in
  * `docs/tech-debt.md` rather than answered here, because the count it wants is
- * copy with an owner (`dashboard/state-copy.ts`).
+ * copy with an owner (`apps/web/src/dashboard/state-copy.ts`).
  */
 const MAX_VISIBLE_MATCHES = 8;
 
 /**
  * The control's accessible name, and the hint inside it.
  *
- * Both live here rather than in `header-copy.ts`: that module owns what the
- * *product* says about itself (its one tagline, which the About dialog is now
- * the only carrier of), and these are a control's name and placeholder with a
- * single carrier apiece. `dashboard/state-copy.ts` is not their home either —
- * it owns the app's pending, failure and empty-fleet vocabulary, and this is
- * none of the three.
+ * Both live here rather than in `header-copy.ts`, which owns what the *product*
+ * says about itself, or in `apps/web/src/dashboard/state-copy.ts`, which owns
+ * the app's pending, failure and empty-fleet vocabulary. These are a control's
+ * name and placeholder with a single carrier apiece.
  */
 const SEARCH_LABEL = 'Search sites by name';
 const SEARCH_PLACEHOLDER = 'Search sites';
@@ -34,11 +32,10 @@ const SEARCH_PLACEHOLDER = 'Search sites';
 /**
  * What the status region says once a site has been picked.
  *
- * Copy this control owns, for the same reason as the two above: it is a widget
- * describing its own answer to the reader who just used it, and
- * `dashboard/state-copy.ts` owns the app's pending, failure and empty-fleet
- * vocabulary — none of which this is. `header-copy.ts` is not its home either;
- * that module says what the *product* is, and this says what just happened.
+ * Copy this control owns, for the reason the two above are: it says what just
+ * happened, which is neither what the product is (`header-copy.ts`) nor the
+ * app's pending, failure and empty-fleet vocabulary
+ * (`apps/web/src/dashboard/state-copy.ts`).
  *
  * A function rather than a template spelled at the call site so the sentence,
  * word order included, is legible in one place — the name leads because it is
@@ -51,11 +48,11 @@ const selectionAnnouncement = (name: string): string => `${name} selected`;
  * What the popup says when nothing matches.
  *
  * Deliberately not the words "no sites": that phrase belongs to the empty
- * *fleet*, which `dashboard/state-copy.ts` answers in one sentence and
- * `state-copy-contract.test.ts` sweeps the app to keep unique. A fleet with
- * sixty sites and a query matching none of them is a different fact, and saying
- * it in the fleet's words would make the two indistinguishable to the sweep and
- * to a reader.
+ * *fleet*, which `apps/web/src/dashboard/state-copy.ts` answers in one sentence
+ * and `apps/web/src/dashboard/state-copy-contract.test.ts` sweeps the app to
+ * keep unique. A populated fleet with a query matching none of it is a different
+ * fact, and saying it in the fleet's words would make the two indistinguishable
+ * to the sweep and to a reader.
  */
 const NO_MATCHES_LABEL = 'No matching sites';
 
@@ -81,8 +78,8 @@ const matchingSites = (sites: readonly Site[], query: string): readonly Site[] =
  * Where the active option lands after a step of `step` through `count` options.
  *
  * Top-level and pure, taking the count as a parameter rather than reading the
- * match list out of the component's scope (`structure.md` rule 1) — which is
- * also what makes the clamping legible without the caller.
+ * match list out of the component's scope (docs/standards/structure.md rule 1)
+ * — which is also what makes the clamping legible without the caller.
  *
  * It clamps rather than wraps. Wrapping is optional in the WAI-ARIA combobox
  * pattern, and clamping is the half that cannot surprise: a reader holding
@@ -117,18 +114,17 @@ export interface SiteSearchProps {
 /**
  * Find a site by name from the header, without hunting the map for it.
  *
- * The fleet is sixty markers on two islands, most of them in knots that only
- * separate two or three zooms in. Reaching one site therefore meant either
+ * The fleet is dozens of markers on two islands, most of them in knots that
+ * only separate two or three zooms in, so reaching one site meant either
  * scrolling the list under the map or expanding clusters until the marker
- * appeared — so the header carries the fleet's index, and a selection made here
- * is the same selection a marker makes.
+ * appeared. The header carries the fleet's index instead, and a selection made
+ * here is the same selection a marker makes.
  *
  * ## The ARIA semantics, stated because nothing lints them
  *
- * This is the app's first combobox, and the repo has no a11y linter — it is a
- * member of `docs/tech-debt.md`'s "No a11y linting" entry, which names this
- * file in return — so review attention is the only gate on the pattern below.
- * Every choice, explicitly:
+ * The repo has no a11y linter — this file is a member of `docs/tech-debt.md`'s
+ * "No a11y linting" entry, which names it in return — so review attention is the
+ * only gate on the pattern below. Every choice, explicitly:
  *
  * - The **input** carries `role="combobox"`, `aria-expanded`, `aria-controls`
  *   naming the popup, and `aria-autocomplete="list"` — the value is never
@@ -138,7 +134,7 @@ export interface SiteSearchProps {
  *   while the reader keeps typing into a field that still has the caret. The
  *   options are therefore `<li>`s and not buttons: a focusable option would
  *   contradict the attribute that says focus is elsewhere.
- * - **`aria-selected` marks the active option**, and only ever one of them. In a
+ * - **`aria-selected` marks the active option**, and only ever one of them: in a
  *   single-select listbox driven by `aria-activedescendant` that attribute *is*
  *   the highlight, so it is set from the same index the id points at rather than
  *   from a second piece of state free to disagree.
@@ -154,18 +150,18 @@ export interface SiteSearchProps {
  *   popup that is not currently rendered, but an active descendant that
  *   resolves to no element is simply an invalid value.
  * - **A selection is announced, because it is no longer anywhere to be seen.**
- *   Focus stays in the input (`design.md` rule 11), the input's value is cleared
- *   rather than rewritten, and the card opens over a map that may be nowhere near
- *   the reader's attention — so a `role="status"` region carries the hit. Its
- *   rules are stated where it is rendered, below.
+ *   Focus stays in the input (docs/standards/design.md rule 11), the value is
+ *   cleared rather than rewritten, and the card opens over a map that may be
+ *   nowhere near the reader's attention — so a `role="status"` region carries the
+ *   hit. Its rules are stated where it is rendered, below.
  * - **No matches is a disabled option, not an empty list or silence.** A listbox
  *   may contain only options, so the message is one `role="option"` marked
  *   `aria-disabled` — it is announced with the popup, it is never the active
  *   descendant, and Enter on it does nothing because there is no site to select.
  *
- * Presentational (`react.md` rule 4): it holds the query and the highlight, which
- * are this control's own, and nothing else. Which site is selected belongs to the
- * dashboard, because the markers and the chart both read it.
+ * Presentational (docs/standards/react.md rule 4): it holds the query and the
+ * highlight, which are this control's own, and nothing else. Which site is
+ * selected belongs to the dashboard, because the markers and the chart read it.
  */
 export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): ReactElement => {
   const [query, setQuery] = useState('');
@@ -177,9 +173,10 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
   const listboxId = `${baseId}-listbox`;
   const optionId = (index: number): string => `${baseId}-option-${String(index)}`;
 
-  // Derived during render rather than mirrored into state (`react.md` rule 1):
-  // the matches are a function of the query and the fleet, and a copy in state
-  // would be a copy free to go stale the moment a site is added.
+  // Derived during render rather than mirrored into state
+  // (docs/standards/react.md rule 1): the matches are a function of the query
+  // and the fleet, and a copy in state would be a copy free to go stale the
+  // moment a site is added.
   const matches = matchingSites(sites, query);
   const expanded = listOpen && query.length > 0;
   // Clamped here rather than trusted from state: the fleet can gain a site while
@@ -189,20 +186,19 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
   const activeSite = matches[activeIndexInRange] ?? null;
   /*
    * The highlighted option's id — and only while the popup is on screen.
-   *
-   * `aria-activedescendant` names an element, so an id that resolves to nothing
-   * is an invalid value rather than a harmless leftover, and the states it would
+   * `aria-activedescendant` names an element, so an id resolving to nothing is
+   * an invalid value rather than a harmless leftover, and the states it would
    * dangle in are the ones this control spends most of its life in: first paint
-   * (an empty query matches the whole fleet, so there is a match without a list
-   * to hold it), after Escape with text still in the field, after a blur, and in
-   * the instant after a selection clears the query.
+   * (an empty query matches every site, so there is a match with no list to hold
+   * it), after Escape with text still in the field, after a blur, and in the
+   * instant after a selection clears the query.
    */
   const activeOptionId = expanded && activeSite !== null ? optionId(activeIndexInRange) : undefined;
 
   const select = (site: Site): void => {
     onSelectSite(site.id);
     // The whole of what a reader is told, now that a selection moves the focus
-    // nowhere (#328, `design.md` rule 11). The card opens over a map the reader
+    // nowhere (#328, docs/standards/design.md rule 11). The card opens over a map the reader
     // is not looking at and the field they are still standing in goes blank, so
     // without this the answer to a search is silence.
     setAnnouncement(selectionAnnouncement(site.name));
@@ -276,11 +272,10 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
           setQuery(event.target.value);
           setListOpen(event.target.value.length > 0);
           setActiveIndex(0);
-          // A reader typing again has moved on from the last answer, and a
-          // region still holding it would repeat that answer the next time a
-          // *different* site is picked only if the words happened to differ.
           // Emptying it here means every selection is a change to an empty
-          // region, including the one that picks the same site twice.
+          // region, including the one that picks the same site twice — a region
+          // still holding the last answer would announce nothing when the same
+          // site is picked again.
           setAnnouncement('');
         }}
         onKeyDown={handleKeyDown}
@@ -330,16 +325,17 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
        * What a selection says, given that it now says nothing by moving.
        *
        * Mounted from first paint and empty until a reader picks something
-       * (`react.md`'s first-paint rule): an announcement reaches anybody only by
-       * *arriving* in a region that was already there, so a region rendered with
-       * its text already inside it would look accessible and announce nothing.
+       * (docs/standards/react.md's first-paint rule): an announcement reaches
+       * anybody only by *arriving* in a region that was already there, so a
+       * region rendered with its text already inside it would look accessible
+       * and announce nothing.
        *
        * The header panel's one live region, and it stays the only one
-       * (`react.md`'s at-most-one rule). The two `SiteSearch` renderings do not
-       * make it two: exactly one of them is ever in the accessibility tree —
-       * `AppHeader.tsx` owns that fact and the breakpoint arithmetic behind it —
-       * so the copy that can fill this is always the copy the reader is using,
-       * and the hidden one is never filled because nothing can type into it.
+       * (docs/standards/react.md's at-most-one rule). The two `SiteSearch`
+       * renderings do not make it two: exactly one of them is ever in the
+       * accessibility tree — `AppHeader.tsx` owns that fact and the breakpoint
+       * arithmetic behind it — so the copy that can fill this is always the copy
+       * the reader is using.
        */}
       <p role="status" className="site-search-status">
         {announcement}

@@ -115,8 +115,10 @@
    move `.header-menu-button` made at #284 D16 and for its reason: the word
    `Close` was wider than it was tall and wanted the wider horizontal pad to sit
    in, whereas a square mark in an oblong box reads as an icon shoved sideways.
-   `--space-2` around a 20px mark is a 36px square, which is the hit target the
-   word used to buy with its own width. `color` is now what the mark is drawn in
+   The even step around the mark buys back the hit target the word used to buy
+   with its own width — a claim no case pins, stated the way
+   `apps/web/src/map/map.css` states the same one for its own controls
+   (`docs/tech-debt.md`, 2026-09-08). `color` is now what the mark is drawn in
    (below), and it is the card's full ink rather than the muted grey the word
    carried: two strokes offer a reader far less area to find than five letters
    do. No type properties, though, unlike the `.header-menu-button` rule this one
