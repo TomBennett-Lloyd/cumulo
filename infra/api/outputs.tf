@@ -24,8 +24,11 @@
 # ---------------------------------------------------------------------------
 # IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
 # a price. Two lines here bill for merely existing: the log group's stored
-# bytes (~$0.0001/month at demo volume) and the two alarms ($0.10 per
-# alarm-month at list). Both are absorbed by always-free pools, not free.
+# bytes (~$0.0002/month at demo volume, warmer included) and the two alarms
+# ($0.10 per alarm-month at list). Both are absorbed by always-free pools, not
+# free. Since #473 "idle" no longer means "nothing running" either — the
+# warmer's rule fires whether or not anybody is looking, and the bullet on it
+# below carries the one charge that leaves this stack because of it.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
 #     ("no resource that bills for existing") was retired. Retained bytes bill
@@ -50,10 +53,12 @@
 #     convenient: the traffic is dominated by reads and Swagger UI assets, so the
 #     handful of failure-path lines is a rounding error against 10,000 requests.
 #     Those three platform lines are exactly what ADR 0005's ~250 bytes per
-#     *invocation* measures; it was never a per-application-record figure. At
-#     demo volume (order 10,000 requests/month)
-#     **10,000 × ~250 B ≈ 2.5 MB/month** retained, ~$0.00008/month at list and
-#     $0.00 as billed inside the account's always-free 5 GB of stored logs.
+#     *invocation* measures; it was never a per-application-record figure. The
+#     billed unit is the **invocation** rather than the request, which is what
+#     #473's warmer changed: at demo volume (order 10,000 requests/month) plus
+#     the warmer's 17,280 pings a month, **~27,000 × ~250 B ≈ 6.8 MB/month**
+#     retained, ~$0.0002/month at list and $0.00 as billed inside the account's
+#     always-free 5 GB of stored logs.
 #     This stack is quoted at that measured size rather than at the 1 KB-per-line
 #     ceiling ingestion and forecast use, and infra/README.md's cost preamble
 #     states the rule: with no application line on the dominant path there is
@@ -74,12 +79,22 @@
 #     the property ADR 0005 chose it for, against an ALB's ≈ $16.43/month of
 #     standing charge. There are no access logs on the stage to add a second
 #     log group — gateway.tf says why at the point of temptation.
-#   * Lambda — request-driven, so an idle stack invokes nothing at all. At demo
-#     volume (order 10,000 requests/month) both the always-free 1,000,000
-#     requests and the 400,000 GB-seconds are untouched; at 256 MB and ~100 ms
-#     the compute allowance covers 16 million requests/month. The stored
-#     deployment package is not a third at-rest line: Lambda code storage
-#     carries no charge inside its 75 GB per-Region quota.
+#   * Lambda — request-driven plus, since #473, clock-driven: an idle stack is
+#     no longer an idle function, because warmer.tf's rule invokes it twice
+#     every five minutes whether or not anybody is looking. At demo volume
+#     (order 10,000 requests/month) plus the warmer's 17,280 both the always-free
+#     1,000,000 requests and the 400,000 GB-seconds are untouched — the warmer is
+#     1.7% of the first and 233 of the 400,000 GB-seconds of the second; at
+#     256 MB and ~100 ms the compute allowance covers 16 million requests/month.
+#     The stored deployment package is not a third at-rest line: Lambda code
+#     storage carries no charge inside its 75 GB per-Region quota.
+#   * The warmer (warmer.tf) — an EventBridge scheduled rule, its two targets and
+#     one Lambda permission, all unpriced (infra/README.md's ingestion cost table
+#     owns that figure). Its invocations ride the Lambda and CloudWatch lines
+#     above. What it does spend outside this stack is one `GET /v1/sites` Query
+#     per ping on `cumulo-sites`: **$0.00/month here, driving ≈ $0.005/month
+#     under storage**, on that table's "everything else" row. It is $0 whenever
+#     the rule is disabled.
 #   * IAM — the execution role, its inline policy, the Lambda permission and the
 #     deploy grant are all free.
 #
