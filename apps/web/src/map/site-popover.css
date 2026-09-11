@@ -34,8 +34,8 @@
  * therefore state `2` and paint above this card by design (`map.css` carries
  * that argument), which is what stopped a panned card burying the reset button.
  * It stays far below the `10` the header's overlays and the info tip share (the
- * census is in apps/web/src/header/header.css) deliberately: those hang over the whole map,
- * and this card belongs to the map rather than above it.
+ * census is in `apps/web/src/header/header.css`) deliberately: those hang over
+ * the whole map, and this card belongs to the map rather than above it.
  *
  * It leans on maplibre for the `position: absolute` that makes a stacking value
  * apply at all. Nothing else here can supply it — the element is maplibre's to
@@ -97,9 +97,10 @@
 /* `--text-lg`, a step below the retired site panel's `--text-xl` (#265): the
    card is a card on the map rather than the top of the reading. It does not
    step below a heading, though, and that survived the fleet chart getting its
-   `<h2>` back on 2026-08-11 (apps/web/src/dashboard/fleet-panel.css) — because that heading
-   is `--text-lg` too. So the card sits level with the first heading under the
-   map rather than under it, which is the whole of what this step is chosen for:
+   `<h2>` back on 2026-08-11 (`apps/web/src/dashboard/fleet-panel.css`) — because
+   that heading is `--text-lg` too. So the card sits level with the first heading
+   under the map rather than under it, which is the whole of what this step is
+   chosen for:
    a card on the map is level with the sections below it rather than over them.
    The fleet chart's title is the only such heading left, and since the site
    table left the page on 2026-08-12 it is also the only section below the map
