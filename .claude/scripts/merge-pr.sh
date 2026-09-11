@@ -631,10 +631,13 @@ fi
 # is one hand resolution; the cost of unioning wrongly is a silently mangled log that
 # the squash merge then makes permanent, which is why every unclear case refuses.
 #
-# The analysis is READ-ONLY and happens in the repository root, against fetched
-# objects — no checkout, nothing written, no worktree touched — so a refusal cannot
-# leave a tree in a state the merge owner has to clean up. Only once every test has
-# passed is anything applied, and then only in the lane's own worktree.
+# The analysis happens in the repository root, against fetched objects, and writes
+# nothing anybody can see: no checkout, no file, no ref, no commit, no worktree
+# touched. (It does write to the object store — the fetch brings objects in and
+# merge-tree --write-tree leaves an unreachable tree behind — which is the same class
+# of write `gh pr checkout` or any fetch makes, and is not state a refusal leaves for
+# the merge owner to undo.) Only once every test has passed is anything applied, and
+# then only in the lane's own worktree.
 #
 # Note for a future rename: this step matches the literal path docs/tech-debt.md and
 # is therefore an EXECUTABLE carrier of it, the way the feedback step is for
@@ -664,7 +667,7 @@ EOF
   return 0
 }
 
-# tech_debt_union_plan <base-sha> <head-sha> <out-file>
+# tech_debt_union_plan <merge-base blob> <base-tip blob> <branch blob> <out-file>
 #   -> 0 the union is written to <out-file>, a one-line summary on stdout
 #      1 refused, the reason on stdout
 #      2 the question could not be asked at all, the reason on stdout
@@ -725,11 +728,7 @@ if (!O.endsWith("\n")) {
 }
 
 const baseLines = O.split("\n");
-let lastHeading = -1;
-for (let i = 0; i < baseLines.length; i++) {
-  if (baseLines[i].startsWith("## ")) lastHeading = i;
-}
-if (lastHeading < 0) {
+if (!baseLines.some((l) => l.startsWith("## "))) {
   refuse(
     target +
       ": the merge-base copy holds no \"## \" entry heading — this is not the append-only log this step knows how to union"
