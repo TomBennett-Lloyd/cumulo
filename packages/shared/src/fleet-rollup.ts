@@ -57,11 +57,12 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * them in one pass therefore land a bit or two apart — measured on the canonical fleet at **~2e-14
  * kW**, worst case `2.1e-14` on a `50.9` kW hour (the `117.4` kW hour's is `1.4e-14`), with the
  * per-hour contributing-capacity sum differing by `1.1e-13` kW on the same fixture.
- * `fleet-rollup-additivity.test.ts` bounds the power discrepancy at a nanowatt and would fail if it
+ * `fleet-rollup-additivity.test.ts` bounds the power discrepancy at a microwatt — `1e-9` kW, which
+ * is `1e-6` W — and would fail if it
  * widened. That is the *entire* difference between this roll-up and the fan-out it replaces: no
  * field is lost and nothing is approximated. The measurement is some **eleven** orders of magnitude
- * below the watt precision a power value in this repo claims — and the nanowatt the proof asserts is
- * itself six orders below a watt — so it is invisible to every consumer, but it is why the proof
+ * below the watt precision a power value in this repo claims — and the microwatt the proof asserts
+ * is itself six orders below a watt — so it is invisible to every consumer, but it is why the proof
  * asserts a bound rather than equality, and why it says so out loud.
  *
  * Rounding partials to watt precision at the write boundary was considered for exactly that reason

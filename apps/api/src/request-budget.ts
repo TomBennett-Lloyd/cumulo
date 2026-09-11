@@ -87,7 +87,9 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   done after the site exists (ADR 0007).
  * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
  *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
- *   no loop to gate and is the widest ungated prefix on the API.
+ *   no loop to gate, and it was the widest ungated prefix on the API until
+ *   ADR 0009's fallback arm above took that title at 5 — temporarily, until
+ *   #507. It is the widest that is *structural* rather than transitional.
  * - `DELETE /v1/sites/{siteId}` — **3** on a user site (limiter 2,
  *   `getFleetSite`), ≈ 21 s, the counted deletes gated after it; **4** on a
  *   seed site, whose single `deleteFleetSite` is a plain
@@ -102,7 +104,7 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
  * what crosses it, at 21,000 ms. It therefore takes **three independent
  * per-unit worst cases coinciding in one request's ungated prefix** to kill
- * an invocation — which the three- and four-unit prefixes above can offer,
+ * an invocation — which every prefix above of three units or more can offer,
  * and which is now the only route to it. Each of those worst cases is itself
  * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
  * module declines to size a slack against, for the same reason

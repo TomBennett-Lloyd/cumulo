@@ -93,8 +93,16 @@ const perLocationPartials = () =>
     );
   });
 
-/** The tightest tolerance a float sum can honour: 1e-9 kW — a nanowatt. See the `it` below. */
-const NANOWATT_PLACES = 9;
+/**
+ * The tightest tolerance a float sum can honour: `1e-9` kW — a **microwatt**.
+ *
+ * Named in the unit these numbers are actually in. A kilowatt's ninth decimal place is 1e-9 kW,
+ * which is 1e-6 W: a microwatt, not the nanowatt an earlier draft of this file called it. The
+ * arithmetic was always right and the word was wrong by three orders, which is exactly the kind of
+ * slip a named constant is supposed to stop rather than spread — so the name carries the unit and
+ * the comment carries the conversion. See the `it` below.
+ */
+const MICROWATT_PLACES = 9;
 
 const expectAggregatesAgree = (
   actual: readonly FleetForecastAggregatePoint[],
@@ -113,19 +121,19 @@ const expectAggregatesAgree = (
   actual.forEach((point, index) => {
     const want = expected[index];
     expect(want).toBeDefined();
-    expect(point.acPowerKw).toBeCloseTo(want?.acPowerKw ?? Number.NaN, NANOWATT_PLACES);
+    expect(point.acPowerKw).toBeCloseTo(want?.acPowerKw ?? Number.NaN, MICROWATT_PLACES);
     expect(point.contributingCapacityKw).toBeCloseTo(
       want?.contributingCapacityKw ?? Number.NaN,
-      NANOWATT_PLACES,
+      MICROWATT_PLACES,
     );
     if (point.uncertainty !== undefined && want?.uncertainty !== undefined) {
       expect(point.uncertainty.p10AcPowerKw).toBeCloseTo(
         want.uncertainty.p10AcPowerKw,
-        NANOWATT_PLACES,
+        MICROWATT_PLACES,
       );
       expect(point.uncertainty.p90AcPowerKw).toBeCloseTo(
         want.uncertainty.p90AcPowerKw,
-        NANOWATT_PLACES,
+        MICROWATT_PLACES,
       );
     }
   });
@@ -146,7 +154,7 @@ describe('the roll-up partition is the fleet partition', () => {
 });
 
 describe('partials sum to the whole-fleet aggregate', () => {
-  it('agrees on every field, discrete ones exactly and kilowatts to a nanowatt', () => {
+  it('agrees on every field, discrete ones exactly and kilowatts to a microwatt', () => {
     expectAggregatesAgree(
       sumFleetRollupPartials(perLocationPartials()),
       fleetForecastAggregate(allForecasts, fleet),
@@ -165,12 +173,12 @@ describe('partials sum to the whole-fleet aggregate', () => {
    * **What this bound covers is `acPowerKw`**, which is what the reduce below reads. The same
    * phenomenon moves the other sums by the same order — the per-hour contributing capacity differs
    * by `1.1e-13` kW on this fixture — and `expectAggregatesAgree` above already holds every field
-   * to `NANOWATT_PLACES`, so the field this one singles out is the one a reader of a chart would
+   * to `MICROWATT_PLACES`, so the field this one singles out is the one a reader of a chart would
    * see.
    *
-   * A nanowatt is six orders of magnitude tighter than the watt precision a power value in this
-   * repo claims, and the measurement is another five below the nanowatt, so the bound is "exact for
-   * every purpose the number is put to" rather than a tolerance hiding a difference. Asserted as a
+   * A microwatt is six orders of magnitude tighter than the watt precision a power value in this
+   * repo claims, and the measurement is another five below the microwatt, so the bound is "exact
+   * for every purpose the number is put to" rather than a tolerance hiding a difference. Asserted as a
    * number so a change that widened it — a rounding step at the write boundary, say — fails here
    * instead of drifting the chart quietly.
    *
@@ -179,7 +187,7 @@ describe('partials sum to the whole-fleet aggregate', () => {
    * (`0.006` kW) from the unrounded one — eleven orders of magnitude worse than the association
    * error it would be fixing.
    */
-  it('differs from the one-pass sum by float association only, under a nanowatt', () => {
+  it('differs from the one-pass sum by float association only, under a microwatt', () => {
     const grouped = sumFleetRollupPartials(perLocationPartials());
     const whole = fleetForecastAggregate(allForecasts, fleet);
 
@@ -220,7 +228,7 @@ describe('the aggregate is what the client used to compute', () => {
     expect(noonPoint?.contributingSiteCount).toBe(fleet.length);
     expect(noonPoint?.contributingCapacityKw).toBeCloseTo(
       fleet.reduce((total, site) => total + site.capacityKw, 0),
-      NANOWATT_PLACES,
+      MICROWATT_PLACES,
     );
   });
 });
