@@ -7,31 +7,27 @@
  * one unit and the page now says so by letting them touch, on one continuous
  * surface, at the full width the chart's time axis is worth drawing at.
  *
- * Tokens only (stylelint.config.mjs). Lengths that no token category covers —
+ * Tokens only (`stylelint.config.mjs`). Lengths that no token category covers —
  * the content measure and the map's height — are the documented residual of the
  * CSS gate, so they are written as `rem`/`vh` and kept to this file's layout
  * decisions rather than spread through the components.
  *
- * #148 put the panel column beside the map and made the surface fill the shell
- * so both halves could share one viewport. #265 replaced that with a single
- * flow at every width: the map is a band across the top of an ordinary
- * scrolling document, and the reading sits under it in one centred measure.
- * Three things fall out of that, and each was a cost of the old shape rather
- * than a feature of it. The map gets the whole width instead of two thirds of
- * it. There is one scroller — the document — instead of a column scrolling
- * inside a page that could not. And there is no breakpoint: the arrangement a
- * narrow screen got is now the arrangement, so there is no second layout to
- * keep true. `app.css` owns the shell this sits in.
+ * One flow at every width (#265), and three things fall out of it. The map gets
+ * the whole width rather than sharing it with a panel column. There is one
+ * scroller — the document — instead of a column scrolling inside a page that
+ * could not. And there is no breakpoint: the arrangement a narrow screen got is
+ * the arrangement, so there is no second layout to keep true.
+ * `apps/web/src/app.css` owns the shell this sits in.
  */
 
-/* No gap, and that is a claim rather than a saving (#323, design.md rule 4).
-   The map and the fleet chart under it are one reading unit — the same fleet in
-   space, then in time — so they touch, and a band of page between them would
-   have said they were unrelated. The two share one continuous `--color-surface`
-   run because `.fleet-chart-section` carries the same surface the map does. The
-   reading below has its own separation to make and makes it in its own padding
-   (`.dashboard-content`), which is why the gap moved there rather than being
-   deleted from the page. */
+/* No gap, and that is a claim rather than a saving (#323,
+   `docs/standards/design.md` rule 4). The map and the fleet chart under it are
+   one reading unit — the same fleet in space, then in time — so they touch, and
+   a band of page between them would have said they were unrelated. The two
+   share one continuous `--color-surface` run because `.fleet-chart-section`
+   carries the same surface the map does. The reading below has its own
+   separation to make and makes it in its own padding (`.dashboard-content`),
+   which is why the gap moved there rather than being deleted from the page. */
 .dashboard {
   display: flex;
   flex-direction: column;
@@ -39,28 +35,30 @@
 }
 
 /* Full bleed: no padding here and none on any ancestor, so the map runs edge to
- * edge and `.map-view` drops its corner radius to match (map.css). A map is the
- * one surface on this page that is better for having no frame — a basemap
- * inset in a card reads as a picture of a place, and this one is the place.
+ * edge and `.map-view` drops its corner radius to match
+ * (`apps/web/src/map/map.css`). A map is the one surface on this page that is
+ * better for having no frame — a basemap inset in a card reads as a picture of a
+ * place, and this one is the place.
  *
- * A band rather than a screenful. 60% of the viewport leaves the chart under it
- * visible on a desktop viewport without a scroll, which is the whole argument
- * for putting the two on one flow; the minimum is the point below which a
- * basemap stops being worth drawing, and it wins on a short window. `flex: none`
- * because the height is the point: a flex item's default `shrink: 1` would let a
- * tall content column below claw it back.
+ * A band rather than a screenful: the height leaves the chart under it visible
+ * on a desktop viewport without a scroll, which is the whole argument for
+ * putting the two on one flow (`apps/web/e2e/chart-surfaces.spec.ts` measures
+ * that). The minimum is the point below which a basemap stops being worth
+ * drawing, and it wins on a short window. `flex: none` because the height is the
+ * point: a flex item's default `shrink: 1` would let a tall content column below
+ * claw it back.
  *
- * `svh`, and deliberately not the `dvh` app.css states a preference for — the
- * two boxes are being asked different questions. `.app` wants a *minimum* that
- * always reaches the bottom of whatever is visible right now, and `dvh`
- * tracking mobile browser chrome is exactly right for that. This box is a
- * *fixed size* with a WebGL canvas inside it that watches its container: under
- * `dvh` every appearance and disappearance of the URL bar would resize the
- * canvas mid-scroll, which is a GL reallocation per chrome transition and the
- * one cost this band must not carry. Plain `vh` has the opposite defect — it is
- * the chrome-retracted height, so while the URL bar is showing the map is more
- * than 60% of what the reader can actually see and pushes the chart further
- * below the fold than intended. `svh` is the chrome-showing height and it is
+ * `svh`, and deliberately not the `dvh` `apps/web/src/app.css` states a
+ * preference for — the two boxes are being asked different questions. `.app`
+ * wants a *minimum* that always reaches the bottom of whatever is visible right
+ * now, and `dvh` tracking mobile browser chrome is exactly right for that. This
+ * box is a *fixed size* with a WebGL canvas inside it that watches its
+ * container: under `dvh` every appearance and disappearance of the URL bar would
+ * resize the canvas mid-scroll, which is a GL reallocation per chrome transition
+ * and the one cost this band must not carry. Plain `vh` has the opposite defect
+ * — it is the chrome-retracted height, so while the URL bar is showing the map
+ * is more than 60% of what the reader can actually see and pushes the chart
+ * further below the fold than intended. `svh` is the chrome-showing height and it is
  * static: never oversized, and never a resize. The map simply keeps that height
  * when the chrome retracts, and the content below gains the difference. */
 .dashboard-map {
@@ -75,13 +73,11 @@
  * harder to read than the same content at a book's width. The measure is where
  * the map's padding went: full bleed is the band's, not the page's.
  *
- * The chart left this box in #323 and took the argument for the measure with
- * it — what is bounded here is the reading, and a chart is better for the width
- * it can get. The padding is a full step on all four sides now rather than open
- * at the top: `.dashboard` no longer supplies a gap above this box (see its
- * rule), so this is where the separation between the chart band and the reading
- * is made, and it is this box's to make because it is this box that is a
- * separate thing from the two above it. */
+ * The padding is a full step on all four sides rather than open at the top:
+ * `.dashboard` supplies no gap above this box (see its rule), so this is where
+ * the separation between the chart band and the reading is made, and it is this
+ * box's to make because it is this box that is a separate thing from the two
+ * above it. */
 .dashboard-content {
   display: flex;
   box-sizing: border-box;
@@ -93,39 +89,14 @@
   padding: var(--space-4);
 }
 
-/* There is no context-region box here any more. One region under the map showed
-   either a selected site's panel or the fleet's, and it existed as an addressable
-   box mainly so a scroll effect could bring it back into view. #265 put a
-   selected site's detail on its own marker (map/site-popover.css) and its
-   forecast on the fleet's chart, so the reading below the map is a plain flow
-   with nothing that swaps and nothing to scroll to. */
-
-/* There is no `.dashboard-fleet` box here any more either. It held the fleet's
-   table until #451 and then only the listing's pending and failure states, which
-   #452 moved into the chart itself — so what was left was an empty flex child
-   contributing a `--space-4` gap above the footer and nothing else. Deleting it
-   is what closes that gap; the credit below is `.dashboard-content`'s only child
-   now, and the padding around it is that box's. The closing itself is a layout
-   fact and so the browser lane's (`testing.md` rule 10), and no spec in
-   `apps/web/e2e/` measures the seam above the footer today — said rather than
-   left implied by the deletion. What a fast test can see is the DOM the claim
-   rests on: this box has one element child in every state, since the only thing
-   inside it is `Dashboard.tsx`'s `<footer>`.
-
-   It was once a scroller of its own — sixty rows are taller than the map, and
-   the old column put the site detail panel *after* this section, so an unbounded
-   list pushed the thing a selection was for below the fold. There has been one
-   scroller since, and it is the document's. */
-
 /* The credit at the foot of the page, belonging to the page rather than to
    whichever surface is above it — so it takes the step that separates it from
-   the chart band and nothing else. That is now the only separation it has to
-   make: `.dashboard-content` holds this footer alone, so the padding above and
-   this step are what stand between the band and the credit. It used to carry
-   `margin-top: auto` as well, which pinned it to the bottom of a column that
-   had a fixed height to have a bottom of; on a document that ends where its
-   content ends there is no space left over for `auto` to absorb, and the
-   declaration would only be describing a shape this page no longer has. */
+   the chart band and nothing else. `.dashboard-content` holds this footer alone
+   (`Dashboard.test.tsx` asserts the one child), so the padding above and this
+   step are what stand between the band and the credit. No `margin-top: auto`:
+   that pinned it to the bottom of a column with a fixed height to have a bottom
+   of, and a document that ends where its content ends leaves nothing for `auto`
+   to absorb. */
 .dashboard-footer {
   padding-top: var(--space-2);
 }
