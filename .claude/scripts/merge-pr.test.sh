@@ -383,6 +383,70 @@ TD_BRANCH_ENTRY='
 - Source: #3
 '
 
+# The same log with its HEADER edited — above the final "## " heading, nowhere near the
+# tail the two lanes collide on. This is the shape PR #524 was refused over (issue
+# #525): an earlier merge had added a restatement ledger to main, so the whole-blob
+# test saw main diverge from the merge base and refused a tail-only conflict.
+TD_BASE_LEDGERED='# Tech-debt log
+
+How this log is kept. Restatement ledger: the executable carrier is merge-pr.sh.
+
+## 2026-09-01 — the entry that was already here
+
+- Where: somewhere
+- Source: #1
+'
+
+# And the same header line moved a DIFFERENT way, so that the two edits collide above
+# the anchor rather than below it. Same line, incompatible text: the region test has to
+# refuse this one exactly as loudly as it admits the one above.
+TD_BASE_LEDGERED_OTHERWISE='# Tech-debt log
+
+How this log is kept. Restatement ledger: nobody has classified the prose carriers.
+
+## 2026-09-01 — the entry that was already here
+
+- Where: somewhere
+- Source: #1
+'
+
+# The anchor is the merge base's FINAL "## " heading, and the step needs it to name
+# exactly one line in each of the three blobs. These three break that in each of the
+# three available ways: a side that no longer carries the line at all (a retitling, or
+# a triage pass that pruned the entry — this log records having pruned 36 entries in a
+# day), a base that repeats it, and a side that appends a second copy of it.
+TD_BASE_RENAMED='# Tech-debt log
+
+How this log is kept.
+
+## 2026-09-01 — #1 — the entry that was already here
+
+- Where: somewhere
+- Source: #1
+'
+
+TD_BASE_DOUBLED='# Tech-debt log
+
+How this log is kept.
+
+## 2026-09-01 — the entry that was already here
+
+- Where: somewhere
+- Source: #1
+
+## 2026-09-01 — the entry that was already here
+
+- Where: somewhere else
+- Source: #4
+'
+
+TD_BRANCH_ENTRY_REUSING_HEADING='
+## 2026-09-01 — the entry that was already here
+
+- Where: the branch
+- Source: #3
+'
+
 td_fixture() { # td_fixture <name> — a repo with a real origin, TD_BASE on main, a lane worktree
   fixture "$1"
   # The SUBJECT commits here, so an identity has to exist somewhere git will find one.
@@ -1239,12 +1303,18 @@ st=$(git -C "$ROOT/wt" status --porcelain)
 end
 
 # ==========================================================================================
-# 20b. an edit INSIDE an existing entry is refused, naming the file and the hunk
+# 20b. an edit INSIDE the base's final entry is refused, naming the file and the line
 # ==========================================================================================
 # The refusal that gives case 20 its meaning. "Both sides appended" is what makes the
 # answer arithmetic; a side that rewrote text the base already had is a judgement call,
 # and a judgement call silently taken is a mangled log the squash merge makes permanent.
-begin "a conflict where one side edited an existing entry is refused, naming the hunk"
+#
+# The scope of that refusal is the region from the base's final "## " heading DOWN, not
+# the whole file — 20q next door is the same shape above the heading, and is unioned.
+# `- Source: #1` is line 8 of TD_BASE and the last line of its last entry, so this case
+# also pins the reported line number to the whole-file count rather than the count
+# within the tail region, which is the difference the anchor introduced.
+begin "a conflict where one side edited the base's final entry is refused, naming the line"
 td_fixture union-edit
 # main both rewrites the last line of the entry that was already there AND appends.
 td_main_writes "${TD_BASE%- Source: #1
@@ -1259,7 +1329,7 @@ run_merge
 expect_rc 1
 expect_stderr 'update-branch — FAILED'
 expect_stderr 'the conflict is not one this script may resolve'
-expect_stderr "$TD: the base side changes line"
+expect_stderr "$TD: the base side changes line 8 of the merge-base copy"
 expect_stderr 'the entry that was already here'
 expect_stderr 'never an edit to text the base already had'
 expect_not_called "pr merge $PR --squash"
@@ -1650,6 +1720,161 @@ expect_rc 0
 expect_stdout "$TD unioned and pushed"
 expect_stdout "2 check(s) complete on $union_sha"
 expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 20q. a header main edited EARLIER does not refuse a tail-only conflict
+# ==========================================================================================
+# Issue #525, and the reason the test moved from the blob to the conflict region. #513
+# tested the whole file — main had to be a byte-for-byte extension of the merge base —
+# and its first live run (PR #524) hit a main whose header had acquired a restatement
+# ledger in an earlier merge. The conflict was still tail-only and the union was still
+# safe; the test refused anyway, and the resolution was done by hand. So: the edit is
+# above the anchor, only one side made it, and it must (a) not refuse and (b) SURVIVE
+# into what gets pushed, rather than being quietly reverted to the merge base.
+begin "a clean header edit on main does not refuse a tail-only conflict, and survives the union"
+td_fixture union-ledgered-header
+td_main_writes "$TD_BASE_LEDGERED$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.1"
+must printf '1\n' >"$STATE/update-branch.1.rc"
+must printf '%s\n' "$UPDATE_NOOP" >"$STATE/update-branch.out"
+td_views
+run_merge
+expect_rc 0
+expect_stdout "$TD unioned and pushed"
+expect_stdout 'base appended 1 entr(ies), the branch 1'
+expect_stdout 'the region above the final base entry heading had moved and merged cleanly'
+expect_called "pr merge $PR --squash"
+[ "$(origin_branch_sha)" != "$before_sha" ] || bad "the resolution was never pushed"
+resolved=$(origin_branch_td)
+case "$resolved" in
+  *'Restatement ledger: the executable carrier is merge-pr.sh.'*) ;;
+  *) bad "the union reverted main's header edit to the merge-base text" ;;
+esac
+main_at=$(printf '%s\n' "$resolved" | grep -n 'another lane merged first' | cut -d: -f1)
+branch_at=$(printf '%s\n' "$resolved" | grep -n 'this lane logged' | cut -d: -f1)
+[ -n "$main_at" ] || bad "the union dropped main's appended entry"
+[ -n "$branch_at" ] || bad "the union dropped the branch's appended entry"
+[ "${main_at:-0}" -lt "${branch_at:-0}" ] ||
+  bad "main's entry must come first and the branch's after (main at $main_at, branch at $branch_at)"
+expect_no_merge_in_progress
+end
+
+# ==========================================================================================
+# 20r. …but a header BOTH sides moved incompatibly is still refused
+# ==========================================================================================
+# The other half of 20q, and what stops it from being a licence to union anything. The
+# conflict is no longer tail-only: the two sides changed the same header line to
+# different text, which is a judgement call the merge owner takes and this step does
+# not. Refused before the worktree is touched, so nothing is pushed and nothing merges.
+begin "a header edit both sides made incompatibly is refused rather than unioned"
+td_fixture union-header-conflict
+td_main_writes "$TD_BASE_LEDGERED$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE_LEDGERED_OTHERWISE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'the conflict is not one this script may resolve'
+expect_stderr "$TD: the region above"
+expect_stderr 'the entry that was already here'
+expect_stderr 'does not merge: git merge-file leaves 1 conflict(s) there'
+expect_stderr 'only when everything above the tail merges on its own'
+expect_not_called "pr merge $PR --squash"
+[ -f "$STATE/merged" ] && bad "the PR merged despite the refusal"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+[ -f "$STATE/prettier.log" ] && bad "prettier ran on a resolution that was refused"
+end
+
+# ==========================================================================================
+# 20s. a side that no longer carries the anchor heading is refused
+# ==========================================================================================
+# The anchor is what makes 20q possible: the head region can only be cut off a side by
+# finding the merge base's final "## " heading IN that side. A side that retitled or
+# pruned that entry has no such line, and without the guard `indexOf` answers -1, the
+# offset arithmetic answers 0, and the WHOLE side reads as tail — which would union a
+# rewritten header into the log as if it were an appended entry. Pruning is a live
+# shape here: docs/tech-debt.md records a pass that deleted 36 entries in one day.
+begin "a side that no longer holds the base's final entry heading is refused"
+td_fixture union-anchor-gone
+td_main_writes "$TD_BASE_RENAMED$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "$TD: the base side no longer holds the line"
+expect_stderr 'the entry that was already here'
+expect_stderr 'rewritten or removed an entry the base already had'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+[ -f "$STATE/prettier.log" ] && bad "prettier ran on a resolution that was refused"
+end
+
+# ==========================================================================================
+# 20t. a base that repeats its final heading anchors nothing
+# ==========================================================================================
+# Two entries titled identically. "The last '## ' line" still picks one, but the cut
+# made in each SIDE is made by content, so it would land on the first copy while the
+# base was split at the second — and the tail comparison would then be between two
+# different regions. Refused at the base rather than split at a guess.
+begin "a merge base whose final entry heading is repeated verbatim is refused"
+td_fixture union-anchor-doubled
+must printf '%s' "$TD_BASE_DOUBLED" >"$REPO/$TD"
+must gitc "$REPO" commit --quiet -am 'the log grows a second entry with the same title'
+must gitc "$REPO" push --quiet origin main
+must gitc "$REPO" worktree remove --force "$ROOT/wt"
+must gitc "$REPO" branch -D "$HEAD_REF" >/dev/null
+must gitc "$REPO" worktree add --quiet -b "$HEAD_REF" "$ROOT/wt" HEAD
+td_main_writes "$TD_BASE_DOUBLED$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE_DOUBLED$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "$TD: the merge-base copy holds 2 lines reading"
+expect_stderr 'a heading repeated verbatim anchors nothing'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+end
+
+# ==========================================================================================
+# 20u. …and so does a side that appends a second copy of it
+# ==========================================================================================
+# The other end of the same guard, and the one a base check cannot catch: the base is
+# fine and the BRANCH appends an entry whose heading is character-for-character the
+# base's last one. Cutting that side by content picks the first copy, and everything
+# below it — an entry the base already had — would be read as appended tail.
+begin "a side that appends a second copy of the anchor heading is refused"
+td_fixture union-anchor-reused
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY_REUSING_HEADING"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "$TD: the branch side holds 2 lines reading"
+expect_stderr 'no longer names one place in it'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
 end
 
 # ==========================================================================================

@@ -623,13 +623,15 @@ fi
 #
 # The scope is deliberately narrow, and narrow in the refusing direction. What is
 # automated is the one collision whose correct answer is arithmetic rather than
-# judgement: both sides appended whole entries to the tail and neither touched
-# anything already there. Everything else — a second conflicted file, a side that
-# edited an existing entry, a side that appended into the last entry's body rather
-# than starting a new one — is a REFUSAL naming the file and the hunk, and lands back
-# at the merge owner's keyboard exactly as it does today. The cost of refusing wrongly
-# is one hand resolution; the cost of unioning wrongly is a silently mangled log that
-# the squash merge then makes permanent, which is why every unclear case refuses.
+# judgement: both sides appended whole entries to the tail, and everything above that
+# tail merges on its own. Everything else — a second conflicted file, a side that
+# edited the base's last entry or anything else from its final `## ` heading down,
+# two sides that changed the region above that heading in ways git cannot reconcile, a
+# side that appended into the last entry's body rather than starting a new one — is a
+# REFUSAL naming the file and the region, and lands back at
+# the merge owner's keyboard exactly as it does today. The cost of refusing wrongly is
+# one hand resolution; the cost of unioning wrongly is a silently mangled log that the
+# squash merge then makes permanent, which is why every unclear case refuses.
 #
 # The analysis happens in the repository root and touches no worktree, no branch and
 # no commit: nothing a refusal would leave for the merge owner to undo. What it does
@@ -668,35 +670,71 @@ EOF
   return 0
 }
 
-# tech_debt_union_plan <merge-base blob> <base-tip blob> <branch blob> <out-file>
+# tech_debt_union_plan <merge-base blob> <base-tip blob> <branch blob> <out-file> <scratch dir>
 #   -> 0 the union is written to <out-file>, a one-line summary on stdout
 #      1 refused, the reason on stdout
 #      2 the question could not be asked at all, the reason on stdout
 #
 # The whole decision, and none of the consequences. Three blobs are read — the file
-# at the merge base (O), at the base tip (A) and at the branch head (B) — and the
-# test is exact string extension: A must begin with O byte for byte, and so must B.
+# at the merge base (O), at the base tip (A) and at the branch head (B).
 #
-# That is deliberately NOT the "conflict region sits below the base's last `## `
-# heading" test issue #513 proposes. Extension is strictly stronger, decides the same
-# cases, and needs no conflict markers to parse: a side that is an exact extension of
-# O has by construction changed nothing that was in O, which is the property the
-# resolution actually depends on and which a line-number comparison only approximates.
-# A side that is not an extension has edited the base text, and that is the refusal —
-# reported with the first line it changed and the entry heading that line falls under,
-# because "docs/tech-debt.md conflicts" is not something a merge owner can act on.
+# #513 tested the WHOLE BLOB: A and B each had to begin with O byte for byte. That is
+# a test of the file, and the thing being resolved is a conflict. Its first live run
+# (PR #524, issue #525) refused a tail-only collision because #513's own merge had
+# added a restatement ledger to this log's header, so main's line 14 no longer matched
+# the merge base — a clean, already-merged edit nowhere near the conflict, and the
+# strictly-stronger test was strictly stronger than the truth.
 #
-# Each tail must then OPEN A NEW `## ` ENTRY. This is the one place the step is
-# stricter than the issue's words, and the reason is a shape this log has already
-# recorded about itself (its 2026-09-11 entry "An Update appended to a sweep-defined
-# entry joins that entry's own sweep"): text appended at EOF with no heading of its
-# own extends the LAST EXISTING ENTRY. It sits below the base's final heading, so the
-# issue's test admits it, and concatenating the two sides would then interleave one
-# entry's body with another entry's heading. Whole entries or nothing.
+# What is tested now is the CONFLICT REGION, which is what issue #513 proposed in the
+# first place: every conflicted hunk must lie after the base's final `## ` heading,
+# and must hold no deletion against the base on either side. Both halves are asked
+# through the base's final heading line H, which anchors all three blobs:
+#
+#   1. H is O's last line starting with `## `, and must appear exactly ONCE in each of
+#      O, A and B. A side that no longer holds it has renamed or deleted the base's
+#      last entry heading, and there is then no anchor and no tail. Refuse, naming it.
+#   2. Split each blob at the start of its H: O = Ohead + Orest, and likewise A and B.
+#   3. `git merge-file -p Ahead Ohead Bhead`, over slices written to <scratch dir> —
+#      which is the mktemp -d tech_debt_union made, and is a parameter rather than a
+#      path derived from <out-file> so that "this function writes nowhere but the
+#      scratch directory" is visible in the signature. Exit 0 means the region ABOVE
+#      the final heading merges cleanly, so no conflicted hunk lies there: the issue's
+#      "every hunk sits after the base's final `## ` heading", asked of the merger
+#      rather than reconstructed from marker line numbers. A conflict count back from
+#      merge-file is the refusal; a failure to run it at all is rc 2, and the two are
+#      kept apart because one is an answer and the other is a broken question.
+#   4. Orest must be an exact string prefix of Arest and of Brest. Within the region
+#      the hunks live in, that is the issue's "no `-` lines against the base on either
+#      side", plus a narrowing: additions must come at the END of that region rather
+#      than spliced into the base's last entry. A side that is not an extension gets
+#      the first line it changed, and H — which is the only `## ` heading Orest can
+#      contain — because "docs/tech-debt.md conflicts" is not something a merge owner
+#      can act on.
+#
+# So the refusal #513 wrote for "a side edited text the base already had" has NARROWED,
+# deliberately and in exactly one direction: from the whole file to the region from H
+# down. An edit above H is now the merger's business, and step 3 is where it is settled.
+#
+# Why not parse merge-file's own markers and map the hunks back to base line numbers:
+# `-p` output carries none, and the hunk that matters here — both sides appending at
+# EOF — has an EMPTY base section, so its position in the base is exactly the thing
+# that cannot be recovered from the output. Asking the merger about the head region
+# decides the same question with the answer it does give.
+#
+# Each tail must then OPEN A NEW `## ` ENTRY, and this survives the change to the
+# region test rather than being subsumed by it — sitting after the base's final
+# heading is PRECISELY what a body-continuation append does. The reason is a shape
+# this log has already recorded about itself (its 2026-09-11 entry "An Update appended
+# to a sweep-defined entry joins that entry's own sweep"): text appended at EOF with
+# no heading of its own extends the LAST EXISTING ENTRY, and concatenating the two
+# sides would then interleave one entry's body with another entry's heading. Whole
+# entries or nothing.
 tech_debt_union_plan() {
   node -e '
 const fs = require("fs");
-const [oPath, aPath, bPath, outPath, target] = process.argv.slice(1);
+const path = require("path");
+const { execFileSync } = require("child_process");
+const [oPath, aPath, bPath, outPath, scratch, target] = process.argv.slice(1);
 
 const say = (code, msg) => {
   process.stdout.write(msg + "\n");
@@ -729,31 +767,136 @@ if (!O.endsWith("\n")) {
 }
 
 const baseLines = O.split("\n");
-if (!baseLines.some((l) => l.startsWith("## "))) {
+let anchorAt = -1;
+for (let i = baseLines.length - 1; i >= 0; i--) {
+  if (baseLines[i].startsWith("## ")) {
+    anchorAt = i;
+    break;
+  }
+}
+if (anchorAt < 0) {
   refuse(
     target +
       ": the merge-base copy holds no \"## \" entry heading — this is not the append-only log this step knows how to union"
   );
 }
+// H anchors all three blobs. It has to name exactly one place in each of them, so a
+// log that repeats a heading line verbatim is refused rather than split at a guess.
+const H = baseLines[anchorAt];
+const occurrences = (lines) => lines.filter((l) => l === H).length;
+if (occurrences(baseLines) !== 1) {
+  refuse(
+    target +
+      ": the merge-base copy holds " +
+      occurrences(baseLines) +
+      " lines reading " +
+      JSON.stringify(H) +
+      " — the tail is anchored on the final entry heading, and a heading repeated verbatim anchors nothing"
+  );
+}
 
-// The heading an offending line falls under, so the refusal names the hunk rather
-// than the file. A line above the first heading answers with that fact.
-const headingAbove = (i) => {
-  for (let k = Math.min(i, baseLines.length - 1); k >= 0; k--) {
-    if (baseLines[k].startsWith("## ")) return "the entry " + JSON.stringify(baseLines[k]);
+// Character offset of the start of line <n>, in a text split into <lines>.
+const offsetOfLine = (lines, n) => lines.slice(0, n).reduce((a, l) => a + l.length + 1, 0);
+
+const headEnd = offsetOfLine(baseLines, anchorAt);
+const oHead = O.slice(0, headEnd);
+const oRest = O.slice(headEnd);
+
+// The same cut in a side, made at ITS copy of H rather than at a line number: the
+// point of the change is that a side may legitimately have grown or shrunk above H.
+const cutAtAnchor = (text, side) => {
+  const lines = text.split("\n");
+  const n = occurrences(lines);
+  if (n === 0) {
+    refuse(
+      target +
+        ": the " +
+        side +
+        " side no longer holds the line " +
+        JSON.stringify(H) +
+        ", which is the final entry heading of the merge base and the line this step anchors the tail on — that side has rewritten or removed an entry the base already had"
+    );
   }
-  return "the header, above the first entry";
+  if (n > 1) {
+    refuse(
+      target +
+        ": the " +
+        side +
+        " side holds " +
+        n +
+        " lines reading " +
+        JSON.stringify(H) +
+        ", so the merge base final entry heading no longer names one place in it and the tail cannot be cut off"
+    );
+  }
+  const at = offsetOfLine(lines, lines.indexOf(H));
+  return [text.slice(0, at), text.slice(at)];
 };
 
-const mustExtend = (text, side) => {
-  if (text.startsWith(O)) return;
-  // Where the two first disagree. The loop always stops below baseLines.length once
-  // startsWith has failed: a side matching every base line INCLUDING the empty element
-  // after the trailing newline necessarily begins with O, which is the case above.
-  const lines = text.split("\n");
-  const n = Math.min(lines.length, baseLines.length);
+const [aHead, aRest] = cutAtAnchor(A, "base");
+const [bHead, bRest] = cutAtAnchor(B, "branch");
+
+// The region ABOVE the anchor, put to the merger itself. A clean edit there — one
+// side, or both in places git can reconcile — is not this collision and must not
+// refuse; a conflict there is, and does. Slices go to the scratch directory the
+// caller passed, which is the one place this function is allowed to write.
+const slice = (name, text) => {
+  const p = path.join(scratch, name);
+  fs.writeFileSync(p, text);
+  return p;
+};
+let mergedHead;
+try {
+  mergedHead = execFileSync(
+    "git",
+    [
+      "merge-file",
+      "-p",
+      "--quiet",
+      slice("head-base", aHead),
+      slice("head-merge-base", oHead),
+      slice("head-branch", bHead),
+    ],
+    // maxBuffer is declared rather than defaulted: the head slice is almost the whole
+    // log (H sits near EOF), the log only grows between triage passes, and Node caps
+    // a child at 1 MiB unless told otherwise. Past the ceiling execFileSync throws
+    // with status null, which lands on say(2) — the safe direction, but a refusal
+    // whose reason is a buffer size is a bad afternoon for whoever reads it.
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 }
+  );
+} catch (e) {
+  // git merge-file exits with the number of conflicts it left, and with something
+  // >= 128 when it could not run at all — a distinction worth keeping, because the
+  // first is an answer and the second is a broken question.
+  if (typeof e.status === "number" && e.status > 0 && e.status < 128) {
+    refuse(
+      target +
+        ": the region above " +
+        JSON.stringify(H) +
+        " — the final entry heading of the merge base — does not merge: git merge-file leaves " +
+        e.status +
+        " conflict(s) there. This step unions tail appends, and only when everything above the tail merges on its own"
+    );
+  }
+  say(2, "could not merge the region above " + JSON.stringify(H) + " in " + target + ": " + e.message);
+}
+// mergedHead needs no trailing-newline check before oRest is concatenated onto it:
+// all three slices are cut at a line start, so each is either empty or ends in a
+// newline, and merge-file over newline-terminated inputs answers in kind.
+
+// H is the LAST "## " line of O and oRest starts at it, so H is the only entry heading
+// oRest can contain — every line the test below can object to falls under it.
+const restLines = oRest.split("\n");
+
+const mustExtend = (rest, side) => {
+  if (rest.startsWith(oRest)) return;
+  // Where the two first disagree. The loop always stops below restLines.length once
+  // startsWith has failed: a side matching every line INCLUDING the empty element
+  // after the trailing newline necessarily begins with oRest, which is the case above.
+  const lines = rest.split("\n");
+  const n = Math.min(lines.length, restLines.length);
   let i = 0;
-  while (i < n && lines[i] === baseLines[i]) i++;
+  while (i < n && lines[i] === restLines[i]) i++;
   refuse(
     target +
       ": the " +
@@ -761,15 +904,15 @@ const mustExtend = (text, side) => {
       " side " +
       (i >= lines.length ? "deletes" : "changes") +
       " line " +
-      (i + 1) +
-      " of the merge-base copy, under " +
-      headingAbove(i) +
-      " — this step unions tail appends and never an edit to text the base already had"
+      (anchorAt + i + 1) +
+      " of the merge-base copy, under the entry " +
+      JSON.stringify(H) +
+      " — from that final heading down, this step unions tail appends and never an edit to text the base already had"
   );
 };
 
-mustExtend(A, "base");
-mustExtend(B, "branch");
+mustExtend(aRest, "base");
+mustExtend(bRest, "branch");
 
 const entriesIn = (tail) => tail.split("\n").filter((l) => l.startsWith("## ")).length;
 
@@ -801,22 +944,30 @@ const mustOpenAnEntry = (tail, side) => {
   }
 };
 
-const aTail = A.slice(O.length);
-const bTail = B.slice(O.length);
+const aTail = aRest.slice(oRest.length);
+const bTail = bRest.slice(oRest.length);
 mustOpenAnEntry(aTail, "base");
 mustOpenAnEntry(bTail, "branch");
 
 // The order is the rule the four hand resolutions used: main first, the branch after.
+// The head region is whatever the merger made of it, which is how an edit above the
+// anchor survives the resolution instead of being silently reverted to the base.
 try {
-  fs.writeFileSync(outPath, O + aTail + bTail);
+  fs.writeFileSync(outPath, mergedHead + oRest + aTail + bTail);
 } catch (e) {
   say(2, "could not write the union: " + e.message);
 }
 say(
   0,
-  "base appended " + entriesIn(aTail) + " entr(ies), the branch " + entriesIn(bTail)
+  "base appended " +
+    entriesIn(aTail) +
+    " entr(ies), the branch " +
+    entriesIn(bTail) +
+    (mergedHead === oHead
+      ? ""
+      : "; the region above the final base entry heading had moved and merged cleanly")
 );
-' "$1" "$2" "$3" "$4" "$TECH_DEBT_PATH"
+' "$1" "$2" "$3" "$4" "$5" "$TECH_DEBT_PATH"
 }
 
 union_reason=""
@@ -955,7 +1106,7 @@ EOF
   git -C "$repo_root" show "$base_sha:$TECH_DEBT_PATH" >"$dir/a" 2>/dev/null
   git -C "$repo_root" show "$tip:$TECH_DEBT_PATH" >"$dir/b" 2>/dev/null
 
-  out=$(tech_debt_union_plan "$dir/base" "$dir/a" "$dir/b" "$dir/union")
+  out=$(tech_debt_union_plan "$dir/base" "$dir/a" "$dir/b" "$dir/union" "$dir")
   rc=$?
   if [ "$rc" -ne 0 ]; then
     union_reason="$out"
