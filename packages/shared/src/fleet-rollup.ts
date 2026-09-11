@@ -58,12 +58,12 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * kW**, worst case `2.1e-14` on a `50.9` kW hour (the `117.4` kW hour's is `1.4e-14`), with the
  * per-hour contributing-capacity sum differing by `1.1e-13` kW on the same fixture.
  * `fleet-rollup-additivity.test.ts` bounds the power discrepancy at a microwatt — `1e-9` kW, which
- * is `1e-6` W — and would fail if it
- * widened. That is the *entire* difference between this roll-up and the fan-out it replaces: no
- * field is lost and nothing is approximated. The measurement is some **eleven** orders of magnitude
- * below the watt precision a power value in this repo claims — and the microwatt the proof asserts
- * is itself six orders below a watt — so it is invisible to every consumer, but it is why the proof
- * asserts a bound rather than equality, and why it says so out loud.
+ * is `1e-6` W — and would fail if it widened. That is the *entire* difference between this roll-up
+ * and the fan-out it replaces: no field is lost and nothing is approximated. The measurement is some
+ * **eleven** orders of magnitude below the watt precision a power value in this repo claims, and the
+ * microwatt the proof asserts is itself six orders below a watt — so it is invisible to every
+ * consumer, but it is why the proof asserts a bound rather than equality, and why it says so out
+ * loud.
  *
  * Rounding partials to watt precision at the write boundary was considered for exactly that reason
  * and **rejected**: a watt of precision is half a watt of error per partial, so twelve of them can
@@ -94,9 +94,9 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * `aggregateFleetForecast`'s own docblock warns that summing two models' views of the same
  * site-hour double-counts it; today's fan-out route returns every model it finds and leaves the
  * client to sum them, which is only harmless because `packages/forecast` emits physics alone. The
- * roll-up has to name a model — a sort key cannot be vague — so it names the one the dashboard has
- * always effectively been drawing, and the fallback filters to the same one so the two paths cannot
- * answer differently. When the ML correction layer lands, *which* model the fleet chart shows is a
+ * roll-up has to name a model — a sort key cannot be vague — so it names the one the dashboard
+ * has always effectively been drawing, and the fallback filters to the same one so the two paths
+ * cannot answer differently. When the ML correction layer lands, *which* model the fleet chart shows is a
  * product decision that gets made here, once, instead of being decided by what happens to be in the
  * table.
  */

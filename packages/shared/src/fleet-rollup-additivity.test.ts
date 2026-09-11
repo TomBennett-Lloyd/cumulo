@@ -178,7 +178,8 @@ describe('partials sum to the whole-fleet aggregate', () => {
    *
    * A microwatt is six orders of magnitude tighter than the watt precision a power value in this
    * repo claims, and the measurement is another five below the microwatt, so the bound is "exact
-   * for every purpose the number is put to" rather than a tolerance hiding a difference. Asserted as a
+   * for every purpose the number is put to" rather than a tolerance hiding a
+   * difference. Asserted as a
    * number so a change that widened it — a rounding step at the write boundary, say — fails here
    * instead of drifting the chart quietly.
    *

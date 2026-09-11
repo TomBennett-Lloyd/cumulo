@@ -87,9 +87,12 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   done after the site exists (ADR 0007).
  * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
  *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
- *   no loop to gate, and it was the widest ungated prefix on the API until
- *   ADR 0009's fallback arm above took that title at 5 — temporarily, until
- *   #507. It is the widest that is *structural* rather than transitional.
+ *   no loop to gate. It was the widest ungated prefix on the API until ADR
+ *   0009's fallback arm above took that title at 5, temporarily, until #507;
+ *   below that it is joint-widest at 4, tied with `GET …/series`,
+ *   `GET /v1/fleet/actuals`, the fleet-forecast roll-up path and a seed-site
+ *   `DELETE`. All five of those are structural, which is the distinction worth
+ *   keeping: the only prefix wider than them is one that is on its way out.
  * - `DELETE /v1/sites/{siteId}` — **3** on a user site (limiter 2,
  *   `getFleetSite`), ≈ 21 s, the counted deletes gated after it; **4** on a
  *   seed site, whose single `deleteFleetSite` is a plain
