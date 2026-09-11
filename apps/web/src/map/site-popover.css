@@ -1,45 +1,38 @@
 /*
  * The selected site's card, drawn on the map above its own marker.
  *
- * Tokens only, as everywhere outside `packages/ui/src/tokens/tokens.css` — the
- * gate in stylelint.config.mjs is what enforces it, and a missing token is a
- * design-system signal rather than a licence to write a literal (`docs/standards/react.md`
- * rule 5). The one length below that is not a token is the card's width, which
- * is the documented residual of that gate: the scale has spacing, type and radii
- * categories and no measure category, so a width has nothing to reference (see
- * the residual note in stylelint.config.mjs).
+ * Tokens only (`docs/standards/react.md` rule 5, gated in
+ * `stylelint.config.mjs`). The one length below that is not a token is the
+ * card's width: the scale has spacing, type and radii categories and no measure
+ * category, so a width has nothing to reference — the documented residual in
+ * `stylelint.config.mjs`, not a value slipping past the gate.
  *
  * It lives beside `map.css` rather than inside it because the two files answer
- * different questions — that one is the surface and its markers, this one is the
- * card a selection puts on top of them — and because this card replaced a panel
- * in the reading column that had a stylesheet of its own, deleted with
- * `SitePanel` in #265.
+ * different questions: that one is the surface and its markers, this one is the
+ * card a selection puts on top of them.
  */
 
 /* The card's own marker, told to outrank the fleet's.
  *
  * maplibre gives markers no stacking order: they are siblings in one pane and
- * every one of them is `z-index: auto`, so they paint in DOM order. (Verified
- * against maplibre-gl 6.1.0 — its `.maplibregl-marker` rule sets position and
- * transform hints and nothing that stacks, and `zIndex` does not appear in its
- * JS at all.) Zooming back out reclusters the fleet, and reclustering mounts
- * fresh marker elements *after* this card's, so without a value here the new
- * bubbles paint over a card the reader has open — the #284 defect.
+ * every one of them is `z-index: auto`, so they paint in DOM order. Zooming back
+ * out reclusters the fleet, and reclustering mounts fresh marker elements
+ * *after* this card's, so without a value here the new bubbles paint over a card
+ * the reader has open — the #284 defect.
  *
- * `1` is what outranks those siblings — and outranking them is not the whole of
- * what it does, which is worth stating because it read that way for a release.
- * Nothing between this marker and the document root opens a stacking context, so
- * the value is not confined to maplibre's pane: any positive number here also
- * beats the map's own chrome, which carried none of its own. The map's controls
- * therefore state `2` and paint above this card by design (`map.css` carries
- * that argument), which is what stopped a panned card burying the reset button.
- * It stays far below the `10` the header's overlays and the info tip share (the
- * census is in `apps/web/src/header/header.css`) deliberately: those hang over
- * the whole map, and this card belongs to the map rather than above it.
+ * Outranking those siblings is not the whole of what `1` does, which is worth
+ * stating because it read that way for a release. Nothing between this marker
+ * and the document root opens a stacking context, so the value is not confined
+ * to maplibre's pane: any positive number here also beats the map's own chrome.
+ * The map's controls therefore state `2` and paint above this card by design
+ * (`map.css` carries that argument), which is what stopped a panned card burying
+ * the reset button. It stays far below the header's overlays (the census is in
+ * `apps/web/src/header/header.css`) deliberately: those hang over the whole map,
+ * and this card belongs to the map rather than above it.
  *
  * It leans on maplibre for the `position: absolute` that makes a stacking value
- * apply at all. Nothing else here can supply it — the element is maplibre's to
- * place, and this rule only borrows it. */
+ * apply at all — the element is maplibre's to place, and this rule only borrows
+ * it. */
 .site-popover-anchor {
   z-index: 1;
 }
@@ -49,26 +42,20 @@
    the translate centres the card on it; `bottom` lifts the card clear of the
    mark it belongs to, which would otherwise be underneath it and unreadable.
 
-   `--color-border` at hairline weight rather than a drop shadow, and now by
-   choice rather than for want of a token: `--color-shadow` is elevation ink in
-   the scale as of #284, so a shadow here is expressible — though not on the
-   terms the chart tooltip's is. `box-shadow` is on the CSS gate's strict-value
-   property list and that plugin judges every sub-value, so a card shadow's
-   offset and blur would each have to be a bare `var()` or `0`; the quarter-step
-   offset the tooltip uses, `calc(var(--space-1) / 4)`, is refused here
-   ("Expected variable or keyword"). The tooltip escapes that because its shadow
-   is a `filter: drop-shadow(…)` (`apps/web/src/charts/charts.css`), and `filter` is not on
-   the strict-value rule's property list in `stylelint.config.mjs` — so that
-   rule never looks at its sub-values at all. Identical sub-values, one refused
-   and one never judged; `packages/ui/src/styles.css` writes the same trap up for
-   `outline`. The card keeps the border anyway. A shadow marks a thing that floats
-   over what it is reading — the tooltip is over its own marks and moves with
-   the pointer — where this card is anchored to one marker and stays put, and
-   the border does the job that actually needs doing: separating the card from
-   whatever tile is under it, the same job the marker tooltip's border does.
-   `--color-surface` behind it is fully opaque, unlike the credits
-   band's veil, because this card carries text a reader has to read rather than
-   a credit that has to stay legible over a continuous map. */
+   A border rather than a drop shadow, and by choice rather than for want of a
+   token. A shadow marks a thing that floats over what it is reading — the chart
+   tooltip is over its own marks and moves with the pointer — where this card is
+   anchored to one marker and stays put, and the border does the job that
+   actually needs doing: separating the card from whatever tile is under it. (A
+   card shadow is also not expressible on the tooltip's terms: `box-shadow` is on
+   the CSS gate's strict-value property list and `filter` is not, so the
+   tooltip's `filter: drop-shadow(…)` sub-values are never judged where the same
+   sub-values in a `box-shadow` are refused. `packages/ui/src/styles.css` writes
+   that trap up for `outline`.)
+
+   `--color-surface` behind it is fully opaque, unlike the credits band's veil,
+   because this card carries text a reader has to read rather than a credit that
+   has to stay legible over a continuous map. */
 .site-popover {
   position: absolute;
   bottom: var(--space-4);
@@ -94,17 +81,10 @@
   justify-content: space-between;
 }
 
-/* `--text-lg`, a step below the retired site panel's `--text-xl` (#265): the
-   card is a card on the map rather than the top of the reading. It does not
-   step below a heading, though, and that survived the fleet chart getting its
-   `<h2>` back on 2026-08-11 (`apps/web/src/dashboard/fleet-panel.css`) — because
-   that heading is `--text-lg` too. So the card sits level with the first heading
-   under the map rather than under it, which is the whole of what this step is
-   chosen for:
-   a card on the map is level with the sections below it rather than over them.
-   The fleet chart's title is the only such heading left, and since the site
-   table left the page on 2026-08-12 it is also the only section below the map
-   for the card to be level with. */
+/* The same step as the fleet chart's title
+   (`apps/web/src/dashboard/fleet-panel.css`), which is the whole of what this
+   step is chosen for: a card on the map is level with the sections below it
+   rather than over them. */
 .site-popover-title {
   margin: 0;
   font-size: var(--text-lg);
@@ -119,15 +99,14 @@
    The even step around the mark buys back the hit target the word used to buy
    with its own width — a claim no case pins, stated the way
    `apps/web/src/map/map.css` states the same one for its own controls
-   (`docs/tech-debt.md`, 2026-09-08). `color` is now what the mark is drawn in
-   (below), and it is the card's full ink rather than the muted grey the word
-   carried: two strokes offer a reader far less area to find than five letters
-   do. No type properties, though, unlike the `.header-menu-button` rule this one
-   was written in the image of: that button keeps a `font-size` because it still
-   owns inline content that would use it, and this button's only child is a glyph
-   sized by its own `width`/`height` below — `display: block`, so not sitting on a
-   text baseline either — so a type scale here would set nothing at all. The same
-   call `.about-dialog-close` makes in `apps/web/src/header/header.css`, for the same reason. */
+   (`docs/tech-debt.md`, 2026-09-08). `color` is the card's full ink rather than
+   the muted grey the word carried: two strokes offer a reader far less area to
+   find than five letters do. No type properties, unlike the
+   `.header-menu-button` rule this one was written in the image of: that button
+   still owns inline content that would use a `font-size`, and this button's only
+   child is a glyph sized by its own `width`/`height` below, so a type scale here
+   would set nothing at all. The same call `.about-dialog-close` makes in
+   `apps/web/src/header/header.css`. */
 .site-popover-close {
   padding: var(--space-2);
   border: none;
@@ -139,24 +118,16 @@
 
 /*
  * The X. Five declarations that are word-for-word `.header-menu-icon`'s in
- * `apps/web/src/header/header.css`, restated here rather than shared — the same call
- * `.about-dialog-basemap` makes about the map's credits pair, and for the same
- * reason (`docs/standards/structure.md` rule 7). That file's rule groups the burger and the
- * magnifier *because they are adjacent on one bar*, which is a constraint this
- * mark is not under: it sits on a card floating over the map, and header chrome
- * restyling itself would not make this wrong. If one copy changed, the other
- * would not be wrong until it changed the same way — rule 7's test for
- * incidental duplication.
+ * `apps/web/src/header/header.css`, restated here rather than shared — the same
+ * call `.about-dialog-basemap` makes about the map's credits pair, and for the
+ * same reason (`docs/standards/structure.md` rule 7). That file's rule groups
+ * the burger and the magnifier *because they are adjacent on one bar*, which is
+ * a constraint this mark is not under: it sits on a card floating over the map,
+ * and header chrome restyling itself would not make this wrong.
  *
- * What each declaration is doing is argued once, at `.header-menu-icon`:
- * `fill: none` so a stroked path does not ink the region its lines bound;
- * `display: block` so the mark does not sit on a text baseline and leave
- * descender space that would make a box square in this file and unsquare on
- * screen; `currentColor` so one colour decision covers both themes; and a
- * unitless `stroke-width` in the user units of the 20-unit `viewBox`, so the
- * weight scales with the box rather than needing restating if the box changes.
- * The `width`/`height` lengths are the CSS gate's documented length residual
- * (`stylelint.config.mjs`), not a value slipping past it.
+ * What each declaration is doing is argued once, at `.header-menu-icon`. The
+ * `width`/`height` lengths are the CSS gate's documented length residual
+ * (`stylelint.config.mjs`).
  */
 .site-popover-close-icon {
   display: block;
