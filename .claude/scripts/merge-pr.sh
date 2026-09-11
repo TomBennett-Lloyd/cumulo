@@ -1152,10 +1152,11 @@ EOF
   # The marker sweep .claude/skills/review-loop/SKILL.md step 5 requires of every
   # conflict resolution, in both of its spellings — the ERE grep and `git diff HEAD
   # --check`, which reads staged and unstaged content alike and so speaks whether or
-  # not the resolved file has been added yet. Three of the union's four parts are whole
-  # blobs, and the fourth — the merged head region — reaches this point only when
-  # merge-file exited 0, which is to say only when it wrote no markers. So a marker here
-  # would mean the resolution is not what this step thinks it is.
+  # not the resolved file has been added yet. Three of the union's four parts are
+  # verbatim slices of the three blobs, and the fourth — the merged head region —
+  # reaches this point only when merge-file exited 0, which is to say only when it wrote
+  # no markers. So a marker here would mean the resolution is not what this step thinks
+  # it is.
   if grep -nE '^(<<<<<<<|=======|>>>>>>>)' "$wt/$TECH_DEBT_PATH" >/dev/null 2>&1; then
     union_abort "$wt" "$dir" "the resolved $TECH_DEBT_PATH still holds conflict markers — refusing to commit it"
     return 1

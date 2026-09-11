@@ -279,8 +279,9 @@ printf '%s\n' "\$*" >>"$2/prettier.log"
 if [ -f "$2/prettier.inject" ]; then
   # A formatter that hands back a file with conflict markers in it. Nothing real does
   # this; what it proves is that the marker sweep runs AFTER the formatter and not
-  # before it, which no case could otherwise tell — the union is built from whole
-  # blobs, so it can never grow a marker on its own.
+  # before it, which no case could otherwise tell — the union is built from verbatim
+  # slices of the three blobs plus a head region merge-file only hands back on exit 0,
+  # so it can never grow a marker on its own.
   printf '<<<<<<< left behind by the formatter\n' >>"\$2"
 fi
 rc=0
@@ -1797,10 +1798,14 @@ end
 # ==========================================================================================
 # The anchor is what makes 20q possible: the head region can only be cut off a side by
 # finding the merge base's final "## " heading IN that side. A side that retitled or
-# pruned that entry has no such line, and without the guard `indexOf` answers -1, the
-# offset arithmetic answers 0, and the WHOLE side reads as tail — which would union a
-# rewritten header into the log as if it were an appended entry. Pruning is a live
-# shape here: docs/tech-debt.md records having been pruned wholesale by a triage pass.
+# pruned that entry has no such line. What the guard buys is a NAMED refusal, not a
+# rescue: without it `indexOf` answers -1, `offsetOfLine(lines, -1)` sums every element
+# but the last and so answers the whole length, the side reads as all head and no tail,
+# and `mustExtend` refuses anyway — with "changes line 5 of the merge-base copy", which
+# sends the merge owner to the heading itself rather than telling them their side no
+# longer has it. So the assertion below is on the message, and that is the whole point
+# of the arm. Pruning is a live shape here: docs/tech-debt.md
+# records having been pruned wholesale by a triage pass.
 begin "a side that no longer holds the base's final entry heading is refused"
 td_fixture union-anchor-gone
 td_main_writes "$TD_BASE_RENAMED$TD_MAIN_ENTRY"
