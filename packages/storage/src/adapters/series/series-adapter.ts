@@ -4,7 +4,15 @@ import {
   type BatchWriteCommandInput,
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import type { Forecast, GenerationReading, UtcIsoTimestamp } from '@cumulo/shared';
+import {
+  FLEET_ROLLUP_PARTITION,
+  fleetRollupTimeBound,
+  type FleetRollupPartial,
+  type Forecast,
+  type GenerationReading,
+  type SeriesKind,
+  type UtcIsoTimestamp,
+} from '@cumulo/shared';
 
 import {
   DYNAMODB_BATCH_WRITE_SIZE,
@@ -21,14 +29,14 @@ import {
   type QueryPaginationBound,
 } from '../storage-adapter-base';
 
+import { fromFleetRollupItem, toFleetRollupItem, type FleetRollupRow } from './fleet-rollup-item';
 import {
   TIME_BOUND_PREFIX,
   fromItem,
   toForecastItem,
   toGenerationReadingItem,
-  type ForecastItem,
-  type GenerationReadingItem,
   type SeriesPoint,
+  type SeriesTableItem,
 } from './series-item';
 
 /**
@@ -43,12 +51,22 @@ import {
  * or splitting it here would throw away the property the key design exists to
  * provide.
  *
+ * **One partition is not a site**: `FLEET_ROLLUP_PARTITION` (`#FLEET`) holds the fleet roll-up
+ * partials ADR 0009 introduced — every location's contribution to every hour, keyed
+ * `<kind>#T#<validTime>#L#<locationId>`. That is the inverse segment order of the
+ * per-site keys above and for the opposite reason: a site's partition is read *by
+ * time*, and this one is read *by kind*, one kind at a time. `fleet-rollup-item.ts`
+ * owns its wire format and says why the sentinel is safe; the two roll-up methods
+ * below are the only ones in this class that address it.
+ *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
  * comment on `createStorageDocumentClient`. The `series` table's provisioned
  * read capacity (`infra/storage/tables.tf`) was sized against
  * eventually-consistent Query reads, and the fleet routes' per-site fan-out —
  * run here, inside the API, since #264 (actuals) and #296 (forecasts) rather
- * than by the browser — is the one user-visible path on that capacity.
+ * than by the browser — is the one user-visible path on that capacity. The
+ * roll-up read replaces that fan-out with one Query and so only ever costs it
+ * less.
  */
 
 /**
@@ -91,6 +109,25 @@ type SeriesWriteRequest = NonNullable<
  */
 export interface SeriesRangeResult {
   readonly points: SeriesPoint[];
+  /** False when a bound stopped pagination with more of the window unread. */
+  readonly complete: boolean;
+}
+
+/**
+ * A window of fleet roll-up partials, and whether the window was read to its end.
+ *
+ * {@link SeriesRangeResult}'s shape, for its reason — a short list cannot say on its own whether it
+ * is the whole answer — and its own type rather than a generic one, because the two carry different
+ * payloads and the honesty flag is the only thing they share
+ * (`docs/standards/structure.md` rule 7).
+ *
+ * `complete` is read harder here than there. A truncated per-site series is a chart with a gap at
+ * the end; a truncated roll-up is a fleet *total* summed from some of its locations, which looks
+ * exactly like a plausible number from a quieter fleet. So ADR 0009's fallback treats
+ * `complete: false` the same way it treats a partition that is not there at all.
+ */
+export interface FleetRollupRangeResult {
+  readonly rows: FleetRollupRow[];
   /** False when a bound stopped pagination with more of the window unread. */
   readonly complete: boolean;
 }
@@ -166,6 +203,78 @@ export class SeriesAdapter extends StorageAdapterBase {
     return { points: items.map(fromItem), complete };
   }
 
+  /**
+   * Writes one location's fleet roll-up partials — its own contribution to each hour of the fleet
+   * aggregate (ADR 0009).
+   *
+   * Through the same batch drain as `putForecasts`, deliberately: these are `cumulo-series` items
+   * like any other, and `BatchWriteItem`'s habit of answering 200 while declining part of the batch
+   * is not less true for being a roll-up. A partial drain comes back as `partial` and the caller
+   * decides — which for the producer means logging it and moving on, because the next cycle rewrites
+   * every one of these keys.
+   *
+   * One location per call, and the caller supplies it. This adapter never derives a location from a
+   * forecast: which location a producer speaks for is settled by the message it consumed (ADR 0004)
+   * and re-deriving it here would be a second answer to a question that already has one.
+   */
+  async putFleetRollupPartials(
+    kind: SeriesKind,
+    locationId: string,
+    partials: readonly FleetRollupPartial[],
+  ): Promise<BatchWriteOutcome> {
+    return this.putSeriesItems(
+      'putFleetRollupPartials',
+      partials.map((partial) => toFleetRollupItem(kind, locationId, partial)),
+    );
+  }
+
+  /**
+   * Every location's partials for one kind over the half-open window `[fromInclusive, toExclusive)`
+   * — the whole fleet aggregate's raw material, in **one** Query.
+   *
+   * The single round trip is the point of the design, so it is worth saying what makes it possible:
+   * every partial of every location lives in one partition (`FLEET_ROLLUP_PARTITION`), and the sort
+   * key leads with the kind, so one key condition selects exactly one kind over exactly one window
+   * and reads past neither. `querySeriesRange`'s bare-bound `BETWEEN` trick is reused one segment
+   * further in — `fleetRollupTimeBound` is the prefix with the location left off, and every real
+   * item at `toExclusive` is that prefix plus `#L#<locationId>`, so it sorts strictly after the
+   * bound and falls outside. `storage-key.test.ts` pins that ordering as plain string comparisons.
+   *
+   * Pagination is still walked, and still bounded on request, for `querySeriesRange`'s reasons:
+   * DynamoDB pages at 1 MB however few items that is, and a caller with a deadline must be able to
+   * stop. `complete: false` matters more here than there — a truncated roll-up is a fleet total
+   * quietly missing some of its locations, which is a plausible-looking number rather than a visible
+   * gap, so the API treats an incomplete read as a reason to fall back rather than as an answer.
+   */
+  async queryFleetRollup(
+    kind: SeriesKind,
+    fromInclusive: UtcIsoTimestamp,
+    toExclusive: UtcIsoTimestamp,
+    bound?: QueryPaginationBound,
+  ): Promise<FleetRollupRangeResult> {
+    const { items, complete } = await this.queryAllPages(
+      'queryFleetRollup',
+      { siteId: FLEET_ROLLUP_PARTITION },
+      {
+        TableName: this.tableName,
+        KeyConditionExpression: 'siteId = :siteId AND sk BETWEEN :from AND :to',
+        ExpressionAttributeValues: {
+          ':siteId': FLEET_ROLLUP_PARTITION,
+          ':from': fleetRollupTimeBound(kind, fromInclusive),
+          ':to': fleetRollupTimeBound(kind, toExclusive),
+        },
+        // Stated rather than left to the SDK default: the sum at read is order-independent, but a
+        // caller that pages with a bound gets the *earliest* hours when this is true and an
+        // arbitrary tail when it is not, which is the difference between a short window and a
+        // wrong one.
+        ScanIndexForward: true,
+      },
+      bound,
+    );
+
+    return { rows: items.map(fromFleetRollupItem), complete };
+  }
+
   /** The next `limit` points at or after `fromInclusive`, ascending (A3). */
   async querySeriesFrom(
     siteId: string,
@@ -196,7 +305,7 @@ export class SeriesAdapter extends StorageAdapterBase {
    */
   private async putSeriesItems(
     operation: string,
-    items: readonly (ForecastItem | GenerationReadingItem)[],
+    items: readonly SeriesTableItem[],
   ): Promise<BatchWriteOutcome> {
     // The key each item will be stored under, as one comparable string:
     // partition plus sort key, which for this table is site plus

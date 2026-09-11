@@ -6,8 +6,15 @@ import { errorResponse, type ApiResponse } from '../http/response';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
 /**
- * The fan-out both fleet routes perform: one Query per site over one window,
- * issued in concurrent batches, deadline-gated between them, whole-or-nothing.
+ * The fan-out over one window: one Query per site, issued in concurrent
+ * batches, deadline-gated between them, whole-or-nothing.
+ *
+ * **Two callers, no longer symmetrical.** `GET /v1/fleet/actuals` reads this
+ * way as its only path; `GET /v1/fleet/forecast` reads the pre-summed `#FLEET`
+ * partition instead and reaches this module only through ADR 0009's fallback,
+ * which #507 removes once a full cycle has been observed. Everything below
+ * still holds for both — what changes when the fallback goes is how often the
+ * forecast side arrives here, and eventually whether it does at all.
  *
  * **The batch is the unit, and the gate sits between batches.** A fleet of 61
  * sites read one site at a time is 61 warm round trips (~2.4 s, measured at
@@ -41,17 +48,20 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * then commit an arbitrary number of Queries on one reading of the clock.
  *
  * **Why this is shared rather than written twice.** `get-fleet-actuals.ts` and
- * `get-fleet-forecast.ts` differ in the parts a reader would expect them to —
- * which direction the window runs, which kind of point they keep, which schema
- * their body is parsed against — and are identical in this part: the order the
- * sites are read in, when the loop is allowed to start another Query, and what
- * happens when it cannot finish. Apply `docs/standards/structure.md` rule 7's
- * test to that middle: if the gate moved, or a truncated fan-out started being
- * served as a partial 200, the other route would be wrong until it changed the
- * same way. So the shared portion is extracted and the dissimilar remainder
- * stays in the handlers — deliberately *not* one function with a direction flag
- * and a "which kind of point" flag, which is the shape rule 7 names as the tell
- * that two intents were forced together.
+ * `fleet-rollup-read.ts`'s fallback differ in the parts a reader would expect
+ * them to — which direction the window runs, which kind of point they keep,
+ * which schema their body is parsed against — and are identical in this part:
+ * the order the sites are read in, when the loop is allowed to start another
+ * Query, and what happens when it cannot finish. Apply
+ * `docs/standards/structure.md` rule 7's test to that middle: if the gate
+ * moved, or a truncated fan-out started being served as a partial 200, the
+ * other caller would be wrong until it changed the same way. So the shared
+ * portion is extracted and the dissimilar remainder stays in the handlers —
+ * deliberately *not* one function with a direction flag and a "which kind of
+ * point" flag, which is the shape rule 7 names as the tell that two intents
+ * were forced together. **That test is what #507 has to re-apply**: with the
+ * fallback gone this module has one caller, and a shared module with one
+ * caller is a module to inline back into it.
  *
  * What comes back is therefore one array of raw {@link SeriesPoint}s per site,
  * unsplit: the split is the caller's half of the job (`series-split.ts`), and

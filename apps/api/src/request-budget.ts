@@ -69,8 +69,17 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   cases overlap (`forecast/fleet-series-read.ts` carries the argument). The
  *   deadline gate sits *between* batches, so the first one is ungated exactly
  *   as a first page is.
- * - `GET /v1/fleet/forecast` — **4**: the same four over the same fleet, its
- *   window running forwards rather than back, ≈ 28 s.
+ * - `GET /v1/fleet/forecast` — **4** on the roll-up path (limiter 2,
+ *   `listFleetSites`, then the first page of the single `#FLEET` Query),
+ *   ≈ 28 s; **5** on ADR 0009's fallback, where that Query's first page is
+ *   followed by the fan-out's first batch, ≈ 35 s. The fallback is the one
+ *   prefix on this API wider than the four above, and it is wider by a whole
+ *   command rather than by a coincidence of composition: the roll-up read is
+ *   consulted first and only *then* found wanting, so both first-reads are
+ *   ungated in the same request. It is temporary by construction — the
+ *   fallback comes out at #507 and the prefix returns to 4 — and it sits
+ *   inside the same argument the section closes with, since a 35-second worst
+ *   case still requires five independent worst cases to coincide.
  * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
  *   admitted per command, including the up-to-36 commands of the store loop.
  *   The committed write is the last thing the route does: nothing follows it,
@@ -78,7 +87,12 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   done after the site exists (ADR 0007).
  * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
  *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
- *   no loop to gate and is the widest ungated prefix on the API.
+ *   no loop to gate. It was the widest ungated prefix on the API until ADR
+ *   0009's fallback arm above took that title at 5, temporarily, until #507;
+ *   below that it is joint-widest at 4, tied with `GET …/series`,
+ *   `GET /v1/fleet/actuals`, the fleet-forecast roll-up path and a seed-site
+ *   `DELETE`. All five of those are structural, which is the distinction worth
+ *   keeping: the only prefix wider than them is one that is on its way out.
  * - `DELETE /v1/sites/{siteId}` — **3** on a user site (limiter 2,
  *   `getFleetSite`), ≈ 21 s, the counted deletes gated after it; **4** on a
  *   seed site, whose single `deleteFleetSite` is a plain
@@ -93,7 +107,7 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
  * what crosses it, at 21,000 ms. It therefore takes **three independent
  * per-unit worst cases coinciding in one request's ungated prefix** to kill
- * an invocation — which the three- and four-unit prefixes above can offer,
+ * an invocation — which every prefix above of three units or more can offer,
  * and which is now the only route to it. Each of those worst cases is itself
  * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
  * module declines to size a slack against, for the same reason

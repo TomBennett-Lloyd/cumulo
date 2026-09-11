@@ -1,6 +1,7 @@
 import {
   forecastSchema,
   type CreateSiteInput,
+  type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
   type Site,
@@ -187,7 +188,9 @@ export class ScriptedFleetDataSource implements FleetDataSource {
     throw new Error('ScriptedFleetDataSource: the forecast poll must not call siteActuals');
   };
 
-  readonly fleetForecasts = (): Promise<FleetSourceResult<readonly Forecast[]>> => {
+  readonly fleetForecasts = (): Promise<
+    FleetSourceResult<readonly FleetForecastAggregatePoint[]>
+  > => {
     throw new Error('ScriptedFleetDataSource: the forecast poll must not read the fleet');
   };
 

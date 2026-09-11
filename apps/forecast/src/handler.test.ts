@@ -42,6 +42,10 @@ const handlerDeps = (input: HandlerDepsInput): ConsumeMessageDeps => ({
       Promise.resolve({ points: [], complete: true }),
     putGenerationReadings: (): Promise<BatchWriteOutcome> =>
       Promise.resolve({ status: 'complete' }),
+    // The fleet roll-up write (#494), answering as a complete drain — same independence, same
+    // reason: which records Lambda must redeliver does not depend on it either.
+    putFleetRollupPartials: (): Promise<BatchWriteOutcome> =>
+      Promise.resolve({ status: 'complete' }),
   },
   log: (entry) => {
     input.recorder.entries.push(entry);

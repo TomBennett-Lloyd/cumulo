@@ -7,6 +7,7 @@ import {
   siteSeriesResponseSchema,
   utcIsoTimestampSchema,
   type CreateSiteInput,
+  type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
   type Site,
@@ -289,7 +290,7 @@ export class HttpFleetDataSource implements FleetDataSource {
   /**
    * The whole fleet's forecasts, in one request — never a fan-out.
    *
-   * `GET /v1/fleet/forecast` reads every site's stored points server-side and
+   * `GET /v1/fleet/forecast` answers from the pre-summed `#FLEET` partition server-side (#494) and
    * answers with one payload (#296). What did not change when the fan-out this
    * replaced went away is the *direction*: `range` is still spent as a
    * **forward horizon** rather than as the look-back {@link RangeHours}
@@ -319,7 +320,7 @@ export class HttpFleetDataSource implements FleetDataSource {
    */
   readonly fleetForecasts = async (
     range: RangeHours,
-  ): Promise<FleetSourceResult<readonly Forecast[]>> =>
+  ): Promise<FleetSourceResult<readonly FleetForecastAggregatePoint[]>> =>
     mapOk(
       await this.requestJson(
         `fleetForecasts (${String(range)}h)`,
@@ -327,7 +328,7 @@ export class HttpFleetDataSource implements FleetDataSource {
         fleetForecastResponseSchema,
         GET_INIT,
       ),
-      (payload) => payload.forecasts,
+      (payload) => payload.points,
     );
 
   /**

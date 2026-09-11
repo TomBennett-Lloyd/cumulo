@@ -1,5 +1,6 @@
 export {
   type SiteHourEntry,
+  type SiteCapacity,
   aggregateFleetForecast,
   type FleetForecastPoint,
   aggregateFleetActuals,
@@ -8,6 +9,16 @@ export {
   contributingCapacityKwByHour,
   fleetCentroid,
 } from './aggregation';
+export {
+  FLEET_ROLLUP_FORECAST_KIND,
+  fleetRollupPartialSchema,
+  fleetForecastAggregatePointSchema,
+  type FleetRollupPartial,
+  type FleetForecastAggregatePoint,
+  fleetRollupPartials,
+  sumFleetRollupPartials,
+  fleetForecastAggregate,
+} from './fleet-rollup';
 export { apiErrorCodeSchema, type ApiErrorCode, apiErrorSchema, type ApiError } from './api-error';
 export { attributionSchema, type Attribution, openMeteoAttribution } from './attribution';
 export {
@@ -71,13 +82,21 @@ export {
   type SeriesKind,
   seriesSortKey,
   parseSeriesSortKey,
+  FLEET_ROLLUP_PARTITION,
+  fleetRollupSortKey,
+  fleetRollupTimeBound,
   weatherSortKey,
   archiveDayMarkerSortKey,
   metricsSortKey,
 } from './storage-key';
 export { generateFleet, canonicalFleetSeed } from './fleet';
 export { describeThrown } from './thrown-detail';
-export { utcIsoTimestampSchema, type UtcIsoTimestamp, type UtcWindow } from './timestamp';
+export {
+  utcIsoTimestampSchema,
+  type UtcIsoTimestamp,
+  type UtcWindow,
+  compareUtcIsoTimestamps,
+} from './timestamp';
 export { weatherMessageSchema, type WeatherMessage } from './weather-message';
 export {
   MAX_PLAUSIBLE_IRRADIANCE_WM2,

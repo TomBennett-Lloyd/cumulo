@@ -234,8 +234,14 @@ describe('DemoFleetDataSource window-scoped reads', () => {
     const siteIds = (points: readonly { readonly siteId: string }[]): number =>
       new Set(points.map((point) => point.siteId)).size;
 
-    expect(forecasts.kind === 'ok' && siteIds(forecasts.value)).toBe(seedFleet.length);
-    expect(forecasts.kind === 'ok' && forecasts.value).toHaveLength(seedFleet.length * 49);
+    // The forecast half is summed by this source now (#494), so "every site is in it" is read off
+    // the contributing count rather than off distinct site ids: 49 hours, every one of them
+    // carrying the whole fleet. The actuals are still raw readings and still counted by site.
+    expect(forecasts.kind === 'ok' && forecasts.value).toHaveLength(49);
+    expect(
+      forecasts.kind === 'ok' &&
+        forecasts.value.every((point) => point.contributingSiteCount === seedFleet.length),
+    ).toBe(true);
     expect(actuals.kind === 'ok' && siteIds(actuals.value)).toBe(seedFleet.length);
   });
 
@@ -246,13 +252,18 @@ describe('DemoFleetDataSource window-scoped reads', () => {
    */
   it('includes a site created this session in the fleet-level series', async () => {
     const source = new DemoFleetDataSource();
-    const created = await source.createSite(validInput);
-    const createdId = created.kind === 'ok' ? created.value.id : '';
+    const before = await source.fleetForecasts(24);
+    const beforeCount = before.kind === 'ok' ? (before.value[0]?.contributingSiteCount ?? 0) : 0;
+
+    await source.createSite(validInput);
 
     const result = await source.fleetForecasts(24);
-    const forecasts = result.kind === 'ok' ? result.value : [];
+    const points = result.kind === 'ok' ? result.value : [];
 
-    expect(forecasts.some((forecast) => forecast.siteId === createdId)).toBe(true);
+    // The summed shape cannot be asked "is this site in it?" by id, so it is asked the question the
+    // sum can answer: one more site contributed, and the capacity behind the hour grew with it.
+    expect(points[0]?.contributingSiteCount).toBe(beforeCount + 1);
+    expect(points[0]?.contributingCapacityKw).toBeGreaterThan(0);
   });
 
   /**

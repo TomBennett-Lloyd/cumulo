@@ -3,28 +3,33 @@ import {
   openMeteoAttribution,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
+import type { SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
-import { readFleetSeries } from './fleet-series-read';
+import { readFleetForecastAggregate, type FleetRollupReadDeps } from './fleet-rollup-read';
 import { DEFAULT_FORECAST_HORIZON_HOURS, FORECAST_HORIZON_HOURS } from './get-site-forecast';
-import { forecastsIn } from './series-split';
 import { hoursAfter } from './series-window';
 
 /**
  * `GET /v1/fleet/forecast` — every fleet site's forecast over one forward
  * horizon, in one request.
  *
- * **The mirror of `get-fleet-actuals.ts`, and it exists for the same arithmetic.**
- * The web app plots the fleet forecast beside the fleet's actual output, so it
- * needs every site's points on every load. Assembled in the browser that is one
- * `GET …/forecast` per site; server-side it is one request whose DynamoDB
- * Queries are spent against a budget the *invocation* owns. That route's
- * docblock has the full argument — this one points at it rather than restating
- * it (`docs/standards/architecture.md` rule 9).
+ * **Summed here, not in the browser (#494, ADR 0009).** The body is one point
+ * per hour — the fleet total, its band, and how many sites and how much
+ * nameplate capacity stood behind it — rather than every site's rows for the
+ * browser to add up. The sum is the same on every load, so it is computed once
+ * by the forecast producer and read back as one Query of the `#FLEET` partition;
+ * `fleet-rollup-read.ts` owns that read and the fan-out fallback that covers the
+ * window before the first full cycle has written.
+ *
+ * **The mirror of `get-fleet-actuals.ts` in shape, no longer in body.** That
+ * route still returns raw readings, because the actuals roll-up is the
+ * fast-follow ticket on the same item shape; its docblock carries the full
+ * argument for reading a fleet server-side in one request, and this one points
+ * at it rather than restating it (`docs/standards/architecture.md` rule 9).
  *
  * **Forward-looking by definition.** The window opens at the clock and runs
  * `hours` ahead, which is what makes this route the actuals route read
@@ -36,7 +41,7 @@ import { hoursAfter } from './series-window';
  * obliges every consumer of this data to display.
  *
  * **An empty fleet, or a fleet whose sites hold no points yet, is a 200 with
- * `forecasts: []`.** A fleet with nothing forecast for it yet is an answer about
+ * `points: []`.** A fleet with nothing forecast for it yet is an answer about
  * the schedule rather than about whether the fleet exists — the distinction
  * `get-site-forecast.ts` draws for a site created moments ago, and the one #17's
  * first-forecast poll reads.
@@ -82,15 +87,11 @@ export const fleetForecastReadDeadlineEvent = 'api.fleet-forecast.read-deadline-
  * shared name would couple them on a resemblance that is currently exact and
  * not structural.
  */
-export interface GetFleetForecastDeps {
+export interface GetFleetForecastDeps extends FleetRollupReadDeps {
   /** Only the listing: this route never writes a site (`typing.md` rule 6, ADR 0002 least privilege). */
   readonly sites: Pick<SiteAdapter, 'listFleetSites'>;
-  /** Reads only: forecast rows are written by the forecast service, not here. */
-  readonly series: Pick<SeriesAdapter, 'querySeriesRange'>;
   /** Injected, so the window a test asserts on is a window the test chose. */
   readonly now: () => UtcIsoTimestamp;
-  /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
-  readonly log: (entry: Record<string, unknown>) => void;
 }
 
 export const getFleetForecast = async (
@@ -119,12 +120,14 @@ export const getFleetForecast = async (
   const from = deps.now();
   const to = hoursAfter(from, hours.data);
 
-  // The batched, deadline-gated fan-out, and its refusal: shared with
-  // `GET /v1/fleet/actuals`, which reads the same sites over the same kind of
-  // window in the opposite direction (`fleet-series-read.ts` argues the split).
-  // `deps` goes in whole — `GetFleetForecastDeps` is a superset of what the read
-  // needs, and the `Pick` in `FleetSeriesReadDeps` is what narrows it.
-  const read = await readFleetSeries(
+  // One Query of the pre-summed `#FLEET` partition, falling back to the old
+  // deadline-gated fan-out — and saying so in the log — while a partition is
+  // still missing or half-written (ADR 0009). `deps` goes in whole:
+  // `GetFleetForecastDeps` is a superset of what the read needs, and the `Pick`s
+  // in `FleetRollupReadDeps` are what narrow it. The deadline event is passed
+  // rather than imported by the read, so this route keeps owning the name an
+  // operator greps for when *this* route runs out of time.
+  const read = await readFleetForecastAggregate(
     deps,
     request.deadline,
     sites,
@@ -137,10 +140,8 @@ export const getFleetForecast = async (
     return read.response;
   }
 
-  // Split per site and flattened once, rather than a split of one concatenated
-  // list: the wire order is site by site, chronological within each.
   return jsonResponse(200, fleetForecastResponseSchema, {
-    forecasts: read.perSite.flatMap((points) => forecastsIn(points)),
+    points: [...read.points],
     attribution: openMeteoAttribution,
   });
 };

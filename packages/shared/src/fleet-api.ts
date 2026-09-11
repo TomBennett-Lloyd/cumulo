@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { attributionSchema } from './attribution';
+import { fleetForecastAggregatePointSchema } from './fleet-rollup';
 import { forecastSchema } from './forecast';
 import { generationReadingSchema } from './generation-reading';
 import { fleetSiteSchema } from './site';
@@ -74,18 +75,27 @@ export const fleetActualsResponseSchema = z.object({
 export type FleetActualsResponse = z.infer<typeof fleetActualsResponseSchema>;
 
 /**
- * Fleet-wide forecasts over one forward horizon: every site's points merged into one array,
- * carrying the same peer `attribution` as the schemas above.
+ * The fleet's forecast over one forward horizon, **already summed** — one point per hour, carrying
+ * the same peer `attribution` as the schemas above.
  *
- * A separate named schema rather than a reuse of {@link siteForecastResponseSchema}, whose shape
- * it currently matches exactly. `structure.md` rule 7's test — would one be wrong if the other
- * changed? — answers no: one site's horizon and the whole fleet's are different intents in
- * different contexts, and the fleet envelope is the one that may grow fleet-only siblings such as
- * a contributing-site count. Same reason {@link fleetActualsResponseSchema} is not
- * {@link siteSeriesResponseSchema} minus a field.
+ * `points`, not `forecasts`, and the rename is the contract change (#494, ADR 0009). This route
+ * used to return every site's raw rows and leave the browser to add them up; it now returns the
+ * fleet total the dashboard actually draws, read as one Query of the pre-summed `#FLEET` partition.
+ * Calling an array of fleet aggregates `forecasts` would invite a consumer to treat a point as one
+ * site's row — which is exactly what the old field name meant.
+ *
+ * The fleet-only siblings this envelope was kept separate for have arrived, which is the other half
+ * of the rename's justification: {@link fleetForecastAggregatePointSchema} carries
+ * `contributingSiteCount` and `contributingCapacityKw`, so the `%`-of-capacity view divides by a
+ * capacity the server evidenced rather than by one the browser re-derived from rows it no longer
+ * receives.
+ *
+ * `fleetActualsResponseSchema` above is deliberately untouched: the actuals roll-up is a fast-follow
+ * ticket on the same item shape (ADR 0009), and moving one wire contract per ticket is what keeps
+ * each one a revert unit.
  */
 export const fleetForecastResponseSchema = z.object({
-  forecasts: z.array(forecastSchema),
+  points: z.array(fleetForecastAggregatePointSchema),
   attribution: attributionSchema,
 });
 

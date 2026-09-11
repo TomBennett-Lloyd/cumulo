@@ -221,17 +221,28 @@ describe('HttpFleetDataSource series window', () => {
 });
 
 describe('HttpFleetDataSource fleet forecast', () => {
+  // The route serves the fleet already summed (#494), so the body is one point per hour rather than
+  // one row per site-hour — written out literally here, because what this suite proves is that the
+  // transport unwraps the wire shape the API actually sends.
   const forecastBody = {
-    forecasts: [forecastPoint(SITE_A, 1.4), forecastPoint(SITE_B, 2.6)],
+    points: [
+      {
+        validTime: '2026-07-30T12:00:00Z',
+        acPowerKw: 4,
+        uncertainty: { p10AcPowerKw: 3, p90AcPowerKw: 5 },
+        contributingSiteCount: 2,
+        contributingCapacityKw: 8,
+      },
+    ],
     attribution: openMeteoAttribution,
   };
 
-  it('fleetForecasts unwraps the forecasts array from the fleet endpoint', async () => {
+  it('fleetForecasts unwraps the summed points from the fleet endpoint', async () => {
     const { source, recorder } = sourceAnswering(() => jsonResponse(forecastBody, 200));
 
     const forecasts = expectValue(await source.fleetForecasts(48));
 
-    expect(forecasts).toEqual(forecastBody.forecasts);
+    expect(forecasts).toEqual(forecastBody.points);
     // One request, the fleet route, and the horizon it was handed: the per-site
     // fan-out this replaced spent a site listing plus one request per site, so
     // the call count and the URL together are the behaviour that changed.

@@ -19,19 +19,21 @@
 #     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
 #     archive — and a group Lambda auto-creates instead would never expire (see
 #     the comment on the function's `depends_on`). Size, counted rather than
-#     assumed: **ten billed lines per invocation** — `forecast.message.outcome`
-#     and `forecast.batch.summary` from handler.ts, one of each because
-#     `batch_size = 1` (event-source.tf) makes a batch a single record; one
-#     `forecast.actuals.outcome` from simulate-actuals.ts per site of the one
-#     location that record speaks for, which is five in the canonical fleet
-#     (#264); plus Lambda's own START, END and REPORT. At ~8,760
-#     invocations/month that is ~87,600 lines, so **10 × 8,760 × 1 KB ≈ 88
-#     MB/month** retained — ~$0.0026/month at ~$0.03/GB-month, and $0.00 as
+#     assumed: **eleven billed lines per invocation** —
+#     `forecast.message.outcome` and `forecast.batch.summary` from handler.ts,
+#     one of each because `batch_size = 1` (event-source.tf) makes a batch a
+#     single record; one `forecast.actuals.outcome` from simulate-actuals.ts
+#     per site of the one location that record speaks for, which is five in the
+#     canonical fleet (#264); one `forecast.fleet-rollup.outcome` from
+#     fleet-rollup-write.ts for that location itself (#494); plus Lambda's own
+#     START, END and REPORT. At ~8,760 invocations/month that is ~96,400 lines,
+#     so **11 × 8,760 × 1 KB ≈ 96 MB/month** retained — ~$0.0029/month at
+#     ~$0.03/GB-month, and $0.00 as
 #     billed because it sits inside the account's always-free 5 GB of stored
-#     logs. That ~88 MB is a **bound, not a measurement**, and generously so:
+#     logs. That ~96 MB is a **bound, not a measurement**, and generously so:
 #     ADR 0005's own ~6.5 GB/month at 25.92 M requests works out at ~250 bytes
-#     per *invocation*, and this prices 1 KB per *line* and then charges all ten
-#     of them. The honest claim is a ceiling, not a meter reading. What moves
+#     per *invocation*, and this prices 1 KB per *line* and then charges all
+#     eleven of them. The honest claim is a ceiling, not a meter reading. What moves
 #     the total is the location count rather than the site count — infra/
 #     README.md's forecast cost notes own that arithmetic.
 #   * CloudWatch alarms — one alarm, the tenth and last of the always-free ten.
@@ -56,8 +58,9 @@
 #     are metered rather than drawn from a free allocation. So this is a driver
 #     row under infra/README.md's cost convention 3 — the line lives in the
 #     **storage** stack's cost table, because storage owns the resource, and
-#     this stack says so here: **$0.00/month here, driving ≈ $1.48/month under
-#     storage** at the canonical fleet (~2,880 items/hour). It is $0 whenever
+#     this stack says so here: **$0.00/month here, driving ≈ $1.78/month under
+#     storage** at the canonical fleet (~3,456 items/hour — ~2,880 forecast
+#     items plus #494's 576 fleet roll-up partials). It is $0 whenever
 #     ingestion's schedule is off, because there are then no messages to drain.
 #   * IAM — the execution role, its inline policy, and the deploy grant are all
 #     free. So is the event source mapping resource itself.
@@ -70,7 +73,7 @@
 # either: it keeps draining ingestion's queue, and every
 # message it drains meters series write units on the storage stack's bill. That
 # is still usually the behaviour you want — an undrained queue is worse — but it
-# is ≈ $1.48/month of somebody's meter rather than nothing at all.
+# is ≈ $1.78/month of somebody's meter rather than nothing at all.
 
 output "function_name" {
   description = "Name of the forecast function, for `aws lambda invoke` and for `aws logs tail /aws/lambda/<name>`. Echoes the cumulo-forecast-<environment> convention so an operator reads the value Terraform actually applied instead of retyping it — the deploy workflow hardcodes the same name."
