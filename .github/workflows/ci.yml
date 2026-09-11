@@ -115,9 +115,13 @@ jobs:
       # floor rather than a census (swept 2026-09-12 with
       # `command grep -rnE '0\.9\.0|0\.8\.0|runner image' --include='*.sh'
       # --include='*.yml' --include='*.md' .`): no other site carries either
-      # number. The install step above, .claude/scripts/shellcheck-pin.sh and
-      # .claude/scripts/install-shellcheck.sh each need the FACT that the image is
-      # older, not the figure, so they point here and carry no literal.
+      # number. The sites that need the FACT that the image is older, rather than
+      # the figure, point here and carry no literal: the two steps above (the
+      # actionlint install's opening comment and the shellcheck install's), plus
+      # .claude/scripts/shellcheck-pin.sh and
+      # .claude/scripts/install-shellcheck.sh. That list is a floor like the sweep
+      # is — a new site pointing here does not have to be added to it to be
+      # correct, it just has to carry no number.
       #
       # That copy is now irrelevant rather than load-bearing: the install step
       # puts the pinned binary ahead of it, and `lint:sh` refuses any version but

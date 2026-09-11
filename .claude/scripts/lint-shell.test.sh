@@ -41,8 +41,16 @@ SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # revision of the gate as a negative control (testing.md rule 4: a regression test is
 # only worth its line count if it has been seen to fail on the pre-fix code):
 #
-#   git show <rev>:.claude/scripts/lint-shell.sh >/tmp/pre.sh
-#   LINT_SHELL_GATE=/tmp/pre.sh bash .claude/scripts/lint-shell.test.sh
+#   mkdir -p /tmp/pre/.claude/scripts
+#   git show <rev>:.claude/scripts/lint-shell.sh >/tmp/pre/.claude/scripts/lint-shell.sh
+#   cp .claude/scripts/shellcheck-pin.sh /tmp/pre/.claude/scripts/
+#   LINT_SHELL_GATE=/tmp/pre/.claude/scripts/lint-shell.sh bash .claude/scripts/lint-shell.test.sh
+#
+# The pin has to travel with the copy, and at its own relative path: since #502 the gate
+# reads its pin from `dirname "${BASH_SOURCE[0]}"`, so a bare `>/tmp/pre.sh` leaves case 1
+# — which runs $GATE against THIS repository, outside any fixture — failing with "cannot
+# read the shellcheck pin" for a reason that has nothing to do with the revision under
+# test. Every other case carries its own pin and is unaffected.
 #
 # Unset — how `pnpm test:scripts` runs it — is the shipped gate.
 GATE=${LINT_SHELL_GATE:-$SCRIPTS/lint-shell.sh}
@@ -126,6 +134,25 @@ run_gate() {
 
 run_gate_on_this_repo() { # the shipped configuration: real repository, no fixture
   capture -C "$SCRIPTS" bash "$GATE"
+}
+
+# stub_shellcheck <dir> <version> <version-rc> — a shellcheck that reports <version> and
+# finds nothing, or (with a non-zero <version-rc>) fails to report a version at all.
+# Cases 10 and 11 need a binary whose version they choose, which is the one thing a real
+# linter cannot give them. The stub analyses nothing, so no case may assert a finding
+# through it.
+stub_shellcheck() {
+  must mkdir -p "$1"
+  cat >"$1/shellcheck" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--version" ]; then
+  [ "$3" = 0 ] || exit "$3"
+  printf 'ShellCheck - shell script analysis tool\nversion: $2\n'
+  exit 0
+fi
+exit 0
+EOF
+  must chmod +x "$1/shellcheck"
 }
 
 # ====================================================================================
@@ -327,6 +354,57 @@ expect_rc 2 "$rc"
 expect_stderr "declares no SHELLCHECK_PIN_VERSION"
 expect_not_out "file(s)"
 case_ctx=""
+end
+
+# ====================================================================================
+# 10. the gate does not outrank the PATH the caller handed it
+# ====================================================================================
+# The refusal in case 6 is only worth having if following its instructions works, and for
+# one commit it did not: the gate PREPENDED Homebrew's prefix to PATH, which promoted
+# Homebrew's shellcheck above the pinned one a developer had deliberately put first. It
+# bites on exactly the day the installer exists for — the day Homebrew moves past the pin
+# — so the wrong version was in front precisely when the escape hatch was needed, and the
+# refusal became a wall that its own instructions could not open.
+#
+# The fixture makes that day happen: a pin naming a version no release carries, and a stub
+# reporting it at the front of PATH. Reaching a verdict is the whole assertion — under a
+# prepend the gate resolves whatever is in the promoted directory instead and refuses. The
+# census is asserted with the stub's version in it, so a gate that ran some other
+# binary while printing the stub's number could not pass either.
+#
+# KNOWN LIMIT, because a regression case that only sometimes regresses has to say so: this
+# bites only where the promoted directory actually holds a second, differently-versioned
+# linter. On a developer's Mac it does; on the Linux runner /opt/homebrew/bin does not
+# exist at all, so prepend and append resolve identically and this case would pass against
+# the pre-fix gate too. The ratchet is real and it is local. Making it portable means naming
+# the promoted directory as a seam, which is the resolution-over-ordering change logged in
+# docs/tech-debt.md — the one that retires this case along with the behaviour it guards.
+begin "gate uses the shellcheck the caller put first, not the one it adds to PATH"
+fixture path_order
+must write_pin "$ROOT/.claude/scripts" 0.0.0-stub
+stub_shellcheck "$ROOT/bin" 0.0.0-stub 0
+capture -C "$ROOT" env "PATH=$ROOT/bin:/opt/homebrew/bin:/usr/bin:/bin" \
+  bash .claude/scripts/lint-shell.sh
+expect_rc 0 "$rc"
+expect_stdout "shellcheck (0.0.0-stub, pinned) over"
+end
+
+# ====================================================================================
+# 11. a shellcheck that cannot report its own version is a broken gate
+# ====================================================================================
+# The exit-code contract, at the one place it used to leak. The version read is a
+# pipeline, so under `set -e` its status propagates verbatim — and a shellcheck exiting 1
+# on `--version` would leave this gate exiting 1 too, which this file reserves for
+# "shellcheck found something". A caller cannot tell those apart, and they want opposite
+# responses: one is a script to fix, the other is an install to fix. So the stub exits 1
+# where the code is most confusable, and the assertion is that the gate exits 2 anyway.
+begin "gate exits 2, not shellcheck's own code, when --version fails"
+fixture version_unreadable
+stub_shellcheck "$ROOT/bin" unused 1
+capture -C "$ROOT" env "PATH=$ROOT/bin:/usr/bin:/bin" \
+  bash .claude/scripts/lint-shell.sh
+expect_rc 2 "$rc"
+expect_not_out "file(s)"
 end
 
 # ====================================================================================

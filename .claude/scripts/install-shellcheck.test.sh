@@ -1,18 +1,26 @@
 #!/usr/bin/env bash
 # Test harness for the pinned-shellcheck installer (.claude/scripts/install-shellcheck.sh).
 #
-# WHAT IS AND IS NOT COVERED HERE, stated first because the gap is the interesting part.
-# The installer's happy path ends in a multi-megabyte download from GitHub, and this harness
-# takes no network — the same rule every other harness in this directory keeps. So what
-# is asserted here is the whole set of arms that REFUSE BEFORE REACHING THE NETWORK, and
-# each case asserts that it never got there (`expect_not_out 'fetching'`), which is also
-# what would catch a refusal that had been softened into a warning.
+# WHAT IS AND IS NOT COVERED HERE, stated first because the gap is the interesting part
+# and because the sentence that used to sit here overclaimed it.
 #
-# The download path is not therefore unasserted — it is asserted somewhere this harness
-# cannot reach and CI cannot avoid: the `Install shellcheck (pinned)` step runs it on
-# every single CI run, before `pnpm verify:full`, so a broken fetch, a wrong checksum or
-# a bad extraction reds the build immediately and loudly. A mocked download here would
-# assert the mock; the real one is already on the critical path of every merge.
+# The installer's happy path ends in a multi-megabyte download from GitHub, and this
+# harness takes no network — the same rule every other harness in this directory keeps.
+# So the cases are all pre-network refusals, and each asserts it never got there
+# (`expect_not_out 'fetching'`), which is also what would catch a refusal softened into a
+# warning. They are NOT every pre-network refusal, and this is a FLOOR rather than a list:
+# the arms for a missing `curl`/`tar` and for a machine with neither `sha256sum` nor
+# `shasum` need a tool taken off PATH that the harness itself depends on, an unwritable
+# `DEST_DIR` is reachable and simply has no case yet, and the bare `|| exit 2` arms have
+# none either. Naming a closed set here would be the overclaim this paragraph replaced.
+#
+# The post-network arms — the download, the checksum comparison, extraction, chmod, and
+# the installed binary's version readback — have their SUCCESS side exercised on every CI
+# run, because the `Install shellcheck (pinned)` step runs the whole happy path before
+# `pnpm verify:full`; a broken fetch or a bad extraction reds the build at once. It is
+# their FAILURE side that is unreachable from here and unreached there, the checksum
+# mismatch most consequentially; that gap is logged in docs/tech-debt.md rather than
+# papered over with a mocked download, which would assert the mock.
 #
 # Every refusal exits 2 — the installer has no exit 1 — so the cases assert 2 and the
 # message, never merely "non-zero": an installer that fell over for an unrelated reason
@@ -33,11 +41,17 @@ SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # shellcheck source=./harness-lib.sh
 . "$SCRIPTS/harness-lib.sh"
 
-# Overridable on the same terms as lint-shell.test.sh's LINT_SHELL_GATE, but not yet for
-# the same purpose: the installer is new, so there is no pre-fix revision to run these
-# cases against as a negative control. What the seam buys today is a mutant copy — break
-# one refusal in a scratch copy, point this at it, and watch the matching case go red —
-# and the negative control the day a fix here needs one.
+# Overridable on the same terms, and for the same purpose, as lint-shell.test.sh's
+# LINT_SHELL_GATE — testing.md rule 4's negative control:
+#
+#   git show <rev>:.claude/scripts/install-shellcheck.sh >/tmp/pre.sh
+#   INSTALL_SHELLCHECK_SCRIPT=/tmp/pre.sh bash .claude/scripts/install-shellcheck.test.sh
+#
+# Case 2's environment variant was pinned that way against the revision before the fix
+# (3 passed, 1 failed). It also takes a mutant copy, which is how the arms with no
+# pre-fix revision behind them get checked. One caution that comes with both: a mutant
+# that breaks an EARLY refusal lets the case run on to the download, so a run against a
+# deliberately broken copy is not network-free the way the shipped configuration is.
 INSTALLER=${INSTALL_SHELLCHECK_SCRIPT:-$SCRIPTS/install-shellcheck.sh}
 
 harness_init_tmp

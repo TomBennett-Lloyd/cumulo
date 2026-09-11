@@ -7,11 +7,11 @@
 # way out for both sides. CI's `checks` job calls it because the runner image's
 # own shellcheck is older than the pin (the image's versions are stated on the
 # `pnpm verify:full` step in .github/workflows/ci.yml and nowhere else); a
-# developer calls it when their package
-# manager has moved past the pin (while Homebrew still resolves to the pinned
-# version, `brew install shellcheck` is the shorter route and the refusal says
-# so). Neither caller states a version: .claude/scripts/shellcheck-pin.sh owns it
-# and this script reads it, so a bump is one commit in one file.
+# developer calls it when their package manager has moved past the pin (while
+# Homebrew still resolves to the pinned version, `brew install shellcheck` is the
+# shorter route, and the refusal says so). Neither caller states a version:
+# .claude/scripts/shellcheck-pin.sh owns it and this script reads it, so a bump is
+# one commit in one file.
 #
 # The shape is lifted from the `Install actionlint (pinned)` step in
 # .github/workflows/ci.yml, whose comments (a)-(d) carry the reasoning this
@@ -68,15 +68,20 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 pin_file="$here/shellcheck-pin.sh"
 [ -r "$pin_file" ] || die "cannot read the pin at $pin_file" \
   '  Without it there is no version to install. Restore the file from git.'
-# Cleared before the source, for the reason lint-shell.sh's twin of this line gives: the
-# pin EXPORTS its declarations, so an inherited value is indistinguishable from a declared
-# one, and a pin file that declares nothing would quietly defer to the environment. Here
-# the stakes are a notch higher than at the gate — an inherited SHA-256 is a checksum
-# nobody committed, verifying a download against a number supplied by the caller.
-unset SHELLCHECK_PIN_VERSION \
-  SHELLCHECK_PIN_SHA256_LINUX_X86_64 \
-  SHELLCHECK_PIN_SHA256_DARWIN_AARCH64 \
-  SHELLCHECK_PIN_SHA256_DARWIN_X86_64
+# Cleared before the source, for the reason lint-shell.sh's twin of this line
+# gives: the pin EXPORTS its declarations, so an inherited value is
+# indistinguishable from a declared one, and a pin file that declares nothing
+# would quietly defer to the environment. Here the stakes are a notch higher than
+# at the gate — an inherited SHA-256 is a checksum nobody committed, verifying a
+# download against a number supplied by the caller.
+#
+# BY PREFIX rather than by name: a hand-written list is coupled to the pin file's
+# export set with nothing keeping the two in step, so adding a fourth platform sum
+# — which the bump procedure over there does not think to mention — would reopen
+# this hole for that platform alone, silently. `${!PREFIX@}` expands to the names
+# currently set with that prefix, and to nothing at all when there are none, which
+# `unset` accepts (checked on bash 3.2, the one macOS ships, both ways).
+unset "${!SHELLCHECK_PIN_@}"
 # shellcheck source=./shellcheck-pin.sh
 . "$pin_file"
 [ -n "${SHELLCHECK_PIN_VERSION:-}" ] || die \

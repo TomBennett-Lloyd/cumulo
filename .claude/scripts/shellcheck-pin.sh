@@ -34,13 +34,13 @@
 # the fix for that is the export the values genuinely want, not a suppression.
 #
 # WHY THIS VERSION (deliberately not naming it in the heading: the declaration
-# below is the only place the number belongs, and a heading carrying it is one a
-# bump would have to remember to true): at the time of pinning it was upstream's latest
-# release, what `brew install shellcheck` resolves to, and the version both
-# failing PRs above had run locally. Given a choice of directions, CI moves up to
-# meet local rather than local down to CI — the newer analyser is the stricter
-# one, and pinning the older would be choosing to keep finding these defects one
-# round later.
+# below is the only place the number belongs, and a heading carrying it is one
+# more site a bump would have to remember to true): at the time of pinning it was
+# upstream's latest release, what `brew install shellcheck` resolves to, and the
+# version both failing PRs above had run locally. Given a choice of directions, CI
+# moves up to meet local rather than local down to CI — the newer analyser is the
+# stricter one, and pinning the older would be choosing to keep finding these
+# defects one round later.
 #
 # BUMPING THE PIN — this file, and nowhere else:
 #   1. Pick the release: https://github.com/koalaman/shellcheck/releases

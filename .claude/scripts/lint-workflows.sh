@@ -43,8 +43,8 @@
 #
 set -euo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
-# machine (same reason lint-shell.sh and worktree-lib.sh do it). Harmless on
-# Linux, where the directory does not exist.
+# machine (same reason worktree-lib.sh does it). Harmless on Linux, where the
+# directory does not exist.
 #
 # Appended, not prepended: prepending outranks a shellcheck the caller put
 # ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's

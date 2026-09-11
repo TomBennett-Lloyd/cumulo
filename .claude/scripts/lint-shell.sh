@@ -42,10 +42,13 @@ set -euo pipefail
 # so the refusal would become a wall on the very day Homebrew moves past the pin
 # and following its instructions would change nothing. Found in review on #502.
 # Appending still supplies the binary when nothing else on PATH has it, which is
-# all the line was ever for. The chain that reaches this gate from
-# `pnpm test:scripts` — run-script-tests.sh, harness-lib.sh and the harnesses
-# themselves — appends for the same reason; a prepend anywhere in it would undo
-# this one.
+# all the line was ever for. Every script on a chain that reaches this gate
+# appends for the same reason, and a prepend anywhere on one would undo this line:
+# `pnpm verify` reaches it through verify-tier.sh and `verify:full`, and
+# `pnpm test:scripts` through run-script-tests.sh, harness-lib.sh and the
+# harnesses. The first of those was missed on the commit that made this change and
+# is the more important half — it is the repo's primary entry point, so the fix
+# was defeated there while reading as done everywhere else.
 export PATH="$PATH:/opt/homebrew/bin"
 
 # The seam the harness needs: discovery has a failure mode (a partial listing)
@@ -81,7 +84,11 @@ fi
 # demonstrated in review on #502, where a truncated pin plus a stale exported variable
 # produced a green census. An environment variable must not be able to become the pin;
 # that is the whole reason the pin is read from disk beside this script.
-unset SHELLCHECK_PIN_VERSION
+# By prefix, not by name, for the reason install-shellcheck.sh's twin of this line
+# gives: a hand-written list drifts from the pin file's export set, and `${!PREFIX@}`
+# cannot. It expands to nothing when nothing matches, which `unset` accepts on
+# bash 3.2.
+unset "${!SHELLCHECK_PIN_@}"
 # shellcheck source=./shellcheck-pin.sh
 . "$pin_file"
 if [ -z "${SHELLCHECK_PIN_VERSION:-}" ]; then
