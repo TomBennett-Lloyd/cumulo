@@ -8,8 +8,8 @@
  * positioned ancestor the consuming surface supplies — and the panel is pinned
  * to that box's right edge and capped at its width. Every consumer therefore
  * owes it one; `InfoTip.tsx`'s docblock states the obligation in the component's
- * own terms and `dashboard/fleet-panel.css` is where today's one consumer
- * discharges it.
+ * own terms and `apps/web/src/dashboard/fleet-panel.css` is where today's one
+ * consumer discharges it.
  *
  * That fixed a real defect rather than tidying an anchor. Hung from the tip
  * itself, the panel had an icon button for a containing block: nothing bounded
@@ -28,7 +28,8 @@
  * (`stylelint.config.mjs` documents that residual). The `100%` beside it is the
  * containing block's width rather than a size anyone chose; the button's box is
  * `--space-6` on both axes, a spacing token doing a sizing job; and the panel's
- * `top: 100%` and `right: 0` anchor rather than size.
+ * `top: 100%` and `right: 0` anchor rather than size — one is a percentage of
+ * the containing block, the other the zero the gate ignores.
  *
  * Its own sheet rather than a corner of `apps/web/src/header/header.css` or
  * `apps/web/src/dashboard/dashboard.css`, because the component is neither
@@ -110,9 +111,11 @@
  * to the panel's own width.
  *
  * `z-index` for the reason `apps/web/src/header/header.css` states over its own
- * values, which this is the third of. The tip that needed it is gone — #284 D13
- * took the (i) off the bar — and the fleet panel's, the only one left, clears
- * static content on document order alone. The value stays because it belongs to
+ * values, which this is the third of: the header is above the dashboard in DOM
+ * order but is not a positioned ancestor, so a tip opened on the bar painted
+ * under maplibre's positioned controls without one. The tip that needed that is
+ * gone — #284 D13 took the (i) off the bar — and the fleet panel's, the only one
+ * left, clears static content on document order alone. The value stays because it belongs to
  * the component rather than to a placement: where the next tip opens is not
  * something this sheet gets told, and a value that has to be added back at the
  * point of use is one that will not be. Stated plainly so nobody has to
@@ -121,10 +124,11 @@
  * outcome it would be one contributor to — the panel's centre, hit-tested — and
  * that case would still pass with the value gone, since the containing block the
  * panel moved to carries `container-type: inline-size`, whose layout containment
- * already lifts the whole row over the chart below it. Which is the reason the
- * hit test is there rather than an argument for dropping the value: re-anchoring
- * the panel changed which stacking context it paints in, so the claim needed
- * re-measuring rather than inheriting.
+ * already lifts the whole row over the chart below it
+ * (`apps/web/src/dashboard/fleet-panel.css` measured that). Which is the reason
+ * the hit test is there rather than an argument for dropping the value:
+ * re-anchoring the panel changed which stacking context it paints in, so the
+ * claim needed re-measuring rather than inheriting.
  *
  * `width: max-content` capped by a measure, so a short sentence gets a small
  * panel and a long one wraps at a readable width instead of stretching to the

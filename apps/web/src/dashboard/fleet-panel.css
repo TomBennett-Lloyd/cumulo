@@ -62,15 +62,19 @@
    hiding, and a panel silently escapes to the page box.
 
    `margin-bottom` is the owner's round-3 item 2 (#449): the row and
-   `.fleet-panel-body` below it touched, and the chrome read as stuck to the
-   chart it introduces. `margin` and `/^margin-/` are on `stylelint.config.mjs`'s
+   `.fleet-panel-body` below it touched at 0px, and the chrome read as stuck to
+   the chart it introduces. What was asked for is "~5px", and 4px is what
+   shipped — `margin` and `/^margin-/` are on `stylelint.config.mjs`'s
    strict-value list with `ignoreFunctions: false`, so the only value this
-   declaration may take is a bare `var(--space-*)`; `--space-1` is one step under
-   the `--space-2` the body uses between its own children, which is the right
-   direction anyway — the row is closer to the chart than the chart's parts are
-   to each other. `apps/web/e2e/chart-controls-gap.spec.ts` asserts the gap. It
-   moves neither overlay: both are positioned at `top: 100%` of this row, so they
-   resolve against its padding box, which a margin sits outside of. */
+   declaration may take is a bare `var(--space-*)`, and a `calc()` contrived to
+   land on a literal 5px is refused by the gate rather than merely discouraged.
+   The scale's quantum here is 4px (`--space-1`), one step under the
+   `--space-2` the body uses between its own children, which is the right
+   direction anyway: the row is closer to the chart than the chart's parts are
+   to each other. `apps/web/e2e/chart-controls-gap.spec.ts` asserts the band that
+   4px sits in. It moves neither overlay: both are positioned at `top: 100%` of
+   this row, so they resolve against its padding box, which a margin sits outside
+   of. */
 .fleet-chart-controls {
   position: relative;
   display: flex;
@@ -131,7 +135,8 @@
  * The query is unnamed because it cannot be ambiguous: `.fleet-chart-stats` is a
  * direct child of the one element declaring `container-type` above, so the
  * nearest ancestor container it resolves to is that row by construction rather
- * than by luck.
+ * than by luck. (`.app-header` in `apps/web/src/header/header.css` states the
+ * same test for the same reason.)
  *
  * One residual: the stats width is the demo fleet's line. A larger fleet sets it
  * wider, so a fleet grown far past the demo's size wraps slightly before the
@@ -141,10 +146,10 @@
  *
  * Both arms of the rule, and the *point* of the hiding, are asserted on a
  * rendered page by `apps/web/e2e/composition.spec.ts`: the row stays one line,
- * no taller than the trigger in it. Neither the heading nor the toggle makes the
- * row taller — that the toggle joins without adding a pixel of height is
- * `unit-toggle.css`'s claim, checked here because the height belongs to this
- * file.
+ * no taller than the trigger in it. The height is the tallest item's, and
+ * neither the heading nor the toggle is it — that the toggle joins without
+ * adding a pixel of height is `unit-toggle.css`'s claim, checked here because
+ * the height belongs to this file.
  *
  * The division of ownership is the durable half of that: this sheet owns the
  * row's px-by-px arithmetic — every item's measured box, which of them sets the

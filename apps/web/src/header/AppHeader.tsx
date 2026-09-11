@@ -9,7 +9,10 @@ import { HeaderMenu } from './HeaderMenu';
 import { SiteSearch } from './SiteSearch';
 
 /**
- * Deliberately not the field's own `Search sites by name`: two controls
+ * The name the icon carries, since the icon carries nothing else.
+ *
+ * `Search sites`, not the field's own `Search sites by name`: this control opens
+ * the search, and the field it opens keeps its own longer name. Two controls
  * announced identically would be two things a voice-control user cannot tell
  * apart by saying either.
  */

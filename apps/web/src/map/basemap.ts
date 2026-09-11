@@ -15,16 +15,17 @@ import type { Theme } from '../theme';
  *   markers.
  * - **Two independently designed styles, one per theme.** The dark basemap is
  *   authored dark, not the light one inverted or CSS-filtered — the treatment
- *   forbids the filtered route.
+ *   forbids the filtered route, and a raster basemap could not have met it
+ *   (there is no way to desaturate raster tiles without exactly that filter).
  *
  * Keyless, no account, no usage cap, $0/month, donation-funded — which is what
  * keeps it inside the repo's free-tier ceiling. The tile credit and the
  * Open-Meteo credit are separate obligations and neither absorbs the other.
  *
- * Rejected: a plain OSM raster layer (its usage policy is hostile to an app like
- * this, and no raster basemap can be desaturated without the banned filter) and
- * Protomaps (a self-hosted PMTiles archive or an API key, for no benefit at this
- * scale). There is no ADR because reversing this is a change to the constant
+ * Rejected: a plain OSM raster layer (its usage policy is hostile to an app
+ * like this, and desaturating it needs the banned filter) and Protomaps (a
+ * self-hosted PMTiles archive or an API key, for no benefit at this scale).
+ * There is no ADR because reversing this is a change to the constant
  * below plus the sites ledgered under it — every one of them a line, none of
  * them structural. OpenFreeMap being donation-funded and SLA-free is precisely
  * why that swap is kept cheap.
@@ -62,8 +63,8 @@ import type { Theme } from '../theme';
  *   because the strip states an obligation the map owes while it is on screen
  *   and this states what the product is built on; only the provider's identity
  *   has to agree.
- * - `README.md`'s data-sources credit — the same obligation in prose, carrying
- *   the ODbL link that the tile data's licence requires.
+ * - The root `README.md`'s data-sources credit — the same obligation in prose,
+ *   carrying the ODbL link that the tile data's licence requires.
  *
  * Deliberately not a member: `docs/design/map-treatment.md` names OpenFreeMap
  * among the candidates #17 was to choose between. It reasons about that decision

@@ -23,10 +23,11 @@
 /* No gap, and that is a claim rather than a saving (#323,
    `docs/standards/design.md` rule 4). The map and the fleet chart under it are
    one reading unit — the same fleet in space, then in time — so they touch, and
-   a band of page between them would have said they were unrelated. The reading
-   below has its own separation to make and makes it in its own padding
-   (`.dashboard-content`), which is why the gap moved there rather than being
-   deleted from the page. */
+   a band of page between them would have said they were unrelated. The two
+   share one continuous `--color-surface` run because `.fleet-chart-section`
+   carries the same surface the map does. The reading below has its own
+   separation to make and makes it in its own padding (`.dashboard-content`),
+   which is why the gap moved there rather than being deleted from the page. */
 .dashboard {
   display: flex;
   flex-direction: column;
@@ -49,16 +50,15 @@
  *
  * `svh`, and deliberately not the `dvh` `apps/web/src/app.css` states a
  * preference for — the two boxes are being asked different questions. `.app`
- * wants a *minimum* that
- * always reaches the bottom of whatever is visible right now, and `dvh`
- * tracking mobile browser chrome is exactly right for that. This box is a
- * *fixed size* with a WebGL canvas inside it that watches its container: under
- * `dvh` every appearance and disappearance of the URL bar would resize the
- * canvas mid-scroll, which is a GL reallocation per chrome transition and the
- * one cost this band must not carry. Plain `vh` has the opposite defect — it is
- * the chrome-retracted height, so while the URL bar is showing the map is more
- * than 60% of what the reader can actually see and pushes the chart further
- * below the fold than intended. `svh` is the chrome-showing height and it is
+ * wants a *minimum* that always reaches the bottom of whatever is visible right
+ * now, and `dvh` tracking mobile browser chrome is exactly right for that. This
+ * box is a *fixed size* with a WebGL canvas inside it that watches its
+ * container: under `dvh` every appearance and disappearance of the URL bar would
+ * resize the canvas mid-scroll, which is a GL reallocation per chrome transition
+ * and the one cost this band must not carry. Plain `vh` has the opposite defect
+ * — it is the chrome-retracted height, so while the URL bar is showing the map
+ * is more than 60% of what the reader can actually see and pushes the chart
+ * further below the fold than intended. `svh` is the chrome-showing height and it is
  * static: never oversized, and never a resize. The map simply keeps that height
  * when the chrome retracts, and the content below gains the difference. */
 .dashboard-map {
