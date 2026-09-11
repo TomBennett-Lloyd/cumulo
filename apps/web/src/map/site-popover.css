@@ -3,7 +3,7 @@
  *
  * Tokens only, as everywhere outside `packages/ui/src/tokens/tokens.css` — the
  * gate in stylelint.config.mjs is what enforces it, and a missing token is a
- * design-system signal rather than a licence to write a literal (react.md
+ * design-system signal rather than a licence to write a literal (`docs/standards/react.md`
  * rule 5). The one length below that is not a token is the card's width, which
  * is the documented residual of that gate: the scale has spacing, type and radii
  * categories and no measure category, so a width has nothing to reference (see
@@ -34,8 +34,8 @@
  * therefore state `2` and paint above this card by design (`map.css` carries
  * that argument), which is what stopped a panned card burying the reset button.
  * It stays far below the `10` the header's overlays and the info tip share (the
- * census is in header/header.css) deliberately: those hang over the whole map,
- * and this card belongs to the map rather than above it.
+ * census is in `apps/web/src/header/header.css`) deliberately: those hang over
+ * the whole map, and this card belongs to the map rather than above it.
  *
  * It leans on maplibre for the `position: absolute` that makes a stacking value
  * apply at all. Nothing else here can supply it — the element is maplibre's to
@@ -57,7 +57,7 @@
    offset and blur would each have to be a bare `var()` or `0`; the quarter-step
    offset the tooltip uses, `calc(var(--space-1) / 4)`, is refused here
    ("Expected variable or keyword"). The tooltip escapes that because its shadow
-   is a `filter: drop-shadow(…)` (`../charts/charts.css`), and `filter` is not on
+   is a `filter: drop-shadow(…)` (`apps/web/src/charts/charts.css`), and `filter` is not on
    the strict-value rule's property list in `stylelint.config.mjs` — so that
    rule never looks at its sub-values at all. Identical sub-values, one refused
    and one never judged; `packages/ui/src/styles.css` writes the same trap up for
@@ -97,9 +97,10 @@
 /* `--text-lg`, a step below the retired site panel's `--text-xl` (#265): the
    card is a card on the map rather than the top of the reading. It does not
    step below a heading, though, and that survived the fleet chart getting its
-   `<h2>` back on 2026-08-11 (dashboard/fleet-panel.css) — because that heading
-   is `--text-lg` too. So the card sits level with the first heading under the
-   map rather than under it, which is the whole of what this step is chosen for:
+   `<h2>` back on 2026-08-11 (`apps/web/src/dashboard/fleet-panel.css`) — because
+   that heading is `--text-lg` too. So the card sits level with the first heading
+   under the map rather than under it, which is the whole of what this step is
+   chosen for:
    a card on the map is level with the sections below it rather than over them.
    The fleet chart's title is the only such heading left, and since the site
    table left the page on 2026-08-12 it is also the only section below the map
@@ -126,7 +127,7 @@
    owns inline content that would use it, and this button's only child is a glyph
    sized by its own `width`/`height` below — `display: block`, so not sitting on a
    text baseline either — so a type scale here would set nothing at all. The same
-   call `.about-dialog-close` makes in `header/header.css`, for the same reason. */
+   call `.about-dialog-close` makes in `apps/web/src/header/header.css`, for the same reason. */
 .site-popover-close {
   padding: var(--space-2);
   border: none;
@@ -138,9 +139,9 @@
 
 /*
  * The X. Five declarations that are word-for-word `.header-menu-icon`'s in
- * `header/header.css`, restated here rather than shared — the same call
+ * `apps/web/src/header/header.css`, restated here rather than shared — the same call
  * `.about-dialog-basemap` makes about the map's credits pair, and for the same
- * reason (`structure.md` rule 7). That file's rule groups the burger and the
+ * reason (`docs/standards/structure.md` rule 7). That file's rule groups the burger and the
  * magnifier *because they are adjacent on one bar*, which is a constraint this
  * mark is not under: it sits on a card floating over the map, and header chrome
  * restyling itself would not make this wrong. If one copy changed, the other
