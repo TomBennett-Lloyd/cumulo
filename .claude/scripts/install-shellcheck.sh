@@ -4,8 +4,10 @@
 #
 # `lint-shell.sh` refuses when the installed shellcheck is not the pinned one; a
 # refusal with no way out is a wall, so this is the way out, and it is the same
-# way out for both sides. CI's `checks` job calls it because the runner image
-# ships 0.9.0 and the pin is newer; a developer calls it when their package
+# way out for both sides. CI's `checks` job calls it because the runner image's
+# own shellcheck is older than the pin (the image's versions are stated on the
+# `pnpm verify:full` step in .github/workflows/ci.yml and nowhere else); a
+# developer calls it when their package
 # manager has moved past the pin (while Homebrew still resolves to the pinned
 # version, `brew install shellcheck` is the shorter route and the refusal says
 # so). Neither caller states a version: .claude/scripts/shellcheck-pin.sh owns it
@@ -37,8 +39,14 @@
 #
 set -euo pipefail
 # Same reason as lint-shell.sh: Homebrew's prefix is not on a non-interactive
-# shell's default PATH on this machine, and curl/shasum may live there.
-export PATH="/opt/homebrew/bin:$PATH"
+# shell's default PATH on this machine, and curl/shasum may live there. Appended
+# rather than prepended, like every other link in that chain — this script never
+# resolves `shellcheck` by name (the binary it installs is run by absolute path),
+# so nothing here turns on it, but a line that reads identically everywhere is
+# one fewer place for the next reader to wonder whether the difference meant
+# something. See lint-shell.sh's comment on the same line for the case where it
+# does mean something.
+export PATH="$PATH:/opt/homebrew/bin"
 
 # die <headline> [detail-line]... — every refusal exits 2, so the caller never has
 # to guess. Only the headline is prefixed; detail lines print as written, which is
@@ -60,6 +68,15 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 pin_file="$here/shellcheck-pin.sh"
 [ -r "$pin_file" ] || die "cannot read the pin at $pin_file" \
   '  Without it there is no version to install. Restore the file from git.'
+# Cleared before the source, for the reason lint-shell.sh's twin of this line gives: the
+# pin EXPORTS its declarations, so an inherited value is indistinguishable from a declared
+# one, and a pin file that declares nothing would quietly defer to the environment. Here
+# the stakes are a notch higher than at the gate — an inherited SHA-256 is a checksum
+# nobody committed, verifying a download against a number supplied by the caller.
+unset SHELLCHECK_PIN_VERSION \
+  SHELLCHECK_PIN_SHA256_LINUX_X86_64 \
+  SHELLCHECK_PIN_SHA256_DARWIN_AARCH64 \
+  SHELLCHECK_PIN_SHA256_DARWIN_X86_64
 # shellcheck source=./shellcheck-pin.sh
 . "$pin_file"
 [ -n "${SHELLCHECK_PIN_VERSION:-}" ] || die \

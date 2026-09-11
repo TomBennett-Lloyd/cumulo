@@ -35,7 +35,18 @@ set -euo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
 # machine (same reason worktree-lib.sh does it). Harmless on Linux, where the
 # directory does not exist.
-export PATH="/opt/homebrew/bin:$PATH"
+#
+# APPENDED, never prepended, and that is load-bearing rather than tidy. Prepending
+# promotes Homebrew's shellcheck above one the caller deliberately put first —
+# which is precisely the escape hatch the version refusal below sends people to,
+# so the refusal would become a wall on the very day Homebrew moves past the pin
+# and following its instructions would change nothing. Found in review on #502.
+# Appending still supplies the binary when nothing else on PATH has it, which is
+# all the line was ever for. The chain that reaches this gate from
+# `pnpm test:scripts` — run-script-tests.sh, harness-lib.sh and the harnesses
+# themselves — appends for the same reason; a prepend anywhere in it would undo
+# this one.
+export PATH="$PATH:/opt/homebrew/bin"
 
 # The seam the harness needs: discovery has a failure mode (a partial listing)
 # that cannot be provoked with a real git, so the command is injectable and the
@@ -63,6 +74,14 @@ if [ ! -r "$pin_file" ]; then
     '  analyser is unknown is exactly what #502 removed. Restore the file from git.' >&2
   exit 2
 fi
+# Cleared before the source, not after: the pin file EXPORTS its declarations, so an
+# inherited SHELLCHECK_PIN_VERSION from the surrounding environment is indistinguishable
+# from one the file set. Without this line, a pin file that parses but declares nothing
+# silently defers to whatever is in the environment, and the refusal below never fires —
+# demonstrated in review on #502, where a truncated pin plus a stale exported variable
+# produced a green census. An environment variable must not be able to become the pin;
+# that is the whole reason the pin is read from disk beside this script.
+unset SHELLCHECK_PIN_VERSION
 # shellcheck source=./shellcheck-pin.sh
 . "$pin_file"
 if [ -z "${SHELLCHECK_PIN_VERSION:-}" ]; then
@@ -98,8 +117,13 @@ fi
 # The version gate. Held on stdout's own terms: `shellcheck --version` prints a
 # `version: <x>` line, and the awk takes that field rather than the last word of
 # the banner, so a reworded header line yields an empty string and a refusal
-# instead of a silent match.
-installed_version=$(shellcheck --version | awk '/^version:/ {print $2}')
+# instead of a silent match. The explicit `|| exit 2` is not redundant with
+# `set -e`: under it the pipeline's own status propagates, so a shellcheck that
+# cannot run its own --version would exit this gate with SHELLCHECK's code —
+# 1 among the possibilities, which this file's contract reserves for "shellcheck
+# found something". Every way of not reaching a verdict has to leave by the same
+# door.
+installed_version=$(shellcheck --version | awk '/^version:/ {print $2}') || exit 2
 if [ "$installed_version" != "$SHELLCHECK_PIN_VERSION" ]; then
   cat >&2 <<EOF
 

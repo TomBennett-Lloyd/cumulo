@@ -45,7 +45,13 @@ set -euo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
 # machine (same reason lint-shell.sh and worktree-lib.sh do it). Harmless on
 # Linux, where the directory does not exist.
-export PATH="/opt/homebrew/bin:$PATH"
+#
+# Appended, not prepended: prepending outranks a shellcheck the caller put
+# ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's
+# version refusal points at — that file's comment on this same line carries
+# the reasoning, and every step of this chain has to agree or the one that
+# prepends decides. (#502)
+export PATH="$PATH:/opt/homebrew/bin"
 
 # Overridable so the test harness can point the gate at a nonexistent binary and
 # assert the preflights fire, without uninstalling anything.

@@ -57,11 +57,13 @@ jobs:
           tar -xzf /tmp/actionlint.tar.gz -C "$RUNNER_TEMP/actionlint" actionlint
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
       # The runner image DOES ship shellcheck, and that was the problem (#502).
-      # ubuntu-latest carries 0.9.0 while developers run Homebrew's current
-      # release, so `pnpm verify` analysed local trees with a stricter linter than
-      # the one that judged them here — a `verify` whose green did not predict
-      # CI's, in the one direction that costs a round. PR #499 (SC2015) and PR
-      # #524 (SC2120/SC2119) are the two that paid it.
+      # It carries an older release than developers get from Homebrew — the
+      # versions, and the source they were verified against, are on the
+      # `pnpm verify:full` step below, which is the one site that owns them — so
+      # `pnpm verify` analysed local trees with a stricter linter than the one
+      # that judged them here: a `verify` whose green did not predict CI's, in the
+      # one direction that costs a round. PR #499 (SC2015) and PR #524
+      # (SC2120/SC2119) are the two that paid it.
       #
       # This step installs the pinned release over the image's, so both sides run
       # the same analyser. Note what is NOT here: a version. The number lives in
@@ -105,12 +107,23 @@ jobs:
       # The shellcheck the composite shells out to is the pinned one installed
       # above, not the image's — the caveat that used to sit here, that the runner
       # lints with an older shellcheck than a developer does, is what #502 closed.
-      # The image still ships its own (0.9.0-1 on Ubuntu2404, 0.8.0-2 on
-      # Ubuntu2204, per actions/runner-images), and that copy is now irrelevant
-      # rather than load-bearing: the install step puts the pinned binary ahead of
-      # it, and `lint:sh` refuses any version but the pin, so an image rollover
-      # that changed or dropped shellcheck could not silently change this job's
-      # verdict. If the install step ever fails, this step never runs.
+      #
+      # THIS COMMENT OWNS THE IMAGE'S SHELLCHECK VERSIONS, and it is the only site
+      # that carries them: verified against actions/runner-images rather than
+      # assumed — images/ubuntu/Ubuntu2404-Readme.md (ubuntu-latest today) lists
+      # 0.9.0-1 and Ubuntu2204-Readme.md lists 0.8.0-2. Restatement ledger, a
+      # floor rather than a census (swept 2026-09-12 with
+      # `command grep -rnE '0\.9\.0|0\.8\.0|runner image' --include='*.sh'
+      # --include='*.yml' --include='*.md' .`): no other site carries either
+      # number. The install step above, .claude/scripts/shellcheck-pin.sh and
+      # .claude/scripts/install-shellcheck.sh each need the FACT that the image is
+      # older, not the figure, so they point here and carry no literal.
+      #
+      # That copy is now irrelevant rather than load-bearing: the install step
+      # puts the pinned binary ahead of it, and `lint:sh` refuses any version but
+      # the pin, so an image rollover that changed or dropped shellcheck could not
+      # silently change this job's verdict. If the install step ever fails, this
+      # step never runs.
       - run: pnpm verify:full
 
   # One of the two jobs here that produce a build, and one of the two deliberate

@@ -9,9 +9,7 @@
 # broken", which is both wrong and unactionable. These cases pin the fix.
 #
 # Since #502 the gate also holds the installed linter to the version declared in the
-# pin file next door, and cases 6-9 cover that arm. (A comment may not open with the
-# tool's own name — `#` plus it is how a DIRECTIVE is spelled, and a sentence there is
-# SC1072/SC1073.) They need no seam in the shipped
+# pin file next door, and cases 6-9 cover that arm. They need no seam in the shipped
 # gate, which is the point of resolving the pin beside the script: every fixture
 # carries its own .claude/scripts/shellcheck-pin.sh, so a case picks the pin it wants
 # by writing that file. `write_pin` below is what every fixture gets by default —
@@ -27,7 +25,12 @@
 # Usage: bash .claude/scripts/lint-shell.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
 set -uo pipefail
-export PATH="/opt/homebrew/bin:$PATH"
+# Appended, not prepended: prepending outranks a shellcheck the caller put
+# ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's
+# version refusal points at — that file's comment on this same line carries
+# the reasoning, and every step of this chain has to agree or the one that
+# prepends decides. (#502)
+export PATH="$PATH:/opt/homebrew/bin"
 
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 
@@ -300,14 +303,30 @@ end
 # version — a bad edit, a rename, a truncated file. Left unchecked the comparison runs
 # against the empty string, which refuses every version on earth while blaming the
 # developer's install rather than the pin. The refusal names the pin instead.
+#
+# The second variant is the one that bit in review, and it is the reason the gate clears
+# the variable before sourcing. The pin file EXPORTS its declarations, so a value already
+# in the environment is indistinguishable from a declared one: a truncated pin plus a
+# stale `SHELLCHECK_PIN_VERSION` produced a green census over four files, with the pin on
+# disk declaring nothing at all. An environment variable that can become the pin is not a
+# pin, so the variant asserts the same refusal the clean case gets — and it sets the value
+# to the version genuinely installed, which is the only value that could have passed.
 begin "gate exits 2 when the pin file declares no version"
 fixture pin_declares_nothing
 must printf '# shellcheck shell=bash\nexport SHELLCHECK_PIN_NOTHING=1\n' \
   >"$ROOT/.claude/scripts/shellcheck-pin.sh"
+case_ctx="a clean environment"
 run_gate
 expect_rc 2 "$rc"
 expect_stderr "declares no SHELLCHECK_PIN_VERSION"
 expect_not_out "file(s)"
+case_ctx="a stale SHELLCHECK_PIN_VERSION in the environment"
+capture -C "$ROOT" env "SHELLCHECK_PIN_VERSION=$INSTALLED_VERSION" \
+  bash .claude/scripts/lint-shell.sh
+expect_rc 2 "$rc"
+expect_stderr "declares no SHELLCHECK_PIN_VERSION"
+expect_not_out "file(s)"
+case_ctx=""
 end
 
 # ====================================================================================

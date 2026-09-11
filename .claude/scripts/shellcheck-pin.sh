@@ -6,7 +6,9 @@
 # resolved from whatever the machine happens to have installed cannot make that
 # prediction, and twice it did not: PR #499 went red on SC2015 and PR #524 on
 # SC2120/SC2119, both after a locally green composite, because developers run
-# Homebrew's shellcheck while the ubuntu-latest runner image ships 0.9.0. Each
+# Homebrew's shellcheck while the ubuntu-latest runner image ships an older one
+# (the image's versions are stated once, on the `pnpm verify:full` step in
+# .github/workflows/ci.yml, which is the only site that cites its source). Each
 # release adds checks, so the skew ran in the direction that costs a CI round
 # every time (#502).
 #
@@ -31,7 +33,9 @@
 # SC2034 ("appears unused") to the shellcheck run that lints this very file, and
 # the fix for that is the export the values genuinely want, not a suppression.
 #
-# WHY 0.11.0: at the time of pinning it was simultaneously upstream's latest
+# WHY THIS VERSION (deliberately not naming it in the heading: the declaration
+# below is the only place the number belongs, and a heading carrying it is one a
+# bump would have to remember to true): at the time of pinning it was upstream's latest
 # release, what `brew install shellcheck` resolves to, and the version both
 # failing PRs above had run locally. Given a choice of directions, CI moves up to
 # meet local rather than local down to CI — the newer analyser is the stricter

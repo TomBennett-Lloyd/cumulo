@@ -2,7 +2,7 @@
 # Test harness for the pinned-shellcheck installer (.claude/scripts/install-shellcheck.sh).
 #
 # WHAT IS AND IS NOT COVERED HERE, stated first because the gap is the interesting part.
-# The installer's happy path ends in a 2.5 MB download from GitHub, and this harness
+# The installer's happy path ends in a multi-megabyte download from GitHub, and this harness
 # takes no network — the same rule every other harness in this directory keeps. So what
 # is asserted here is the whole set of arms that REFUSE BEFORE REACHING THE NETWORK, and
 # each case asserts that it never got there (`expect_not_out 'fetching'`), which is also
@@ -21,15 +21,23 @@
 # Usage: bash .claude/scripts/install-shellcheck.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
 set -uo pipefail
-export PATH="/opt/homebrew/bin:$PATH"
+# Appended, not prepended: prepending outranks a shellcheck the caller put
+# ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's
+# version refusal points at — that file's comment on this same line carries
+# the reasoning, and every step of this chain has to agree or the one that
+# prepends decides. (#502)
+export PATH="$PATH:/opt/homebrew/bin"
 
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 
 # shellcheck source=./harness-lib.sh
 . "$SCRIPTS/harness-lib.sh"
 
-# Overridable on the same terms as lint-shell.test.sh's LINT_SHELL_GATE, and for the same
-# purpose: running these cases against a pre-fix revision as a negative control.
+# Overridable on the same terms as lint-shell.test.sh's LINT_SHELL_GATE, but not yet for
+# the same purpose: the installer is new, so there is no pre-fix revision to run these
+# cases against as a negative control. What the seam buys today is a mutant copy — break
+# one refusal in a scratch copy, point this at it, and watch the matching case go red —
+# and the negative control the day a fix here needs one.
 INSTALLER=${INSTALL_SHELLCHECK_SCRIPT:-$SCRIPTS/install-shellcheck.sh}
 
 harness_init_tmp
@@ -78,13 +86,29 @@ end
 # The quiet version of case 1: a file that sources cleanly and sets nothing. Left
 # unchecked the URL is built around an empty version and the failure arrives as a 404
 # three steps later, blaming the download for a bad edit to the pin.
+#
+# The second variant is why the installer clears the pin names before sourcing. The pin
+# EXPORTS its declarations, so anything already in the environment reads as declared —
+# and here that means a version AND a SHA-256 the caller supplied, i.e. a download
+# verified against a checksum nobody committed. Both are set, so a failure to clear
+# either one would carry the case past this refusal.
 begin "installer exits 2 when the pin declares no SHELLCHECK_PIN_VERSION"
 fixture pin_without_version
 must write_pin "$DIR" 'export SHELLCHECK_PIN_SOMETHING=1'
+case_ctx="a clean environment"
 run_installer
 expect_rc 2 "$rc"
 expect_stderr "declares no SHELLCHECK_PIN_VERSION"
 expect_not_out "fetching"
+case_ctx="stale pin values in the environment"
+run_installer SHELLCHECK_PIN_VERSION=0.11.0 \
+  SHELLCHECK_PIN_SHA256_LINUX_X86_64=deadbeef \
+  SHELLCHECK_PIN_SHA256_DARWIN_AARCH64=deadbeef \
+  SHELLCHECK_PIN_SHA256_DARWIN_X86_64=deadbeef
+expect_rc 2 "$rc"
+expect_stderr "declares no SHELLCHECK_PIN_VERSION"
+expect_not_out "fetching"
+case_ctx=""
 end
 
 # ====================================================================================
@@ -97,8 +121,8 @@ end
 # behaviours are both worse than a refusal: guessing an asset name downloads something
 # whose checksum nobody recorded, and skipping installs nothing while exiting 0.
 #
-# The stub is reachable because the installer prepends Homebrew's prefix to PATH and
-# Homebrew ships no `uname` there, so the stub directory is still the first hit.
+# The stub is reachable unconditionally: the installer only ever APPENDS to PATH, so a
+# directory the case puts at the front stays at the front.
 begin "installer exits 2, naming the platform, when no pinned asset covers it"
 fixture unknown_platform
 must write_pin "$DIR" 'export SHELLCHECK_PIN_VERSION=1.2.3'
