@@ -26,16 +26,25 @@
 #
 # The sweep is keyed to the CLAIM FAMILY, not to the instances — an arm per
 # literal would miss every carrier holding only a derived figure, which is most
-# of them. Run from the repo root, 2026-09-11:
+# of them — and it is case-insensitive, because a table row capitalises what a
+# sentence does not. Run from the repo root, 2026-09-11:
 #
-#   git grep -nE '17,?280|34,?560|27,?000|233 GB|6\.8 ?MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|every five minutes|two targets|#473' -- :/
+#   git grep -niE '17,?280|34,?560|27,?000|233 GB|6\.8 ?MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|every five minutes|[0-9]+ targets|Plan: [0-9]+ to add|expect [0-9]+ lines|[0-9]+ .resource. blocks|#473' -- :/ ':!docs/tech-debt.md' ':!docs/review-feedback.md'
 #
 # It returns hits in exactly three files — this one, `infra/README.md` and
-# `infra/api/outputs.tf` (`git grep -l` on the same pattern is the cheap form of
-# that assertion) — and that containment is itself the ledger's most
-# useful claim: no carrier lives outside the api stack and the README sections
-# describing it. Nothing in `apps/`, `packages/` or `docs/` restates any of
-# this, so a cadence change is a two-file edit.
+# `infra/api/outputs.tf`; `git grep -l` on the same pattern is the cheap form of
+# that assertion. The two pathspec exclusions are the append-only logs, which
+# record what was decided rather than carrying a live claim: `docs/tech-debt.md`
+# holds this schedule's residuals and states none of its figures, and
+# `docs/review-feedback.md` matches the plan-count arm on an unrelated 2026
+# entry about a `terraform plan -destroy`. Neither is trued by a cadence change,
+# and both would otherwise be permanent noise in this readback. That
+# containment is the ledger's most useful claim: no
+# carrier lives outside the api stack and the README sections describing it,
+# and nothing in `apps/` or `packages/` restates any of this. A cadence change
+# is a three-file edit, and the third file is the easy one to forget —
+# `infra/api/outputs.tf`'s cost commentary carries the 17,280, the ~27,000 and
+# the 233 GB-s as well.
 #
 #   * **The cadence and the target count** — `schedule_expression` below and the
 #     two `aws_cloudwatch_event_target` blocks are the owner. Every monthly
