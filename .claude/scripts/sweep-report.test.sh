@@ -626,7 +626,9 @@ end
 begin "a sweep whose pattern git cannot compile fails the run, and says so"
 # This is how pre-check (b)'s refusal arm is reachable without a stub: the
 # pattern is the one part of a sweep the ledger controls, and an invalid PCRE
-# makes git itself refuse. Without the arm the fatal text is counted as a hit.
+# makes git itself refuse. Measured without the arm: the run reports "returned 0
+# line(s) and NONE of them is its declared carrier" — a tool failure
+# misdiagnosed as a wrong pattern or a carrier that has gone.
 fixture bad-pcre
 ledger_new bad-pcre
 row docs/fixture-notes.md 3 "a claim" "sweep" verified-true "sweep=FIXTURE_CARRIER_(unclosed" "control=docs/fixture-notes.md"
@@ -636,17 +638,32 @@ expect_stdout "pre-check (b) could not run the sweep"
 expect_not_stdout "sweep-report: OK"
 end
 
-begin "a seam value that could reach bash -c as code is refused outright"
+begin "a seam value that could reach bash -c as more than one word is refused"
 # pre-check (c) runs as a STRING through bash -c, so the seam is validated to a
-# path-safe character class before anything reads it. lint-shell.sh's precedent
+# path-safe character class before anything reads it; lint-shell.sh's precedent
 # uses its own seam in argv position only, where a value is inert.
+#
+# The discriminating assertion is expect_stderr, not the exit code: unguarded,
+# BOTH values below still exit 2 — they reach the header's `git diff` in argv
+# position first, where a value holding a metacharacter is simply not an
+# executable, and the run dies there with "diff <sha> failed (exit 127)". The
+# message is what tells "refused by the seam's own validation" apart from
+# "happened to fail later for another reason". The second value is the one that
+# would survive argv position and still break: a real directory whose name holds
+# a space, which `bash -c` splits into two words.
 fixture hostile-seam
 ledger_new hostile-seam
 row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
 capture -C "$ROOT" env "SWEEP_REPORT_GIT_CMD=git; touch $TMP_ROOT/pwned" bash "$SUBJECT" "$LEDGER" "$BASE"
 expect_rc 2
 expect_stderr "SWEEP_REPORT_GIT_CMD must be a command name or path"
-[ -e "$TMP_ROOT/pwned" ] && bad "the injected command ran"
+expect_not_stderr "failed (exit 127)"
+
+must mkdir -p "$TMP_ROOT/seam dir"
+must cp "$STUB_GIT" "$TMP_ROOT/seam dir/git"
+capture -C "$ROOT" env "SWEEP_REPORT_GIT_CMD=$TMP_ROOT/seam dir/git" bash "$SUBJECT" "$LEDGER" "$BASE"
+expect_rc 2
+expect_stderr "SWEEP_REPORT_GIT_CMD must be a command name or path"
 end
 
 begin "a ledger inside the repo is printed repo-relative, so the command pastes back"

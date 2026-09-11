@@ -101,8 +101,10 @@ SPELLED_RE='\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|fo
 # a path-safe character class before anything reads it — the same argument the
 # base sha gets below, one variable further out.
 : "${SWEEP_REPORT_GIT_CMD:=git}"
+# No empty-value arm: `:=` above substitutes for null as well as unset, so an
+# exported-but-empty SWEEP_REPORT_GIT_CMD is already `git` by the time this runs.
 case "$SWEEP_REPORT_GIT_CMD" in
-  '' | *[!A-Za-z0-9_./-]*)
+  *[!A-Za-z0-9_./-]*)
     printf 'sweep-report: SWEEP_REPORT_GIT_CMD must be a command name or path holding only [A-Za-z0-9_./-]\n' >&2
     printf '  It reaches a bash -c string in pre-check (c); anything else there is executed.\n' >&2
     printf '  Got: %s\n' "$SWEEP_REPORT_GIT_CMD" >&2
@@ -164,8 +166,9 @@ cd "$repo_root" || fatal "cannot enter the repository root: $repo_root"
 
 # Resolved to a full hex sha, and used in that form everywhere below: pre-check
 # (c) embeds it in a command STRING, and a hex sha carries nothing else into
-# that string. It and the validated seam above are the only two variables that
-# reach it; everything the ledger parameterises reaches git as argv instead.
+# that string. It and the seam validated above are the only values reaching that
+# string that are not this script's own constants; everything the ledger
+# parameterises reaches git as argv instead, through run_shown.
 base_sha=$(git rev-parse --verify --quiet "$base_arg^{commit}")
 rc=$?
 if [ "$rc" -ne 0 ] || [ -z "$base_sha" ]; then
@@ -374,8 +377,9 @@ run_shown() {
 # is composed only from this script's own constants, the resolved hex base sha,
 # and the seam validated at the top of this file — never from ledger text, which
 # reaches git as argv through run_shown. That eval-shaped form is the reason
-# both of those values are validated rather than trusted; it is also a design
-# this script would rather not have, and `docs/tech-debt.md` says so.
+# both of those values are validated rather than trusted. It is also a design
+# this script would rather not have — `docs/tech-debt.md`'s entry "pre-check (c)
+# is the script's one eval-shaped surface" has the argument and the way out.
 run_shown_pipeline() {
   printf '$ %s\n' "$1"
   bash -c "$1" >"$CMD_OUT" 2>"$CMD_ERR"
