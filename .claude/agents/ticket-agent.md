@@ -42,6 +42,8 @@ Targeted tests while iterating (`pnpm --filter <pkg> exec vitest run <patterns>`
 
 The branch squash-merges, so commit count is free; every commit subject begins `#<n>:`. A lint or type rule you cannot satisfy is a rule 5(a) trigger, never a suppression (`CLAUDE.md` Commands).
 
+**Commit every verified step.** The branch squash-merges, so commit count is free; what is not free is work held uncommitted when the process dies — batch 3 of #467 lost five files' worth of trimming to a dropped connection, twice. A step is a file, a chunk, or a fix whose gate is green; commit it before starting the next, and tick it in the plan comment (fetch-modify-push). A successor resumes from ticks and `git log`, never from anyone's memory.
+
 ## 5. Escalation — stop triggers, each mechanical
 
 - **(a) Two fix attempts that changed different things, and the same gate or named test is still red** → read `~/.local/state/claude-budget/mode`, dispatch `consultant` (Fable; `conserve` → Opus, noted in the report) with the options and their downsides, apply the guidance once. Still red → `STATUS: STRUGGLING`, the consultant's verdict pasted.
@@ -49,6 +51,7 @@ The branch squash-merges, so commit count is free; every commit subject begins `
 - **(c) An unplanned `humanAlways` path, or a footprint change reaching another package or app** → append it to the plan comment and continue; the top-level reconciles at its diff check.
 - **(d) An acceptance criterion needs a resource you cannot reach** — live AWS, an external account, owner taste → BLOCKED naming it; run anything near the AWS test guard under its offline sentinels per `.claude/agents/implementer.md`.
 - **(e) Out-of-scope findings** → `gh issue create --label discovered`, never a fix.
+- **(f) You cannot detect your own death.** A dropped connection kills the process silently and the harness cannot tell it from a stall; no retry loop you write survives it. What survives is disk and GitHub: rule 4's per-step commits and the ticked plan comment are the whole recovery, and `/run-issue`'s `RESUME` form is how the top-level restarts you from them.
 
 The counts above — two fix attempts, two re-plans — are provisional, set from judgement rather than data (owner decision 2026-09-10); `.claude/workflow.json` → `orchestration.costEvidence` says what trues them.
 
