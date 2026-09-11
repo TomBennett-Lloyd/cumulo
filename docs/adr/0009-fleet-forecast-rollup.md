@@ -4,7 +4,7 @@
 - **Date:** 2026-09-11
 - **Issue:** #494
 
-**Supersedes ADR 0002 in part**: the `### Fleet-wide aggregation (A5): fan-out, chosen at this scale` decision, for the fleet **forecast** read only. Everything else in 0002 — the table split, the key design, the capacity mode, the TTL posture — stands untouched, and the fan-out remains how a fleet **actuals** read is served until the fast-follow ticket below lands.
+**Supersedes ADR 0002 in part**: the `### Fleet-wide aggregation (A5): fan-out, chosen at this scale` decision, for the fleet **forecast** read only. Everything else in 0002 — the table split, the key design, the capacity mode, the TTL posture — stands untouched, and the fan-out remains how a fleet **actuals** read is served until the fast-follow ticket ([#506](https://github.com/TomBennett-Lloyd/cumulo/issues/506)) lands.
 
 ## Context
 
@@ -77,7 +77,7 @@ For **one release**, a `#FLEET` window that is missing — or that is missing an
 
 **Incomplete is treated exactly like absent**, which is the only judgement call in the fallback. Eleven of twelve locations sums to a fleet total that looks like a plausible number from a quieter fleet: the missing site does not read as missing, it reads as less generation. That is the half-truth the fan-out already refuses for itself.
 
-Both arms end in the same `@cumulo/shared` functions, so this is a second _path_ and not a second owner of the numbers. **Removal trigger:** the event absent from the logs for 24 hours after the first post-deploy cycle. Tracked as a `discovered` issue.
+Both arms end in the same `@cumulo/shared` functions, so this is a second _path_ and not a second owner of the numbers. **Removal trigger:** the event absent from the logs for 24 hours after the first post-deploy cycle. Tracked as [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507), which states the condition in the form a log query can answer.
 
 ### The client seam moves up
 
@@ -85,7 +85,7 @@ Both arms end in the same `@cumulo/shared` functions, so this is a second _path_
 
 ### Step Functions is the planned evolution, not a rejected alternative
 
-An orchestrated cycle — a state machine that fans out the locations and has a real terminal state — is the right shape **once several consumers need a genuine end-of-run event**: the actuals roll-up, off-cycle forecasts for add-a-site (#498), and anything that wants to publish "the fleet is fresh as of T". It is not taken now because this design needs no such event at all, and buying an orchestration layer to get one would be paying for a signal nothing currently reads. **The trigger is the second consumer**: when a second thing needs to know a cycle finished, Step Functions is the answer, and this roll-up becomes one of its steps rather than a thing bolted to the end of a message handler.
+An orchestrated cycle — a state machine that fans out the locations and has a real terminal state — is the right shape **once several consumers need a genuine end-of-run event**: the actuals roll-up (#506), off-cycle forecasts for add-a-site (#498), and anything that wants to publish "the fleet is fresh as of T". It is not taken now because this design needs no such event at all, and buying an orchestration layer to get one would be paying for a signal nothing currently reads. **The trigger is the second consumer**: when a second thing needs to know a cycle finished, Step Functions is the answer, and this roll-up becomes one of its steps rather than a thing bolted to the end of a message handler.
 
 ## Options considered
 

@@ -50,7 +50,7 @@ import { forecastsIn } from './series-split';
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
  * that explain it, so "has a full cycle written every location yet?" is one log query. When the
  * event has been absent for 24 hours after the first post-deploy cycle, the fallback and this
- * module's second arm come out (the removal issue ADR 0009 names).
+ * module's second arm come out — #507, which states the condition in the form a log query can answer.
  */
 
 /**
