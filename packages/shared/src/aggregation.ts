@@ -2,7 +2,7 @@ import type { Forecast, UncertaintyBand } from './forecast';
 import type { GenerationReading } from './generation-reading';
 import type { GeoCoordinates } from './location';
 import type { Site } from './site';
-import type { UtcIsoTimestamp } from './timestamp';
+import { compareUtcIsoTimestamps, type UtcIsoTimestamp } from './timestamp';
 
 /**
  * Fleet aggregation — per-hour sums across the sites of a fleet.
@@ -32,22 +32,26 @@ export interface SiteHourEntry {
   readonly validTime: UtcIsoTimestamp;
 }
 
+/**
+ * What capacity arithmetic reads off a site: which site it is, and what it is rated at.
+ *
+ * Declared as the parameter shape rather than taking a whole {@link Site} because those two fields
+ * are all {@link contributingCapacityKwByHour} touches, and the narrower parameter is what makes it
+ * callable from the forecast producer — which holds `SitePhysics` (a `Site` minus `name`, the
+ * projection the `by-location` index carries) and would otherwise have to invent a name to satisfy
+ * a type nothing reads it from (`docs/standards/typing.md` rule 6). `Site`, `FleetSite` and
+ * `SitePhysics` are all structurally assignable to it, so no call site converts.
+ */
+export interface SiteCapacity {
+  readonly id: string;
+  readonly capacityKw: number;
+}
+
 /** The surviving entries for one hour, after per-site deduplication. */
 interface SiteHourGroup<Entry extends SiteHourEntry> {
   readonly validTime: UtcIsoTimestamp;
   readonly entries: readonly Entry[];
 }
-
-/**
- * Chronological comparison. `UtcIsoTimestamp` is fixed-width UTC by construction, so lexicographic
- * order *is* chronological order (see `timestamp.ts`) — no date parsing needed.
- */
-const compareTimestamps = (left: UtcIsoTimestamp, right: UtcIsoTimestamp): number => {
-  if (left < right) {
-    return -1;
-  }
-  return left > right ? 1 : 0;
-};
 
 /**
  * Group entries by `validTime`, keeping at most one entry per `siteId` per hour, and return the
@@ -76,7 +80,7 @@ const groupOnePerSitePerHour = <Entry extends SiteHourEntry>(
   }
 
   return [...byHour.entries()]
-    .sort(([left], [right]) => compareTimestamps(left, right))
+    .sort(([left], [right]) => compareUtcIsoTimestamps(left, right))
     .map(([validTime, bySite]) => ({ validTime, entries: [...bySite.values()] }));
 };
 
@@ -221,7 +225,7 @@ const eitherDuplicateSupersedes = (): boolean => true;
  */
 export const contributingCapacityKwByHour = (
   entries: readonly SiteHourEntry[],
-  sites: readonly Site[],
+  sites: readonly SiteCapacity[],
 ): ReadonlyMap<UtcIsoTimestamp, number> => {
   const capacityKwBySiteId = new Map<string, number>();
   for (const site of sites) {

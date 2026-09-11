@@ -47,3 +47,26 @@ export interface UtcWindow {
   readonly startInclusive: UtcIsoTimestamp;
   readonly endExclusive: UtcIsoTimestamp;
 }
+
+/**
+ * Chronological comparison of two instants, as an `Array.prototype.sort`
+ * comparator.
+ *
+ * It compares the *strings*, and that is correct rather than lazy: the form
+ * above is fixed-width UTC by construction, so lexicographic order **is**
+ * chronological order — the same property ADR 0002's range queries rest on.
+ * Parsing would add nothing and would introduce a second order free to disagree
+ * with the one the sort keys are built on.
+ *
+ * Here rather than in a consumer because the property it exploits is this
+ * module's (`docs/standards/architecture.md` rule 9): every caller ordering
+ * instants leans on the width guarantee declared a few lines up, so the rule has
+ * one implementation and it sits beside the rule. `aggregation.ts` and
+ * `fleet-rollup.ts` are its callers today.
+ */
+export const compareUtcIsoTimestamps = (left: UtcIsoTimestamp, right: UtcIsoTimestamp): number => {
+  if (left < right) {
+    return -1;
+  }
+  return left > right ? 1 : 0;
+};

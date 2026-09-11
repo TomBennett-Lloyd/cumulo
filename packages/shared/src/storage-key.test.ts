@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   archiveDayMarkerSortKey,
+  FLEET_ROLLUP_PARTITION,
+  fleetRollupSortKey,
+  fleetRollupTimeBound,
   metricsSortKey,
   parseSeriesSortKey,
   seriesSortKey,
@@ -206,5 +209,79 @@ describe('metricsSortKey', () => {
     expect(metricsSortKey(shorter, 'ml', 'persistence')).not.toBe(
       metricsSortKey(july, 'ml', 'persistence'),
     );
+  });
+});
+
+describe('fleet roll-up keys', () => {
+  const DUBLIN = '53.35,-6.26';
+  const CORK = '51.90,-8.48';
+  const physics: SeriesKind = { kind: 'forecast', model: 'physics' };
+
+  it('renders a partial key as kind, then hour, then location', () => {
+    expect(fleetRollupSortKey(physics, NOON, DUBLIN)).toBe(
+      'FC#physics#T#2026-07-30T12:00:00Z#L#53.35,-6.26',
+    );
+    expect(fleetRollupSortKey({ kind: 'generation' }, NOON, DUBLIN)).toBe(
+      'GEN#T#2026-07-30T12:00:00Z#L#53.35,-6.26',
+    );
+  });
+
+  it('never lets one location overwrite another at the same hour', () => {
+    expect(fleetRollupSortKey(physics, NOON, DUBLIN)).not.toBe(
+      fleetRollupSortKey(physics, NOON, CORK),
+    );
+  });
+
+  it('keeps the two kinds and the two models in separate contiguous runs', () => {
+    const forecastRun = [physics, { kind: 'forecast', model: 'ml' } as const].map((kind) =>
+      fleetRollupSortKey(kind, NOON, DUBLIN),
+    );
+
+    for (const key of forecastRun) {
+      // A Query bounded to one kind cannot reach another kind's items, whatever the hour.
+      expect(key.startsWith(fleetRollupTimeBound(physics, NOON))).toBe(key === forecastRun[0]);
+    }
+    expect(
+      fleetRollupSortKey({ kind: 'generation' }, NOON, DUBLIN).startsWith(
+        fleetRollupTimeBound(physics, NOON),
+      ),
+    ).toBe(false);
+  });
+
+  it('orders one kind chronologically, whatever the locations are called', () => {
+    const keys = [
+      fleetRollupSortKey(physics, TWO_PM, DUBLIN),
+      fleetRollupSortKey(physics, NOON, CORK),
+      fleetRollupSortKey(physics, ONE_PM, DUBLIN),
+    ].sort(byCodeUnit);
+
+    expect(keys).toEqual([
+      fleetRollupSortKey(physics, NOON, CORK),
+      fleetRollupSortKey(physics, ONE_PM, DUBLIN),
+      fleetRollupSortKey(physics, TWO_PM, DUBLIN),
+    ]);
+  });
+
+  /**
+   * The half-open `[from, to)` property the adapter's `BETWEEN` rests on, pinned as plain string
+   * comparisons: every item at the upper bound sorts strictly after the bare bound and so falls
+   * outside, while every item at the lower bound falls inside.
+   */
+  it('excludes the upper bound and includes the lower, for every location', () => {
+    const from = fleetRollupTimeBound(physics, NOON);
+    const to = fleetRollupTimeBound(physics, TWO_PM);
+
+    for (const location of [DUBLIN, CORK]) {
+      expect(byCodeUnit(fleetRollupSortKey(physics, NOON, location), from)).toBe(1);
+      expect(byCodeUnit(fleetRollupSortKey(physics, ONE_PM, location), to)).toBe(-1);
+      expect(byCodeUnit(fleetRollupSortKey(physics, TWO_PM, location), to)).toBe(1);
+    }
+  });
+
+  it('uses a partition no site id can collide with', () => {
+    expect(FLEET_ROLLUP_PARTITION).toBe('#FLEET');
+    // `siteSchema.id` is a v4 UUID: hex and dashes only, so `#` is unreachable there.
+    expect(FLEET_ROLLUP_PARTITION).toMatch(/#/u);
+    expect(crypto.randomUUID()).not.toContain('#');
   });
 });
