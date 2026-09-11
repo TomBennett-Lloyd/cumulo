@@ -117,9 +117,9 @@
    tip annotates.
 
    Both of this row's overlays hang off it since 2026-08-12, not the tip's alone:
-   `range-picker.css` re-anchored the window sheet here after it opened past a
-   phone's left edge from the trigger it used to hang from, and that file owns
-   the measurement and the argument. So what this declaration holds up is the
+   `range-picker.css` re-anchored the window sheet here after it opened 151px past
+   a phone's left edge from the trigger it used to hang from, and that file owns
+   the argument. So what this declaration holds up is the
    row's overlays rather than `InfoTip` in particular — worth saying, because a
    reader weighing its removal against one consumer would be weighing it against
    half of them.
@@ -236,10 +236,9 @@
  * widths between the two thresholds is where that trade is visible — a 390px
  * phone is inside it, and shows the row's four controls and no numbers where it
  * used to show all five items on one line. `docs/standards/design.md` rule 7 is
- * what decides
- * it: controls have wrap priority over auxiliary text, and the alternative is
- * the picker or the toggle taking a second line at a width where the numbers
- * could have yielded instead.
+ * what decides it: controls have wrap priority over auxiliary text, and the
+ * alternative is the picker or the toggle taking a second line at a width where
+ * the numbers could have yielded instead.
  *
  * **The toggle was two chips at 70.31px before it was one at 32px**, which would
  * have put this threshold at 25.5rem. It was rebuilt as one button because at
@@ -288,8 +287,8 @@
  *
  * One residual, where there were two. Both were inherited from measuring text
  * rather than boxes, and both are the ones `apps/web/src/header/header.css`
- * records for its own threshold; #463 closed the first of them, which is the whole point of that
- * ticket reaching this file:
+ * records for its own threshold; #463 closed the first of them, which is the
+ * whole point of that ticket reaching this file:
  *
  * - ~~The heading and the numbers resolve to the platform's system stack, so
  *   where that stack runs wider this under-fires and where it runs narrower the

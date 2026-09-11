@@ -42,11 +42,10 @@ export interface ForecastChartPoint {
    *
    * Nullable since #264, and the reason is a real shape rather than defensive
    * typing: a chart whose x-domain is the union of forecast hours and actual
-   * hours (`apps/web/src/dashboard/fleet-series.ts`) has hours behind the horizon
-   * that were
-   * measured and never forecast. The median then breaks at those hours exactly
-   * as the actuals break past the horizon — a gap, never a bridge and never a
-   * zero, because both would draw a forecast nobody made.
+   * hours (`apps/web/src/dashboard/fleet-series.ts`) has hours behind the
+   * horizon that were measured and never forecast. The median then breaks at
+   * those hours exactly as the actuals break past the horizon — a gap, never a
+   * bridge and never a zero, because both would draw a forecast nobody made.
    */
   readonly medianKw: number | null;
   /** Absent — the key omitted, never `undefined` — for a point-estimate forecast. */

@@ -38,9 +38,10 @@ import type { GeoCoordinates, Site } from '@cumulo/shared';
  * Great Britain, spanning enough longitude that the fleet's own sites disagree about nightfall by
  * more than a plotted hour. Both figures — the span, and the disagreement between the earliest and
  * latest site — are asserted over the real fleet in `fleet-night.test.ts` rather than written down
- * here (`docs/standards/architecture.md` rule 9: that file owns the coordinates, that test computes
- * with them, and this comment restates neither). A single point standing in for all of them lands
- * its edge inside the fleet's own rolloff, which is precisely the contradiction above.
+ * here (`docs/standards/architecture.md` rule 9: `packages/shared/src/fleet.ts` owns the
+ * coordinates, that test computes with them, and this comment restates neither). A single point
+ * standing in for all of them lands its edge inside the fleet's own rolloff, which is precisely the
+ * contradiction above.
  *
  * What the layer is *for* is what makes the under-claim tolerable: it says "the PV series is flat
  * here because the sun is down", which is a claim about the diurnal cause of a shape the reader is

@@ -10,8 +10,8 @@ import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './c
  * in kW or in percent of capacity since #291, which is a fact the title carries
  * and the grid is indifferent to. Chrome and marks are the two halves of that
  * plot and now sit in a file each — `forecast-chart-marks.tsx` is the other —
- * with the component left holding composition (`docs/standards/structure.md`
- * rule 4).
+ * with `ForecastChart.tsx` left holding composition
+ * (`docs/standards/structure.md` rule 4).
  *
  * Every number here is geometry in SVG user units, which are rendered pixels
  * (`chart-geometry.ts`'s `chartPlot`): coordinates and gaps, not styling. The
@@ -49,8 +49,8 @@ const KW_LABEL_END_FLOOR = 46;
  * `Math.max` and not a branch on the width: this file is handed a plot rather
  * than a measurement, and the constraint is a position on the canvas rather
  * than a rule about panels, so it is expressible without knowing which gutter
- * `chartPlot` chose (`architecture.md` rule 9 — the threshold has one owner and
- * it is not here).
+ * `chartPlot` chose (`docs/standards/architecture.md` rule 9 — the threshold has
+ * one owner and it is not here).
  */
 const kwLabelX = (plot: PlotRect): number => Math.max(KW_LABEL_END_FLOOR, plot.left - Y_LABEL_GAP);
 /**

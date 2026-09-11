@@ -51,9 +51,8 @@ const GET_INIT: RequestInit = { method: 'GET' };
  *
  * The same three lines exist in `demo-fleet-data-source.ts`, and the
  * duplication is incidental (`docs/standards/structure.md` rule 7): that one
- * formats instants
- * it invented for a fixture, this one formats query parameters a server will
- * validate. Neither becomes wrong because the other changed.
+ * formats instants it invented for a fixture, this one formats query parameters
+ * a server will validate. Neither becomes wrong because the other changed.
  *
  * Parsed rather than asserted, so a clock that produced something unformattable
  * fails here — a bug — instead of becoming a 400 the user sees.
@@ -313,11 +312,10 @@ export class HttpFleetDataSource implements FleetDataSource {
    * route does not serve one: a fleet short of a site's points is summed hour
    * by hour into a fleet that merely looks like it generates less, so the read
    * refuses rather than truncating (`docs/standards/error-handling.md` rule 5).
-   * That decision
-   * is `apps/api/src/forecast/fleet-series-read.ts`'s and its reasoning lives
-   * there; labelling a response partial is the richer answer that module names
-   * as still open — the same contract change #165 holds for the per-site
-   * routes.
+   * That decision is `apps/api/src/forecast/fleet-series-read.ts`'s and its
+   * reasoning lives there; labelling a response partial is the richer answer
+   * that module names as still open — the same contract change #165 holds for
+   * the per-site routes.
    */
   readonly fleetForecasts = async (
     range: RangeHours,

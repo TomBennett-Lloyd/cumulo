@@ -7,9 +7,9 @@ import type { RangeHours } from '../data/fleet-data-source';
  *
  * Extracted when two panels carried one, because the two copies had the same
  * intent (`docs/standards/structure.md` rule 7): the offered windows are a
- * property of what
- * `FleetDataSource` can serve, not of the panel asking, so adding a 72 h window
- * or renaming `7 d` would leave any copy that missed the change simply wrong.
+ * property of what `FleetDataSource` can serve, not of the panel asking, so
+ * adding a 72 h window or renaming `7 d` would leave any copy that missed the
+ * change simply wrong.
  *
  * One caller carries the picker today — the fleet panel — because #265 took the
  * site's own chart off the page and made a selected site a series on the fleet's
@@ -123,9 +123,9 @@ export interface RangePickerProps {
  * reader is standing on leave the document either way, so without the hand-back
  * focus drops to `body` and a keyboard reader is returned to the top of the
  * page. That is `docs/standards/design.md` rule 11's own carve-out rather than
- * an exception to it: the page changed in answer to their action, and the trigger is where
- * their next act lives. An outside press deliberately moves nothing — the
- * pointer is already where the reader wants to be.
+ * an exception to it: the page changed in answer to their action, and the
+ * trigger is where their next act lives. An outside press deliberately moves
+ * nothing — the pointer is already where the reader wants to be.
  *
  * The resemblance to `InfoTip` is deliberate and, like the tip's own
  * resemblance to the menu, deliberately **not** extracted. Its docblock
@@ -147,10 +147,10 @@ export const RangePicker = ({ range, ariaLabel, onSelect }: RangePickerProps): R
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // A subscription to something outside React (`docs/standards/react.md`
-  // rule 1), and so genuinely an effect. Only while open, for the tip's reason: a listener on
-  // the document while nothing is revealed is a cost paid by readers who never
-  // press the trigger.
+  // A subscription to something outside React (`docs/standards/react.md` rule
+  // 1), and so genuinely an effect. Only while open, for the tip's reason: a
+  // listener on the document while nothing is revealed is a cost paid by
+  // readers who never press the trigger.
   useEffect(() => {
     if (!open) {
       return undefined;

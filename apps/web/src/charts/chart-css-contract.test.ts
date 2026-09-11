@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 /*
  * The parts of `charts.css` that carry a design obligation rather than a
- * preference, asserted mechanically. `apps/web/src/map/map-css-contract.test.ts`
- * is the precedent and its docblock carries the argument for the whole shape of
- * this check; the short version is that jsdom applies no stylesheet, so a component
- * test asking a rendered `<line>` for its computed stroke would report the
- * initial value and pass against an empty file. Reading the stylesheet as text
- * proves the declarations exist, not that they take effect
- * (`docs/standards/testing.md` rule 10).
+ * preference, asserted mechanically.
+ * `apps/web/src/map/map-css-contract.test.ts` is the precedent and its docblock
+ * carries the argument for the whole shape of this check; the short version is
+ * that jsdom applies no stylesheet, so a component test asking a rendered
+ * `<line>` for its computed stroke would report the initial value and pass
+ * against an empty file. Reading the stylesheet as text proves the declarations
+ * exist, not that they take effect (`docs/standards/testing.md` rule 10).
  *
  * What that leaves to the browser lane is the thing this file is named for:
  * whether the plot's three verticals are actually *told apart* by a reader — the
