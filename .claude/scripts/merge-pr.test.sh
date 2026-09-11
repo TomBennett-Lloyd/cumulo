@@ -197,10 +197,16 @@ case "\$1 \$2" in
     [ -f "\$state/view.count" ] && read -r n <"\$state/view.count"
     n=\$((n + 1))
     printf '%s' "\$n" >"\$state/view.count"
-    if [ -f "\$state/view.\$n" ]; then
-      cat "\$state/view.\$n"
+    slot="\$state/view.\$n"
+    [ -f "\$slot" ] || slot="\$state/view.default"
+    if [ -f "\$state/view.\$n.oid-from-wt" ]; then
+      # The one headRefOid a fixture cannot write ahead of time: the sha the union step
+      # committed during this very run. Substituted from the lane worktree at call time,
+      # which is what lets a case assert what the await gate compares against.
+      real=\$(git -C "$ROOT/wt" rev-parse HEAD)
+      sed "s/\"headRefOid\":\"[^\"]*\"/\"headRefOid\":\"\$real\"/" "\$slot"
     else
-      cat "\$state/view.default"
+      cat "\$slot"
     fi
     rc=0
     [ -f "\$state/view.\$n.rc" ] && read -r rc <"\$state/view.\$n.rc"
@@ -270,6 +276,13 @@ prettier_stub() { # prettier_stub <path> <state dir>
   cat >"$1" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"$2/prettier.log"
+if [ -f "$2/prettier.inject" ]; then
+  # A formatter that hands back a file with conflict markers in it. Nothing real does
+  # this; what it proves is that the marker sweep runs AFTER the formatter and not
+  # before it, which no case could otherwise tell — the union is built from whole
+  # blobs, so it can never grow a marker on its own.
+  printf '<<<<<<< left behind by the formatter\n' >>"\$2"
+fi
 rc=0
 [ -f "$2/prettier.rc" ] && read -r rc <"$2/prettier.rc"
 exit "\$rc"
@@ -1431,6 +1444,140 @@ expect_not_stdout 'asking whether it is'
 expect_not_called "pr update-branch $PR"
 expect_not_called "pr merge $PR --rebase"
 expect_branch_unpushed "$before_sha"
+end
+
+# ==========================================================================================
+# 20j. a formatter that FAILS aborts the merge and puts the worktree back
+# ==========================================================================================
+# The first case that reaches a failure path AFTER the worktree has been written to, and
+# so the first one that can hold the section header to its claim that every such failure
+# leaves the tree as it was found. Before it, every refusal happened during the read-only
+# analysis, which made `expect_no_merge_in_progress` true by construction everywhere.
+begin "a failing formatter aborts the merge and leaves the lane worktree as it was found"
+td_fixture union-prettier-red
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+before_td=$(cat "$ROOT/wt/$TD")
+must printf '3\n' >"$STATE/prettier.rc"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "prettier exited 3 over $TD"
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+st=$(git -C "$ROOT/wt" status --porcelain)
+[ -z "$st" ] || bad "the abort left the lane worktree dirty: $st"
+[ "$(cat "$ROOT/wt/$TD")" = "$before_td" ] ||
+  bad "the abort did not restore the lane's own copy of $TD"
+end
+
+# ==========================================================================================
+# 20k. the marker sweep runs AFTER the formatter, not before it
+# ==========================================================================================
+begin "conflict markers present after formatting are caught before anything is committed"
+td_fixture union-markers
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must : >"$STATE/prettier.inject"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "the resolved $TD still holds conflict markers"
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+end
+
+# ==========================================================================================
+# 20l. a head this checkout and GitHub disagree about is refused
+# ==========================================================================================
+# The lease below it expects GitHub's headRefOid, and the analysis reads the local tip.
+# If those are different commits the analysis answered about a branch nobody is merging.
+begin "a PR head the lane worktree does not have is refused before the merge-tree call"
+td_fixture union-tip-mismatch
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+V_OID="aaa111"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "but the PR's head is aaa111"
+expect_stderr 'push it by hand and re-run'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+end
+
+# ==========================================================================================
+# 20m. the resolution consumes no update-branch attempt
+# ==========================================================================================
+# The attempt budget bounds the head-sha race; the union arm is bounded by its own
+# one-pass flag. A run with MERGE_PR_UPDATE_RETRIES=1 must still merge — taking an
+# attempt here would drop out of the loop with "gave up" AFTER a successful push.
+begin "a union resolves and merges even with a single update-branch attempt allowed"
+td_fixture union-one-attempt
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.1"
+must printf '1\n' >"$STATE/update-branch.1.rc"
+must printf '%s\n' "$UPDATE_NOOP" >"$STATE/update-branch.out"
+td_views
+capture -C "$REPO" env \
+  MERGE_PR_GH_CMD="$ROOT/gh" MERGE_PR_REAP_CMD="$ROOT/reap" \
+  MERGE_PR_PRETTIER_CMD="$ROOT/prettier" \
+  MERGE_PR_POLL_INTERVAL_SECONDS=0 MERGE_PR_POLL_TIMEOUT_SECONDS=30 \
+  MERGE_PR_RETRY_SECONDS=0 MERGE_PR_UPDATE_RETRIES=1 MERGE_PR_CONFIRM_RETRIES=2 \
+  bash "$SUBJECT" "$PR" "$REPO"
+expect_rc 0
+expect_stdout "$TD unioned and pushed"
+expect_not_stderr 'gave up after'
+expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 20n. a retried update-branch that WRITES waits past the union's own head
+# ==========================================================================================
+# Main moved again in the seconds between the push and the retry, so update-branch writes
+# rather than answering the no-op. The head that write replaced is the sha the union
+# pushed — not the one read at classify time — and comparing against the older one clears
+# the await gate on the union's own head while the rollup being read belongs to the write.
+# That is PR #501's shape reached through the new door, so the fixture answers exactly it:
+# the poll's first read is the union's own sha, substituted at call time.
+begin "a write after the union waits past the sha the union pushed, not the classify-time one"
+td_fixture union-then-write
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.1"
+must printf '1\n' >"$STATE/update-branch.1.rc"
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
+V_MSST="DIRTY"
+write_view 1
+V_MSST="BLOCKED"
+write_view 2
+must : >"$STATE/view.2.oid-from-wt"
+V_OID="ddd444"
+V_MSST="CLEAN"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout "$TD unioned and pushed"
+expect_stdout 'updated onto the base (attempt 1)'
+expect_stdout '2 check(s) complete on ddd444'
+expect_not_stderr "mergeStateStatus is 'BLOCKED'"
+expect_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================

@@ -631,13 +631,13 @@ fi
 # is one hand resolution; the cost of unioning wrongly is a silently mangled log that
 # the squash merge then makes permanent, which is why every unclear case refuses.
 #
-# The analysis happens in the repository root, against fetched objects, and writes
-# nothing anybody can see: no checkout, no file, no ref, no commit, no worktree
-# touched. (It does write to the object store — the fetch brings objects in and
-# merge-tree --write-tree leaves an unreachable tree behind — which is the same class
-# of write `gh pr checkout` or any fetch makes, and is not state a refusal leaves for
-# the merge owner to undo.) Only once every test has passed is anything applied, and
-# then only in the lane's own worktree.
+# The analysis happens in the repository root and touches no worktree, no branch and
+# no commit: nothing a refusal would leave for the merge owner to undo. What it does
+# write is git's own scratch — the fetch brings objects in and writes $GIT_DIR/FETCH_HEAD,
+# which this step then reads back for the base sha, and merge-tree --write-tree leaves
+# an unreachable tree behind. That is the same class of write any `git fetch` makes.
+# Only once every test has passed is anything applied, and then only in the lane's own
+# worktree.
 #
 # Note for a future rename: this step matches the literal path docs/tech-debt.md and
 # is therefore an EXECUTABLE carrier of it, the way the feedback step is for
@@ -820,6 +820,7 @@ say(
 
 union_reason=""
 union_summary=""
+union_new_sha=""
 
 union_abort() { # union_abort <worktree> <scratch dir> <reason> — undo and refuse
   git -C "$1" merge --abort >/dev/null 2>&1
@@ -895,7 +896,7 @@ tech_debt_union() {
     return 1
   }
   [ "$tip" = "$pr_head_sha" ] || {
-    union_reason="the worktree at $wt is on $tip but the PR's head is $pr_head_sha — refusing to resolve a branch this checkout and GitHub do not agree about"
+    union_reason="the worktree at $wt is on $tip but the PR's head is $pr_head_sha — refusing to resolve a branch this checkout and GitHub do not agree about. If $tip is a resolution an earlier run committed and failed to push, push it by hand and re-run"
     return 1
   }
 
@@ -1019,11 +1020,34 @@ EOF
     return 1
   fi
 
-  # core.commentChar and commit.cleanup move together, always: every commit subject in
-  # this repo begins '#<issue>', git's default cleanup reads a leading '#' as a comment
-  # and DELETES the subject line (#321 lost one that way), and the commentChar swap on
-  # its own then preserves git's ';'-prefixed Conflicts block into the message instead.
-  # docs/friction-log.md's 2026-09-11 entry is where the pairing was made mandatory.
+  # Both overrides, and the real reason for each — measured on git 2.50.1 rather than
+  # carried over from the rebase rule, which is about a different mechanism:
+  #
+  #   - commit.cleanup=strip so the message does not depend on repo-local config. The
+  #     `prepare` script in package.json writes commit.cleanup=whitespace, and a clone
+  #     that has not run it has git's own default instead. `-m` defaults to whitespace
+  #     either way today, so this is belt and braces, not a repair.
+  #   - core.commentChar=';' because it MUST travel with strip. Every commit subject
+  #     here begins '#<issue>', strip deletes comment lines, and
+  #     `git -c commit.cleanup=strip commit -m '#513: …'` aborts with "empty commit
+  #     message" — the subject is the whole message. With the swap it survives.
+  #
+  # What this pairing is NOT: it is not the rebase trap. `commit -m` never reads
+  # MERGE_MSG, so there is no ';'-prefixed Conflicts block here to preserve — that is
+  # .claude/skills/review-loop/SKILL.md step 5's rule, about `rebase`, and the artifact
+  # it warns of is recorded in docs/friction-log.md's 2026-08-11 entry (#366's
+  # commentChar repair), not its 2026-09-11 one.
+  #
+  # This commit runs the repo's own pre-commit hook, and that is a dependency worth
+  # naming rather than discovering: .githooks/pre-commit hard-fails without gitleaks and
+  # without node_modules, and runs lint-staged over the WHOLE staged index — which,
+  # mid-merge, is every file the base brought in, not the one file resolved here. It
+  # fails in the safe direction (a non-zero commit reaches union_abort and the run
+  # refuses), but it does make the one-invocation path conditional on the lane
+  # worktree's toolchain, and the operator meets the hook's own text wrapped in "could
+  # not commit the resolution". --no-verify is deliberately not used: this commit puts
+  # somebody else's merged content into a tree, and a secret scan is the one check that
+  # is cheaper to run than to skip.
   #
   # The '#<issue>:' prefix is the repo's subject form, and it is conditional because the
   # Closes list can legitimately be empty here: a PR with no Closes line reaches the
@@ -1049,12 +1073,21 @@ EOF
     origin "HEAD:refs/heads/$pr_head_ref" 2>&1)
   rc=$?
   if [ "$rc" -ne 0 ]; then
-    # The commit stands and the tree is clean; a re-run re-reads GitHub and decides
-    # again from there, which is this script's repair for everything.
+    # NOT aborted: the merge is already committed, and `git merge --abort` has nothing
+    # left to undo. This is also the one failure a bare re-run does NOT repair, which is
+    # the opposite of how the rest of this script behaves and so is said out loud: the
+    # worktree tip is now the resolution commit while GitHub still answers the old head,
+    # so the tip guard above refuses the next run with a message about a disagreement
+    # rather than about this push. The repair is to push the branch by hand and re-run.
     rm -rf "$dir"
-    union_reason="the resolution is committed on '$pr_head_ref' but the push failed (git push exited $rc): $out"
+    union_reason="the resolution is committed on '$pr_head_ref' but the push failed (git push exited $rc). A re-run will NOT retry it — push $wt by hand, then re-run: $out"
     return 1
   fi
+
+  # The sha the resolution put on the branch. update_branch_step needs it: if the
+  # retried update-branch WRITES rather than answering the no-op, the head it replaced
+  # is this one and not the head read at classify time.
+  union_new_sha=$(git -C "$wt" rev-parse HEAD 2>/dev/null)
 
   rm -rf "$dir"
   return 0
@@ -1118,6 +1151,11 @@ update_branch_step() {
         *)
           await_new_head=1
           update_answer=${out%%$'\n'*}
+          # The head this write replaced. Normally that is the head read at classify
+          # time; after a tech-debt resolution it is the sha that resolution pushed, and
+          # comparing against the older one would clear the gate on the union's own head
+          # while the rollup being read belongs to whatever this write just made.
+          [ -n "$union_new_sha" ] && pre_update_sha="$union_new_sha"
           step 'update-branch' "updated onto the base (attempt $attempt)"
           ;;
       esac
@@ -1157,7 +1195,18 @@ update_branch_step() {
         pre_update_sha="$pr_head_sha"
         update_answer="merge-pr resolved the $TECH_DEBT_PATH append collision on the branch and pushed it"
         step 'update-branch' "$TECH_DEBT_PATH unioned and pushed ($union_summary); re-running update-branch"
-        attempt=$((attempt + 1))
+        # No attempt is consumed. The attempt budget bounds the head-sha race; this arm
+        # is bounded by union_attempted, which allows exactly one pass through it. Taking
+        # an attempt here would make MERGE_PR_UPDATE_RETRIES=1 fall out of the loop with
+        # "gave up after 1 attempts" AFTER a resolution it had successfully pushed.
+        #
+        # The wait is the same one the head-sha arm takes, for the same reason: gh has
+        # just been told about a push and answers the mergeability it computed before
+        # it. An update-branch issued in the same second can come back 422 on the state
+        # it is replacing, and union_attempted would turn that into a hard failure
+        # rather than a retry — losing the one-invocation property this step exists for.
+        # The harness pins the interval to 0, so no case waits.
+        sleep "$MERGE_PR_RETRY_SECONDS"
         ;;
       # The head-sha race, in every spelling it is known to arrive in. The REST
       # endpoint's documented 422 is `expected_head_sha didn't match pull request
