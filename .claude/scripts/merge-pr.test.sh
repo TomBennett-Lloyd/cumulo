@@ -864,10 +864,13 @@ end
 # ==========================================================================================
 # 17h. a PR merged elsewhere while this run was working finishes the chain, it does not fail
 # ==========================================================================================
-# A merged PR reports mergeStateStatus UNKNOWN — the same answer GitHub gives while
-# it is still computing a merge — so the re-read loop has to watch the STATE as well
-# as the status, or a concurrent merge burns every retry and then fails the run on a
-# PR that is merged. The fixture merges it between the poll and the merge step.
+# A merged PR reports mergeStateStatus UNKNOWN, the same answer GitHub gives while
+# it is still computing a merge, so the merge step cannot read that status alone.
+# What this case pins is the STATE guard the merge block opens with: without it the
+# run would refuse a PR that is merged. It does NOT pin the MERGED arm of the
+# re-read loop above — that arm only saves the remaining sleeps, and deleting it
+# leaves this case green, which is the honest thing to say about a case rather than
+# claim coverage the mutation does not support.
 begin "a PR merged elsewhere mid-run finishes the post-merge steps instead of failing"
 fixture merged-elsewhere
 V_LABELS="awaiting-review"

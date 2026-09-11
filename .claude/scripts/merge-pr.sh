@@ -387,9 +387,8 @@ if [ -n "$method_override" ]; then
 fi
 
 # The changed-file list, paginated. `--paginate` is what makes the answer the
-# whole PR rather than its first 100 files (see the PR_JSON_FIELDS comment), and
-# the shape is lifted verbatim from .github/workflows/ci.yml's merge-ritual-gate
-# step, which reads the same list for the same reason.
+# whole PR rather than its first 100 files — the PR_JSON_FIELDS comment above says
+# why that matters here.
 pr_files=()
 files_out=$("$MERGE_PR_GH_CMD" api "repos/{owner}/{repo}/pulls/$pr_number/files" \
   --paginate --jq '.[].filename' 2>&1)
@@ -490,10 +489,9 @@ curated_history_ok() { # -> 0, or 1 with the reason on stdout
 
 step 'classify' "PR #$pr_number is $pr_state on '$pr_head_ref'; $merge_reason; $class_summary"
 
-# Every refusal the classification already implies is taken HERE, while the branch
-# is still untouched and no CI round has been spent. Deferring either of these to
-# the merge step would mean refusing AFTER update-branch had written to the branch
-# and the poll had waited out a full run — the cost this script exists to save.
+# Deferring either of these to the merge step would mean refusing AFTER
+# update-branch had written to the branch and the poll had waited out a full CI
+# run — the cost this script exists to save.
 if [ "$already_merged" = "0" ]; then
   [ -n "$merge_method" ] || fail 'classify' \
     "$merge_reason — cannot tell a single-issue squash from a batch rebase. Add the Closes line to the body, or pass --method squash|rebase"
@@ -780,10 +778,11 @@ else
   # moved.
   #
   # mergeStateStatus is eventually consistent: GitHub answers UNKNOWN while it is
-  # still computing the merge, so that one state is re-read rather than refused —
-  # and the loop watches for MERGED as well, because a merged PR ALSO reports
-  # UNKNOWN, so a PR merged by someone else during this window would otherwise
-  # burn every retry and then fail on a PR that is merged.
+  # still computing the merge, so that one state is re-read rather than refused.
+  # The MERGED arm leaves the loop early rather than deciding anything — a merged
+  # PR also answers UNKNOWN, so without it a PR merged elsewhere during this
+  # window sleeps out every remaining retry before the block below reaches the
+  # same verdict. Time, not correctness: the guard on that block is what decides.
   attempt=1
   while [ "$pr_merge_state" = "UNKNOWN" ] && [ "$pr_state" != "MERGED" ] &&
     [ "$attempt" -lt "$MERGE_PR_CONFIRM_RETRIES" ]; do
@@ -802,7 +801,12 @@ elif [ "$already_merged" = "0" ]; then
   # docs/design/task-orchestrator.md both say "a batch that is BEHIND or
   # conflicted" — and the scoping is load-bearing rather than pedantic: BLOCKED
   # (branch protection), UNKNOWN (GitHub still computing) and DRAFT all reach this
-  # point too, and telling a merge owner to bounce an agent into a
+  # point too. The residual, so nobody rediscovers it as a bug: a batch that is
+  # BOTH stale and blocked reports BLOCKED, so it falls through to the generic
+  # refusal and is told its state with no repair named. It is never merged; the
+  # merge owner reads the state and finds the second blocker. Prescribing a
+  # force-push bounce for BLOCKED was the worse of the two errors. And telling a
+  # merge owner to bounce an agent into a
   # rebase-and-force-push when the blocker is a required review is walking them
   # into a wrong and expensive repair. Everything else falls to the generic
   # refusal below, which names the state and prescribes nothing.
