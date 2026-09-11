@@ -66,8 +66,8 @@
 # event source mapping is deleted before the function it targets, and the queue
 # it reads survives because another stack owns it. A forgotten forecast stack
 # costs a fraction of a cent *within its own boundary* — bounded, because
-# retention is — but, unlike the api stack, it is not inert, and since #258 that
-# is no longer free either: it keeps draining ingestion's queue, and every
+# retention is — but it is not inert, and since #258 that is no longer free
+# either: it keeps draining ingestion's queue, and every
 # message it drains meters series write units on the storage stack's bill. That
 # is still usually the behaviour you want — an undrained queue is worse — but it
 # is ≈ $1.48/month of somebody's meter rather than nothing at all.
