@@ -60,9 +60,8 @@ export interface ForecastChartPoint {
    * `false`, because those are different facts: `false` is a caller that worked out this hour is
    * daylight, and absence is a caller that did not answer the question at all. Only the fleet's
    * series is classified (`apps/web/src/dashboard/fleet-night.ts`); every other producer of these
-   * points — the
-   * site overlay's own domain, a fixture in a test — has no fleet to ask the question of and would
-   * be inventing an answer by supplying one. What each case draws is
+   * points — the site overlay's own domain, a fixture in a test — has no fleet to ask the question
+   * of and would be inventing an answer by supplying one. What each case draws is
    * `forecast-chart-context.tsx`'s.
    *
    * Under `exactOptionalPropertyTypes` the distinction is real rather than notional: the key is
