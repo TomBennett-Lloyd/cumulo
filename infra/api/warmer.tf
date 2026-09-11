@@ -22,10 +22,20 @@
 # ---------------------------------------------------------------------------
 # Restatement ledger (`docs/standards/architecture.md` rule 9) for the values
 # this file owns. A floor rather than a census: it lists what the sweep below
-# found, and one more carrier extends it rather than falsifies it. Sweep, run
-# 2026-09-11 from the repo root:
+# found, and one more carrier extends it rather than falsifies it.
 #
-#   git grep -nE '192\.0\.2\.1|cumulo-warmer|17,?280|54 ms|cron\(0/5' -- :/
+# The sweep is keyed to the CLAIM FAMILY, not to the instances — an arm per
+# literal would miss every carrier holding only a derived figure, which is most
+# of them. Run from the repo root, 2026-09-11:
+#
+#   git grep -nE '17,?280|34,?560|27,?000|233 GB|6\.8 ?MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|every five minutes|two targets|#473' -- :/
+#
+# It returns hits in exactly three files — this one, `infra/README.md` and
+# `infra/api/outputs.tf` (`git grep -l` on the same pattern is the cheap form of
+# that assertion) — and that containment is itself the ledger's most
+# useful claim: no carrier lives outside the api stack and the README sections
+# describing it. Nothing in `apps/`, `packages/` or `docs/` restates any of
+# this, so a cadence change is a two-file edit.
 #
 #   * **The cadence and the target count** — `schedule_expression` below and the
 #     two `aws_cloudwatch_event_target` blocks are the owner. Every monthly
@@ -34,23 +44,36 @@
 #       *computing*: `12 × 2 × 24 × 30 = 17,280` is derived there, and it is the
 #       one site that shows the derivation.
 #     - `infra/README.md`, api cost table — the Lambda invocations, Lambda
-#       compute and DynamoDB reads rows, the paragraph above the table, and the
-#       "meaning of idle" note under it: *asserting*, each carrying the derived
-#       17,280 or the ≈ $0.005/month it drives.
+#       compute, Warmer schedule, DynamoDB reads and CloudWatch-logs rows, the
+#       paragraph above the table, the "meaning of idle" note under it, and the
+#       "nothing here has an hourly rate" bullet: *asserting*, each carrying the
+#       derived 17,280, the ~27,000, the 34,560, the ≈ 6.8 MB or the ≈ $0.005.
 #     - `infra/README.md`, storage cost table — the "everything else" row, the
-#       standing-bill paragraph, and the ingestion teardown bullet that contrasts
-#       the two scheduled stacks: *asserting*, the same two figures.
-#     - `infra/api/outputs.tf` — the CloudWatch-logs and Lambda-invocations
-#       bullets of the cost commentary: *asserting*, the same 17,280.
-#     - `infra/README.md`, api runbook step B3 — *asserting* the five resources
-#       this file declares (`Plan: 20 to add`). That is the resource count
-#       rather than the cadence, but it moves for the same reason: a third
+#       `series` row's note on what drives it, the standing-bill paragraph, and
+#       the ingestion teardown bullet that contrasts the self-driven stacks:
+#       *asserting*, the same figures.
+#     - `infra/README.md`, the api and web "whether to leave it up" paragraphs
+#       — *arguing*, both from "the rule fires whether or not anybody is
+#       looking" and the api one also from the ≈ $0.005.
+#     - `infra/api/outputs.tf` — the IDLE COST header, the API Gateway, Lambda,
+#       CloudWatch-logs, warmer and IAM bullets: *asserting*, carrying the
+#       17,280, the 233 GB-s, the ≈ 6.8 MB, the ≈ $0.005 and the two-targets /
+#       two-permissions counts.
+#     - `infra/README.md` — the stack table's api row, the api runbook's opening
+#       resource sentence, step B3's `Plan: 20 to add`, step B3's `state list`
+#       expectation of 25, and the teardown's `list-rules` readback:
+#       *asserting* the five resources this file declares. That is the resource
+#       count rather than the cadence, but it moves for the same reason: a third
 #       target changes both, as does the `cron(0/5 * * * ? *)` readback in B7.
+#     - `infra/README.md`, the bootstrap cost table's state-bucket row —
+#       *computing*, from a census of `resource` blocks across all seven stacks
+#       that this file's five moved. It records the recipe that re-derives it.
 #   * **The warm `GET /v1/sites` latency, 54 ms** — measured over the 30 days to
 #     2026-08-24, recorded in #473, restated in the first paragraph above.
 #     Carried by `infra/README.md`'s Lambda compute row, which is *computing*:
-#     ≈ 233 GB-s is `17,280 × 0.25 GB × 54 ms`. Re-measure the latency and that
-#     row is re-derived in the same change.
+#     ≈ 233 GB-s is `17,280 × 0.25 GB × 54 ms`, and by `infra/api/outputs.tf`'s
+#     Lambda bullet, which *asserts* the 233. Re-measure the latency and both
+#     are re-derived in the same change.
 #   * **The payload's markers, `192.0.2.1` and `cumulo-warmer`** — the `locals`
 #     below are the owner. Carried by `infra/README.md`'s B3 payload readback
 #     (*asserting*: it tells the operator what the plan must show) and by B7's
