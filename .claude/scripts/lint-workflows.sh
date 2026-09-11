@@ -83,11 +83,13 @@ lint:workflows: shellcheck is not installed — refusing to report a pass.
   mode this gate exists to prevent.
 
       macOS:  brew install shellcheck
-      Debian: sudo apt-get install -y shellcheck
+      any:    bash .claude/scripts/install-shellcheck.sh
 
-  GitHub's ubuntu-latest runner image ships it preinstalled, so CI needs no
-  install step for shellcheck (see the comment on the verify step in
-  .github/workflows/ci.yml).
+  The version is pinned repo-wide (#502): .claude/scripts/shellcheck-pin.sh owns
+  the number, CI installs that release, and the 'lint:sh' gate — which runs ahead
+  of this one in 'pnpm lint' — is the single place that refusal lives. This gate
+  deliberately does not re-check it: two gates enforcing one rule is two places
+  for it to drift.
 
   (Looked for: $SHELLCHECK_BIN)
 

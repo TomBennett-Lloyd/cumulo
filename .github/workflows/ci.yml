@@ -21,8 +21,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # actionlint is the one tool the composite needs that the runner image
-      # does not ship (contrast the shellcheck note on the verify step below).
+      # actionlint is the one tool the composite needs that the runner image does
+      # not ship at all. shellcheck it does ship — at a version this repo will not
+      # accept, which the step after this one replaces; the two installs answer
+      # different problems and are deliberately not merged.
       #
       # (a) Why a direct download and not rhysd's official
       #     `download-actionlint.bash`: that script is fetched from `main` — an
@@ -34,9 +36,13 @@ jobs:
       #     version alone means a re-tagged release swaps the binary silently;
       #     the checksum is what makes that a loud failure instead.
       # (c) Single owner. This step is the only pinned copy of the version in
-      #     the repo — local runs float on `brew install actionlint`, the same
-      #     accepted CI-pins/local-floats skew shellcheck already has, ledgered
-      #     on #108. Nothing else restates 1.7.12.
+      #     the repo — local runs float on `brew install actionlint`, an accepted
+      #     CI-pins/local-floats skew ledgered on #108. Nothing else restates
+      #     1.7.12. shellcheck no longer keeps it company there: #502 closed that
+      #     skew after it cost two CI rounds, and the step below is what a
+      #     version both sides have to agree on looks like — the number moves out
+      #     of the workflow into a file both the installer and the gate read.
+      #     The skew survives here because actionlint runs in exactly one place.
       # (d) Bump procedure: pick the new version, fetch that release's
       #     `actionlint_<version>_checksums.txt` from the same GitHub releases
       #     path, and update both strings in this one step. Nowhere else.
@@ -50,6 +56,30 @@ jobs:
           mkdir -p "$RUNNER_TEMP/actionlint"
           tar -xzf /tmp/actionlint.tar.gz -C "$RUNNER_TEMP/actionlint" actionlint
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
+      # The runner image DOES ship shellcheck, and that was the problem (#502).
+      # ubuntu-latest carries 0.9.0 while developers run Homebrew's current
+      # release, so `pnpm verify` analysed local trees with a stricter linter than
+      # the one that judged them here — a `verify` whose green did not predict
+      # CI's, in the one direction that costs a round. PR #499 (SC2015) and PR
+      # #524 (SC2120/SC2119) are the two that paid it.
+      #
+      # This step installs the pinned release over the image's, so both sides run
+      # the same analyser. Note what is NOT here: a version. The number lives in
+      # .claude/scripts/shellcheck-pin.sh, and both readers of it — this install
+      # and the `lint:sh` gate, which refuses any other version — take it from
+      # there, so a bump is one commit in one file and CI cannot lag the gate.
+      # That is the difference from the actionlint step above, whose comment (c)
+      # says why it keeps its literals: this version needs two agreeing sides,
+      # and two sides carrying the same literal is a mirror waiting to drift
+      # (docs/standards/architecture.md rule 9).
+      #
+      # The install's own reasoning — direct release download, checksum as well
+      # as version, nothing written outside a temp directory — lives in that
+      # script's docblock and is not restated here. It appends its directory to
+      # $GITHUB_PATH itself, which is what puts the pinned binary ahead of the
+      # image's for every later step in this job, `pnpm verify:full` included.
+      - name: Install shellcheck (pinned)
+        run: bash .claude/scripts/install-shellcheck.sh
       # One step, not one step per gate. Enumerating the gates here duplicates
       # the composite's list, and the duplicate drifts: `pnpm test:scripts`
       # was added to it and never reached CI, so the shell harness was
@@ -72,17 +102,15 @@ jobs:
       # re-create exactly the duplicate this step exists to remove.
       # Gate completeness beats step granularity.
       #
-      # No `apt-get install shellcheck` step, even though the composite shells
-      # out to it: the runner image ships shellcheck. Verified against
-      # actions/runner-images, not assumed — images/ubuntu/Ubuntu2404-Readme.md
-      # (ubuntu-latest today) lists shellcheck 0.9.0-1, and Ubuntu2204-Readme.md
-      # lists 0.8.0-2, so this survives the next ubuntu-latest rollover too. If a
-      # future image drops it, the shell gate hard-fails with install
-      # instructions rather than passing by skipping.
-      # Open caveat, first checked on this PR's own CI run: local Homebrew is on
-      # 0.11.0, so the runner lints with an older shellcheck than a developer
-      # does. Newer versions add checks, which makes CI the more permissive of
-      # the two — the safe direction, but not a pinned one.
+      # The shellcheck the composite shells out to is the pinned one installed
+      # above, not the image's — the caveat that used to sit here, that the runner
+      # lints with an older shellcheck than a developer does, is what #502 closed.
+      # The image still ships its own (0.9.0-1 on Ubuntu2404, 0.8.0-2 on
+      # Ubuntu2204, per actions/runner-images), and that copy is now irrelevant
+      # rather than load-bearing: the install step puts the pinned binary ahead of
+      # it, and `lint:sh` refuses any version but the pin, so an image rollover
+      # that changed or dropped shellcheck could not silently change this job's
+      # verdict. If the install step ever fails, this step never runs.
       - run: pnpm verify:full
 
   # One of the two jobs here that produce a build, and one of the two deliberate
