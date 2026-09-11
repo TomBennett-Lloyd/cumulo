@@ -47,6 +47,13 @@ HUMAN_ALWAYS_DEFAULT='["docs/adr/**",".claude/workflow.json","CLAUDE.md"]'
 # anything else, which means it wrote a merge commit onto the branch.
 UPDATE_NOOP='PR branch already up-to-date'
 UPDATE_WROTE="Updated branch $HEAD_REF"
+# The third answer, and the one the docs/tech-debt.md union cases turn on: GitHub
+# answers a 422 when the base and the head both changed the same region.
+UPDATE_CONFLICT='failed to update branch: merge conflict between base and head'
+
+# The one path the union step will resolve, spelled once here so a case that changes
+# it changes it everywhere — including in the assertions about what came out.
+TD='docs/tech-debt.md'
 
 ROOT=""
 STATE=""
@@ -73,11 +80,13 @@ V_FILES=""
 V_CHECKS=""
 V_COMMITS=""
 V_BODY=""
+V_BASE_REF=""
 
 reset_view() {
   V_STATE="OPEN"
   V_MSST="CLEAN"
   V_OID="aaa111"
+  V_BASE_REF="main"
   V_LABELS=""
   V_FILES="docs/notes.md"
   V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS"
@@ -126,6 +135,7 @@ EOF
 
 pr_json() {
   printf '{"number":%s,"state":"%s","url":"https://example.test/pull/%s",' "$PR" "$V_STATE" "$PR"
+  printf '"baseRefName":"%s",' "$V_BASE_REF"
   printf '"headRefName":"%s","headRefOid":"%s","mergeStateStatus":"%s","body":"%s",' \
     "$HEAD_REF" "$V_OID" "$V_MSST" "$V_BODY"
   printf '"labels":'
@@ -201,6 +211,19 @@ case "\$1 \$2" in
     exit 0
     ;;
   "pr update-branch")
+    # A SEQUENCE, for the same reason \`pr view\` is one: the union step resolves a
+    # conflict and then RESUMES here, so "conflict, then already-up-to-date" is a claim
+    # about two calls. update-branch.1, update-branch.2, … fall back to update-branch.out.
+    n=0
+    [ -f "\$state/ub.count" ] && read -r n <"\$state/ub.count"
+    n=\$((n + 1))
+    printf '%s' "\$n" >"\$state/ub.count"
+    if [ -f "\$state/update-branch.\$n" ]; then
+      cat "\$state/update-branch.\$n"
+      rc=0
+      [ -f "\$state/update-branch.\$n.rc" ] && read -r rc <"\$state/update-branch.\$n.rc"
+      exit "\$rc"
+    fi
     [ -f "\$state/update-branch.out" ] && cat "\$state/update-branch.out"
     rc=0
     [ -f "\$state/update-branch.rc" ] && read -r rc <"\$state/update-branch.rc"
@@ -238,6 +261,22 @@ EOF
   must chmod +x "$1"
 }
 
+# prettier is stubbed for the same reason reap-worktree.sh is: what these cases assert
+# is that the union step RUNS it, over the file it resolved, before it commits — not
+# that prettier formats markdown, which prettier's own tests own. It logs its argv and
+# leaves the file alone, so a case can also assert the union content byte for byte
+# without a formatter rewriting it first.
+prettier_stub() { # prettier_stub <path> <state dir>
+  cat >"$1" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$2/prettier.log"
+rc=0
+[ -f "$2/prettier.rc" ] && read -r rc <"$2/prettier.rc"
+exit "\$rc"
+EOF
+  must chmod +x "$1"
+}
+
 # --- fixtures ---------------------------------------------------------------------------------
 
 fixture() { # fixture <name> [humanAlways JSON array]
@@ -251,6 +290,7 @@ fixture() { # fixture <name> [humanAlways JSON array]
   must gitc "$REPO" commit --quiet -m base
   gh_stub "$ROOT/gh" "$STATE"
   reap_stub "$ROOT/reap" "$STATE"
+  prettier_stub "$ROOT/prettier" "$STATE"
   : >"$STATE/calls.log"
   # The no-op is the default answer, so that a case saying "updated" has to move
   # headRefOid on the reads that follow — an update that reports a write and
@@ -262,7 +302,7 @@ fixture() { # fixture <name> [humanAlways JSON array]
 
 reset_calls() { # a second run of the subject against the same state, from the top
   : >"$STATE/calls.log"
-  must rm -f "$STATE/view.count"
+  must rm -f "$STATE/view.count" "$STATE/ub.count"
 }
 
 POLL_TIMEOUT=30
@@ -271,6 +311,7 @@ run_merge() { # run_merge [caller's working directory]
   capture -C "${1:-$REPO}" env \
     MERGE_PR_GH_CMD="$ROOT/gh" \
     MERGE_PR_REAP_CMD="$ROOT/reap" \
+    MERGE_PR_PRETTIER_CMD="$ROOT/prettier" \
     MERGE_PR_POLL_INTERVAL_SECONDS=0 \
     MERGE_PR_POLL_TIMEOUT_SECONDS="$POLL_TIMEOUT" \
     MERGE_PR_RETRY_SECONDS=0 \
@@ -295,6 +336,103 @@ call_line() { # call_line <prefix> -> 1-based line number of the first matching 
   local n
   n=$(grep -n -- "^$1" "$STATE/calls.log" | head -1 | cut -d: -f1)
   printf '%s\n' "${n:-0}"
+}
+
+# --- the docs/tech-debt.md union fixtures ------------------------------------------------------
+#
+# These cases need MORE git than the rest of the file, not less. The union step
+# fetches a base, runs merge-tree, merges in the lane's worktree, commits and pushes
+# with a lease — stubbing any of that would stub the thing under test — so the fixture
+# grows a real bare origin and a real lane worktree, and the assertions read what came
+# out of the push rather than what the subject said it did.
+
+TD_BASE='# Tech-debt log
+
+How this log is kept.
+
+## 2026-09-01 — the entry that was already here
+
+- Where: somewhere
+- Source: #1
+'
+
+TD_MAIN_ENTRY='
+## 2026-09-11 — the entry another lane merged first
+
+- Where: main
+- Source: #2
+'
+
+TD_BRANCH_ENTRY='
+## 2026-09-11 — the entry this lane logged
+
+- Where: the branch
+- Source: #3
+'
+
+td_fixture() { # td_fixture <name> — a repo with a real origin, TD_BASE on main, a lane worktree
+  fixture "$1"
+  # The SUBJECT commits here, so an identity has to exist somewhere git will find one.
+  # `gitc` passes identity per command and cannot reach a commit this harness does not
+  # make, so repo-local config it is — written inside a temp fixture, never on the box.
+  must git -C "$REPO" config user.email test@test
+  must git -C "$REPO" config user.name test
+  must git -C "$REPO" config commit.gpgsign false
+  must git init --quiet --bare "$ROOT/origin.git"
+  must gitc "$REPO" remote add origin "$ROOT/origin.git"
+  must mkdir -p "$REPO/docs"
+  must printf '%s' "$TD_BASE" >"$REPO/docs/tech-debt.md"
+  must gitc "$REPO" add -A
+  must gitc "$REPO" commit --quiet -m 'the log as both sides found it'
+  must gitc "$REPO" push --quiet origin main
+  must gitc "$REPO" worktree add --quiet -b "$HEAD_REF" "$ROOT/wt" HEAD
+}
+
+td_main_writes() { # td_main_writes <the whole docs/tech-debt.md, as main has it>
+  must printf '%s' "$1" >"$REPO/docs/tech-debt.md"
+  must gitc "$REPO" commit --quiet -am 'another lane merged first'
+  must gitc "$REPO" push --quiet origin main
+}
+
+# td_branch_writes — the lane's own copy, pushed, and V_OID moved to the sha GitHub
+# would then be answering. That last line is not bookkeeping: the union step refuses to
+# resolve a branch whose local tip and headRefOid disagree, so a fixture that left
+# V_OID at "aaa111" would test the guard rather than the resolution.
+td_branch_writes() { # td_branch_writes <the whole docs/tech-debt.md, as the lane has it>
+  must printf '%s' "$1" >"$ROOT/wt/docs/tech-debt.md"
+  must gitc "$ROOT/wt" commit --quiet -am 'the lane logs its own finding'
+  must gitc "$ROOT/wt" push --quiet origin "$HEAD_REF"
+  V_OID=$(gitc "$ROOT/wt" rev-parse HEAD) || {
+    printf 'FATAL could not read the lane tip\n' >&2
+    exit 2
+  }
+}
+
+# td_views — the read sequence every union case shares: DIRTY at classify, then one
+# post-push read still answering the head the push replaced (the PR #501 shape, which
+# the union step arms the same gate against), then the new head, CLEAN and green.
+td_views() {
+  V_MSST="DIRTY"
+  write_view 1
+  V_MSST="BLOCKED"
+  write_view 2
+  V_OID="ccc333"
+  V_MSST="CLEAN"
+  write_view default
+  write_merged_view
+}
+
+origin_branch_sha() { git -C "$ROOT/origin.git" rev-parse "$HEAD_REF"; }
+origin_branch_td() { git -C "$ROOT/origin.git" show "$HEAD_REF:$TD"; }
+
+expect_no_merge_in_progress() {
+  ! git -C "$ROOT/wt" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 ||
+    bad "the lane worktree was left mid-merge — a refusal must put the tree back"
+}
+
+expect_branch_unpushed() { # expect_branch_unpushed <sha the branch must still be at>
+  [ "$(origin_branch_sha)" = "$1" ] ||
+    bad "the branch was pushed despite the refusal (origin is at $(origin_branch_sha), expected $1)"
 }
 
 # ==========================================================================================
@@ -1040,6 +1178,259 @@ expect_rc 1
 expect_stderr 'feedback — FAILED'
 expect_stderr 'no "- **Category**:" line'
 expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 20. append vs append: resolved, pushed and MERGED in one invocation
+# ==========================================================================================
+# The whole point of #513. Four PRs on 2026-09-11 arrived DIRTY for this exact reason
+# and were resolved by hand four times, so "one invocation" is the property — not "the
+# script offers to help and the merge owner finishes it".
+begin "two lanes that both appended a tech-debt entry are unioned, pushed and merged in one run"
+td_fixture union-append
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.1"
+must printf '1\n' >"$STATE/update-branch.1.rc"
+must printf '%s\n' "$UPDATE_NOOP" >"$STATE/update-branch.out"
+td_views
+run_merge
+expect_rc 0
+expect_stdout "gh reports a conflict; asking whether it is the $TD append collision"
+expect_stdout "$TD unioned and pushed"
+expect_stdout 'base appended 1 entr(ies), the branch 1'
+expect_stdout 'the update moved the head'
+expect_called "pr merge $PR --squash"
+expect_stdout "done — PR #$PR MERGED"
+# What actually landed on the branch, read out of the origin rather than off stdout.
+[ "$(origin_branch_sha)" != "$before_sha" ] || bad "the resolution was never pushed"
+resolved=$(origin_branch_td)
+case "$resolved" in
+  *'the entry that was already here'*) ;;
+  *) bad "the union dropped the entry both sides inherited" ;;
+esac
+main_at=$(printf '%s\n' "$resolved" | grep -n 'another lane merged first' | cut -d: -f1)
+branch_at=$(printf '%s\n' "$resolved" | grep -n 'this lane logged' | cut -d: -f1)
+[ -n "$main_at" ] || bad "the union dropped main's appended entry"
+[ -n "$branch_at" ] || bad "the union dropped the branch's appended entry"
+[ "${main_at:-0}" -lt "${branch_at:-0}" ] ||
+  bad "main's entry must come first and the branch's after (main at $main_at, branch at $branch_at)"
+# Formatted before it was committed, over the file it resolved.
+grep -qxF -- "--write $TD" "$STATE/prettier.log" ||
+  bad "prettier was not run over $TD (log: $(cat "$STATE/prettier.log" 2>/dev/null))"
+# And the tree it worked in was left as it found it: clean, no merge in progress.
+expect_no_merge_in_progress
+st=$(git -C "$ROOT/wt" status --porcelain)
+[ -z "$st" ] || bad "the lane worktree was left dirty after a successful resolution: $st"
+end
+
+# ==========================================================================================
+# 20b. an edit INSIDE an existing entry is refused, naming the file and the hunk
+# ==========================================================================================
+# The refusal that gives case 20 its meaning. "Both sides appended" is what makes the
+# answer arithmetic; a side that rewrote text the base already had is a judgement call,
+# and a judgement call silently taken is a mangled log the squash merge makes permanent.
+begin "a conflict where one side edited an existing entry is refused, naming the hunk"
+td_fixture union-edit
+# main both rewrites the last line of the entry that was already there AND appends.
+td_main_writes "${TD_BASE%- Source: #1
+}- Source: #1, and also #9
+$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'the conflict is not one this script may resolve'
+expect_stderr "$TD: the base side changes line"
+expect_stderr 'the entry that was already here'
+expect_stderr 'never an edit to text the base already had'
+expect_not_called "pr merge $PR --squash"
+[ -f "$STATE/merged" ] && bad "the PR merged despite the refusal"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+[ -f "$STATE/prettier.log" ] && bad "prettier ran on a resolution that was refused"
+end
+
+# ==========================================================================================
+# 20c. a second conflicted file is refused, and the set is named
+# ==========================================================================================
+begin "a conflicted set wider than docs/tech-debt.md is refused, naming every member"
+td_fixture union-two-files
+must printf 'as the base had it\n' >"$REPO/notes.txt"
+must gitc "$REPO" add -A
+must gitc "$REPO" commit --quiet -m 'a second file both sides will touch'
+must gitc "$REPO" push --quiet origin main
+must gitc "$REPO" worktree remove --force "$ROOT/wt"
+must gitc "$REPO" branch -D "$HEAD_REF" >/dev/null
+must gitc "$REPO" worktree add --quiet -b "$HEAD_REF" "$ROOT/wt" HEAD
+must printf 'as main has it\n' >"$REPO/notes.txt"
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+must printf 'as the branch has it\n' >"$ROOT/wt/notes.txt"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'the conflicted set is'
+expect_stderr 'notes.txt'
+expect_stderr "resolves $TD and only $TD, alone"
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+end
+
+# ==========================================================================================
+# 20d. a dirty lane worktree is refused before anything is touched
+# ==========================================================================================
+# Somebody's uncommitted work is in there. A merge would either refuse halfway or sweep
+# it into the resolution commit, and this script is not entitled to either outcome.
+begin "a lane worktree with uncommitted work in it is refused, and nothing is merged"
+td_fixture union-dirty
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf 'half a thought\n' >"$ROOT/wt/scratch.txt"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'is not clean'
+expect_stderr 'scratch.txt'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+[ -f "$ROOT/wt/scratch.txt" ] || bad "the refusal removed the uncommitted work it refused over"
+end
+
+# ==========================================================================================
+# 20e. no worktree holds the branch — there is nowhere to do this
+# ==========================================================================================
+begin "a branch no worktree holds is refused rather than checked out somewhere"
+td_fixture union-no-worktree
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must gitc "$REPO" worktree remove --force "$ROOT/wt"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr "no worktree holds '$HEAD_REF'"
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+end
+
+# ==========================================================================================
+# 20f. an append that extends the last entry instead of starting a new one is refused
+# ==========================================================================================
+# It sits below the base's final "## " heading, so #513's own proposed test admits it —
+# and concatenating the two sides would then splice one entry's body into another's.
+# docs/tech-debt.md records this shape about itself ("An Update appended to a
+# sweep-defined entry joins that entry's own sweep"). Whole entries or nothing.
+begin "a tail append carrying no heading of its own is refused, not unioned"
+td_fixture union-no-heading
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "${TD_BASE}- Update: and one more thing about that same entry
+"
+before_sha=$(origin_branch_sha)
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'the branch side appends'
+expect_stderr 'and one more thing about that same entry'
+expect_stderr 'extends the last existing entry rather than starting a new one'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+expect_no_merge_in_progress
+end
+
+# ==========================================================================================
+# 20g. a second conflict after a resolution fails the run rather than looping
+# ==========================================================================================
+# The resolution reported success and gh still says conflict: either main moved again —
+# which a re-run handles — or what was resolved was never what update-branch meant. Both
+# want a human reading the message, and neither wants the attempt budget spent on a loop.
+begin "a conflict reported again after the union fails the run instead of retrying it"
+td_fixture union-twice
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stdout "$TD unioned and pushed"
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'reports a conflict again after the'
+expect_not_called "pr merge $PR --squash"
+# Two attempts, not three: the second conflict ends the run rather than consuming the
+# rest of MERGE_PR_UPDATE_RETRIES.
+attempts=$(grep -c -- "^pr update-branch $PR\$" "$STATE/calls.log")
+[ "$attempts" = "2" ] || bad "expected 2 update-branch attempts, got $attempts"
+end
+
+# ==========================================================================================
+# 20h. a conflict spelling the arm does not match still fails the run
+# ==========================================================================================
+# The safe direction, unchanged from before the step existed: an answer this script
+# cannot classify fails, and the union step is never even asked.
+begin "an update-branch failure that does not read as a conflict never reaches the union step"
+td_fixture union-unmatched
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+must printf 'HTTP 503: the server is having a moment\n' >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+td_views
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'gh pr update-branch exited 1'
+expect_not_stdout 'asking whether it is'
+expect_not_called "pr merge $PR --squash"
+expect_branch_unpushed "$before_sha"
+end
+
+# ==========================================================================================
+# 20i. a --rebase batch never reaches the union step at all
+# ==========================================================================================
+# The step lives inside update-branch, which a batch skips: `gh pr update-branch` writes
+# a merge commit and blocks rebase-merge outright, and so would this resolution.
+begin "a --rebase batch is never offered the union, because it is never update-branch'd"
+td_fixture union-batch
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+before_sha=$(origin_branch_sha)
+V_BODY="Closes #21 and Closes #22"
+V_COMMITS="#21: the first,#22: the second"
+V_MSST="DIRTY"
+write_view default
+write_merged_view
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+run_merge
+expect_rc 1
+expect_stderr 'merge — FAILED'
+expect_stderr 'curate onto latest main'
+expect_not_stdout 'asking whether it is'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --rebase"
+expect_branch_unpushed "$before_sha"
 end
 
 # ==========================================================================================
