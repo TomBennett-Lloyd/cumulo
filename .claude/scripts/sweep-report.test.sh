@@ -1,0 +1,422 @@
+#!/usr/bin/env bash
+# Test harness for sweep-report.sh, its neighbour in this directory.
+#
+# The assertion vocabulary is harness-lib.sh next door; the fixtures are real
+# git repositories, built the way verify-tier.test.sh builds its own, because
+# the subject's whole input is a ledger plus what git says about a tree, and a
+# stub for git is a stub for the thing under test.
+#
+# What this harness has to be able to fail on, stated up front, because the
+# subject exists to stop a class of defect rather than to compute a number:
+#
+#   - The TOTALS are the script's, not a lane's. The #520 case below is the
+#     fixture the ticket names: a ledger whose true reading is "186 checked —
+#     5 trued, 0 deleted, 5 raised" against the "3 trued, 3 raised" that PR
+#     #520's title carried into `main` as the squash subject `6943ee6`. The
+#     case asserts the true rendering AND the absence of the false one, so a
+#     regression that reintroduces a typed number has somewhere to be caught.
+#   - The title fragment and the table CANNOT disagree. One case reads the four
+#     numbers out of the title line and the six out of the table's total row and
+#     compares them, rather than asserting two literals that a future edit could
+#     drift apart in step.
+#   - A failing tree cannot produce a passing report. Every failure mode —
+#     unresolved quote, sweep whose carrier did not come back, subject absent at
+#     base, spelled-out figure, ragged comment continuation — has its own case
+#     asserting a non-zero exit, because the exit code is what makes the report
+#     unpasteable over a red tree.
+#   - The subject's OWN positive controls ran. An emptiness claim with no
+#     control is indistinguishable from a broken pattern
+#     (docs/standards/evidence.md member 7), so two cases assert the control
+#     output is present in the report and not merely promised by its prose.
+#
+# Usage: bash .claude/scripts/sweep-report.test.sh  (or `pnpm test:scripts`)
+# Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
+set -uo pipefail
+
+SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
+SUBJECT="$SCRIPTS/sweep-report.sh"
+
+# shellcheck source=./harness-lib.sh
+. "$SCRIPTS/harness-lib.sh"
+harness_init_tmp
+
+# The fixture's carrier strings. Deliberately unlike anything this repository
+# holds: every case runs against its own fixture repo, and a string that also
+# occurred in the real tree would make a passing case say nothing.
+SUBJECT_ALPHA="FIXTURE_CARRIER_ALPHA"
+SUBJECT_BETA="FIXTURE_CARRIER_BETA"
+FIXTURE_QUOTE="a fixture claim the ledger cites verbatim"
+
+# PR #520's title, now the squash subject of `main`'s 6943ee6, against a body
+# and a lane report that both said five and five. The numbers below are the
+# ledger's true reading; this string is what a typed rendering produced.
+FALSE_RENDERING="3 trued, 3 raised"
+
+ROOT=""
+BASE=""
+
+# --- fixtures ----------------------------------------------------------------------------
+
+# Identity is passed per-command: the harness must not depend on (or write) any git config.
+gitc() {
+  local dir="$1"
+  shift
+  git -C "$dir" -c user.email=test@test -c user.name=test -c commit.gpgsign=false "$@"
+}
+
+# fixture <name> -> ROOT, a fresh repo one commit deep on main, and BASE, that
+# commit's sha. The base commit carries a markdown carrier file and a source
+# file, so a case can trim from either, or dirty either, without creating it.
+fixture() {
+  ROOT="$TMP_ROOT/$1"
+  must mkdir -p "$ROOT/docs" "$ROOT/src"
+  must git init --quiet -b main "$ROOT"
+  must printf '%s\n' \
+    '# Fixture notes' \
+    '' \
+    "The carrier line: $SUBJECT_ALPHA is defined in src/fixture.ts." \
+    "A second carrier: $SUBJECT_BETA, cited nowhere else." \
+    "Standing claim — $FIXTURE_QUOTE." \
+    >"$ROOT/docs/fixture-notes.md"
+  must printf '%s\n' \
+    "export const $SUBJECT_ALPHA = 1;" \
+    'export const ordinary = 2;' \
+    >"$ROOT/src/fixture.ts"
+  must gitc "$ROOT" add -A
+  must gitc "$ROOT" commit --quiet -m base
+  BASE=$(gitc "$ROOT" rev-parse HEAD) || exit 2
+}
+
+# --- ledger construction -------------------------------------------------------------------
+#
+# Tabs are the format, so they are never typed into a case. ledger_new writes
+# the fixed header; row joins its arguments with tabs via IFS, which is the one
+# spelling that cannot silently produce a space where the format wants a tab.
+
+LEDGER=""
+
+ledger_new() { # ledger_new <name> -> sets LEDGER to a fresh ledger holding only the header
+  LEDGER="$TMP_ROOT/$1.tsv"
+  must printf 'path\tline\tclaim\tcheck\tdisposition\n' >"$LEDGER"
+}
+
+row() { # row <field>... — one ledger row, fields joined with tabs
+  local IFS
+  IFS=$(printf '\t')
+  printf '%s\n' "$*" >>"$LEDGER"
+}
+
+run_report() { # run_report [ledger] — the production invocation against $ROOT
+  capture -C "$ROOT" bash "$SUBJECT" "${1:-$LEDGER}" "$BASE"
+}
+
+# --- the two renderings, read back out of the report ----------------------------------------
+#
+# Both helpers reduce their line to "claims/trued/deleted/raised" by taking the
+# numbers in order, so a case can compare the title against the table without
+# re-stating either layout. A layout change breaks them loudly rather than
+# quietly passing.
+
+numbers_of_title() {
+  printf '%s\n' "$out" | awk '
+    / checked / && / raised$/ {
+      gsub(/[^0-9 ]/, " ")
+      n = split($0, a, / +/)
+      c = 0
+      for (i = 1; i <= n; i++) if (a[i] != "") v[++c] = a[i]
+      print v[1] "/" v[2] "/" v[3] "/" v[4]
+      exit
+    }'
+}
+
+numbers_of_total_row() {
+  printf '%s\n' "$out" | awk '
+    /\*\*total\*\*/ {
+      gsub(/[^0-9 ]/, " ")
+      n = split($0, a, / +/)
+      c = 0
+      for (i = 1; i <= n; i++) if (a[i] != "") v[++c] = a[i]
+      print v[1] "/" v[3] "/" v[4] "/" v[5]
+      exit
+    }'
+}
+
+# --- cases: the subject parses ---------------------------------------------------------------
+
+begin "sweep-report.sh parses under every bash on the box"
+expect_parses "$SUBJECT"
+end
+
+# --- cases: arguments -------------------------------------------------------------------------
+
+fixture args
+
+begin "--help prints usage and exits 0"
+capture -C "$ROOT" bash "$SUBJECT" --help
+expect_rc 0
+expect_stdout "Usage: bash .claude/scripts/sweep-report.sh"
+end
+
+begin "no arguments is refused with no verdict"
+capture -C "$ROOT" bash "$SUBJECT"
+expect_rc 2
+expect_stderr "Usage: bash .claude/scripts/sweep-report.sh"
+end
+
+begin "a ledger that is not a readable file is refused"
+capture -C "$ROOT" bash "$SUBJECT" "$TMP_ROOT/absent.tsv" "$BASE"
+expect_rc 2
+expect_stderr "ledger is not a readable file"
+end
+
+begin "a base that does not resolve to a commit is refused"
+ledger_new base-unknown
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+capture -C "$ROOT" bash "$SUBJECT" "$LEDGER" "deadbee"
+expect_rc 2
+expect_stderr "base-sha does not resolve to a commit"
+end
+
+# --- cases: ledger validation ------------------------------------------------------------------
+
+begin "a header that is not the fixed format is refused, and names both forms"
+LEDGER="$TMP_ROOT/bad-header.tsv"
+must printf 'file\tline\tclaim\tcheck\tdisposition\n' >"$LEDGER"
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 2
+expect_stderr "the header is not the fixed format"
+expect_stderr "expected: path"
+expect_not_stdout "### PR title fragment"
+end
+
+begin "an unknown disposition is rejected by name and ledger line"
+ledger_new bad-disposition
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+row docs/fixture-notes.md 4 "another claim" "read the file" "mostly-true"
+run_report
+expect_rc 2
+expect_stderr "ledger line 3"
+expect_stderr 'unknown disposition "mostly-true"'
+expect_stderr "verified-true, trued, deleted, out-of-scope, restored"
+end
+
+begin "a ledger holding only its header is refused"
+ledger_new empty
+run_report
+expect_rc 2
+expect_stderr "holds no data rows"
+end
+
+begin "a row with fewer than five columns is refused"
+ledger_new short-row
+must printf 'docs/fixture-notes.md\t3\ta claim\n' >>"$LEDGER"
+run_report
+expect_rc 2
+expect_stderr "the fixed format is five tab-separated columns"
+end
+
+begin "a trued row that names no trimmed subject is refused"
+ledger_new no-subject
+row docs/fixture-notes.md 3 "a claim" "read the file" trued
+run_report
+expect_rc 2
+expect_stderr "must name the trimmed subject"
+end
+
+begin "an out-of-scope row that names no quote is refused"
+ledger_new no-quote
+row docs/fixture-notes.md 3 "the code is wrong" "read the code" out-of-scope
+run_report
+expect_rc 2
+expect_stderr "must name at least one quote="
+end
+
+begin "a sweep without its positive control is refused"
+ledger_new sweep-no-control
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true "sweep=FIXTURE_CARRIER_\\w+"
+run_report
+expect_rc 2
+expect_stderr "sweep= without control="
+end
+
+begin "an unknown directive key is rejected by name"
+ledger_new bad-key
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true "carrier=docs/fixture-notes.md"
+run_report
+expect_rc 2
+expect_stderr 'unknown directive key "carrier"'
+end
+
+# --- cases: totals, and the two renderings agreeing ------------------------------------------
+
+begin "totals come out per file and in a total row"
+ledger_new totals
+row docs/fixture-notes.md 3 "carrier claim" "read the file" verified-true
+row docs/fixture-notes.md 4 "second claim" "git grep" trued "subject=$SUBJECT_BETA"
+row src/fixture.ts 1 "the constant exists" "read the file" verified-true
+row src/fixture.ts 2 "a deleted carrier, since restored" "git show base" restored
+run_report
+expect_rc 0
+expect_stdout "    4 checked — 1 trued, 0 deleted, 0 raised"
+expect_stdout "| \`docs/fixture-notes.md\` | 2 | 1 | 1 | 0 | 0 | 0 |"
+expect_stdout "| \`src/fixture.ts\` | 2 | 1 | 0 | 0 | 0 | 1 |"
+expect_stdout '| **total** | **4** | **2** | **1** | **0** | **0** | **1** |'
+end
+
+begin "the title fragment's numbers equal the table's total row"
+title=$(numbers_of_title)
+totals=$(numbers_of_total_row)
+[ -n "$title" ] || bad "no title fragment in the report"
+[ "$title" = "$totals" ] || bad "title says $title, the table's total row says $totals"
+end
+
+begin "#520's ledger: the true rendering is printed and the typed one is absent"
+# 186 claims: 176 verified-true, 5 trued, 0 deleted, 5 out-of-scope — the reading
+# PR #520's body and lane report both gave. Its TITLE said 3 and 3, and the title
+# is what merge-pr.sh turns into the squash subject, so that is the rendering that
+# became history. Here both renderings come out of one computation.
+ledger_new pr520
+i=1
+while [ "$i" -le 176 ]; do
+  row docs/fixture-notes.md "$i" "verified claim $i" "read the file" verified-true
+  i=$((i + 1))
+done
+i=1
+while [ "$i" -le 5 ]; do
+  row docs/fixture-notes.md "$i" "trued claim $i" "git grep" trued "subject=$SUBJECT_BETA"
+  i=$((i + 1))
+done
+i=1
+while [ "$i" -le 5 ]; do
+  row docs/fixture-notes.md "$i" "the code is wrong, not the prose ($i)" "read the code" out-of-scope "quote=$FIXTURE_QUOTE"
+  i=$((i + 1))
+done
+run_report
+expect_rc 0
+expect_stdout "    186 checked — 5 trued, 0 deleted, 5 raised"
+expect_stdout '| **total** | **186** | **176** | **5** | **0** | **5** | **0** |'
+expect_not_stdout "$FALSE_RENDERING"
+end
+
+begin "#520's ledger: the title and the table still agree at 186 rows"
+title=$(numbers_of_title)
+totals=$(numbers_of_total_row)
+[ "$title" = "186/5/0/5" ] || bad "title numbers are $title, expected 186/5/0/5"
+[ "$title" = "$totals" ] || bad "title says $title, the table's total row says $totals"
+end
+
+# --- cases: the pre-checks pass on a clean tree -------------------------------------------------
+
+begin "a clean ledger and tree: every pre-check runs, with its command above its output"
+ledger_new clean
+row docs/fixture-notes.md 3 "the carrier is cited" "git grep" trued "subject=$SUBJECT_ALPHA"
+row docs/fixture-notes.md 4 "the second carrier" "sweep" verified-true "sweep=FIXTURE_CARRIER_\\w+" "control=docs/fixture-notes.md"
+row src/fixture.ts 1 "the code is wrong here" "read the code" out-of-scope "quote=$FIXTURE_QUOTE"
+run_report
+expect_rc 0
+expect_stdout "sweep-report: OK"
+expect_stdout "### Pre-check (a) — inbound references"
+expect_stdout "### Pre-check (b) — ledger sweeps"
+expect_stdout "### Pre-check (c) — no spelled-out figure"
+expect_stdout "### Pre-check (d) — every quoted string resolves"
+expect_stdout "### Pre-check (e) — comment reflow"
+# The command is printed above its own output, from the argv that ran.
+expect_stdout "\$ git grep -n -F -e $SUBJECT_ALPHA $BASE -- docs/fixture-notes.md"
+expect_stdout "\$ git grep -n -F -e $SUBJECT_ALPHA -- ':!docs/fixture-notes.md'"
+# Pre-check (a)'s inbound sweep found src/fixture.ts, which is the hit a reader must read.
+expect_stdout "src/fixture.ts:1:export const $SUBJECT_ALPHA"
+end
+
+begin "the subject's own positive controls are in the report, not merely promised"
+# evidence.md member 7: an emptiness claim with no control says nothing. Both
+# built-in controls must have produced visible output in the run above.
+expect_stdout "+ // a three-second debounce"
+expect_stdout "reflow-control.ts:"
+end
+
+begin "a tech-debt skeleton is emitted per out-of-scope row, quotes resolved"
+expect_stdout "- Where: \`src/fixture.ts\` · \`docs/fixture-notes.md\` carries \"$FIXTURE_QUOTE\""
+expect_stdout "- What: the code is wrong here"
+end
+
+# --- cases: a failing check cannot produce a passing report --------------------------------------
+
+begin "an unresolved quote fails the run"
+ledger_new missing-quote
+row src/fixture.ts 1 "the code is wrong here" "read the code" out-of-scope "quote=a claim no file in this tree carries"
+run_report
+expect_rc 1
+expect_stdout "unresolved quote"
+expect_stderr "check(s) failed"
+expect_not_stdout "sweep-report: OK"
+end
+
+begin "a sweep whose declared carrier does not come back fails the run"
+# The sweep matches both real carriers; the carrier it DECLARES is a file it
+# never returns, which is the shape prose.md rule 3(b)'s control exists to catch
+# — a pattern that looks productive while missing the member that matters.
+ledger_new sweep-miss
+row docs/fixture-notes.md 3 "a claim" "sweep" verified-true "sweep=FIXTURE_CARRIER_\\w+" "control=docs/uncited-carrier.md"
+run_report
+expect_rc 1
+expect_stdout "NONE of them is its declared carrier"
+end
+
+begin "a subject the base does not carry fails the run on its positive control"
+ledger_new subject-miss
+row docs/fixture-notes.md 3 "a claim" "git grep" trued "subject=FIXTURE_CARRIER_TYPO"
+run_report
+expect_rc 1
+expect_stdout "positive control"
+expect_stdout "the ledger names a subject the base does not carry"
+end
+
+begin "a spelled-out figure added to the diff fails the run"
+fixture spelled
+must printf '%s\n' \
+  "export const $SUBJECT_ALPHA = 1;" \
+  '// a three-second debounce before the retry' \
+  >"$ROOT/src/fixture.ts"
+fixture_has "$ROOT/src/fixture.ts" "three-second"
+ledger_new spelled
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 1
+expect_stdout "spell a figure out in words"
+end
+
+begin "a ragged comment continuation added to the diff fails the run"
+fixture reflow
+must printf '%s\n' \
+  "export const $SUBJECT_ALPHA = 1;" \
+  '// a short note' \
+  '// this continuation line is deliberately wide enough to count as a full-width one' \
+  >"$ROOT/src/fixture.ts"
+fixture_has "$ROOT/src/fixture.ts" "a short note"
+ledger_new reflow
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 1
+expect_stdout "ragged comment continuation"
+end
+
+begin "the same shape in a markdown file is not a reflow finding"
+# `#` is a heading and `*` a bullet in markdown, and prettier reflows markdown
+# prose but not comments — so the check would fire on ordinary prose edits.
+fixture reflow-markdown
+must printf '%s\n' \
+  '# Fixture notes' \
+  '' \
+  '## A heading' \
+  'this paragraph line is deliberately wide enough to count as a full-width continuation' \
+  >"$ROOT/docs/fixture-notes.md"
+fixture_has "$ROOT/docs/fixture-notes.md" "A heading"
+ledger_new reflow-markdown
+row src/fixture.ts 1 "a claim" "read the file" verified-true
+run_report
+expect_rc 0
+expect_stdout "no ragged comment continuation"
+end
+
+finish

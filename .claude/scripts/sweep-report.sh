@@ -1,0 +1,675 @@
+#!/usr/bin/env bash
+#
+# sweep-report.sh — the reporting prose of a trim/sweep PR, COMPUTED from the
+# claim ledger instead of typed from memory.
+#
+# Why this exists (#522). A trim batch's diff is verified by commands; its
+# report is not. Across #497's two batches every rendering of the same ledger
+# was retyped, and the retyping is where the defects were: PR #512 minted two
+# false claims in its own fix round, PR #520's cycle-2 findings were five for
+# five in the reporting prose with none in the diff, and #520 shipped THREE
+# renderings of one ledger — a title saying "3 trued, 3 raised", a body saying
+# five and five, and a lane report agreeing with the body. `merge-pr.sh` builds
+# the squash subject from the PR title, so the one rendering nobody re-read is
+# the one that became history (`6943ee6`). `docs/standards/prose.md` rule 2
+# already applies the cure to figures — generate them, never type them — and
+# this script is that rule pointed at the report itself.
+#
+# So: one ledger in, and every rendering out of ONE computation — the PR title
+# fragment, the totals table, the five pre-check blocks of `prose.md` rule 3
+# with the exact command above each output, and a `docs/tech-debt.md` entry
+# skeleton per out-of-scope row with its quotes already resolved. The exit code
+# is the point as much as the text: a failing check or an unresolved quote
+# exits non-zero, so a lane cannot paste a passing report over a failing tree.
+#
+# Usage:
+#   bash .claude/scripts/sweep-report.sh <ledger.tsv> <base-sha>
+#
+#     ledger.tsv   the claim ledger, format below
+#     base-sha     the commit the batch branched from; the diff and the
+#                  inbound-reference controls are read against it
+#
+# Exit:  0 every check passed
+#        1 a check FAILED — an unresolved quote, a sweep whose positive control
+#          did not come back, a spelled-out figure, a reflow hit
+#        2 no verdict reached — bad arguments, an unreadable or malformed
+#          ledger, an unknown base, or one of this script's OWN positive
+#          controls failing, which means the check is broken rather than the
+#          tree (docs/standards/evidence.md sanctioned form 5)
+#
+# ## Ledger format, fixed
+#
+# A TSV the lane maintains as it works. The header is validated verbatim:
+#
+#     path<TAB>line<TAB>claim<TAB>check<TAB>disposition[<TAB>key=value]...
+#
+# `disposition` is one of verified-true | trued | deleted | out-of-scope |
+# restored, and anything else is rejected by name and ledger line number.
+# `line` may be empty (a claim pinned to a section rather than a line); every
+# other required field must be non-empty.
+#
+# The optional trailing fields are the pre-checks' INPUTS, one `key=value` per
+# tab-separated field. They are fields rather than markers inside the prose
+# columns for one reason: a TSV field cannot contain a tab, so a PCRE holding
+# `]`, `|` or a quote needs no escaping and cannot be mis-parsed.
+#
+#   subject=<identifier>   required on `trued` and `deleted` rows — the trimmed
+#                          subject whose inbound references pre-check (a) greps
+#   sweep=<pcre>           a restatement ledger's sweep, run with `git grep -P`
+#   control=<path>         required with `sweep=`, and only with it: the carrier
+#                          the sweep MUST return (prose.md rule 3(b))
+#   quote=<string>         required, repeatable, on `out-of-scope` rows — the
+#                          strings the emitted tech-debt skeleton will cite
+#
+# ## What is NOT here
+#
+# This is a lane TOOL, not a gate: it is deliberately absent from `pnpm verify`,
+# because a gate needs an input that exists on every branch and a ledger does
+# not. Its harness, sweep-report.test.sh next door, is what `verify` runs — and
+# that harness is discovered by run-script-tests.sh, never enumerated.
+#
+set -uo pipefail
+# Homebrew's prefix is not on a non-interactive shell's default PATH on this
+# machine (same reason lint-shell.sh and run-script-tests.sh do it). Harmless on
+# Linux, where the directory does not exist.
+export PATH="/opt/homebrew/bin:$PATH"
+
+LEDGER_HEADER=$(printf 'path\tline\tclaim\tcheck\tdisposition')
+
+# The spelled-number pattern is `docs/standards/prose.md` rule 3(c), verbatim.
+# It lives in one variable so the run and its positive control cannot drift:
+# an emptiness claim and a broken pattern print the same nothing.
+SPELLED_RE='\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|ninety|hundred)[- ](second|minute|px|pixel|ms|kW|sites?)'
+
+# The width at which a comment line counts as a "full-width continuation" for
+# pre-check (e). Prettier does not reflow comments, so a three-word line above a
+# line this long is a comment that was edited and left ragged.
+REFLOW_CONTINUATION_COLS=60
+
+usage() {
+  cat <<'EOF'
+Usage: bash .claude/scripts/sweep-report.sh <ledger.tsv> <base-sha>
+
+  ledger.tsv   claim ledger — path/line/claim/check/disposition TSV
+  base-sha     the commit the batch branched from
+
+Exit: 0 all checks passed, 1 a check failed, 2 no verdict reached.
+EOF
+}
+
+fatal() { # fatal <headline> [detail...] — no verdict is reachable
+  printf 'sweep-report: %s\n' "$1" >&2
+  shift
+  while [ $# -gt 0 ]; do
+    printf '  %s\n' "$1" >&2
+    shift
+  done
+  exit 2
+}
+
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+esac
+
+if [ $# -ne 2 ]; then
+  usage >&2
+  exit 2
+fi
+
+ledger_arg="$1"
+base_arg="$2"
+
+# The ledger path is resolved against the CALLER's directory, before the cd to
+# the repository root below moves the ground under a relative path.
+case "$ledger_arg" in
+  /*) ledger="$ledger_arg" ;;
+  *) ledger="$PWD/$ledger_arg" ;;
+esac
+[ -f "$ledger" ] || fatal "ledger is not a readable file: $ledger_arg"
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fatal "not inside a git repository"
+cd "$repo_root" || fatal "cannot enter the repository root: $repo_root"
+
+# Resolved to a full hex sha, and used in that form everywhere below: the two
+# pre-checks that run as pipelines embed it in a command STRING, and a hex sha
+# is the one spelling that cannot carry anything else into that string.
+base_sha=$(git rev-parse --verify --quiet "$base_arg^{commit}")
+rc=$?
+if [ "$rc" -ne 0 ] || [ -z "$base_sha" ]; then
+  fatal "base-sha does not resolve to a commit in this repository: $base_arg"
+fi
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/sweep-report.XXXXXX") || fatal "cannot create a temp directory"
+trap 'rm -rf "$work"' EXIT INT TERM
+
+ROWS="$work/rows.tsv"
+SUBJECTS="$work/subjects.tsv"
+SWEEPS="$work/sweeps.tsv"
+SCOPE="$work/scope.tsv"
+QUOTES="$work/quotes.tsv"
+RESOLVED="$work/resolved.tsv"
+FAILURES="$work/failures"
+PARSE_ERRORS="$work/parse-errors"
+CMD_OUT="$work/cmd.out"
+
+: >"$ROWS"
+: >"$SUBJECTS"
+: >"$SWEEPS"
+: >"$SCOPE"
+: >"$QUOTES"
+: >"$RESOLVED"
+: >"$FAILURES"
+: >"$PARSE_ERRORS"
+
+# A literal tab, for the parameter expansions that split the records below.
+# `IFS=$'\t' read` cannot do that job: tab is IFS whitespace, so bash collapses
+# runs of it and strips it from both ends, and an empty `line` column would
+# shift every field after it.
+TAB=$(printf '\t')
+
+# --- ledger parse and validation ------------------------------------------------------------
+#
+# One awk pass: it validates every row and emits the pre-checks' inputs into
+# purpose-shaped files, so nothing downstream re-parses the ledger and nothing
+# downstream can disagree with this pass about what the ledger said.
+#
+# Diagnostics go to a FILE the shell then prints to stderr, rather than to
+# awk's "/dev/stderr": that name is a gawk/BSD-awk convenience, not POSIX, and
+# this script has to say the same thing under whichever awk the box has.
+
+awk -v HEADER="$LEDGER_HEADER" \
+  -v ERRS="$PARSE_ERRORS" \
+  -v ROWS="$ROWS" \
+  -v SUBJECTS="$SUBJECTS" \
+  -v SWEEPS="$SWEEPS" \
+  -v SCOPE="$SCOPE" \
+  -v QUOTES="$QUOTES" '
+BEGIN {
+  FS = "\t"; OFS = "\t"
+  split("verified-true trued deleted out-of-scope restored", d, " ")
+  for (i in d) OKD[d[i]] = 1
+  split("subject sweep control quote", k, " ")
+  for (i in k) OKK[k[i]] = 1
+  errs = 0; rows = 0
+}
+
+function err(msg) { printf("  ledger line %d: %s\n", FNR, msg) > (ERRS); errs++ }
+
+NR == 1 {
+  if ($0 != HEADER) {
+    printf("  the header is not the fixed format\n") > (ERRS)
+    printf("    expected: %s\n", HEADER) > (ERRS)
+    printf("    found:    %s\n", $0) > (ERRS)
+    errs++
+  }
+  next
+}
+
+/^[ \t]*$/ { next }
+
+{
+  if (NF < 5) {
+    err("has " NF " field(s); the fixed format is five tab-separated columns")
+    next
+  }
+  path = $1; line = $2; claim = $3; check = $4; disp = $5
+  if (path == "") err("column 1 (path) is empty")
+  if (claim == "") err("column 3 (claim) is empty")
+  if (check == "") err("column 4 (check) is empty")
+  if (!(disp in OKD)) {
+    err("unknown disposition \"" disp "\" — allowed: verified-true, trued, deleted, out-of-scope, restored")
+    next
+  }
+
+  nsubject = 0; nsweep = 0; ncontrol = 0; nquote = 0; sweep = ""; control = ""
+  for (i = 6; i <= NF; i++) {
+    f = $i
+    if (f == "") { err("trailing field " i " is empty — a directive field is key=value"); continue }
+    p = index(f, "=")
+    if (p < 2) { err("trailing field " i " is not key=value: \"" f "\""); continue }
+    key = substr(f, 1, p - 1); val = substr(f, p + 1)
+    if (!(key in OKK)) { err("unknown directive key \"" key "\" — allowed: subject, sweep, control, quote"); continue }
+    if (val == "") { err("directive \"" key "\" has an empty value"); continue }
+    if (key == "subject") { nsubject++; print path, val > (SUBJECTS) }
+    else if (key == "sweep") { nsweep++; sweep = val }
+    else if (key == "control") { ncontrol++; control = val }
+    else if (key == "quote") { nquote++; print FNR, val > (QUOTES) }
+  }
+
+  if ((disp == "trued" || disp == "deleted") && nsubject == 0)
+    err("a " disp " row must name the trimmed subject — add subject=<identifier>")
+  if (disp == "out-of-scope" && nquote == 0)
+    err("an out-of-scope row must name at least one quote= for its tech-debt entry")
+  if (nsweep > 1) err("more than one sweep= on one row — give a sweep its own row")
+  if (ncontrol > 1) err("more than one control= on one row")
+  if (nsweep == 1 && ncontrol != 1)
+    err("sweep= without control= — a sweep ships with a named carrier it must return (prose.md rule 3(b))")
+  if (ncontrol == 1 && nsweep != 1)
+    err("control= without sweep=")
+  if (nsweep == 1 && ncontrol == 1) print control, sweep > (SWEEPS)
+  if (disp == "out-of-scope") print FNR, path, line, claim > (SCOPE)
+
+  print path, disp > (ROWS)
+  rows++
+}
+
+END {
+  if (rows == 0) {
+    printf("  the ledger holds no data rows — a report over nothing is not a report\n") > (ERRS)
+    errs++
+  }
+  if (errs > 0) exit 2
+}
+' "$ledger"
+parse_rc=$?
+
+if [ "$parse_rc" -ne 0 ]; then
+  printf 'sweep-report: the ledger is not valid — no report is produced.\n' >&2
+  cat "$PARSE_ERRORS" >&2
+  exit 2
+fi
+
+# --- report plumbing ------------------------------------------------------------------------
+
+checks_run=0
+checks_failed=0
+
+check_fail() { # check_fail <one-line reason>
+  printf 'FAIL — %s\n\n' "$1"
+  printf '%s\n' "$1" >>"$FAILURES"
+  checks_failed=$((checks_failed + 1))
+}
+
+check_pass() { # check_pass <one-line reason>
+  printf 'ok — %s\n\n' "$1"
+}
+
+# render_cmd — the displayed form of an argv, quoted so that what the report
+# shows is what a reader can paste back. It is built FROM the argv the next line
+# runs, never typed beside it: a displayed command that drifts from the executed
+# one is this script's own version of the defect it exists to stop.
+render_cmd() {
+  local rendered="" arg
+  for arg in "$@"; do
+    case "$arg" in
+      '') rendered="$rendered ''" ;;
+      *[!A-Za-z0-9_./=:-]*) rendered="$rendered '${arg//\'/\'\\\'\'}'" ;;
+      *) rendered="$rendered $arg" ;;
+    esac
+  done
+  printf '$%s\n' "$rendered"
+}
+
+# run_shown — print the command, run that exact argv, print its output. The
+# output lands in $CMD_OUT so the caller reads it as a file and counts it as a
+# number, never as an exit status (docs/standards/evidence.md sanctioned form 2).
+run_shown() {
+  render_cmd "$@"
+  "$@" >"$CMD_OUT" 2>&1
+  if [ -s "$CMD_OUT" ]; then
+    cat "$CMD_OUT"
+  else
+    printf '(no output)\n'
+  fi
+}
+
+# run_shown_pipeline — the same contract for the pre-check `prose.md` states AS
+# a pipeline. The string is displayed and executed, so they cannot diverge; it
+# is composed only from this script's own constants and the resolved hex base
+# sha, never from ledger text, which is why an eval-shaped form is safe here and
+# argv is used for everything the ledger parameterises.
+run_shown_pipeline() {
+  printf '$ %s\n' "$1"
+  bash -c "$1" >"$CMD_OUT" 2>&1
+  if [ -s "$CMD_OUT" ]; then
+    cat "$CMD_OUT"
+  else
+    printf '(no output)\n'
+  fi
+}
+
+line_count() { # line_count <file> -> the number of lines it holds, as a number
+  local n
+  n=$(command wc -l <"$1")
+  printf '%s' "${n// /}"
+}
+
+# --- the report ------------------------------------------------------------------------------
+
+# Static prose is emitted through QUOTED heredocs, never through printf format
+# strings: markdown backticks inside a format string read as command
+# substitution to shellcheck (SC2016), and a suppression comment is itself a
+# lint error (CLAUDE.md). Where a line needs a substitution AND a backtick, the
+# whole line is built as one double-quoted argument to `printf '%s\n'`.
+cat <<'EOF'
+## Sweep report
+
+Every figure and every pasted output below is this script's, not a lane's recollection — a
+reviewer re-runs it and diffs the result against the PR body (`docs/standards/prose.md`
+§ Trim batches rule 4).
+
+EOF
+printf '%s\n' "Command: \`bash .claude/scripts/sweep-report.sh $ledger_arg $base_arg\`"
+printf '%s\n\n' "Ledger: \`$ledger_arg\` · base: \`$base_sha\`"
+
+# Title fragment and totals table come out of ONE awk END block over ONE row
+# file. That is the whole answer to #520: the title line and the table's total
+# row are printfs over the same variables, so they cannot disagree.
+awk -F'\t' '
+function cell(p, d) { return ((p SUBSEP d) in c) ? c[p SUBSEP d] : 0 }
+{
+  path = $1; disp = $2
+  if (!(path in seen)) { seen[path] = 1; order[++n] = path }
+  total[path]++
+  c[path SUBSEP disp]++
+  g[disp]++
+  grand++
+}
+END {
+  printf("### PR title fragment\n\n")
+  printf("    %d checked — %d trued, %d deleted, %d raised\n\n", grand, g["trued"] + 0, g["deleted"] + 0, g["out-of-scope"] + 0)
+  printf("### Claim ledger totals\n\n")
+  printf("| file | claims | verified-true | trued | deleted | out-of-scope | restored |\n")
+  printf("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+  for (i = 1; i <= n; i++) {
+    p = order[i]
+    printf("| `%s` | %d | %d | %d | %d | %d | %d |\n", p, total[p], cell(p, "verified-true"), cell(p, "trued"), cell(p, "deleted"), cell(p, "out-of-scope"), cell(p, "restored"))
+  }
+  printf("| **total** | **%d** | **%d** | **%d** | **%d** | **%d** | **%d** |\n\n", grand, g["verified-true"] + 0, g["trued"] + 0, g["deleted"] + 0, g["out-of-scope"] + 0, g["restored"] + 0)
+}
+' "$ROWS"
+
+# --- pre-check (a): inbound references --------------------------------------------------------
+
+cat <<'EOF'
+### Pre-check (a) — inbound references (`prose.md` rule 3(a))
+
+For every subject the ledger names as trimmed: first the positive control — the subject must
+resolve at the base in the file the row names, which is what catches a mistyped subject — then
+the inbound sweep with that file excluded. **Every hit below is to be read.**
+
+EOF
+
+if [ ! -s "$SUBJECTS" ]; then
+  cat <<'EOF'
+(the ledger names no trimmed subject — no `trued` or `deleted` row)
+
+EOF
+else
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    subj_path=${rec%%"$TAB"*}
+    subject=${rec#*"$TAB"}
+    checks_run=$((checks_run + 1))
+    printf '```\n'
+    run_shown git grep -n -F -e "$subject" "$base_sha" -- "$subj_path"
+    control_hits=$(line_count "$CMD_OUT")
+    printf '\n'
+    run_shown git grep -n -F -e "$subject" -- ":!$subj_path"
+    inbound_hits=$(line_count "$CMD_OUT")
+    printf '```\n\n'
+    if [ "$control_hits" -eq 0 ]; then
+      check_fail "positive control: \`$subject\` is not in \`$subj_path\` at $base_sha — the ledger names a subject the base does not carry"
+    else
+      check_pass "\`$subject\`: control $control_hits hit(s) at base, $inbound_hits inbound reference(s) to read"
+    fi
+  done <"$SUBJECTS"
+fi
+
+# --- pre-check (b): ledger sweeps -------------------------------------------------------------
+
+cat <<'EOF'
+### Pre-check (b) — ledger sweeps, each with its positive control (`prose.md` rule 3(b))
+
+EOF
+
+if [ ! -s "$SWEEPS" ]; then
+  printf '(the ledger declares no sweep)\n\n'
+else
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    control=${rec%%"$TAB"*}
+    pattern=${rec#*"$TAB"}
+    checks_run=$((checks_run + 1))
+    printf '```\n'
+    run_shown git grep -n -P -e "$pattern"
+    sweep_hits=$(line_count "$CMD_OUT")
+    printf '```\n\n'
+    control_seen=$(command grep -c -F -e "$control" "$CMD_OUT")
+    if [ "$control_seen" -eq 0 ]; then
+      check_fail "sweep \`$pattern\` returned $sweep_hits line(s) and NONE of them is its declared carrier \`$control\` — the pattern is wrong, or the carrier is gone"
+    else
+      check_pass "sweep \`$pattern\`: $sweep_hits hit(s), carrier \`$control\` among them"
+    fi
+  done <"$SWEEPS"
+fi
+
+# --- pre-check (c): spelled-out figures --------------------------------------------------------
+
+cat <<'EOF'
+### Pre-check (c) — no spelled-out figure enters a comment (`prose.md` rule 3(c))
+
+EOF
+
+checks_run=$((checks_run + 1))
+printf '```\n'
+run_shown_pipeline "git diff $base_sha | command grep -E '^\\+' | command grep -iE '$SPELLED_RE'"
+spelled_hits=$(line_count "$CMD_OUT")
+printf '\n'
+printf '# positive control — the same pattern against a line known to match\n'
+run_shown_pipeline "printf '%s\\n' '+ // a three-second debounce' | command grep -iE '$SPELLED_RE'"
+spelled_control=$(line_count "$CMD_OUT")
+printf '```\n\n'
+
+if [ "$spelled_control" -eq 0 ]; then
+  fatal "pre-check (c)'s own positive control returned nothing" \
+    "The pattern matches nothing, so its empty result over the diff proves nothing." \
+    "This is a broken check, not a clean tree — no verdict (evidence.md form 5)."
+fi
+if [ "$spelled_hits" -gt 0 ]; then
+  check_fail "$spelled_hits added line(s) spell a figure out in words — prose.md rule 3(c)"
+else
+  check_pass "no spelled-out figure in the added lines; the control returned $spelled_control line(s)"
+fi
+
+# --- pre-check (d): tech-debt quote resolution --------------------------------------------------
+
+cat <<'EOF'
+### Pre-check (d) — every quoted string resolves (`prose.md` rule 3(d))
+
+One `git grep -nF` per `quote=` on an `out-of-scope` row. A miss fails loudly and the run exits
+non-zero, so the skeletons below can only cite what the tree actually holds.
+
+EOF
+
+if [ ! -s "$QUOTES" ]; then
+  cat <<'EOF'
+(the ledger has no `out-of-scope` row, so no quote to resolve)
+
+EOF
+else
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    rowid=${rec%%"$TAB"*}
+    quote=${rec#*"$TAB"}
+    checks_run=$((checks_run + 1))
+    printf '```\n'
+    run_shown git grep -n -F -e "$quote"
+    quote_hits=$(line_count "$CMD_OUT")
+    printf '```\n\n'
+    if [ "$quote_hits" -eq 0 ]; then
+      check_fail "unresolved quote (ledger line $rowid): \`$quote\` is in no file in this tree"
+    else
+      # The first hit's FILE is what the skeleton cites. tech-debt.md's own
+      # format rule forbids bare line numbers in an entry, so the line number
+      # stays here — as the evidence that the quote resolved — while the
+      # skeleton carries the file and the quoted string, the two pointers that
+      # survive an unrelated edit.
+      first_hit=$(command head -n 1 "$CMD_OUT")
+      hit_file=${first_hit%%:*}
+      printf '%s\t%s\t%s\n' "$rowid" "$hit_file" "$quote" >>"$RESOLVED"
+      check_pass "\`$quote\` resolves — $quote_hits hit(s), first in \`$hit_file\`"
+    fi
+  done <"$QUOTES"
+fi
+
+# --- pre-check (e): comment reflow --------------------------------------------------------------
+#
+# The detector is written out here and run twice — once over the diff, once over
+# a fixture known to contain exactly one offender. Same program, both times:
+# that is the only way "nothing remains" can be told apart from "my detector
+# never matched anything".
+#
+# The rule, stated once: among the diff's ADDED lines, a comment line of three
+# words or fewer that ends without punctuation, immediately above a comment line
+# at least REFLOW_CONTINUATION_COLS wide. Markdown files are skipped outright —
+# `#` is a heading there and `*` a bullet, and prettier reflows markdown prose
+# but not comments, which is the whole reason this check exists.
+
+REFLOW_AWK="$work/reflow.awk"
+cat >"$REFLOW_AWK" <<'AWK'
+function is_comment(s,   t) {
+  t = s
+  sub(/^[ \t]+/, "", t)
+  return (t ~ /^\/\//) || (t ~ /^#/) || (t ~ /^\*/) || (t ~ /^--/)
+}
+function body_of(s,   t) {
+  t = s
+  sub(/^[ \t]+/, "", t)
+  sub(/^(\/\/+|#+|\*+|--+)[ \t]*/, "", t)
+  sub(/[ \t]+$/, "", t)
+  return t
+}
+BEGIN { skip = 0; short = 0; hits = 0; file = "(unknown)" }
+/^\+\+\+ / {
+  file = substr($0, 7)
+  skip = (file ~ /\.md$/)
+  short = 0
+  next
+}
+/^(--- |@@|diff |index |old mode|new mode|new file|deleted file|similarity|rename|Binary)/ { short = 0; next }
+/^\+/ {
+  if (skip) { short = 0; next }
+  text = substr($0, 2)
+  if (!is_comment(text)) { short = 0; next }
+  body = body_of(text)
+  if (short && length(body) >= COLS) {
+    hits++
+    printf("%s: \"%s\" then a %d-column continuation: \"%s\"\n", file, prev, length(body), body)
+  }
+  nwords = (body == "") ? 0 : split(body, w, /[ \t]+/)
+  short = (nwords > 0 && nwords <= 3 && body !~ /[.,:;!?)]$/)
+  prev = body
+  next
+}
+{ short = 0 }
+END { exit (hits > 0) ? 1 : 0 }
+AWK
+
+REFLOW_FIXTURE="$work/reflow-control.diff"
+cat >"$REFLOW_FIXTURE" <<'FIXTURE'
++++ b/reflow-control.ts
++// a short note
++// this continuation line is deliberately wide enough to count as a full-width continuation
+FIXTURE
+
+cat <<'EOF'
+### Pre-check (e) — comment reflow (`prose.md` rule 3(e))
+
+EOF
+printf '%s\n' "Prettier does not reflow comments, so a 3-word-or-shorter unpunctuated comment line above"
+printf '%s\n' "a comment line of $REFLOW_CONTINUATION_COLS columns or more is an edit left ragged. The detector runs over the"
+cat <<'EOF'
+diff and then, immediately, over a fixture holding exactly one offender — the same program both
+times; it is written out by this script, so re-running the script is how a reviewer reproduces
+it. Markdown is out of scope: `#` is a heading there, not a comment.
+
+EOF
+
+DIFF_FILE="$work/diff.txt"
+git diff "$base_sha" >"$DIFF_FILE" 2>/dev/null
+
+checks_run=$((checks_run + 1))
+printf '```\n'
+run_shown awk -v COLS="$REFLOW_CONTINUATION_COLS" -f "$REFLOW_AWK" "$DIFF_FILE"
+reflow_hits=$(line_count "$CMD_OUT")
+printf '\n'
+printf '# positive control — the same detector over a fixture with one known offender\n'
+run_shown awk -v COLS="$REFLOW_CONTINUATION_COLS" -f "$REFLOW_AWK" "$REFLOW_FIXTURE"
+reflow_control=$(line_count "$CMD_OUT")
+printf '```\n\n'
+
+if [ "$reflow_control" -eq 0 ]; then
+  fatal "pre-check (e)'s own positive control returned nothing" \
+    "The detector matches nothing, so its silence over the diff proves nothing." \
+    "This is a broken check, not a clean diff — no verdict (evidence.md form 5)."
+fi
+if [ "$reflow_hits" -gt 0 ]; then
+  check_fail "the diff adds $reflow_hits ragged comment continuation(s) — prose.md rule 3(e)"
+else
+  check_pass "no ragged comment continuation in the diff; the control found its offender"
+fi
+
+# --- tech-debt entry skeletons --------------------------------------------------------------
+
+cat <<'EOF'
+### `docs/tech-debt.md` entry skeletons — one per `out-of-scope` row
+
+EOF
+
+if [ ! -s "$SCOPE" ]; then
+  cat <<'EOF'
+(no `out-of-scope` row, so no entry is owed)
+
+EOF
+else
+  today=$(date +%Y-%m-%d)
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    rowid=${rec%%"$TAB"*}
+    rest=${rec#*"$TAB"}
+    scope_path=${rest%%"$TAB"*}
+    rest=${rest#*"$TAB"}
+    scope_line=${rest%%"$TAB"*}
+    scope_claim=${rest#*"$TAB"}
+    printf '```markdown\n'
+    printf '## %s — %s\n' "$today" "$scope_claim"
+    printf '%s' "- Where: \`$scope_path\`"
+    while IFS= read -r res; do
+      res_row=${res%%"$TAB"*}
+      [ "$res_row" = "$rowid" ] || continue
+      res_rest=${res#*"$TAB"}
+      res_file=${res_rest%%"$TAB"*}
+      res_quote=${res_rest#*"$TAB"}
+      printf '%s' " · \`$res_file\` carries \"$res_quote\""
+    done <"$RESOLVED"
+    printf '\n'
+    printf -- '- What: %s\n' "$scope_claim"
+    printf -- '- Source: PR #<this PR>, ledger row %s (%s)\n' "$rowid" "${scope_line:-no line pinned}"
+    printf '```\n\n'
+  done <"$SCOPE"
+  cat <<'EOF'
+Every pointer above resolved in pre-check (d). `docs/tech-debt.md`'s own format rule forbids
+bare line numbers, so an entry cites the file and the quoted string.
+
+EOF
+fi
+
+# --- verdict ----------------------------------------------------------------------------------
+
+printf '### Verdict\n\n'
+if [ "$checks_failed" -eq 0 ]; then
+  printf 'sweep-report: OK — %d check(s) run, 0 failed.\n' "$checks_run"
+  exit 0
+fi
+
+printf 'sweep-report: %d of %d check(s) FAILED.\n\n' "$checks_failed" "$checks_run"
+while IFS= read -r reason; do
+  printf -- '- %s\n' "$reason"
+done <"$FAILURES"
+printf '\n'
+printf 'sweep-report: %d of %d check(s) failed — see the report above.\n' "$checks_failed" "$checks_run" >&2
+exit 1
