@@ -30,10 +30,11 @@
 # a gate rather than a convenience.
 #
 # Usage:
-#   merge-pr.sh <pr-number> [repo-root]
+#   merge-pr.sh [--method squash|rebase] <pr-number> [repo-root]
 #
 #     pr-number   the PR to merge
 #     repo-root   the repository to act in (default: the one holding this script)
+#     --method    override the squash/rebase inference (see the classify step)
 #
 # Exit:  0 the chain completed (or had already completed on an earlier run)
 #        1 a step failed or refused — the message names it; fix the cause and re-run
@@ -62,7 +63,16 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 : "${MERGE_PR_EXPECTED_CHECKS:=0}"                     # a floor the operator can raise; see the checks step
 : "${MERGE_PR_CONFIRM_RETRIES:=5}"                     # re-reads allowed for an eventually-consistent state
 
-PR_JSON_FIELDS='body,commits,files,headRefName,headRefOid,labels,mergeStateStatus,number,state,statusCheckRollup,url'
+# `files` is deliberately NOT in this list. `gh pr view --json files` is
+# `files(first: 100)` with no truncation signal, and the humanAlways decision made
+# off a silently-truncated file list fails in the one direction that cannot be
+# taken back: a PR touching CLAUDE.md as its 120th file would classify AUTO and
+# merge without the owner. The file list is read separately, paginated, exactly as
+# .github/workflows/ci.yml's merge-ritual-gate reads it and for the reason its
+# comment (c) gives. `commits` carries the same cap and is left on this list: it
+# feeds only the curated-history check, whose comparison is against a member count
+# of two to six, so a truncated answer refuses rather than merges.
+PR_JSON_FIELDS='body,commits,headRefName,headRefOid,labels,mergeStateStatus,number,state,statusCheckRollup,url'
 
 # The numeric knobs are validated here rather than where they are used. Under
 # `set -u` without `set -e`, a `[ "$x" -gt 0 ]` on a non-numeric value prints an
@@ -82,10 +92,11 @@ done
 
 usage() {
   cat >&2 <<'EOF'
-usage: merge-pr.sh <pr-number> [repo-root]
+usage: merge-pr.sh [--method squash|rebase] <pr-number> [repo-root]
 
   pr-number   the PR to merge
   repo-root   the repository to act in (default: the one holding this script)
+  --method    override the squash/rebase inference (see the classify step)
 
 Exit: 0 chain complete, 1 a step failed or refused (a re-run resumes there), 2 no verdict.
 EOF
@@ -94,9 +105,20 @@ EOF
 
 pr_number=""
 repo_root=""
+method_override=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) usage ;;
+    --method)
+      shift
+      case "${1-}" in
+        squash | rebase) method_override="$1" ;;
+        *)
+          printf 'merge-pr: --method takes squash or rebase, got "%s"\n' "${1-}" >&2
+          usage
+          ;;
+      esac
+      ;;
     -*)
       printf 'merge-pr: unknown option %s\n' "$1" >&2
       usage
@@ -195,7 +217,6 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   put("mergeStateStatus", pr.mergeStateStatus);
   put("url", pr.url);
   for (const l of pr.labels || []) put("label", l && l.name);
-  for (const f of pr.files || []) put("file", f && f.path);
   for (const c of pr.commits || []) put("commit", c && c.messageHeadline);
   for (const c of pr.statusCheckRollup || []) {
     // Two shapes share this array. A CheckRun carries status + conclusion; a
@@ -254,7 +275,6 @@ pr_head_sha=""
 pr_merge_state=""
 pr_url=""
 pr_labels=()
-pr_files=()
 pr_closes=()
 pr_commits=()
 check_names=()
@@ -283,7 +303,6 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
   pr_merge_state=""
   pr_url=""
   pr_labels=()
-  pr_files=()
   pr_closes=()
   pr_commits=()
   check_names=()
@@ -300,7 +319,6 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
       mergeStateStatus) pr_merge_state="$a" ;;
       url) pr_url="$a" ;;
       label) pr_labels+=("$a") ;;
-      file) pr_files+=("$a") ;;
       closes) pr_closes+=("$a") ;;
       commit) pr_commits+=("$a") ;;
       check)
@@ -333,8 +351,10 @@ already_merged=0
 
 # --- step: classify ----------------------------------------------------------------------------
 #
-# Two independent classifications, both read here so the whole run's shape is
-# stated on one line before anything mutates.
+# Two independent classifications, and every refusal either of them implies, all
+# resolved HERE — before update-branch has touched the branch and before the poll
+# has spent a CI round. A refusal that arrives at the merge step has already cost
+# what it exists to save.
 
 merge_method=""
 case "${#pr_closes[@]}" in
@@ -349,6 +369,37 @@ case "${#pr_closes[@]}" in
     merge_reason="batch of ${#pr_closes[@]} issues (${closes_list# }) -> rebase"
     ;;
 esac
+
+# An explicit --method overrides the inference, and exists because the inference
+# is a heuristic rather than a fact. "Batch" is a run-issue lane property —
+# `orchestration.routeRule`'s 2-6 members, one agent, one in-flight row — and a
+# Closes count only correlates with it: PR #414 carried four Closes lines and was
+# squash-merged. The inference stays the default because the issue asks for it;
+# an operator who knows the lane says so and is believed.
+if [ -n "$method_override" ]; then
+  merge_method="--$method_override"
+  merge_reason="$merge_reason, overridden to $method_override"
+fi
+
+# The changed-file list, paginated. `--paginate` is what makes the answer the
+# whole PR rather than its first 100 files (see the PR_JSON_FIELDS comment), and
+# the shape is lifted verbatim from .github/workflows/ci.yml's merge-ritual-gate
+# step, which reads the same list for the same reason.
+pr_files=()
+files_out=$("$MERGE_PR_GH_CMD" api "repos/{owner}/{repo}/pulls/$pr_number/files" \
+  --paginate --jq '.[].filename' 2>&1)
+files_rc=$?
+[ "$files_rc" -eq 0 ] || fail 'classify' "could not read the changed-file list (gh api exited $files_rc): $files_out"
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  pr_files+=("$path")
+done <<EOF
+$files_out
+EOF
+# A PR with no files is not a thing GitHub produces, so an empty list means the
+# read answered something this script does not understand — and an empty list is
+# exactly what classifies every humanAlways PR as AUTO.
+[ "${#pr_files[@]}" -gt 0 ] || fail 'classify' "the changed-file list came back empty for PR #$pr_number — refusing to classify humanAlways against nothing"
 
 # humanAlways matching, against the list .claude/workflow.json owns. The glob
 # subset understood is exactly two shapes — a literal path, and a `<dir>/**`
@@ -403,7 +454,48 @@ if [ -n "$human_hits" ]; then
   class_summary="HUMAN (humanAlways: $human_hits)"
 fi
 
+curated_history_ok() { # -> 0, or 1 with the reason on stdout
+  # .claude/skills/run-issue/SKILL.md step 4 makes --rebase conditional on this:
+  # one commit per surviving member, each naming its member issue. A script that
+  # took the rebase branch without checking would merge batches on terms the repo
+  # forbids, so the check travels with the branch that needs it.
+  local n m found
+  if [ "${#pr_commits[@]}" -ne "${#pr_closes[@]}" ]; then
+    printf 'curated history: %s commit(s) for %s member issue(s) — a batch merges --rebase only when those match\n' \
+      "${#pr_commits[@]}" "${#pr_closes[@]}"
+    return 1
+  fi
+  for n in "${pr_closes[@]}"; do
+    found=0
+    for m in "${pr_commits[@]}"; do
+      case "$m" in
+        *"#$n"*)
+          found=1
+          break
+          ;;
+      esac
+    done
+    if [ "$found" = "0" ]; then
+      printf 'curated history: no commit subject references member issue #%s\n' "$n"
+      return 1
+    fi
+  done
+  return 0
+}
+
 step 'classify' "PR #$pr_number is $pr_state on '$pr_head_ref'; $merge_reason; $class_summary"
+
+# Every refusal the classification already implies is taken HERE, while the branch
+# is still untouched and no CI round has been spent. Deferring either of these to
+# the merge step would mean refusing AFTER update-branch had written to the branch
+# and the poll had waited out a full run — the cost this script exists to save.
+if [ "$already_merged" = "0" ]; then
+  [ -n "$merge_method" ] || fail 'classify' \
+    "$merge_reason — cannot tell a single-issue squash from a batch rebase. Add the Closes line to the body, or pass --method squash|rebase"
+  if [ "$merge_method" = "--rebase" ]; then
+    curated_reason=$(curated_history_ok) || fail 'classify' "$curated_reason"
+  fi
+fi
 
 # --- step: feedback ---------------------------------------------------------------------------
 #
@@ -414,6 +506,22 @@ step 'classify' "PR #$pr_number is $pr_state on '$pr_head_ref'; $merge_reason; $
 # is not this run's business. Matching the heading against the PR number would be
 # wrong — the declared heading form is `## YYYY-MM-DD — [PR/issue #n — ]<slug>`,
 # and real entries use the `issue #n` spelling as often as the `PR #n` one.
+#
+# The placeholder is looked for in the two FIELDS that declare it, not anywhere in
+# the added text. docs/review-feedback.md's own `## Entry format` section quotes
+# the literal twice while explaining it, so a PR editing that section — itself a
+# plausible humanAlways change — would otherwise be refused with a message about
+# an unfilled verdict it does not have. Safe direction, wrong diagnosis, and a
+# refusal whose stated reason is false teaches the reader to stop believing it.
+#
+# What this step reads is the PATH docs/review-feedback.md and the LITERAL
+# "pending — filled at merge". Both are owned elsewhere — `.claude/workflow.json`'s
+# feedbackLog for the path, docs/review-feedback.md's `## Entry format` for the
+# literal — so both are ledgered there (architecture.md rule 9), and this comment
+# is the pointer back. The failure direction if either moves without this file:
+# the added-lines set comes back empty or the field lines stop matching, and the
+# step REFUSES with a message naming the stale path. Loud and closed, never a
+# quiet pass.
 
 feedback_state() { # -> 0 entry present and filled; 1 refuse (reason on stdout); 2 unreadable
   local diff rc spool added
@@ -446,8 +554,19 @@ feedback_state() { # -> 0 entry present and filled; 1 refuse (reason on stdout);
     printf 'the branch touches docs/review-feedback.md but adds no "## " entry heading\n'
     return 1
   fi
-  if printf '%s\n' "$added" | grep -qF 'pending — filled at merge'; then
-    printf 'the entry still carries the literal "pending — filled at merge" placeholder. A verdict is a human-approved decision and this script will never write one: fill Category AND Verdict on the branch, push, then re-run\n'
+
+  local fields
+  fields=$(printf '%s\n' "$added" | grep -E '^- \*\*(Category|Verdict)\*\*:')
+  if ! printf '%s\n' "$fields" | grep -q 'Category'; then
+    printf 'the added entry has no "- **Category**:" line — an entry that cannot carry a category cannot record a decision\n'
+    return 1
+  fi
+  if ! printf '%s\n' "$fields" | grep -q 'Verdict'; then
+    printf 'the added entry has no "- **Verdict**:" line — the verdict is what the merge is waiting on\n'
+    return 1
+  fi
+  if printf '%s\n' "$fields" | grep -qF 'pending — filled at merge'; then
+    printf 'the entry Category or Verdict still reads the literal "pending — filled at merge". A verdict is a human-approved decision and this script will never write one: fill BOTH on the branch, push, then re-run\n'
     return 1
   fi
   return 0
@@ -476,12 +595,20 @@ fi
 
 # --- step: update-branch -----------------------------------------------------------------------
 #
-# Unconditional and FIRST, per .claude/skills/review-loop/SKILL.md step 5: a green
-# watch on a stale head is not a mergeable state, and the bounce costs a whole
-# second CI round to discover (#229, #241). Two non-zero answers here are not
-# failures — "already up to date", which is the common case, and the head-sha race
-# (GitHub rejects the update when the head moved between gh's read and the API
-# call), which is simply retried.
+# FIRST, per .claude/skills/review-loop/SKILL.md step 5: a green watch on a stale
+# head is not a mergeable state, and the bounce costs a whole second CI round to
+# discover (#229, #241). "Unconditional" in that sentence means "never skipped
+# because a watch looked green" — it is NOT unconditional across merge methods.
+#
+# A --rebase batch never runs it. `gh pr update-branch` writes a MERGE COMMIT, and
+# .claude/skills/run-issue/SKILL.md step 4 says why that is fatal there: a merge
+# commit breaks the one-commit-per-member invariant and blocks rebase-merge
+# outright, so a batch that is BEHIND or conflicted gets a "curate onto latest
+# main" bounce to the branch's owner instead (the same rule is carried by
+# .claude/agents/task-orchestrator.md's bounce paragraphs and mirrored in
+# docs/design/task-orchestrator.md). Running it anyway would pollute the branch
+# first and only then refuse at the merge step — a refusal that costs exactly what
+# it exists to prevent.
 
 checks_baseline=0
 
@@ -490,21 +617,36 @@ update_branch_step() {
   while [ "$attempt" -le "$MERGE_PR_UPDATE_RETRIES" ]; do
     out=$("$MERGE_PR_GH_CMD" pr update-branch "$pr_number" 2>&1)
     rc=$?
-    if [ "$rc" -eq 0 ]; then
-      step 'update-branch' "updated onto the base (attempt $attempt)"
-      return 0
-    fi
     # Matched against a lowercased copy rather than with `shopt -s nocasematch`:
     # that shell option is global, and a function that leaves it set changes how
     # every later `case` in the script matches.
     lower=$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')
+    if [ "$rc" -eq 0 ]; then
+      # gh reports the no-op case on the SUCCESS path ("PR branch already
+      # up-to-date"), and the API has also been seen rejecting it as a 422. Both
+      # spellings are read here, because which one you get is gh's business and
+      # the distinction this step reports is updated-or-not.
+      case "$lower" in
+        *"already up to date"* | *"already up-to-date"* | *"not behind"*)
+          step 'update-branch' 'already up to date with the base'
+          ;;
+        *) step 'update-branch' "updated onto the base (attempt $attempt)" ;;
+      esac
+      return 0
+    fi
     case "$lower" in
       *"already up to date"* | *"already up-to-date"* | *"not behind"*)
         step 'update-branch' 'already up to date with the base'
         return 0
         ;;
-      *"head sha"* | *"out of date"* | *"stale"*)
-        # The race this retry exists for: sleeping and asking again is the fix.
+      # The head-sha race. gh drives this through the GraphQL
+      # `updatePullRequestBranch` mutation, whose argument is `expectedHeadOid`,
+      # while the REST endpoint spells the same thing `expected_head_sha` — so
+      # both vocabularies are matched rather than whichever one a given gh build
+      # happens to surface. An unmatched spelling falls to the `*)` arm and fails
+      # the run, which is the safe direction: a re-run is the repair.
+      *"head sha"* | *"head oid"* | *"expected head"* | *"expectedheadoid"* | \
+        *"out of date"* | *"stale"*)
         if [ "$attempt" -ge "$MERGE_PR_UPDATE_RETRIES" ]; then
           fail 'update-branch' "the head moved under every one of $MERGE_PR_UPDATE_RETRIES attempts: $out"
         fi
@@ -521,20 +663,32 @@ update_branch_step() {
 
 if [ "$already_merged" = "1" ]; then
   step 'update-branch' 'skipped (PR is already MERGED)'
+elif [ "$merge_method" = "--rebase" ]; then
+  checks_baseline=${#check_names[@]}
+  step 'update-branch' 'skipped — a --rebase batch is curated and force-pushed by its owner, never updated from here (a merge commit would block rebase-merge)'
 else
   # The count of checks on the PRE-update head is the floor the post-update head
-  # must reach. That is the whole answer to "the expected count is present":
-  # after an update-branch the rollup is briefly empty or short while the new
-  # head's workflows register, and "no check is pending" is trivially true of a
-  # rollup with no checks in it yet. Derived from this PR rather than from the
-  # base branch, because the base branch's workflow set is not this PR's.
+  # must reach. After an update-branch the rollup is briefly empty or short while
+  # the new head's workflows register, and "no check is pending" is trivially true
+  # of a rollup with no checks in it yet; the floor is what makes the poll wait for
+  # the ones that have not arrived. Derived from this PR rather than from the base
+  # branch, because the base branch's workflow set is not this PR's.
+  #
+  # What the floor does NOT deliver, stated so nobody trusts it for more: it is a
+  # floor, not a required-checks list. A head whose PREVIOUS read also had no
+  # checks — a PR polled for the first time seconds after its push — yields a floor
+  # of 1, so one green check would clear the poll. What stops a merge there is
+  # branch protection, which this script deliberately does not restate: the merge
+  # runs only from mergeStateStatus CLEAN, and a head missing a required check is
+  # BLOCKED, not CLEAN. MERGE_PR_EXPECTED_CHECKS raises the floor for an operator
+  # who wants the poll itself to wait rather than the merge step to refuse.
   checks_baseline=${#check_names[@]}
   update_branch_step
 fi
 
 # --- step: checks -------------------------------------------------------------------------------
 
-checks_verdict() { # -> ready:<n> | pending:<present>/<expected>:<pending> | failed:<name>:<conclusion>
+checks_verdict() { # -> ready:<n> | pending:<present>:<expected>:<pending> | failed:<name>:<conclusion>
   local expected i total pending
   expected="$checks_baseline"
   [ "$MERGE_PR_EXPECTED_CHECKS" -gt "$expected" ] && expected="$MERGE_PR_EXPECTED_CHECKS"
@@ -600,51 +754,35 @@ fi
 
 # --- step: merge ---------------------------------------------------------------------------------
 
-curated_history_ok() { # -> 0, or 1 with the reason on stdout
-  # .claude/skills/run-issue/SKILL.md step 4 makes --rebase conditional on this:
-  # one commit per surviving member, each naming its member issue. A script that
-  # took the rebase branch without checking would merge batches on terms the repo
-  # forbids, so the check travels with the branch that needs it.
-  local n m found
-  if [ "${#pr_commits[@]}" -ne "${#pr_closes[@]}" ]; then
-    printf 'curated history: %s commit(s) for %s member issue(s) — a batch merges --rebase only when those match\n' \
-      "${#pr_commits[@]}" "${#pr_closes[@]}"
-    return 1
-  fi
-  for n in "${pr_closes[@]}"; do
-    found=0
-    for m in "${pr_commits[@]}"; do
-      case "$m" in
-        *"#$n"*)
-          found=1
-          break
-          ;;
-      esac
-    done
-    if [ "$found" = "0" ]; then
-      printf 'curated history: no commit subject references member issue #%s\n' "$n"
-      return 1
-    fi
-  done
-  return 0
-}
-
 if [ "$already_merged" = "1" ]; then
   step 'merge' 'skipped (PR is already MERGED)'
 else
-  [ -n "$merge_method" ] || fail 'merge' "$merge_reason — cannot tell a single-issue squash from a batch rebase"
-  if [ "$merge_method" = "--rebase" ]; then
-    curated_reason=$(curated_history_ok) || fail 'merge' "$curated_reason"
-  fi
-
+  # The curated-history check ran at classify time; re-running it here would read
+  # the same commits. What is re-read is the merge state, which the poll may have
+  # moved.
+  #
   # mergeStateStatus is eventually consistent: GitHub answers UNKNOWN while it is
-  # still computing the merge, so that one state is re-read rather than refused.
+  # still computing the merge, so that one state is re-read rather than refused —
+  # and the loop watches for MERGED as well, because a merged PR ALSO reports
+  # UNKNOWN, so a PR merged by someone else during this window would otherwise
+  # burn every retry and then fail on a PR that is merged.
   attempt=1
-  while [ "$pr_merge_state" = "UNKNOWN" ] && [ "$attempt" -lt "$MERGE_PR_CONFIRM_RETRIES" ]; do
+  while [ "$pr_merge_state" = "UNKNOWN" ] && [ "$pr_state" != "MERGED" ] &&
+    [ "$attempt" -lt "$MERGE_PR_CONFIRM_RETRIES" ]; do
     sleep "$MERGE_PR_RETRY_SECONDS"
     read_pr || fail 'merge' "$last_error"
     attempt=$((attempt + 1))
   done
+fi
+
+if [ "$already_merged" = "0" ] && [ "$pr_state" = "MERGED" ]; then
+  already_merged=1
+  step 'merge' 'skipped (the PR was merged elsewhere while this run was working)'
+elif [ "$already_merged" = "0" ]; then
+  if [ "$pr_merge_state" != "CLEAN" ] && [ "$merge_method" = "--rebase" ]; then
+    # A batch's repair is never gh pr update-branch — see the update-branch step.
+    fail 'merge' "mergeStateStatus is '$pr_merge_state', not CLEAN, and this is a --rebase batch: the repair is a \"curate onto latest main\" bounce to the branch's owner, force-pushed, not an update from here"
+  fi
   [ "$pr_merge_state" = "CLEAN" ] || fail 'merge' "mergeStateStatus is '$pr_merge_state', not CLEAN — a merge is only ever taken from CLEAN"
 
   merge_out=$("$MERGE_PR_GH_CMD" pr merge "$pr_number" "$merge_method" 2>&1)

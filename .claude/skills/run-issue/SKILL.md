@@ -43,6 +43,15 @@ the section before you dispatch.
    chain of `.claude/skills/review-loop/SKILL.md` step 5, unchanged — including the
    `humanAlways` ritual, and the merge-time `Category`/`Verdict` fill, which reaches the agent
    as a bounce because only it writes to its worktree.
+   **`bash .claude/scripts/merge-pr.sh <pr>` runs that chain's mechanical half for you** —
+   `gh pr update-branch` with retries against the head-sha race, the pending-aware checks
+   poll, a merge taken only from `CLEAN`, and then, only once the PR reports `MERGED`, the
+   label removal, the `Closes`-issue check and the worktree reap. It is idempotent and
+   re-runnable from any state, so the repair for a chain that dies mid-poll is to run it
+   again; a failure names the step the next run resumes from. It never fills a **Verdict** —
+   a `humanAlways` PR whose entry still carries the `pending — filled at merge` placeholder
+   is refused outright — so the fill above stays a bounce to the agent, and every judgement
+   this prose owns stays yours.
 4. **Rebase hand-off** — your second touchpoint, and only when `main` moved. After every
    merge, `gh pr view --json mergeStateStatus` on each open lane PR. `BEHIND` → run
    `gh pr update-branch` yourself; it is mechanical. `DIRTY` → `REBASE — <what merged since
@@ -103,14 +112,6 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    report's branch commit list must show commit count == surviving-member count, each
    commit referencing its member issue, and `git log --oneline main..<branch>` must match
    it (CI green AND curated history are both required; either failing blocks the merge).
-   **`bash .claude/scripts/merge-pr.sh <pr>` runs that chain for you**, idempotently and
-   re-runnably from any state, and a network death mid-chain is repaired by running it
-   again — the failure names the step the next run resumes from. It performs the mechanical
-   half only: update-branch with retries, the pending-aware poll, `CLEAN`-only merge, the
-   squash/rebase choice with the curated-history check, and the post-merge label, issue and
-   worktree steps. It never fills a **Verdict** — a humanAlways PR still carrying the
-   `pending — filled at merge` placeholder is refused outright — so the fill above stays
-   yours, and so does every judgement the prose here owns.
    A batch that is BEHIND or conflicted gets a "curate onto latest main" bounce instead of
    `gh pr update-branch` (a merge commit would break the invariant and block rebase-merge);
    after the force-push, wait for the new head's checks as usual. HUMAN-class: notify the
