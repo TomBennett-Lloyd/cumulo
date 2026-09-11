@@ -1,5 +1,7 @@
 import {
+  fleetForecastAggregate,
   utcIsoTimestampSchema,
+  type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
   type Site,
@@ -104,7 +106,7 @@ const ACTUALS: readonly GenerationReading[] = [
 
 /** The canned answers to the calls the panel makes. */
 export interface StubFleet {
-  readonly forecasts: FleetSourceResult<readonly Forecast[]>;
+  readonly forecasts: FleetSourceResult<readonly FleetForecastAggregatePoint[]>;
   readonly actuals: FleetSourceResult<readonly GenerationReading[]>;
   /**
    * Non-null fails the *overlay* read only.
@@ -118,8 +120,22 @@ export interface StubFleet {
 
 const ready = <T,>(value: T): FleetSourceResult<T> => ({ kind: 'ok', value });
 
+/**
+ * The fleet's forecasts as the seam now hands them over: summed, one point per hour (#494).
+ *
+ * Built from the per-site rows above through `fleetForecastAggregate` — the same `@cumulo/shared`
+ * function the producer writes its partials with and the demo source computes with — rather than
+ * hand-written as aggregate points. The fixtures below still say what they mean in per-site terms
+ * ("07:00 loses site B"), and the divisor and contributing count each hour carries are the ones a
+ * real fleet of these sites would have, not numbers a fixture chose.
+ */
+const summed = (
+  forecasts: readonly Forecast[],
+): FleetSourceResult<readonly FleetForecastAggregatePoint[]> =>
+  ready(fleetForecastAggregate(forecasts, SITES));
+
 export const FULL_FLEET: StubFleet = {
-  forecasts: ready(FORECASTS),
+  forecasts: summed(FORECASTS),
   actuals: ready(ACTUALS),
   siteForecastError: null,
 };
@@ -133,7 +149,7 @@ export const OVERLAYLESS_FLEET: StubFleet = {
 /** 07:00 loses site B, so that hour aggregates one of the fleet's two sites and 06:00 keeps both. */
 export const PARTIAL_FLEET: StubFleet = {
   ...FULL_FLEET,
-  forecasts: ready(
+  forecasts: summed(
     FORECASTS.filter(
       (forecast) => !(forecast.siteId === SITE_B_ID && forecast.validTime === timestamp(7)),
     ),
@@ -150,7 +166,7 @@ export const PARTIAL_FLEET: StubFleet = {
  */
 export const FORECASTLESS_FLEET: StubFleet = {
   ...FULL_FLEET,
-  forecasts: ready([]),
+  forecasts: summed([]),
   actuals: ready([]),
 };
 
@@ -192,7 +208,7 @@ export const ACTUALS_FAILED_FLEET: StubFleet = {
  * from one window cannot be mistaken for a row from the other in an assertion.
  */
 export const DISJOINT_WINDOW_FLEET: StubFleet = {
-  forecasts: ready([
+  forecasts: summed([
     forecastAt(SITE_A_ID, 12, 2, band(1, 3)),
     forecastAt(SITE_B_ID, 12, 4, band(3, 6)),
     forecastAt(SITE_A_ID, 13, 3, band(2, 4)),
@@ -218,7 +234,7 @@ export const DISJOINT_WINDOW_FLEET: StubFleet = {
  */
 export const ACTUALS_ONLY_FLEET: StubFleet = {
   ...DISJOINT_WINDOW_FLEET,
-  forecasts: ready([]),
+  forecasts: summed([]),
 };
 
 const FULL_CAPABILITIES: FleetSourceCapabilities = { fleetLookback: true, fleetActuals: true };
@@ -287,7 +303,7 @@ export class CountingFleetSource implements FleetDataSource {
 
   readonly fleetForecasts = (
     range: RangeHours,
-  ): Promise<FleetSourceResult<readonly Forecast[]>> => {
+  ): Promise<FleetSourceResult<readonly FleetForecastAggregatePoint[]>> => {
     this.forecastRanges.push(range);
     return Promise.resolve(this.canned.forecasts);
   };

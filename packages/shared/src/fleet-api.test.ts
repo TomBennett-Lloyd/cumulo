@@ -133,27 +133,63 @@ describe('fleetActualsResponseSchema', () => {
 });
 
 describe('fleetForecastResponseSchema', () => {
-  it('accepts fleet-wide forecasts carrying the attribution as a peer of the data it credits', () => {
+  /** One hour of the fleet, as the roll-up read serves it (#494): summed, with its own divisor. */
+  const point = {
+    validTime: '2026-07-30T14:00:00Z',
+    acPowerKw: 12.4,
+    uncertainty: { p10AcPowerKw: 9.1, p90AcPowerKw: 15.8 },
+    contributingSiteCount: 3,
+    contributingCapacityKw: 18.6,
+  };
+
+  it('accepts summed fleet points carrying the attribution as a peer of the data it credits', () => {
     const result = fleetForecastResponseSchema.safeParse({
-      forecasts: [forecast],
+      points: [point],
       attribution: openMeteoAttribution,
     });
 
     expect(result.success).toBe(true);
   });
 
-  it('accepts an empty forecasts array — a fleet awaiting its first cycle is a 200', () => {
+  it('accepts an empty points array — a fleet awaiting its first cycle is a 200', () => {
     expect(
-      fleetForecastResponseSchema.safeParse({ forecasts: [], attribution: openMeteoAttribution })
+      fleetForecastResponseSchema.safeParse({ points: [], attribution: openMeteoAttribution })
         .success,
     ).toBe(true);
   });
 
+  it('accepts an hour with no band, which is what no site having one means', () => {
+    expect(
+      fleetForecastResponseSchema.safeParse({
+        points: [{ ...point, uncertainty: undefined }],
+        attribution: openMeteoAttribution,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a point with no divisor — the percent view would have nothing to divide by', () => {
+    expect(
+      fleetForecastResponseSchema.safeParse({
+        points: [{ ...point, contributingCapacityKw: undefined }],
+        attribution: openMeteoAttribution,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a per-site forecast row, the shape this envelope stopped carrying', () => {
+    expect(
+      fleetForecastResponseSchema.safeParse({
+        points: [forecast],
+        attribution: openMeteoAttribution,
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects a bare array, the shape the wrapper exists to avoid', () => {
-    expect(fleetForecastResponseSchema.safeParse([forecast]).success).toBe(false);
+    expect(fleetForecastResponseSchema.safeParse([point]).success).toBe(false);
   });
 
   it('rejects a body missing attribution', () => {
-    expect(fleetForecastResponseSchema.safeParse({ forecasts: [forecast] }).success).toBe(false);
+    expect(fleetForecastResponseSchema.safeParse({ points: [point] }).success).toBe(false);
   });
 });

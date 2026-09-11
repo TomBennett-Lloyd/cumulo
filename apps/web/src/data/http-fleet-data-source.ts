@@ -7,6 +7,7 @@ import {
   siteSeriesResponseSchema,
   utcIsoTimestampSchema,
   type CreateSiteInput,
+  type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
   type Site,
@@ -319,7 +320,7 @@ export class HttpFleetDataSource implements FleetDataSource {
    */
   readonly fleetForecasts = async (
     range: RangeHours,
-  ): Promise<FleetSourceResult<readonly Forecast[]>> =>
+  ): Promise<FleetSourceResult<readonly FleetForecastAggregatePoint[]>> =>
     mapOk(
       await this.requestJson(
         `fleetForecasts (${String(range)}h)`,
@@ -327,7 +328,7 @@ export class HttpFleetDataSource implements FleetDataSource {
         fleetForecastResponseSchema,
         GET_INIT,
       ),
-      (payload) => payload.forecasts,
+      (payload) => payload.points,
     );
 
   /**

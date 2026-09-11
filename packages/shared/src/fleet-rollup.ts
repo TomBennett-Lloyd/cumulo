@@ -5,7 +5,7 @@ import {
   contributingCapacityKwByHour,
   type SiteCapacity,
 } from './aggregation';
-import type { Forecast, UncertaintyBand } from './forecast';
+import { uncertaintyBandSchema, type Forecast } from './forecast';
 import type { SeriesKind } from './storage-key';
 import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
 
@@ -152,13 +152,15 @@ export type FleetRollupPartial = z.infer<typeof fleetRollupPartialSchema>;
  * The band is absent rather than `undefined` when no site had one, matching `FleetForecastPoint`:
  * under `exactOptionalPropertyTypes` those are different values, and only absence is meaningful.
  */
-export interface FleetForecastAggregatePoint {
-  readonly validTime: UtcIsoTimestamp;
-  readonly acPowerKw: number;
-  readonly uncertainty?: UncertaintyBand;
-  readonly contributingSiteCount: number;
-  readonly contributingCapacityKw: number;
-}
+export const fleetForecastAggregatePointSchema = z.object({
+  validTime: utcIsoTimestampSchema,
+  acPowerKw: z.number().gte(0),
+  uncertainty: uncertaintyBandSchema.optional(),
+  contributingSiteCount: z.int().gte(0),
+  contributingCapacityKw: z.number().gte(0),
+});
+
+export type FleetForecastAggregatePoint = z.infer<typeof fleetForecastAggregatePointSchema>;
 
 /**
  * One group of sites' forecasts, as the per-hour partials a producer writes — ascending by

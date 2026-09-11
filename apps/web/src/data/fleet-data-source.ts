@@ -1,4 +1,10 @@
-import type { CreateSiteInput, Forecast, GenerationReading, Site } from '@cumulo/shared';
+import type {
+  CreateSiteInput,
+  FleetForecastAggregatePoint,
+  Forecast,
+  GenerationReading,
+  Site,
+} from '@cumulo/shared';
 
 /**
  * Why the fleet could not answer, from the client's point of view.
@@ -289,13 +295,21 @@ export interface FleetDataSource {
   ) => Promise<FleetSourceResult<readonly GenerationReading[]>>;
 
   /**
-   * Every site's forecast over the window, unaggregated.
+   * The fleet's forecast over the window, **already summed** — one point per hour.
    *
-   * The summing belongs to `@cumulo/shared`'s aggregation (`architecture.md`
-   * rule 3), so this returns the raw series and the view aggregates. The HTTP
-   * source reads `GET /v1/fleet/forecast`, one request for the whole fleet —
-   * the client-side fan-out #14 left open was retired when that route landed
-   * (#296).
+   * The seam sits above the aggregation rather than below it (#494). Returning
+   * raw per-site rows is what forced every consumer to add up a fleet, and the
+   * numbers it added up are the same on every load: the HTTP source now reads
+   * `GET /v1/fleet/forecast`, which serves the total the forecast producer
+   * computed, and the demo source — which has no API behind it and generates
+   * its fleet in the browser — computes the identical shape with
+   * `@cumulo/shared`'s `fleetForecastAggregate`. One definition of the fleet
+   * total (`architecture.md` rule 3), two ways of arriving at the shape.
+   *
+   * `contributingCapacityKw` travels with each point for that reason too: the
+   * `%`-of-capacity view needs a per-hour divisor, and a consumer that had to
+   * re-derive one from rows it no longer receives would be the second owner
+   * this move exists to remove.
    *
    * It spends `range` as a **forward horizon**, not as the look-back
    * {@link RangeHours} otherwise describes: that route's window opens at the
@@ -303,7 +317,9 @@ export interface FleetDataSource {
    * look-back with. An implementation is free to serve the look-back if it can
    * — the demo source does — but no implementation is required to.
    */
-  readonly fleetForecasts: (range: RangeHours) => Promise<FleetSourceResult<readonly Forecast[]>>;
+  readonly fleetForecasts: (
+    range: RangeHours,
+  ) => Promise<FleetSourceResult<readonly FleetForecastAggregatePoint[]>>;
 
   /**
    * Every site's generation actuals over the window, unaggregated — simulated

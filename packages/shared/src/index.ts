@@ -12,6 +12,7 @@ export {
 export {
   FLEET_ROLLUP_FORECAST_KIND,
   fleetRollupPartialSchema,
+  fleetForecastAggregatePointSchema,
   type FleetRollupPartial,
   type FleetForecastAggregatePoint,
   fleetRollupPartials,
