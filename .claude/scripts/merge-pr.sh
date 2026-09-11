@@ -625,6 +625,14 @@ fi
 
 checks_baseline=0
 
+# What the checks step needs from this one: the head this run is replacing, and
+# whether it was replaced at all. GitHub answers both the old sha and the old
+# rollup for a while after the write lands (the checks step says how long), so
+# "did the head move" is the only question that separates the stale answer from
+# the fresh one.
+pre_update_sha=""
+await_new_head=0
+
 update_branch_step() {
   local attempt=1 out lower rc
   while [ "$attempt" -le "$MERGE_PR_UPDATE_RETRIES" ]; do
@@ -643,7 +651,10 @@ update_branch_step() {
         *"already up to date"* | *"already up-to-date"* | *"not behind"*)
           step 'update-branch' 'already up to date with the base'
           ;;
-        *) step 'update-branch' "updated onto the base (attempt $attempt)" ;;
+        *)
+          await_new_head=1
+          step 'update-branch' "updated onto the base (attempt $attempt)"
+          ;;
       esac
       return 0
     fi
@@ -699,10 +710,26 @@ else
   # BLOCKED, not CLEAN. MERGE_PR_EXPECTED_CHECKS raises the floor for an operator
   # who wants the poll itself to wait rather than the merge step to refuse.
   checks_baseline=${#check_names[@]}
+  pre_update_sha="$pr_head_sha"
   update_branch_step
 fi
 
 # --- step: checks -------------------------------------------------------------------------------
+#
+# An update-branch that wrote is not visible at once. For roughly a minute and a
+# half after it, `gh pr view` still answers the PREVIOUS head's sha, that head's
+# rollup, and BLOCKED — and every verdict this step and the merge step take reads
+# one of those three. On PR #501 the answer was the old head's checks, complete and
+# none pending, so the baseline floor was satisfied by a rollup belonging to a
+# commit that no longer existed, and the merge step then refused on the BLOCKED
+# that came with it. A re-run 90 s later merged. The floor cannot catch this on its
+# own: the stale rollup has the same count as the head it came from.
+#
+# So nothing is evaluated until the sha this run replaced is gone. The wait is
+# bounded by the same poll budget the checks themselves get, and a head that never
+# moves is a refusal rather than a merge on an unknown head —
+# .claude/skills/review-loop/SKILL.md step 5 names the same trap for the
+# hand-typed chain.
 
 checks_verdict() { # -> ready:<n> | pending:<present>:<expected>:<pending> | failed:<name>:<conclusion>
   local expected i total pending
@@ -738,6 +765,7 @@ if [ "$already_merged" = "1" ]; then
   step 'checks' 'skipped (PR is already MERGED)'
 else
   poll_deadline=$((SECONDS + MERGE_PR_POLL_TIMEOUT_SECONDS))
+  verdict=""
   while :; do
     read_pr || fail 'checks' "$last_error"
     if [ "$pr_state" = "MERGED" ]; then
@@ -747,18 +775,26 @@ else
       step 'checks' 'PR was merged elsewhere during the poll'
       break
     fi
-    verdict=$(checks_verdict)
-    case "$verdict" in
-      ready:*)
-        step 'checks' "${verdict#ready:} check(s) complete on $pr_head_sha, none pending, none failing"
-        break
-        ;;
-      failed:*)
-        rest=${verdict#failed:}
-        fail 'checks' "check '${rest%:*}' concluded ${rest##*:}"
-        ;;
-    esac
+    if [ "$await_new_head" = "1" ] && [ "$pr_head_sha" != "$pre_update_sha" ]; then
+      await_new_head=0
+      step 'checks' "the update moved the head $pre_update_sha -> $pr_head_sha; reading that head"
+    fi
+    if [ "$await_new_head" = "0" ]; then
+      verdict=$(checks_verdict)
+      case "$verdict" in
+        ready:*)
+          step 'checks' "${verdict#ready:} check(s) complete on $pr_head_sha, none pending, none failing"
+          break
+          ;;
+        failed:*)
+          rest=${verdict#failed:}
+          fail 'checks' "check '${rest%:*}' concluded ${rest##*:}"
+          ;;
+      esac
+    fi
     if [ "$SECONDS" -ge "$poll_deadline" ]; then
+      [ "$await_new_head" = "0" ] || fail 'checks' \
+        "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — update-branch reported it updated the branch, but the head still reads $pre_update_sha. Every check and merge state from here would be the replaced head's: re-run once the update has landed"
       rest=${verdict#pending:}
       present=${rest%%:*}
       rest=${rest#*:}
