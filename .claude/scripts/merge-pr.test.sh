@@ -1804,8 +1804,8 @@ end
 # and `mustExtend` refuses anyway — with "changes line 5 of the merge-base copy", which
 # sends the merge owner to the heading itself rather than telling them their side no
 # longer has it. So the assertion below is on the message, and that is the whole point
-# of the arm. Pruning is a live shape here: docs/tech-debt.md
-# records having been pruned wholesale by a triage pass.
+# of the arm. Pruning is a live shape here: docs/tech-debt.md records having been pruned
+# wholesale by a triage pass.
 begin "a side that no longer holds the base's final entry heading is refused"
 td_fixture union-anchor-gone
 td_main_writes "$TD_BASE_RENAMED$TD_MAIN_ENTRY"
