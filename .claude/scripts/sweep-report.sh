@@ -5,15 +5,16 @@
 #
 # Why this exists (#522). A trim batch's diff is verified by commands; its
 # report is not. Across #497's two batches every rendering of the same ledger
-# was retyped, and the retyping is where the defects were: PR #512 minted two
-# false claims in its own fix round, PR #520's cycle-2 findings were five for
-# five in the reporting prose with none in the diff, and #520 shipped THREE
-# renderings of one ledger — a title saying "3 trued, 3 raised", a body saying
-# five and five, and a lane report agreeing with the body. `merge-pr.sh` builds
-# the squash subject from the PR title, so the one rendering nobody re-read is
-# the one that became history (`6943ee6`). `docs/standards/prose.md` rule 2
-# already applies the cure to figures — generate them, never type them — and
-# this script is that rule pointed at the report itself.
+# was retyped, and the retyping is where the defects were: two of PR #512's four
+# cycle-1 findings were claims that batch had minted itself, PR #520's cycle-2
+# findings were five for five in the reporting prose with none in the diff, and
+# #520's title said "3 trued, 3 raised" where its body said five and five. A
+# squash merge takes its subject from the PR title — `merge-pr.sh` runs
+# `gh pr merge <n> --squash` and leaves GitHub to default it — so the rendering
+# nobody re-read is the one that became history (`6943ee6`).
+# `docs/standards/prose.md` rule 2 already applies the cure to figures —
+# generate them, never type them — and this script is that rule pointed at the
+# report itself.
 #
 # So: one ledger in, and every rendering out of ONE computation — the PR title
 # fragment, the totals table, the five pre-check blocks of `prose.md` rule 3
@@ -59,7 +60,12 @@
 #   control=<path>         required with `sweep=`, and only with it: the carrier
 #                          the sweep MUST return (prose.md rule 3(b))
 #   quote=<string>         required, repeatable, on `out-of-scope` rows — the
-#                          strings the emitted tech-debt skeleton will cite
+#                          strings the emitted tech-debt skeleton will cite.
+#                          Resolved tree-wide, and the hit's file is what the
+#                          skeleton cites: `prose.md` rule 3(d) is "greps to the
+#                          file it NAMES", and the file a tech-debt entry names
+#                          is the code that is wrong, which is rarely the file
+#                          the ledger row's prose sat in.
 #
 # ## What is NOT here
 #
@@ -154,6 +160,8 @@ RESOLVED="$work/resolved.tsv"
 FAILURES="$work/failures"
 PARSE_ERRORS="$work/parse-errors"
 CMD_OUT="$work/cmd.out"
+CMD_ERR="$work/cmd.err"
+CMD_RC=0
 
 : >"$ROWS"
 : >"$SUBJECTS"
@@ -303,17 +311,32 @@ render_cmd() {
   printf '$%s\n' "$rendered"
 }
 
-# run_shown — print the command, run that exact argv, print its output. The
-# output lands in $CMD_OUT so the caller reads it as a file and counts it as a
-# number, never as an exit status (docs/standards/evidence.md sanctioned form 2).
-run_shown() {
-  render_cmd "$@"
-  "$@" >"$CMD_OUT" 2>&1
+# run_shown — print the command, run that exact argv, print its output.
+#
+# stdout and stderr go to SEPARATE files, and `$?` is captured on the line
+# immediately after the run (docs/standards/evidence.md sanctioned form 1). The
+# two streams are not merged for a reason this script learned the hard way: a
+# `fatal: Invalid pathspec magic` on stderr, folded into the output file, is one
+# LINE — and a line count over that file then reports a git failure as a hit,
+# which is a broken check reported as a clean one. The count the report reads is
+# produced by the check, or the check is refused.
+emit_streams() {
   if [ -s "$CMD_OUT" ]; then
     cat "$CMD_OUT"
   else
     printf '(no output)\n'
   fi
+  if [ -s "$CMD_ERR" ]; then
+    printf '# stderr (exit %d):\n' "$CMD_RC"
+    cat "$CMD_ERR"
+  fi
+}
+
+run_shown() {
+  render_cmd "$@"
+  "$@" >"$CMD_OUT" 2>"$CMD_ERR"
+  CMD_RC=$?
+  emit_streams
 }
 
 # run_shown_pipeline — the same contract for the pre-check `prose.md` states AS
@@ -323,11 +346,25 @@ run_shown() {
 # argv is used for everything the ledger parameterises.
 run_shown_pipeline() {
   printf '$ %s\n' "$1"
-  bash -c "$1" >"$CMD_OUT" 2>&1
-  if [ -s "$CMD_OUT" ]; then
-    cat "$CMD_OUT"
+  bash -c "$1" >"$CMD_OUT" 2>"$CMD_ERR"
+  CMD_RC=$?
+  emit_streams
+}
+
+# cmd_errored — true when the last run_shown could not answer its question.
+# Exit 1 is NOT an error for any subject this script runs: `grep` and `git grep`
+# spell "no match" that way, and pre-check (e)'s awk spells "found something"
+# that way. Anything above that, or any word on stderr, is a tool that failed
+# rather than a tree that is clean.
+cmd_errored() {
+  [ "$CMD_RC" -gt 1 ] || [ -s "$CMD_ERR" ]
+}
+
+cmd_error_detail() { # cmd_error_detail -> the first stderr line, for the failure reason
+  if [ -s "$CMD_ERR" ]; then
+    command head -n 1 "$CMD_ERR"
   else
-    printf '(no output)\n'
+    printf 'exit %s with nothing on stderr' "$CMD_RC"
   fi
 }
 
@@ -352,8 +389,40 @@ reviewer re-runs it and diffs the result against the PR body (`docs/standards/pr
 § Trim batches rule 4).
 
 EOF
-printf '%s\n' "Command: \`bash .claude/scripts/sweep-report.sh $ledger_arg $base_arg\`"
-printf '%s\n\n' "Ledger: \`$ledger_arg\` · base: \`$base_sha\`"
+# The command is printed with the ledger path made repo-relative wherever it is
+# inside the repository. `$ledger_arg` as typed is reproducible only from the
+# directory the lane happened to stand in, and rule 4 asks a reviewer to re-run
+# this from the root — a printed command that resolves from neither directory is
+# a command nobody can re-run.
+case "$ledger" in
+  "$repo_root"/*) ledger_shown=${ledger#"$repo_root"/} ;;
+  *) ledger_shown="$ledger" ;;
+esac
+printf '%s\n' "Command: \`bash .claude/scripts/sweep-report.sh $ledger_shown $base_sha\`"
+printf '%s\n\n' "Ledger: \`$ledger_shown\` · base: \`$base_sha\`"
+
+# The diff's scale, from --numstat, which counts lines structurally
+# (docs/standards/evidence.md sanctioned form 3). It is in the header because
+# pre-checks (c) and (e) are emptiness claims over this diff: without the scale
+# beside them, a report generated against the wrong base reads exactly like a
+# report over a clean batch. An empty diff fails the run outright, below.
+DIFF_FILE="$work/diff.txt"
+git diff "$base_sha" >"$DIFF_FILE" 2>"$CMD_ERR"
+diff_rc=$?
+if [ "$diff_rc" -ne 0 ]; then
+  fatal "git diff $base_sha failed (exit $diff_rc)" "$(command head -n 1 "$CMD_ERR")"
+fi
+NUMSTAT_FILE="$work/numstat.txt"
+git diff --numstat "$base_sha" >"$NUMSTAT_FILE" 2>"$CMD_ERR"
+numstat_rc=$?
+if [ "$numstat_rc" -ne 0 ]; then
+  fatal "git diff --numstat $base_sha failed (exit $numstat_rc)" "$(command head -n 1 "$CMD_ERR")"
+fi
+diff_scale=$(awk '
+  { files++; added += ($1 == "-") ? 0 : $1; removed += ($2 == "-") ? 0 : $2 }
+  END { printf("%d file(s), +%d / -%d line(s)", files + 0, added + 0, removed + 0) }' "$NUMSTAT_FILE")
+diff_files=${diff_scale%% *}
+printf '%s\n\n' "Diff at this base: $diff_scale"
 
 # Title fragment and totals table come out of ONE awk END block over ONE row
 # file. That is the whole answer to #520: the title line and the table's total
@@ -407,11 +476,22 @@ else
     printf '```\n'
     run_shown git grep -n -F -e "$subject" "$base_sha" -- "$subj_path"
     control_hits=$(line_count "$CMD_OUT")
+    control_broke=0
+    if cmd_errored; then
+      control_broke=1
+      control_detail=$(cmd_error_detail)
+    fi
     printf '\n'
     run_shown git grep -n -F -e "$subject" -- ":!$subj_path"
     inbound_hits=$(line_count "$CMD_OUT")
+    if cmd_errored; then
+      control_broke=1
+      control_detail=$(cmd_error_detail)
+    fi
     printf '```\n\n'
-    if [ "$control_hits" -eq 0 ]; then
+    if [ "$control_broke" -eq 1 ]; then
+      check_fail "pre-check (a) could not run for \`$subject\` — git said: $control_detail"
+    elif [ "$control_hits" -eq 0 ]; then
       check_fail "positive control: \`$subject\` is not in \`$subj_path\` at $base_sha — the ledger names a subject the base does not carry"
     else
       check_pass "\`$subject\`: control $control_hits hit(s) at base, $inbound_hits inbound reference(s) to read"
@@ -437,9 +517,23 @@ else
     printf '```\n'
     run_shown git grep -n -P -e "$pattern"
     sweep_hits=$(line_count "$CMD_OUT")
+    sweep_broke=0
+    if cmd_errored; then
+      sweep_broke=1
+      sweep_detail=$(cmd_error_detail)
+    fi
     printf '```\n\n'
-    control_seen=$(command grep -c -F -e "$control" "$CMD_OUT")
-    if [ "$control_seen" -eq 0 ]; then
+    # The control is matched against the PATH FIELD of `git grep -n`'s
+    # `path:line:content`, never against the whole line. A sweep over a
+    # restatement ledger routinely returns lines whose CONTENT names other
+    # paths, so a substring test passes whenever the sweep happens to return a
+    # line that merely mentions the carrier — the control then certifies text it
+    # did not return, which is evidence.md member 7 inside the tool built to
+    # enforce it.
+    control_seen=$(awk -F: -v carrier="$control" '$1 == carrier { n++ } END { print n + 0 }' "$CMD_OUT")
+    if [ "$sweep_broke" -eq 1 ]; then
+      check_fail "pre-check (b) could not run the sweep \`$pattern\` — git said: $sweep_detail"
+    elif [ "$control_seen" -eq 0 ]; then
       check_fail "sweep \`$pattern\` returned $sweep_hits line(s) and NONE of them is its declared carrier \`$control\` — the pattern is wrong, or the carrier is gone"
     else
       check_pass "sweep \`$pattern\`: $sweep_hits hit(s), carrier \`$control\` among them"
@@ -469,10 +563,15 @@ if [ "$spelled_control" -eq 0 ]; then
     "The pattern matches nothing, so its empty result over the diff proves nothing." \
     "This is a broken check, not a clean tree — no verdict (evidence.md form 5)."
 fi
-if [ "$spelled_hits" -gt 0 ]; then
+# The control proves the PATTERN works; it cannot prove there was a diff for the
+# pattern to work over. Those are two different emptiness claims, and only the
+# scale in the header settles the second one.
+if [ "$diff_files" -eq 0 ]; then
+  check_fail "pre-check (c) had nothing to run over — the diff at $base_sha is empty, so its silence is about the base, not about the batch"
+elif [ "$spelled_hits" -gt 0 ]; then
   check_fail "$spelled_hits added line(s) spell a figure out in words — prose.md rule 3(c)"
 else
-  check_pass "no spelled-out figure in the added lines; the control returned $spelled_control line(s)"
+  check_pass "no spelled-out figure across $diff_scale; the control returned $spelled_control line(s)"
 fi
 
 # --- pre-check (d): tech-debt quote resolution --------------------------------------------------
@@ -499,8 +598,15 @@ else
     printf '```\n'
     run_shown git grep -n -F -e "$quote"
     quote_hits=$(line_count "$CMD_OUT")
+    quote_broke=0
+    if cmd_errored; then
+      quote_broke=1
+      quote_detail=$(cmd_error_detail)
+    fi
     printf '```\n\n'
-    if [ "$quote_hits" -eq 0 ]; then
+    if [ "$quote_broke" -eq 1 ]; then
+      check_fail "pre-check (d) could not resolve \`$quote\` — git said: $quote_detail"
+    elif [ "$quote_hits" -eq 0 ]; then
       check_fail "unresolved quote (ledger line $rowid): \`$quote\` is in no file in this tree"
     else
       # The first hit's FILE is what the skeleton cites. tech-debt.md's own
@@ -523,11 +629,20 @@ fi
 # that is the only way "nothing remains" can be told apart from "my detector
 # never matched anything".
 #
-# The rule, stated once: among the diff's ADDED lines, a comment line of three
-# words or fewer that ends without punctuation, immediately above a comment line
-# at least REFLOW_CONTINUATION_COLS wide. Markdown files are skipped outright —
-# `#` is a heading there and `*` a bullet, and prettier reflows markdown prose
-# but not comments, which is the whole reason this check exists.
+# The rule, stated once: an ADDED comment line of three words or fewer that ends
+# without punctuation, immediately above a comment line at least
+# REFLOW_CONTINUATION_COLS wide. The short line must be added — it is the line
+# the trim shortened — but the CONTINUATION may be a context line, and usually
+# is: a trim edits one line and leaves the rest of the paragraph alone, so the
+# ragged pair arrives as one `+` above one ` ` line. Requiring both to be added
+# would miss the canonical case the rule exists for.
+#
+# Markdown files are skipped outright: `#` is a heading there and `*` a bullet,
+# and prettier reflows markdown prose but not comments, which is the whole
+# reason this check exists. Two comment-lookalikes are excluded for the same
+# reason — a shebang (`#!…`, one word, no punctuation) above a long `#` comment,
+# and a JSDoc tag (`* @param x`) above its long description, are both ordinary
+# shapes rather than ragged edits.
 
 REFLOW_AWK="$work/reflow.awk"
 cat >"$REFLOW_AWK" <<'AWK'
@@ -543,16 +658,22 @@ function body_of(s,   t) {
   sub(/[ \t]+$/, "", t)
   return t
 }
-BEGIN { skip = 0; short = 0; hits = 0; file = "(unknown)" }
-/^\+\+\+ / {
+BEGIN { skip = 0; short = 0; hits = 0; in_hunk = 0; file = "(unknown)" }
+# A `+++ ` line is a file header only BEFORE the first hunk of that file; inside
+# a hunk it is content (a diff quoted in a doc), and treating it as a header
+# would silently repoint `file` and `skip` at whatever it names.
+/^diff / { in_hunk = 0; short = 0; next }
+/^\+\+\+ / && !in_hunk {
   file = substr($0, 7)
   skip = (file ~ /\.md$/)
   short = 0
   next
 }
-/^(--- |@@|diff |index |old mode|new mode|new file|deleted file|similarity|rename|Binary)/ { short = 0; next }
-/^\+/ {
+/^@@/ { in_hunk = 1; short = 0; next }
+/^(--- |index |old mode|new mode|new file|deleted file|similarity|rename|Binary)/ { short = 0; next }
+/^[+ ]/ {
   if (skip) { short = 0; next }
+  added = (substr($0, 1, 1) == "+")
   text = substr($0, 2)
   if (!is_comment(text)) { short = 0; next }
   body = body_of(text)
@@ -561,7 +682,8 @@ BEGIN { skip = 0; short = 0; hits = 0; file = "(unknown)" }
     printf("%s: \"%s\" then a %d-column continuation: \"%s\"\n", file, prev, length(body), body)
   }
   nwords = (body == "") ? 0 : split(body, w, /[ \t]+/)
-  short = (nwords > 0 && nwords <= 3 && body !~ /[.,:;!?)]$/)
+  ordinary = (body ~ /^!/) || (body ~ /^@/)
+  short = (added && !ordinary && nwords > 0 && nwords <= 3 && body !~ /[.,:;!?)]$/)
   prev = body
   next
 }
@@ -569,11 +691,16 @@ BEGIN { skip = 0; short = 0; hits = 0; file = "(unknown)" }
 END { exit (hits > 0) ? 1 : 0 }
 AWK
 
+# The control fixture is the canonical shape: one ADDED short line above an
+# UNCHANGED (context) continuation. It therefore also proves the arm the
+# detector was missing, not merely that the detector runs.
 REFLOW_FIXTURE="$work/reflow-control.diff"
 cat >"$REFLOW_FIXTURE" <<'FIXTURE'
+diff --git a/reflow-control.ts b/reflow-control.ts
 +++ b/reflow-control.ts
+@@ -1,3 +1,3 @@
 +// a short note
-+// this continuation line is deliberately wide enough to count as a full-width continuation
+ // this continuation line is deliberately wide enough to count as a full-width continuation
 FIXTURE
 
 cat <<'EOF'
@@ -589,13 +716,15 @@ it. Markdown is out of scope: `#` is a heading there, not a comment.
 
 EOF
 
-DIFF_FILE="$work/diff.txt"
-git diff "$base_sha" >"$DIFF_FILE" 2>/dev/null
-
 checks_run=$((checks_run + 1))
 printf '```\n'
 run_shown awk -v COLS="$REFLOW_CONTINUATION_COLS" -f "$REFLOW_AWK" "$DIFF_FILE"
 reflow_hits=$(line_count "$CMD_OUT")
+reflow_broke=0
+if cmd_errored; then
+  reflow_broke=1
+  reflow_detail=$(cmd_error_detail)
+fi
 printf '\n'
 printf '# positive control — the same detector over a fixture with one known offender\n'
 run_shown awk -v COLS="$REFLOW_CONTINUATION_COLS" -f "$REFLOW_AWK" "$REFLOW_FIXTURE"
@@ -607,10 +736,14 @@ if [ "$reflow_control" -eq 0 ]; then
     "The detector matches nothing, so its silence over the diff proves nothing." \
     "This is a broken check, not a clean diff — no verdict (evidence.md form 5)."
 fi
-if [ "$reflow_hits" -gt 0 ]; then
+if [ "$reflow_broke" -eq 1 ]; then
+  check_fail "pre-check (e) could not run — awk said: $reflow_detail"
+elif [ "$diff_files" -eq 0 ]; then
+  check_fail "pre-check (e) had nothing to run over — the diff at $base_sha is empty, so its silence is about the base, not about the batch"
+elif [ "$reflow_hits" -gt 0 ]; then
   check_fail "the diff adds $reflow_hits ragged comment continuation(s) — prose.md rule 3(e)"
 else
-  check_pass "no ragged comment continuation in the diff; the control found its offender"
+  check_pass "no ragged comment continuation across $diff_scale; the control found its offender"
 fi
 
 # --- tech-debt entry skeletons --------------------------------------------------------------
@@ -626,7 +759,10 @@ if [ ! -s "$SCOPE" ]; then
 
 EOF
 else
-  today=$(date +%Y-%m-%d)
+  # The heading's date is a PLACEHOLDER, not today's date. rule 4 has a reviewer
+  # re-run this script and diff its output against the PR body, and `date` makes
+  # that diff non-empty the moment the review happens on a later day than the
+  # run — a reproducible report cannot carry a clock.
   while IFS= read -r rec; do
     [ -n "$rec" ] || continue
     rowid=${rec%%"$TAB"*}
@@ -636,7 +772,7 @@ else
     scope_line=${rest%%"$TAB"*}
     scope_claim=${rest#*"$TAB"}
     printf '```markdown\n'
-    printf '## %s — %s\n' "$today" "$scope_claim"
+    printf '## <YYYY-MM-DD> — %s\n' "$scope_claim"
     printf '%s' "- Where: \`$scope_path\`"
     while IFS= read -r res; do
       res_row=${res%%"$TAB"*}
