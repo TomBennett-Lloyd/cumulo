@@ -41,6 +41,17 @@ export type ForecastItem = Forecast & SeriesItemKeys;
 export type GenerationReadingItem = GenerationReading & SeriesItemKeys;
 
 /**
+ * The least an item must carry to be addressable in this table: the partition key and the sort key.
+ *
+ * Named because the adapter's batch-write path reads exactly these two and nothing else — it needs
+ * them to check for colliding keys before it sends — and a union of every concrete item type would
+ * have to be edited each time the table gained a kind, for no gain (`docs/standards/typing.md`
+ * rule 6). `siteId` is `string` rather than a site's id because the fleet roll-up stores its
+ * partials under the `#FLEET` sentinel (`fleet-rollup-item.ts`).
+ */
+export type SeriesTableItem = SeriesItemKeys & { readonly siteId: string };
+
+/**
  * One point on a site's timeline. A forecast and an actual are different
  * things — different schemas, different meanings — so the Query that returns
  * them interleaved returns a discriminated union rather than a bag of optional

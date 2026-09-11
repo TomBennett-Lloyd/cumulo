@@ -10,6 +10,8 @@ export {
   fleetCentroid,
 } from './aggregation';
 export {
+  FLEET_ROLLUP_FORECAST_KIND,
+  fleetRollupPartialSchema,
   type FleetRollupPartial,
   type FleetForecastAggregatePoint,
   fleetRollupPartials,

@@ -1,10 +1,13 @@
+import { z } from 'zod';
+
 import {
   aggregateFleetForecast,
   contributingCapacityKwByHour,
   type SiteCapacity,
 } from './aggregation';
 import type { Forecast, UncertaintyBand } from './forecast';
-import { compareUtcIsoTimestamps, type UtcIsoTimestamp } from './timestamp';
+import type { SeriesKind } from './storage-key';
+import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
 
 /**
  * The fleet roll-up: the fleet aggregate split into per-location **partials** that a per-location
@@ -82,22 +85,58 @@ import { compareUtcIsoTimestamps, type UtcIsoTimestamp } from './timestamp';
  * arithmetic, and keeping it out is what lets {@link fleetForecastAggregate} run the same code over
  * a whole fleet treated as one group. `@cumulo/storage` carries the location alongside the stored
  * item.
+ *
+ * **A schema rather than an interface**, and the type inferred from it — `forecastSchema`'s shape,
+ * for `forecastSchema`'s reason. A partial makes a round trip through DynamoDB, so the thing that
+ * comes back is `unknown` until a schema has looked at it (`docs/standards/typing.md` rule 3), and
+ * the parse is also what restores the branded `validTime` a stored string has lost. Declaring the
+ * type here and the schema in `@cumulo/storage` would be two definitions of one shape free to
+ * disagree (`docs/standards/architecture.md` rule 2); this way the arithmetic above and the table
+ * below are held to the same object.
+ *
+ * The bounds are the weak ones a *sum* can honestly carry. Every term is a non-negative power or a
+ * count, so the sum is too — but there is deliberately no upper bound, because the ceiling
+ * `forecastSchema` puts on one site's kW (`MAX_PLAUSIBLE_RESIDENTIAL_KW`) says nothing about a
+ * fleet's, and a number invented here would start refusing rows the moment the fleet grew.
+ * Non-finite values are refused by `z.number()` itself, which is the guard that matters: a `NaN`
+ * reaching the sum would poison every hour it touched and render as an empty chart.
  */
-export interface FleetRollupPartial {
-  readonly validTime: UtcIsoTimestamp;
+/**
+ * The one forecast kind the fleet aggregate is rolled up from, on both sides of the table.
+ *
+ * The producer writes partials for this kind and the API reads them for this kind, from this one
+ * declaration, because a roll-up written under one kind and read under another is an empty fleet
+ * with no error anywhere (`docs/standards/architecture.md` rule 9).
+ *
+ * **Physics, and stating that fixes a latent bug rather than introducing a restriction.**
+ * `aggregateFleetForecast`'s own docblock warns that summing two models' views of the same
+ * site-hour double-counts it; today's fan-out route returns every model it finds and leaves the
+ * client to sum them, which is only harmless because `packages/forecast` emits physics alone. The
+ * roll-up has to name a model — a sort key cannot be vague — so it names the one the dashboard has
+ * always effectively been drawing, and the fallback filters to the same one so the two paths cannot
+ * answer differently. When the ML correction layer lands, *which* model the fleet chart shows is a
+ * product decision that gets made here, once, instead of being decided by what happens to be in the
+ * table.
+ */
+export const FLEET_ROLLUP_FORECAST_KIND: SeriesKind = { kind: 'forecast', model: 'physics' };
+
+export const fleetRollupPartialSchema = z.object({
+  validTime: utcIsoTimestampSchema,
   /** Σ `acPowerKw` over this group's sites at this hour. */
-  readonly acPowerKw: number;
+  acPowerKw: z.number().gte(0),
   /** Σ of each site's `p10AcPowerKw`, or its point estimate where it carried no band. */
-  readonly p10AcPowerKw: number;
+  p10AcPowerKw: z.number().gte(0),
   /** Σ of each site's `p90AcPowerKw`, or its point estimate where it carried no band. */
-  readonly p90AcPowerKw: number;
+  p90AcPowerKw: z.number().gte(0),
   /** Whether *any* site in this group carried a band at this hour — see the module docblock. */
-  readonly hasUncertainty: boolean;
+  hasUncertainty: z.boolean(),
   /** How many distinct sites in this group reported this hour. */
-  readonly contributingSiteCount: number;
+  contributingSiteCount: z.int().gte(0),
   /** Σ nameplate `capacityKw` over exactly those sites — the %-of-capacity divisor. */
-  readonly contributingCapacityKw: number;
-}
+  contributingCapacityKw: z.number().gte(0),
+});
+
+export type FleetRollupPartial = z.infer<typeof fleetRollupPartialSchema>;
 
 /**
  * One hour of the summed fleet forecast, as a reader of the aggregate sees it.
