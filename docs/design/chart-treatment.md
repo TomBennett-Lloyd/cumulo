@@ -194,7 +194,9 @@ envelope is a deterministic width attached to every stored row
 (`@cumulo/shared`'s `simulated-uncertainty.ts`), not an ensemble the physics model produced, and
 the legend is where a reader is told which of the two they are looking at. The same qualifier
 belongs on any future band whose source is simulated; a fitted band from the ML layer would drop
-it. The hover readout's `P10–P90` row name stays bare — it labels the two values at a sample and
+it. The actuals row above wears the same word on its own record and not on this one
+([#264](https://github.com/TomBennett-Lloyd/cumulo/issues/264)): the measurements are synthesized
+too. The hover readout's `P10–P90` row name stays bare — it labels the two values at a sample and
 makes no claim about where they came from.
 
 ## An overlay is a fourth series, and the rules it is held to
