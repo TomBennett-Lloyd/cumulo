@@ -643,14 +643,14 @@ begin "a seam value that could reach bash -c as more than one word is refused"
 # path-safe character class before anything reads it; lint-shell.sh's precedent
 # uses its own seam in argv position only, where a value is inert.
 #
-# The discriminating assertion is expect_stderr, not the exit code: unguarded,
-# BOTH values below still exit 2 — they reach the header's `git diff` in argv
-# position first, where a value holding a metacharacter is simply not an
-# executable, and the run dies there with "diff <sha> failed (exit 127)". The
-# message is what tells "refused by the seam's own validation" apart from
-# "happened to fail later for another reason". The second value is the one that
-# would survive argv position and still break: a real directory whose name holds
-# a space, which `bash -c` splits into two words.
+# For the FIRST value the discriminating assertion is expect_stderr, not the
+# exit code: unguarded it still exits 2, because a value holding a metacharacter
+# is not an executable and the header's argv-position `git diff` dies there with
+# "diff <sha> failed (exit 127)" — the seam's own message is what tells "refused
+# by validation" apart from "happened to fail later". The SECOND value is the
+# one that survives argv position, where a quoted value is one word, and breaks
+# only inside `bash -c`, which splits it into two: unguarded it exits 1 from
+# pre-check (c), so there the exit code discriminates as well.
 fixture hostile-seam
 ledger_new hostile-seam
 row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
