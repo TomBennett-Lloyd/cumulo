@@ -118,7 +118,10 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * product decision that gets made here, once, instead of being decided by what happens to be in the
  * table.
  */
-export const FLEET_ROLLUP_FORECAST_KIND: SeriesKind = { kind: 'forecast', model: 'physics' };
+export const FLEET_ROLLUP_FORECAST_KIND = {
+  kind: 'forecast',
+  model: 'physics',
+} as const satisfies SeriesKind;
 
 export const fleetRollupPartialSchema = z.object({
   validTime: utcIsoTimestampSchema,
