@@ -42,6 +42,12 @@ PR=490
 HEAD_REF=490-lane
 HUMAN_ALWAYS_DEFAULT='["docs/adr/**",".claude/workflow.json","CLAUDE.md"]'
 
+# `gh pr update-branch`'s two answers, and the only distinction the subject draws
+# between them: the no-op it prints when the branch is already current, and
+# anything else, which means it wrote a merge commit onto the branch.
+UPDATE_NOOP='PR branch already up-to-date'
+UPDATE_WROTE="Updated branch $HEAD_REF"
+
 ROOT=""
 STATE=""
 REPO=""
@@ -246,6 +252,11 @@ fixture() { # fixture <name> [humanAlways JSON array]
   gh_stub "$ROOT/gh" "$STATE"
   reap_stub "$ROOT/reap" "$STATE"
   : >"$STATE/calls.log"
+  # The no-op is the default answer, so that a case saying "updated" has to move
+  # headRefOid on the reads that follow — an update that reports a write and
+  # leaves the head where it was is a state GitHub does not produce, and the
+  # subject now refuses it (case 12c).
+  must printf '%s\n' "$UPDATE_NOOP" >"$STATE/update-branch.out"
   reset_view
 }
 
@@ -298,6 +309,9 @@ end
 # ==========================================================================================
 begin "a single-issue PR merges --squash and every step reports"
 fixture single
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
+write_view 1
+V_OID="bbb222"
 write_view default
 write_merged_view
 run_merge
@@ -306,6 +320,7 @@ expect_stdout 'single issue #12 -> squash'
 expect_stdout 'AUTO'
 expect_stdout 'not owed (no humanAlways path in the diff)'
 expect_stdout 'updated onto the base (attempt 1)'
+expect_stdout 'the update moved the head aaa111 -> bbb222'
 expect_stdout '2 check(s) complete'
 expect_stdout 'merged squash (rc=0), state MERGED'
 expect_stdout 'closed by the merge: #12'
@@ -421,6 +436,7 @@ end
 # ==========================================================================================
 begin "a BEHIND PR is updated first and merges from the new head"
 fixture behind
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
 V_MSST="BEHIND"
 write_view default
 write_view 1
@@ -609,8 +625,11 @@ end
 # reach, so an empty rollup polls on and, with no budget left, times out saying so.
 begin "a rollup that has not registered yet is never read as green"
 fixture unregistered
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
 write_view default
 write_view 1
+# The new head, with nothing registered on it yet.
+V_OID="bbb222"
 V_CHECKS=""
 write_view 2
 POLL_TIMEOUT=0
@@ -621,6 +640,71 @@ expect_stderr 'checks — FAILED'
 expect_stderr 'timed out'
 expect_stderr '0 of an expected 2 check(s) present'
 expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 12b. the post-update rollup that is still the OLD head's is waited out, in one run
+# ==========================================================================================
+# PR #501's sequence exactly: update-branch wrote, and the next read answered the
+# old head's sha, the old head's rollup — complete, none pending, so the baseline
+# floor was satisfied by it — and BLOCKED. The floor cannot separate that answer
+# from a fresh one; the sha can. The property is that ONE invocation waits and then
+# merges, because the manual repair for this was a second run 90 s later.
+begin "a post-update rollup still belonging to the old head is waited out, then merged"
+fixture stale-rollup
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
+V_MSST="BEHIND"
+write_view 1
+V_MSST="BLOCKED"
+write_view 2
+V_OID="bbb222"
+V_MSST="CLEAN"
+write_view 3
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'updated onto the base (attempt 1)'
+expect_stdout 'the update moved the head aaa111 -> bbb222'
+expect_stdout '2 check(s) complete on bbb222'
+expect_not_stdout 'complete on aaa111'
+expect_not_stderr "mergeStateStatus is 'BLOCKED'"
+expect_called "pr merge $PR --squash"
+# The stale answer was re-read rather than believed: classify, the stale poll, the
+# fresh poll and the post-merge confirmation are four reads. A subject that took
+# the first post-update answer never reaches the fourth — it breaks the poll on the
+# stale rollup and refuses at the merge step on the BLOCKED beside it, which is
+# PR #501's outcome.
+views=$(grep -c -- "^pr view $PR " "$STATE/calls.log")
+[ "$views" -ge 4 ] || bad "expected at least 4 pr view calls, got $views"
+end
+
+# ==========================================================================================
+# 12c. …and an update that reports a write while the head never moves is refused
+# ==========================================================================================
+# The companion that gives 12b its meaning: waiting is only half the guarantee, and
+# a wait with no end is how the timeout budget gets spent on a PR nobody is going
+# to merge. The fixture is otherwise mergeable — CLEAN, two green checks — so a
+# subject that skipped the sha would merge it.
+#
+# One fixture, two causes: the update has not landed, or gh answered a no-op in a
+# spelling the update-branch step does not recognise. They are indistinguishable
+# from here, which is why the refusal quotes gh's answer rather than naming one.
+begin "an update that reports a write while the head never moves is refused"
+fixture head-unmoved
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr 'checks — FAILED'
+expect_stderr 'the head still reads aaa111'
+expect_stderr "gh answered \"$UPDATE_WROTE\""
+expect_stderr 'no-op spelling update-branch does not recognise'
+expect_not_called "pr merge $PR --squash"
+[ -f "$STATE/merged" ] && bad "the PR merged on a head that never moved"
 end
 
 # ==========================================================================================
