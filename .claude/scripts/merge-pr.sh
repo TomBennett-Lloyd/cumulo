@@ -67,11 +67,14 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # `files(first: 100)` with no truncation signal, and the humanAlways decision made
 # off a silently-truncated file list fails in the one direction that cannot be
 # taken back: a PR touching CLAUDE.md as its 120th file would classify AUTO and
-# merge without the owner. The file list is read separately, paginated, exactly as
-# .github/workflows/ci.yml's merge-ritual-gate reads it and for the reason its
-# comment (c) gives. `commits` carries the same cap and is left on this list: it
-# feeds only the curated-history check, whose comparison is against a member count
-# of two to six, so a truncated answer refuses rather than merges.
+# merge without the owner. The file list is read separately and paginated, the
+# same endpoint and flags .github/workflows/ci.yml's merge-ritual-gate step uses
+# to read the same list (its comment (c) is about why that job needs no checkout,
+# which is a different argument — what is borrowed here is the call, not the
+# reasoning). `commits` carries the same cap and is left on this list: it feeds
+# only the curated-history check, whose first test is a count comparison against
+# the Closes count, so a list truncated at 100 refuses rather than merges for any
+# PR closing fewer than 100 issues.
 PR_JSON_FIELDS='body,commits,headRefName,headRefOid,labels,mergeStateStatus,number,state,statusCheckRollup,url'
 
 # The numeric knobs are validated here rather than where they are used. Under
@@ -351,10 +354,12 @@ already_merged=0
 
 # --- step: classify ----------------------------------------------------------------------------
 #
-# Two independent classifications, and every refusal either of them implies, all
-# resolved HERE — before update-branch has touched the branch and before the poll
-# has spent a CI round. A refusal that arrives at the merge step has already cost
-# what it exists to save.
+# Two independent classifications, and every refusal the MERGE-METHOD one implies
+# taken HERE — before update-branch has touched the branch and before the poll has
+# spent a CI round. A refusal that arrives at the merge step has already cost what
+# it exists to save. (The humanAlways classification's own refusal is the feedback
+# step below, which needs a second call to read the diff; it still lands before
+# update-branch, which is the property that matters.)
 
 merge_method=""
 case "${#pr_closes[@]}" in
@@ -518,10 +523,20 @@ fi
 # "pending — filled at merge". Both are owned elsewhere — `.claude/workflow.json`'s
 # feedbackLog for the path, docs/review-feedback.md's `## Entry format` for the
 # literal — so both are ledgered there (architecture.md rule 9), and this comment
-# is the pointer back. The failure direction if either moves without this file:
-# the added-lines set comes back empty or the field lines stop matching, and the
-# step REFUSES with a message naming the stale path. Loud and closed, never a
-# quiet pass.
+# is the pointer back. The two fail in OPPOSITE directions if they move without
+# this file, and the difference is the whole reason the ledgers matter:
+#
+#   - the PATH moving is loud and closed. The awk target finds nothing under the
+#     old name, the added-lines set comes back empty, and the step refuses with a
+#     message naming the stale path. `is_human` is computed from merge.humanAlways
+#     independently, so the refusal still fires on exactly the PRs it should.
+#   - the LITERAL moving is a QUIET PASS. The field lines are `- **Category**:`
+#     and `- **Verdict**:`, a different string, so they go on matching; only the
+#     placeholder test below stops matching, and a gate that stops matching is a
+#     gate that opens. Nothing anywhere says so — which is why the ledger in
+#     docs/review-feedback.md names this file as the literal's one executable
+#     carrier, and why that ledger is the only thing standing between a reworded
+#     placeholder and a humanAlways PR merged with no verdict.
 
 feedback_state() { # -> 0 entry present and filled; 1 refuse (reason on stdout); 2 unreadable
   local diff rc spool added
@@ -639,14 +654,17 @@ update_branch_step() {
         step 'update-branch' 'already up to date with the base'
         return 0
         ;;
-      # The head-sha race. gh drives this through the GraphQL
-      # `updatePullRequestBranch` mutation, whose argument is `expectedHeadOid`,
-      # while the REST endpoint spells the same thing `expected_head_sha` — so
-      # both vocabularies are matched rather than whichever one a given gh build
-      # happens to surface. An unmatched spelling falls to the `*)` arm and fails
-      # the run, which is the safe direction: a re-run is the repair.
-      *"head sha"* | *"head oid"* | *"expected head"* | *"expectedheadoid"* | \
-        *"out of date"* | *"stale"*)
+      # The head-sha race, in every spelling it is known to arrive in. The REST
+      # endpoint's documented 422 is `expected_head_sha didn't match pull request
+      # head.` — UNDERSCORES, which is why `head sha` with a space never matched
+      # it and an arm written only that way would have failed the run on the
+      # exact race this loop exists for. gh also drives the same update through
+      # the GraphQL `updatePullRequestBranch` mutation, whose argument is
+      # `expectedHeadOid`, so that vocabulary is matched too. An unmatched
+      # spelling still falls to the `*)` arm and fails the run, which is the safe
+      # direction: a re-run is the repair.
+      *"expected_head_sha"* | *"head_sha"* | *"head sha"* | *"head oid"* | \
+        *"expectedheadoid"* | *"expected head"* | *"out of date"* | *"stale"*)
         if [ "$attempt" -ge "$MERGE_PR_UPDATE_RETRIES" ]; then
           fail 'update-branch' "the head moved under every one of $MERGE_PR_UPDATE_RETRIES attempts: $out"
         fi
@@ -779,9 +797,21 @@ if [ "$already_merged" = "0" ] && [ "$pr_state" = "MERGED" ]; then
   already_merged=1
   step 'merge' 'skipped (the PR was merged elsewhere while this run was working)'
 elif [ "$already_merged" = "0" ]; then
-  if [ "$pr_merge_state" != "CLEAN" ] && [ "$merge_method" = "--rebase" ]; then
-    # A batch's repair is never gh pr update-branch — see the update-branch step.
-    fail 'merge' "mergeStateStatus is '$pr_merge_state', not CLEAN, and this is a --rebase batch: the repair is a \"curate onto latest main\" bounce to the branch's owner, force-pushed, not an update from here"
+  # The bounce is prescribed only for the two states it is the repair for. The
+  # rule is scoped that way at both its carriers — run-issue step 4 and
+  # docs/design/task-orchestrator.md both say "a batch that is BEHIND or
+  # conflicted" — and the scoping is load-bearing rather than pedantic: BLOCKED
+  # (branch protection), UNKNOWN (GitHub still computing) and DRAFT all reach this
+  # point too, and telling a merge owner to bounce an agent into a
+  # rebase-and-force-push when the blocker is a required review is walking them
+  # into a wrong and expensive repair. Everything else falls to the generic
+  # refusal below, which names the state and prescribes nothing.
+  if [ "$merge_method" = "--rebase" ]; then
+    case "$pr_merge_state" in
+      BEHIND | DIRTY)
+        fail 'merge' "mergeStateStatus is '$pr_merge_state' and this is a --rebase batch: the repair is a \"curate onto latest main\" bounce to the branch's owner, force-pushed, never an update from here — gh pr update-branch would write a merge commit and block the rebase-merge outright"
+        ;;
+    esac
   fi
   [ "$pr_merge_state" = "CLEAN" ] || fail 'merge' "mergeStateStatus is '$pr_merge_state', not CLEAN — a merge is only ever taken from CLEAN"
 

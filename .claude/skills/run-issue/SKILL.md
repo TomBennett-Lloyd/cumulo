@@ -112,6 +112,10 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    report's branch commit list must show commit count == surviving-member count, each
    commit referencing its member issue, and `git log --oneline main..<branch>` must match
    it (CI green AND curated history are both required; either failing blocks the merge).
+   `merge-pr.sh` (ticket-agent lane, step 3) runs this chain for a batch too, and knows
+   the two differences: it checks the curated history itself and refuses without it, and
+   it never runs `gh pr update-branch` on a `--rebase` PR — it reports the bounce below
+   instead of taking it, since only the branch's owner can curate and force-push.
    A batch that is BEHIND or conflicted gets a "curate onto latest main" bounce instead of
    `gh pr update-branch` (a merge commit would break the invariant and block rebase-merge);
    after the force-push, wait for the new head's checks as usual. HUMAN-class: notify the

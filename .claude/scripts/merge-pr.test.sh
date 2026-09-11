@@ -521,6 +521,27 @@ expect_not_called "pr merge $PR --rebase"
 end
 
 # ==========================================================================================
+# 10b-ii. …but the bounce is prescribed only for the states it repairs
+# ==========================================================================================
+# BLOCKED is branch protection, not a stale branch. Telling a merge owner to bounce
+# an agent into a rebase-and-force-push when the blocker is a required review sends
+# them to a wrong and expensive repair, so only BEHIND and DIRTY get that message.
+begin "a BLOCKED --rebase batch is refused by state, with no curate-onto-main advice"
+fixture batch-blocked
+V_BODY="Closes #21 and Closes #22"
+V_COMMITS="#21: the first,#22: the second"
+V_MSST="BLOCKED"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'merge — FAILED'
+expect_stderr "mergeStateStatus is 'BLOCKED', not CLEAN"
+expect_not_stderr 'curate onto latest main'
+expect_not_called "pr merge $PR --rebase"
+end
+
+# ==========================================================================================
 # 10c. --method overrides the inference, and the squash path updates the branch again
 # ==========================================================================================
 # The inference is a heuristic: PR #414 carried four Closes lines and was squashed.
@@ -838,6 +859,99 @@ expect_stderr 'classify — FAILED'
 expect_stderr 'CLOSED without being merged'
 expect_not_called "pr merge $PR --squash"
 expect_not_called "pr update-branch $PR"
+end
+
+# ==========================================================================================
+# 17h. a PR merged elsewhere while this run was working finishes the chain, it does not fail
+# ==========================================================================================
+# A merged PR reports mergeStateStatus UNKNOWN — the same answer GitHub gives while
+# it is still computing a merge — so the re-read loop has to watch the STATE as well
+# as the status, or a concurrent merge burns every retry and then fails the run on a
+# PR that is merged. The fixture merges it between the poll and the merge step.
+begin "a PR merged elsewhere mid-run finishes the post-merge steps instead of failing"
+fixture merged-elsewhere
+V_LABELS="awaiting-review"
+write_view default
+write_view 1
+# The poll's read: checks are ready, but the merge state has not settled, which is
+# what sends the merge step into its UNKNOWN re-read loop.
+V_MSST="UNKNOWN"
+write_view 2
+# What that loop reads: merged, and still answering UNKNOWN — which is what a
+# merged PR always answers, and the reason the loop cannot watch the status alone.
+V_STATE="MERGED"
+write_view 3
+run_merge
+expect_rc 0
+expect_stdout 'skipped (the PR was merged elsewhere while this run was working)'
+expect_stdout "'awaiting-review' removed, after the merge"
+expect_stdout "done — PR #$PR MERGED"
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 17i. gh's no-op answer is read on the SUCCESS path, where it actually arrives
+# ==========================================================================================
+# gh prints "PR branch already up-to-date" and exits 0. A step that reported every
+# rc=0 as "updated onto the base" would claim a write that never happened — and the
+# checks baseline it implies is the difference between waiting for a new head's
+# workflows and merging on the old head's results.
+begin "an rc=0 'already up-to-date' answer is reported as a no-op, not as an update"
+fixture noop-success
+write_view default
+must printf 'PR branch already up-to-date\n' >"$STATE/update-branch.out"
+must printf '0\n' >"$STATE/update-branch.rc"
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'already up to date with the base'
+expect_not_stdout 'updated onto the base'
+expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 17j. the head-sha race is retried, in the spelling GitHub actually uses
+# ==========================================================================================
+# The REST 422 reads `expected_head_sha didn't match pull request head.` —
+# underscores. An arm matching only "head sha" with a space never sees it, and the
+# run fails on the exact race the retry loop exists for.
+begin "an expected_head_sha 422 is retried rather than failing the run"
+fixture headsha-race
+write_view default
+must printf "expected_head_sha didn't match pull request head.\n" >"$STATE/update-branch.out"
+must printf '1\n' >"$STATE/update-branch.rc"
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'update-branch — FAILED'
+expect_stderr 'the head moved under every one of 3 attempts'
+expect_not_called "pr merge $PR --squash"
+# Retried, not refused on the first answer: three attempts, one call each.
+attempts=$(grep -c -- "^pr update-branch $PR\$" "$STATE/calls.log")
+[ "$attempts" = "3" ] || bad "expected 3 update-branch attempts, got $attempts"
+end
+
+# ==========================================================================================
+# 17k. an entry with no Category line is refused
+# ==========================================================================================
+begin "an added entry with no Category line is refused"
+fixture no-category
+V_FILES="CLAUDE.md"
+cat >"$STATE/diff" <<'EOF'
+diff --git a/docs/review-feedback.md b/docs/review-feedback.md
+--- a/docs/review-feedback.md
++++ b/docs/review-feedback.md
+@@ -1,0 +2,2 @@
++## 2026-09-11 — PR #490 — slug
++- **Verdict**: Approved without changes.
+EOF
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'feedback — FAILED'
+expect_stderr 'no "- **Category**:" line'
+expect_not_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================
