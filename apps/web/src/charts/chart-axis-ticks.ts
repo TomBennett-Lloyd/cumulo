@@ -8,9 +8,9 @@ import { TOOLTIP_CHAR_WIDTH } from './tooltip-geometry';
  *
  * **The contract is an inequality, not a label budget.** The axis used to thin
  * to a fixed count (eight labels, whatever the width), which is a guess about
- * how much room eight of them need; at ~436px of chart the guess was wrong and
- * neighbouring `Wed 14:00` ticks ran into each other. What replaces it is a
- * width model plus a stated invariant — for consecutive labels in one tier,
+ * how much room eight of them need, and #259 is where that guess was wrong. What
+ * replaces it is a width model plus a stated invariant — for consecutive labels
+ * in one tier,
  *
  *     x[i+1] − x[i] ≥ (w[i] + w[i+1]) / 2 + MIN_LABEL_GAP
  *
@@ -33,14 +33,13 @@ import { TOOLTIP_CHAR_WIDTH } from './tooltip-geometry';
  * are proportional to time rather than to array position — so a tick sits over
  * the sample it names on an axis with a missing hour in it exactly as it does on
  * a complete one. What this file decides is *which* instants get a label and
- * whether the ones it kept can coexist; where each one lands is the same mapping
- * every mark on the canvas uses.
+ * whether the ones it kept can coexist.
  *
  * Pure: no React, no DOM, no clock. The tiers are a function of the samples and
  * the scale they are drawn against, so the overlap claim is provable by
  * arithmetic over a sweep of widths rather than by looking at a rendered page —
  * which is the point, since a browser can only ever be asked about the widths
- * somebody thought to try (`testing.md` rule 10).
+ * somebody thought to try (`docs/standards/testing.md` rule 10).
  */
 
 /** One label of one tier: the text, and the x its middle sits on. */
@@ -64,7 +63,7 @@ export interface XAxisTiers {
  * measurement — #284 D6 trued it against a rendered panel, and
  * `tooltip-geometry.ts` carries the arithmetic. A second literal here would be
  * a restatement with no owner, and the two would drift the first time either was
- * retuned (`architecture.md` rule 9).
+ * retuned (`docs/standards/architecture.md` rule 9).
  *
  * The same caveat applies as there: a mean is not a bound, so a tier of wide
  * glyphs is modelled a little narrow. That is why `MIN_LABEL_GAP` is a real gap
@@ -77,8 +76,8 @@ export const AXIS_CHAR_WIDTH = TOOLTIP_CHAR_WIDTH;
  *
  * Not slack in the model — labels touching at their box edges read as one
  * smeared string even when nothing technically overlaps, and the width model
- * above is a mean rather than a ceiling. Eight units is a little over one
- * character, so a pair the model got slightly wrong is still visibly two labels.
+ * above is a mean rather than a ceiling. A little over one character, so a pair
+ * the model got slightly wrong is still visibly two labels.
  */
 export const MIN_LABEL_GAP = 8;
 
@@ -159,8 +158,7 @@ const labelXOnCanvas = (x: number, text: string): number => Math.max(labelWidth(
  * of what keeps this tier honest: the axis is time-proportional, so a sample's
  * position is a fact about *when* it is and not about where it sits in the
  * array. Two params rather than a named object, because a string and a number
- * cannot be swapped for each other at a call site — which is exactly what the
- * `index`/`count` pair this replaced could do.
+ * cannot be swapped for each other at a call site.
  */
 const tierLabel = (text: string, x: number): TierLabel => ({
   text,
