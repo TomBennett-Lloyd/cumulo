@@ -88,13 +88,27 @@ LEDGER_HEADER=$(printf 'path\tline\tclaim\tcheck\tdisposition')
 # an emptiness claim and a broken pattern print the same nothing.
 SPELLED_RE='\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|ninety|hundred)[- ](second|minute|px|pixel|ms|kW|sites?)'
 
-# The seam the harness needs. Pre-checks (a), (b) and (d) can be made to fail
-# with a real git — a bad pathspec in the ledger does it — but the two `git diff`
-# calls below take no ledger input at all, so their failure paths are
-# unreachable from a fixture and would ship unasserted. Same precedent and same
-# narrow scope as `LINT_SHELL_GIT_CMD` in lint-shell.sh: it covers these diff
-# calls ONLY, and the repo-identity `rev-parse` above stays plain git.
+# The seam the harness needs. Pre-checks (a) and (b) can be made to fail with a
+# real git — a bad pathspec or an invalid PCRE in the ledger does it — but the
+# `git diff` calls below take no ledger input at all, so their failure paths are
+# unreachable from a fixture and would ship unasserted. Same precedent as
+# `LINT_SHELL_GIT_CMD` in lint-shell.sh and the same narrow scope: it covers the
+# diff calls ONLY, and the repo-identity `rev-parse` stays plain git.
+#
+# It carries one hazard the precedent does not: lint-shell.sh uses its seam in
+# argv position, where a value is inert, while pre-check (c) runs as a STRING
+# through `bash -c` and would evaluate whatever this held. So it is validated to
+# a path-safe character class before anything reads it — the same argument the
+# base sha gets below, one variable further out.
 : "${SWEEP_REPORT_GIT_CMD:=git}"
+case "$SWEEP_REPORT_GIT_CMD" in
+  '' | *[!A-Za-z0-9_./-]*)
+    printf 'sweep-report: SWEEP_REPORT_GIT_CMD must be a command name or path holding only [A-Za-z0-9_./-]\n' >&2
+    printf '  It reaches a bash -c string in pre-check (c); anything else there is executed.\n' >&2
+    printf '  Got: %s\n' "$SWEEP_REPORT_GIT_CMD" >&2
+    exit 2
+    ;;
+esac
 
 # The width at which a comment line counts as a "full-width continuation" for
 # pre-check (e). Prettier does not reflow comments, so a three-word line above a
@@ -149,8 +163,9 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fatal "not inside a gi
 cd "$repo_root" || fatal "cannot enter the repository root: $repo_root"
 
 # Resolved to a full hex sha, and used in that form everywhere below: pre-check
-# (c) embeds it in a command STRING, and a hex sha is the one spelling that
-# cannot carry anything else into that string.
+# (c) embeds it in a command STRING, and a hex sha carries nothing else into
+# that string. It and the validated seam above are the only two variables that
+# reach it; everything the ledger parameterises reaches git as argv instead.
 base_sha=$(git rev-parse --verify --quiet "$base_arg^{commit}")
 rc=$?
 if [ "$rc" -ne 0 ] || [ -z "$base_sha" ]; then
@@ -342,8 +357,11 @@ emit_streams() {
 # `fatal: Invalid pathspec magic` on stderr, folded into the output file, is one
 # LINE — and a line count over that file then reports a git failure as a hit,
 # which is a broken check reported as a clean one. The count the report reads is
-# produced by the check, or the check is refused — which is what every caller's
-# `cmd_errored` test below is for.
+# produced by the check, or the check is refused — which is what the
+# `cmd_errored` test after each pre-check's own run is for. The two built-in
+# positive controls are the exception: their guard is the `*_control -eq 0`
+# refusal beside them, because a control that returns nothing is a broken check
+# rather than a failed one.
 run_shown() {
   render_cmd "$@"
   "$@" >"$CMD_OUT" 2>"$CMD_ERR"
@@ -353,9 +371,11 @@ run_shown() {
 
 # run_shown_pipeline — the same contract for the pre-check `prose.md` states AS
 # a pipeline. The string is displayed and executed, so they cannot diverge; it
-# is composed only from this script's own constants and the resolved hex base
-# sha, never from ledger text, which is why an eval-shaped form is safe here and
-# argv is used for everything the ledger parameterises.
+# is composed only from this script's own constants, the resolved hex base sha,
+# and the seam validated at the top of this file — never from ledger text, which
+# reaches git as argv through run_shown. That eval-shaped form is the reason
+# both of those values are validated rather than trusted; it is also a design
+# this script would rather not have, and `docs/tech-debt.md` says so.
 run_shown_pipeline() {
   printf '$ %s\n' "$1"
   bash -c "$1" >"$CMD_OUT" 2>"$CMD_ERR"
@@ -434,11 +454,15 @@ diff_scale=$(awk '
   { files++; added += ($1 == "-") ? 0 : $1; removed += ($2 == "-") ? 0 : $2 }
   END { printf("%d file(s), +%d / -%d line(s)", files + 0, added + 0, removed + 0) }' "$NUMSTAT_FILE")
 diff_files=${diff_scale%% *}
-# Named as "working tree vs base", not "the branch": `git diff <sha>` reads the
-# WORKING TREE, so a report run with uncommitted edits describes a state no
-# reviewer re-running on a clean checkout will see. Saying which state was read
-# is the honest half; making the two agree is `docs/tech-debt.md`'s.
-printf '%s\n\n' "Diff at this base (working tree vs \`$base_sha\`): $diff_scale"
+# Named as "tracked working tree vs base", and both words earn their place:
+# `git diff <sha>` reads the working tree, so a report run with uncommitted
+# edits describes a state no reviewer re-running on a clean checkout will see —
+# and it reads only TRACKED files, so a new file the lane has not staged is
+# invisible to the scale and to pre-checks (c) and (e) alike
+# (docs/standards/evidence.md member 8's blind spot, and its general lesson:
+# name the state a check is asserted in). Saying which state was read is the
+# honest half; making the two agree is `docs/tech-debt.md`'s.
+printf '%s\n\n' "Diff at this base (tracked working tree vs \`$base_sha\`): $diff_scale"
 
 # Title fragment and totals table come out of ONE awk END block over ONE row
 # file. That is the whole answer to #520: the title line and the table's total

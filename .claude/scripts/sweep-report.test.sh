@@ -538,7 +538,7 @@ ledger_new empty-diff
 row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
 run_report
 expect_rc 1
-expect_stdout "Diff at this base (working tree vs \`$BASE\`): 0 file(s), +0 / -0 line(s)"
+expect_stdout "Diff at this base (tracked working tree vs \`$BASE\`): 0 file(s), +0 / -0 line(s)"
 expect_stdout "pre-check (c) had nothing to run over"
 expect_stdout "pre-check (e) had nothing to run over"
 end
@@ -549,18 +549,19 @@ ledger_new scale
 row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
 run_report
 expect_rc 0
-expect_stdout "Diff at this base (working tree vs \`$BASE\`): 1 file(s), +1 / -0 line(s)"
+expect_stdout "Diff at this base (tracked working tree vs \`$BASE\`): 1 file(s), +1 / -0 line(s)"
 end
 
 # --- cases: the diff calls' failure paths, through the SWEEP_REPORT_GIT_CMD seam --------------
 #
-# Pre-checks (a), (b) and (d) are made to fail with a real git by a bad pathspec
-# in the ledger. The two `git diff` calls take no ledger input at all, so their
-# failure paths are unreachable from a fixture — the seam is how they get
-# asserted, the same move lint-shell.sh makes for its own discovery call. The
-# stub fails on the Nth call and otherwise delegates to the real git, because
-# the three call sites are argv-identical and only their order tells them apart:
-# 1 the header diff, 2 the header --numstat, 3 pre-check (c)'s pipeline.
+# Pre-checks (a) and (b) are made to fail with a real git from the ledger — a
+# bad pathspec for (a), an invalid PCRE for (b). The three `git diff` calls take
+# no ledger input at all, so their failure paths are unreachable from a fixture;
+# the seam is how they get asserted, the same move lint-shell.sh makes for its
+# own discovery call. The stub fails on the Nth call and otherwise delegates to
+# the real git: calls 1 and 3 are argv-identical, so order is the only thing
+# that tells them apart — 1 the header diff, 2 the header --numstat, 3
+# pre-check (c)'s pipeline.
 
 # The stub is written through a QUOTED heredoc rather than a printf of
 # single-quoted lines: shell code inside a format string reads as unexpanded
@@ -616,7 +617,36 @@ begin "pre-check (c) refuses when its pipeline could not run"
 run_with_stub_git 3
 expect_rc 1
 expect_stdout "pre-check (c) could not run"
+# The stub's own words, so the failure DETAIL is load-bearing rather than
+# decorative: a reader is told which command failed and how.
+expect_stdout "deliberate failure on call 3"
 expect_not_stdout "no spelled-out figure across"
+end
+
+begin "a sweep whose pattern git cannot compile fails the run, and says so"
+# This is how pre-check (b)'s refusal arm is reachable without a stub: the
+# pattern is the one part of a sweep the ledger controls, and an invalid PCRE
+# makes git itself refuse. Without the arm the fatal text is counted as a hit.
+fixture bad-pcre
+ledger_new bad-pcre
+row docs/fixture-notes.md 3 "a claim" "sweep" verified-true "sweep=FIXTURE_CARRIER_(unclosed" "control=docs/fixture-notes.md"
+run_report
+expect_rc 1
+expect_stdout "pre-check (b) could not run the sweep"
+expect_not_stdout "sweep-report: OK"
+end
+
+begin "a seam value that could reach bash -c as code is refused outright"
+# pre-check (c) runs as a STRING through bash -c, so the seam is validated to a
+# path-safe character class before anything reads it. lint-shell.sh's precedent
+# uses its own seam in argv position only, where a value is inert.
+fixture hostile-seam
+ledger_new hostile-seam
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+capture -C "$ROOT" env "SWEEP_REPORT_GIT_CMD=git; touch $TMP_ROOT/pwned" bash "$SUBJECT" "$LEDGER" "$BASE"
+expect_rc 2
+expect_stderr "SWEEP_REPORT_GIT_CMD must be a command name or path"
+[ -e "$TMP_ROOT/pwned" ] && bad "the injected command ran"
 end
 
 begin "a ledger inside the repo is printed repo-relative, so the command pastes back"
