@@ -79,7 +79,7 @@
 # with every driver row convention 3 requires. Two further prose sites carry
 # figures of their own rather than pointing here without one:
 # infra/README.md's ingestion teardown paragraph and its "a forgotten stack is
-# nearly free" cost note both carry the ≈ $0.30 and ≈ $1.48 estimates, and move
+# nearly free" cost note both carry the ≈ $0.30 and ≈ $1.78 estimates, and move
 # with them.
 #
 # ADRs are carriers here like anything else. An ADR's decision and its
@@ -109,13 +109,16 @@
 # `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts —
 # which since #467's prose trim carries the ratio between a per-site read and a
 # fleet fan-out and none of the unit figures themselves — and the fleet-vs-poll
-# comment in apps/web/src/data/use-first-forecast.test.tsx. One ADR carrier
-# joins them: ADR 0002's 2026-08-10 (#264) Amendments entry, which states the
-# current per-load figure and halves every read-side figure derived from its
-# predecessor — a quoter of this stack's arithmetic rather than an owner of it,
-# and owed the ADR treatment described above rather than an inline true-up. So:
-# change the per-load read arithmetic, and every site named here moves in the
-# same commit.
+# comment in apps/web/src/data/use-first-forecast.test.tsx. Two ADR carriers
+# join them, both quoters of this stack's arithmetic rather than owners of it,
+# and both owed the ADR treatment described above rather than an inline
+# true-up: ADR 0002's 2026-08-10 (#264) Amendments entry, which states the
+# per-load figure as it then stood and halves every read-side figure derived
+# from its predecessor — its 2026-09-11 (#494) successor entry marks it
+# as-it-stood and points back here; and ADR 0009's `## Consequences`, which
+# states the roll-up read's own ~18 units and the ≈ $1.78 write line and names
+# this section as the owner of the current per-load total. So: change the
+# per-load read arithmetic, and every site named here moves in the same commit.
 #
 # Both member lists are a floor rather than a census: one more carrier does not
 # falsify them. The sweep behind the ADR members, run 2026-08-11 with
@@ -305,25 +308,31 @@ resource "aws_dynamodb_table" "sites" {
 #    receive — but the thing absorbing the cliff was redelivery patience rather
 #    than capacity, and the alarm mailed on every occurrence (#258).
 #
-#    Cost is activity-shaped rather than standing: ~2.10 M write units/month at
-#    the canonical 12-location fleet (~2,880 items per cycle, the figure the
-#    forecast stack's cost table carries) ≈ $1.48/month, ≈ $2.50 at ADR 0002's
-#    ~50-site planning envelope of 4,850 units per cycle, ≈ $4.99 at #29's
-#    100-site cap, and $0 while the schedule is idle. Reads are activity-shaped
-#    for the same reason and stay negligible: the dashboard read path the
-#    21 RCU was sized against now costs **≈ 52 a load** at $0.1415/M — ~50
-#    read units per load on this table and ~2 elsewhere. The ~50 is ~25 covering
-#    every site's partition for the fleet's forecasts and ~25 again for its
-#    simulated actuals, since #264 gave the fleet a measured half and #296
-#    put both behind their own API route, where the per-site Queries are now
-#    issued server-side. (The load's remaining ~2 units are one Query over the
-#    `FLEET` partition on `sites`, not this table.) This paragraph owns the
-#    per-load figure — ADR 0002's ≈ 27 was honest until #264 gave a load its
-#    second `series` read, and is amended (2026-08-10) rather than current;
-#    every carrier is named in this file's header ledger. So the loads it
-#    takes to spend a cent still number in the thousands, and the bound on a
-#    determined caller is ADR 0005's gateway throttle rather than a read
-#    allocation — which is what the 21 RCU had become in practice anyway.
+#    Cost is activity-shaped rather than standing: ~2.52 M write units/month at
+#    the canonical 12-location fleet (~3,456 items per cycle — ~2,880 forecast
+#    items, the figure the forecast stack's cost table carries, plus 12 × 48 =
+#    576 fleet roll-up partials since #494, a term that grows with *locations*
+#    rather than with sites) ≈ $1.78/month, ≈ $2.79 at ADR 0002's ~50-site
+#    planning envelope of 4,850 units per cycle plus the same 576, ≈ $5.29 at
+#    #29's 100-site cap, and $0 while the schedule is idle. Reads are
+#    activity-shaped for the same reason and stay negligible: the dashboard
+#    read path the 21 RCU was sized against now costs **≈ 45 a load** at
+#    $0.1415/M — ~43 read units per load on this table and ~2 elsewhere. The
+#    ~43 is ~18 for the fleet's forecasts — one Query of the `#FLEET`
+#    partition since #494 (ADR 0009), ~576 items of ~250 B ≈ 144 KB over a
+#    48-hour horizon, eventually consistent — plus ~25 covering every site's
+#    partition for its simulated actuals, whose fan-out ADR 0009 leaves in
+#    place until the actuals roll-up lands. (The load's remaining ~2 units are
+#    one Query over the `FLEET` partition on `sites`, not this table.) **The
+#    units were never what #494 was filed about**: the forecast half went from
+#    eight batched round trips to one, and the unit saving is incidental. This
+#    paragraph owns the per-load figure — ADR 0002's ≈ 27 was honest until
+#    #264 gave a load its second `series` read, and is amended (2026-08-10)
+#    rather than current; every carrier is named in this file's header ledger.
+#    So the loads it takes to spend a cent still number in the thousands, and
+#    the bound on a determined caller is ADR 0005's gateway throttle rather
+#    than a read allocation — which is what the 21 RCU had become in practice
+#    anyway.
 #
 #    There is deliberately no `on_demand_throughput` block, for the same reason
 #    3 below states: a `max_write_request_units` ceiling is a per-second cap, so

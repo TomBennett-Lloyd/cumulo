@@ -237,11 +237,12 @@ export interface FleetDataSource {
    * This read is the cheap one: a single Query over the `FLEET` partition, ~2
    * read units on `sites` (ADR 0002). The read-capacity mistake that ADR's
    * review called out belongs to the fleet-level *series* reads it usually
-   * precedes — {@link fleetForecasts} and {@link fleetActuals} each cover every
-   * site's partition, ~25 read units on `series` a call, against a per-site
-   * poll's ~0.5. Since #264 (actuals) and #296 (forecasts) those Queries are
-   * issued server-side inside one request each rather than by a browser
-   * fan-out — polling either of them would still be that mistake. The per-load
+   * precedes. {@link fleetActuals} still covers every site's partition at ~25
+   * read units on `series` a call, against a per-site poll's ~0.5;
+   * {@link fleetForecasts} costs ~18 since #494 replaced its fan-out with one
+   * Query of the pre-summed `#FLEET` partition (ADR 0009). Both are issued
+   * server-side inside one request each rather than by a browser fan-out —
+   * polling either of them would still be that mistake. The per-load
    * arithmetic is owned by the `series` section of `infra/storage/tables.tf`.
    */
   readonly listSites: () => Promise<FleetSourceResult<readonly Site[]>>;
