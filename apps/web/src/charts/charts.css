@@ -1,40 +1,29 @@
 /*
  * Styling for the forecast chart.
  *
- * Every mark here is `docs/design/chart-treatment.md` in CSS: the band is a
- * fill with no `fill-opacity` (the 10% alpha is baked into the token, and
- * setting one double-dips), the bounds are hairlines because the quantiles are
- * data, the median is 2px round-capped in slot 1, and actuals are near-ink,
- * drawn last, never faded to let the band through.
+ * Every mark here is `docs/design/chart-treatment.md` in CSS.
  *
  * Values are tokens — the gate in stylelint.config.mjs, not a style choice
- * (react.md rule 5). The class names are deliberately prefixed
- * `forecast-chart-`: the token preview's `.chart-*` block in preview.css is a
- * swatch of this treatment and stays independent of the real component, so
- * neither can silently restyle the other.
+ * (`docs/standards/react.md` rule 5). The class names are deliberately prefixed
+ * `forecast-chart-`: the token preview's `.chart-*` block in
+ * `apps/web/src/preview/preview.css` is a swatch of this treatment and stays
+ * independent of the real component, so neither can silently restyle the other.
  */
 
 /* `position: relative` earns its line here and is #452's: it makes this box the
    containing block for `.forecast-chart-error` below, so the failure overlay
-   resolves its `inset: 0` against the figure rather than against the page. The
-   two declarations are one mechanism and useless apart — take this one away and
-   the overlay lands on the nearest positioned ancestor, which is the controls
-   row's own box or the viewport, neither of which is where the chart is.
+   resolves its `inset: 0` against the figure rather than against the page.
    `chart-css-contract.test.ts` reads them as a pair for that reason. */
 .forecast-chart-figure {
   position: relative;
   margin: 0;
 }
 
-/* No `max-width` here any more (#284 D3). The plot used to be held to a measure
-   narrower than the panel around it, which left it floating in white space with
-   the table twin filling the gap below; the twin is folded away now, and the
-   chart takes the whole column. The measure that bounds it is the reading
-   column's own (`dashboard.css`), not a second one restated per chart.
-   `preview.css` keeps a measure of its own, and the value stays there rather
-   than being quoted here (architecture.md rule 9): the token preview is a
-   different surface sizing a swatch of this treatment, and the two are free to
-   diverge (structure.md rule 7).
+/* No `max-width` here any more (#284 D3). The measure that bounds it is the
+   reading column's own (`apps/web/src/dashboard/dashboard.css`), not a second
+   one restated per chart. `apps/web/src/preview/preview.css` keeps a measure of
+   its own, and the value stays there rather than being quoted here
+   (`docs/standards/architecture.md` rule 9).
 
    `width: 100%` is doing a second job since #284 D15, and it is the load-bearing
    one: this is the box the chart *measures* to draw itself 1:1
@@ -61,9 +50,7 @@
    `pinch-zoom` is named beside it because this property is an allow-list rather
    than a list of exceptions: `pan-y` on its own permits vertical panning and
    nothing else, so a two-finger zoom starting anywhere on this band would be
-   refused — on the largest data surface on the page, in a product `design.md`
-   rule 1 makes first-class on a phone, and to a reader magnifying a chart rather
-   than fighting it. It costs the scrub nothing: a pinch is two pointers and the
+   refused. It costs the scrub nothing: a pinch is two pointers and the
    scrub is one, so the gesture the paragraph above is about is untouched. */
 .forecast-chart {
   display: block;
@@ -98,8 +85,8 @@
    alone suffices: that spec's `paintsARing` reads a style of `none` as no ring.
    And no pseudo-class appears here at all, so this is nowhere near the bare
    `:focus` that `selector-pseudo-class-disallowed-list` bans in
-   `stylelint.config.mjs` — it is `design.md` rule 11's split, expressed against
-   the one focus an engine gets wrong by default. */
+   `stylelint.config.mjs` — it is `docs/standards/design.md` rule 11's split,
+   expressed against the one focus an engine gets wrong by default. */
 .forecast-chart[data-focus-via-pointer='true'] {
   outline-style: none;
 }
@@ -109,14 +96,13 @@
   stroke-width: 1;
 }
 
-/* The measurement seam, and the only dashed mark on this canvas (#284 D11). It
- * shared the grid's rule until now, which made the one line that means "the
- * measurements stop here" indistinguishable from the five that mean nothing at
- * all. Same ink and same weight — it is still recessive chrome, not data — but
- * dashed, which is what carries the meaning: chart-treatment.md bans a dashed
- * *grid* precisely because a dash reads as "threshold", and a threshold is what
- * this rule is. Dashing the forecast line instead stays banned; the seam is
- * marked once, in chrome (#290, and the horizon bullet in that document).
+/* The measurement seam, and the only dashed mark on this canvas (#284 D11).
+ * Same ink and same weight — it is still recessive chrome, not data — but
+ * dashed, which is what carries the meaning: `docs/design/chart-treatment.md`
+ * bans a dashed *grid* precisely because a dash reads as "threshold", and a
+ * threshold is what this rule is. Dashing the forecast line instead stays
+ * banned; the seam is marked once, in chrome (#290, and the horizon bullet in
+ * that document).
  *
  * `stroke-dasharray` is a length pair, so it reaches the page through the
  * documented allow-list residual in stylelint.config.mjs, the same way
@@ -129,22 +115,20 @@
 }
 
 /* The two context layers (#335), drawn so the diurnal shape of the series reads
- * against its cause rather than being explained in a sentence (design.md rule
- * 10). Both are decoration to assistive technology: they live inside the
- * `role="img"` svg, add nothing to the tab order and nothing to the label.
+ * against its cause rather than being explained in a sentence
+ * (`docs/standards/design.md` rule 10). Both are decoration to assistive
+ * technology: they live inside the `role="img"` svg, add nothing to the tab
+ * order and nothing to the label.
  *
- * The wash is a fill and no more — the alpha is baked into the token, exactly as
- * the band's is, so nothing here double-dips with a `fill-opacity`. It is the
- * backmost mark on the canvas, which is what lets it be this faint: every other
- * mark is drawn over it at full strength.
+ * The wash is a fill and no more. It is the backmost mark on the canvas, which
+ * is what lets it be this faint: every other mark is drawn over it at full
+ * strength.
  *
  * The boundary is the *third* vertical meaning on this plot, and the three are
- * separated by treatment rather than by position: day boundary solid at the
- * grid's hairline weight in the grid's ink, horizon dashed at the same weight
- * and ink, crosshair solid at the data weight in full ink. Grid ink and a
- * hairline are right for a boundary because it is the most recessive of the
- * three — it is the frame the hours hang on, like the axis's day tier, not an
- * event and not the reader's own landmark.
+ * separated by treatment rather than by position. Grid ink and a hairline are
+ * right for a boundary because it is the most recessive of the three — it is
+ * the frame the hours hang on, like the axis's day tier, not an event and not
+ * the reader's own landmark.
  *
  * The coincidence case, accepted rather than overlooked: with "now" near a UTC
  * midnight the horizon rule can land on the same x as a boundary, and the two
@@ -161,7 +145,7 @@
   stroke-width: 1;
 }
 
-/* No `fill-opacity`: the alpha lives in the token (chart-treatment.md). */
+/* No `fill-opacity`: the alpha lives in the token (`docs/design/chart-treatment.md`). */
 .forecast-chart-band {
   fill: var(--color-chart-band-fill);
 }
@@ -173,7 +157,7 @@
 }
 
 /* A lone banded hour has no run to sweep an area across, so its P90–P10
- * interval is the band (chart-treatment.md). Full data-line weight, not the
+ * interval is the band (`docs/design/chart-treatment.md`). Full data-line weight, not the
  * bounds' hairline: a 1px stroke at 35% alpha in a single column is invisible,
  * which is the disappearance this mark exists to prevent. */
 .forecast-chart-band-interval {
@@ -201,9 +185,9 @@
 
 /* An overlay is the first series added alongside the forecast, so it takes slot
  * 2: slot 1 is the forecast's hue everywhere in the product, and the categorical
- * slots are assigned in fixed order and never cycled (chart-treatment.md). The
- * legend swatch shares this rule rather than restating the stroke, so the key
- * cannot drift from the line it names. */
+ * slots are assigned in fixed order and never cycled
+ * (`docs/design/chart-treatment.md`). The legend swatch shares this rule rather
+ * than restating the stroke, so the key cannot drift from the line it names. */
 .forecast-chart-overlay,
 .forecast-chart-swatch-overlay {
   fill: none;
@@ -230,7 +214,7 @@
 }
 
 /* The ring is a spacer, not a border: it keeps the end dot countable where it
- * crosses the median line (chart-treatment.md). */
+ * crosses the median line (`docs/design/chart-treatment.md`). */
 .forecast-chart-actuals-marker {
   fill: var(--color-chart-actuals);
   stroke: var(--color-surface);
@@ -251,9 +235,9 @@
  * `--color-text` mints no token and owes no new AA audit: it is the strong ink
  * in both themes — near-black on the light surface, near-white on the dark one —
  * and is already the body ink over `--color-surface` and `--color-bg`, carrying
- * that measurement in tokens.css. A stroke is not text, and the threshold a
- * mark owes is the lower one, so the audit the token already carries covers
- * this use with room to spare.
+ * that measurement in `packages/ui/src/tokens/tokens.css`. A stroke is not text,
+ * and the threshold a mark owes is the lower one, so the audit the token
+ * already carries covers this use with room to spare.
  *
  * It does land on the same value as `--color-chart-actuals` in both modes —
  * near-ink is what both mean — so crosshair and actuals are the same colour at
@@ -261,14 +245,10 @@
  * whole of the argument is the crossing: they meet at a point, not along a run
  * (one is vertical, the other broadly horizontal), so what a reader is asked to
  * separate is a junction of two directions rather than two strokes lying on top
- * of each other. That argument was carrying a second half until #421 — that the
- * crosshair only ever exists under a live pointer, so the pair was never
- * stationary — and a tap now pins the crosshair where the finger left it, over
- * actuals that were stationary all along. So the stationary pair is a state the
- * chart reaches, and it is the crossing alone that makes it legible. Two tokens
- * agreeing today is also not a reason to make one reference the other — they
- * mean different things and are free to diverge (chart-treatment.md reserves
- * near-ink for one *series*; this is chrome). */
+ * of each other. Two tokens agreeing today is also not a reason to make one
+ * reference the other — they mean different things and are free to diverge
+ * (`docs/design/chart-treatment.md` reserves near-ink for one *series*; this is
+ * chrome). */
 .forecast-chart-crosshair {
   stroke: var(--color-text);
   stroke-width: 2;
@@ -282,11 +262,10 @@
  *
  * Slot 1's hue at the data weight, because this stands where the fleet's own
  * median line is about to be and reads as a rehearsal of it rather than as a
- * different kind of thing (chart-treatment.md's median treatment: 2px, round
- * cap and join, `--color-chart-1`). The opacity is the entire difference between
- * the two, and it is the whole of "subtle": a placeholder at full ink would be
- * the loudest mark this plot ever draws, for the one state that has nothing to
- * say.
+ * different kind of thing (`docs/design/chart-treatment.md`'s median treatment).
+ * The opacity is the entire difference between the two, and it is the whole of
+ * "subtle": a placeholder at full ink would be the loudest mark this plot ever
+ * draws, for the one state that has nothing to say.
  *
  * `stroke-dasharray: 1` is a fraction rather than a length, because the element
  * carries `pathLength="1"` (`ForecastChart.tsx`) — one dash and one gap of the
@@ -295,10 +274,6 @@
  * changes size. There is no dash-scale token for either to spend, so both reach
  * the page through the documented allow-list residual in stylelint.config.mjs,
  * exactly as `.forecast-chart-horizon`'s pattern above does.
- *
- * No dependency, and none wanted: a normalised path length plus a dash offset is
- * plain SVG and CSS, and anything heavier here would be a library bought to
- * animate one placeholder.
  *
  * The duration is unhurried on purpose — a fast loop reads as a spinner, which
  * is the thing this replaced. `chart-css-contract.test.ts` asserts the pieces
@@ -358,10 +333,10 @@
  *
  * The state is unchanged for them, and that is the point rather than a
  * consolation: the machine-readable half is `aria-busy` on the panel
- * (`dashboard/fleet-panel-body.tsx`), which owes nothing to whether anything
- * moves. This is the first selector in this file written as a *pair*, which is
- * why `chart-css-contract.test.ts` grew a lookup that names which of the two it
- * means. */
+ * (`apps/web/src/dashboard/fleet-panel-body.tsx`), which owes nothing to
+ * whether anything moves. This is the first selector in this file written as a
+ * *pair*, which is why `chart-css-contract.test.ts` grew a lookup that names
+ * which of the two it means. */
 @media (prefers-reduced-motion: reduce) {
   .forecast-chart-loading-trace {
     animation: none;
@@ -375,17 +350,16 @@
  * `position: absolute; inset: 0` inside the positioned figure above is the whole
  * of the no-jump requirement, and it is structural rather than measured: an
  * out-of-flow child contributes nothing to its parent's height, so this state
- * cannot move the page arriving or leaving however tall its contents are. That
- * is #448's discipline applied to the other end of the read — the wait is a mark
- * inside the plot's box, and the failure is a panel over the same box. The two
- * declarations plus the figure's `position` are what
+ * cannot move the page arriving or leaving however tall its contents are. The
+ * two declarations plus the figure's `position` are what
  * `chart-css-contract.test.ts` pins, because a claim about layout that no test
  * can see is a claim about nothing.
  *
  * **`--color-danger`, not `--color-warning`, and the owner's "warning triangle"
- * is not an argument against it.** `panel-states.css` owns this vocabulary —
- * danger says a request failed, warning says the answer arrived but is
- * incomplete — and this state is the first of those: there is no answer at all.
+ * is not an argument against it.** `apps/web/src/dashboard/panel-states.css`
+ * owns this vocabulary — danger says a request failed, warning says the answer
+ * arrived but is incomplete — and this state is the first of those: there is no
+ * answer at all.
  * The owner's phrase specifies the glyph's shape, which is what the icon draws;
  * the ink is the vocabulary's to decide, and warning's token would fail
  * non-text contrast on this surface besides.
@@ -409,32 +383,29 @@
 /* The ink is inherited from the container above, so the sentence and the glyph
    cannot end up two different reds. Only the margin reset and the type step are
    this rule's, and the step is the one every other state sentence on the page
-   takes (`panel-states.css`). */
+   takes (`apps/web/src/dashboard/panel-states.css`). */
 .forecast-chart-error-message {
   margin: 0;
   font-size: var(--text-sm);
 }
 
-/* The glyph, in `map.css`'s `.map-control-icon` idiom — strokes, no fill,
-   `currentColor` — at a size chosen against what it sits on rather than copied.
-   That icon's size is the copied one: its own comment in `map.css` says its
-   declarations are word-for-word `.header-menu-icon`'s, so it wears the header
-   bar's mark, and the square control around it is derived outward from the mark
-   rather than the mark from the control — `.map-control-reset`'s comment works
-   that step out a few rules above. This one joins no such family: it stands in
-   the middle of the page's largest surface with nothing but a short sentence
-   beside it, so it takes the step that reads at plot scale. Neither size is
-   restated here: both are worked figures nothing pins, and a copy of one rots
-   green (`architecture.md` rules 9 and 12).
+/* The glyph, in `apps/web/src/map/map.css`'s `.map-control-icon` idiom —
+   strokes, no fill, `currentColor` — at a size chosen against what it sits on
+   rather than copied. It stands in the middle of the page's largest surface
+   with nothing but a short sentence beside it, so it takes the step that reads
+   at plot scale. Neither size is restated here: both are worked figures nothing
+   pins, and a copy of one rots green (`docs/standards/architecture.md` rules 9
+   and 12).
 
    `stroke-linecap: round` is load-bearing rather than styling: the exclamation's
-   dot is a subpath far shorter than the stroke is wide (`forecast-chart-error.tsx`
-   carries the length), which a butt cap paints as a sliver too thin to see and a
-   round cap paints as a dot of the full stroke width. The join is round for the same reason the icon
-   family's are — a stroked triangle's apex under a miter join at this weight is
-   a spike. Neither the width, the height nor `stroke-width` has a token to
-   spend; they are the documented length residual of the CSS gate
-   (stylelint.config.mjs), as `.map-control-icon`'s own are. */
+   dot is a subpath far shorter than the stroke is wide
+   (`forecast-chart-error.tsx` carries the length), which a butt cap paints as a
+   sliver too thin to see and a round cap paints as a dot of the full stroke
+   width. The join is round for the same reason the icon family's are — a
+   stroked triangle's apex under a miter join at this weight is a spike. Neither
+   the width, the height nor `stroke-width` has a token to spend; they are the
+   documented length residual of the CSS gate (stylelint.config.mjs), as
+   `.map-control-icon`'s own are. */
 .forecast-chart-error-icon {
   display: block;
   width: 2rem;
@@ -483,9 +454,9 @@
  * what a spacing token means, and so is not the borrowing the table's header
  * rule below objects to: that one used `--space-1 / 4` to express a border
  * thickness, which the spacing scale has no opinion about. Border and shadow
- * together, not either
- * alone: the border is what separates the panel from a mark of the same tone
- * directly beneath it, and the shadow is what puts it above the plot. */
+ * together, not either alone: the border is what separates the panel from a
+ * mark of the same tone directly beneath it, and the shadow is what puts it
+ * above the plot. */
 .forecast-chart-tooltip-panel {
   rx: var(--radius-sm);
   fill: var(--color-surface);
@@ -502,7 +473,7 @@
 }
 
 /* The name column is muted and the value column beside it is full contrast
- * (chart-treatment.md): the number is what the reader came for, and identity
+ * (`docs/design/chart-treatment.md`): the number is what the reader came for, and identity
  * comes from the key stroke and the label rather than from colouring the text.
  * Contrast only — where the two columns sit is geometry, and lives in
  * `tooltip-geometry.ts` with the rest of the panel's arithmetic. */
@@ -558,19 +529,20 @@
 }
 
 /* Legend text wears text tokens, never the series colour — identity comes from
- * the swatch beside it (chart-treatment.md).
+ * the swatch beside it (`docs/design/chart-treatment.md`).
  *
  * The class names are the chart's and the rule stays in this file, but since
  * 2026-08-11 the legend does not render on the chart: it sits under the
- * sentence in the (i)'s popover (`dashboard/FleetPanel.tsx`, `info/info.css`).
- * Here rather than moved to `info.css` because what it styles is a chart's key —
- * `info.css` styles the tip, whoever opens one and whatever they put in it.
+ * sentence in the (i)'s popover (`apps/web/src/dashboard/FleetPanel.tsx`,
+ * `apps/web/src/info/info.css`). Here rather than moved to
+ * `apps/web/src/info/info.css` because what it styles is a chart's key —
+ * `apps/web/src/info/info.css` styles the tip, whoever opens one and whatever
+ * they put in it.
  *
  * `--space-3` above rather than the `--space-4` that separated it from the plot.
  * The step was clearing a drawing; it is now separating two lines of a small
  * sheet whose own padding is `--space-3`, and a step wider than the padding
- * around it reads as a gap rather than as a rhythm. `--space-2` was the other
- * candidate and is too tight to break the sentence from the key it precedes. */
+ * around it reads as a gap rather than as a rhythm. */
 .forecast-chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -601,10 +573,11 @@
    stylesheet can say.
 
    Recessed, not raised: `--color-bg` is the page's own colour and the band this
-   sits in is `--color-surface` (`dashboard/fleet-panel.css`), so the panel reads
-   as a well cut into the band rather than as a card floating over it. That
-   direction is the point — a raised card would compete with the chart above it
-   for the reading's attention, and this is the thing a reader is offered second.
+   sits in is `--color-surface` (`apps/web/src/dashboard/fleet-panel.css`), so
+   the panel reads as a well cut into the band rather than as a card floating
+   over it. That direction is the point — a raised card would compete with the
+   chart above it for the reading's attention, and this is the thing a reader is
+   offered second.
    Contrast survives the move by the tokens file's own reckoning rather than by
    assertion: `--color-bg` is one of the two surfaces
    `packages/ui/src/tokens/tokens.css` measures ink against, and the muted ink
@@ -619,7 +592,7 @@
    twin is a sibling of the figure in `.fleet-panel-body`'s grid now, so the seam
    a reader sees is that grid's step plus this one. Deliberately the loosest seam
    in this reading: every other gap here joins things that are one statement, and
-   this is the one place a separation is meant (`design.md` rule 4). */
+   this is the one place a separation is meant (`docs/standards/design.md` rule 4). */
 .forecast-chart-details {
   margin-top: var(--space-4);
   padding: var(--space-3);
@@ -630,10 +603,9 @@
 /* The small step in medium weight, which is a size chosen against what this
    summary names: a section *inside* a panel that already has a visible title
    (`.fleet-chart-title`, at `--text-lg`). A disclosure naming a whole card in
-   the reading's flow would take the heading scale instead — the fleet's own
-   table summary did, until that table left the page on 2026-08-12 — and this one
-   sits a step under the title it is subordinate to. `cursor: pointer` and the platform focus
-   ring (@cumulo/ui's styles.css rings `summary`) are the whole of its
+   the reading's flow would take the heading scale instead, and this one sits a
+   step under the title it is subordinate to. `cursor: pointer` and the platform
+   focus ring (`packages/ui/src/styles.css` rings `summary`) are the whole of its
    interaction treatment; the marker, the state and the keyboard operation are
    the element's own. */
 .forecast-chart-summary {
@@ -668,11 +640,11 @@
 /* A hairline is a hairline, not a quarter of a spacing step: `--space-1 / 4`
  * borrowed a token that means "gap between things" to express a border width,
  * and would change thickness if the spacing scale were ever retuned. The
- * idiom is `range-picker.css`'s ancestor `views.css`, now deleted — longhands
- * with a plain `1px` width. `preview.css`
- * splits the difference (longhands, but the calc value) in `.swatch-chip`,
- * `.map-marker` and its own table rule; see docs/tech-debt.md on why the gate
- * cannot see the difference. */
+ * idiom is `apps/web/src/dashboard/range-picker.css`'s ancestor `views.css`,
+ * now deleted — longhands with a plain `1px` width.
+ * `apps/web/src/preview/preview.css` splits the difference (longhands, but the
+ * calc value) in `.swatch-chip`, `.map-marker` and its own table rule; see
+ * docs/tech-debt.md on why the gate cannot see the difference. */
 .forecast-chart-table thead th {
   border-bottom-width: 1px;
   border-bottom-style: solid;

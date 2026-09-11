@@ -30,17 +30,15 @@ import { CHART_DATA_UNAVAILABLE_MESSAGE, EMPTY_FLEET_MESSAGE } from './state-cop
  * What the fleet panel says about the fleet.
  *
  * Four of its other subjects have suites of their own, each split off when this
- * file reached the 300-line ceiling (`structure.md` rule 4). What a *selected
- * site* adds to the same chart is `FleetPanel.overlay.test.tsx`'s. The panel's
- * own furniture — the controls row and its five items, one (i), the visible
- * heading the section is named by, and one chart present in every state — is
- * `FleetPanel.structure.test.tsx`'s. What the panel makes of the *listing's*
- * status, which became a prop in #452, is `FleetPanel.listing.test.tsx`'s. What
- * the newest of those items *does* — the unit toggle, the switch a selection
- * makes and the reader's claim on it — is `FleetPanel.unit-toggle.test.tsx`'s
- * (#291). All five share `fleet-panel-test-fixture.tsx`, which is where the
- * canned fleets and the two lines every test writes to get a panel on screen
- * live.
+ * file reached the 300-line ceiling (`docs/standards/structure.md` rule 4). What a
+ * *selected site* adds to the same chart is `FleetPanel.overlay.test.tsx`'s. The
+ * panel's own furniture is `FleetPanel.structure.test.tsx`'s. What the panel
+ * makes of the *listing's* status, which became a prop in #452, is
+ * `FleetPanel.listing.test.tsx`'s. What the newest of those items *does* — the
+ * unit toggle, the switch a selection makes and the reader's claim on it — is
+ * `FleetPanel.unit-toggle.test.tsx`'s (#291). All five share
+ * `fleet-panel-test-fixture.tsx`, which is where the canned fleets and the two
+ * lines every test writes to get a panel on screen live.
  */
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers
@@ -51,10 +49,10 @@ afterEach(cleanup);
  * Press an (i), the way a reader asks a surface to explain itself.
  *
  * The panel's descriptions live behind toggletips since #265
- * (`info/InfoTip.tsx`), and their content is mounted only while one is open — so
- * a case about what the panel *says* has to ask first. Named by the button's
- * accessible name rather than by a class, because that name is the contract a
- * reader has with the control.
+ * (`apps/web/src/info/InfoTip.tsx`), and their content is mounted only while one
+ * is open — so a case about what the panel *says* has to ask first. Named by
+ * the button's accessible name rather than by a class, because that name is the
+ * contract a reader has with the control.
  */
 const openTip = (label: string): void => {
   fireEvent.click(screen.getByRole('button', { name: label }));
@@ -71,19 +69,11 @@ const demoFleet = async (dataSource: DemoFleetDataSource): Promise<readonly Site
 /**
  * The forecast is *plotted* — not merely a figure on screen.
  *
- * `container.querySelector('svg')` stood at each of these sites, and since #284
- * D3 it proves nothing: the figure is rendered in every state the panel has,
- * loading and failed included, so the query is true by construction and passes
- * over exactly the defect it was written to catch. The median path is the
- * part that exists only once the fleet read has summed to hours worth stroking,
- * which is what each of these cases means when it says the chart survived. The
- * figure's mere presence has an owner — `FleetPanel.structure.test.tsx`, whose
- * whole subject it is — so restating it here bought a second copy of a weaker
- * claim.
- *
- * One helper rather than the same line three times: the three sites have one
- * intent, so a change to what counts as "plotted" must reach all of them
- * (`structure.md` rule 7).
+ * The median path is the part that exists only once the fleet read has summed to
+ * hours worth stroking, which is what each of these cases means when it says the
+ * chart survived. The figure's mere presence has an owner —
+ * `FleetPanel.structure.test.tsx`, whose whole subject it is — so restating it
+ * here bought a second copy of a weaker claim.
  *
  * Scoped to the plot's own children, because the legend draws a swatch in the
  * same class and an unscoped sweep would find the key rather than the line —
@@ -118,8 +108,8 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
     expect(subtitle).toContain('simulated actuals');
     expect(subtitle).toContain('simulated P10–P90 band');
-    // The canonical demo fleet is 60 sites; the kW figure is asserted by shape rather than by
-    // value, because restating the sum here would only prove that two copies of it agree.
+    // The kW figure is asserted by shape rather than by value, because restating
+    // the sum here would only prove that two copies of it agree.
     expect(container.querySelector('.fleet-chart-stats')?.textContent).toMatch(
       /^60 sites · \d+(\.\d)? kW$/u,
     );
@@ -130,9 +120,7 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
    * The assertion above and the case below went with `fleetStatsLine` in #323
    * and are back with it (owner, 2026-08-11). Restored rather than rewritten,
    * for the reason the copy itself was: the wording they pin had an owner and a
-   * history, and a fresh pair would have re-decided both. The only change is the
-   * class they read — `.fleet-panel-stats` became `.fleet-chart-stats` when the
-   * panel became a band.
+   * history, and a fresh pair would have re-decided both.
    *
    * They are the only exercise either arm of `siteCountLabel` gets. The
    * structure suite pins the line's *presence* by shape (`/\d+ sites? · /u`),
@@ -207,13 +195,12 @@ describe('FleetPanel against a source with the full fleet-level capabilities', (
 
   it('renders no completeness caption when every site contributes', async () => {
     /*
-     * The inverse of the partial case above, and #323's change to it. This used
-     * to assert "Aggregated from 2 sites" in a `.panel-caption`; the complete
-     * arm of `completenessNote` is `null` now, because a chart drawing every
-     * site is what the reader already expects to be looking at and a sentence
-     * saying so describes the chart rather than reporting anything
-     * (`design.md` rule 2). The partial direction is untouched — it is news,
-     * and the case above still pins it word for word.
+     * The inverse of the partial case above, and #323's change to it. The
+     * complete arm of `completenessNote` is `null` now, because a chart drawing
+     * every site is what the reader already expects to be looking at and a
+     * sentence saying so describes the chart rather than reporting anything
+     * (`docs/standards/design.md` rule 2). The partial direction is untouched — it
+     * is news, and the case above still pins it word for word.
      *
      * **The figure assertion is what makes the two nulls mean anything.** Both
      * absences are satisfied by a component that rendered nothing at all, or
@@ -284,17 +271,13 @@ describe('FleetPanel against a source that can only see the horizon', () => {
 /*
  * The combination #264 makes reachable, and the reason this suite exists at all.
  * The forecast service synthesises fleet actuals now, so the live source carries
- * them while its forecast read still reaches forward only. No source was ever in that
- * state before, and the copy that covered it named "next 24 h" over a plot that
- * now also carries the hours behind the horizon.
+ * them while its forecast read still reaches forward only.
  *
- * This arm *does* carry a range picker, which is what #284 D5 changed and what
- * this docblock used to deny: the control is gated on `fleetLookback ||
- * fleetActuals` rather than on look-back alone, because with simulated actuals a
- * wider window buys both more measured hours behind the horizon and more
- * forecast hours ahead of it. `FleetPanel.tsx`'s docblock owns that reasoning
- * and `FleetPanel.structure.test.tsx` asserts the picker and the re-ask pressing
- * it triggers; what this suite owns is the copy that combination produces.
+ * This arm *does* carry a range picker, which is what #284 D5 changed: the
+ * control is gated on `fleetLookback || fleetActuals` rather than on look-back
+ * alone. `FleetPanel.tsx`'s docblock owns that reasoning and
+ * `FleetPanel.structure.test.tsx` asserts the picker and the re-ask pressing it
+ * triggers; what this suite owns is the copy that combination produces.
  */
 describe('FleetPanel against a source with simulated actuals but no look-back', () => {
   /*
@@ -355,11 +338,7 @@ describe('FleetPanel against a source with simulated actuals but no look-back', 
 /*
  * Two reads, two windows, two requests — so either can fail alone, and what the panel does about
  * it is not symmetrical. The forecast is the answer; the actuals are an addition to it, and one
- * that costs a single metered request — as, since #296, the forecast does too. Before #264's
- * review both failures came out of one `combineFleetQueries` arm: a failed actuals read withdrew
- * a fleet sum that had arrived and reported it under the forecast's own failure sentence, and its
- * "Try again" re-spent the 60-site fan-out the forecast read then was, to re-ask one request that
- * had never been the fleet's.
+ * that costs a single metered request — as, since #296, the forecast does too.
  *
  * #452 sharpened the asymmetry rather than changing it. A total failure is now one generic
  * account inside the figure and carries no transport detail at all; a partial one still names the
@@ -379,9 +358,10 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     // absence of, so the two cases now differ in the plot rather than in a figure both states have.
     expectForecastPlotted(container);
     // A partial answer must never reach the total-failure treatment (#452,
-    // `error-handling.md` rule 5): the actuals not arriving is not "we cannot show data on the
-    // graph", and the chart under this notice is drawing every forecast hour. Its positive
-    // control is the forecast-failure case below, which finds this exact node.
+    // `docs/standards/error-handling.md` rule 5): the actuals not arriving is not
+    // "we cannot show data on the graph", and the chart under this notice is
+    // drawing every forecast hour. Its positive control is the forecast-failure
+    // case below, which finds this exact node.
     expect(container.querySelector('.forecast-chart-error')).toBeNull();
     expect(container.textContent).not.toContain(CHART_DATA_UNAVAILABLE_MESSAGE);
     expect(screen.queryByRole('alert')).toBeNull();
@@ -425,8 +405,6 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
     expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
       ['Time (UTC)', 'Median', 'Actual'],
     ]);
-    // Scoped to the plot's own children: the legend draws a swatch in the same
-    // class, so an unscoped sweep would find the key rather than the line.
     expect(container.querySelector('.forecast-chart > .forecast-chart-median')).toBeNull();
     expect(screen.getByRole('alert').textContent).toContain(CHART_DATA_UNAVAILABLE_MESSAGE);
     expect(screen.queryByText(actualsFailurePattern)).toBeNull();
@@ -485,7 +463,7 @@ describe('FleetPanel with nothing to show', () => {
      * total failure"* — so the detail assertion went with the detail, and what is left is the
      * generic account, in the figure, with the recourse still attached. The retry half is
      * untouched and is the reason the recourse survives at all: re-asking a read that failed is
-     * exactly the case `react.md`'s **Failed** bullet offers a button for.
+     * exactly the case `docs/standards/react.md`'s **Failed** bullet offers a button for.
      */
     const dataSource = new CountingFleetSource(FAILED_FLEET);
     const container = await renderSettled(dataSource);
@@ -574,8 +552,7 @@ describe('FleetPanel as the page keeps it mounted', () => {
     // `role="alert"` actually announces (#161). It is the only arrangement left: the panel is
     // never hidden, so an alert can no longer mount inside a `display: none` subtree that
     // assistive technology never reads. Since #452 the tree it mounts into is the chart's own
-    // `<figure>`, which is on screen from the first frame in every state (#284 D3) — so the
-    // property is if anything easier to satisfy than when the alert was a card above the plot.
+    // `<figure>`, which is on screen from the first frame in every state (#284 D3).
     expect((await screen.findByRole('alert')).textContent).toContain(
       CHART_DATA_UNAVAILABLE_MESSAGE,
     );
