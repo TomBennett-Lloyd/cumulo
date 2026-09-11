@@ -1,19 +1,60 @@
 ---
 name: run-issue
-description: Run one GitHub issue end-to-end via a task-orchestrator sub-agent, keeping
-  the top-level session free for parallel issues and merge ownership. Replaces invoking
-  plan-issue/execute/review-loop inline when orchestration.mode is delegated.
+description: Run one GitHub issue via a ticket-agent, or a same-surface batch via a
+  task-orchestrator, keeping the top-level session free for parallel issues and merge
+  ownership.
 ---
 
-You are the merge owner running one or more issues through task-orchestrators. Check
-`.claude/workflow.json` → `orchestration` first, and route on the SET's shape, not on habit:
-under `batch-delegated` — the current mode — a **multi-ticket same-surface batch** is what
-this procedure is for, and a **single issue** runs inline (plan-issue → execute →
-review-loop, in this session) unless one of `routeRule`'s two named exceptions applies. The
-older `flat` (everything inline) and `delegated`/`delegated-pilot` (every issue delegated)
-values still resolve; read `routeRule` rather than assuming which one is set. Delegating a
-lone issue costs roughly double what running it here does — `orchestration.costEvidence` has
-the numbers — so the batch is the thing that earns the orchestrator, not the delegation.
+You are the merge owner, and you own merging and merge-readiness in both lanes below.
+`.claude/workflow.json` → `orchestration.routeRule` picks the lane by the ticket SET's
+shape — read it there rather than assuming, since `modeHistory`'s superseded values still
+resolve in older references. Two dispatch shapes come out of it: a **single issue** goes to
+one `ticket-agent` (`.claude/agents/ticket-agent.md`), and a **multi-ticket same-surface
+batch** goes to one `task-orchestrator`. Neither lane's procedure is the other's, so pick
+the section before you dispatch.
+
+## Ticket-agent lane
+
+1. **Admission**: the same in-flight table as below (issue, agent handle, branch, and the
+   footprint once the plan comment lands). Predict the footprint from the issue body and
+   name any known in-flight overlap in the dispatch prompt, so the agent either plans around
+   it or expects the rebase. A single lane never holds for another lane's plan — overlap is
+   priced as rebase cost, and only entangled same-file SOURCE overlap is batched or
+   sequenced, here, at dispatch. `conserve` budget mode: one lane.
+2. **Dispatch** `ticket-agent` with the issue number, the main-checkout path, the budget
+   mode and the overlap note — nothing else; it reads the issue and the files.
+   **`run_in_background: true`**, which is the opposite of the rule in
+   `.claude/agents/task-orchestrator.md` rule 4 and does not contradict it: that rule governs
+   what an orchestrator spawns, and the reason it exists — a nested child's completion routing
+   past its parent to you — cannot arise for your own direct child, whose completion IS the
+   lane report arriving. Silence until that report is the healthy state; do not poll. If the
+   notification is lost the report is still durable: `gh pr view <n> --json body`, or the
+   issue's comments.
+3. **Diff check** — your first touchpoint, and your only read of the code. `git rev-parse
+<branch>` must equal the report's HEAD, or stop and reconcile before anything else. Check
+   the changed files against the plan comment's files (drift named, or none); every `Verify`
+   and `CI` field pasted rather than summarised; CI green on the reported head. Then read
+   `gh pr diff <n>` for three things: scope (only this ticket's work), suppressions
+   (`gh pr diff <n> | command grep -nE 'eslint-disable|@ts-expect-error|as any'`, with a
+   positive control against a scratch line holding one), and classification against the
+   extensions the diff actually carries. Findings go back as one `FIX — <finding>` message to
+   the warm agent, which returns a refreshed report. **Two FIX bounces on one ticket is the
+   cap**: past that, report to the owner instead of bouncing a third time. Then the merge
+   chain of `.claude/skills/review-loop/SKILL.md` step 5, unchanged — including the
+   `humanAlways` ritual, and the merge-time `Category`/`Verdict` fill, which reaches the agent
+   as a bounce because only it writes to its worktree.
+4. **Rebase hand-off** — your second touchpoint, and only when `main` moved. After every
+   merge, `gh pr view --json mergeStateStatus` on each open lane PR. `BEHIND` → run
+   `gh pr update-branch` yourself; it is mechanical. `DIRTY` → `REBASE — <what merged since
+this branch was cut, which files, what the union rule expects>` to the warm agent, which
+   rebases per its rule 8 and re-reports. The second merger rebases, always; merges serialise.
+5. **Release**: PR merged, issue closed, no bounce open → the `## Lane report` in the PR body
+   is the retro's first-hand input; run `/retro`; remove the row. A wedged agent (no report,
+   no branch movement) gets the worktree and the issue inspected FIRST, then `TaskStop`, then
+   a fresh `RESUME issue #n` dispatch — the new agent reconciles from `git log main..<branch>`, A dead lane is recognised, not diagnosed: the task shows no progress or an `ENOTFOUND` / stall-watchdog failure, its output file is a few hundred bytes, and `ps` shows no process under the worktree — a 0-byte background task entry alongside it is a ghost of a command whose owner died, safe to stop. Then `RESUME`: the new agent audits uncommitted work against the plan comment's ticks before adding to it, and never re-does a step whose files exist.
+   `git status`, the plan comment and any PR, and adopts what is already done.
+
+## Batch lane
 
 1. **Admission**: maintain the in-flight table in your session-state scratchpad file
    (issue, agent handle, phase, footprint, branch). A row leaves the table only at
