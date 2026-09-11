@@ -8,10 +8,11 @@
 # was retyped, and the retyping is where the defects were: two of PR #512's four
 # cycle-1 findings were claims that batch had minted itself, PR #520's cycle-2
 # findings were five for five in the reporting prose with none in the diff, and
-# #520's title said "3 trued, 3 raised" where its body said five and five. A
-# squash merge takes its subject from the PR title — `merge-pr.sh` runs
-# `gh pr merge <n> --squash` and leaves GitHub to default it — so the rendering
-# nobody re-read is the one that became history (`6943ee6`).
+# #520's title said "3 trued, 3 raised" where its body said five and five. That
+# title is what became history: `merge-pr.sh` runs `gh pr merge <n> --squash`
+# with no `--subject`, and this repository's `squash_merge_commit_title` is
+# `COMMIT_OR_PR_TITLE` — so a branch of more than one commit (#512's six, #520's
+# four) squashes under its PR title, and `6943ee6` carries #520's.
 # `docs/standards/prose.md` rule 2 already applies the cure to figures —
 # generate them, never type them — and this script is that rule pointed at the
 # report itself.
@@ -87,6 +88,14 @@ LEDGER_HEADER=$(printf 'path\tline\tclaim\tcheck\tdisposition')
 # an emptiness claim and a broken pattern print the same nothing.
 SPELLED_RE='\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|ninety|hundred)[- ](second|minute|px|pixel|ms|kW|sites?)'
 
+# The seam the harness needs. Pre-checks (a), (b) and (d) can be made to fail
+# with a real git — a bad pathspec in the ledger does it — but the two `git diff`
+# calls below take no ledger input at all, so their failure paths are
+# unreachable from a fixture and would ship unasserted. Same precedent and same
+# narrow scope as `LINT_SHELL_GIT_CMD` in lint-shell.sh: it covers these diff
+# calls ONLY, and the repo-identity `rev-parse` above stays plain git.
+: "${SWEEP_REPORT_GIT_CMD:=git}"
+
 # The width at which a comment line counts as a "full-width continuation" for
 # pre-check (e). Prettier does not reflow comments, so a three-word line above a
 # line this long is a comment that was edited and left ragged.
@@ -139,9 +148,9 @@ esac
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fatal "not inside a git repository"
 cd "$repo_root" || fatal "cannot enter the repository root: $repo_root"
 
-# Resolved to a full hex sha, and used in that form everywhere below: the two
-# pre-checks that run as pipelines embed it in a command STRING, and a hex sha
-# is the one spelling that cannot carry anything else into that string.
+# Resolved to a full hex sha, and used in that form everywhere below: pre-check
+# (c) embeds it in a command STRING, and a hex sha is the one spelling that
+# cannot carry anything else into that string.
 base_sha=$(git rev-parse --verify --quiet "$base_arg^{commit}")
 rc=$?
 if [ "$rc" -ne 0 ] || [ -z "$base_sha" ]; then
@@ -311,15 +320,8 @@ render_cmd() {
   printf '$%s\n' "$rendered"
 }
 
-# run_shown — print the command, run that exact argv, print its output.
-#
-# stdout and stderr go to SEPARATE files, and `$?` is captured on the line
-# immediately after the run (docs/standards/evidence.md sanctioned form 1). The
-# two streams are not merged for a reason this script learned the hard way: a
-# `fatal: Invalid pathspec magic` on stderr, folded into the output file, is one
-# LINE — and a line count over that file then reports a git failure as a hit,
-# which is a broken check reported as a clean one. The count the report reads is
-# produced by the check, or the check is refused.
+# emit_streams — render the last run's two streams into the report, stderr under
+# a label of its own so a reader can see it was not counted.
 emit_streams() {
   if [ -s "$CMD_OUT" ]; then
     cat "$CMD_OUT"
@@ -332,6 +334,16 @@ emit_streams() {
   fi
 }
 
+# run_shown — print the command, run that exact argv, print its output.
+#
+# stdout and stderr go to SEPARATE files, and `$?` is captured on the line
+# immediately after the run (docs/standards/evidence.md sanctioned form 1). The
+# two streams are not merged for a reason this script learned the hard way: a
+# `fatal: Invalid pathspec magic` on stderr, folded into the output file, is one
+# LINE — and a line count over that file then reports a git failure as a hit,
+# which is a broken check reported as a clean one. The count the report reads is
+# produced by the check, or the check is refused — which is what every caller's
+# `cmd_errored` test below is for.
 run_shown() {
   render_cmd "$@"
   "$@" >"$CMD_OUT" 2>"$CMD_ERR"
@@ -407,13 +419,13 @@ printf '%s\n\n' "Ledger: \`$ledger_shown\` · base: \`$base_sha\`"
 # beside them, a report generated against the wrong base reads exactly like a
 # report over a clean batch. An empty diff fails the run outright, below.
 DIFF_FILE="$work/diff.txt"
-git diff "$base_sha" >"$DIFF_FILE" 2>"$CMD_ERR"
+"$SWEEP_REPORT_GIT_CMD" diff "$base_sha" >"$DIFF_FILE" 2>"$CMD_ERR"
 diff_rc=$?
 if [ "$diff_rc" -ne 0 ]; then
   fatal "git diff $base_sha failed (exit $diff_rc)" "$(command head -n 1 "$CMD_ERR")"
 fi
 NUMSTAT_FILE="$work/numstat.txt"
-git diff --numstat "$base_sha" >"$NUMSTAT_FILE" 2>"$CMD_ERR"
+"$SWEEP_REPORT_GIT_CMD" diff --numstat "$base_sha" >"$NUMSTAT_FILE" 2>"$CMD_ERR"
 numstat_rc=$?
 if [ "$numstat_rc" -ne 0 ]; then
   fatal "git diff --numstat $base_sha failed (exit $numstat_rc)" "$(command head -n 1 "$CMD_ERR")"
@@ -422,7 +434,11 @@ diff_scale=$(awk '
   { files++; added += ($1 == "-") ? 0 : $1; removed += ($2 == "-") ? 0 : $2 }
   END { printf("%d file(s), +%d / -%d line(s)", files + 0, added + 0, removed + 0) }' "$NUMSTAT_FILE")
 diff_files=${diff_scale%% *}
-printf '%s\n\n' "Diff at this base: $diff_scale"
+# Named as "working tree vs base", not "the branch": `git diff <sha>` reads the
+# WORKING TREE, so a report run with uncommitted edits describes a state no
+# reviewer re-running on a clean checkout will see. Saying which state was read
+# is the honest half; making the two agree is `docs/tech-debt.md`'s.
+printf '%s\n\n' "Diff at this base (working tree vs \`$base_sha\`): $diff_scale"
 
 # Title fragment and totals table come out of ONE awk END block over ONE row
 # file. That is the whole answer to #520: the title line and the table's total
@@ -550,8 +566,13 @@ EOF
 
 checks_run=$((checks_run + 1))
 printf '```\n'
-run_shown_pipeline "git diff $base_sha | command grep -E '^\\+' | command grep -iE '$SPELLED_RE'"
+run_shown_pipeline "$SWEEP_REPORT_GIT_CMD diff $base_sha | command grep -E '^\\+' | command grep -iE '$SPELLED_RE'"
 spelled_hits=$(line_count "$CMD_OUT")
+spelled_broke=0
+if cmd_errored; then
+  spelled_broke=1
+  spelled_detail=$(cmd_error_detail)
+fi
 printf '\n'
 printf '# positive control — the same pattern against a line known to match\n'
 run_shown_pipeline "printf '%s\\n' '+ // a three-second debounce' | command grep -iE '$SPELLED_RE'"
@@ -566,7 +587,9 @@ fi
 # The control proves the PATTERN works; it cannot prove there was a diff for the
 # pattern to work over. Those are two different emptiness claims, and only the
 # scale in the header settles the second one.
-if [ "$diff_files" -eq 0 ]; then
+if [ "$spelled_broke" -eq 1 ]; then
+  check_fail "pre-check (c) could not run — the pipeline said: $spelled_detail"
+elif [ "$diff_files" -eq 0 ]; then
   check_fail "pre-check (c) had nothing to run over — the diff at $base_sha is empty, so its silence is about the base, not about the batch"
 elif [ "$spelled_hits" -gt 0 ]; then
   check_fail "$spelled_hits added line(s) spell a figure out in words — prose.md rule 3(c)"

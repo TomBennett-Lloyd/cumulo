@@ -538,7 +538,7 @@ ledger_new empty-diff
 row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
 run_report
 expect_rc 1
-expect_stdout "Diff at this base: 0 file(s), +0 / -0 line(s)"
+expect_stdout "Diff at this base (working tree vs \`$BASE\`): 0 file(s), +0 / -0 line(s)"
 expect_stdout "pre-check (c) had nothing to run over"
 expect_stdout "pre-check (e) had nothing to run over"
 end
@@ -549,7 +549,74 @@ ledger_new scale
 row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
 run_report
 expect_rc 0
-expect_stdout "Diff at this base: 1 file(s), +1 / -0 line(s)"
+expect_stdout "Diff at this base (working tree vs \`$BASE\`): 1 file(s), +1 / -0 line(s)"
+end
+
+# --- cases: the diff calls' failure paths, through the SWEEP_REPORT_GIT_CMD seam --------------
+#
+# Pre-checks (a), (b) and (d) are made to fail with a real git by a bad pathspec
+# in the ledger. The two `git diff` calls take no ledger input at all, so their
+# failure paths are unreachable from a fixture — the seam is how they get
+# asserted, the same move lint-shell.sh makes for its own discovery call. The
+# stub fails on the Nth call and otherwise delegates to the real git, because
+# the three call sites are argv-identical and only their order tells them apart:
+# 1 the header diff, 2 the header --numstat, 3 pre-check (c)'s pipeline.
+
+# The stub is written through a QUOTED heredoc rather than a printf of
+# single-quoted lines: shell code inside a format string reads as unexpanded
+# expressions to shellcheck (SC2016), and a suppression is itself a lint error.
+STUB_GIT=""
+make_stub_git() {
+  STUB_GIT="$TMP_ROOT/stub-git"
+  cat >"$STUB_GIT" <<'STUB'
+#!/usr/bin/env bash
+n=$(cat "$STUB_GIT_COUNT" 2>/dev/null || printf 0)
+n=$((n + 1))
+printf '%s' "$n" >"$STUB_GIT_COUNT"
+if [ "$n" = "$STUB_GIT_FAIL_ON" ]; then
+  printf 'stub-git: deliberate failure on call %s\n' "$n" >&2
+  exit 3
+fi
+exec git "$@"
+STUB
+  fixture_has "$STUB_GIT" 'exec git "$@"'
+  must chmod +x "$STUB_GIT"
+}
+
+run_with_stub_git() { # run_with_stub_git <fail-on-call-number>
+  must rm -f "$TMP_ROOT/stub-git.count"
+  capture -C "$ROOT" env \
+    "SWEEP_REPORT_GIT_CMD=$STUB_GIT" \
+    "STUB_GIT_COUNT=$TMP_ROOT/stub-git.count" \
+    "STUB_GIT_FAIL_ON=$1" \
+    bash "$SUBJECT" "$LEDGER" "$BASE"
+}
+
+make_stub_git
+
+begin "a failing git diff is no verdict, not an empty diff"
+fixture git-diff-fails
+ledger_new git-diff-fails
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_with_stub_git 1
+expect_rc 2
+expect_stderr "diff $BASE failed (exit 3)"
+expect_stderr "deliberate failure on call 1"
+end
+
+begin "a failing git diff --numstat is no verdict, not a zero-line scale"
+run_with_stub_git 2
+expect_rc 2
+expect_stderr "--numstat $BASE failed (exit 3)"
+end
+
+begin "pre-check (c) refuses when its pipeline could not run"
+# Without this refusal the pipeline's silence reads as a clean tree — the same
+# class as the git-failure case above, one caller short (evidence.md form 5).
+run_with_stub_git 3
+expect_rc 1
+expect_stdout "pre-check (c) could not run"
+expect_not_stdout "no spelled-out figure across"
 end
 
 begin "a ledger inside the repo is printed repo-relative, so the command pastes back"
