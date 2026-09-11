@@ -59,7 +59,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 : "${MERGE_PR_POLL_INTERVAL_SECONDS:=20}"              # between checks polls
 : "${MERGE_PR_POLL_TIMEOUT_SECONDS:=1800}"             # total budget for the checks poll
 : "${MERGE_PR_UPDATE_RETRIES:=3}"                      # update-branch attempts against the head-sha race
-: "${MERGE_PR_RETRY_SECONDS:=10}"                      # between those attempts, and between state re-reads
+: "${MERGE_PR_RETRY_SECONDS:=10}"                      # between those attempts, between state re-reads, and after a union push
 : "${MERGE_PR_EXPECTED_CHECKS:=0}"                     # a floor the operator can raise; see the checks step
 : "${MERGE_PR_CONFIRM_RETRIES:=5}"                     # re-reads allowed for an eventually-consistent state
 : "${MERGE_PR_PRETTIER_CMD:=pnpm exec prettier}"       # formatter the tech-debt union re-runs; see that step
@@ -633,20 +633,21 @@ fi
 #
 # The analysis happens in the repository root and touches no worktree, no branch and
 # no commit: nothing a refusal would leave for the merge owner to undo. What it does
-# write is git's own scratch — the fetch brings objects in and writes $GIT_DIR/FETCH_HEAD,
-# which this step then reads back for the base sha, and merge-tree --write-tree leaves
-# an unreachable tree behind. That is the same class of write any `git fetch` makes.
-# Only once every test has passed is anything applied, and then only in the lane's own
-# worktree.
+# write is a fetch's own writes, plus the unreachable tree merge-tree --write-tree
+# leaves behind. (Deliberately not enumerated further. Two passes running, a careful
+# list of what a `git fetch` writes has been falsified by one more thing it writes —
+# FETCH_HEAD, then the remote-tracking refs — and a claim that cannot be completed is
+# better made in the form that does not need completing.) Only once every test has
+# passed is anything applied, and then only in the lane's own worktree.
 #
 # Note for a future rename: this step matches the literal path docs/tech-debt.md and
 # is therefore an EXECUTABLE carrier of it, the way the feedback step is for
-# docs/review-feedback.md. That path has no restatement ledger anywhere
-# (.claude/workflow.json holds feedbackLog/feedbackLogLedger and no tech-debt
-# equivalent), so there is nothing to add this file to; the failure direction is at
-# least quiet-and-closed rather than quiet-and-open — a renamed log stops conflicting
-# under this name, merge-tree reports the new name, and the conflicted-set test
-# refuses with that name in the message.
+# docs/review-feedback.md. That path's restatement ledger is the paragraph under
+# `# Tech-debt log` in docs/tech-debt.md itself — go there first, and note that the
+# harness next door carries the literal too. The failure direction here is at least
+# quiet-and-closed rather than quiet-and-open: a renamed log stops conflicting under
+# this name, merge-tree reports the new name, and the conflicted-set test refuses
+# with that name in the message.
 
 TECH_DEBT_PATH='docs/tech-debt.md'
 
@@ -1112,13 +1113,23 @@ EOF
 
 checks_baseline=0
 
-# What the checks step needs from this one: the head this run is replacing,
-# whether it was replaced at all, and the answer that claimed so. GitHub goes on
+# What the checks step needs from this one: the heads this run is replacing,
+# whether they were replaced at all, and the answer that claimed so. GitHub goes on
 # answering the old sha and the old rollup after the write lands (the checks step
-# says why that matters), so "did the head move" is the only question that
+# says why that matters), so "is this still one of the heads we superseded" is what
 # separates the stale answer from the fresh one — and gh's own words are what tell
 # a head that has not moved YET from one that was never going to.
+#
+# TWO shas, not one, and the plural is load-bearing. A run can supersede a head
+# twice: the tech-debt union pushes over the head read at classify time, and a
+# retried update-branch can then write over the union's own head. The gate is an
+# inequality, so excluding only the LATEST superseded sha leaves the earlier one
+# admissible — and the earlier one is exactly what a lagging GitHub answers. That
+# is not hypothetical: it is what the first version of this fix did, and a probe
+# case caught the run taking its merge on the pre-union head's rollup. Both are
+# excluded, and superseded_union_sha stays empty on every run that did not union.
 pre_update_sha=""
+superseded_union_sha=""
 await_new_head=0
 update_answer=""
 
@@ -1151,11 +1162,10 @@ update_branch_step() {
         *)
           await_new_head=1
           update_answer=${out%%$'\n'*}
-          # The head this write replaced. Normally that is the head read at classify
-          # time; after a tech-debt resolution it is the sha that resolution pushed, and
-          # comparing against the older one would clear the gate on the union's own head
-          # while the rollup being read belongs to whatever this write just made.
-          [ -n "$union_new_sha" ] && pre_update_sha="$union_new_sha"
+          # A write after a tech-debt resolution replaced the sha that resolution
+          # pushed, so that sha joins the superseded set — ADDED to it, never swapped
+          # for the classify-time head, which GitHub can still be answering.
+          [ -n "$union_new_sha" ] && superseded_union_sha="$union_new_sha"
           step 'update-branch' "updated onto the base (attempt $attempt)"
           ;;
       esac
@@ -1324,9 +1334,10 @@ else
       step 'checks' 'PR was merged elsewhere during the poll'
       break
     fi
-    if [ "$await_new_head" = "1" ] && [ "$pr_head_sha" != "$pre_update_sha" ]; then
+    if [ "$await_new_head" = "1" ] && [ "$pr_head_sha" != "$pre_update_sha" ] &&
+      { [ -z "$superseded_union_sha" ] || [ "$pr_head_sha" != "$superseded_union_sha" ]; }; then
       await_new_head=0
-      step 'checks' "the update moved the head $pre_update_sha -> $pr_head_sha; reading that head"
+      step 'checks' "the update moved the head ${pre_update_sha}${superseded_union_sha:+/$superseded_union_sha} -> $pr_head_sha; reading that head"
     fi
     if [ "$await_new_head" = "0" ]; then
       verdict=$(checks_verdict)
@@ -1343,7 +1354,7 @@ else
     fi
     if [ "$SECONDS" -ge "$poll_deadline" ]; then
       [ "$await_new_head" = "0" ] || fail 'checks' \
-        "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — gh answered \"$update_answer\", which this step read as a write, but the head still reads $pre_update_sha, so every check and merge state here is the replaced head's. Either the update has not landed yet (re-run), or that answer is a no-op spelling update-branch does not recognise, in which case the branch is already current and the spelling belongs in that step's no-op arm"
+        "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — gh answered \"$update_answer\", which this step read as a write, but the head still reads $pr_head_sha, one of the sha(s) this run superseded (${pre_update_sha}${superseded_union_sha:+, $superseded_union_sha}), so every check and merge state here is a replaced head's. Either the update has not landed yet (re-run), or that answer is a no-op spelling update-branch does not recognise, in which case the branch is already current and the spelling belongs in that step's no-op arm"
       rest=${verdict#pending:}
       present=${rest%%:*}
       rest=${rest#*:}

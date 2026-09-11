@@ -394,15 +394,15 @@ td_fixture() { # td_fixture <name> — a repo with a real origin, TD_BASE on mai
   must git init --quiet --bare "$ROOT/origin.git"
   must gitc "$REPO" remote add origin "$ROOT/origin.git"
   must mkdir -p "$REPO/docs"
-  must printf '%s' "$TD_BASE" >"$REPO/docs/tech-debt.md"
+  must printf '%s' "$TD_BASE" >"$REPO/$TD"
   must gitc "$REPO" add -A
   must gitc "$REPO" commit --quiet -m 'the log as both sides found it'
   must gitc "$REPO" push --quiet origin main
   must gitc "$REPO" worktree add --quiet -b "$HEAD_REF" "$ROOT/wt" HEAD
 }
 
-td_main_writes() { # td_main_writes <the whole docs/tech-debt.md, as main has it>
-  must printf '%s' "$1" >"$REPO/docs/tech-debt.md"
+td_main_writes() { # td_main_writes <the whole tech-debt log, as main has it>
+  must printf '%s' "$1" >"$REPO/$TD"
   must gitc "$REPO" commit --quiet -am 'another lane merged first'
   must gitc "$REPO" push --quiet origin main
 }
@@ -411,8 +411,8 @@ td_main_writes() { # td_main_writes <the whole docs/tech-debt.md, as main has it
 # would then be answering. That last line is not bookkeeping: the union step refuses to
 # resolve a branch whose local tip and headRefOid disagree, so a fixture that left
 # V_OID at "aaa111" would test the guard rather than the resolution.
-td_branch_writes() { # td_branch_writes <the whole docs/tech-debt.md, as the lane has it>
-  must printf '%s' "$1" >"$ROOT/wt/docs/tech-debt.md"
+td_branch_writes() { # td_branch_writes <the whole tech-debt log, as the lane has it>
+  must printf '%s' "$1" >"$ROOT/wt/$TD"
   must gitc "$ROOT/wt" commit --quiet -am 'the lane logs its own finding'
   must gitc "$ROOT/wt" push --quiet origin "$HEAD_REF"
   V_OID=$(gitc "$ROOT/wt" rev-parse HEAD) || {
@@ -1576,6 +1576,47 @@ expect_rc 0
 expect_stdout "$TD unioned and pushed"
 expect_stdout 'updated onto the base (attempt 1)'
 expect_stdout '2 check(s) complete on ddd444'
+expect_not_stderr "mergeStateStatus is 'BLOCKED'"
+expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 20o. …and the head the union REPLACED is still stale too
+# ==========================================================================================
+# The companion to 20n, and the case that caught a defect the fix round planted. A run
+# that unions and is then written over has superseded TWO heads: the one read at
+# classify time and the one the union pushed. The await gate is an inequality, so a
+# version that excluded only the newer of the two left the OLDER one admissible — and a
+# lagging GitHub answers exactly that one. The fixture answers it: the poll's first read
+# is the pre-union head, complete and CLEAN, which is the shape that merges on a rollup
+# belonging to a commit two pushes ago.
+begin "a lagging answer naming the head the union replaced is not read as the new head"
+td_fixture union-oldest-stale
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+pre_union_head="$V_OID"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.1"
+must printf '1\n' >"$STATE/update-branch.1.rc"
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
+V_MSST="DIRTY"
+write_view 1
+# The poll's first read: still the PRE-union head, and every check on it green — so a
+# gate that let this through would break the poll here and merge on it.
+V_MSST="CLEAN"
+write_view 2
+# Its second: the union's own head, which the write that followed has replaced.
+V_MSST="BLOCKED"
+write_view 3
+must : >"$STATE/view.3.oid-from-wt"
+V_OID="eee555"
+V_MSST="CLEAN"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout "$TD unioned and pushed"
+expect_stdout '2 check(s) complete on eee555'
+expect_not_stdout "complete on $pre_union_head"
 expect_not_stderr "mergeStateStatus is 'BLOCKED'"
 expect_called "pr merge $PR --squash"
 end
