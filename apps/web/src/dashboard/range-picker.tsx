@@ -6,9 +6,10 @@ import type { RangeHours } from '../data/fleet-data-source';
  * The window picker, and the labels that name a window anywhere else on screen.
  *
  * Extracted when two panels carried one, because the two copies had the same
- * intent (`structure.md` rule 7): the offered windows are a property of what
- * `FleetDataSource` can serve, not of the panel asking, so adding a 72 h window
- * or renaming `7 d` would leave any copy that missed the change simply wrong.
+ * intent (`docs/standards/structure.md` rule 7): the offered windows are a
+ * property of what `FleetDataSource` can serve, not of the panel asking, so
+ * adding a 72 h window or renaming `7 d` would leave any copy that missed the
+ * change simply wrong.
  *
  * One caller carries the picker today — the fleet panel — because #265 took the
  * site's own chart off the page and made a selected site a series on the fleet's
@@ -28,8 +29,7 @@ import type { RangeHours } from '../data/fleet-data-source';
  * It lives in `dashboard/` because that is where its caller lives: the three
  * chart *views* it was extracted from are gone (#148), and a control used only
  * by the reading under the map has no business sitting in a directory named
- * after the pages that used to exist. Its styling moved with it, into
- * `range-picker.css`.
+ * after the pages that used to exist.
  */
 
 /**
@@ -75,9 +75,9 @@ export interface RangePickerProps {
  * rather than implied. The virtue this control had is the one it has given up:
  * the current window was readable without opening anything, and a reader now
  * has to press to see which of the three is pressed. What that buys is the
- * row's width — ~144px of it, measured — and the width is what the fleet's own
- * numbers need in order to be on screen at all. `fleet-panel.css` owns the
- * container width below which those numbers hide and re-derived it against this
+ * row's width, and the width is what the fleet's own numbers need in order to be
+ * on screen at all. `fleet-panel.css` owns the container width below which those
+ * numbers hide, the width the fold bought and the re-derivation against this
  * trigger; the point of the fold is that the number came down, not that the
  * control looks tidier. The window itself is not lost with the chips, either:
  * the chart's own accessible name and its table caption both state it, from
@@ -86,7 +86,8 @@ export interface RangePickerProps {
  *
  * ## A disclosure, not a menu
  *
- * `HeaderMenu.tsx` :69–:74 settles this, and its reasoning is unchanged here.
+ * `apps/web/src/header/HeaderMenu.tsx` :69–:74 settles this, and its reasoning
+ * is unchanged here.
  * The ARIA menu pattern is an application menu bar: it takes arrow keys over
  * Tab, owns Home/End and type-ahead, and manages a roving tabindex — a contract
  * owed in full the moment the role is claimed, and one that makes ordinary
@@ -96,15 +97,13 @@ export interface RangePickerProps {
  * The trigger's name lives only in `aria-label` and the glyph is `aria-hidden`,
  * which is that same file's :39–:60 shape for its reason: a mark that says
  * nothing its name does not already say should not be in the accessibility tree
- * twice. It also inherits that shape's named edge — this is now the second
- * control in the app whose accessible name exists only in an attribute, so
- * losing the attribute leaves a button announced as "button" with nothing on
- * screen looking wrong and no gate firing. `HeaderMenu.tsx` states that edge for
- * the first and points at the missing-a11y-linting debt (#351) as what would
- * one day catch it mechanically; until that lands the catch is a suite's, and
- * for this control it is `FleetPanel.structure.test.tsx`'s accessible-name case.
+ * twice. It inherits that shape's named edge along with the shape, and that file
+ * states the edge and points at the missing-a11y-linting debt (#351) as what
+ * would one day catch it mechanically; until that lands the catch for this
+ * control is `FleetPanel.structure.test.tsx`'s accessible-name case.
  *
- * The `<svg>` is drawn here rather than fetched, on `Brand.tsx`'s terms: no test
+ * The `<svg>` is drawn here rather than fetched, on
+ * `apps/web/src/header/Brand.tsx`'s terms: no test
  * asserts its geometry and nothing outside this file imports it, so a designed
  * glyph replaces it and reaches nothing else. Its colour is the stylesheet's,
  * because the frontend gate is a stylesheet gate.
@@ -123,36 +122,35 @@ export interface RangePickerProps {
  * load-bearing rather than the precaution it is in the tip. The buttons the
  * reader is standing on leave the document either way, so without the hand-back
  * focus drops to `body` and a keyboard reader is returned to the top of the
- * page. That is `design.md` rule 11's own carve-out rather than an exception to
- * it: the page changed in answer to their action, and the trigger is where
- * their next act lives. An outside press deliberately moves nothing — the
- * pointer is already where the reader wants to be.
+ * page. That is `docs/standards/design.md` rule 11's own carve-out rather than
+ * an exception to it: the page changed in answer to their action, and the
+ * trigger is where their next act lives. An outside press deliberately moves
+ * nothing — the pointer is already where the reader wants to be.
  *
  * The resemblance to `InfoTip` is deliberate and, like the tip's own
- * resemblance to the menu, deliberately **not** extracted. Its docblock (:79–:90)
- * is where `structure.md` rule 7's question is asked, and the answer here is the
- * same one: for the dismissal *policy*, yes, two overlays in one app dismissing
- * on different gestures is an inconsistency a reader can feel; for the code
- * around it, no. This one closes on a selection and hands focus back on that
- * path, the tip has no selection to close on, and the menu's listener stands
- * down for a modal neither of the others has. What the three genuinely share is
- * one rule, and it is smaller than the hook that would carry it. The moment
+ * resemblance to the menu, deliberately **not** extracted. Its docblock
+ * (:79–:90) is where `docs/standards/structure.md` rule 7's question is asked,
+ * and the answer here is the same one: for the dismissal *policy*, yes; for the
+ * code around it, no. This one closes on a selection and hands focus back on
+ * that path, the tip has no selection to close on, and the menu's listener
+ * stands down for a modal neither of the others has. The moment
  * extraction becomes right is already written down and unchanged by there being
  * a third copy: `docs/tech-debt.md` holds a pending decision about a fourth
  * dismissal route, and applying it means applying it in one place. A third copy
  * is a reason to take that decision, not a licence to pre-empt it here.
  *
- * Presentational (`react.md` rule 4): all it owns is whether it is open.
+ * Presentational (`docs/standards/react.md` rule 4): all it owns is whether it
+ * is open.
  */
 export const RangePicker = ({ range, ariaLabel, onSelect }: RangePickerProps): ReactElement => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // A subscription to something outside React (`react.md` rule 1), and so
-  // genuinely an effect. Only while open, for the tip's reason: a listener on
-  // the document while nothing is revealed is a cost paid by readers who never
-  // press the trigger.
+  // A subscription to something outside React (`docs/standards/react.md` rule
+  // 1), and so genuinely an effect. Only while open, for the tip's reason: a
+  // listener on the document while nothing is revealed is a cost paid by
+  // readers who never press the trigger.
   useEffect(() => {
     if (!open) {
       return undefined;

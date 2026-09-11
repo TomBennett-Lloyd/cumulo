@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 /*
  * The parts of `charts.css` that carry a design obligation rather than a
- * preference, asserted mechanically. `map/map-css-contract.test.ts` is the
- * precedent and its docblock carries the argument for the whole shape of this
- * check; the short version is that jsdom applies no stylesheet, so a component
- * test asking a rendered `<line>` for its computed stroke would report the
- * initial value and pass against an empty file. Reading the stylesheet as text
- * proves the declarations exist, not that they take effect (testing.md rule 10).
+ * preference, asserted mechanically.
+ * `apps/web/src/map/map-css-contract.test.ts` is the precedent and its docblock
+ * carries the argument for the whole shape of this check; the short version is
+ * that jsdom applies no stylesheet, so a component test asking a rendered
+ * `<line>` for its computed stroke would report the initial value and pass
+ * against an empty file. Reading the stylesheet as text proves the declarations
+ * exist, not that they take effect (`docs/standards/testing.md` rule 10).
  *
  * What that leaves to the browser lane is the thing this file is named for:
  * whether the plot's three verticals are actually *told apart* by a reader — the
@@ -16,10 +17,9 @@ import { describe, expect, it } from 'vitest';
  * full-ink crosshair. Two of them were one line drawn twice before #284 D11, and
  * #335 added the third. The grid was never in that comparison: it is horizontal
  * only, so a reader separates it by orientation before ink or weight comes into
- * it. `apps/web/e2e/` owns
- * that criterion and no spec in it asserts it today, so this is what the fast
- * lane can honestly say about #284 D11 and #335, and it is deliberately a claim
- * about the declarations rather than about the pixels.
+ * it. `apps/web/e2e/` owns that criterion and no spec in it asserts it today, so
+ * this is what the fast lane can honestly say about #284 D11 and #335, and it is
+ * deliberately a claim about the declarations rather than about the pixels.
  *
  * The failure it exists to catch is a merge back to sameness: the horizon rule
  * folded into the grid's selector list again (which is where it lived until
@@ -52,14 +52,8 @@ interface OpenBlock {
  * `([^{}]+)\{([^{}]*)\}` over the whole file, which cannot see nesting at all:
  * an `@media` block's prelude becomes a "selector" and its first inner rule's
  * body becomes that rule's declarations, so every assertion downstream is
- * reading the wrong text — the defect recorded as #311. It was written against a
- * `charts.css` that had no at-rule at all, on the argument that the day one
- * arrived should be a loud failure rather than a silent misread; that day is
- * 2026-08-12, when #448's loading trace brought a `prefers-reduced-motion`
- * override with it, and the nesting this parser already tracked is what let the
- * lookups below simply name which scope they mean instead of being rewritten.
- * What has not changed is the refusal: anything this reader does not model
- * throws.
+ * reading the wrong text — the defect recorded as #311. The refusal is the other
+ * half: anything this reader does not model throws.
  *
  * Scope, stated rather than assumed: it models comment-stripped CSS with
  * balanced braces and no braces inside strings or `url()`. A brace inside a
@@ -128,22 +122,17 @@ const conditionalRulesFor = (selector: string): readonly CssRule[] =>
  *
  * Every departure from "exactly one rule in that scope" throws rather than
  * returning something an assertion could pass against vacuously
- * (error-handling.md rule 1). A missing rule is a violated invariant of this
- * test's own subject — the file is ours and these selectors are the contract —
- * and a duplicate means the declarations read here are no longer the whole
- * story for that scope.
+ * (`docs/standards/error-handling.md` rule 1). A missing rule is a violated
+ * invariant of this test's own subject — the file is ours and these selectors
+ * are the contract — and a duplicate means the declarations read here are no
+ * longer the whole story for that scope.
  *
  * **The scope is a parameter because it stopped being knowable from the
- * selector.** Until #448 this lookup took no scope and threw on *any* second
- * rule, which was the same guard stated as an impossibility: with no at-rule in
- * the file, "exactly one rule" and "the unconditional rule" were the same
- * sentence. The loading trace is deliberately a pair — a rule and a
+ * selector.** The loading trace is deliberately a pair — a rule and a
  * reduced-motion override of it — so a lookup that refused every second rule
- * could not read either half of it. What the old shape was protecting is not
- * lost, only moved somewhere it can be named: the case below asserts that the
- * selectors read unconditionally really are unconditional, which is the claim
- * the throw used to make in passing, and it makes it about a stated list rather
- * than about whichever selector an assertion happened to ask for.
+ * could not read either half of it. That a selector read unconditionally really
+ * is unconditional is asserted by name in the case below, about a stated list
+ * rather than about whichever selector an assertion happened to ask for.
  */
 const declarationsIn = (scope: readonly string[], selector: string): string => {
   const matches = rules.filter(
@@ -307,7 +296,8 @@ describe('charts.css tells the plot’s three verticals apart', () => {
  * reader who has asked for no motion is given the curve without the sweep.
  * Neither is visible to jsdom, which applies no stylesheet, and the second is
  * not visible to the browser lane either without emulating a system preference,
- * so this is where both are honestly assertable (testing.md rule 10).
+ * so this is where both are honestly assertable (`docs/standards/testing.md`
+ * rule 10).
  *
  * The timing is deliberately not asserted. "Unhurried, subtle over showy" is the
  * owner's bar and a number pinned here would be a number nobody could argue
@@ -373,10 +363,10 @@ describe('charts.css draws the wait instead of spelling it', () => {
  *
  * jsdom cannot see any of this — it applies no stylesheet and lays nothing out —
  * and neither can the browser lane, because `DemoFleetDataSource` never fails so
- * the state is unreachable in the shipped app (`testing.md` rule 10 asks for
- * that to be said rather than left implied). Reading the declarations is
- * therefore the only guard this state has, which is why it is a named case
- * rather than a line in a comment.
+ * the state is unreachable in the shipped app (`docs/standards/testing.md` rule
+ * 10 asks for that to be said rather than left implied). Reading the
+ * declarations is therefore the only guard this state has, which is why it is a
+ * named case rather than a line in a comment.
  */
 describe('charts.css keeps the failure inside the chart’s own box', () => {
   it('takes the error overlay out of flow, so it cannot change the figure’s height', () => {
@@ -387,10 +377,7 @@ describe('charts.css keeps the failure inside the chart’s own box', () => {
   });
 
   it('positions the figure, which is what the overlay resolves against', () => {
-    // The other half of the pair above. Without it `inset: 0` is measured from
-    // whatever ancestor happens to be positioned — the controls row, or the
-    // initial containing block — and the overlay lands somewhere that is not the
-    // chart, with nothing else in the repo noticing.
+    // The other half of the pair this suite's docblock enumerates.
     expect(declarationsFor('.forecast-chart-figure')).toContain('position: relative;');
   });
 });
