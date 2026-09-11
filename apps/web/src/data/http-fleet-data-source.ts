@@ -31,13 +31,14 @@ const MS_PER_HOUR = 3_600_000;
  * this client's to choose, and it is chosen to match the forecast horizon the
  * API serves by default (`DEFAULT_FORECAST_HORIZON_HOURS` in
  * `apps/api/src/forecast/get-site-forecast.ts` — cited rather than imported,
- * because `apps/web` may not import another app, `architecture.md` rule 1).
+ * because `apps/web` may not import another app,
+ * `docs/standards/architecture.md` rule 1).
  * Asking for less would crop the forecast half of an accuracy chart; asking for
  * more would spend a read on rows that cannot exist yet.
  *
- * The widest window this produces is 168 + 48 = 216 hours, comfortably inside
- * the route's `MAX_SERIES_SPAN_HOURS` of 336 — so widening `RangeHours` has
- * headroom before it starts 400ing.
+ * The widest window this produces is the largest `RangeHours` plus this
+ * horizon, comfortably inside the route's `MAX_SERIES_SPAN_HOURS` — so widening
+ * `RangeHours` has headroom before it starts 400ing.
  */
 const SERIES_HORIZON_HOURS = 48;
 
@@ -49,7 +50,8 @@ const GET_INIT: RequestInit = { method: 'GET' };
  * second, which `toISOString()` alone is not (it always emits milliseconds).
  *
  * The same three lines exist in `demo-fleet-data-source.ts`, and the
- * duplication is incidental (`structure.md` rule 7): that one formats instants
+ * duplication is incidental (`docs/standards/structure.md` rule 7): that one
+ * formats instants
  * it invented for a fixture, this one formats query parameters a server will
  * validate. Neither becomes wrong because the other changed.
  *
@@ -65,9 +67,7 @@ const utcSecondIso = (epochMs: number): string =>
  * Every read route answers with an envelope — `{ sites }`, `{ forecasts,
  * attribution }` — and every caller here wants the array inside it, so the
  * unwrapping is one function rather than a `kind === 'ok'` ternary at every
- * call site, each free to get the error arm subtly wrong. Deliberately without
- * a count of those sites: the set moves whenever a route does — #296 changed it
- * — and a literal count in prose goes stale the moment one is added.
+ * call site, each free to get the error arm subtly wrong.
  */
 const mapOk = <T, R>(
   result: FleetSourceResult<T>,
@@ -87,10 +87,11 @@ export interface HttpFleetDataSourceOptions {
 /**
  * The `FleetDataSource` that talks to the deployed Fleet API.
  *
- * A class rather than a factory over captured variables (`structure.md`
- * rule 2): the members share the base URL, the transport, the clock and — the
- * one that matters — the in-flight series map, and `this.` is what makes that
- * sharing visible to a reader holding only one method.
+ * A class rather than a factory over captured variables
+ * (`docs/standards/structure.md` rule 2): the members share the base URL, the
+ * transport, the clock and — the one that matters — the in-flight series map,
+ * and `this.` is what makes that sharing visible to a reader holding only one
+ * method.
  *
  * Members are arrow properties because `FleetDataSource` declares them as
  * properties: views hand `source.listSites` straight to a hook, and a detached
@@ -105,12 +106,11 @@ export class HttpFleetDataSource implements FleetDataSource {
    *
    * The detail view asks for that pair's forecasts and actuals concurrently,
    * and both are halves of one `/series` payload. `/series` is metered by the
-   * API's per-IP limiter (30 requests per 60 seconds, then a one-hour block;
-   * the route table in `apps/api/src/main.ts` owns which routes are), so
-   * sharing the promise is the difference between one metered request per
-   * selection and two. Even unshared this is far from the limiter — a human
-   * would need more than 30 distinct (site, range) selections inside a minute —
-   * but the halving is free and it is the frugality posture CLAUDE.md asks for.
+   * API's per-IP limiter (`apps/api/src/abuse/ip-limiter.ts` owns the policy;
+   * the route table in `apps/api/src/main.ts` owns which routes it is applied
+   * to), so sharing the promise is the difference between one metered request
+   * per selection and two. Even unshared this is far from the limiter, but the
+   * halving is free and it is the frugality posture CLAUDE.md asks for.
    */
   private readonly seriesInFlight = new Map<
     string,
@@ -131,7 +131,7 @@ export class HttpFleetDataSource implements FleetDataSource {
    * The `try` wraps the `fetch` and nothing else: a rejection from the
    * transport is the expected `network` failure, while anything thrown by the
    * parsing below it would be a bug in this app and must not be dressed up as a
-   * network problem (`error-handling.md` rules 1 and 2).
+   * network problem (`docs/standards/error-handling.md` rules 1 and 2).
    */
   private readonly requestJson = async <T>(
     operation: string,
@@ -192,10 +192,11 @@ export class HttpFleetDataSource implements FleetDataSource {
      * Building the window can fail before any request is made: a clock that
      * returned a non-finite instant makes `toISOString` throw `RangeError`, and
      * `utcSecondIso` parses rather than asserts, so a malformed instant throws
-     * `ZodError`. Both are bugs and correctly throw (`error-handling.md`
-     * rule 1) — but both happen before the request exists, which is precisely
-     * where an inner `finally` runs too early. It would delete a key the `set`
-     * below had not written yet, and the failed promise would then be stored
+     * `ZodError`. Both are bugs and correctly throw
+     * (`docs/standards/error-handling.md` rule 1) — but both happen before the
+     * request exists, which is precisely where an inner `finally` runs too
+     * early. It would delete a key the `set` below had not written yet, and the
+     * failed promise would then be stored
      * *permanently*: every later read of this (site, range) would be handed the
      * same failure for the life of the page.
      *
@@ -223,16 +224,13 @@ export class HttpFleetDataSource implements FleetDataSource {
    * explicit window — which is #289's, on the way to #148. It is not something
    * a different request shape here could reach.
    *
-   * What the false one no longer means is "no window control". It used to: a
-   * picker here moves the actuals' window and leaves the forecast half roughly
-   * where it was, and that asymmetry was once read as a reason to withhold the
-   * control. #284 D5 keeps the control and pays for the asymmetry in the copy
-   * instead — more measured hours is a real thing to offer a reader, and the
+   * What the false one no longer means is "no window control": a picker here
+   * moves the actuals' window and leaves the forecast half roughly where it was,
+   * and #284 D5 keeps the control and pays for that asymmetry in the copy — the
    * chart's own name declines to claim the forecast half moved with them.
    *
    * `fleetActuals` is true because the fleet's readings now both exist and
-   * arrive in one request: the forecast service writes them and
-   * `GET /v1/fleet/actuals` serves them (#264, see the comment there).
+   * arrive in one request (#264; {@link fleetActuals} below carries how).
    */
   readonly capabilities: FleetSourceCapabilities = {
     fleetLookback: false,
@@ -260,9 +258,9 @@ export class HttpFleetDataSource implements FleetDataSource {
     });
 
   /**
-   * No `hours` parameter: the API's own default is 48, and restating it here
-   * would be a second definition of the poll's horizon that could drift from
-   * the published contract.
+   * No `hours` parameter: the API's own `DEFAULT_FORECAST_HORIZON_HOURS` is the
+   * poll's horizon, and restating it here would be a second definition that
+   * could drift from the published contract.
    */
   readonly getSiteForecast = async (
     siteId: Site['id'],
@@ -298,8 +296,8 @@ export class HttpFleetDataSource implements FleetDataSource {
    * **forward horizon** rather than as the look-back {@link RangeHours}
    * describes, because the route's window opens at the clock and runs ahead. So
    * the fleet aggregate still shows no history, and it is still capped by how
-   * far the deployed pipeline has written. Closing that needs the fleet
-   * *series* endpoint, not a change here (#289, #148).
+   * far the deployed pipeline has written; {@link capabilities} above carries
+   * what closing that takes.
    *
    * That route *is* metered by the API's per-IP limiter, and deliberately so:
    * the caller picks nothing about this request's cost and the fleet picks all
@@ -314,7 +312,8 @@ export class HttpFleetDataSource implements FleetDataSource {
    * has always had. There is no partial for this client to label because the
    * route does not serve one: a fleet short of a site's points is summed hour
    * by hour into a fleet that merely looks like it generates less, so the read
-   * refuses rather than truncating (`error-handling.md` rule 5). That decision
+   * refuses rather than truncating (`docs/standards/error-handling.md` rule 5).
+   * That decision
    * is `apps/api/src/forecast/fleet-series-read.ts`'s and its reasoning lives
    * there; labelling a response partial is the richer answer that module names
    * as still open — the same contract change #165 holds for the per-site
@@ -346,8 +345,9 @@ export class HttpFleetDataSource implements FleetDataSource {
    * range selection is the point of it: assembling the same answer in the
    * browser would spend one metered `/series` request per site (the only
    * per-site route that carries actuals), and on a 60-site fleet that alone
-   * would trip the limiter's 30-per-60-seconds block. Which is why the fleet's
-   * actuals are read here and must never be re-pointed at `/series`.
+   * would trip the limiter's block (`apps/api/src/abuse/ip-limiter.ts`). Which
+   * is why the fleet's actuals are read here and must never be re-pointed at
+   * `/series`.
    */
   readonly fleetActuals = async (
     range: RangeHours,
