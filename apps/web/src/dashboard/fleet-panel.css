@@ -244,9 +244,9 @@
  * have put this threshold at 25.5rem. It was rebuilt as one button because at
  * 320px the five-item row wrapped on a font stack whose glyphs run wide — the
  * `sans-serif` fallback a Linux reader gets, and the one CI renders in — and a
- * wrapped row is what `charts/chart-geometry.ts` derives against. The 38.31px
- * that bought is the difference between a rule this row can keep at every width
- * in common use and one that holds only where the fonts are narrow. #463 has
+ * wrapped row is what `apps/web/src/charts/chart-geometry.ts` derives against.
+ * The 38.31px that bought is the difference between a rule this row can keep at
+ * every width in common use and one that holds only where the fonts are narrow. #463 has
  * since retired the condition that forced it: there is no wide-fallback platform
  * left to lose at 320px on, so that pressure is history rather than a live
  * constraint.
