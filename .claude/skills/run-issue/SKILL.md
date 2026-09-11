@@ -51,7 +51,7 @@ this branch was cut, which files, what the union rule expects>` to the warm agen
 5. **Release**: PR merged, issue closed, no bounce open → the `## Lane report` in the PR body
    is the retro's first-hand input; run `/retro`; remove the row. A wedged agent (no report,
    no branch movement) gets the worktree and the issue inspected FIRST, then `TaskStop`, then
-   a fresh `RESUME issue #n` dispatch — the new agent reconciles from `git log main..<branch>`,
+   a fresh `RESUME issue #n` dispatch — the new agent reconciles from `git log main..<branch>`, A dead lane is recognised, not diagnosed: the task shows no progress or an `ENOTFOUND` / stall-watchdog failure, its output file is a few hundred bytes, and `ps` shows no process under the worktree — a 0-byte background task entry alongside it is a ghost of a command whose owner died, safe to stop. Then `RESUME`: the new agent audits uncommitted work against the plan comment's ticks before adding to it, and never re-does a step whose files exist.
    `git status`, the plan comment and any PR, and adopts what is already done.
 
 ## Batch lane
