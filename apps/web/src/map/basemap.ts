@@ -56,8 +56,8 @@ import type { Theme } from '../theme';
  *   `MapAttributionStrip.test.tsx` (the assertion on that href). Crediting a
  *   provider whose tiles are no longer being served is a licence failure, not a
  *   stale string.
- * - `apps/web/src/header/AboutDialog.tsx` (and
- *   `apps/web/src/header/AboutDialog.test.tsx`) — the same credit in the About
+ * - `apps/web/src/header/AboutDialog.tsx`, with its assertion in
+ *   `apps/web/src/header/AboutDialog.test.tsx` — the same credit in the About
  *   dialog's data-sources block. A second carrier rather than a shared component
  *   because the strip states an obligation the map owes while it is on screen
  *   and this states what the product is built on; only the provider's identity
