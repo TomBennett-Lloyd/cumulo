@@ -54,16 +54,20 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * ## The one way the two paths differ, stated rather than absorbed
  *
  * IEEE-754 addition is not associative. Adding a fleet's sixty terms grouped by location and adding
- * them in one pass therefore land a bit or two apart — measured at **~1.4e-14 kW on a ~117 kW
- * fleet total** (`fleet-rollup-additivity.test.ts`, which bounds it at a nanowatt and would fail if
- * it widened). That is the *entire* discrepancy between this roll-up and the fan-out it replaces:
- * no field is lost and nothing is approximated. It is six orders of magnitude below the watt
- * precision a power value in this repo claims, so it is invisible to every consumer — but it is why
- * the proof asserts a bound rather than equality, and why it says so out loud.
+ * them in one pass therefore land a bit or two apart — measured on the canonical fleet at **~2e-14
+ * kW**, worst case `2.1e-14` on a `50.9` kW hour (the `117.4` kW hour's is `1.4e-14`), with the
+ * per-hour contributing-capacity sum differing by `1.1e-13` kW on the same fixture.
+ * `fleet-rollup-additivity.test.ts` bounds the power discrepancy at a nanowatt and would fail if it
+ * widened. That is the *entire* difference between this roll-up and the fan-out it replaces: no
+ * field is lost and nothing is approximated. The measurement is some **eleven** orders of magnitude
+ * below the watt precision a power value in this repo claims — and the nanowatt the proof asserts is
+ * itself six orders below a watt — so it is invisible to every consumer, but it is why the proof
+ * asserts a bound rather than equality, and why it says so out loud.
  *
  * Rounding partials to watt precision at the write boundary was considered for exactly that reason
- * and **rejected**: twelve rounded partials can sum 6 mW away from the unrounded fleet, a thousand
- * times worse than the association error it would be fixing.
+ * and **rejected**: a watt of precision is half a watt of error per partial, so twelve of them can
+ * put the summed fleet **6 W** (`0.006` kW) from the unrounded one — eleven orders of magnitude
+ * *worse* than the association error it would be fixing, and six worse than the bound.
  *
  * ## One definition of the fleet total, still
  *
@@ -77,6 +81,28 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * Pure by construction: no I/O, no clock, no ambient state. The storage shape of a partial belongs
  * to `@cumulo/storage`; this module owns only the arithmetic and the vocabulary.
  */
+
+/**
+ * The one forecast kind the fleet aggregate is rolled up from, on both sides of the table.
+ *
+ * The producer writes partials for this kind and the API reads them for this kind, from this one
+ * declaration, because a roll-up written under one kind and read under another is an empty fleet
+ * with no error anywhere (`docs/standards/architecture.md` rule 9).
+ *
+ * **Physics, and stating that fixes a latent bug rather than introducing a restriction.**
+ * `aggregateFleetForecast`'s own docblock warns that summing two models' views of the same
+ * site-hour double-counts it; today's fan-out route returns every model it finds and leaves the
+ * client to sum them, which is only harmless because `packages/forecast` emits physics alone. The
+ * roll-up has to name a model — a sort key cannot be vague — so it names the one the dashboard has
+ * always effectively been drawing, and the fallback filters to the same one so the two paths cannot
+ * answer differently. When the ML correction layer lands, *which* model the fleet chart shows is a
+ * product decision that gets made here, once, instead of being decided by what happens to be in the
+ * table.
+ */
+export const FLEET_ROLLUP_FORECAST_KIND = {
+  kind: 'forecast',
+  model: 'physics',
+} as const satisfies SeriesKind;
 
 /**
  * One location's additive contribution to one hour of the fleet aggregate.
@@ -101,28 +127,6 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * Non-finite values are refused by `z.number()` itself, which is the guard that matters: a `NaN`
  * reaching the sum would poison every hour it touched and render as an empty chart.
  */
-/**
- * The one forecast kind the fleet aggregate is rolled up from, on both sides of the table.
- *
- * The producer writes partials for this kind and the API reads them for this kind, from this one
- * declaration, because a roll-up written under one kind and read under another is an empty fleet
- * with no error anywhere (`docs/standards/architecture.md` rule 9).
- *
- * **Physics, and stating that fixes a latent bug rather than introducing a restriction.**
- * `aggregateFleetForecast`'s own docblock warns that summing two models' views of the same
- * site-hour double-counts it; today's fan-out route returns every model it finds and leaves the
- * client to sum them, which is only harmless because `packages/forecast` emits physics alone. The
- * roll-up has to name a model — a sort key cannot be vague — so it names the one the dashboard has
- * always effectively been drawing, and the fallback filters to the same one so the two paths cannot
- * answer differently. When the ML correction layer lands, *which* model the fleet chart shows is a
- * product decision that gets made here, once, instead of being decided by what happens to be in the
- * table.
- */
-export const FLEET_ROLLUP_FORECAST_KIND = {
-  kind: 'forecast',
-  model: 'physics',
-} as const satisfies SeriesKind;
-
 export const fleetRollupPartialSchema = z.object({
   validTime: utcIsoTimestampSchema,
   /** Σ `acPowerKw` over this group's sites at this hour. */

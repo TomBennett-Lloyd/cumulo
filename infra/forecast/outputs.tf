@@ -30,7 +30,7 @@
 #     so **11 × 8,760 × 1 KB ≈ 96 MB/month** retained — ~$0.0029/month at
 #     ~$0.03/GB-month, and $0.00 as
 #     billed because it sits inside the account's always-free 5 GB of stored
-#     logs. That ~88 MB is a **bound, not a measurement**, and generously so:
+#     logs. That ~96 MB is a **bound, not a measurement**, and generously so:
 #     ADR 0005's own ~6.5 GB/month at 25.92 M requests works out at ~250 bytes
 #     per *invocation*, and this prices 1 KB per *line* and then charges all
 #     eleven of them. The honest claim is a ceiling, not a meter reading. What moves

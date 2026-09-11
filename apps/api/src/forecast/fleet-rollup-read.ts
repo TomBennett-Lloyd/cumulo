@@ -42,10 +42,14 @@ import { forecastsIn } from './series-split';
  * sums to a fleet total that looks exactly like a plausible number from a quieter fleet — there is
  * no gap to see, because the missing site does not read as missing, it reads as less generation.
  * That is the half-truth `fleet-series-read.ts` refuses for the fan-out, applied to the roll-up.
- * Completeness is mechanical rather than a guess: the route already lists the fleet and every site
- * carries coordinates, so the expected location set is exactly `sites.map(locationId)` — the same
- * function ingestion keys its messages on, so the two sets are the same partition of the fleet by
- * construction rather than by agreement.
+ * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
+ * every site carries coordinates, so the expected set is the active sites' `locationId`s — the same
+ * function ingestion keys its messages on, over the same `active` predicate, so the two sets are the
+ * same partition of the fleet by construction rather than by agreement. What the check does *not*
+ * see is a location that wrote some of its hours and not others: a partial `BatchWriteItem` drain is
+ * logged and left for the next cycle (`fleet-rollup-write.ts`), and until that cycle runs the
+ * roll-up can be short an hour without saying so. Tracked in `docs/tech-debt.md`; an expected-hours
+ * notion is not something this route owns.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
  * that explain it, so "has a full cycle written every location yet?" is one log query. When the
@@ -88,15 +92,21 @@ export type FleetForecastAggregateRead =
   | { readonly complete: false; readonly response: ApiResponse };
 
 /**
- * Which locations the fleet expects a partial from — one per distinct weather bucket its sites sit
- * in.
+ * Which locations the fleet expects a partial from — one per distinct weather bucket its **active**
+ * sites sit in.
  *
  * A `Set` because two sites in one bucket are one expected partial: `locationId` is what the
  * producer's messages are keyed by (ADR 0004), so twelve cluster locations holding sixty sites
  * expect twelve partials and not sixty.
+ *
+ * `active` is the half that makes this set the same set the producer writes, rather than merely a
+ * similar one. `listFleetSites` returns the fleet active *and* inactive, while ingestion publishes
+ * only for locations holding an active site (`activeFetchLocations`) — so a location whose every
+ * site has been deactivated can never be written again, and counting it here would pin the route on
+ * `incomplete` for ever while logging a line that means the opposite of what it says.
  */
 const expectedLocations = (sites: readonly FleetSite[]): ReadonlySet<string> =>
-  new Set(sites.map((site) => locationId(site)));
+  new Set(sites.filter((site) => site.active).map((site) => locationId(site)));
 
 /**
  * Whether a roll-up read can answer for this fleet, and if not, why.
@@ -154,8 +164,27 @@ const aggregateFromFanOut = async (
   return { complete: true, points: fleetForecastAggregate(forecasts, sites) };
 };
 
-const summed = (rows: readonly FleetRollupRow[]): readonly FleetForecastAggregatePoint[] =>
-  sumFleetRollupPartials(rows.map((row) => row.partial));
+/**
+ * Sum the partials of the locations this fleet actually has active sites at, and no others.
+ *
+ * The filter is not defensive tidiness; without it a decommissioned location keeps generating. Its
+ * partials are written under keys nothing rewrites once ingestion stops publishing for it, and they
+ * outlive the last site there by the whole forecast horizon — so a fleet that lost a location would
+ * carry a ghost's kilowatts, its site count and its nameplate capacity for about two days. The
+ * fan-out arm cannot do that, because it iterates the site list; this makes the roll-up arm answer
+ * the same question rather than a question about what the table happens to hold.
+ *
+ * TTL reaps those items on the series table's own 90-day clock, which is far too slow to be the
+ * answer here, and a producer that deleted them would need an end-of-run event this design does not
+ * have (ADR 0009). Filtering at read costs one `Set` lookup per row and needs neither.
+ */
+const summed = (
+  rows: readonly FleetRollupRow[],
+  expected: ReadonlySet<string>,
+): readonly FleetForecastAggregatePoint[] =>
+  sumFleetRollupPartials(
+    rows.filter((row) => expected.has(row.locationId)).map((row) => row.partial),
+  );
 
 /**
  * Read the fleet's summed forecast over `from`…`to`: the roll-up if it can answer, the fan-out if
@@ -193,7 +222,7 @@ export const readFleetForecastAggregate = async (
   const reason = fallbackReason(rollup, expected);
 
   if (reason === undefined) {
-    return { complete: true, points: summed(rollup.rows) };
+    return { complete: true, points: summed(rollup.rows, expected) };
   }
 
   deps.log({

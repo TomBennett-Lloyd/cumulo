@@ -157,18 +157,27 @@ describe('partials sum to the whole-fleet aggregate', () => {
    * The one place the two paths genuinely differ, named and bounded rather than absorbed.
    *
    * IEEE-754 addition is not associative, so adding the same 60 terms grouped by location and
-   * adding them in one pass land a bit or two apart — measured here at ~1.4e-14 kW on a ~117 kW
-   * fleet total. That is the *entire* discrepancy between the roll-up and the fan-out it replaces:
-   * there is no field the partial cannot carry and nothing is approximated.
+   * adding them in one pass land a bit or two apart — measured here at ~2e-14 kW: worst case
+   * `2.1e-14` on the 50.9 kW hour, `1.4e-14` on the 117.4 kW one. That is the *entire* discrepancy
+   * between the roll-up and the fan-out it replaces: there is no field the partial cannot carry and
+   * nothing is approximated.
+   *
+   * **What this bound covers is `acPowerKw`**, which is what the reduce below reads. The same
+   * phenomenon moves the other sums by the same order — the per-hour contributing capacity differs
+   * by `1.1e-13` kW on this fixture — and `expectAggregatesAgree` above already holds every field
+   * to `NANOWATT_PLACES`, so the field this one singles out is the one a reader of a chart would
+   * see.
    *
    * A nanowatt is six orders of magnitude tighter than the watt precision a power value in this
-   * repo claims, so the bound is "exact for every purpose the number is put to" rather than a
-   * tolerance hiding a difference. Asserted as a number so a change that widened it — a rounding
-   * step at the write boundary, say — fails here instead of drifting the chart quietly.
+   * repo claims, and the measurement is another five below the nanowatt, so the bound is "exact for
+   * every purpose the number is put to" rather than a tolerance hiding a difference. Asserted as a
+   * number so a change that widened it — a rounding step at the write boundary, say — fails here
+   * instead of drifting the chart quietly.
    *
-   * Rounding partials to a watt each was considered for exactly that reason and rejected: twelve
-   * rounded partials can sum 6 mW away from the unrounded fleet, a thousand times worse than the
-   * association error it would be fixing.
+   * Rounding partials to a watt each was considered for exactly that reason and rejected: a watt of
+   * precision is half a watt of error per partial, so twelve of them can put the summed fleet 6 W
+   * (`0.006` kW) from the unrounded one — eleven orders of magnitude worse than the association
+   * error it would be fixing.
    */
   it('differs from the one-pass sum by float association only, under a nanowatt', () => {
     const grouped = sumFleetRollupPartials(perLocationPartials());

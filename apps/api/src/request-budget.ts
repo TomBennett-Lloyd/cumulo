@@ -69,8 +69,17 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   cases overlap (`forecast/fleet-series-read.ts` carries the argument). The
  *   deadline gate sits *between* batches, so the first one is ungated exactly
  *   as a first page is.
- * - `GET /v1/fleet/forecast` — **4**: the same four over the same fleet, its
- *   window running forwards rather than back, ≈ 28 s.
+ * - `GET /v1/fleet/forecast` — **4** on the roll-up path (limiter 2,
+ *   `listFleetSites`, then the first page of the single `#FLEET` Query),
+ *   ≈ 28 s; **5** on ADR 0009's fallback, where that Query's first page is
+ *   followed by the fan-out's first batch, ≈ 35 s. The fallback is the one
+ *   prefix on this API wider than the four above, and it is wider by a whole
+ *   command rather than by a coincidence of composition: the roll-up read is
+ *   consulted first and only *then* found wanting, so both first-reads are
+ *   ungated in the same request. It is temporary by construction — the
+ *   fallback comes out at #507 and the prefix returns to 4 — and it sits
+ *   inside the same argument the section closes with, since a 35-second worst
+ *   case still requires five independent worst cases to coincide.
  * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
  *   admitted per command, including the up-to-36 commands of the store loop.
  *   The committed write is the last thing the route does: nothing follows it,

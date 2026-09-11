@@ -311,10 +311,13 @@ resource "aws_dynamodb_table" "sites" {
 #    Cost is activity-shaped rather than standing: ~2.52 M write units/month at
 #    the canonical 12-location fleet (~3,456 items per cycle — ~2,880 forecast
 #    items, the figure the forecast stack's cost table carries, plus 12 × 48 =
-#    576 fleet roll-up partials since #494, a term that grows with *locations*
-#    rather than with sites) ≈ $1.78/month, ≈ $2.79 at ADR 0002's ~50-site
-#    planning envelope of 4,850 units per cycle plus the same 576, ≈ $5.29 at
-#    #29's 100-site cap, and $0 while the schedule is idle. Reads are
+#    576 fleet roll-up partials since #494, a term that is `locations × 48`
+#    and so grows with *locations* rather than with sites) ≈ $1.78/month,
+#    ≈ $2.79 at ADR 0002's ~50-site planning envelope of 4,850 units per cycle
+#    plus the same 576 — that envelope states no location count, so the
+#    canonical 12 is assumed — and ≈ $6.28 at #29's 100-site cap, whose worst
+#    case is ≤ 52 locations (packages/shared/src/site.ts) and therefore
+#    52 × 48 = 2,496 partials. $0 while the schedule is idle. Reads are
 #    activity-shaped for the same reason and stay negligible: the dashboard
 #    read path the 21 RCU was sized against now costs **≈ 45 a load** at
 #    $0.1415/M — ~43 read units per load on this table and ~2 elsewhere. The

@@ -60,7 +60,7 @@ A partial can only carry a field that is an **additive per-hour total**, because
 
 `packages/shared/src/fleet-rollup-additivity.test.ts` makes the claim executable over the canonical 12 × 5 fleet, because `generateFleet`'s clusters _are_ the `locationId` buckets the producer's messages are keyed by.
 
-**The one way the two paths differ, stated rather than absorbed.** IEEE-754 addition is not associative, so adding a fleet's terms grouped by location and adding them in one pass land a bit or two apart — measured at **~1.4e-14 kW on a ~117 kW fleet**. That is the _entire_ discrepancy: no field is lost and nothing is approximated. It is six orders of magnitude below the watt precision a power value here claims. Rounding partials to watt precision at the write boundary was considered for exactly this reason and **rejected**: twelve rounded partials can sum 6 mW away from the unrounded fleet, a thousand times worse than the error it would be fixing.
+**The one way the two paths differ, stated rather than absorbed.** IEEE-754 addition is not associative, so adding a fleet's terms grouped by location and adding them in one pass land a bit or two apart — measured on the canonical fleet at **~2e-14 kW**, worst case `2.1e-14` on a `50.9` kW hour, with the contributing-capacity sum differing by `1.1e-13` kW. That is the _entire_ discrepancy: no field is lost and nothing is approximated. It is some **eleven** orders of magnitude below the watt precision a power value here claims, and the nanowatt the proof bounds it at is itself six orders below a watt. Rounding partials to watt precision at the write boundary was considered for exactly this reason and **rejected**: a watt of precision is half a watt of error per partial, so twelve of them can put the summed fleet **6 W** from the unrounded one — eleven orders of magnitude worse than the error it would be fixing.
 
 ### One model, named once
 
@@ -121,3 +121,19 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 2. The fallback event still appearing 24 hours after the first full post-deploy cycle → the roll-up is not being written, and the producer is wrong.
 3. A fleet-aggregate field that is _not_ an additive per-hour total → the partial cannot carry it, and the additivity test will say so before anything ships.
 4. The `#FLEET` partition becoming hot enough to be a partition-throughput concern — a single partition key is a single physical partition's worth of throughput, which at a demo's traffic is orders of magnitude away.
+
+## Amendments
+
+No stated value has moved. This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
+
+**The value: the fan-out's measured latency, 1,753.9 ms p50 / 2,998.9 ms p95 warm** at the canonical 12-location × 5-site fleet. It is stated in `## Context` above, it is the whole reason ADR 0002's revisit trigger 4 is met, and it is quoted by five sites that argue from it rather than merely citing it:
+
+- `packages/shared/src/fleet-rollup.ts` — the module docblock's "Why this module exists at all".
+- `apps/api/src/forecast/fleet-rollup-read.ts` — "What this replaces".
+- `apps/forecast/src/fleet-rollup-write.ts` — "Why it lives in the producer at all".
+- `docs/adr/0002-storage-split.md` — its 2026-09-11 (#494) Amendments entry, an immutable carrier owed an as-it-stood annotation and its own entry rather than an inline true-up.
+- `docs/review-feedback.md` — the 2026-09-11 (#494) entry.
+
+Mutable carriers are trued up in the same change as the value (rule 11); the ADR carrier is not. The list is a **floor, not a census**: it is what a sweep found, so the sweep is stated — `command grep -rn` over `docs/`, `apps/`, `packages/` and `infra/` (excluding `node_modules`) on two arms, run 2026-09-11: the literal `1,753.9|2,998.9`, and a claim-shaped arm `p50|p95` for a carrier that paraphrases the measurement without repeating either figure. The second arm's hits were read; outside the five above they are unrelated latency prose. A carrier that neither repeats a figure nor uses those words is unsearched by this sweep rather than shown absent.
+
+**A note on what this value is not.** The figure is a _measurement of what was replaced_, so it cannot move under this document the way a parameter can — nothing in the repo can re-measure a fan-out that no longer serves this route. What can happen is that it is re-measured on the fallback arm before #507 removes it, which would be a new measurement of a different thing and belongs in that ticket, not here.

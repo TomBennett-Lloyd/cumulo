@@ -116,8 +116,10 @@ export const getFleetActuals = async (
   const from = hoursBefore(to, hours.data);
 
   // The batched, deadline-gated fan-out, and its refusal: shared with
-  // `GET /v1/fleet/forecast`, which reads the same sites over the same kind of
-  // window in the opposite direction (`fleet-series-read.ts` argues the split).
+  // `GET /v1/fleet/forecast`'s ADR 0009 fallback, which reads the same sites
+  // over the same kind of window in the opposite direction
+  // (`fleet-series-read.ts` argues the split). This route is the fan-out's
+  // remaining *primary* caller until the actuals roll-up lands (#506).
   // `deps` goes in whole — `GetFleetActualsDeps` is a superset of what the read
   // needs, and the `Pick` in `FleetSeriesReadDeps` is what narrows it.
   const read = await readFleetSeries(

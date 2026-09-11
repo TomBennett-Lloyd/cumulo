@@ -290,7 +290,7 @@ export class HttpFleetDataSource implements FleetDataSource {
   /**
    * The whole fleet's forecasts, in one request — never a fan-out.
    *
-   * `GET /v1/fleet/forecast` reads every site's stored points server-side and
+   * `GET /v1/fleet/forecast` answers from the pre-summed `#FLEET` partition server-side (#494) and
    * answers with one payload (#296). What did not change when the fan-out this
    * replaced went away is the *direction*: `range` is still spent as a
    * **forward horizon** rather than as the look-back {@link RangeHours}
