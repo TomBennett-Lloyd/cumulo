@@ -235,7 +235,8 @@ export const sumFleetRollupPartials = (
  * It is also the executable statement of this module's additivity claim: summing one group is the
  * degenerate case of summing many, so `fleetForecastAggregate(all, sites)` and
  * `sumFleetRollupPartials(each location's partials)` must be equal — which is what
- * `fleet-rollup.test.ts` pins over the canonical 12 × 5 fleet.
+ * `fleet-rollup-additivity.test.ts` pins over the canonical 12 × 5 fleet, to within the association
+ * bound the section above states.
  */
 export const fleetForecastAggregate = (
   forecasts: readonly Forecast[],
