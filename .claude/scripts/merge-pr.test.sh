@@ -437,8 +437,9 @@ expect_stdout '2 check(s) complete on bbb222'
 expect_called "pr merge $PR --squash"
 update_at=$(call_line "pr update-branch $PR")
 merge_at=$(call_line "pr merge $PR")
-[ "$update_at" -gt 0 ] && [ "$update_at" -lt "$merge_at" ] ||
+if [ "$update_at" -le 0 ] || [ "$update_at" -ge "$merge_at" ]; then
   bad "update-branch must run before the merge (update at $update_at, merge at $merge_at)"
+fi
 end
 
 # ==========================================================================================
