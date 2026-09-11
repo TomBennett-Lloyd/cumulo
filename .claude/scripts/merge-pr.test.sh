@@ -767,7 +767,7 @@ end
 # ==========================================================================================
 # 17d. the placeholder is looked for in the two declared FIELDS, not in any added line
 # ==========================================================================================
-# docs/review-feedback.md's own `## Entry format` section quotes the literal twice
+# docs/review-feedback.md's own `## Entry format` section quotes the literal
 # while explaining it. A humanAlways PR editing that section must not be refused
 # with a message about a verdict it does not have: a refusal whose stated reason is
 # false teaches the reader to stop believing the next one.

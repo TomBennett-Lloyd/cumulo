@@ -512,7 +512,7 @@ fi
 #
 # The placeholder is looked for in the two FIELDS that declare it, not anywhere in
 # the added text. docs/review-feedback.md's own `## Entry format` section quotes
-# the literal twice while explaining it, so a PR editing that section — itself a
+# the literal while explaining it, so a PR editing that section — itself a
 # plausible humanAlways change — would otherwise be refused with a message about
 # an unfilled verdict it does not have. Safe direction, wrong diagnosis, and a
 # refusal whose stated reason is false teaches the reader to stop believing it.
