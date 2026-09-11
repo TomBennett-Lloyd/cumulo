@@ -671,8 +671,10 @@ expect_not_stdout 'complete on aaa111'
 expect_not_stderr "mergeStateStatus is 'BLOCKED'"
 expect_called "pr merge $PR --squash"
 # The stale answer was re-read rather than believed: classify, the stale poll, the
-# fresh poll, and the post-merge confirmation are four reads, and a subject that
-# merged on the first post-update answer would show three.
+# fresh poll and the post-merge confirmation are four reads. A subject that took
+# the first post-update answer never reaches the fourth — it breaks the poll on the
+# stale rollup and refuses at the merge step on the BLOCKED beside it, which is
+# PR #501's outcome.
 views=$(grep -c -- "^pr view $PR " "$STATE/calls.log")
 [ "$views" -ge 4 ] || bad "expected at least 4 pr view calls, got $views"
 end
@@ -684,6 +686,10 @@ end
 # a wait with no end is how the timeout budget gets spent on a PR nobody is going
 # to merge. The fixture is otherwise mergeable — CLEAN, two green checks — so a
 # subject that skipped the sha would merge it.
+#
+# One fixture, two causes: the update has not landed, or gh answered a no-op in a
+# spelling the update-branch step does not recognise. They are indistinguishable
+# from here, which is why the refusal quotes gh's answer rather than naming one.
 begin "an update that reports a write while the head never moves is refused"
 fixture head-unmoved
 must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
@@ -695,6 +701,8 @@ POLL_TIMEOUT=30
 expect_rc 1
 expect_stderr 'checks — FAILED'
 expect_stderr 'the head still reads aaa111'
+expect_stderr "gh answered \"$UPDATE_WROTE\""
+expect_stderr 'no-op spelling update-branch does not recognise'
 expect_not_called "pr merge $PR --squash"
 [ -f "$STATE/merged" ] && bad "the PR merged on a head that never moved"
 end

@@ -625,13 +625,15 @@ fi
 
 checks_baseline=0
 
-# What the checks step needs from this one: the head this run is replacing, and
-# whether it was replaced at all. GitHub answers both the old sha and the old
-# rollup for a while after the write lands (the checks step says how long), so
-# "did the head move" is the only question that separates the stale answer from
-# the fresh one.
+# What the checks step needs from this one: the head this run is replacing,
+# whether it was replaced at all, and the answer that claimed so. GitHub goes on
+# answering the old sha and the old rollup after the write lands (the checks step
+# says why that matters), so "did the head move" is the only question that
+# separates the stale answer from the fresh one — and gh's own words are what tell
+# a head that has not moved YET from one that was never going to.
 pre_update_sha=""
 await_new_head=0
+update_answer=""
 
 update_branch_step() {
   local attempt=1 out lower rc
@@ -653,6 +655,7 @@ update_branch_step() {
           ;;
         *)
           await_new_head=1
+          update_answer=${out%%$'\n'*}
           step 'update-branch' "updated onto the base (attempt $attempt)"
           ;;
       esac
@@ -716,20 +719,24 @@ fi
 
 # --- step: checks -------------------------------------------------------------------------------
 #
-# An update-branch that wrote is not visible at once. For roughly a minute and a
-# half after it, `gh pr view` still answers the PREVIOUS head's sha, that head's
-# rollup, and BLOCKED — and every verdict this step and the merge step take reads
-# one of those three. On PR #501 the answer was the old head's checks, complete and
-# none pending, so the baseline floor was satisfied by a rollup belonging to a
-# commit that no longer existed, and the merge step then refused on the BLOCKED
-# that came with it. A re-run 90 s later merged. The floor cannot catch this on its
-# own: the stale rollup has the same count as the head it came from.
+# An update-branch that wrote is not visible at once: for the window
+# .claude/skills/review-loop/SKILL.md step 5 names — it names the same trap for the
+# hand-typed chain — `gh pr view` still answers the PREVIOUS head's sha, that
+# head's rollup, and BLOCKED, and every verdict this step and the merge step take
+# reads one of those three. On PR #501 the answer was the old head's checks,
+# complete and none pending, so the baseline floor was satisfied by a rollup
+# belonging to a commit that no longer existed, and the merge step then refused on
+# the BLOCKED that came with it. A re-run 90 s later merged. The floor cannot catch
+# this on its own: the stale rollup has the same count as the head it came from.
 #
-# So nothing is evaluated until the sha this run replaced is gone. The wait is
-# bounded by the same poll budget the checks themselves get, and a head that never
-# moves is a refusal rather than a merge on an unknown head —
-# .claude/skills/review-loop/SKILL.md step 5 names the same trap for the
-# hand-typed chain.
+# So nothing is evaluated until the sha this run replaced is gone, bounded by the
+# same poll budget the checks themselves get. A head that never moves is REFUSED
+# rather than merged on: the alternative reading — clear the gate on a CLEAN
+# unmoved read, since the stale answer is BLOCKED — turns one observation into a
+# gate, and gets a merge taken on a head whose checks nobody looked at when it is
+# wrong. The refusal costs a re-run, which is the direction this script is wrong in
+# everywhere else, and it quotes gh's answer because the OTHER cause of an unmoved
+# head is a no-op spelling the arm above does not know.
 
 checks_verdict() { # -> ready:<n> | pending:<present>:<expected>:<pending> | failed:<name>:<conclusion>
   local expected i total pending
@@ -794,7 +801,7 @@ else
     fi
     if [ "$SECONDS" -ge "$poll_deadline" ]; then
       [ "$await_new_head" = "0" ] || fail 'checks' \
-        "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — update-branch reported it updated the branch, but the head still reads $pre_update_sha. Every check and merge state from here would be the replaced head's: re-run once the update has landed"
+        "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — gh answered \"$update_answer\", which this step read as a write, but the head still reads $pre_update_sha, so every check and merge state here is the replaced head's. Either the update has not landed yet (re-run), or that answer is a no-op spelling update-branch does not recognise, in which case the branch is already current and the spelling belongs in that step's no-op arm"
       rest=${verdict#pending:}
       present=${rest%%:*}
       rest=${rest#*:}
