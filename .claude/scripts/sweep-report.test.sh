@@ -114,8 +114,8 @@ row() { # row <field>... — one ledger row, fields joined with tabs
   printf '%s\n' "$*" >>"$LEDGER"
 }
 
-run_report() { # run_report [ledger] — the production invocation against $ROOT
-  capture -C "$ROOT" bash "$SUBJECT" "${1:-$LEDGER}" "$BASE"
+run_report() { # the production invocation against $ROOT, on the case's ledger
+  capture -C "$ROOT" bash "$SUBJECT" "$LEDGER" "$BASE"
 }
 
 # --- the two renderings, read back out of the report ----------------------------------------
