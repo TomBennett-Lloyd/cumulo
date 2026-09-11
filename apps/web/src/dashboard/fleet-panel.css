@@ -2,158 +2,75 @@
  * The fleet chart section: a full-width band under the map, and the page's one
  * chart.
  *
- * It was a card until #323 — the same chrome as the site table that sat below it
- * then, surface plus `--radius-md` plus `--space-4` of padding, so that the two
- * read as siblings in one reading. What that arrangement got wrong is what #323
- * fixed: the chart's neighbour is the *map*, not the table. They are the same
- * fleet drawn twice, and a rounded card inset in a centred measure put a border,
- * a gap and a page margin between two things that should touch
- * (`docs/standards/design.md` rule 4). So the radius goes, the measure goes, and
- * the surface stays — the map's band and this one are one continuous run of
- * `--color-surface`, with no seam for a reader to read a separation into. The
- * table itself left the page on 2026-08-12, so there is no card below this band
- * to be a sibling of.
+ * It was a card until #323. The chart's neighbour is the *map*, not the table
+ * that then sat below it: they are the same fleet drawn twice, so a rounded card
+ * inset in a centred measure put a border, a gap and a page margin between two
+ * things that should touch (`docs/standards/design.md` rule 4). The radius and
+ * the measure go; the surface stays, so the map's band and this one are one
+ * continuous run of `--color-surface`.
  *
  * These `.fleet-chart-*` classes are this section's and nothing else's. The
  * async states it renders wear `panel-states.css`'s `.panel-*` classes, which
  * are the column's shared vocabulary and are not extended here
- * (`docs/standards/react.md`, "Async surface convention"). `.fleet-panel-body`
- * keeps its name because what it names did not change.
- *
- * Every value is a token — the gate in `stylelint.config.mjs`, not a style
- * choice (`docs/standards/react.md` rule 5).
+ * (`docs/standards/react.md`, "Async surface convention").
  */
 
-/* Padding, not inset. The vertical step is `--space-2` rather than the
-   `--space-4` a card wanted, because there is no longer a card edge for the
-   contents to clear — only the map above and the reading below, and the whole
-   argument for the band is that the chart sits close under the map. The
-   horizontal step stays a full `--space-4` so the plot's left edge is not flush
-   against the viewport. That vertical saving is height the plot gets back, which
-   is what `docs/standards/design.md` rule 3's one-viewport acceptance is
-   measured in (`apps/web/e2e/chart-surfaces.spec.ts`).
-
-   No `border-radius` and no `display: grid` any more. The radius belonged to a
-   card; the grid existed to space a `.fleet-panel-header` from a body, and with
-   that element gone the section's two children stack in normal flow with their
-   own margins and the controls row's own box. The row carries a heading again
-   since 2026-08-11, but it is still the flex row below and not a grid child, so
-   nothing here changed with it. */
+/* The vertical step is `--space-2` rather than the `--space-4` a card wanted:
+   there is no card edge for the contents to clear, and the whole argument for
+   the band is that the chart sits close under the map. That saving is height the
+   plot gets back, which is what `docs/standards/design.md` rule 3's
+   one-viewport acceptance is measured in (`apps/web/e2e/chart-surfaces.spec.ts`).
+   The horizontal step stays a full `--space-4` so the plot's left edge is not
+   flush against the viewport. */
 .fleet-chart-section {
   padding: var(--space-2) var(--space-4);
   background: var(--color-surface);
 }
 
-/* No `[hidden]` restatement here any more. This section used to be hidden while
-   a site panel held the context region, and its `display: grid` beat the user
-   agent's `[hidden] { display: none }`, so the rule had to be written out. #265
-   anchored the site's card to its own marker on the map instead: nothing
-   displaces this section, it is never handed `hidden`, and a rule for a state
-   that cannot occur is a rule nobody can tell has stopped working. */
-
 /* The controls row: the section's heading, the fleet's own numbers, the (i)
    carrying the description, the unit toggle and the window picker.
 
-   Five items since #291. #284 D4 wrote the row with four; #323 removed the first
-   two — the heading became the section's `aria-label` and the numbers were read
-   as a restatement of the chart below them — and the owner put both back on
-   2026-08-11 (`FleetPanel.tsx`'s docblock carries the argument). #291's toggle
-   is the fifth, and what it costs the row is the container query below, not
-   anything here. What the reinstatement undid here is the `justify-content:
-   flex-end` #323 added, which only made sense while the row held nothing but
-   controls: spacing all four to the end would strand the heading in the middle
-   of the row, and spacing them apart would break the heading off from the
-   numbers it is read with (`docs/standards/design.md` rule 4 — the two are one
-   reading unit and stay touching).
+   `margin-left: auto` on the (i) absorbs the line's free space at one point, so
+   the heading and the numbers sit at the row's start and everything after the
+   (i) at its end, with nothing spread through the middle. It is on the (i)
+   because that is where the row turns from content into controls — which is why
+   the unit toggle needed no rule of its own to arrive at the end.
 
-   `margin-left: auto` on the (i) does the job instead, and does exactly it: one
-   auto margin absorbs the line's free space at that one point, so the heading
-   and the numbers sit at the row's start and everything after the (i) at its
-   end, with nothing spread through the middle. It is on the (i) rather than on
-   the picker because the (i) is where the row turns from content into controls —
-   which is why #291's toggle needed no rule of its own to arrive at the end: it
-   is on the far side of the one auto margin, like the picker beside it.
-
-   `flex-wrap` keeps doing the job #284 D4 gave it: at a width that cannot hold
-   the controls, the picker takes a line of its own rather than being crushed
-   (`docs/standards/design.md` rule 7 — controls have wrap priority, and the
-   window selectors stay on one line at every screen size). `.range-picker`'s own
+   `flex-wrap`: at a width that cannot hold the controls, the picker takes a line
+   of its own rather than being crushed (`docs/standards/design.md` rule 7 —
+   controls have wrap priority over auxiliary text). `.range-picker`'s own
    `flex-shrink: 0` is the belt to that brace and states so in
    `range-picker.css`.
 
-   There is still no `flex: 1 1 0%` item on this row, and the stats line is
-   deliberately not one. Until #323 that declaration made the numbers the item
-   that *shrank* — to an ellipsis, at whatever width the row ran out of. They now
-   hide whole instead, at a width this file measures (the container query below).
+   `container-type: inline-size` is what lets the query below ask the row rather
+   than the window, which is `docs/standards/design.md` rule 7's default rather
+   than its documented escalation; `.app-header` in
+   `apps/web/src/header/header.css` is the precedent and the worked example of
+   the same choice.
 
-   `container-type: inline-size` is what lets that query ask the row rather than
-   the window, which is `docs/standards/design.md` rule 7's default rather than
-   its documented escalation. `.app-header` in `apps/web/src/header/header.css`
-   (:297–:299) is the precedent
-   and the worked example of the same choice; what is asked here is simpler than
-   what is asked there, because this row is a plain block in normal flow whose
-   inline size was already the section's to decide, so containing it changes
-   nothing about its own box. Measured rather than assumed: the row is 24px tall
-   and its items keep their widths on both sides of the declaration, and both
-   overlays this row opens — the `.info-tip-panel` and, since the picker folded,
-   the `.range-picker-popover` — are the topmost element at their own centre. The
-   stacking context the containment creates does not bury either of them under
-   the chart below (checked in Chromium against these stylesheets and this row's
-   real markup, by a hit test; the browser wave re-checks it on the real page).
-
-   24px rather than the 25px this note read when the containment was written:
-   the height is the tallest item's, and the 25px item was the segmented picker
-   that became a 24px trigger on 2026-08-11. The row's own arithmetic is below
-   and `range-picker.css` owns the trigger's box; what the containment did to the
-   row is unchanged by that, which is why this reading is amended rather than
-   re-argued.
-
-   `position: relative` is this row discharging a contract
-   `apps/web/src/info/info.css` states and `apps/web/src/info/InfoTip.tsx`
-   documents: a tip's panel is anchored to the nearest
-   positioned ancestor and clamped to its width and right edge, so every consumer
-   owes it one. That is what stops the panel running off a phone's viewport, and
-   this row is the right box to owe it — it is exactly as wide as the chart the
-   tip annotates.
-
-   Both of this row's overlays hang off it since 2026-08-12, not the tip's alone:
-   `range-picker.css` re-anchored the window sheet here after it opened 151px past
-   a phone's left edge from the trigger it used to hang from, and that file owns
-   the argument. So what this declaration holds up is the
-   row's overlays rather than `InfoTip` in particular — worth saying, because a
-   reader weighing its removal against one consumer would be weighing it against
-   half of them.
-
-   It is written out rather than left to the containment above, which would in
-   fact supply it: `container-type: inline-size` implies layout containment, and
-   a layout-contained element is already a containing block for absolutely
-   positioned descendants. Relying on that would make an anchor a side effect of
-   a container query — delete the query when the stats line stops hiding, and a
-   panel silently escapes to the page box on the next phone that opens it. The
-   declaration says what is being promised, and costs a row in normal flow
-   nothing else.
+   `position: relative` discharges a contract `apps/web/src/info/info.css`
+   states: an overlay is anchored to the nearest positioned ancestor and clamped
+   to its width and right edge, so every consumer owes it one. Both of this row's
+   overlays hang off it — `.info-tip-panel`, and the `.range-picker-popover`
+   since `range-picker.css` re-anchored it here — so a reader weighing this
+   declaration's removal against one consumer would be weighing it against half
+   of them. It is written out rather than left to the containment above, which
+   would in fact supply it: `container-type: inline-size` implies layout
+   containment, and a layout-contained element is already a containing block for
+   absolutely positioned descendants. Relying on that would make an anchor a side
+   effect of a container query — delete the query when the stats line stops
+   hiding, and a panel silently escapes to the page box.
 
    `margin-bottom` is the owner's round-3 item 2 (#449): the row and
-   `.fleet-panel-body` below it touched at 0px, and the chrome read as stuck to
-   the chart it introduces. What was asked for is "~5px", and 4px is what
-   shipped — `margin` and `/^margin-/` are on `stylelint.config.mjs`'s
+   `.fleet-panel-body` below it touched, and the chrome read as stuck to the
+   chart it introduces. `margin` and `/^margin-/` are on `stylelint.config.mjs`'s
    strict-value list with `ignoreFunctions: false`, so the only value this
-   declaration may take is a bare `var(--space-*)`, and a `calc()` contrived to
-   land on a literal 5px is refused by the gate rather than merely discouraged.
-   The scale's quantum here is 4px (`--space-1`), one step under the
-   `--space-2` the body uses between its own children, which is the right
-   direction anyway: the row is closer to the chart than the chart's parts are
-   to each other.
-
-   Two things it deliberately does not move. The container query above measures
-   the *inline* axis, so a bottom margin cannot reach the 23.625rem threshold;
-   and both of this row's overlays — `.info-tip-panel` (`apps/web/src/info/info.css`)
-   and `.range-picker-popover` (`range-picker.css`) — are absolutely positioned
-   at `top: 100%` of this row, so they resolve against its padding box, which a
-   margin sits outside of. Neither overlay shifts by the 4px and neither position
-   needs re-deriving. What it does move is the fold arithmetic in
-   `apps/web/src/charts/chart-geometry.ts`, by exactly 4px, and that docblock's
-   2026-08-12 paragraph states the new stack. */
+   declaration may take is a bare `var(--space-*)`; `--space-1` is one step under
+   the `--space-2` the body uses between its own children, which is the right
+   direction anyway — the row is closer to the chart than the chart's parts are
+   to each other. `apps/web/e2e/chart-controls-gap.spec.ts` asserts the gap. It
+   moves neither overlay: both are positioned at `top: 100%` of this row, so they
+   resolve against its padding box, which a margin sits outside of. */
 .fleet-chart-controls {
   position: relative;
   display: flex;
@@ -168,10 +85,6 @@
   margin-left: auto;
 }
 
-/* The section's name, visible again since 2026-08-11. Restored from the
-   `.fleet-panel-title` rule #323 deleted, declaration for declaration: this is
-   the same heading at the same step of the type scale, not a new one that
-   happens to look similar. */
 .fleet-chart-title {
   margin: 0;
   font-size: var(--text-lg);
@@ -180,17 +93,11 @@
 }
 
 /* Tabular figures so the count and the capacity do not shuffle sideways when a
-   site is added and the numbers change width.
-
-   Restored from `.fleet-panel-stats` minus its whole flex half — `flex: 1 1 0%`,
-   `min-width: 0`, `overflow: hidden` and `text-overflow: ellipsis` are all gone.
-   That machinery existed to make this the item that yielded *by shrinking*, and
-   the yield is a different one now: the line hides whole below the width the
-   query below measures, so there is nothing to truncate and no slack to claim.
-   `white-space: nowrap` stays, and is now the only member of that set left — it
-   stops the line wrapping to two rows in the widths just above the threshold,
-   which is the one shape between "whole" and "absent" that this rule still has
-   to forbid. */
+   site is added and the numbers change width. `white-space: nowrap` stops the
+   line wrapping to two rows in the widths just above the threshold below, which
+   is the one shape between "whole" and "absent" that this rule still has to
+   forbid — the line hides whole rather than shrinking, so there is nothing here
+   to truncate. */
 .fleet-chart-stats {
   margin: 0;
   color: var(--color-text);
@@ -202,132 +109,49 @@
 /*
  * The width below which the numbers go, asked of the row and not of the window.
  *
- * 23.625rem is measured, not picked. At this row's own content — the heading at
- * 119.64px (`--text-lg`, `--font-weight-semibold`), the stats line at 129.56px
- * ("60 sites · 332.0 kW", `--text-sm`, tabular figures), the (i) at 24px, the
- * unit toggle at 32px (one chip held at its `--space-8` floor in both units,
- * `unit-toggle.css`), the picker's trigger at 24px and four `--space-3` gaps at
- * 12px each — the row's max-content width is 377.20px. 377.20px is 23.575rem at
- * the default root size, and the query fires at 23.625rem (378px), the next
- * 1/16rem step above it. Rounding *up* rather than down is deliberate and is the
- * safe direction: the failure this rule exists to prevent is the numbers
- * surviving into a wrapped row, so at most a tenth of a pixel of width where
- * they could still have fitted is the price, and it buys the guarantee that they
- * never outstay the room for them.
+ * Measured, not picked. The row's max-content width is its laid-out item boxes
+ * plus the gaps, read in a throwaway Chromium run over these stylesheets and
+ * this row's real markup — `packages/ui/src/tokens/tokens.css`,
+ * `apps/web/src/info/info.css`, `range-picker.css`, `unit-toggle.css`,
+ * `apps/web/src/app.css`'s own body rule (which is where this row's text
+ * inherits `--font-sans` from) and the two rules above — rather than a reading
+ * of the rendered dashboard. The query fires at the next 1/16rem step above that
+ * width. Rounding *up* is deliberate and is the safe direction: the failure this
+ * rule exists to prevent is the numbers surviving into a wrapped row, so a
+ * fraction of a pixel of width where they could still have fitted is the price,
+ * and it buys the guarantee that they never outstay the room for them.
  *
- * **It read 23.125rem until #463, and what changed is that this number now
- * means the same thing on every machine.** That ticket put a self-hosted face
- * behind `--font-sans` (`packages/ui/src/tokens/tokens.css` owns the choice and
- * the licence), so the two text terms above are no longer readings of whatever
- * the measuring platform happened to resolve. Inter sets this heading 4.16px
- * wider than SF Pro did and this stats line 3.47px wider — 7.63px on the row,
- * and the whole of the move from 369.57px. The three control boxes are
- * font-independent and re-measured to the pixel they had; the toggle in
- * particular stays at the floor `unit-toggle.css` owns.
- *
- * **It read 20.375rem until #291, and that time the threshold went up.** The
- * unit toggle is a fifth item on the row (`unit-toggle.css`), so it costs its
- * own 32px and one more `--space-3` — 44px in all — and every other term above
- * is unchanged and re-measured to the hundredth of a pixel it had before.
- * What that buys and what it costs are both worth stating plainly, because this
- * is the direction of change the rule's own argument is least comfortable with:
- * a reader gets a control for the unit at every width, and the fleet's count and
- * capacity now leave at container widths that used to hold them. The band of
- * widths between the two thresholds is where that trade is visible — a 390px
- * phone is inside it, and shows the row's four controls and no numbers where it
- * used to show all five items on one line. `docs/standards/design.md` rule 7 is
- * what decides it: controls have wrap priority over auxiliary text, and the
- * alternative is the picker or the toggle taking a second line at a width where
- * the numbers could have yielded instead.
- *
- * **The toggle was two chips at 70.31px before it was one at 32px**, which would
- * have put this threshold at 25.5rem. It was rebuilt as one button because at
- * 320px the five-item row wrapped on a font stack whose glyphs run wide — the
- * `sans-serif` fallback a Linux reader gets, and the one CI renders in — and a
- * wrapped row is what `apps/web/src/charts/chart-geometry.ts` derives against.
- * The 38.31px that bought is the difference between a rule this row can keep at
- * every width in common use and one that holds only where the fonts are narrow. #463 has
- * since retired the condition that forced it: there is no wide-fallback platform
- * left to lose at 320px on, so that pressure is history rather than a live
- * constraint.
- *
- * **It read 29.375rem until 2026-08-11, and that drop was the point of that
- * change rather than a consequence of it.** The owner folded the segmented
- * picker into a calendar trigger — *"perhaps if we made the time period
- * selection into a dropdown from a calendar icon there might always be space"* —
- * and a 167.75px control became a 24px one, taking 143.75px out of a row whose
- * max-content width was 469.33px. A threshold left at the old number would have
- * kept hiding the numbers across 144px of width that then held them comfortably,
- * which is the same defect as never reinstating them: what was asked for is the
- * fleet's own count and capacity wherever there is room. The fold made room and
- * #291 has spent some of it back; the ledger of the three readings is kept here
- * because a threshold that has moved twice is one a reader will want the history
- * of before moving it a third time.
- *
- * How it was obtained, stated because the number is only as good as its method:
- * a throwaway Chromium run over these stylesheets and this row's real markup —
- * `packages/ui/src/tokens/tokens.css`, `apps/web/src/info/info.css`,
- * `range-picker.css`, `unit-toggle.css`, `apps/web/src/app.css`'s own body rule
- * (which is where this row's text inherits `--font-sans` from) and the two rules
- * above — rather than a reading of the rendered dashboard. Two details of the
- * harness are worth passing on. The row's own `container-type: inline-size`
- * contains it on the inline axis, so a `width: max-content` parent sizes it to
- * zero and every item wraps; the max-content figure above is the laid-out item
- * boxes plus the gaps. And the boundary is bisected at explicit widths with the
- * query below inert — a query that had already removed an item would make the
- * row fit trivially and the boundary meaningless. The browser wave re-checks it
- * on a real page; a reading a few pixels off there is a correction to this
- * literal, not a fault in the mechanism.
+ * Two details of the harness are worth passing on. The row's own
+ * `container-type: inline-size` contains it on the inline axis, so a
+ * `width: max-content` parent sizes it to zero and every item wraps. And the
+ * boundary is bisected at explicit widths with the query below inert — a query
+ * that had already removed an item would make the row fit trivially and the
+ * boundary meaningless.
  *
  * The query is unnamed because it cannot be ambiguous: `.fleet-chart-stats` is a
  * direct child of the one element declaring `container-type` above, so the
  * nearest ancestor container it resolves to is that row by construction rather
- * than by luck. (`.app-header` in `apps/web/src/header/header.css` states the
- * same test for the same reason.)
+ * than by luck.
  *
- * One residual, where there were two. Both were inherited from measuring text
- * rather than boxes, and both are the ones `apps/web/src/header/header.css`
- * records for its own threshold; #463 closed the first of them, which is the
- * whole point of that ticket reaching this file:
+ * One residual: the stats width is the demo fleet's line. A larger fleet sets it
+ * wider, so a fleet grown far past the demo's size wraps slightly before the
+ * query fires. Session-created sites move it by ones, so the gap is small; the
+ * alternative — a threshold derived from a fleet nobody has — would be a number
+ * measured against nothing.
  *
- * - ~~The heading and the numbers resolve to the platform's system stack, so
- *   where that stack runs wider this under-fires and where it runs narrower the
- *   numbers leave with room to spare.~~ **Retired.** `--font-sans` now leads
- *   with a self-hosted face, so both text terms are properties of the artefact
- *   and this threshold is the same number everywhere it is evaluated. What is
- *   left of it is a load-time transient rather than a platform difference: the
- *   fallback paints during the swap window, and
- *   `packages/ui/src/tokens/tokens.css` records what that mismatch costs and why
- *   it is not corrected with `size-adjust`.
- * - The stats width is still the demo fleet's line. A larger fleet sets it wider
- *   ("120 sites · 1332.0 kW" measures 147.72px, 18px more), so a fleet grown far
- *   past 60 sites wraps slightly before the query fires. The demo fleet is 60
- *   sites and session-created sites move it by ones, so the gap is small; the
- *   alternative — a threshold derived from a fleet nobody has — would be a
- *   number measured against nothing.
+ * Both arms of the rule, and the *point* of the hiding, are asserted on a
+ * rendered page by `apps/web/e2e/composition.spec.ts`: the row stays one line,
+ * no taller than the trigger in it. Neither the heading nor the toggle makes the
+ * row taller — that the toggle joins without adding a pixel of height is
+ * `unit-toggle.css`'s claim, checked here because the height belongs to this
+ * file.
  *
- * The heading still does not make the row taller, and neither does the toggle:
- * the heading's line box is 22.5px (`--text-lg` × `--leading-tight`) against a
- * 24px (i), a 24px trigger and a 24px toggle, where the picker the trigger
- * replaced was 25px. Measured in the same run and at every width it was asked
- * about: the five-item row, the row with the numbers hidden and the toggle's own
- * box are all 24px. That the toggle joins the row without adding a pixel of
- * height is `unit-toggle.css`'s claim, written down there and checked here
- * because this is the file the height belongs to.
- * `apps/web/src/charts/chart-geometry.ts` derives `CHART_VIEW_BOX_HEIGHT` from a
- * stack that includes this row, on the argument
- * that the row does not get taller; a row that got *shorter* leaves that
- * constant standing with a pixel more clearance than its derivation claimed, so
- * nothing there had to move.
- *
- * The division of ownership is the durable half of that, and it is what this
- * pointer states: this sheet owns the row's px-by-px arithmetic — every item's
- * measured box, which of them sets the height, and the container width below
- * which the numbers hide — while that file owns the constant and consumes only
- * the conclusion, pointing back here rather than restating any of it
- * (`docs/standards/architecture.md` rule 9). Written as who owns what rather
- * than as what that file currently says, because a pointer reporting another
- * file's state goes stale the moment somebody fixes it.
+ * The division of ownership is the durable half of that: this sheet owns the
+ * row's px-by-px arithmetic — every item's measured box, which of them sets the
+ * height, and the container width below which the numbers hide — while
+ * `apps/web/src/charts/chart-geometry.ts` owns `CHART_VIEW_BOX_HEIGHT` and
+ * consumes only the conclusion, pointing back here rather than restating any of
+ * it (`docs/standards/architecture.md` rule 9).
  */
 @container (max-width: 23.625rem) {
   .fleet-chart-stats {
@@ -336,11 +160,8 @@
 }
 
 /* Whatever the section has to say and the chart it says it about are one
-   statement, so they sit at the tightest step this reading uses. `--space-2` was
-   chosen in #284 D15 as one step under the card's own gap, to buy the plot
-   height under a 60svh map; the card's gap is gone and the step stands on its
-   own argument now — a notice and the chart it annotates are as close as two
-   elements on this page ever get. */
+   statement, so they sit at the tightest step this reading uses — a notice and
+   the chart it annotates are as close as two elements on this page ever get. */
 .fleet-panel-body {
   display: grid;
   gap: var(--space-2);
