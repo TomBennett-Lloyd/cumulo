@@ -56,7 +56,7 @@
  * The search's box, and the popup's containing block.
  *
  * `flex: 1 1 …` is what makes it the item that gives way. The bar is one
- * wrapping row (`app.css`), so the brand and the menu keep their intrinsic
+ * wrapping row (`apps/web/src/app.css`), so the brand and the menu keep their intrinsic
  * widths and the search absorbs whatever is left, down to a basis wide enough to
  * read a site name in and up to the cap below.
  *
@@ -67,7 +67,7 @@
  * comment points back here instead of spelling the basis out again.
  *
  * The cap and the two auto margins are one behaviour, and the behaviour is
- * `design.md` rule 7's — measure the container, take the largest version that
+ * `docs/standards/design.md` rule 7's — measure the container, take the largest version that
  * fits (#327). Below the cap the field has already taken all the free space, so
  * the margins resolve to zero and both are inert; above it the cap stops the
  * growth and the margins split what is left, which centres the field in the gap
@@ -78,7 +78,7 @@
  * residual paragraph owns that. `auto` on the margins is one of that gate's
  * `ignoreValues`, a keyword rather than a spelled value.
  *
- * Restatement ledger (`architecture.md` rule 9) — the one site carrying the cap
+ * Restatement ledger (`docs/standards/architecture.md` rule 9) — the one site carrying the cap
  * as a literal of its own, because it asserts it and a number read back out of
  * this declaration would agree with it however wrong it was:
  *
@@ -165,7 +165,7 @@
 
 /* The active option, which is where Enter would land. Three cues rather than a
  * tint alone — weight and a border as well as the fill — because colour never
- * carries a state alone in this app (map-treatment.md), and this state is the
+ * carries a state alone in this app (`docs/design/map-treatment.md`), and this state is the
  * one a reader traverses the list by. */
 .site-search-option[aria-selected='true'] {
   border-color: var(--color-accent);
@@ -194,7 +194,7 @@
  * to be, and a live region nobody can reach announces nothing.
  *
  * Copied from `.forecast-chart-readout` in `apps/web/src/charts/charts.css`
- * rather than shared with it: that makes two consumers, and `structure.md` rule 7
+ * rather than shared with it: that makes two consumers, and `docs/standards/structure.md` rule 7
  * puts the extraction threshold at the third, so a third region is the signal to
  * lift this into `packages/ui`. The 1px lengths are the length half of the
  * frontend gate's documented residual (`stylelint.config.mjs`), not a size that
@@ -226,7 +226,7 @@
  * selector list below rather than restating its declarations — the two sit side
  * by side on the same bar at exactly the widths where both are on screen, so any
  * divergence would read as a mistake rather than a difference. One treatment in
- * one place, not `structure.md` rule 7's two surfaces free to diverge.
+ * one place, not `docs/standards/structure.md` rule 7's two surfaces free to diverge.
  */
 .header-search-toggle {
   display: none;
@@ -237,7 +237,7 @@
  * header rather than a band beneath it.
  *
  * `flex-basis: 100%` is the whole of the placement. `.app-header` is already a
- * wrapping flex row (`app.css`), so an item that asks for the full width takes
+ * wrapping flex row (`apps/web/src/app.css`), so an item that asks for the full width takes
  * the next line and the row's own `gap` sets it off — no second container, no
  * duplicated padding, and the header's bottom border stays under everything the
  * header is showing.
@@ -262,11 +262,11 @@
  * About `<dialog>` mounted in this `<header>`, which while open is in the top
  * layer and laid out against the viewport.
  *
- * Here rather than in `app.css` for the file header's reason, and this rule is
- * the sharpest case of it: `app.css` owns the row the product and the token
+ * Here rather than in `apps/web/src/app.css` for the file header's reason, and this rule is
+ * the sharpest case of it: `apps/web/src/app.css` owns the row the product and the token
  * gallery share, so a `container-type` written there would put containment on a
  * page that never asks a question about its own width. The gallery's entry
- * (`apps/web/src/preview/main.tsx`) loads `app.css` and never this file, so its
+ * (`apps/web/src/preview/main.tsx`) loads `apps/web/src/app.css` and never this file, so its
  * `.app-header` stays `container-type: normal` — measured, not inferred from the
  * import list.
  *
@@ -282,7 +282,7 @@
 /*
  * A query that exists because a row runs out of width rather than because a
  * device was named — and, since #326, one that asks the row instead of asking
- * the window. This is `design.md` rule 7's default rather than its documented
+ * the window. This is `docs/standards/design.md` rule 7's default rather than its documented
  * escalation: the bar measures its own content box, so the fold holds whatever
  * happens outside it, and nothing here would need re-deriving if the header ever
  * stopped being the full width of the viewport.
@@ -320,7 +320,7 @@
  * so a single "mobile" width standing for both would be a number neither of them
  * measured.
  *
- * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
+ * Restatement ledger (`docs/standards/architecture.md` rule 9) — the sites carrying a literal
  * derived from the measurement above, each needing re-deriving if this bar's
  * content or typography moves it:
  *
@@ -556,7 +556,7 @@
 }
 
 /*
- * `ThemeToggle` is shared with the token gallery and styled once, in `app.css`,
+ * `ThemeToggle` is shared with the token gallery and styled once, in `apps/web/src/app.css`,
  * where its `margin-left: auto` put it at the end of a header bar. Inside a
  * stacked popover that margin would shove it to one side, so the *placement*
  * half is overridden by the surface that placed it — which is this one — while
@@ -577,7 +577,7 @@
  * `.about-dialog-sources`'s in this same file, copied rather than shared
  * because the two are alike in treatment only: a dialog's credits block and a
  * menu's settings region would each be free to change without the other being
- * wrong (structure.md rule 7). `margin: 0` because the popover's own `gap`
+ * wrong (`docs/standards/structure.md` rule 7). `margin: 0` because the popover's own `gap`
  * already spaces this list, and the user agent's `<hr>` margins would space it
  * a second time. */
 .header-menu-divider {
@@ -698,9 +698,9 @@
 /*
  * The tile credit, matched to the weather credit above it so neither reads as
  * the more important of the two — the same pairing `.map-attribution-tiles`
- * makes in `map/map.css` for the same two obligations, arrived at
+ * makes in `apps/web/src/map/map.css` for the same two obligations, arrived at
  * independently because these are two surfaces free to diverge, not one
- * treatment in two places (`structure.md` rule 7).
+ * treatment in two places (`docs/standards/structure.md` rule 7).
  *
  * That freedom is being exercised as of #265 and again as of #428: the map's
  * pair sits on a translucent veil over tiles and took underlined links, then full
@@ -747,7 +747,7 @@
  * as the card's primary action: even padding round the mark, and no fill. The
  * accent fill went with the word, which needed it to read as *the* action; a
  * filled accent block in the top-right corner would instead be the loudest thing
- * on a card whose point is the text underneath it (`design.md` rule 2 — this
+ * on a card whose point is the text underneath it (`docs/standards/design.md` rule 2 — this
  * chrome's job is to be found, not to compete).
  *
  * No type properties, unlike `.header-menu-button`, which keeps a `font-size`
@@ -772,7 +772,7 @@
  * would be the failure, and a dialog's close button is under no such constraint.
  * The same call `.about-dialog-basemap` makes a few rules up, on the same test —
  * if one copy changed, the other would not be wrong until it changed the same
- * way (`structure.md` rule 7).
+ * way (`docs/standards/structure.md` rule 7).
  */
 .about-dialog-close-icon {
   display: block;
