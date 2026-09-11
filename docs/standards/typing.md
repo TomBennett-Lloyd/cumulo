@@ -4,11 +4,7 @@
 
 ## Rules
 
-1. **Model the domain, not the transport.** A type describes what a value _is_, not what shape happened to arrive. Meaningful primitives get named types — `SiteId`, `Watts`, `ForecastHorizonHours` — not bare `string`/`number` passed four layers deep. Where confusion is plausible (IDs, physical units), use branded types so the compiler catches unit mistakes:
-
-   ```ts
-   type Watts = number & { readonly __unit: 'W' };
-   ```
+1. **Model the domain, not the transport.** A type describes what a value _is_, not what shape happened to arrive. Meaningful primitives get named types, not bare `string`/`number` passed four layers deep. Where confusion is plausible (IDs, physical units), brand the type so the compiler catches the mistake — the repo's worked case is `utcIsoTimestampSchema` (`packages/shared/src/timestamp.ts`), whose `.brand<'UtcIsoTimestamp'>()` is applied to the schema rather than hand-written beside it, because rule 3 owns the type wherever a schema already parses the value.
 
 2. **No `any`, no unchecked assertions.** `as` is only acceptable when narrowing something already proven by a runtime check the compiler can't follow — and that's rare; prefer a type guard the compiler _can_ follow. The linter enforces this (suppression comments are themselves lint errors). If you're fighting the type checker, the type model is wrong: fix the model, don't silence the checker.
 

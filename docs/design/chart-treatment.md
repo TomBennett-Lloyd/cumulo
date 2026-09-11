@@ -123,8 +123,8 @@ Composition rules that keep both legible where they overlap:
   per contiguous run of forecast samples, and an hour with no forecast gets no median mark and an
   em dash in the table twin, never a zero. A straight
   segment across a gap is a value that was never measured or never modelled, drawn with exactly the
-  confidence of the values on either side of it — partial data is labelled partial, in the chart as
-  much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted
+  confidence of the values on either side of it — partial data is labelled partial
+  (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
   Every case here is an hour the series **has**, carrying a null; an hour the series does not carry
   at all is a different case with a different answer today, and "Settled, then reversed" below is

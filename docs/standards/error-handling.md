@@ -20,7 +20,7 @@
 
 4. **Errors carry context.** What operation, on what entity (`siteId`, horizon, request id), caused by what. Structured logging at boundaries; no bare `console.log` in library code.
 
-5. **Degrade honestly in the product.** A fleet aggregate computed while three sites failed to forecast says so — partial results are labeled partial, in the API response and the UI. Silently pretending completeness corrupts exactly the accuracy-tracking features this project is about.
+5. **Degrade honestly in the product.** A fleet aggregate computed while three sites failed to forecast says so — `partialAggregateNotice` (`apps/web/src/dashboard/state-copy.ts`) labels the partial in the UI. Where the wire contract has no field to label it with, the honest answer is a refusal rather than a short 200: `apps/api/src/forecast/get-site-series.ts` returns `errorResponse('internal', …)` on an incomplete read and states why at length. Silently pretending completeness corrupts exactly the accuracy-tracking features this project is about.
 
 ## Worked examples
 

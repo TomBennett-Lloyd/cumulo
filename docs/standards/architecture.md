@@ -12,7 +12,7 @@
 
 4. **Service boundaries are the ones in the ADR — resist fragmenting further.** Ingestion, forecast, fleet API, web. A new deployable needs an ADR arguing for it (independent scaling/failure/deploy cadence), not just a new concern. New concerns default to new _modules_ inside existing services.
 
-5. **No `utils/` dumping ground.** Name modules by domain (`irradiance.ts`, `aggregation.ts`), not by genericness. If code has no domain name, question whether it belongs here at all. The `check:module-names` gate in `verify` enforces the filename half of this — a bare `utils.*` module fails the build, not just review.
+5. **No `utils/` dumping ground.** Name modules by domain (`irradiance.ts`, `aggregation.ts`), not by genericness. If code has no domain name, question whether it belongs here at all. The `check:module-names` gate in `verify` enforces this — a bare `utils.*` module fails the build, not just review.
 
 6. **Significant decisions get an ADR** (`docs/adr/`, template there). Significant = expensive to reverse, cross-service, or surprising to a newcomer. The service split, the DynamoDB/Postgres split, and the PV-model runtime are all ADR-worthy; a function's internal shape is not.
 
