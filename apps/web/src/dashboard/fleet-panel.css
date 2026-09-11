@@ -146,10 +146,11 @@
  *
  * Both arms of the rule, and the *point* of the hiding, are asserted on a
  * rendered page by `apps/web/e2e/composition.spec.ts`: the row stays one line,
- * no taller than the trigger in it. The height is the tallest item's, and
- * neither the heading nor the toggle is it — that the toggle joins without
- * adding a pixel of height is `unit-toggle.css`'s claim, checked here because
- * the height belongs to this file.
+ * no taller than the trigger in it. The height is the tallest item's, and the
+ * 25px item was the segmented picker that became a 24px trigger on 2026-08-11.
+ * Neither the heading nor the toggle makes the row taller — that the toggle
+ * joins without adding a pixel of height is `unit-toggle.css`'s claim, checked
+ * here because the height belongs to this file.
  *
  * The division of ownership is the durable half of that: this sheet owns the
  * row's px-by-px arithmetic — every item's measured box, which of them sets the

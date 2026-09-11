@@ -125,7 +125,7 @@
  * that case would still pass with the value gone, since the containing block the
  * panel moved to carries `container-type: inline-size`, whose layout containment
  * already lifts the whole row over the chart below it
- * (`apps/web/src/dashboard/fleet-panel.css` measured that). Which is the reason
+ * (`apps/web/src/dashboard/range-picker.css` measured that). Which is the reason
  * the hit test is there rather than an argument for dropping the value:
  * re-anchoring the panel changed which stacking context it paints in, so the
  * claim needed re-measuring rather than inheriting.

@@ -47,12 +47,13 @@ export interface InfoTipProps {
  * would get whichever won. That budget is already at its limit in one state,
  * where `docs/standards/react.md` sanctions a second `role="alert"` beside the
  * readout on a failed fleet read, on grounds a tip cannot borrow: a failed chart
- * has no sample to speak and so cannot compete with it. So the change is announced the way a disclosure
- * announces it — the button carries `aria-expanded`, which is state on the
- * control the reader just pressed rather than an interruption. (A `role="status"`
- * mounted with its text already inside it announces nothing anyway, #161, so the
- * live-region version would have had to keep an empty container on every page
- * for every tip, which is the cost the budget rule exists to refuse.)
+ * has no sample to speak and so cannot compete with it. So the change is
+ * announced the way a disclosure announces it — the button carries
+ * `aria-expanded`, which is state on the control the reader just pressed rather
+ * than an interruption. (A `role="status"` mounted with its text already inside
+ * it announces nothing anyway, #161, so the live-region version would have had to
+ * keep an empty container on every page for every tip, which is the cost the
+ * budget rule exists to refuse.)
  *
  * The content is mounted only while open rather than hidden with CSS. A
  * description nobody has asked for is not in the document at all: no text for a
