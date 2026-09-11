@@ -413,8 +413,8 @@ How this log is kept. Restatement ledger: nobody has classified the prose carrie
 # The anchor is the merge base's FINAL "## " heading, and the step needs it to name
 # exactly one line in each of the three blobs. These three break that in each of the
 # three available ways: a side that no longer carries the line at all (a retitling, or
-# a triage pass that pruned the entry — this log records having pruned 36 entries in a
-# day), a base that repeats it, and a side that appends a second copy of it.
+# a triage pass that pruned the entry — docs/tech-debt.md records having been pruned
+# wholesale before), a base that repeats it, and a side that appends a second copy.
 TD_BASE_RENAMED='# Tech-debt log
 
 How this log is kept.
@@ -1800,7 +1800,7 @@ end
 # pruned that entry has no such line, and without the guard `indexOf` answers -1, the
 # offset arithmetic answers 0, and the WHOLE side reads as tail — which would union a
 # rewritten header into the log as if it were an appended entry. Pruning is a live
-# shape here: docs/tech-debt.md records a pass that deleted 36 entries in one day.
+# shape here: docs/tech-debt.md records having been pruned wholesale by a triage pass.
 begin "a side that no longer holds the base's final entry heading is refused"
 td_fixture union-anchor-gone
 td_main_writes "$TD_BASE_RENAMED$TD_MAIN_ENTRY"
