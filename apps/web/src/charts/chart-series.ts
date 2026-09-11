@@ -5,7 +5,8 @@ import { spanHoursBetween, yForKw, type PlotRect } from './chart-geometry';
  * The chart's data model and the string-and-number layer beneath its JSX: point
  * lookups, contiguous-run detection, and the SVG `d` attributes that carry a
  * series. Pure — no React, no DOM — so the arithmetic that decides what gets
- * drawn is separable from the elements that draw it (`structure.md` rule 4).
+ * drawn is separable from the elements that draw it
+ * (`docs/standards/structure.md` rule 4).
  *
  * **The path strings are d3-shape's, the gaps are ours.** `d3-shape` is asked
  * for one thing — the curve through a run of points — and nothing else: it never
@@ -32,8 +33,7 @@ export interface ForecastChartBand {
  * at the panel seam — storage, the API and `@cumulo/shared` stay in kW
  * throughout, so nothing upstream of the panel sees a percentage. The spellings
  * are unchanged deliberately: renaming them is a sweep across every chart
- * surface and is filed as its own change rather than folded into the ticket that
- * made the sentence necessary.
+ * surface.
  */
 export interface ForecastChartPoint {
   readonly validTimeIso: string;
@@ -42,7 +42,8 @@ export interface ForecastChartPoint {
    *
    * Nullable since #264, and the reason is a real shape rather than defensive
    * typing: a chart whose x-domain is the union of forecast hours and actual
-   * hours (`dashboard/fleet-series.ts`) has hours behind the horizon that were
+   * hours (`apps/web/src/dashboard/fleet-series.ts`) has hours behind the horizon
+   * that were
    * measured and never forecast. The median then breaks at those hours exactly
    * as the actuals break past the horizon — a gap, never a bridge and never a
    * zero, because both would draw a forecast nobody made.
@@ -58,13 +59,13 @@ export interface ForecastChartPoint {
    * **Optional on purpose, and absence means "draw nothing".** It is not a `boolean` defaulting to
    * `false`, because those are different facts: `false` is a caller that worked out this hour is
    * daylight, and absence is a caller that did not answer the question at all. Only the fleet's
-   * series is classified (`dashboard/fleet-night.ts`); every other producer of these points — the
+   * series is classified (`apps/web/src/dashboard/fleet-night.ts`); every other producer of these
+   * points — the
    * site overlay's own domain, a fixture in a test — has no fleet to ask the question of and would
-   * be inventing an answer by supplying one. Both cases draw no shading, so the chart's rendering
-   * rule collapses them, but the type keeps them distinct so a future reader can tell an unshaded
-   * daylight hour from an unclassified one.
+   * be inventing an answer by supplying one. What each case draws is
+   * `forecast-chart-context.tsx`'s.
    *
-   * Under `exactOptionalPropertyTypes` that distinction is real rather than notional: the key is
+   * Under `exactOptionalPropertyTypes` the distinction is real rather than notional: the key is
    * omitted, never set to `undefined`, exactly as `band` above is.
    */
   readonly night?: boolean;
@@ -112,7 +113,7 @@ export interface ChartScale {
    * five hours put their samples in different places if one of them is missing
    * an hour. It doubles as the count — `xs.length` is the number of samples, and
    * carrying both would be two spellings of one fact that a caller could set
-   * into disagreement (`architecture.md` rule 9).
+   * into disagreement (`docs/standards/architecture.md` rule 9).
    */
   readonly xs: readonly number[];
 }
@@ -137,7 +138,7 @@ const MISSING_VALUE = '—';
  * `xs` and the points it was built from stay the same length — which is the
  * contract `ChartScale` above states — and exists because the compiler cannot
  * see that under `noUncheckedIndexedAccess` and an assertion here would be a
- * suppression rather than a proof (`typing.md` rule 2).
+ * suppression rather than a proof (`docs/standards/typing.md` rule 2).
  */
 export const xAt = (scale: ChartScale, index: number): number =>
   scale.xs[index] ?? (scale.plot.left + scale.plot.right) / 2;
@@ -164,12 +165,10 @@ export const overlayAt = (values: readonly (number | null)[], index: number): nu
  * outside it is dropped: the chart has nowhere to put a column the series it is
  * drawn over does not have.
  *
- * That used to be stated as the same rule `joinFleetSeries` followed, and it is
- * deliberately no longer cited that way. #264 gave the fleet's join a *union*
- * x-domain — the chart's own hours are now the union of what was forecast and
- * what was measured — so the rule here is the narrower one it always actually
- * was: an overlay is resolved onto a domain somebody else decided, and it never
- * widens it. What decides that domain is the caller's business.
+ * Narrower than `joinFleetSeries`' rule, and deliberately not cited as that one:
+ * an overlay is resolved onto a domain somebody else decided and never widens
+ * it, while #264 gave the fleet's join a *union* x-domain of its own. What
+ * decides that domain is the caller's business.
  *
  * An hour the overlay does not cover — and an hour it covers with `null` — is
  * `null` here, so the mark breaks at it rather than being drawn at a value
