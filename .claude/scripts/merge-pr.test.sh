@@ -1622,6 +1622,37 @@ expect_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================
+# 20p. …and the head the union pushed is the one a no-op resume settles ON
+# ==========================================================================================
+# The other side of 20n/20o, and the one td_views cannot state: its settled read is a
+# fixture sha, so every union case so far proves which heads are EXCLUDED and none
+# proves which is admitted. When the retried update-branch answers the no-op, the head
+# this run is waiting for IS the sha the union pushed — so excluding it there (the
+# symmetrical mistake to the one 20o was written for) would burn the whole poll budget
+# on a branch that was already current. The settled read is substituted from the lane
+# worktree, and the assertion names the sha the run itself produced.
+begin "a no-op resume settles on the head the union pushed, rather than waiting past it"
+td_fixture union-settles-on-its-own-head
+td_main_writes "$TD_BASE$TD_MAIN_ENTRY"
+td_branch_writes "$TD_BASE$TD_BRANCH_ENTRY"
+must printf '%s\n' "$UPDATE_CONFLICT" >"$STATE/update-branch.1"
+must printf '1\n' >"$STATE/update-branch.1.rc"
+must printf '%s\n' "$UPDATE_NOOP" >"$STATE/update-branch.out"
+V_MSST="DIRTY"
+write_view 1
+V_MSST="CLEAN"
+write_view default
+must : >"$STATE/view.2.oid-from-wt"
+write_merged_view
+run_merge
+union_sha=$(git -C "$ROOT/wt" rev-parse HEAD)
+expect_rc 0
+expect_stdout "$TD unioned and pushed"
+expect_stdout "2 check(s) complete on $union_sha"
+expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
 # 18. usage
 # ==========================================================================================
 begin "a missing or non-numeric PR number is a usage error, and nothing is called"

@@ -1281,8 +1281,10 @@ fi
 # the BLOCKED that came with it. A re-run 90 s later merged. The floor cannot catch
 # this on its own: the stale rollup has the same count as the head it came from.
 #
-# So nothing is evaluated until the sha this run replaced is gone, bounded by the
-# same poll budget the checks themselves get. A head that never moves is REFUSED
+# So nothing is evaluated until every sha this run superseded is gone — which shas
+# those are is the update-branch step's business, stated where pre_update_sha and
+# superseded_union_sha are declared, and deliberately not re-argued here. Bounded by
+# the same poll budget the checks themselves get. A head that never moves is REFUSED
 # rather than merged on: the alternative reading — clear the gate on a CLEAN
 # unmoved read, since the stale answer is BLOCKED — turns one observation into a
 # gate, and gets a merge taken on a head whose checks nobody looked at when it is
