@@ -75,7 +75,9 @@
 #     metrics are free.
 #   * API Gateway HTTP API — $1.00 per million requests, no per-hour charge, no
 #     minimum, no per-stage fee. An idle API costs nothing, and one somebody
-#     forgets to destroy costs only its log group's fraction of a cent. This is
+#     forgets to destroy costs its log group's fraction of a cent within this
+#     stack — plus, since #473, the warmer's DynamoDB reads on another one's
+#     meter (the warmer bullet below). This is
 #     the property ADR 0005 chose it for, against an ALB's ≈ $16.43/month of
 #     standing charge. There are no access logs on the stage to add a second
 #     log group — gateway.tf says why at the point of temptation.
@@ -95,8 +97,9 @@
 #     per ping on `cumulo-sites`: **$0.00/month here, driving ≈ $0.005/month
 #     under storage**, on that table's "everything else" row. It is $0 whenever
 #     the rule is disabled.
-#   * IAM — the execution role, its inline policy, the Lambda permission and the
-#     deploy grant are all free.
+#   * IAM — the execution role, its inline policy, the two Lambda permissions
+#     (the gateway's and the warmer's) and the deploy grant are all free. So is
+#     the warmer's rule, its targets and the function's async invoke config.
 #
 # The worst case is bounded rather than free, which is the honest version:
 # ≈ $36/month with the stage throttle pegged continuously for a month (ADR

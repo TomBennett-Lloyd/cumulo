@@ -1,8 +1,10 @@
 # The warmer (#473). Every real visitor arrives at an idle function, so the
-# first paint of the demo is a cold start — measured at p99 2.96 s against a
-# warm p50 of 54 ms, on an endpoint whose organic traffic is zero. This is the
-# clock that keeps two execution environments alive so that nobody's first
-# request is the one that pays for them.
+# first paint of the demo is a cold start — p99 2.96 s against a warm p50 of
+# 54 ms, on an endpoint whose organic traffic is zero, measured over the 30 days
+# to 2026-08-24 and recorded in #473. This is the clock that keeps two execution
+# environments alive so that nobody's first request is the one that pays for
+# them. The 54 ms is a tuned input as well as a symptom — the ledger at the foot
+# of this header says which cost row is computed from it.
 #
 # It invokes the function **directly**. A scheduled HTTPS call through the
 # gateway would be billed as a gateway request, counted by the `Count` metric
@@ -10,11 +12,51 @@
 # — a warmer that spends the cost bound it is meant to sit under. A direct
 # invoke touches none of the three.
 #
-# Two containers, not one. `apps/web/src/dashboard/Dashboard.tsx` fetches
-# `GET /v1/sites` first and gates the two fleet queries on its result, so a
+# Two containers, not one. `apps/web/src/dashboard/Dashboard.tsx` calls
+# `listSites` first, and `apps/web/src/dashboard/FleetPanel.tsx` gates its two
+# `useFleetQuery` calls on the result (`const enabled = sites.length > 0`), so a
 # visitor's first paint is one request followed by a concurrent pair. One warm
 # environment covers the first request and leaves the pair to cold-start a
 # second — which is why this rule carries two targets rather than one.
+#
+# ---------------------------------------------------------------------------
+# Restatement ledger (`docs/standards/architecture.md` rule 9) for the values
+# this file owns. A floor rather than a census: it lists what the sweep below
+# found, and one more carrier extends it rather than falsifies it. Sweep, run
+# 2026-09-11 from the repo root:
+#
+#   git grep -nE '192\.0\.2\.1|cumulo-warmer|17,?280|54 ms|cron\(0/5' -- :/
+#
+#   * **The cadence and the target count** — `schedule_expression` below and the
+#     two `aws_cloudwatch_event_target` blocks are the owner. Every monthly
+#     figure anywhere is computed from that pair and from nothing else.
+#     - `infra/README.md`, api cost table, the "warmer's arithmetic" bullet —
+#       *computing*: `12 × 2 × 24 × 30 = 17,280` is derived there, and it is the
+#       one site that shows the derivation.
+#     - `infra/README.md`, api cost table — the Lambda invocations, Lambda
+#       compute and DynamoDB reads rows, the paragraph above the table, and the
+#       "meaning of idle" note under it: *asserting*, each carrying the derived
+#       17,280 or the ≈ $0.005/month it drives.
+#     - `infra/README.md`, storage cost table — the "everything else" row, the
+#       standing-bill paragraph, and the ingestion teardown bullet that contrasts
+#       the two scheduled stacks: *asserting*, the same two figures.
+#     - `infra/api/outputs.tf` — the CloudWatch-logs and Lambda-invocations
+#       bullets of the cost commentary: *asserting*, the same 17,280.
+#     - `infra/README.md`, api runbook step B3 — *asserting* the five resources
+#       this file declares (`Plan: 20 to add`). That is the resource count
+#       rather than the cadence, but it moves for the same reason: a third
+#       target changes both, as does the `cron(0/5 * * * ? *)` readback in B7.
+#   * **The warm `GET /v1/sites` latency, 54 ms** — measured over the 30 days to
+#     2026-08-24, recorded in #473, restated in the first paragraph above.
+#     Carried by `infra/README.md`'s Lambda compute row, which is *computing*:
+#     ≈ 233 GB-s is `17,280 × 0.25 GB × 54 ms`. Re-measure the latency and that
+#     row is re-derived in the same change.
+#   * **The payload's markers, `192.0.2.1` and `cumulo-warmer`** — the `locals`
+#     below are the owner. Carried by `infra/README.md`'s B3 payload readback
+#     (*asserting*: it tells the operator what the plan must show) and by B7's
+#     note on what the log group cannot separate (*arguing*: the markers are
+#     what it says identify an invocation to a reader).
+# ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_event_rule" "warmer" {
   name = "cumulo-api-warmer-${var.environment}"
@@ -62,6 +104,25 @@ locals {
   # connection every later handler reuses — `/openapi.json` would warm the
   # runtime and leave that connection cold.
   #
+  # `rawPath` is a code↔Terraform mirror, and the gate cannot hold it — stated
+  # here rather than left to be discovered, per `docs/standards/architecture.md`
+  # rule 8. The route lives in `apps/api/src/main.ts` as an inline
+  # `segments: ['v1', 'sites']` entry in the `routes` array, and
+  # `.claude/scripts/check-infra-mirrors.sh`'s `str-eq` mode reads a Terraform
+  # *resource attribute* against an `export const NAME = '<text>';` — neither
+  # side has that shape, and this one is inside a `jsonencode` in a `locals`
+  # block, which the gate's reader does not address at all. Making it
+  # declarable would mean exporting a path constant from the API purely so
+  # infrastructure could compare against it, which is application code shaped by
+  # a gate rather than by the service. So the drift is real and unmechanised:
+  # rename the route and the warmer keeps working — a 404 still warms the
+  # runtime — but stops opening the DynamoDB connection, which is the half of
+  # the job it is here for, and nothing goes red. What catches it is a human
+  # step rather than a gate: the runbook's B7 in `infra/README.md` replays this
+  # very payload through a *synchronous* `aws lambda invoke` and reads the
+  # status out of the response body, which is the one thing the rule's own
+  # asynchronous ticks cannot report. Re-run that step after any change to the
+  # route table.
   # **There is no `origin` header, and that is a decision.** The write routes are
   # guarded by `checkWriteOrigin` (ADR 0006), so this payload repointed at
   # `POST /v1/sites` would be refused rather than admitted: the warmer cannot
