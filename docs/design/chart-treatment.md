@@ -942,7 +942,8 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   removed on 2026-08-12 ([`dashboard-composition.md`](dashboard-composition.md) records the
   decision), leaving this the page's only one — so the open/closed semantics, the keyboard
   operation and the announcement are the platform's.
-  **It sits after the figure, as its own panel** — the owner's ask on 2026-08-11, in their words:
+  **It sits after the figure, as its own panel** — the owner's ask on 2026-08-11
+  ([#431](https://github.com/TomBennett-Lloyd/cumulo/issues/431)), in their words:
   _"i think the raw data could actually live in a collapsible panel rather than inline with the
   graph etc"_. It used to render inside the `<figure>`, under the legend, which filed the numbers
   as one more piece of the drawing's furniture; as the figure's next sibling on a quiet recessed
