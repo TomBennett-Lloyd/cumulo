@@ -8,8 +8,9 @@ These are the owner's standing design decisions, distilled from the #265/#284 de
 open questions (`docs/design/design-principles.md`, from #337, is the distillation record — the
 evidence corpus, the grounding behind each rule, and the owner's answers live there). They are
 prospective rules for choices no design record has decided; the decided surfaces live in
-`docs/design/chart-treatment.md`, `map-treatment.md`, and `dashboard-composition.md`, and a rule
-here that gets decided into a surface lands in that surface's record.
+`docs/design/chart-treatment.md`, `docs/design/map-treatment.md`, and
+`docs/design/dashboard-composition.md`, and a rule here that gets decided into a surface lands in
+that surface's record.
 
 ## Rules
 
