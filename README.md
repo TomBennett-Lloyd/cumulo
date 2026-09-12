@@ -26,9 +26,11 @@ Fresh clone:
 ```bash
 pnpm install            # installs dependencies and points git at .githooks
 brew install gitleaks   # required: the pre-commit hook hard-fails without it
-brew install shellcheck # required: pnpm verify's lint:sh gate hard-fails without it
+brew install shellcheck # required: pnpm verify's lint:sh gate hard-fails without it — see the version note below
 brew install actionlint # required: pnpm verify's lint:workflows gate hard-fails without it
 ```
+
+**shellcheck is version-pinned.** `lint:sh` refuses any version but the one [`.claude/scripts/shellcheck-pin.sh`](.claude/scripts/shellcheck-pin.sh) declares — that file is the single owner of the number, and CI installs the same release from the same declaration. The point is that a green `pnpm verify` predicts a green CI: while `lint:sh` ran whatever was installed, it twice did not ([#502](https://github.com/TomBennett-Lloyd/cumulo/issues/502)). `brew install shellcheck` is the shortest route for as long as Homebrew's current version is the pinned one; when it is not, `bash .claude/scripts/install-shellcheck.sh` fetches and checksums the pinned release into a directory of its own and prints the `PATH` line. The refusal message says both.
 
 `pnpm install` runs the root `prepare` script, which sets two pieces of repo-local git config. `core.hooksPath=.githooks` points git at the committed hook, so there is nothing to copy into `.git/hooks` by hand. `commit.cleanup=whitespace` stops git deleting comment lines from commit messages: every commit subject here begins `#<issue>:`, which git's default `cleanup=strip` reads as a comment and silently removes, promoting the body's first paragraph to subject. It bites only where git re-commits a message nobody retyped — `git rebase --continue` after a conflict, most often — and "Successfully rebased" is not evidence to the contrary; PR #385 lost a subject that way.
 
