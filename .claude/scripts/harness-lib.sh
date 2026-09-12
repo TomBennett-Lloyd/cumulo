@@ -36,7 +36,12 @@
 # tree's existence from inside its own override, so the case can assert the hook ran on EXIT
 # and ran BEFORE the `rm -rf`, not merely that it ran.
 set -u
-export PATH="/opt/homebrew/bin:$PATH"
+# Appended, not prepended: prepending outranks a shellcheck the caller put
+# ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's
+# version refusal points at — that file's comment on this same line carries
+# the reasoning, and every step of this chain has to agree or the one that
+# prepends decides. (#502)
+export PATH="$PATH:/opt/homebrew/bin"
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo "harness-lib.sh is a sourced library, not an executable script" >&2
