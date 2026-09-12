@@ -154,7 +154,7 @@ repaint when a series is toggled off, or when an overlay arrives:
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Forecast (P10–P90, simulated) | rect filled `--color-chart-band-fill`, with hairline top and bottom edges in `--color-chart-band-stroke` |
 | Forecast (median)             | short 2px line key in `--color-chart-1`                                                                  |
-| Actuals                       | short 2px line key in `--color-chart-actuals`                                                            |
+| Actuals (simulated)           | short 2px line key in `--color-chart-actuals`                                                            |
 | _an overlay_                  | short 2px line key in `--color-chart-2` — see below                                                      |
 
 **Where it renders is the chart's surface's business, not the chart's**, and since the owner's
