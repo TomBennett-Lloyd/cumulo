@@ -43,9 +43,15 @@
 #
 set -euo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
-# machine (same reason lint-shell.sh and worktree-lib.sh do it). Harmless on
-# Linux, where the directory does not exist.
-export PATH="/opt/homebrew/bin:$PATH"
+# machine (same reason worktree-lib.sh does it). Harmless on Linux, where the
+# directory does not exist.
+#
+# Appended, not prepended: prepending outranks a shellcheck the caller put
+# ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's
+# version refusal points at — that file's comment on this same line carries
+# the reasoning, and every step of this chain has to agree or the one that
+# prepends decides. (#502)
+export PATH="$PATH:/opt/homebrew/bin"
 
 # Overridable so the test harness can point the gate at a nonexistent binary and
 # assert the preflights fire, without uninstalling anything.
@@ -83,11 +89,13 @@ lint:workflows: shellcheck is not installed — refusing to report a pass.
   mode this gate exists to prevent.
 
       macOS:  brew install shellcheck
-      Debian: sudo apt-get install -y shellcheck
+      any:    bash .claude/scripts/install-shellcheck.sh
 
-  GitHub's ubuntu-latest runner image ships it preinstalled, so CI needs no
-  install step for shellcheck (see the comment on the verify step in
-  .github/workflows/ci.yml).
+  The version is pinned repo-wide (#502): .claude/scripts/shellcheck-pin.sh owns
+  the number, CI installs that release, and the 'lint:sh' gate — which runs ahead
+  of this one in 'pnpm lint' — is the single place that refusal lives. This gate
+  deliberately does not re-check it: two gates enforcing one rule is two places
+  for it to drift.
 
   (Looked for: $SHELLCHECK_BIN)
 

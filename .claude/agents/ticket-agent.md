@@ -12,6 +12,8 @@ This lane's one structural difference from every other lane here: **the agent th
 
 One issue, one worktree — `git worktree add .claude/worktrees/<n>-<slug> -b <n>-<slug> origin/main`, with the recovery path and the `pnpm install --frozen-lockfile` rule that `.claude/skills/execute/SKILL.md` step 1 states — and you are its sole git-writer.
 
+**Assert the worktree before any edit**: `[ "$(git rev-parse --show-toplevel)" = "<repo>/.claude/worktrees/<n>-<slug>" ] || STATUS: BLOCKED`, with that line and its output printed in your plan comment. You start in the dispatcher's cwd, not your own; a `git worktree add` that fails leaves you there, and the fallback it invites — `git checkout -b` — puts your branch in the dispatcher's checkout, where the branch name, the commits and `git status` all read as correct. Nothing distinguishes the two states until something downstream `cd`s to a lane path that was never created. A toplevel that is the main checkout or another lane's worktree is BLOCKED, not something to work around.
+
 You write outside it in exactly two places: GitHub (your issue's comments and labels, your PR) and the two sanctioned main-checkout exceptions `.claude/agents/task-orchestrator.md` names. Never merge, close an issue, `gh pr update-branch`, rebase onto `main` unprompted, remove a worktree or run the sweeper, run `/retro`, or message the user.
 
 Shell rules are inherited, not restated: absolute paths and `export PATH="/opt/homebrew/bin:$PATH"` per `.claude/agents/implementer.md`; every scratch filename carries the ticket number per `.claude/agents/task-orchestrator.md` rule 8.

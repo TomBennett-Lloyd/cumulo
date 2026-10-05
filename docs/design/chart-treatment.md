@@ -123,8 +123,8 @@ Composition rules that keep both legible where they overlap:
   per contiguous run of forecast samples, and an hour with no forecast gets no median mark and an
   em dash in the table twin, never a zero. A straight
   segment across a gap is a value that was never measured or never modelled, drawn with exactly the
-  confidence of the values on either side of it — partial data is labelled partial, in the chart as
-  much as in the API (`error-handling.md` rule 5). The gap itself is left empty: no dotted
+  confidence of the values on either side of it — partial data is labelled partial
+  (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
   Every case here is an hour the series **has**, carrying a null; an hour the series does not carry
   at all is a different case with a different answer today, and "Settled, then reversed" below is
@@ -154,7 +154,7 @@ repaint when a series is toggled off, or when an overlay arrives:
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Forecast (P10–P90, simulated) | rect filled `--color-chart-band-fill`, with hairline top and bottom edges in `--color-chart-band-stroke` |
 | Forecast (median)             | short 2px line key in `--color-chart-1`                                                                  |
-| Actuals                       | short 2px line key in `--color-chart-actuals`                                                            |
+| Actuals (simulated)           | short 2px line key in `--color-chart-actuals`                                                            |
 | _an overlay_                  | short 2px line key in `--color-chart-2` — see below                                                      |
 
 **Where it renders is the chart's surface's business, not the chart's**, and since the owner's
@@ -194,7 +194,9 @@ envelope is a deterministic width attached to every stored row
 (`@cumulo/shared`'s `simulated-uncertainty.ts`), not an ensemble the physics model produced, and
 the legend is where a reader is told which of the two they are looking at. The same qualifier
 belongs on any future band whose source is simulated; a fitted band from the ML layer would drop
-it. The hover readout's `P10–P90` row name stays bare — it labels the two values at a sample and
+it. The actuals row above wears the same word on its own record and not on this one
+([#264](https://github.com/TomBennett-Lloyd/cumulo/issues/264)): the measurements are synthesized
+too. The hover readout's `P10–P90` row name stays bare — it labels the two values at a sample and
 makes no claim about where they came from.
 
 ## An overlay is a fourth series, and the rules it is held to
@@ -942,7 +944,8 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   removed on 2026-08-12 ([`dashboard-composition.md`](dashboard-composition.md) records the
   decision), leaving this the page's only one — so the open/closed semantics, the keyboard
   operation and the announcement are the platform's.
-  **It sits after the figure, as its own panel** — the owner's ask on 2026-08-11, in their words:
+  **It sits after the figure, as its own panel** — the owner's ask on 2026-08-11
+  ([#431](https://github.com/TomBennett-Lloyd/cumulo/issues/431)), in their words:
   _"i think the raw data could actually live in a collapsible panel rather than inline with the
   graph etc"_. It used to render inside the `<figure>`, under the legend, which filed the numbers
   as one more piece of the drawing's furniture; as the figure's next sibling on a quiet recessed
