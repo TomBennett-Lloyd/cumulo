@@ -217,22 +217,62 @@ const chartAggregateOf = (
     ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals), sites, unit)
     : EMPTY_FLEET_AGGREGATE;
 
+/** The two halves of one site's window, which the overlay draws either side of its seam. */
+interface SiteOverlayHours {
+  readonly forecasts: readonly Forecast[];
+  readonly actuals: readonly GenerationReading[];
+}
+
 /**
- * The selected site's forecasts, or an empty answer when nothing is selected.
+ * The selected site's own hours — forecast and measured — or an empty answer
+ * when nothing is selected.
  *
  * The empty arm is not dead: `enabled` gates the *request*, and a caller whose
  * `selectionReady` says yes while holding no site is asking about nobody, which
  * is honestly answered by no hours rather than by a crash. Top-level and fully
  * parameterised so it reads on its own (`structure.md` rule 1).
+ *
+ * **Two reads, one metered call** (#530). `HttpFleetDataSource` answers both out
+ * of the same `GET /v1/sites/{id}/series` payload and shares the in-flight
+ * request between them (`apps/web/src/data/http-fleet-data-source.ts`'s
+ * `seriesFor`), so asking together costs what asking for the forecast alone cost
+ * — which is why the overlay can draw the site's measurements at all. Asserted
+ * where that share lives: `apps/web/src/data/http-fleet-data-source.test.ts`,
+ * "serves concurrent forecasts and actuals for one site and range from a single
+ * request".
+ *
+ * **The `Promise.all` is the load-bearing half, and nothing in this panel's own
+ * suite bites on it.** Both calls reach their first `await` before either
+ * settles, which is what puts them in one flight; awaiting the first and then
+ * starting the second would bill a second trip. `CountingFleetSource` shares
+ * nothing, so that rewrite would leave every assertion in
+ * `apps/web/src/dashboard/FleetPanel.overlay.test.tsx` green while doubling live
+ * `/series` traffic — the named test above is the whole guard.
+ *
+ * Either failure fails the pair, on the arm that failed. A half-answer here
+ * would draw a line whose missing half is indistinguishable from a site that had
+ * nothing to report, and the panel's one overlay notice already says the honest
+ * thing about it.
  */
-const siteOverlayForecasts = (
+const siteOverlayHours = async (
   dataSource: FleetDataSource,
   site: Site | null,
   range: RangeHours,
-): Promise<FleetSourceResult<readonly Forecast[]>> =>
-  site === null
-    ? Promise.resolve({ kind: 'ok', value: [] })
-    : dataSource.siteForecasts(site.id, range);
+): Promise<FleetSourceResult<SiteOverlayHours>> => {
+  if (site === null) {
+    return { kind: 'ok', value: { forecasts: [], actuals: [] } };
+  }
+  const [forecasts, actuals] = await Promise.all([
+    dataSource.siteForecasts(site.id, range),
+    dataSource.siteActuals(site.id, range),
+  ]);
+  if (forecasts.kind === 'error') {
+    return forecasts;
+  }
+  return actuals.kind === 'error'
+    ? actuals
+    : { kind: 'ok', value: { forecasts: forecasts.value, actuals: actuals.value } };
+};
 
 /**
  * The selection and the answer about it, collapsed into the one value the body
@@ -246,17 +286,20 @@ const siteOverlayForecasts = (
  */
 const overlayState = (
   site: Site | null,
-  forecasts: QueryState<readonly Forecast[]>,
+  hours: QueryState<SiteOverlayHours>,
   unit: ChartUnit,
 ): OverlayState => {
   if (site === null) {
     return { kind: 'none' };
   }
-  if (forecasts.status === 'failed') {
+  if (hours.status === 'failed') {
     return { kind: 'failed', siteName: site.name };
   }
-  return forecasts.status === 'ready'
-    ? { kind: 'series', series: siteOverlaySeries(site, forecasts.data, unit) }
+  return hours.status === 'ready'
+    ? {
+        kind: 'series',
+        series: siteOverlaySeries(site, hours.data.forecasts, hours.data.actuals, unit),
+      }
     : { kind: 'none' };
 };
 
@@ -384,8 +427,8 @@ export const FleetPanel = ({
    * has already followed the new prop. `docs/tech-debt.md` has it, with the
    * reason the guard for it belongs in the hooks rather than here.
    */
-  const overlayForecasts = useFleetQuery(
-    () => siteOverlayForecasts(dataSource, selectedSite, range),
+  const overlayHours = useFleetQuery(
+    () => siteOverlayHours(dataSource, selectedSite, range),
     ['site-overlay', selectedSite?.id ?? null, range, overlayAttempt],
     { enabled: selectionReady },
   );
@@ -454,7 +497,7 @@ export const FleetPanel = ({
     siteCount: sites.length,
     chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals, unit),
     unit,
-    overlay: overlayState(selectedSite, overlayForecasts, unit),
+    overlay: overlayState(selectedSite, overlayHours, unit),
     onRetryOverlay: retryOverlay,
     onRetryActuals: retryActuals,
   };

@@ -22,7 +22,7 @@ import {
  * jsdom — `SitePopover.tsx` is the half that needs a live maplibre map, and it
  * is this card that it portals into a marker.
  *
- * The site's own chart is not here: one site's forecast is a second series on
+ * The site's own chart is not here: one site's own hours are a second series on
  * the fleet chart below the map (`apps/web/src/dashboard/site-overlay.ts`), so
  * the card carries the site's identity and the state of its first forecast and
  * stops there — a chart at marker size would be a chart nobody could read. No

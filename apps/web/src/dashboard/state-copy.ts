@@ -107,7 +107,7 @@ export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
  * Three sentences left this module in #265 because the surface that said them no
  * longer exists: the site detail panel drew a windowed chart of one site, so it
  * owed the reader an empty answer, a nothing-measured notice and a per-site
- * failure. The site's card on the map draws no chart — one site's forecast is a
+ * failure. The site's card on the map draws no chart — one site's own hours are a
  * series on the fleet's (`apps/web/src/dashboard/site-overlay.ts`) — so there is
  * no window to be empty and no per-site series call to fail. Copy for a surface
  * that is gone is copy that gets reused by someone who assumes it came back.
@@ -146,9 +146,15 @@ export const partialAggregateNotice = (contributing: number, total: number): str
  * so. The source's own message is deliberately not appended: the recourse here
  * is a button, not a diagnosis, and the transport detail belongs to the failures
  * a reader can act on with it.
+ *
+ * **"Hours", not "forecast"** (#530). The read behind this notice covers the
+ * site's measured hours as well as its forecast ones and fails as a pair on
+ * either arm (`apps/web/src/dashboard/FleetPanel.tsx`'s `siteOverlayHours`), so
+ * naming the forecast would tell a reader that a read had failed which in fact
+ * succeeded — `error-handling.md` rule 1's blame rule, applied to copy.
  */
 export const siteOverlayFailureNotice = (siteName: string): string =>
-  `${siteName}’s own forecast could not be loaded, so the chart shows the fleet only.`;
+  `${siteName}’s own hours could not be loaded, so the chart shows the fleet only.`;
 
 /**
  * The fleet's forecast arrived; its simulated actuals did not.
