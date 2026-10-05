@@ -365,7 +365,7 @@ if [ "$ratchet" = "1" ]; then
       printf '#     bash .claude/scripts/check-comment-density.sh --ratchet\n'
       cat "$TMP/newbase"
     } >"$TMP/baseline.new"
-    if ! mv "$TMP/baseline.new" "$BASELINE"; then
+    if ! mkdir -p "$(dirname "$BASELINE")" || ! mv "$TMP/baseline.new" "$BASELINE"; then
       printf 'check-comment-density: could not write %s\n' "$BASELINE_REL" >&2
       exit 2
     fi
