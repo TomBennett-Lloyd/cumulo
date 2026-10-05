@@ -74,6 +74,31 @@ export interface ChartOverlayPoint {
   readonly validTimeIso: string;
   /** `null` where the overlay has nothing for the hour — a gap, never a zero. */
   readonly kw: number | null;
+  /**
+   * Whether this hour was measured rather than forecast (#530).
+   *
+   * **Optional, and absence means forecast** — which is what every hour of
+   * every overlay was before #530, so an overlay that never says otherwise is a
+   * projection throughout and reads as one. Under
+   * `exactOptionalPropertyTypes` the key is omitted rather than set to
+   * `undefined`, exactly as `ForecastChartPoint.band` above is.
+   *
+   * It decides treatment and not value: the measured stretch is solid and ends
+   * in a marker, the stretch past it is dashed
+   * (`apps/web/src/charts/forecast-chart-marks.tsx`). Because one value channel
+   * answers every hour, the tooltip, the table column and the spoken readout
+   * read one number per hour and know nothing of this flag.
+   *
+   * **The producer owes a stronger invariant than "no hour is both": no sample
+   * at or before the seam is a forecast at all.** `overlayStretches` selects the
+   * solid stretch by index against the seam and never re-reads this flag per
+   * sample, so any sample drawn behind the seam is stroked as a measurement. A
+   * producer that filled a gap behind the seam with the forecast for that hour
+   * would have it drawn solid — the very thing #530 removed.
+   * `apps/web/src/dashboard/site-overlay.ts` discharges it by dropping every
+   * forecast hour at or before the site's last measured hour, measured or not.
+   */
+  readonly measured?: boolean;
 }
 
 /** A whole overlay series, named by the label its legend row and table column carry. */
@@ -90,6 +115,15 @@ export interface ChartOverlaySeries {
 export interface ChartOverlayColumn {
   readonly label: string;
   readonly values: readonly (number | null)[];
+  /**
+   * The last sample the overlay measured, or `undefined` where it measured
+   * none — the overlay's own seam, which is not the fleet's.
+   *
+   * A required key holding `undefined` rather than an optional one, because
+   * `overlayColumn` below is the only producer and there is no caller to omit
+   * it: "measured nothing" is an answer this join always has.
+   */
+  readonly lastMeasuredIndex: number | undefined;
 }
 
 /** One sample of an overlay — what the tooltip draws and the readout speaks. */
@@ -157,7 +191,9 @@ export const overlayAt = (values: readonly (number | null)[], index: number): nu
   values[index] ?? 0;
 
 /**
- * The overlay's value at each sample of the main series.
+ * The overlay at each sample of the main series — the one join every overlay
+ * surface reads (`docs/design/chart-treatment.md`, "An overlay is a fourth
+ * series").
  *
  * The main series' `validTimeIso` order is the x-domain, and an overlay hour
  * outside it is dropped: the chart has nowhere to put a column the series it is
@@ -171,15 +207,28 @@ export const overlayAt = (values: readonly (number | null)[], index: number): nu
  * An hour the overlay does not cover — and an hour it covers with `null` — is
  * `null` here, so the mark breaks at it rather than being drawn at a value
  * nobody supplied.
+ *
+ * **The seam comes out of the same pass**, as the last sample that is both
+ * measured and drawn. A measured hour carrying `null` is not it: the line never
+ * reaches that hour, so a marker there would sit on nothing — which is the
+ * invariant `forecast-chart-marks.tsx` draws the seam marker on.
  */
-export const overlayValuesByIndex = (
+export const overlayColumn = (
   points: readonly ForecastChartPoint[],
   overlay: ChartOverlaySeries,
-): readonly (number | null)[] => {
-  const kwByHour = new Map<string, number | null>(
-    overlay.points.map((point) => [point.validTimeIso, point.kw]),
+): ChartOverlayColumn => {
+  const byHour = new Map<string, ChartOverlayPoint>(
+    overlay.points.map((point) => [point.validTimeIso, point]),
   );
-  return points.map((point) => kwByHour.get(point.validTimeIso) ?? null);
+  const resolved = points.map((point) => byHour.get(point.validTimeIso));
+  return {
+    label: overlay.label,
+    values: resolved.map((point) => point?.kw ?? null),
+    lastMeasuredIndex: resolved.reduce<number | undefined>(
+      (last, point, index) => (point?.measured === true && point.kw !== null ? index : last),
+      undefined,
+    ),
+  };
 };
 
 /** The overlay's row at one sample, or nothing at all where there is no overlay. */

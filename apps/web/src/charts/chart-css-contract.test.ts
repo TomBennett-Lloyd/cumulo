@@ -161,6 +161,7 @@ const declarationsIn = (scope: readonly string[], selector: string): string => {
 const declarationsFor = (selector: string): string => declarationsIn([], selector);
 
 const DASH = /stroke-dasharray\s*:/;
+const DASH_PATTERN = /stroke-dasharray\s*:\s*(?<pattern>[^;]+);/;
 const STROKE_WIDTH = /stroke-width\s*:\s*(?<width>[^;]+);/;
 
 /** #448's placeholder curve, and the file's one deliberately-overridden selector. */
@@ -176,13 +177,14 @@ const REDUCED_MOTION = ['@media (prefers-reduced-motion: reduce)'];
  * Listed rather than derived, because the claim is about these rules and a list
  * derived from the file would agree with the file by construction. Membership is
  * therefore hand-kept, by a stated rule: every selector an assertion below reads
- * through `declarationsFor` — or through `strokeWidthOf`, which resolves through
- * it — less `LOADING_TRACE`, whose override is deliberate and is the positive
- * control for the case that reads this list. What re-checks the list against that
- * rule is `command grep -nE "declarationsFor\(|strokeWidthOf\(" ` over this file,
- * run 2026-08-12 — which is how `.forecast-chart-median` was found read below and
- * missing here, leaving the weight comparison it appears in true of some readers
- * and not others with nothing failing.
+ * through `declarationsFor` — or through `strokeWidthOf` or `dashPatternOf`, which
+ * resolve through it — less `LOADING_TRACE`, whose override is deliberate and is
+ * the positive control for the case that reads this list. What re-checks the list
+ * against that rule is
+ * `command grep -nE "declarationsFor\(|strokeWidthOf\(|dashPatternOf\(" ` over
+ * this file, run 2026-10-05 — which is how `.forecast-chart-median` was found
+ * read below and missing here on 2026-08-12, leaving the weight comparison it
+ * appears in true of some readers and not others with nothing failing.
  */
 const UNCONDITIONAL_SELECTORS = [
   '.forecast-chart-grid',
@@ -190,9 +192,26 @@ const UNCONDITIONAL_SELECTORS = [
   '.forecast-chart-day-boundary',
   '.forecast-chart-crosshair',
   '.forecast-chart-median',
+  '.forecast-chart-overlay',
+  '.forecast-chart-overlay-projected',
   '.forecast-chart-figure',
   '.forecast-chart-error',
 ];
+
+/**
+ * The dash pattern a rule declares. Absence is a violated invariant here too:
+ * the one case below compares two patterns, and a rule that had quietly lost its
+ * dash would otherwise compare as "different" and pass.
+ */
+const dashPatternOf = (selector: string): string => {
+  const pattern = DASH_PATTERN.exec(declarationsFor(selector))?.groups?.pattern;
+
+  if (pattern === undefined) {
+    throw new Error(`charts.css declares no stroke-dasharray for '${selector}'`);
+  }
+
+  return pattern.trim();
+};
 
 /**
  * The stroke width a rule declares. A vertical mark with none is a violated
@@ -283,6 +302,39 @@ describe('charts.css tells the plot’s three verticals apart', () => {
     // trace really is overridden, so the emptiness above is a fact about the
     // listed selectors rather than about a filter that never matches anything.
     expect(conditionalRulesFor(LOADING_TRACE)).toHaveLength(1);
+  });
+});
+
+/*
+ * #530's dashed data mark, and the two things that keep it legible.
+ *
+ * The overlay is the only mark on this canvas carrying both measurement and
+ * projection in one ink — the fleet's two are two series in two inks — so the
+ * dash is what separates the site's projection from the hours it measured. Two
+ * declarations carry that: the dash exists on the stretch past the seam and
+ * nowhere else in the series, so the legend
+ * swatch — which shares the base rule — does not claim the whole series is a
+ * projection; and the pattern is not the seam rule's, because the two marks
+ * cross and are drawn at different weights.
+ *
+ * Declarations rather than pixels, for the reason this file's own docblock gives:
+ * jsdom applies no stylesheet. Whether a reader actually tells the two patterns
+ * apart is `apps/web/e2e/`'s criterion and **no spec in it asserts it today** —
+ * `chart-surfaces.spec.ts` polls the overlay's path count, which passes under
+ * either treatment — so the only reading of it on record is #530's one-off
+ * browser measurement in both themes. `apps/web/src/charts/ForecastChart.test.tsx`
+ * owns which stretch of the overlay gets the class.
+ */
+describe('charts.css dashes the overlay where it becomes a projection', () => {
+  it('dashes the stretch past the seam and leaves the series’ own rule solid', () => {
+    expect(declarationsFor('.forecast-chart-overlay-projected')).toMatch(DASH);
+    expect(declarationsFor('.forecast-chart-overlay')).not.toMatch(DASH);
+  });
+
+  it('keeps the projection’s pattern off the seam rule’s, which it crosses', () => {
+    expect(dashPatternOf('.forecast-chart-overlay-projected')).not.toBe(
+      dashPatternOf('.forecast-chart-horizon'),
+    );
   });
 });
 

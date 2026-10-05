@@ -100,15 +100,30 @@ Composition rules that keep both legible where they overlap:
   words what its own ink had said. Actuals stop there; band and median continue past it. On the live fleet chart they do not merely
   continue past it, they _begin_ at it — the two windows are disjoint, so the boundary is where one
   series hands over to the other rather than where they overlap. The boundary is marked once, in
-  chrome, rather than by dashing the forecast line. **The dash is what makes it read as a
+  chrome, and the fleet's own lines are not dashed — which is a conclusion rather than a ban: the
+  fleet draws its measurement and its projection as **two series in two inks**, so a dash on the
+  median would say in a pattern what its hue already says. **The dash is what makes it read as a
   boundary** ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11): drawn solid it
   wore the gridlines' ink at the gridlines' weight, so the one vertical on the plot that means
   something was told from the ones that mean nothing only by where it happened to fall. It stays
   recessive — same ink, same hairline weight, chrome rather than data — because what changed is
-  legibility, not importance. This is the single exception to the no-dashed-chrome rule below, and
-  it is an exception on that rule's own terms: a dash reads as a threshold, and a threshold is
-  exactly what the seam is. The dash pattern itself belongs to `.forecast-chart-horizon` in
+  legibility, not importance. The dash is an exception to the no-dashed-chrome rule below on that
+  rule's own terms: a dash reads as projection or threshold, and a threshold is exactly what the
+  seam is. The dash pattern itself belongs to `.forecast-chart-horizon` in
   [`apps/web/src/charts/charts.css`](../../apps/web/src/charts/charts.css) and is not restated here.
+- **A series carrying both its measurements and its projection in one mark carries the seam in its
+  own stroke: solid behind, dashed ahead**
+  ([#530](https://github.com/TomBennett-Lloyd/cumulo/issues/530), 2026-10-05). The same reading of
+  a dash settles this as settles the bullet above — a dash reads as projection, and a run past the
+  seam _is_ a projection. The overlay is the one such series on this canvas: its measured hours and
+  its forecast hours are one line in one ink (the "fourth series" section below states its two
+  runs), so it has no second channel to tell them apart with, where the fleet's two inks are
+  already that channel. Without the dash the overlay's left half is a prediction drawn exactly like
+  its right half, and the plot's one mark of where a projection begins applies to a series the
+  reader is not looking at. The run behind the seam ends in the end-dot above, as the actuals' does.
+  The pattern belongs to `.forecast-chart-overlay-projected` in
+  [`apps/web/src/charts/charts.css`](../../apps/web/src/charts/charts.css), which carries why the
+  two dashes differ.
 - **A gap _inside_ a series breaks the line. It is never bridged.** The horizon rule above says
   where the measurements stop; this says what a missing hour before that boundary looks like. A
   null actual ends the run and the line restarts after the gap, so the actuals series is drawn once
@@ -202,9 +217,9 @@ makes no claim about where they came from.
 ## An overlay is a fourth series, and the rules it is held to
 
 A chart may carry **one overlay** — a second series on the same plot, in slot 2. The fleet chart is
-the shipped case: selecting a site draws that site's forecast over the fleet's sum, so a reader can
-see how much of the afternoon is one roof without holding two charts in their head. Four
-decisions govern it, and each of them was previously written only in a code comment:
+the shipped case: selecting a site draws that site's own hours over the fleet's sum, so a reader can
+see how much of the afternoon is one roof without holding two charts in their head. Five
+decisions govern it, and the first four were previously written only in a code comment:
 
 - **It appends rather than taking a place in draw order.** The legend's forecast entries keep their
   positions and their swatches whether or not an overlay is present — so the overlay is the last
@@ -214,13 +229,23 @@ decisions govern it, and each of them was previously written only in a code comm
   legend by. The mark itself is drawn between the median and the actuals, so the measurement still
   wins every overlap; the legend and the draw order are allowed to differ because they answer
   different questions.
-- **The overlay draws its median only — never a band.** Its source may well carry P10–P90 (a
-  per-site forecast does), and it is deliberately dropped: the band treatment at the top of this
+- **It is two runs, not one line** ([#530](https://github.com/TomBennett-Lloyd/cumulo/issues/530),
+  2026-10-05): the hours the overlay measured, solid and ending in the end-dot; the hours it only
+  forecast, dashed. The seam between them is the overlay's own last measured hour, never the
+  fleet's — a site with nothing measured over the window is dashed throughout, because what the
+  fleet measured says nothing about what that site did. Until this decision the overlay was the
+  site's forecasts across the whole window, past ones included, which drew a prediction with the
+  same stroke as a measurement; it now says which hours are which, as the fleet's two series say
+  it by being two series. The horizon bullet above carries why a dash is the right mark for it.
+- **The overlay's forecast run is a median only — never a band.** Its source may well carry P10–P90
+  (a per-site forecast does), and it is deliberately dropped: the band treatment at the top of this
   document belongs to the plot's primary series, and two washes over one another leave the reader
   with a question the chart cannot answer, namely whose uncertainty they are looking at. An overlay
-  is a line. Measured actuals are dropped for the same shape of reason plus a cost — they are a
-  second metered source call, spent to draw a second near-ink line where the treatment reserves
-  near-ink for exactly one series.
+  is a line. Its measured run is drawn in slot 2 like the rest of it, not in the near-ink the
+  treatment reserves for the plot's one primary measurement
+  ([#530](https://github.com/TomBennett-Lloyd/cumulo/issues/530) kept that reservation while adding
+  the run; the measurements themselves cost no extra metered call, which
+  [`apps/web/src/dashboard/site-overlay.ts`](../../apps/web/src/dashboard/site-overlay.ts) states).
 - **It shares the one value axis**, like everything else here — see the single-axis rule below.
   The axis is scaled to whatever is on the plot, so an overlay running above the primary series
   raises the axis rather than being drawn off the top of it.
@@ -255,9 +280,9 @@ worse than one overlapping its own rule.
 
 - **Gridlines: `--color-chart-grid`, hairline (1px), solid, horizontal only.** Never dashed —
   dashing reads as "projection" or "threshold" when it is just a grid. The grid sits one step off
-  the surface and stays recessive. The horizon rule is the one dashed mark on the canvas and does
-  not weaken this: it is not a gridline, and it is dashed for the reason the grid is not — it
-  genuinely is a threshold (see the horizon bullet above).
+  the surface and stays recessive. The canvas's two dashed marks do not weaken this, they rest on
+  it: the horizon rule is dashed because it genuinely is a threshold, and the overlay's run past it
+  because that run genuinely is a projection (see the horizon bullets above).
 - **Axis ticks and labels: `--color-chart-axis-label` at `--text-xs`**, with
   `font-variant-numeric: tabular-nums` so tick values align vertically. Axis titles use
   `--color-text-muted`.

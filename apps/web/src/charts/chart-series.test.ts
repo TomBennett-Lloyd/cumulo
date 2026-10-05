@@ -5,7 +5,7 @@ import {
   curvedLinePath,
   highestOverlayKw,
   overlayReadingAt,
-  overlayValuesByIndex,
+  overlayColumn,
   xAt,
   type ChartOverlaySeries,
   type ChartScale,
@@ -32,9 +32,17 @@ const overlayOf = (
   points: kwByHour.map(([hour, kw]) => ({ validTimeIso: isoHour(hour), kw })),
 });
 
-describe('overlayValuesByIndex', () => {
+/** The same, with each hour saying whether it was measured — the seam's only input. */
+const seamedOverlayOf = (
+  hours: readonly (readonly [number, number | null, boolean])[],
+): ChartOverlaySeries => ({
+  label: 'Baseline',
+  points: hours.map(([hour, kw, measured]) => ({ validTimeIso: isoHour(hour), kw, measured })),
+});
+
+describe('overlayColumn', () => {
   it('puts every covered hour in the slot its timestamp holds in the main series', () => {
-    const values = overlayValuesByIndex(
+    const { values } = overlayColumn(
       domain([6, 9, 12]),
       overlayOf([
         [6, 1.5],
@@ -49,7 +57,7 @@ describe('overlayValuesByIndex', () => {
   it('follows the main series order rather than the overlay’s own', () => {
     // The x-domain is the forecast's, so an overlay that arrives in another
     // order still lands under the hours it names.
-    const values = overlayValuesByIndex(
+    const { values } = overlayColumn(
       domain([6, 9, 12]),
       overlayOf([
         [12, 3.5],
@@ -66,7 +74,7 @@ describe('overlayValuesByIndex', () => {
     // number: a zero here would draw the overlay flat along the axis for two
     // hours it never spoke about, with exactly the confidence of the hours it
     // did (chart-treatment.md — a gap is never bridged, and never invented).
-    const values = overlayValuesByIndex(
+    const { values } = overlayColumn(
       domain([6, 9, 12, 15]),
       overlayOf([
         [6, 1.5],
@@ -80,7 +88,7 @@ describe('overlayValuesByIndex', () => {
   });
 
   it('reads an hour the overlay covers with null as the same gap', () => {
-    const values = overlayValuesByIndex(
+    const { values } = overlayColumn(
       domain([6, 9]),
       overlayOf([
         [6, null],
@@ -93,7 +101,7 @@ describe('overlayValuesByIndex', () => {
 
   it('drops overlay hours the main series does not carry', () => {
     // Inventing a column for them would imply a forecast that was never made.
-    const values = overlayValuesByIndex(
+    const { values } = overlayColumn(
       domain([9]),
       overlayOf([
         [6, 1.5],
@@ -106,7 +114,76 @@ describe('overlayValuesByIndex', () => {
   });
 
   it('answers an empty column for an empty main series', () => {
-    expect(overlayValuesByIndex([], overlayOf([[6, 1.5]]))).toStrictEqual([]);
+    expect(overlayColumn([], overlayOf([[6, 1.5]])).values).toStrictEqual([]);
+  });
+
+  it('reads no seam from an overlay that claims nothing measured', () => {
+    // Every overlay before #530 was this one, and it reads as a projection
+    // throughout rather than as a measurement the series never claimed.
+    expect(overlayColumn(domain([6, 9]), overlayOf([[6, 1.5]])).lastMeasuredIndex).toBeUndefined();
+  });
+
+  it('puts the seam at the last measured hour, in the main series’ own slots', () => {
+    const column = overlayColumn(
+      domain([6, 9, 12, 15]),
+      seamedOverlayOf([
+        [6, 1.5, true],
+        [9, 2.5, true],
+        [12, 3.5, false],
+        [15, 4.5, false],
+      ]),
+    );
+
+    expect(column.lastMeasuredIndex).toBe(1);
+  });
+
+  it('reads the seam from the hours and not from their order', () => {
+    // The overlay arrives in whatever order its producer had; the seam is a slot
+    // in the x-domain, so it has to come out of the join rather than out of the
+    // position a reading happened to hold.
+    const column = overlayColumn(
+      domain([6, 9, 12]),
+      seamedOverlayOf([
+        [12, 3.5, false],
+        [9, 2.5, true],
+        [6, 1.5, true],
+      ]),
+    );
+
+    expect(column.lastMeasuredIndex).toBe(1);
+  });
+
+  it('passes over a measured hour the overlay has no value for', () => {
+    // The line never reaches that hour, so the seam marker drawn there would sit
+    // on nothing — `forecast-chart-marks.tsx` draws it on this invariant.
+    const column = overlayColumn(
+      domain([6, 9, 12]),
+      seamedOverlayOf([
+        [6, 1.5, true],
+        [9, null, true],
+        [12, 3.5, false],
+      ]),
+    );
+
+    expect(column.lastMeasuredIndex).toBe(0);
+  });
+
+  it('reads no seam where the measured hours are all outside the x-domain', () => {
+    // Dropped by the join like any other uncovered hour, and the seam goes with
+    // them: a slot the chart does not have cannot be marked.
+    const column = overlayColumn(
+      domain([12]),
+      seamedOverlayOf([
+        [6, 1.5, true],
+        [12, 3.5, false],
+      ]),
+    );
+
+    expect(column).toStrictEqual({
+      label: 'Baseline',
+      values: [3.5],
+      lastMeasuredIndex: undefined,
+    });
   });
 });
 
@@ -243,14 +320,16 @@ describe('overlayReadingAt', () => {
   });
 
   it('carries the label with the value, so a row can name itself', () => {
-    expect(overlayReadingAt({ label: 'Baseline', values: [1.5, null] }, 0)).toStrictEqual({
+    expect(
+      overlayReadingAt({ label: 'Baseline', values: [1.5, null], lastMeasuredIndex: undefined }, 0),
+    ).toStrictEqual({
       label: 'Baseline',
       kw: 1.5,
     });
   });
 
   it('reads a gap, and an index past the end, as a null value under the label', () => {
-    const column = { label: 'Baseline', values: [1.5, null] };
+    const column = { label: 'Baseline', values: [1.5, null], lastMeasuredIndex: undefined };
 
     expect(overlayReadingAt(column, 1)).toStrictEqual({ label: 'Baseline', kw: null });
     expect(overlayReadingAt(column, 9)).toStrictEqual({ label: 'Baseline', kw: null });
