@@ -30,4 +30,4 @@
 
 ## Why
 
-The job this repo showcases values judgement about boundaries: a small number of genuinely independent services, documented reasoning, and restraint about further splitting. The pure-core rule is also what makes the physics-vs-ML comparison feature cheap to build — both layers are pure transforms over the same typed inputs.
+What this repo showcases is judgement about boundaries: a small number of genuinely independent services, documented reasoning, and restraint about further splitting. The pure-core rule is also what makes the physics-vs-ML comparison feature cheap to build — both layers are pure transforms over the same typed inputs.
