@@ -1,4 +1,10 @@
-import type { Forecast, GenerationReading, Site } from '@cumulo/shared';
+import {
+  compareUtcIsoTimestamps,
+  type Forecast,
+  type GenerationReading,
+  type Site,
+  type UtcIsoTimestamp,
+} from '@cumulo/shared';
 
 import type { ChartOverlaySeries } from '../charts/ForecastChart';
 import type { ChartUnit } from './chart-unit';
@@ -23,14 +29,16 @@ const inUnit = (site: Site, unit: ChartUnit, acPowerKw: number): number =>
  * The site's last measured hour, by timestamp rather than by position.
  *
  * The readings arrive in whatever order the source gave them, so this is a
- * maximum and not a last element. ISO-8601 UTC timestamps of one shape order
- * lexicographically, which is the property `utcIsoTimestampSchema`
- * (`packages/shared/src/timestamp.ts`) makes true of every value here.
+ * maximum and not a last element — and the ordering is
+ * `compareUtcIsoTimestamps`' (`packages/shared/src/timestamp.ts`), which owns the
+ * rule and the width guarantee it rests on.
  */
-const lastMeasuredIso = (actuals: readonly GenerationReading[]): string | undefined =>
-  actuals.reduce<string | undefined>(
+const lastMeasuredIso = (actuals: readonly GenerationReading[]): UtcIsoTimestamp | undefined =>
+  actuals.reduce<UtcIsoTimestamp | undefined>(
     (latest, reading) =>
-      latest === undefined || reading.validTime > latest ? reading.validTime : latest,
+      latest === undefined || compareUtcIsoTimestamps(reading.validTime, latest) > 0
+        ? reading.validTime
+        : latest,
     undefined,
   );
 
@@ -42,10 +50,14 @@ const lastMeasuredIso = (actuals: readonly GenerationReading[]): string | undefi
  * window** (#530). Until then this series was the site's `forecasts` over the
  * whole range, so the hours behind the seam were the site's *past* forecasts
  * drawn identically to its future ones — a line whose left half said "predicted"
- * and looked like its right half. The fleet draws nothing of that kind: its
- * actuals stop at the seam and its median begins there. So a forecast hour at or
- * before the site's last measured hour is dropped here, and the hour the two
- * meet at carries the measurement.
+ * and looked like its right half. The fleet needs no such rule because it says
+ * the same thing with two series in two inks; the overlay is one line, so it has
+ * to say it with the hours it carries. **Every** forecast hour at or before the
+ * site's last measured hour is dropped here — not only the ones a reading
+ * duplicates — because the chart strokes a sample behind the seam as a
+ * measurement without re-asking which it was (`ChartOverlayPoint.measured` in
+ * `apps/web/src/charts/chart-series.ts` states that invariant). The hour the two
+ * runs meet at therefore carries the measurement.
  *
  * The seam travels as `measured` on each point, not as an index: this series is
  * in its own time base and `overlayColumn` (`apps/web/src/charts/chart-series.ts`)
@@ -107,7 +119,9 @@ export const siteOverlaySeries = (
         measured: true,
       })),
       ...forecasts
-        .filter((forecast) => seam === undefined || forecast.validTime > seam)
+        .filter(
+          (forecast) => seam === undefined || compareUtcIsoTimestamps(forecast.validTime, seam) > 0,
+        )
         .map((forecast) => ({
           validTimeIso: forecast.validTime,
           kw: inUnit(site, unit, forecast.acPowerKw),

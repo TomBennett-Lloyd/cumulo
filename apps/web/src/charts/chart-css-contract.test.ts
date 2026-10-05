@@ -318,7 +318,10 @@ describe('charts.css tells the plot’s three verticals apart', () => {
  *
  * Declarations rather than pixels, for the reason this file's own docblock gives:
  * jsdom applies no stylesheet. Whether a reader actually tells the two patterns
- * apart is the browser lane's, and `apps/web/src/charts/ForecastChart.test.tsx`
+ * apart is `apps/web/e2e/`'s criterion and **no spec in it asserts it today** —
+ * `chart-surfaces.spec.ts` polls the overlay's path count, which passes under
+ * either treatment — so the only reading of it on record is #530's one-off
+ * browser measurement in both themes. `apps/web/src/charts/ForecastChart.test.tsx`
  * owns which stretch of the overlay gets the class.
  */
 describe('charts.css dashes the overlay where it becomes a projection', () => {

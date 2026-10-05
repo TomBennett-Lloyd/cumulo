@@ -85,11 +85,18 @@ export interface ChartOverlayPoint {
    *
    * It decides treatment and not value: the measured stretch is solid and ends
    * in a marker, the stretch past it is dashed
-   * (`apps/web/src/charts/forecast-chart-marks.tsx`). An hour is one or the
-   * other and never both — the producer drops a forecast hour the overlay has
-   * already measured (`apps/web/src/dashboard/site-overlay.ts`) — which is what
-   * keeps this one value channel enough for the tooltip, the table column and
-   * the spoken readout alike.
+   * (`apps/web/src/charts/forecast-chart-marks.tsx`). Because one value channel
+   * answers every hour, the tooltip, the table column and the spoken readout
+   * read one number per hour and know nothing of this flag.
+   *
+   * **The producer owes a stronger invariant than "no hour is both": no sample
+   * at or before the seam is a forecast at all.** `overlayStretches` selects the
+   * solid stretch by index against the seam and never re-reads this flag per
+   * sample, so any sample drawn behind the seam is stroked as a measurement. A
+   * producer that filled a gap behind the seam with the forecast for that hour
+   * would have it drawn solid — the very thing #530 removed.
+   * `apps/web/src/dashboard/site-overlay.ts` discharges it by dropping every
+   * forecast hour at or before the site's last measured hour, measured or not.
    */
   readonly measured?: boolean;
 }

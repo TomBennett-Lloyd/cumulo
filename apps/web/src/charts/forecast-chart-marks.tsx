@@ -292,13 +292,14 @@ const overlayStretches = (
  * The runs are derived here rather than passed in because nothing outside this
  * builder needs them.
  *
- * **It is the one series that crosses the seam, so it carries the seam in its
- * own stroke** (#530): measured hours solid and ending in a dot, forecast hours
- * dashed. That mirrors the fleet's own structure in slot 2 — the fleet's actuals
- * stop at the seam with an end dot and its median begins there — where before
- * #530 the whole overlay was one treatment over the site's forecasts, past ones
- * included. A lone hour stays the marker it was, because a dot has no pattern to
- * carry. The reasoning is the horizon bullet's in
+ * **It is the one mark here carrying both measurement and projection, so it
+ * carries the seam in its own stroke** (#530): measured hours solid and ending in
+ * a dot, forecast hours dashed. The fleet's two are told apart by being two
+ * series in two inks — `actualsElements` and `medianElements` above — and the
+ * overlay has one ink for both, which is what leaves the dash as its only
+ * channel. Before #530 it had no channel at all: one treatment over the site's
+ * forecasts, past ones included. A lone hour stays the marker it was, because a
+ * dot has no pattern to carry. The reasoning is the horizon bullets' in
  * `docs/design/chart-treatment.md`; the dash pattern is `charts.css`'s.
  *
  * `lastMeasuredIndex` is the *overlay's* seam, from `overlayColumn` — never the

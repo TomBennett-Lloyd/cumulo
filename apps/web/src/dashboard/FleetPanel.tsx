@@ -236,10 +236,18 @@ interface SiteOverlayHours {
  * of the same `GET /v1/sites/{id}/series` payload and shares the in-flight
  * request between them (`apps/web/src/data/http-fleet-data-source.ts`'s
  * `seriesFor`), so asking together costs what asking for the forecast alone cost
- * — which is why the overlay can draw the site's measurements at all. Asking in
- * parallel rather than in sequence is what puts them in that one flight;
- * awaiting the first before starting the second would let it settle and bill the
- * second trip.
+ * — which is why the overlay can draw the site's measurements at all. Asserted
+ * where that share lives: `apps/web/src/data/http-fleet-data-source.test.ts`,
+ * "serves concurrent forecasts and actuals for one site and range from a single
+ * request".
+ *
+ * **The `Promise.all` is the load-bearing half, and nothing in this panel's own
+ * suite bites on it.** Both calls reach their first `await` before either
+ * settles, which is what puts them in one flight; awaiting the first and then
+ * starting the second would bill a second trip. `CountingFleetSource` shares
+ * nothing, so that rewrite would leave every assertion in
+ * `apps/web/src/dashboard/FleetPanel.overlay.test.tsx` green while doubling live
+ * `/series` traffic — the named test above is the whole guard.
  *
  * Either failure fails the pair, on the arm that failed. A half-answer here
  * would draw a line whose missing half is indistinguishable from a site that had

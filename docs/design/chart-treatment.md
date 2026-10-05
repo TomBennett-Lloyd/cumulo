@@ -100,9 +100,9 @@ Composition rules that keep both legible where they overlap:
   words what its own ink had said. Actuals stop there; band and median continue past it. On the live fleet chart they do not merely
   continue past it, they _begin_ at it — the two windows are disjoint, so the boundary is where one
   series hands over to the other rather than where they overlap. The boundary is marked once, in
-  chrome, and the fleet's own lines are not dashed — which is a conclusion rather than a ban:
-  nothing of the fleet's _crosses_ the seam, so a dash on the median would say in a pattern what
-  its hue and its band already say. **The dash is what makes it read as a
+  chrome, and the fleet's own lines are not dashed — which is a conclusion rather than a ban: the
+  fleet draws its measurement and its projection as **two series in two inks**, so a dash on the
+  median would say in a pattern what its hue already says. **The dash is what makes it read as a
   boundary** ([#284](https://github.com/TomBennett-Lloyd/cumulo/issues/284) D11): drawn solid it
   wore the gridlines' ink at the gridlines' weight, so the one vertical on the plot that means
   something was told from the ones that mean nothing only by where it happened to fall. It stays
@@ -111,16 +111,17 @@ Composition rules that keep both legible where they overlap:
   rule's own terms: a dash reads as projection or threshold, and a threshold is exactly what the
   seam is. The dash pattern itself belongs to `.forecast-chart-horizon` in
   [`apps/web/src/charts/charts.css`](../../apps/web/src/charts/charts.css) and is not restated here.
-- **A series that crosses the seam carries it in its own stroke: solid behind, dashed ahead**
+- **A series carrying both its measurements and its projection in one mark carries the seam in its
+  own stroke: solid behind, dashed ahead**
   ([#530](https://github.com/TomBennett-Lloyd/cumulo/issues/530), 2026-10-05). The same reading of
   a dash settles this as settles the bullet above — a dash reads as projection, and a run past the
-  seam _is_ a projection. The overlay is the one series this reaches, because it is the one whose
-  measured hours and forecast hours sit on one line (the "fourth series" section below states its
-  two runs); the fleet's median stays solid for the reason that bullet gives. Without it the
-  overlay's left half is a prediction drawn exactly like its right half, and the plot's one mark of
-  where a projection begins applies to a series the reader is not looking at. The run behind the
-  seam ends in the end-dot above, as the actuals' does. The patterns belong to
-  `.forecast-chart-overlay-projected` in
+  seam _is_ a projection. The overlay is the one such series on this canvas: its measured hours and
+  its forecast hours are one line in one ink (the "fourth series" section below states its two
+  runs), so it has no second channel to tell them apart with, where the fleet's two inks are
+  already that channel. Without the dash the overlay's left half is a prediction drawn exactly like
+  its right half, and the plot's one mark of where a projection begins applies to a series the
+  reader is not looking at. The run behind the seam ends in the end-dot above, as the actuals' does.
+  The pattern belongs to `.forecast-chart-overlay-projected` in
   [`apps/web/src/charts/charts.css`](../../apps/web/src/charts/charts.css), which carries why the
   two dashes differ.
 - **A gap _inside_ a series breaks the line. It is never bridged.** The horizon rule above says
@@ -234,9 +235,8 @@ decisions govern it, and the first four were previously written only in a code c
   fleet's — a site with nothing measured over the window is dashed throughout, because what the
   fleet measured says nothing about what that site did. Until this decision the overlay was the
   site's forecasts across the whole window, past ones included, which drew a prediction with the
-  same stroke as a measurement; it now mirrors the fleet's structure, where the actuals stop at the
-  seam and the median begins there. The horizon bullet above carries why a dash is the right mark
-  for it.
+  same stroke as a measurement; it now says which hours are which, as the fleet's two series say
+  it by being two series. The horizon bullet above carries why a dash is the right mark for it.
 - **The overlay's forecast run is a median only — never a band.** Its source may well carry P10–P90
   (a per-site forecast does), and it is deliberately dropped: the band treatment at the top of this
   document belongs to the plot's primary series, and two washes over one another leave the reader
