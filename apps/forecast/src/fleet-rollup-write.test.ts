@@ -129,11 +129,11 @@ describe('writeFleetRollup', () => {
     // `packages/shared/src/fleet-rollup-additivity.test.ts`; this pins that the *producer* feeds
     // that machinery the same inputs it was proved over.
     expect(sumFleetRollupPartials(calls[0]?.partials ?? [])).toEqual(
-      fleetForecastAggregate(twoSitesTwoHours, sites),
+      fleetForecastAggregate(twoSitesTwoHours, sites, FLEET_ROLLUP_FORECAST_KIND),
     );
   });
 
-  it('rolls up one model only, so a second model cannot double-count the fleet', async () => {
+  it('rolls up one model only, so a second model cannot decide the fleet by row order', async () => {
     const { deps: rollupDeps, calls } = harness();
     const withMl = [
       ...twoSitesTwoHours,
@@ -142,7 +142,10 @@ describe('writeFleetRollup', () => {
 
     await writeFleetRollup(rollupDeps, LOCATION, withMl, sites);
 
-    // 7 kW, not 10.1: the ML row for the same site-hour is a second view of it, not a second site.
+    // 7 kW, not 7.1. Unfiltered, the ML row is not a second site — `aggregateFleetForecast` keeps
+    // one entry per site-hour — it *replaces* the physics row, the `issuedAt` tie going to whichever
+    // arrived last. The contributing count is 2 either way, which is exactly why an unfiltered sum
+    // is hard to notice: nothing about the shape of the answer says a model was swapped.
     expect(calls[0]?.partials[0]?.acPowerKw).toBe(7);
     expect(calls[0]?.partials[0]?.contributingSiteCount).toBe(2);
   });

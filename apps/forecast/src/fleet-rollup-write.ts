@@ -81,19 +81,6 @@ export interface FleetRollupWriteDeps {
   readonly log: (entry: Record<string, unknown>) => void;
 }
 
-/**
- * The forecasts the fleet aggregate is summed from: one model's, never two.
- *
- * `aggregateFleetForecast`'s own docblock refuses to filter and says why — model selection is the
- * caller's — and this is the caller making it, through the one declaration the API reads back with
- * (`FLEET_ROLLUP_FORECAST_KIND`). Filtering here rather than trusting the producer to emit one model
- * is the difference between a property the code holds and a coincidence: `packages/forecast` emits
- * physics alone today, and the hour that stops being true is the hour a silent double-count would
- * otherwise begin.
- */
-const rolledUpForecasts = (forecasts: readonly Forecast[]): readonly Forecast[] =>
-  forecasts.filter((forecast) => forecast.model === FLEET_ROLLUP_FORECAST_KIND.model);
-
 const failedOutcome = (
   locationId: string,
   operation: FleetRollupOperation,
@@ -113,7 +100,9 @@ const failedOutcome = (
  *
  * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another: there is no `+`
  * over a power value in this file, which is the rule `apps/web/src/dashboard/fleet-series.ts` states
- * for the client, applied to the producer (`docs/standards/architecture.md` rule 3).
+ * for the client, applied to the producer (`docs/standards/architecture.md` rule 3). The model
+ * selection is `@cumulo/shared`'s too — `fleetRollupPartials` filters on the kind it is handed, so
+ * the producer and the API's fallback cannot select differently (#531).
  */
 export const writeFleetRollup = async (
   deps: FleetRollupWriteDeps,
@@ -123,7 +112,7 @@ export const writeFleetRollup = async (
 ): Promise<FleetRollupOutcome> => {
   let partials: readonly FleetRollupPartial[];
   try {
-    partials = fleetRollupPartials(rolledUpForecasts(forecasts), sites);
+    partials = fleetRollupPartials(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND);
   } catch (error: unknown) {
     return failedOutcome(locationId, 'fleetRollupPartials', error);
   }

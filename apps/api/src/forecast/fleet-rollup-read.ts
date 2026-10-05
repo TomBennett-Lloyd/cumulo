@@ -1,4 +1,5 @@
 import {
+  activeFleetSites,
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   locationId,
@@ -44,12 +45,11 @@ import { forecastsIn } from './series-split';
  * That is the half-truth `fleet-series-read.ts` refuses for the fan-out, applied to the roll-up.
  * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
  * every site carries coordinates, so the expected set is the active sites' `locationId`s — the same
- * function ingestion keys its messages on, over the same `active` predicate, so the two sets are the
- * same partition of the fleet by construction rather than by agreement. What the check does *not*
- * see is a location that wrote some of its hours and not others: a partial `BatchWriteItem` drain is
- * logged and left for the next cycle (`fleet-rollup-write.ts`), and until that cycle runs the
- * roll-up can be short an hour without saying so. Tracked in `docs/tech-debt.md`; an expected-hours
- * notion is not something this route owns.
+ * `locationId` ingestion keys its messages on, over the same `activeFleetSites` predicate
+ * ingestion's `activeFetchLocations` takes, so the two sets are the same partition of the fleet by
+ * construction rather than by agreement. It is **not** checked per hour, which is a decision rather
+ * than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states it and what makes
+ * the residual honest rather than silent.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
  * that explain it, so "has a full cycle written every location yet?" is one log query. When the
@@ -92,21 +92,21 @@ export type FleetForecastAggregateRead =
   | { readonly complete: false; readonly response: ApiResponse };
 
 /**
- * Which locations the fleet expects a partial from — one per distinct weather bucket its **active**
- * sites sit in.
+ * Which locations the fleet expects a partial from — one per distinct weather bucket its sites sit
+ * in.
  *
  * A `Set` because two sites in one bucket are one expected partial: `locationId` is what the
  * producer's messages are keyed by (ADR 0004), so twelve cluster locations holding sixty sites
  * expect twelve partials and not sixty.
  *
- * `active` is the half that makes this set the same set the producer writes, rather than merely a
- * similar one. `listFleetSites` returns the fleet active *and* inactive, while ingestion publishes
- * only for locations holding an active site (`activeFetchLocations`) — so a location whose every
- * site has been deactivated can never be written again, and counting it here would pin the route on
- * `incomplete` for ever while logging a line that means the opposite of what it says.
+ * The sites are already the active ones — {@link readFleetForecastAggregate} narrows once, for both
+ * arms — which is the half that makes this set the set the producer writes rather than merely a
+ * similar one: ingestion publishes only for locations holding an active site, so a location whose
+ * every site has been deactivated can never be written again, and counting it here would pin the
+ * route on `incomplete` for ever while logging a line that means the opposite of what it says.
  */
 const expectedLocations = (sites: readonly FleetSite[]): ReadonlySet<string> =>
-  new Set(sites.filter((site) => site.active).map((site) => locationId(site)));
+  new Set(sites.map((site) => locationId(site)));
 
 /**
  * Whether a roll-up read can answer for this fleet, and if not, why.
@@ -138,11 +138,11 @@ const fallbackReason = (
  * The fan-out, aggregated server-side — what the browser used to do with the rows this route used
  * to send.
  *
- * `forecastsIn` then `fleetForecastAggregate`, filtered to the rolled-up model so that this arm and
- * the roll-up arm answer the same question. Without the filter a fleet whose sites had both a
- * physics and an ML row for an hour would read as twice the fleet here and as the fleet there, and
- * the discrepancy would appear exactly when the fallback fired — the worst possible time for the
- * two paths to disagree.
+ * `forecastsIn` then `fleetForecastAggregate` over the rolled-up kind, so that this arm and the
+ * roll-up arm answer the same question. The filter is the shared function's rather than this file's
+ * (#531): a fleet whose sites had both a physics and an ML row for an hour would otherwise read
+ * here as whichever model the Query returned last, and the discrepancy would appear exactly when
+ * the fallback fired — the worst possible time for the two paths to disagree.
  */
 const aggregateFromFanOut = async (
   deps: FleetRollupReadDeps,
@@ -157,11 +157,12 @@ const aggregateFromFanOut = async (
     return read;
   }
 
-  const forecasts = read.perSite
-    .flatMap((points) => forecastsIn(points))
-    .filter((forecast) => forecast.model === FLEET_ROLLUP_FORECAST_KIND.model);
+  const forecasts = read.perSite.flatMap((points) => forecastsIn(points));
 
-  return { complete: true, points: fleetForecastAggregate(forecasts, sites) };
+  return {
+    complete: true,
+    points: fleetForecastAggregate(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND),
+  };
 };
 
 /**
@@ -190,6 +191,14 @@ const summed = (
  * Read the fleet's summed forecast over `from`…`to`: the roll-up if it can answer, the fan-out if
  * it cannot.
  *
+ * **`activeFleetSites` is applied once, here, which is what makes both arms answer for one fleet**
+ * (#531). The narrowed list is simultaneously the expected-partial set, the fan-out's site list and
+ * the nameplate divisor `fleetForecastAggregate` divides by, so there is no arrangement of this
+ * module in which one of the three counts a site the others do not. Applied here rather than at the
+ * route boundary because this function is also called directly by `fleet-rollup-read.test.ts`: a
+ * predicate living one layer up would leave the module able to be handed an inactive site and
+ * expect a partial for it.
+ *
  * The roll-up Query is page-bounded on the same deadline the fan-out uses, so a request that is
  * running out of time cannot spend it all here and then discover it has to fall back too. A
  * `StorageError` from either arm travels to the route boundary as it always did — no `catch` here
@@ -205,11 +214,15 @@ export const readFleetForecastAggregate = async (
   to: UtcIsoTimestamp,
   deadlineEvent: string,
 ): Promise<FleetForecastAggregateRead> => {
-  // A fleet with no sites is answered without touching the table at all. Not an optimisation: the
-  // fleet total of nothing is nothing, there is no partition state that could make it otherwise,
-  // and the route's "an empty fleet is a 200 with an empty array" promise should not be one billed
-  // read away from being a 500.
-  if (sites.length === 0) {
+  const active = activeFleetSites(sites);
+
+  // A fleet with no *active* sites is answered without touching the table at all. Not an
+  // optimisation: the fleet total of nothing is nothing, there is no partition state that could make
+  // it otherwise, and the route's "an empty fleet is a 200 with an empty array" promise should not
+  // be one billed read away from being a 500. A fleet whose every site is deactivated reaches the
+  // same answer by the same argument, and reaching it here rather than through `summed`'s empty
+  // expected set is what spares it the Query.
+  if (active.length === 0) {
     return { complete: true, points: [] };
   }
 
@@ -218,7 +231,7 @@ export const readFleetForecastAggregate = async (
   };
 
   const rollup = await deps.series.queryFleetRollup(FLEET_ROLLUP_FORECAST_KIND, from, to, bound);
-  const expected = expectedLocations(sites);
+  const expected = expectedLocations(active);
   const reason = fallbackReason(rollup, expected);
 
   if (reason === undefined) {
@@ -233,5 +246,5 @@ export const readFleetForecastAggregate = async (
     hours: new Set(rollup.rows.map((row) => row.partial.validTime)).size,
   });
 
-  return aggregateFromFanOut(deps, deadline, sites, from, to, deadlineEvent);
+  return aggregateFromFanOut(deps, deadline, active, from, to, deadlineEvent);
 };

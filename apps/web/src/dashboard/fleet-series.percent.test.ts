@@ -1,4 +1,5 @@
 import {
+  FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   forecastSchema,
   generationReadingSchema,
@@ -87,7 +88,7 @@ const percentPoints = (
   // partials with and the demo source computes with — because the aggregate is what the seam hands
   // this pipeline since #494, and a hand-built one could carry a divisor no real fleet would.
   fleetChartAggregate(
-    fleetForecastAggregate(forecasts, twoSizeFleet),
+    fleetForecastAggregate(forecasts, twoSizeFleet, FLEET_ROLLUP_FORECAST_KIND),
     readings,
     twoSizeFleet,
     'percent',

@@ -10,7 +10,7 @@
  * Pure: no I/O, no clock. The caller supplies the fleet and fetches the result.
  */
 
-import { locationId } from '@cumulo/shared';
+import { activeFleetSites, locationId } from '@cumulo/shared';
 import type { FleetSite } from '@cumulo/shared';
 
 /**
@@ -52,13 +52,16 @@ const fetchLocationOf = (id: string): FetchLocation => {
 /**
  * The distinct location ids of the sites still worth fetching for.
  *
- * `locationId` is imported rather than reimplemented: it is simultaneously the
+ * Neither half is reimplemented here. `locationId` is simultaneously the
  * `cumulo-weather` partition key and this de-duplication key, and a drift between
  * the two would either double the fetch volume or write readings into a partition
- * nothing reads back (ADR 0002 §3).
+ * nothing reads back (ADR 0002 §3). `activeFleetSites` is the same predicate the
+ * API's fleet reads narrow by, so the locations a cycle writes partials for and
+ * the locations a roll-up read expects them from are one predicate's output
+ * rather than two copies of it (#531).
  */
 const activeLocationIds = (sites: readonly FleetSite[]): Set<string> =>
-  new Set(sites.filter((site) => site.active).map((site) => locationId(site)));
+  new Set(activeFleetSites(sites).map((site) => locationId(site)));
 
 /**
  * The weather fetches one ingestion cycle should issue for `sites`.

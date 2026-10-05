@@ -1,4 +1,5 @@
 import {
+  FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   utcIsoTimestampSchema,
   type FleetForecastAggregatePoint,
@@ -132,7 +133,7 @@ const ready = <T,>(value: T): FleetSourceResult<T> => ({ kind: 'ok', value });
 const summed = (
   forecasts: readonly Forecast[],
 ): FleetSourceResult<readonly FleetForecastAggregatePoint[]> =>
-  ready(fleetForecastAggregate(forecasts, SITES));
+  ready(fleetForecastAggregate(forecasts, SITES, FLEET_ROLLUP_FORECAST_KIND));
 
 export const FULL_FLEET: StubFleet = {
   forecasts: summed(FORECASTS),

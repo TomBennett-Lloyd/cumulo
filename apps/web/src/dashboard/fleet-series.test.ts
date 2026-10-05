@@ -1,5 +1,6 @@
 import {
   canonicalFleetSeed,
+  FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   forecastSchema,
   generateFleet,
@@ -210,6 +211,7 @@ describe('fleetChartAggregate', () => {
       fleetForecastAggregate(
         [forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')],
         demoFleet,
+        FLEET_ROLLUP_FORECAST_KIND,
       ),
       [],
       demoFleet,
@@ -224,6 +226,7 @@ describe('fleetChartAggregate', () => {
       fleetForecastAggregate(
         [forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')],
         demoFleet,
+        FLEET_ROLLUP_FORECAST_KIND,
       ),
       [],
       demoFleet,
@@ -237,7 +240,11 @@ describe('fleetChartAggregate', () => {
     // The empty-fleet arm reaching the chart: a fleet that is nowhere has no night, so the layer
     // draws nothing rather than shading hours no site was consulted about.
     const aggregate = fleetChartAggregate(
-      fleetForecastAggregate([forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')], []),
+      fleetForecastAggregate(
+        [forecastAt(2, 0, '2026-12-21'), forecastAt(12, 9, '2026-12-21')],
+        [],
+        FLEET_ROLLUP_FORECAST_KIND,
+      ),
       [],
       [],
       'kw',
@@ -248,7 +255,11 @@ describe('fleetChartAggregate', () => {
 
   it('leaves the kilowatts and the completeness count untouched by the night layer', () => {
     const aggregate = fleetChartAggregate(
-      fleetForecastAggregate([forecastAt(12, 9, '2026-12-21')], demoFleet),
+      fleetForecastAggregate(
+        [forecastAt(12, 9, '2026-12-21')],
+        demoFleet,
+        FLEET_ROLLUP_FORECAST_KIND,
+      ),
       [],
       demoFleet,
       'kw',
