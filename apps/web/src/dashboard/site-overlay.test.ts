@@ -139,11 +139,12 @@ describe('siteOverlaySeries', () => {
   it('drops a forecast hour behind the seam that no reading covers', () => {
     /*
      * The half of that rule a duplicate-only filter would satisfy, and the one
-     * the solid stroke actually rests on: `overlayStretches` strokes every sample
-     * at or before the seam as a measurement without re-reading `measured`
-     * (`charts/chart-series.ts`'s `ChartOverlayPoint.measured`). So an outage
-     * hour behind the seam — forecast, never measured — must not reach the chart
-     * at all; left in, it would be drawn solid and read as a reading.
+     * the solid stroke actually rests on: `overlayStretches`
+     * (`apps/web/src/charts/forecast-chart-marks.tsx`) strokes every sample at or
+     * before the seam as a measurement without re-reading `measured`, which is the
+     * invariant `charts/chart-series.ts` states. So an outage hour behind the
+     * seam — forecast, never measured — must not reach the chart at all; left in,
+     * it would be drawn solid and read as a reading.
      */
     const series = siteOverlaySeries(
       SITE,

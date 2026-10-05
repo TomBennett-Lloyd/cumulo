@@ -310,8 +310,9 @@ describe('charts.css tells the plot’s three verticals apart', () => {
  *
  * The overlay is the only mark on this canvas carrying both measurement and
  * projection in one ink — the fleet's two are two series in two inks — so the
- * dash is what separates the site's projection from the hours it measured. Two declarations carry that: the dash exists on
- * the stretch past the seam and nowhere else in the series, so the legend
+ * dash is what separates the site's projection from the hours it measured. Two
+ * declarations carry that: the dash exists on the stretch past the seam and
+ * nowhere else in the series, so the legend
  * swatch — which shares the base rule — does not claim the whole series is a
  * projection; and the pattern is not the seam rule's, because the two marks
  * cross and are drawn at different weights.
