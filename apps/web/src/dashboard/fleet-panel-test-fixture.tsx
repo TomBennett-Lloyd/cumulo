@@ -111,9 +111,11 @@ export interface StubFleet {
   /**
    * Non-null fails the *overlay* read only.
    *
-   * A message rather than a whole result, because the site's own hours are always filtered from
-   * {@link FORECASTS} when they succeed — what varies is only whether the read failed, and a
-   * second copy of the success value would be a second thing to keep in step.
+   * One message for both arms, because the panel asks for them as one read and renders one notice
+   * for the pair ({@link siteForecasts} and {@link siteActuals} below). A message rather than a
+   * whole result, because the site's own hours are always filtered from {@link FORECASTS} and
+   * {@link ACTUALS} when they succeed — what varies is only whether the read failed, and a second
+   * copy of the success value would be a second thing to keep in step.
    */
   readonly siteForecastError: string | null;
 }

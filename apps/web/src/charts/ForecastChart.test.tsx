@@ -260,10 +260,10 @@ describe('ForecastChart', () => {
   });
 
   /*
-   * The seam (#530). The overlay is the one series that crosses it under a
-   * single treatment, so it carries it in its own stroke: solid over the hours
-   * it measured, dashed over the hours it only forecast, a dot where the two
-   * meet. The seam is the *overlay's* — `measured` on its own points — and
+   * The seam (#530). The overlay is the one mark here carrying both measurement
+   * and projection in one ink, so it carries the seam in its own stroke: solid
+   * over the hours it measured, dashed over the hours it only forecast, a dot
+   * where the two meet. The seam is the *overlay's* — `measured` on its own points — and
    * `chart-series.test.ts` owns how that resolves to an index.
    */
   const SEAMED_OVERLAY: ChartOverlaySeries = {
