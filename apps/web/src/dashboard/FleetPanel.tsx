@@ -1,4 +1,9 @@
-import { type Forecast, type GenerationReading, type Site } from '@cumulo/shared';
+import {
+  type FleetForecastAggregatePoint,
+  type Forecast,
+  type GenerationReading,
+  type Site,
+} from '@cumulo/shared';
 import { useId, useMemo, useState, type ReactElement } from 'react';
 
 import { forecastChartLegend } from '../charts/forecast-chart-legend';
@@ -176,7 +181,7 @@ const DEFAULT_RANGE: RangeHours = 24;
  * sentence appearing above it (#448).
  */
 const combineFleetQueries = (
-  forecasts: QueryState<readonly Forecast[]>,
+  forecasts: QueryState<readonly FleetForecastAggregatePoint[]>,
   actuals: QueryState<readonly GenerationReading[]>,
 ): QueryState<FleetSeries> => {
   if (forecasts.status === 'failed') {

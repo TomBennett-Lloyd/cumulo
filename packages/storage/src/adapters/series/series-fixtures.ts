@@ -1,9 +1,11 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
+  fleetRollupPartialSchema,
   forecastSchema,
   generationReadingSchema,
   utcIsoTimestampSchema,
+  type FleetRollupPartial,
   type Forecast,
   type GenerationReading,
   type UtcIsoTimestamp,
@@ -133,6 +135,74 @@ export const interleavedPage = [
   mlItem15h,
   physicsItem15h,
 ];
+
+/**
+ * The location the roll-up fixtures speak for — `locationId({ latitude: 51.5, longitude: -0.125 })`
+ * spelled out, because a fixture that called the function would agree with the key builder by
+ * construction and prove nothing about the stored string.
+ */
+export const LOCATION_ID = '51.50,-0.13';
+
+type PartialOverrides = Partial<Record<keyof FleetRollupPartial, unknown>>;
+
+/** One location's contribution to 14:00 — a three-site hour, banded. */
+export const partial = (overrides: PartialOverrides = {}): FleetRollupPartial =>
+  fleetRollupPartialSchema.parse({
+    validTime: '2026-07-30T14:00:00Z',
+    acPowerKw: 9.6,
+    p10AcPowerKw: 8.1,
+    p90AcPowerKw: 11.4,
+    hasUncertainty: true,
+    contributingSiteCount: 3,
+    contributingCapacityKw: 15,
+    ...overrides,
+  });
+
+/**
+ * The stored roll-up item, written out literally for `series-fixtures.ts`'s standing reason. Note
+ * what the key says and the per-site keys above do not: kind first, then the hour, then the
+ * location — `fleetRollupSortKey` explains why the order is inverted.
+ */
+export const rollupItem14h = {
+  siteId: '#FLEET',
+  sk: `FC#physics#T#2026-07-30T14:00:00Z#L#${LOCATION_ID}`,
+  expiresAt: EXPIRES_AT_14H,
+  locationId: LOCATION_ID,
+  validTime: '2026-07-30T14:00:00Z',
+  acPowerKw: 9.6,
+  p10AcPowerKw: 8.1,
+  p90AcPowerKw: 11.4,
+  hasUncertainty: true,
+  contributingSiteCount: 3,
+  contributingCapacityKw: 15,
+};
+
+/** The same hour from a second location — what a fleet read has to add to the first. */
+export const OTHER_LOCATION_ID = '53.35,-6.26';
+
+export const otherRollupItem14h = {
+  ...rollupItem14h,
+  sk: `FC#physics#T#2026-07-30T14:00:00Z#L#${OTHER_LOCATION_ID}`,
+  locationId: OTHER_LOCATION_ID,
+  acPowerKw: 4.4,
+  p10AcPowerKw: 3.9,
+  p90AcPowerKw: 5.1,
+  contributingSiteCount: 2,
+  contributingCapacityKw: 8,
+};
+
+export const rollupItem15h = {
+  ...rollupItem14h,
+  sk: `FC#physics#T#2026-07-30T15:00:00Z#L#${LOCATION_ID}`,
+  expiresAt: EXPIRES_AT_15H,
+  validTime: '2026-07-30T15:00:00Z',
+  acPowerKw: 7.2,
+  p10AcPowerKw: 6.0,
+  p90AcPowerKw: 8.8,
+};
+
+/** A roll-up page as DynamoDB returns it: sort-key order, so both locations at 14:00 then 15:00. */
+export const rollupPage = [rollupItem14h, otherRollupItem14h, rollupItem15h];
 
 export const offlineBaseClient = (requestHandler?: RecordingHttpHandler): DynamoDBClient =>
   new DynamoDBClient({

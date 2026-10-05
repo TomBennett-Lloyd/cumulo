@@ -1,4 +1,4 @@
-import type { Forecast, GenerationReading } from '@cumulo/shared';
+import type { FleetForecastAggregatePoint, GenerationReading } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
@@ -138,7 +138,8 @@ export type FleetActualsState =
 
 /** The two source calls this panel makes, once the forecast has answered. */
 export interface FleetSeries {
-  readonly forecasts: readonly Forecast[];
+  /** Already summed — one point per hour, as `FleetDataSource.fleetForecasts` now answers (#494). */
+  readonly forecasts: readonly FleetForecastAggregatePoint[];
   readonly actuals: FleetActualsState;
 }
 

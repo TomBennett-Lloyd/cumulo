@@ -65,7 +65,7 @@
 # billed under the storage stack they write into: directly, the weather table's
 # on-demand writes (#156, ≈ $0.30/mo at the canonical fleet), and indirectly,
 # the series writes every message it enqueues becomes once the forecast
-# consumer drains it (#258, ≈ $1.48/mo) — the larger of the two, and driven from
+# consumer drains it (#258, ≈ $1.78/mo) — the larger of the two, and driven from
 # here even though this stack never touches that table.
 
 output "queue_url" {

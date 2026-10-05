@@ -9,6 +9,7 @@ import {
 } from '@cumulo/shared';
 import type { BatchWriteOutcome, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 
+import { reportFleetRollupWrite } from './fleet-rollup-write';
 import { locationForecasts, type LocationForecastsOutcome } from './location-forecasts';
 import { simulateTrailingActuals } from './simulate-actuals';
 import type { SqsRecord } from './sqs-event';
@@ -29,8 +30,9 @@ import type { SqsRecord } from './sqs-event';
  * place to put one: SQS is at-least-once, and idempotency here is *structural*.
  * Every row is a Put over a sort key derived from the row itself — `T#<validTime>#
  * FC#physics` for a forecast, `T#<validTime>#GEN` for the simulated actual that
- * follows it (ADR 0002) — so a redelivered message rewrites exactly the rows it
- * wrote the first time. Both writes are deterministic in their inputs, the draw
+ * follows it (ADR 0002), and `FC#physics#T#<validTime>#L#<locationId>` for this
+ * location's fleet roll-up partial (ADR 0009) — so a redelivered message rewrites
+ * exactly the rows it wrote the first time. Both writes are deterministic in their inputs, the draw
  * behind a simulated actual included (`simulatedActualFromForecast`), which is
  * what makes the rest of this module's failure policy — fail the record, let the
  * queue redeliver — free rather than merely acceptable.
@@ -77,15 +79,21 @@ export type MessageOutcome = { readonly messageId: string } & (
  * `log` is declared here rather than only on the handler because this is the type
  * the handler binds once and hands down. `consumeMessage` writes no entry of its
  * own — it returns its outcome and the boundary decides what to say about it — but
- * it does hand `log` to `simulateTrailingActuals`, whose per-site outcomes are
- * reported where they happen rather than folded into this message's result
- * (`runCycle`'s per-location events in `apps/ingestion` are the same shape).
+ * it does hand `log` to `simulateTrailingActuals` and to the fleet roll-up write,
+ * whose outcomes are reported where they happen rather than folded into this
+ * message's result (`runCycle`'s per-location events in `apps/ingestion` are the
+ * same shape).
+ *
+ * `putFleetRollupPartials` joins the `series` narrowing for #494 and adds no AWS
+ * permission: it is a Put into the table this function already writes, under the
+ * `#FLEET` sentinel partition rather than a site's id, so `infra/forecast/iam.tf`
+ * is untouched.
  */
 export interface ConsumeMessageDeps {
   readonly sites: Pick<SiteAdapter, 'listActiveSitePhysicsAtLocation'>;
   readonly series: Pick<
     SeriesAdapter,
-    'putForecasts' | 'querySeriesRange' | 'putGenerationReadings'
+    'putForecasts' | 'querySeriesRange' | 'putGenerationReadings' | 'putFleetRollupPartials'
   >;
   /**
    * Structured-logging sink (`docs/standards/error-handling.md` rule 4). Injected
@@ -305,6 +313,14 @@ export const consumeMessage = async (
     { series: deps.series, log: deps.log, now: () => issuedAt },
     sites.map((site) => site.id),
   );
+
+  // This location's contribution to the fleet aggregate (ADR 0009, #494), computed from the
+  // forecasts already in hand and written as one item per hour. Beside the simulation above and
+  // under the identical policy — reported to the log, never failing the record — for the identical
+  // reason: the message's own work is stored, and redelivering a whole location's horizon to retry
+  // a derived write would cost more than the write is worth. Unlike the simulation it reads
+  // nothing, so it runs after both writes without widening the invocation's storage budget.
+  await reportFleetRollupWrite({ series: deps.series, log: deps.log }, location, forecasts, sites);
 
   return {
     messageId,

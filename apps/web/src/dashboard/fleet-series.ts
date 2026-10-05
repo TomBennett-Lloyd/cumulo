@@ -1,10 +1,8 @@
 import {
   aggregateFleetActuals,
-  aggregateFleetForecast,
   contributingCapacityKwByHour,
   type FleetActualsPoint,
-  type FleetForecastPoint,
-  type Forecast,
+  type FleetForecastAggregatePoint,
   type GenerationReading,
   type Site,
   type UtcIsoTimestamp,
@@ -20,17 +18,24 @@ import { fleetNightClassifier } from './fleet-night';
  * Everything here is pure and takes what it reads
  * (docs/standards/structure.md rule 1), so it is unit-testable without a DOM.
  *
- * The summing is not here. `aggregateFleetForecast` / `aggregateFleetActuals`
- * in `@cumulo/shared` own every kilowatt of arithmetic
+ * The summing is not here, and since #494 half of it is not even in this app.
+ * The fleet *forecast* arrives already summed — one point per hour from
+ * `FleetDataSource.fleetForecasts`, computed by the forecast producer in live
+ * mode and by `@cumulo/shared`'s `fleetForecastAggregate` in the demo — so this
+ * file no longer calls `aggregateFleetForecast` at all. The fleet *actuals* are
+ * still raw readings and `aggregateFleetActuals` still sums them here, because
+ * their roll-up is the fast-follow ticket (ADR 0009); when it lands, that call
+ * and the actuals divisor below leave together.
+ *
+ * Either way every kilowatt of arithmetic is `@cumulo/shared`'s
  * (docs/standards/architecture.md rule 3), including the comonotonic band
- * addition whose statistical position is stated in that module; this file
- * *calls* them, joins their output to the chart's shape and counts what went
- * into it. There is deliberately no `+` over a power value below — if one
- * appears, a second definition of "the fleet total" has been created. The
- * percent arm is not an exception: dividing an already-summed hour by an
- * already-summed divisor rescales one total rather than computing a second, and
- * the divisor itself is summed in `@cumulo/shared`
- * (`contributingCapacityKwByHour`).
+ * addition whose statistical position is stated in that module. There is
+ * deliberately no `+` over a power value below — if one appears, a second
+ * definition of "the fleet total" has been created. The percent arm is not an
+ * exception: dividing an already-summed hour by an already-summed divisor
+ * rescales one total rather than computing a second, and each divisor is summed
+ * upstream — the forecast's travels on the point as `contributingCapacityKw`,
+ * the actuals' is `contributingCapacityKwByHour`'s.
  *
  * This is also the seam where the display unit is applied, and the only one.
  * Below it — storage, the API, `@cumulo/shared` — everything is kW and stays
@@ -52,7 +57,7 @@ import { fleetNightClassifier } from './fleet-night';
  * Seeded from the first point rather than from `Infinity` so an empty series answers 0 instead of a
  * number no caller could render.
  */
-export const minimumContributingSites = (points: readonly FleetForecastPoint[]): number =>
+export const minimumContributingSites = (points: readonly FleetForecastAggregatePoint[]): number =>
   points.reduce(
     (lowest, point) => Math.min(lowest, point.contributingSiteCount),
     points[0]?.contributingSiteCount ?? 0,
@@ -83,10 +88,10 @@ export const minimumContributingSites = (points: readonly FleetForecastPoint[]):
  * instant" is true of the code rather than true by luck of the spelling.
  */
 export const joinFleetSeries = (
-  points: readonly FleetForecastPoint[],
+  points: readonly FleetForecastAggregatePoint[],
   actuals: readonly FleetActualsPoint[],
 ): readonly ForecastChartPoint[] => {
-  const forecastByHour = new Map<UtcIsoTimestamp, FleetForecastPoint>(
+  const forecastByHour = new Map<UtcIsoTimestamp, FleetForecastAggregatePoint>(
     points.map((point) => [point.validTime, point]),
   );
   const measuredByHour = new Map<UtcIsoTimestamp, number>(
@@ -213,11 +218,15 @@ const inPercentOfCapacity = (
 /**
  * The joined series in percent of the capacity actually behind each hour.
  *
- * The divisors come from the *unaggregated* per-site reads rather than from the aggregate, because
- * the aggregate does not carry them: `contributingSiteCount` is a count, and a count times the mean
- * site is only the right divisor on a fleet of identical sites. The exact per-hour sum is
- * `@cumulo/shared`'s to compute and that module's docblock owns the reasoning; both reads are
- * already in the caller's hand, so it costs one pass each.
+ * **The forecast's divisor now travels on the aggregate**, as `contributingCapacityKw` (#494). It is
+ * still the exact per-hour sum over the sites that reported — a count times the mean site is only
+ * the right divisor on a fleet of identical sites — but it is summed once where the fleet is summed
+ * rather than re-derived here from rows this app no longer receives in live mode.
+ *
+ * **The actuals' divisor is still computed here**, from the raw readings, because fleet actuals are
+ * still raw readings (ADR 0009's fast follow). Keeping the two divisors apart is not a transitional
+ * accident: the sites that forecast an hour and the sites that reported it need not be the same, and
+ * one divisor over both series would put a percentage over capacity that was never behind it.
  *
  * The maps are keyed by `UtcIsoTimestamp` and read here by the joined point's `validTimeIso`, which
  * is the same string with the brand dropped at the chart's boundary — read through
@@ -225,13 +234,12 @@ const inPercentOfCapacity = (
  */
 const percentOfCapacitySeries = (
   points: readonly ForecastChartPoint[],
-  forecasts: readonly Forecast[],
+  forecastPoints: readonly FleetForecastAggregatePoint[],
   readings: readonly GenerationReading[],
   sites: readonly Site[],
 ): readonly ForecastChartPoint[] => {
-  const forecastCapacityKwByHour: ReadonlyMap<string, number> = contributingCapacityKwByHour(
-    forecasts,
-    sites,
+  const forecastCapacityKwByHour: ReadonlyMap<string, number> = new Map(
+    forecastPoints.map((point) => [point.validTime, point.contributingCapacityKw]),
   );
   const actualCapacityKwByHour: ReadonlyMap<string, number> = contributingCapacityKwByHour(
     readings,
@@ -251,10 +259,10 @@ const percentOfCapacitySeries = (
  * The fleet's two reads, summed and joined into what the chart draws — the pipeline under one name.
  *
  * One function rather than three calls at the use site, because the three are one intent and
- * because a caller memoizing them is memoizing this and nothing else. `aggregateFleetForecast`'s
- * output is used twice and computed once, which is why the completeness count travels with the
- * points rather than being asked for separately: split across two calls, memoizing the points
- * would have left the count re-summing the whole fleet on every render.
+ * because a caller memoizing them is memoizing this and nothing else. The forecast aggregate is
+ * read three times — joined, divided by, and counted — which is why the completeness count travels
+ * with the points rather than being asked for separately: split across two calls, memoizing the
+ * points would have left the count walking the whole fleet again on every render.
  *
  * `sites` is here rather than in `joinFleetSeries` because night is not a property of the join.
  * The join's business is the union x-domain and what each series has to say at each hour; where
@@ -275,15 +283,14 @@ const percentOfCapacitySeries = (
  * the kW ones; the `'kw'` arm is today's pipeline unchanged, value for value.
  */
 export const fleetChartAggregate = (
-  forecasts: readonly Forecast[],
+  forecastPoints: readonly FleetForecastAggregatePoint[],
   readings: readonly GenerationReading[],
   sites: readonly Site[],
   unit: ChartUnit,
 ): FleetChartAggregate => {
-  const forecastPoints = aggregateFleetForecast(forecasts);
   const joined = joinFleetSeries(forecastPoints, aggregateFleetActuals(readings));
   const scaled =
-    unit === 'kw' ? joined : percentOfCapacitySeries(joined, forecasts, readings, sites);
+    unit === 'kw' ? joined : percentOfCapacitySeries(joined, forecastPoints, readings, sites);
   const isNight = fleetNightClassifier(sites);
 
   return {

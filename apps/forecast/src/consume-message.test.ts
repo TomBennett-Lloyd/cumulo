@@ -1,103 +1,27 @@
-import type { Forecast, SitePhysics, UtcIsoTimestamp } from '@cumulo/shared';
+import type { SitePhysics, UtcIsoTimestamp } from '@cumulo/shared';
 import { StorageError } from '@cumulo/storage';
-import type { BatchWriteOutcome, SeriesRangeResult } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
-import { consumeMessage, type ConsumeMessageDeps, type MessageOutcome } from './consume-message';
+import { consumeMessage, type MessageOutcome } from './consume-message';
 import {
   ISSUED_AT,
   RANELAGH_ID,
   RATHMINES_ID,
+  deps,
+  emptyRecorder,
   reading,
   recordOf,
-  rejectedWith,
   sitePhysics,
 } from './forecast-fixtures';
+import { fleetRollupWriteEvent } from './fleet-rollup-write';
 import { simulatedActualsOutcomeEvent } from './simulate-actuals';
 
 /**
- * One record's processing, exercised through its only public surface: give it a
- * record and two adapter doubles, and read the outcome it returns.
- *
- * The doubles are deliberately thin — they answer or they reject — because the
- * behaviour under test is the *conversion*: which adapter answer becomes which
- * outcome, and which throw becomes which `failed` detail. Anything that mocked an
- * AWS client and asserted the mock was called would prove nothing
- * (`docs/standards/testing.md` rule 3).
+ * One record's processing, exercised through its only public surface: give it a record and the
+ * adapter doubles from `forecast-fixtures.ts`, and read the outcome it returns. That module's
+ * `deps` docblock says why the doubles live there and what they are deliberately thin about.
  */
 
-/** What the doubles saw, so a test can assert on writes without a spy framework. */
-interface Recorder {
-  readonly written: Forecast[][];
-  readonly locationsQueried: string[];
-  /** Site ids whose trailing window was read — the simulated-actuals producer's first move. */
-  readonly simulatedFor: string[];
-  readonly entries: Record<string, unknown>[];
-}
-
-const emptyRecorder = (): Recorder => ({
-  written: [],
-  locationsQueried: [],
-  simulatedFor: [],
-  entries: [],
-});
-
-interface DepsInput {
-  readonly recorder: Recorder;
-  /** What the sites lookup answers with; defaults to one Ranelagh site. */
-  readonly sites?: readonly SitePhysics[];
-  /** Rejected by the sites lookup instead of answering. */
-  readonly sitesRejectsWith?: unknown;
-  /** What the series write answers with; defaults to a complete drain. */
-  readonly storeOutcome?: BatchWriteOutcome;
-  /** Rejected by the series write instead of answering. */
-  readonly storeRejectsWith?: unknown;
-  /** Rejected by the trailing-window read instead of answering with an empty window. */
-  readonly trailingRejectsWith?: unknown;
-  readonly now?: () => UtcIsoTimestamp;
-}
-
-const deps = (input: DepsInput): ConsumeMessageDeps => ({
-  sites: {
-    listActiveSitePhysicsAtLocation: (locationId: string): Promise<SitePhysics[]> => {
-      input.recorder.locationsQueried.push(locationId);
-      return input.sitesRejectsWith === undefined
-        ? Promise.resolve([...(input.sites ?? [sitePhysics()])])
-        : rejectedWith(input.sitesRejectsWith);
-    },
-  },
-  series: {
-    putForecasts: (forecasts): Promise<BatchWriteOutcome> => {
-      if (input.storeRejectsWith !== undefined) {
-        return rejectedWith(input.storeRejectsWith);
-      }
-      input.recorder.written.push([...forecasts]);
-      return Promise.resolve(input.storeOutcome ?? { status: 'complete' });
-    },
-    // The simulated-actuals producer's two calls. The window answers empty unless a test rejects
-    // it, so every existing case runs the producer over a site with nothing to simulate — which
-    // is what makes "the message's outcome does not depend on it" the default rather than a
-    // specially wired case.
-    querySeriesRange: (siteId): Promise<SeriesRangeResult> => {
-      input.recorder.simulatedFor.push(siteId);
-      return input.trailingRejectsWith === undefined
-        ? Promise.resolve({ points: [], complete: true })
-        : rejectedWith(input.trailingRejectsWith);
-    },
-    putGenerationReadings: (): Promise<BatchWriteOutcome> =>
-      Promise.resolve({ status: 'complete' }),
-  },
-  log: (entry) => {
-    input.recorder.entries.push(entry);
-  },
-  now: input.now ?? ((): UtcIsoTimestamp => ISSUED_AT),
-});
-
-/**
- * The `detail` of an outcome that carries one, or a failure naming what came back
- * instead. A typed narrowing rather than `expect.stringContaining` inside a
- * `toMatchObject`, which types as `any` and would let a wrong-shaped outcome pass.
- */
 const detailOf = (outcome: MessageOutcome): string => {
   if (outcome.status !== 'failed' && outcome.status !== 'malformed') {
     throw new Error(`expected a failed or malformed outcome, got '${outcome.status}'`);
@@ -362,10 +286,13 @@ describe('consuming one weather message', () => {
 
     await consumeMessage(deps({ recorder }), recordOf('m-1', [reading()]));
 
-    // The only entries are the simulated-actuals producer's, which reports per site where it
-    // happens rather than folding its results into this message's outcome (#264). Nothing here
-    // describes the message.
-    expect(recorder.entries.map((entry) => entry.event)).toEqual([simulatedActualsOutcomeEvent]);
+    // The only entries belong to the two derived writers — the simulated-actuals producer (#264)
+    // and the fleet roll-up (#494) — each of which reports where it happens rather than folding
+    // its result into this message's outcome. Nothing here describes the message.
+    expect(recorder.entries.map((entry) => entry.event)).toEqual([
+      simulatedActualsOutcomeEvent,
+      fleetRollupWriteEvent,
+    ]);
   });
 
   it('writes rows attributed to the site they were forecast for', async () => {
