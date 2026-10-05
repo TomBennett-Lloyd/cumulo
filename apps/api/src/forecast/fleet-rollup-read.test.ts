@@ -186,6 +186,39 @@ describe('the roll-up answers', () => {
     expect(logged).toEqual([]);
   });
 
+  /**
+   * The completeness decision, pinned rather than argued: the check is per **location**, so a
+   * location that wrote some of its hours and not others is summed rather than refused, and the
+   * short hour is **labelled** by the `contributingSiteCount` that travels on it — which
+   * `minimumContributingSites` folds and `partialAggregateNotice` renders
+   * (`docs/standards/error-handling.md` rule 5). ADR 0009's 2026-10-05 (#531) amendment states why
+   * an expected-*hours* notion is not this route's to hold.
+   *
+   * This case does not fail on the pre-#531 code. It is here so the amendment has an asserting test
+   * rather than standing prose (`docs/standards/prose.md` rule 2): a change that started refusing
+   * the short hour, or that stopped carrying the count that labels it, fails here.
+   */
+  it('sums a location that wrote half its hours, and the short hour says how thin it is', async () => {
+    const twoPm = '2026-07-31T14:00:00Z';
+    const { deps, siteReads, logged } = harness({
+      rows: [
+        { locationId: DUBLIN, partial: partial({ acPowerKw: 5, contributingSiteCount: 2 }) },
+        {
+          locationId: DUBLIN,
+          partial: partial({ validTime: twoPm, acPowerKw: 6, contributingSiteCount: 2 }),
+        },
+        { locationId: BRISTOL, partial: partial({ acPowerKw: 3, contributingSiteCount: 1 }) },
+      ],
+    });
+
+    const points = pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
+
+    expect(points.map((point) => point.acPowerKw)).toEqual([8, 6]);
+    expect(points.map((point) => point.contributingSiteCount)).toEqual([3, 2]);
+    expect(siteReads).toEqual([]);
+    expect(logged).toEqual([]);
+  });
+
   it('answers an empty fleet without reading anything at all', async () => {
     const { deps, rollupReads, siteReads, logged } = harness();
 
