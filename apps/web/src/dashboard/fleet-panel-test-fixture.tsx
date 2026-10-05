@@ -285,6 +285,9 @@ export class CountingFleetSource implements FleetDataSource {
    */
   readonly siteForecastRequests: string[] = [];
 
+  /** The same record for the site's measured hours, which the overlay draws behind its seam (#530). */
+  readonly siteActualsRequests: string[] = [];
+
   /** Counted separately from the forecasts: "neither call was spent" is two facts, not one. */
   private actualsCalls = 0;
 
@@ -339,10 +342,27 @@ export class CountingFleetSource implements FleetDataSource {
     );
   };
 
-  // The overlay is the site's median and nothing else, so the site's actuals are never asked for.
-  // A throw rather than an empty answer: it is a bug worth a loud crash, not a state to render.
-  readonly siteActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
-    throw new Error('CountingFleetSource: the fleet panel must not call siteActuals');
+  /**
+   * The same site's measured hours — the other half of the overlay since #530, and counted for
+   * the same reason {@link siteForecasts} is: the two are one metered call in the deployed source,
+   * so the pair of counts is what would catch a panel that had started asking twice as often as
+   * it draws.
+   *
+   * Filtered from {@link ACTUALS}, so the site's solid stretch really is a component of the
+   * fleet's own actuals drawn under it. It fails with `siteForecastError` too: the panel asks for
+   * both as one read and renders one notice for the pair, so a fixture that could fail only half
+   * of it would be describing a state the panel cannot reach.
+   */
+  readonly siteActuals = (
+    siteId: string,
+    range: RangeHours,
+  ): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+    this.siteActualsRequests.push(`${siteId}@${String(range)}`);
+    return Promise.resolve(
+      this.canned.siteForecastError === null
+        ? { kind: 'ok', value: ACTUALS.filter((reading) => reading.siteId === siteId) }
+        : { kind: 'error', error: { code: 'network', message: this.canned.siteForecastError } },
+    );
   };
 
   readonly getSiteForecast = (): Promise<FleetSourceResult<readonly Forecast[]>> => {

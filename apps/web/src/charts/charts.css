@@ -96,13 +96,14 @@
   stroke-width: 1;
 }
 
-/* The measurement seam, and the only dashed mark on this canvas (#284 D11).
- * Same ink and same weight — it is still recessive chrome, not data — but
- * dashed, which is what carries the meaning: `docs/design/chart-treatment.md`
+/* The measurement seam, and the only dashed mark in this canvas's chrome
+ * (#284 D11). Same ink and same weight — it is still recessive chrome, not data
+ * — but dashed, which is what carries the meaning: `docs/design/chart-treatment.md`
  * bans a dashed *grid* precisely because a dash reads as "threshold", and a
- * threshold is what this rule is. Dashing the forecast line instead stays
- * banned; the seam is marked once, in chrome (#290, and the horizon bullet in
- * that document).
+ * threshold is what this rule is. The fleet's own lines are not dashed and need
+ * no seam of their own, because none of them crosses it (#290, and the horizon
+ * bullet in that document); `.forecast-chart-overlay-projected` below is the one
+ * series that does.
  *
  * `stroke-dasharray` is a length pair, so it reaches the page through the
  * documented allow-list residual in stylelint.config.mjs, the same way
@@ -195,6 +196,20 @@
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* The overlay's stretch past the measurement seam (#530). It is the one series
+ * that crosses the seam under a single treatment, so the dash is where a reader
+ * learns the site's line has stopped reporting and started projecting — the
+ * horizon bullet in `docs/design/chart-treatment.md` carries the argument.
+ *
+ * A longer dash and a longer gap than `.forecast-chart-horizon`'s pattern
+ * above, because this is drawn at the data weight rather than the hairline's and
+ * the two have to stay distinguishable where the overlay crosses the rule. Same
+ * allow-list residual route as that rule, and for the same reason: no
+ * dash-scale token to spend. */
+.forecast-chart-overlay-projected {
+  stroke-dasharray: 9 6;
 }
 
 /* An overlay hour left alone between two gaps, in the marker vocabulary the
