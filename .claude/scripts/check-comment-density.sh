@@ -7,7 +7,7 @@
 # `.test.*` and `.spec.*` are excluded — docs/standards/testing.md rule 10 splits
 # those lanes, and a test's prose is its own question. `.sh` is NOT scanned: those
 # trees contain none, and the repository's shell lives under `.claude/scripts/`,
-# which this gate's scope does not reach (#554).
+# which this gate's scope does not reach (#558).
 #
 # WHAT A COMMENT LINE IS, and it is a definition rather than a measurement. A
 # non-blank line counts as a comment line when it lies inside a block comment, or
