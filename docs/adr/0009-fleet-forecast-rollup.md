@@ -66,6 +66,8 @@ A partial can only carry a field that is an **additive per-hour total**, because
 
 The roll-up is keyed by kind, and a kind names a model, so `FLEET_ROLLUP_FORECAST_KIND` declares **physics** once for the producer and the reader both. That also closes a latent double-count: today's route returns every model it finds and lets the client sum them, which `aggregateFleetForecast`'s own docblock warns against, and which is harmless only because `packages/forecast` emits physics alone. When the ML correction layer lands, _which_ model the fleet chart shows becomes a product decision made in one place rather than one decided by what happens to be in the table.
 
+> **Amended 2026-10-05 (#531)**: the "latent double-count" this paragraph names is not the mechanism the code has. The decision stands and the amendment strengthens it; see `## Amendments`.
+
 ### The fallback, and its removal trigger
 
 For **one release**, a `#FLEET` window that is missing — or that is missing any location the active fleet has sites at, or that was read short by a page budget — falls back to the fan-out plus a server-side aggregate, and logs exactly one line:
@@ -124,7 +126,7 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 
 ## Amendments
 
-No stated value has moved. This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
+No stated value has moved — the 2026-10-05 entry below records two corrections that are not value moves. This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
 
 **The value: the fan-out's measured latency, 1,753.9 ms p50 / 2,998.9 ms p95 warm** at the canonical 12-location × 5-site fleet. It is stated in `## Context` above, it is the whole reason ADR 0002's revisit trigger 4 is met, and it is quoted by five sites that argue from it rather than merely citing it:
 
@@ -137,3 +139,32 @@ No stated value has moved. This section opens with a **restatement ledger**, whi
 Mutable carriers are trued up in the same change as the value (rule 11); the ADR carrier is not. The list is a **floor, not a census**: it is what a sweep found, so the sweep is stated — `command grep -rn` over `docs/`, `apps/`, `packages/` and `infra/` (excluding `node_modules`) on two arms, run 2026-09-11: the literal `1,753.9|2,998.9`, and a claim-shaped arm `p50|p95` for a carrier that paraphrases the measurement without repeating either figure. The second arm's hits were read; outside the five above they are unrelated latency prose. A carrier that neither repeats a figure nor uses those words is unsearched by this sweep rather than shown absent.
 
 **A note on what this value is not.** The figure is a _measurement of what was replaced_, so it cannot move under this document the way a parameter can — nothing in the repo can re-measure a fan-out that no longer serves this route. What can happen is that it is re-measured on the fallback arm before #507 removes it, which would be a new measurement of a different thing and belongs in that ticket, not here.
+
+### 2026-10-05 (#531) — the completeness check's granularity, and the model hazard it was wrong about
+
+Two corrections, no change to the decision. Both came out of #494's own review, were logged as `docs/tech-debt.md` entries, and were raised as [#531](https://github.com/TomBennett-Lloyd/cumulo/issues/531).
+
+**1. Completeness is per location, deliberately, and not per hour.** `### The fallback, and its removal trigger` above compares location _sets_: a `#FLEET` window missing any location the active fleet has sites at falls back. A location that wrote _some_ of its hours and not others is therefore summed, and the hours it is short of are summed over the remaining locations. That is one dimension in from the half-truth the fallback exists to refuse, and the state is reachable — `writeFleetRollup`'s `store-partial` outcome is a logged-and-retried policy, not an impossibility.
+
+It stays per location, for three reasons the route cannot argue its way out of:
+
+- **An expected-_hours_ notion is not this route's to hold.** A cycle is twelve independent invocations with no end-of-run event (`## Context` above), so mid-cycle the locations legitimately hold _different_ hour sets — the mixing `## Consequences` already accepts. Any within-read agreement test therefore fires on normal operation, once per cycle, and falls back to the fan-out this ADR exists to stop paying for.
+- **The two candidates both cost more than the gap.** A per-location hour count written beside the partials is the second _representation_ option A above argues against; a producer that failed the record on a partial drain trades a missing hour for a whole location's horizon redelivered, which `apps/forecast/src/fleet-rollup-write.ts` refuses by design and says why.
+- **The residual is labelled, not silent**, which is the half that makes it acceptable under `docs/standards/error-handling.md` rule 5 rather than merely cheap. `contributingSiteCount` travels on every point, `minimumContributingSites` (`apps/web/src/dashboard/fleet-series.ts`) folds it to the thinnest hour, and `partialAggregateNotice` (`apps/web/src/dashboard/state-copy.ts`) renders it. A short hour reads as a fleet whose sites did not all report, because that is what it is. The fan-out arm has the same property, so the two arms agree about this too. `apps/api/src/forecast/fleet-rollup-read.test.ts` pins it as a case rather than as this paragraph.
+
+What would reopen it: [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507), which removes the fan-out arm and so removes the fallback the gap currently hides behind, and any consumer that needs the fleet total without a count beside it.
+
+**2. The "latent double-count" in `### One model, named once` was wrong when written.** `aggregateFleetForecast` does not sum two models' views of one site-hour: `groupOnePerSitePerHour` keeps one entry per `siteId` per hour and `forecastSupersedes` is `>=` on `issuedAt`, so same-cycle physics and ML rows collapse to whichever arrived last in input order. An unfiltered fleet total is therefore not inflated — it is a total whose _model_ was decided by row order, and the sort key orders `FC#ml` before `FC#physics`, so the model that survives today is luck rather than design. That is a better reason for naming one model, not a worse one, so the decision is unchanged; what moves is which failure it prevents. `packages/shared/src/fleet-rollup.test.ts` asserts the collapse so the claim has a test under it.
+
+The filter also moved, which is what #531 changed in code: `fleetForecastAggregate` and `fleetRollupPartials` now **take** the forecast kind, so the producer, this ADR's fallback arm and the browser's demo source are held to one model selection by the compiler rather than by three call sites each remembering to filter.
+
+**Known quoters of the corrected claim** — a floor, not a census. Sweep run 2026-10-05 from the worktree root, two arms: `command grep -rnE 'double-count|double count' docs apps packages infra` for the literal, and `command grep -rnE 'two models|second model|physics and (an )?ML'` over the same roots for a carrier that paraphrases it. Both arms' hits were read; the ones that carry _this_ claim are:
+
+- `packages/shared/src/aggregation.ts` — the root carrier every other site cites, and the only one that stated the mechanism. Trued up in the same change (rule 11).
+- `packages/shared/src/fleet-rollup.ts` — `FLEET_ROLLUP_FORECAST_KIND`'s docblock. Trued up.
+- `apps/forecast/src/fleet-rollup-write.ts` — `rolledUpForecasts`'s docblock, deleted with the helper the shared filter replaces.
+- `apps/api/src/forecast/fleet-rollup-read.ts` — `aggregateFromFanOut`'s docblock. Trued up.
+- `docs/review-feedback.md`'s 2026-09-11 (#494) entry — a past-tense record of what that PR claimed, left as written: the entries are the record.
+- `### One model, named once` above — immutable, annotated inline rather than reworded.
+
+Everything else both arms returned is unrelated: `apps/ingestion/src/cycle-budget.test.ts` (visit hours), `packages/storage/scripts/smoke/series-checks.ts` (a window boundary), `infra/README.md` (cross-stack cost rows), and the `two models` hits in ADR 0002, `docs/tech-debt.md` and the storage fixtures, which count models rather than claiming anything about summing them.
