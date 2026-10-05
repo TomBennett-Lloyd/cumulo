@@ -223,8 +223,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Chromium only, matching the config's single project: downloading engines
-      # no project ever launches is the easiest minute in this job to waste.
+      # Chromium only — the one engine both of the config's projects name:
+      # downloading engines no project ever launches is the easiest minute in
+      # this job to waste.
       # `--with-deps` is the half that is CI-only — it apt-installs the shared
       # libraries a bare runner image lacks, which a developer's machine has.
       - name: install chromium (+ system deps)
