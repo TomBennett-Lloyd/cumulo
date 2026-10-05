@@ -21,9 +21,9 @@ import { boxOf, layoutBoxOf, settledBoxOf } from './layout-box';
  * regression test. These reproduce them by construction, which is what
  * `testing.md` rule 4 asks.
  *
- * The `webServer` still builds and boots for this file, because the config boots
- * it once per run rather than per spec. That costs this file nothing it can avoid
- * and buys it nothing either.
+ * The `webServer`s still build and boot for this file, because the config boots
+ * them once per run rather than per spec. That costs this file nothing it can
+ * avoid and buys it nothing either.
  *
  * One export deliberately has no case here: `polledSample`'s "resolved without
  * the sample it settled on" guard. It reports a violated invariant rather than a

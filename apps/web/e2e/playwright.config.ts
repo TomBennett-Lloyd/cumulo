@@ -165,10 +165,10 @@ export default defineConfig({
   /*
    * Two servers, started in parallel by Playwright, serving two builds of this
    * same tree: the app at a domain root, and the app under a path. They cost
-   * one `vite build` each — 0.6 s on the machine this was written on, which is
-   * what makes the second one affordable beside a Chromium boot — and they
-   * write to separate out dirs, because each build empties its own first
-   * (`base-path-preview.ts` owns that argument).
+   * one `vite build` each, which is what makes the second one affordable beside
+   * a Chromium boot — `.github/workflows/ci.yml`'s `web-e2e` cost block owns
+   * what that run costs — and they write to separate out dirs, because each
+   * build empties its own first (`base-path-preview.ts` owns that argument).
    */
   webServer: [
     {

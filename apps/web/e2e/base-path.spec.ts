@@ -24,8 +24,8 @@ import { routeBasemap } from './hermetic-basemap';
  * scraper does not resolve a relative URL against the page it came from. Those
  * two are spared for different reasons — Vite's HTML asset table includes
  * `og:image` content and excludes external absolute URLs from the rewrite,
- * while `og:url` is not in the table at all — and `index.html`'s comment beside
- * them owns the mechanism. Asserting both anyway costs one line and is what
+ * while `og:url` is not in the table at all — and `apps/web/index.html`'s
+ * comment beside them owns the mechanism. Asserting both anyway costs one line and is what
  * would catch the table gaining an entry.
  *
  * Nothing here asserts a *value*: not the deploy's base path, which

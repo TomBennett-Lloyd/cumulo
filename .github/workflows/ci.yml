@@ -173,8 +173,8 @@ jobs:
         run: bash .claude/scripts/check-web-bundle.sh
 
   # The browser lane: Playwright drives the shipping composition in a real
-  # Chromium, against a production build the config's own webServer command
-  # makes (apps/web/e2e/playwright.config.ts owns that; nothing is restated
+  # Chromium, against the production builds the config's own webServer commands
+  # make (apps/web/e2e/playwright.config.ts owns those; nothing is restated
   # here).
   #
   # (a) Blocking, not advisory, and that is the whole decision. It runs on every
@@ -194,7 +194,8 @@ jobs:
   #     is the per-commit local composite, and it stays browser-binary-free and
   #     fast on purpose — a developer who has never run `playwright install`
   #     must still be able to run it, and it must not grow a multi-minute step.
-  #     This lane needs an installed browser plus a production build. So the
+  #     This lane needs an installed browser plus the production builds its
+  #     servers make. So the
   #     split is by cost, not by importance, and it is drawn *through* the lane
   #     rather than around it: the lane's lint and typecheck half is in `verify`
   #     already (the `tsc -p e2e` appended to the web package's `typecheck`), so
@@ -205,7 +206,7 @@ jobs:
   # (c) Cost, written down rather than left to be rediscovered: ~2–3 min, in
   #     parallel with the jobs above, so repo-wide wall time is unchanged.
   #     Roughly — install ≈1 min, the chromium download ≈30–60 s uncached, the
-  #     vite build ≈5 s, the specs themselves under a minute. $0: this is a
+  #     vite builds ≈5 s, the specs themselves under a minute. $0: this is a
   #     public repo, whose Actions minutes are free. Caching the browser
   #     binaries is deliberately *not* done yet — a cache key has its own
   #     staleness failure mode, and it buys nothing until the download is
