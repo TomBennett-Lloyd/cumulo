@@ -300,8 +300,10 @@ describe('the fallback', () => {
   it('sums one model only, so the two arms cannot answer differently', async () => {
     // The fan-out reads whatever the partition holds, an ML row for the same site-hour included;
     // the roll-up arm only ever sums the rolled-up model. Unfiltered, this arm would read 3.1 here
-    // rather than 2.8 — not twice the fleet but the *other model's* fleet, the ML row winning the
-    // `issuedAt` tie as the last row in Query order — exactly when the fallback fired.
+    // rather than 2.8 — not twice the fleet but the *other model's* fleet, this fixture's ML row
+    // taking the `issuedAt` tie by being listed last. Which model wins is the point rather than
+    // which one does: `seriesSortKey` puts `FC#ml` before `FC#physics`, so an ascending Query hands
+    // the tie to physics and production survives by sort-key luck (ADR 0009's 2026-10-05 entry).
     const physics = forecast({ acPowerKw: 2.8 });
     const { deps } = harness({
       pointsBySite: {
