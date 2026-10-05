@@ -46,10 +46,11 @@ import { forecastsIn } from './series-split';
  * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
  * every site carries coordinates, so the expected set is the active sites' `locationId`s — the same
  * `locationId` ingestion keys its messages on, over the same `activeFleetSites` predicate
- * ingestion's `activeFetchLocations` takes, so the two sets are the same partition of the fleet by
- * construction rather than by agreement. It is **not** checked per hour, which is a decision rather
- * than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states it and what makes
- * the residual honest rather than silent.
+ * `activeFetchLocations` takes, so neither set can drift from the other on activity. A cycle that
+ * deferred a location for budget is a different dimension and is what `incomplete` is for. The
+ * check is **not** per hour, which is a decision rather than an omission: ADR 0009's
+ * `## Amendments` entry for 2026-10-05 (#531) states it and what makes the residual honest rather
+ * than silent.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
  * that explain it, so "has a full cycle written every location yet?" is one log query. When the
@@ -111,19 +112,15 @@ const expectedLocations = (sites: readonly FleetSite[]): ReadonlySet<string> =>
 /**
  * Whether a roll-up read can answer for this fleet, and if not, why.
  *
- * An empty fleet expects nothing, so an empty partition answers it completely — which is the right
- * answer and not a lucky one: a fleet with no sites has a fleet total of nothing, and falling back
- * to a fan-out over zero sites to discover that would be the same empty answer at the cost of a
- * round trip.
+ * `expected` is never empty: {@link readFleetForecastAggregate} answers a fleet with no active
+ * sites before reaching here, and a site always has a `locationId`. The empty-fleet reasoning lives
+ * at that early return, where the answer is given.
  */
 const fallbackReason = (
   read: FleetRollupRangeResult,
   expected: ReadonlySet<string>,
 ): FallbackReason | undefined => {
   const present = new Set(read.rows.map((row) => row.locationId));
-  if (expected.size === 0) {
-    return undefined;
-  }
   if (present.size === 0) {
     return 'absent';
   }

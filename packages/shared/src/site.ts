@@ -130,9 +130,10 @@ export type FleetSite = z.infer<typeof fleetSiteSchema>;
  * inactive, so every consumer wanting "the fleet still being forecast" narrows it, and an arm that
  * narrows differently answers a different question under the same name: a roll-up read whose
  * expected-partial set and whose nameplate divisor disagreed about one site would report a fleet
- * under-performing against capacity that cannot generate (#531). Ingestion publishes for exactly
- * this set, so a producer's locations and a reader's expected locations are one predicate's output
- * rather than two copies of it.
+ * under-performing against capacity that cannot generate (#531). Ingestion narrows by this same
+ * predicate (`activeFetchLocations`) before a cycle picks which of those locations it has budget
+ * for, so a producer's locations and a reader's expected locations cannot disagree about *activity*
+ * — which is the dimension this function owns, and the only one it claims.
  */
 export const activeFleetSites = (sites: readonly FleetSite[]): readonly FleetSite[] =>
   sites.filter((site) => site.active);

@@ -158,12 +158,14 @@ What would reopen it: [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/5
 
 The filter also moved, which is what #531 changed in code: `fleetForecastAggregate` and `fleetRollupPartials` now **take** the forecast kind, so the producer, this ADR's fallback arm and the browser's demo source are held to one model selection by the compiler rather than by three call sites each remembering to filter.
 
-**Known quoters of the corrected claim** — a floor, not a census. Sweep run 2026-10-05 from the worktree root, two arms: `command grep -rnE 'double-count|double count' docs apps packages infra` for the literal, and `command grep -rnE 'two models|second model|physics and (an )?ML'` over the same roots for a carrier that paraphrases it. Both arms' hits were read; the ones that carry _this_ claim are:
+**Known quoters of the corrected claim** — a floor, not a census. Sweep run 2026-10-05 from the worktree root, **three** arms over `docs apps packages infra`: `command grep -rnE 'double-count|double count'` for the literal, `command grep -rnE 'two models|second model|physics and (an )?ML'` for a carrier that paraphrases it, and — added in review cycle 1, which found two carriers the first two arms could not see — `command grep -rnE 'twice the fleet|as twice'` for a carrier that states the consequence without naming the mechanism. Positive control for the third arm: it returns `apps/api/src/forecast/fleet-rollup-read.test.ts`'s trued comment, which holds the string. All three arms' hits were read; the ones that carry _this_ claim are:
 
 - `packages/shared/src/aggregation.ts` — the root carrier every other site cites, and the only one that stated the mechanism. Trued up in the same change (rule 11).
 - `packages/shared/src/fleet-rollup.ts` — `FLEET_ROLLUP_FORECAST_KIND`'s docblock. Trued up.
 - `apps/forecast/src/fleet-rollup-write.ts` — `rolledUpForecasts`'s docblock, deleted with the helper the shared filter replaces.
 - `apps/api/src/forecast/fleet-rollup-read.ts` — `aggregateFromFanOut`'s docblock. Trued up.
+- `apps/api/src/forecast/fleet-rollup-read.test.ts` — the model case's comment, which said an unfiltered fan-out arm "would read as twice the fleet". Trued up: on that fixture it reads the _other model's_ number.
+- `docs/tech-debt.md`'s #494 entry — "the demo chart would read as twice the fleet". Not trued here and nothing is owed: the 2026-10-05 triage replaced that entry with a redirect row to #531, so the claim is already absent from `main` (`git show origin/main:docs/tech-debt.md` returns no occurrence) and present only in this branch's older base.
 - `docs/review-feedback.md`'s 2026-09-11 (#494) entry — a past-tense record of what that PR claimed, left as written: the entries are the record.
 - `### One model, named once` above — immutable, annotated inline rather than reworded.
 

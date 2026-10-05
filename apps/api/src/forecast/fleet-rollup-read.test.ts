@@ -29,8 +29,9 @@ import {
  *
  * Through `readFleetForecastAggregate` directly because the route adds nothing to this question: it
  * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both. What matters
- * here is that a half-written partition is never summed, and that every fallback leaves one line an
- * operator can count while a deployment settles.
+ * here is that a partition missing a whole *location* is never summed — the dimension the check
+ * works in, and the one ADR 0009's 2026-10-05 amendment entry records it as working in — and that
+ * every fallback leaves one line an operator can count while a deployment settles.
  */
 
 const FROM = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
@@ -298,8 +299,9 @@ describe('the fallback', () => {
 
   it('sums one model only, so the two arms cannot answer differently', async () => {
     // The fan-out reads whatever the partition holds, an ML row for the same site-hour included;
-    // the roll-up arm only ever sums the rolled-up model. Unfiltered, this arm would read as twice
-    // the fleet exactly when the fallback fired.
+    // the roll-up arm only ever sums the rolled-up model. Unfiltered, this arm would read 3.1 here
+    // rather than 2.8 — not twice the fleet but the *other model's* fleet, the ML row winning the
+    // `issuedAt` tie as the last row in Query order — exactly when the fallback fired.
     const physics = forecast({ acPowerKw: 2.8 });
     const { deps } = harness({
       pointsBySite: {
