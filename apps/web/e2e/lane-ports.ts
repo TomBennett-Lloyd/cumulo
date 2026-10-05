@@ -9,13 +9,19 @@ import { fileURLToPath } from 'node:url';
  * `e2e/playwright.config.ts` (each server command, each readiness probe and
  * each project's `baseURL`).
  *
- * Restatement ledger (`architecture.md` rule 9). One file spells the resulting
- * ranges out rather than importing them, because it instructs an agent rather
- * than running: `.claude/agents/browser-smoke.md`'s "Server ownership" section,
- * whose kill-or-return rule needs a reader to recognise a lane port on sight. A
- * base port added below is a change to that list too (rule 10). Sweep:
- * `git grep -nE "2[456]173–" -- :/`, which returns that file and the three
- * per-port docblocks below it, and nothing else.
+ * Restatement ledger (`architecture.md` rule 9) — a floor, not a census, swept
+ * 2026-10-05. The derived numbers are spelled out rather than imported in the
+ * per-port docblocks below, and in one file outside this one:
+ * `.claude/agents/browser-smoke.md`'s "Server ownership" section, which
+ * instructs an agent rather than running, and whose kill-or-return rule needs a
+ * reader to recognise a lane port on sight. A base port added below is a change
+ * to that list too (rule 10). Sweep:
+ * `git grep -nE "2[456]173" -- ':/' ':(exclude,top)packages/forecast/fixtures'`
+ * — the family of lane-block lower bounds and not any one phrasing of a range,
+ * because the comma-separated restatement in `BASE_PATH_PREVIEW_BASE_PORT`'s
+ * own docblock is a carrier no en-dash arm returns. The exclusion is
+ * `packages/forecast/fixtures/pvlib-golden.json`, where the digits fall inside
+ * a float.
  *
  * The problem it solves: every worktree serves *its own* build, so two browser
  * sessions from two worktrees are independent work — but while every one of

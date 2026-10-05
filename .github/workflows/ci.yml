@@ -195,14 +195,14 @@ jobs:
   #     fast on purpose — a developer who has never run `playwright install`
   #     must still be able to run it, and it must not grow a multi-minute step.
   #     This lane needs an installed browser plus the production builds its
-  #     servers make. So the
-  #     split is by cost, not by importance, and it is drawn *through* the lane
-  #     rather than around it: the lane's lint and typecheck half is in `verify`
-  #     already (the `tsc -p e2e` appended to the web package's `typecheck`), so
-  #     a spec that stops compiling fails locally like any other file. Only the
-  #     half that needs a browser lives out here as a parallel job — reachable
-  #     locally in one command, `pnpm --filter @cumulo/web test:e2e`, after a
-  #     one-time `pnpm --filter @cumulo/web exec playwright install chromium`.
+  #     servers make. So the split is by cost, not by importance, and it is
+  #     drawn *through* the lane rather than around it: the lane's lint and
+  #     typecheck half is in `verify` already (the `tsc -p e2e` appended to the
+  #     web package's `typecheck`), so a spec that stops compiling fails locally
+  #     like any other file. Only the half that needs a browser lives out here
+  #     as a parallel job — reachable locally in one command, `pnpm --filter
+  #     @cumulo/web test:e2e`, after a one-time `pnpm --filter @cumulo/web exec
+  #     playwright install chromium`.
   # (c) Cost, written down rather than left to be rediscovered: ~2–3 min, in
   #     parallel with the jobs above, so repo-wide wall time is unchanged.
   #     Roughly — install ≈1 min, the chromium download ≈30–60 s uncached, the
