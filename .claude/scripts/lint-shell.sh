@@ -15,11 +15,41 @@
 # tree and is named *.sh or carries a shell shebang is checked, and finding
 # nothing at all is treated as a broken filter rather than a pass.
 #
+# THE VERSION THIS GATE IS A PREDICTION FOR is the one declared in
+# .claude/scripts/shellcheck-pin.sh, which this script sources and holds the
+# installed shellcheck to; no version literal appears here, because that file is
+# the single owner and its docblock carries the why and the bump procedure. The
+# census line below prints the version actually in use on every run.
+#
+# Why a refusal rather than a warning when they differ (#502). `verify` exists so
+# that green locally predicts green in CI, and a leg that analyses with whatever
+# the machine has installed cannot make that prediction: PR #499 went red on
+# SC2015 and PR #524 on SC2120/SC2119, each after a locally green composite, each
+# costing a CI round and a resume. A warning would have printed on both of those
+# runs and changed neither outcome — the whole content of the promise is that the
+# gate is unwilling to report a pass it cannot stand behind, which is why this
+# lands on exit 2 (the gate is broken, no verdict) alongside the missing-linter
+# refusal below rather than on exit 1 (shellcheck found something).
+#
 set -euo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
 # machine (same reason worktree-lib.sh does it). Harmless on Linux, where the
 # directory does not exist.
-export PATH="/opt/homebrew/bin:$PATH"
+#
+# APPENDED, never prepended, and that is load-bearing rather than tidy. Prepending
+# promotes Homebrew's shellcheck above one the caller deliberately put first —
+# which is precisely the escape hatch the version refusal below sends people to,
+# so the refusal would become a wall on the very day Homebrew moves past the pin
+# and following its instructions would change nothing. Found in review on #502.
+# Appending still supplies the binary when nothing else on PATH has it, which is
+# all the line was ever for. Every script on a chain that reaches this gate
+# appends for the same reason, and a prepend anywhere on one would undo this line:
+# `pnpm verify` reaches it through verify-tier.sh and `verify:full`, and
+# `pnpm test:scripts` through run-script-tests.sh, harness-lib.sh and the
+# harnesses. The first of those was missed on the commit that made this change and
+# is the more important half — it is the repo's primary entry point, so the fix
+# was defeated there while reading as done everywhere else.
+export PATH="$PATH:/opt/homebrew/bin"
 
 # The seam the harness needs: discovery has a failure mode (a partial listing)
 # that cannot be provoked with a real git, so the command is injectable and the
@@ -30,11 +60,47 @@ export PATH="/opt/homebrew/bin:$PATH"
 # an environment variable is a different hazard from the one this seam buys.
 : "${LINT_SHELL_GIT_CMD:=git}"
 
+# The pin is read from THIS script's directory rather than from the repo root or
+# an environment variable — a version an env var could redirect is not a pin. It
+# is also what gives the harness its seam without one existing in shipped code:
+# a fixture copies this gate and writes the pin it wants to test alongside it.
+gate_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
+
 repo_root=$(git rev-parse --show-toplevel) || exit 2
 cd "$repo_root" || exit 2
 
+pin_file="$gate_dir/shellcheck-pin.sh"
+if [ ! -r "$pin_file" ]; then
+  printf '%s\n' \
+    'lint:sh: cannot read the shellcheck pin at .claude/scripts/shellcheck-pin.sh.' \
+    '  Without it this gate has no version to hold the linter to, and a run whose' \
+    '  analyser is unknown is exactly what #502 removed. Restore the file from git.' >&2
+  exit 2
+fi
+# Cleared before the source, not after: the pin file EXPORTS its declarations, so an
+# inherited SHELLCHECK_PIN_VERSION from the surrounding environment is indistinguishable
+# from one the file set. Without this line, a pin file that parses but declares nothing
+# silently defers to whatever is in the environment, and the refusal below never fires —
+# demonstrated in review on #502, where a truncated pin plus a stale exported variable
+# produced a green census. An environment variable must not be able to become the pin;
+# that is the whole reason the pin is read from disk beside this script.
+# By prefix, not by name, for the reason install-shellcheck.sh's twin of this line
+# gives: a hand-written list drifts from the pin file's export set, and `${!PREFIX@}`
+# cannot. It expands to nothing when nothing matches, which `unset` accepts on
+# bash 3.2.
+unset "${!SHELLCHECK_PIN_@}"
+# shellcheck source=./shellcheck-pin.sh
+. "$pin_file"
+if [ -z "${SHELLCHECK_PIN_VERSION:-}" ]; then
+  printf '%s\n' \
+    'lint:sh: the pin file declares no SHELLCHECK_PIN_VERSION.' \
+    '  A pin that parses but declares nothing would compare every installed version' \
+    '  against the empty string and refuse them all. See .claude/scripts/shellcheck-pin.sh.' >&2
+  exit 2
+fi
+
 if ! command -v shellcheck >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
+  cat >&2 <<EOF
 
 lint:sh: shellcheck is not installed — refusing to report a pass.
 
@@ -42,11 +108,51 @@ lint:sh: shellcheck is not installed — refusing to report a pass.
   it hard-fails instead. These scripts remove worktrees and delete branches;
   unquoted expansions in them are not a style question.
 
-      macOS:  brew install shellcheck
-      Debian: sudo apt-get install -y shellcheck
+  This gate is a prediction for shellcheck $SHELLCHECK_PIN_VERSION and accepts no
+  other version (.claude/scripts/shellcheck-pin.sh owns that number):
 
-  GitHub's ubuntu-latest runner image ships it preinstalled, so CI needs no
-  install step (see the comment on the verify step in .github/workflows/ci.yml).
+      macOS:  brew install shellcheck      # while Homebrew resolves to the pin
+      any:    bash .claude/scripts/install-shellcheck.sh
+
+  CI installs the same pinned release, from the same declaration — see the
+  'Install shellcheck (pinned)' step in .github/workflows/ci.yml.
+
+EOF
+  exit 2
+fi
+
+# The version gate. Held on stdout's own terms: `shellcheck --version` prints a
+# `version: <x>` line, and the awk takes that field rather than the last word of
+# the banner, so a reworded header line yields an empty string and a refusal
+# instead of a silent match. The explicit `|| exit 2` is not redundant with
+# `set -e`: under it the pipeline's own status propagates, so a shellcheck that
+# cannot run its own --version would exit this gate with SHELLCHECK's code —
+# 1 among the possibilities, which this file's contract reserves for "shellcheck
+# found something". Every way of not reaching a verdict has to leave by the same
+# door.
+installed_version=$(shellcheck --version | awk '/^version:/ {print $2}') || exit 2
+if [ "$installed_version" != "$SHELLCHECK_PIN_VERSION" ]; then
+  cat >&2 <<EOF
+
+lint:sh: shellcheck ${installed_version:-<unreadable>} is installed, but this gate is pinned to $SHELLCHECK_PIN_VERSION.
+
+  Refusing rather than warning, and refusing rather than running. A pass reported
+  by a different analyser than CI's is not a prediction about CI, and that is the
+  only thing this gate is for: #499 and #524 each shipped a locally green tree
+  that CI's older shellcheck rejected. A warning would have printed on both and
+  saved neither.
+
+  Install the pinned release — it lands in a directory of its own, nothing is
+  written to a shared prefix, and the last line it prints is the PATH export:
+
+      bash .claude/scripts/install-shellcheck.sh
+
+  On macOS, 'brew install shellcheck' is the shorter route for as long as
+  Homebrew's current version is the pinned one.
+
+  If the pin itself is what should move, that is one commit in one file:
+  .claude/scripts/shellcheck-pin.sh carries the bump procedure. Both sides read
+  it, so CI follows in the same commit.
 
 EOF
   exit 2
@@ -116,8 +222,11 @@ if [ ${#shell_files[@]} -eq 0 ]; then
   exit 2
 fi
 
-printf 'lint:sh: shellcheck (%s) over %d file(s)\n' \
-  "$(shellcheck --version | awk '/^version:/ {print $2}')" "${#shell_files[@]}"
+# The census reports the version it was held to a moment ago, not a second read of
+# it: one `shellcheck --version` per run, and the number printed here is by
+# construction the number the pin check passed.
+printf 'lint:sh: shellcheck (%s, pinned) over %d file(s)\n' \
+  "$installed_version" "${#shell_files[@]}"
 
 # -x follows sourced files, so worktree-lib.sh is analysed in the context of each
 # script that sources it rather than skipped as SC1091. -P SCRIPTDIR is what makes

@@ -27,97 +27,72 @@ import {
  * What the fleet chart section puts under its controls, in every state it can
  * be in.
  *
- * Cut out of `FleetPanel.tsx` when the restructure below took that file past
- * `structure.md` rule 4's 300-line ceiling — the second cut from the same wall,
- * after `fleet-panel-copy.ts`. The body builders were the right thing to move
- * rather than the nearest thing: every function here is pure, takes what it
- * reads (rule 1), and returns markup, so the file that is left is the component
- * — its props, its queries and its controls row — with no rendering arithmetic
- * in it.
+ * Cut out of `apps/web/src/dashboard/FleetPanel.tsx` when the restructure below
+ * took that file past `structure.md` rule 4's ceiling. The body builders were the
+ * right thing to move rather than the nearest thing: every function here is pure,
+ * takes what it reads (rule 1), and returns markup, so what is left in that file
+ * is the component with no rendering arithmetic in it.
  *
  * ## One chart, in every state, and nothing that swaps around it
  *
- * The body is always the same two slots in the same order: whatever the panel
- * has to *say* right now, and the chart. Loading, failed, empty, forecastless
- * and ready differ only in what fills the first of those and in what the second
- * one draws (#284 D3). Before this, three of those states returned in place of
- * the chart, so a reader watching a retry land saw the page's tallest element
- * appear under their pointer and everything below it jump — and a reader whose
- * fleet read failed lost the axes, the legend and the table twin along with the
- * numbers, which is more than the failure took. `ForecastChart` draws bare
- * chrome for an empty series by contract, so "no points yet" is a chart with
- * nothing plotted on it rather than a hole where a chart goes.
+ * The body is always the same two slots in the same order: whatever the panel has
+ * to *say* right now, and the chart. Loading, failed, empty, forecastless and
+ * ready differ only in what fills the first and in what the second draws (#284
+ * D3). Before this, three of those states returned in place of the chart, so a
+ * reader watching a retry land saw the page's tallest element appear under their
+ * pointer and everything below it jump — and a reader whose fleet read failed
+ * lost the axes and the table twin along with the numbers, which is more than the
+ * failure took. `ForecastChart` draws bare chrome for an empty series by
+ * contract, so "no points yet" is a chart with nothing plotted on it rather than
+ * a hole where a chart goes.
  *
- * **The loading state fills the first slot with nothing, and #448 is why.** The
- * owner's round of 2026-08-12 took the pending sentence out of it — *"graph
- * loading state needs to be visual not words … It also causes the page to
- * jump"* — so that arm now says nothing and the chart draws the wait instead, as
- * a self-tracing curve inside the plot (`charts/chart-loading-curve.ts`,
- * `docs/design/chart-treatment.md`'s Loading section). Which makes the claim
- * this section owns *stronger* rather than weaker: the states no longer differ
- * only in a sentence above a fixed chart, they differ in what is drawn on it,
- * and the one state that used to change the body's height by arriving and
- * leaving no longer changes anything. What the reader is owed while they wait is
- * still stated, just not in words — `bodyLayout` marks the container `aria-busy`
- * so the state stays machine-readable, and `docs/standards/react.md`'s Pending
- * bullet was amended by the same round to say when a surface may do that.
+ * **Two of the five states now fill the first slot with nothing**, and both moved
+ * the same way: the wait (#448 — *"graph loading state needs to be visual not
+ * words … It also causes the page to jump"*) is drawn inside the plot by
+ * `apps/web/src/charts/chart-loading-curve.ts`, and a total failure (#452 — *"the
+ * sites fetch error state should show in the graph area"*, ruled generic: one
+ * account for any total failure of the chart's data path) is an overlay inside
+ * the figure, `apps/web/src/charts/forecast-chart-error.tsx`. Neither can move
+ * the page. That makes the claim this section owns stronger rather than weaker:
+ * the states differ in what is *drawn* as well as in what is said, and the two
+ * that used to swap the tallest element on the page for a sentence now differ in
+ * nothing but what the plot has on it. The wait stays machine-readable through
+ * `bodyLayout`'s `aria-busy` (`docs/standards/react.md`'s Pending bullet).
  *
- * **The failed state emptied the first slot too, and #452 is why.** The owner's
- * follow-up asked for the fleet's failure to be shown where the chart is —
- * *"the sites fetch error state should show in the graph area"* — and ruled it
- * generic: one account for any total failure of the chart's data path, rather
- * than a sentence per read. So the failed arm's `PanelError` card left this file
- * and became an overlay inside the figure
- * (`charts/forecast-chart-error.tsx`), which is #448's move made for the other
- * end of the same read. Two of the five states now say nothing above the chart,
- * and neither of them can move the page. What did *not* move is every **partial**
- * state: a failed actuals read, a failed overlay and a short aggregate all still
- * speak in the first slot, because each of them has a chart that arrived and an
- * answer to keep (`error-handling.md` rule 5). Which failures are total is
- * `FleetPanel.tsx`'s to decide and is decided there.
+ * What did *not* move is every **partial** state: a failed actuals read, a failed
+ * overlay and a short aggregate all still speak in the first slot, because each
+ * has a chart that arrived and an answer to keep (`error-handling.md` rule 5).
+ * Which failures are total is `FleetPanel.tsx`'s to decide and is decided there.
  *
  * ### Restatement ledger (`architecture.md` rule 9)
  *
- * This section is the owner of the claim "one chart, in every state" — that the
- * body is one arrangement the states differ *inside*, rather than a switch
- * between arrangements. The sites below restate it in their own words, each
- * because it asserts or reasons about it locally; changing what the states share
- * finds them here rather than one review cycle at a time. Banked on #403 and
- * written in #431, the first member since to touch this file.
- *
- * #448 is the second, and it is the case the ledger was for: taking the words
- * out of the loading arm falsified the *phrasing* of several members without
- * touching the claim — each of them said the states differ in what the panel
- * *says* — so they were trued in that change rather than found a cycle at a
- * time. What each gained is the same clause: the states differ in what is drawn
- * as well as in what is said, and the loading one now differs only in that.
- *
- * #452 is the third, and it is the same shape once more rather than a new one:
- * the failed arm joined the loading arm in saying nothing above the chart, so
- * members quoting the failed state's sentence — or counting the alert it used to
- * mount here — were falsified in their phrasing while the claim held. They are
- * trued in that change. The claim itself comes out stronger again: what is left
- * speaking above the chart is only the states with something *partial* or
- * *absent* to report, and the two states that used to swap the tallest element
- * on the page for a sentence now differ from every other state in what the plot
- * has on it and in nothing else.
+ * This section owns the claim "one chart, in every state" — that the body is one
+ * arrangement the states differ *inside*, rather than a switch between
+ * arrangements. The sites below restate it in their own words, each because it
+ * asserts or reasons about it locally; changing what the states share finds them
+ * here rather than one review cycle at a time. Both #448 and #452 falsified the
+ * *phrasing* of several members without touching the claim, and both trued them
+ * in the same change rather than a review cycle at a time — which is the case the
+ * ledger was banked (#403) and written (#431) for.
  *
  * - `bodyLayout`'s docblock below — "the one arrangement every state renders",
  *   which is this claim stated about the function that enforces it.
- * - `FleetPanel.tsx` — the "One chart, always on screen" section, the
- *   `combineFleetQueries` docblock ("nothing takes the section down any more"),
- *   and the `enabled` comment.
- * - `FleetPanel.structure.test.tsx` — the file header, and
+ * - `apps/web/src/dashboard/FleetPanel.tsx` — the "One chart, always on screen"
+ *   section, the `combineFleetQueries` docblock, and the `enabled` comment.
+ * - `apps/web/src/dashboard/FleetPanel.structure.test.tsx` — the file header, and
  *   `expectPanelFurniture`'s docblock, which is where D3's clauses are read.
- * - `FleetPanel.test.tsx` — the figure-presence note, the overlay-state note and
- *   the first-mount note.
- * - `Dashboard.test.tsx` — the first-paint live-region case's comment.
- * - `Dashboard.tsx` — the composition comment's "nothing swaps" paragraph.
- * - `Dashboard.deep-link.test.tsx` — the comment spending #178's saving on the
- *   grounds that the chart is on screen from first paint.
- * - `dashboard-test-fixture.tsx` — the chart-section locator's docblock.
- * - `map/SitePopoverCard.tsx` — the note that the card plots nothing because the
- *   fleet chart is on screen in every state of the panel.
+ * - `apps/web/src/dashboard/FleetPanel.test.tsx` — the figure-presence note, the
+ *   overlay-state note and the first-mount note.
+ * - `apps/web/src/dashboard/Dashboard.test.tsx` — the first-paint live-region
+ *   case's comment.
+ * - `apps/web/src/dashboard/Dashboard.tsx` — the composition comment's "nothing
+ *   swaps" paragraph.
+ * - `apps/web/src/dashboard/Dashboard.deep-link.test.tsx` — the comment spending
+ *   #178's saving on the grounds that the chart is on screen from first paint.
+ * - `apps/web/src/dashboard/dashboard-test-fixture.tsx` — the chart-section
+ *   locator's docblock.
+ * - `apps/web/src/map/SitePopoverCard.tsx` — the note that the card plots nothing
+ *   because the fleet chart is on screen in every state of the panel.
  * - `docs/design/dashboard-composition.md` — the "A selection changes what is
  *   drawn, not what is on screen" section.
  * - `docs/standards/react.md`'s D3 bullets — **listed, never edited.** That file
@@ -128,27 +103,25 @@ import {
  * `command grep -rnE "in every state|One chart|one arrangement" apps/web/src docs`,
  * run **from the worktree root** — run at the repo root it descends into
  * `.claude/worktrees/` and returns every sibling checkout's copy of this list.
- * Re-run 2026-08-11, which is where the list above comes from; the three members
- * #403 banked without (`Dashboard.tsx`, `Dashboard.deep-link.test.tsx`, the
- * composition doc) are what that re-run added. It is still a floor rather than a
- * census, because a carrier paraphrasing the claim without the phrase is
- * invisible to it (`architecture.md` rule 10).
+ * Re-run 2026-08-11, which is where the list above comes from. It is a floor
+ * rather than a census, because a carrier paraphrasing the claim without the
+ * phrase is invisible to it (`architecture.md` rule 10).
  *
- * Two things the sweep returns that are **not** members, named so the next
- * reader does not re-decide them: the "in every state" in `Dashboard.test.tsx`'s
- * attribution-credit docblock and in `design.md` / `design-principles.md`
- * belongs to the Open-Meteo licence claim, a different obligation that happens
- * to share the phrase.
+ * Two things the sweep returns that are **not** members, named so the next reader
+ * does not re-decide them: the "in every state" in
+ * `apps/web/src/dashboard/Dashboard.test.tsx`'s attribution-credit docblock and
+ * in `docs/standards/design.md` / `docs/design/design-principles.md` belongs to
+ * the Open-Meteo licence claim, a different obligation that shares the phrase.
  *
  * ## An empty answer is the *joined* series being empty
  *
- * The empty guard asks about what would be drawn, not about the forecast alone.
- * A fleet whose forecast read summed to nothing while its actuals arrived is
- * a fleet with hours to plot, and the earlier guard — which returned on an empty
+ * The empty guard asks about what would be drawn, not about the forecast alone. A
+ * fleet whose forecast read summed to nothing while its actuals arrived is a
+ * fleet with hours to plot, and the earlier guard — which returned on an empty
  * forecast before the two series were joined — threw those hours away and told
- * the reader there was nothing at all (#290). What that state is owed is the
- * chart, and the partial-aggregate line saying the forecast half is short; both
- * fall out of the ordinary ready arm below once the join happens first.
+ * the reader there was nothing at all (#290). That state is owed the chart plus
+ * the partial-aggregate line; both fall out of the ready arm below once the join
+ * happens first.
  */
 
 /**
@@ -316,31 +289,22 @@ const fleetChart = (
  *
  * Deliberately **not** a live region. `react.md` budgets one per panel and this
  * panel's is the chart's own readout, which is the announcement a reader asked
- * for by moving the selection; a second region here would mean whichever won.
- * It is the same non-live treatment the completeness note above uses, for the
- * same reason — an incomplete answer is a caption on the answer, not an event.
+ * for by moving the selection; a second region here would mean whichever won. An
+ * incomplete answer is a caption on the answer, not an event — the same reason
+ * the completeness note above is not live either.
  *
  * The single co-occurrence that budget sanctions is the panel's failed state,
- * which #284 D3 made possible by keeping the chart on screen through a failure
- * rather than returning in place of it. Since #452 that alert is no longer this
- * file's: the failure is drawn inside the figure, so the `role="alert"` and the
- * readout it sits beside are now both the chart's own
- * (`charts/forecast-chart-error.tsx`). The sanctioning property is untouched by
- * the move, because it was never about which file rendered the alert — a failed
- * fleet read leaves no points, so the readout renders empty for exactly as long
- * as the alert is up, and the two provably cannot compete. It is not licence for
- * a third region here either, and the partial states above deliberately take
- * none: this arm's notice is a caption on an answer, not an event.
+ * whose `role="alert"` lives inside the figure since #452
+ * (`apps/web/src/charts/forecast-chart-error.tsx`). The sanctioning property
+ * survives the move because it was never about which file rendered the alert: a
+ * failed fleet read leaves no points, so the readout renders empty for exactly as
+ * long as the alert is up and the two provably cannot compete.
  *
  * The retry is offered because re-asking genuinely can work, which is the test
  * `react.md` sets for offering one at all: a series that did not arrive is a
- * failure a transient network fault or a 5xx can be repeated out of. What it
- * re-asks is only the series that failed — one site's hours, or the fleet's one
- * metered actuals request — and never the fleet's forecast read beside it,
- * which arrived. Until #296 that second half was a cost argument too, because
- * the forecast read was then a per-site fan-out over the whole fleet; it is one
- * metered request now, and the half that survives is that refetching a series
- * which never failed is waste at any price.
+ * failure a transient network fault or a 5xx can be repeated out of. It re-asks
+ * only the series that failed and never the fleet's forecast read beside it,
+ * which arrived — refetching a series that never failed is waste at any price.
  */
 const partialSeriesNote = (message: string, onRetry: () => void): ReactElement => (
   <p className="panel-notice">
@@ -364,20 +328,16 @@ const actualsNote = (actuals: FleetActualsState, onRetry: () => void): ReactElem
  * waiting, and whether it has anything to draw *from* — the only four things
  * that vary.
  *
- * The third joined the first two in #448, when the wait stopped being something
- * the panel *says*, and the fourth in #452, when a total failure stopped being
- * one either. Both moved the same way and for the same reason: a state that used
- * to arrive as a sentence above the chart now arrives inside the chart's own box,
- * so it changes what the reader sees without changing where anything sits.
- * `notice` is nullable for that reason too — a state with no news has no element
- * to render, and a placeholder one would put an empty box in the grid above the
- * chart, which is the page jump these rounds removed, spelled a different way.
+ * `loading` (#448) and `error` (#452) are here because a state that used to
+ * arrive as a sentence above the chart now arrives inside the chart's own box.
+ * `notice` is nullable for the same reason — a state with no news has no element
+ * to render, and a placeholder would put an empty box in the grid above the
+ * chart, which is the page jump those rounds removed spelled a different way.
  *
- * `error` is `null` in every arm but one, and it is deliberately not a union with
- * `loading`: the chart takes them as two independent by-presence props over two
- * different mechanisms (a mark among the marks, and an HTML panel over the whole
- * figure), so collapsing them here would only mean expanding them again at the
- * call below.
+ * `error` is deliberately not a union with `loading`: the chart takes them as two
+ * independent by-presence props over two different mechanisms (a mark among the
+ * marks, and an HTML panel over the whole figure), so collapsing them here would
+ * only mean expanding them again at the call below.
  */
 interface FleetBodyContent {
   readonly notice: ReactElement | null;
@@ -426,30 +386,20 @@ const unavailableContent = (onRetry: () => void): FleetBodyContent => ({
  * fixing. The notice is a fragment in the ready arm, so its children stay direct
  * children of the grid and keep the body's own gap.
  *
- * **What a state differs in is no longer only what it says.** Since #448 the
- * loading arm says nothing at all: it is the chart that carries the wait, as a
- * mark inside the plot (`charts/chart-loading-curve.ts`), and this container
- * carries the same fact for anything that cannot see a drawing —
- * `aria-busy="true"` while the read is out, and no attribute at all otherwise.
- * The arrangement is unchanged and if anything more nearly one arrangement than
- * before: every state renders the same two slots, and the state that used to
- * fill the first with a sentence now leaves it empty rather than swapping the
- * layout around it.
+ * `aria-busy` is what carries the wait for anything that cannot see a drawing,
+ * now that the loading arm says nothing at all (#448).
  *
  * `undefined` rather than `"false"` on the settled path, so the attribute is
  * absent instead of present-and-negative. The two are equivalent to assistive
- * technology and are not equivalent to a `[aria-busy="true"]` query, which is
- * what `fleet-panel-test-fixture.tsx`'s `settle()` waits on and what
- * `e2e/chart-loading.spec.ts` watches for.
+ * technology and are not equivalent to an `[aria-busy="true"]` query, which is
+ * what `apps/web/src/dashboard/fleet-panel-test-fixture.tsx`'s `settle()` waits
+ * on and what `apps/web/e2e/chart-loading.spec.ts` watches for.
  *
- * **`aria-busy` stays loading's alone, and #452's failure state deliberately
- * does not touch it.** A failed read is not a wait, and the reason the wordless
- * loading arm needs the attribute at all is that it has nothing to say — a
- * drawing announces nothing. The failure has the opposite problem and the
- * opposite solution: it is text-bearing, so it takes `react.md`'s **Failed**
- * lane and announces through its own `role="alert"` inside the figure. Marking
- * the body busy as well would tell a reader something is arriving when nothing
- * is.
+ * **It stays loading's alone, and #452's failure state deliberately does not
+ * touch it.** A failed read is not a wait; it is text-bearing, so it takes
+ * `react.md`'s **Failed** lane and announces through its own `role="alert"`
+ * inside the figure. Marking the body busy as well would tell a reader something
+ * is arriving when nothing is.
  */
 const bodyLayout = (
   { notice, points, loading, error }: FleetBodyContent,
@@ -544,16 +494,10 @@ const stateContent = (
      * The owner asked for this one directly: the label that used to sit here
      * "is both misleading (most of the time is spent fetching not summing) and
      * also not visually appealing. It also causes the page to jump." Both
-     * complaints are answered by the same deletion — a sentence that arrives
-     * above the chart and leaves again is the jump, and a sentence naming the
-     * wrong half of the wait is the misleading part. What replaces it is drawn
-     * inside the plot, in the box the chart already occupies, so no reader is
-     * told anything and nothing moves.
-     *
-     * The wait is still machine-readable: `bodyLayout` marks this container
-     * `aria-busy`, which is the half of `react.md`'s Pending bullet that the
-     * amendment of 2026-08-12 kept. Completion is unchanged too — it is this
-     * busy container being replaced by content, never an announcement.
+     * complaints are answered by the same deletion. What replaces it is drawn
+     * inside the plot, in the box the chart already occupies, so nothing moves;
+     * the wait stays machine-readable through `bodyLayout`'s `aria-busy`, which
+     * is the half of `react.md`'s Pending bullet the same round kept.
      */
     return { notice: null, points: aggregate.points, loading: true, error: null };
   }
@@ -561,21 +505,19 @@ const stateContent = (
     /*
      * The forecast read is the answer itself, so its failure is total and takes
      * the generic in-figure account (#452) rather than a sentence of its own.
-     * What is left of the old arm here is the *retry*, which survives on the
-     * same argument it always had: it is offered because a fleet read that came
-     * back with nothing is exactly the failure a repeat can outlive. The rule is
+     * The *retry* survives on the argument it always had: a fleet read that came
+     * back with nothing is exactly the failure a repeat can outlive. That reads
      * `react.md`'s **Failed** bullet ("a retry only when retrying can work"; no
-     * retry that "re-runs an identical metered request"), read as withholding
-     * one where re-running would deterministically return what it already
-     * returned — a read that failed being the opposite case. That reading is an
-     * interpretation, not the bullet's own words; `docs/tech-debt.md` has why
-     * the amendment belongs in `react.md` rather than here.
+     * retry that "re-runs an identical metered request") as withholding one where
+     * re-running would deterministically return what it already returned — an
+     * interpretation rather than the bullet's own words, and
+     * `docs/tech-debt.md` has why the amendment belongs in `react.md`.
      *
-     * What the arm gave up is the source's own message, and it was the owner's
-     * call rather than this file's: a total failure gets one generic sentence,
-     * because a transport detail is not something the reader can act on
-     * (`state-copy.ts`'s `CHART_DATA_UNAVAILABLE_MESSAGE`). `state.error` is
-     * still carried this far — `use-fleet-query.ts` says why it stays typed.
+     * The source's own message is deliberately dropped: a total failure gets one
+     * generic sentence, because a transport detail is not something the reader
+     * can act on (`apps/web/src/dashboard/state-copy.ts`'s
+     * `CHART_DATA_UNAVAILABLE_MESSAGE`). `state.error` is still carried this far —
+     * `apps/web/src/data/use-fleet-query.ts` says why it stays typed.
      */
     return unavailableContent(onRetry);
   }

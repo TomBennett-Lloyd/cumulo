@@ -8,12 +8,10 @@ import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './c
  * The plot's chrome: the value grid and its labels, the forecast-horizon rule,
  * the two tiers of the time axis, and the two axis titles — the value axis being
  * in kW or in percent of capacity since #291, which is a fact the title carries
- * and the grid is indifferent to. Each builder returns an
- * array that `ForecastChart.tsx` spreads straight into the plot — since #331 by
- * handing it down to `forecast-chart-hover-boundary.tsx`, which owns the `<svg>`
- * these land inside — exactly as `forecast-chart-marks.tsx` does for the data.
- * Chrome and marks are the two halves of that plot and now sit in a file each,
- * with the component left holding composition (`structure.md` rule 4).
+ * and the grid is indifferent to. Chrome and marks are the two halves of that
+ * plot and now sit in a file each — `forecast-chart-marks.tsx` is the other —
+ * with `ForecastChart.tsx` left holding composition
+ * (`docs/standards/structure.md` rule 4).
  *
  * Every number here is geometry in SVG user units, which are rendered pixels
  * (`chart-geometry.ts`'s `chartPlot`): coordinates and gaps, not styling. The
@@ -21,12 +19,7 @@ import { axisTickText, xAt, type ChartScale, type ForecastChartPoint } from './c
  * axis labels is `chart-axis-ticks.ts`'s — this file only puts the answer on a
  * row.
  *
- * **Both titles run parallel to the axis they name** (#284 D10). They used to
- * sit side by side in the band above the plot, where `kW` was as close to the
- * time axis as to the one it belonged to and the clock note read as a caption
- * for the whole chart. Rotating the kW title up the left gutter and putting the
- * time title under the time axis makes each one unambiguous by position, which
- * is the whole of what an axis title is for.
+ * **Both titles run parallel to the axis they name** (#284 D10).
  */
 
 /** SVG user units between a kW tick label and the plot's left edge. */
@@ -36,26 +29,17 @@ const Y_LABEL_GAP = 10;
  * plot was given.
  *
  * Everything to the left of it is spoken for and cannot move: the rotated
- * `Power (kW)` title's box runs to canvas x 13.66 at the shipping type — its
- * far end is already 0.34 units *past* the canvas edge, so it cannot be slid
- * over — and the widest label `axisTicks` can print is `1000` at 30.23 units
- * measured on a rendered page, which has to sit whole or it is the #19 defect.
- * 13.66 + 30.23 leaves 2.1 units of clearance between the two at 46, and that is
- * this number.
- *
- * **`1000` is still the worst case once the axis can be drawn in percent**
- * (#291): a percent axis prints `100` at most in any practical fleet, which is
- * narrower, so this floor is sized for the kW mode and holds for both. It is
- * deliberately not retuned per unit — a label end that moved when a reader
- * pressed the toggle would slide the plot sideways under them, and the rotated
- * title above it does not change width either way.
+ * `Power (kW)` title's box — its far end is already *past* the canvas edge, so
+ * it cannot be slid over — and the widest label `axisTicks` can print, which has
+ * to sit whole or it is the #19 defect. `chart-geometry.ts`'s `PLOT_LEFT_WIDE`
+ * owns that pair's measurement, the clearance they leave each other, and why
+ * neither this floor nor the gutter is retuned when the unit toggles (#291).
  *
  * A floor rather than a second gap because the wide gutter already sits exactly
- * on it: 56 − `Y_LABEL_GAP` is 46. So the two say one thing between them —
- * a label sits `Y_LABEL_GAP` from the plot where the gutter can afford it, and
- * the narrow gutter (`chart-geometry.ts`'s `PLOT_LEFT_NARROW`, 50) buys its six
- * units back out of that gap, leaving 4. There is nothing under 46 left to
- * spend, which is why that module's floor is 50 and not lower.
+ * on it. So the two say one thing between them — a label sits `Y_LABEL_GAP` from
+ * the plot where the gutter can afford it, and the narrow gutter
+ * (`chart-geometry.ts`'s `PLOT_LEFT_NARROW`) buys its units back out of that
+ * gap, which is the whole of what that gutter spends.
  */
 const KW_LABEL_END_FLOOR = 46;
 /**
@@ -65,8 +49,8 @@ const KW_LABEL_END_FLOOR = 46;
  * `Math.max` and not a branch on the width: this file is handed a plot rather
  * than a measurement, and the constraint is a position on the canvas rather
  * than a rule about panels, so it is expressible without knowing which gutter
- * `chartPlot` chose (`architecture.md` rule 9 — the threshold has one owner and
- * it is not here).
+ * `chartPlot` chose (`docs/standards/architecture.md` rule 9 — the threshold has
+ * one owner and it is not here).
  */
 const kwLabelX = (plot: PlotRect): number => Math.max(KW_LABEL_END_FLOOR, plot.left - Y_LABEL_GAP);
 /**
@@ -74,12 +58,11 @@ const kwLabelX = (plot: PlotRect): number => Math.max(KW_LABEL_END_FLOOR, plot.l
  * `chart-geometry.ts`'s `X_AXIS_BAND` reserves: the hours, the days that
  * qualify them, and the axis title under both.
  *
- * A pitch of 14 units at `--text-xs` (12px), which is one line of that text plus
- * a hair, so the three rows reach 41 units below the floor. The band is 48 —
- * `X_AXIS_BAND` carries why the last seven are the axis title's descenders and
- * the margin under them, and `e2e/chart-surfaces.spec.ts` is what measures the
- * result on a rendered page, because a font with a longer descender than this
- * one's is how the arithmetic stops being true.
+ * A pitch at `--text-xs`, which is one line of that text plus a hair.
+ * `X_AXIS_BAND` carries why the last few units are the axis title's descenders
+ * and the margin under them, and `apps/web/e2e/chart-surfaces.spec.ts` is what
+ * measures the result on a rendered page, because a font with a longer descender
+ * than this one's is how the arithmetic stops being true.
  */
 const TIME_TIER_BASELINE = 13;
 const DAY_TIER_BASELINE = 27;
@@ -89,12 +72,11 @@ const X_TITLE_BASELINE = 41;
  *
  * Its glyphs run *across* that line once the rotation is applied — ascenders one
  * way, descenders the other — so the title occupies roughly this ± half a line
- * of text: canvas x −0.34 to 13.66, measured on a rendered page for #430. That
- * band is the whole reason the gutter cannot be thinner than it is, and it is
- * why this constant cannot simply be moved left to make room — the ascender end
- * is already a third of a pixel past the canvas edge, which the containment
- * budget in `e2e/chart-surfaces.spec.ts` absorbs (0.005 of the box's height,
- * against a quarter) and a smaller `Y_TITLE_X` would not.
+ * of text, measured on a rendered page for #430. That band is the whole reason
+ * the gutter cannot be thinner than it is, and it is why this constant cannot
+ * simply be moved left to make room — the ascender end is already past the
+ * canvas edge, which `apps/web/e2e/chart-surfaces.spec.ts`'s
+ * `LABEL_CONTAINMENT_TOLERANCE` absorbs and a smaller `Y_TITLE_X` would not.
  *
  * `KW_LABEL_END_FLOOR` above holds the label off the other end of that band, and
  * `chart-geometry.ts`'s two `PLOT_LEFT_*` constants carry the arithmetic for the
@@ -106,13 +88,10 @@ const Y_TITLE_X = 8;
  * What the y axis counts, in each of the two units the panel can put it in
  * (#291).
  *
- * **The title stopped being a constant and became one of two chosen by the
- * caller.** It was a literal here on the argument that a unit names the data
- * rather than the frame — true while `kW` was the only answer, and falsified the
- * moment a reader could switch: the axis title, the table twin's caption and the
- * spoken readout's frame now have to agree about which unit is showing, so the
- * *words* have one owner (`chart-copy.ts`) and this file keeps only the
- * arrangement of them (`architecture.md` rule 9).
+ * The axis title, the table twin's caption and the spoken readout's frame have
+ * to agree about which unit is showing, so the *words* have one owner
+ * (`chart-copy.ts`) and this file keeps only the arrangement of them
+ * (`docs/standards/architecture.md` rule 9).
  *
  * The two arrangements differ because the two labels do. `kW` is a unit and
  * needs the quantity named around it; `% of capacity` already names both, and
@@ -150,14 +129,11 @@ export const gridElements = (scale: ChartScale): readonly ReactElement[] =>
  * Marked once, in chrome — never by dashing the forecast line.
  *
  * **The dash carries the meaning alone** (owner's design round, 2026-08-11,
- * [#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)). The rule used
- * to be captioned `forecast horizon` in `--color-chart-axis-label` just inside
- * the plot's ceiling, with the caption flipping to the rule's left where a late
- * horizon would have pushed it off the canvas. The words went and the mark
- * stayed: a dash reads as a threshold, which is what the caption was spelling
- * out (`docs/design/chart-treatment.md`, the horizon bullet), so the caption
- * was the plot telling the reader in words what the ink already said. The flip
- * and the estimated label width it needed went with it.
+ * [#429](https://github.com/TomBennett-Lloyd/cumulo/issues/429)). The words went
+ * and the mark stayed: a dash reads as a threshold, which is what the caption
+ * was spelling out (`docs/design/chart-treatment.md`, the horizon bullet), so
+ * the caption was the plot telling the reader in words what the ink already
+ * said.
  *
  * Still plural and still an array, like every builder in this file: the whole
  * chrome is spread into the plot the same way, and a rule alone today is not a
@@ -239,21 +215,18 @@ export const xAxisElements = (
  * The kW title is rotated a quarter turn anticlockwise so it reads up the left
  * gutter, through a `transform` **attribute** and not a `style` prop — SVG
  * geometry is what this is, and inline style is a lint error in UI code
- * (`react.md` rule 5). The rotation is about the text's own anchor point, so the
- * title stays centred on the plot's vertical middle whatever the plot's height.
+ * (`docs/standards/react.md` rule 5).
  *
  * The time title is `TIME_COLUMN_HEADER` and not a second spelling of it: the
  * axis and the table twin's time column carry the same clock, so they carry the
- * same words from one owner (`architecture.md` rule 9). This is also where the
- * treatment's "every chart states its clock" obligation is now discharged —
- * under the axis it qualifies, rather than as a floating note in the top-right
- * corner.
+ * same words from one owner (`docs/standards/architecture.md` rule 9). This is
+ * also where the treatment's "every chart states its clock" obligation is
+ * discharged, under the axis it qualifies.
  *
- * **`percent` picks which of the two value-axis titles is printed** (#291), and
- * it is an explicit parameter rather than something read off the plot: the
- * geometry is identical in both units, so there is nothing in a `PlotRect` that
- * could answer the question, and a caller that forgot to pass it would draw a
- * percent chart labelled in kW. The rotation is what makes the longer string
+ * `percent` is an explicit parameter rather than something read off the plot:
+ * the geometry is identical in both units, so there is nothing in a `PlotRect`
+ * that could answer the question, and a caller that forgot to pass it would draw
+ * a percent chart labelled in kW. The rotation is what makes the longer string
  * free — the title runs *along* the axis, so `% of capacity` spends the plot's
  * height rather than the gutter's width, and the gutter is unchanged by the
  * unit (`chart-geometry.ts`'s `PLOT_LEFT_WIDE`).

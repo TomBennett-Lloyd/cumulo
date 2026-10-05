@@ -27,6 +27,26 @@ const MS_PER_HOUR = 3_600_000;
  * leaves one 5-second poll of headroom, so a test that passes at this default
  * would still pass if the real pipeline were a poll slower — and would fail if
  * the UI added a wait of its own.
+ *
+ * Restatement ledger (`docs/standards/architecture.md` rule 9) — the sites
+ * carrying this value as a literal of their own, because they advance a fake
+ * clock by it or argue from it, and a number read back out of this declaration
+ * would agree with it however wrong it was. Stated as a sweep and a floor
+ * rather than a count, which the next suite would falsify: as of 2026-09-11,
+ * `git grep -nP '\b45[_ ]?000\b|\b45[- ]?s(ec(ond)?s?)?\b|\bforty[- ]five\b|
+ * DEFAULT_FIRST_FORECAST_DELAY_MS' -- ':/'` from a worktree root (joined onto
+ * one line) returns these plus the sites that name the identifier and quote
+ * nothing, and a carrier written after that date belongs in this list, added by
+ * whoever writes it. `-P` and not `-E`: `git grep -E` accepts `\b` and then
+ * matches nothing with it, so an `-E` run of this pattern reports a false clean.
+ *
+ * - `apps/web/src/data/demo-fleet-data-source.test.ts`, `DELAY_MS` — injected
+ *   back into this source and advanced past; `:179` argues from it in prose too.
+ * - `apps/web/src/dashboard/Dashboard.test.tsx`, `DEMO_FIRST_FORECAST_DELAY_MS`
+ *   — the same value again, for the composition; `:139` argues from it in prose
+ *   too.
+ * - `apps/web/src/data/use-first-forecast.test.tsx:92` — advances fake timers by
+ *   the literal inline, with no constant of its own.
  */
 const DEFAULT_FIRST_FORECAST_DELAY_MS = 45_000;
 

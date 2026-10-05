@@ -79,8 +79,11 @@
 #        guard below).
 set -uo pipefail
 # Homebrew's prefix is not on a non-interactive shell's default PATH on this
-# machine (same reason lint-shell.sh and run-script-tests.sh do it). Harmless on
-# Linux, where the directory does not exist.
+# machine (same reason worktree-lib.sh does it). Harmless on Linux, where the
+# directory does not exist. Prepending is right HERE and wrong in the
+# lint:sh chain — see lint-shell.sh's comment on this line for which is
+# which; nothing this script runs resolves shellcheck, so no caller's
+# deliberate choice is outranked by this line. (#502)
 export PATH="/opt/homebrew/bin:$PATH"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2

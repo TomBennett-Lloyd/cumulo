@@ -1,15 +1,13 @@
 /**
- * Pure sizing for the chart's hover tooltip: how wide the panel has to be to
- * hold the words it was given, how tall its drawn rows make it, where each
- * row's centre line sits and where its two columns begin. No React and no DOM —
- * `forecast-chart-hover.tsx` composes these numbers into SVG attributes, and
- * every one of them is testable without rendering a chart (`structure.md` rule
- * 4: the first cut out of a growing file is its types and its arithmetic).
+ * Pure sizing for the chart's hover tooltip: panel width for the words it was
+ * given, height for the rows it draws, and where each row's centre line and two
+ * columns sit. No React and no DOM, so every number is testable without
+ * rendering a chart (`docs/standards/structure.md` rule 4);
+ * `forecast-chart-hover.tsx` composes them into SVG attributes.
  *
- * All values are SVG user units. Geometry — coordinates and extents — is not
- * styling, so these are numbers here rather than tokens in `charts.css`; the
- * panel's colour, radius and shadow are that file's, and none of them appear
- * here.
+ * All values are SVG user units. Geometry is not styling, so these are numbers
+ * here rather than tokens in `charts.css`, which owns the panel's colour, radius
+ * and shadow.
  */
 
 /**
@@ -24,18 +22,15 @@ export const TOOLTIP_ROW_HEIGHT = 14;
 /** Clear of the plot ceiling so the panel border does not sit on the top grid line. */
 export const TOOLTIP_TOP_GAP = 4;
 /**
- * Long enough to read as a mark of the series, short enough to stay a key.
- * Shortened from 12 in #284 D12: with the rows in columns the key is read
- * against the name beside it rather than against the run of text it used to
- * introduce, so it can be a mark of the series' colour instead of a dash long
- * enough to hold its own.
+ * Long enough to read as a mark of the series, short enough to stay a key: with
+ * the rows in columns the key is read against the name beside it rather than
+ * against a run of text it introduces.
  *
- * It is a *footprint* rather than a stroke length, and the distinction became
- * real in #429: most rows key a line and draw one this long, but the range row
- * keys the band, and what it draws in the same span is a wash between two bound
- * hairlines rather than a stroke (`forecast-chart-hover.tsx`). The number is
- * unchanged and the name is kept for the same reason — every row's key occupies
- * exactly this much of the row, which is what the sizing below is computing.
+ * Despite the name it is a *footprint*, not a stroke length — most rows key a
+ * line and draw one this long, but the range row keys the band and draws a wash
+ * between two bound hairlines in the same span (`forecast-chart-hover.tsx`).
+ * Every row's key occupies exactly this much of the row, which is what the
+ * sizing below computes.
  */
 export const KEY_STROKE_LENGTH = 8;
 export const KEY_TEXT_GAP = 6;
@@ -55,68 +50,37 @@ export const FIRST_SERIES_ROW = 1;
  * little air at the right-hand edge; erring narrow clips an overlay's name,
  * which is the failure this sizing exists to prevent.
  *
- * **Trued against a rendered measurement, not guessed.** #284 D6 shipped this at
- * 5.6, and the browser smoke on the demo data caught the clip it caused: with
- * "Manchester rooftop 1" selected as the overlay, the row `2.8 Manchester
- * rooftop 1` (24 characters) drew a right edge at 170.63 user units inside a
- * panel 168.4 wide — 2.23 units of overhang. Text started at
- * `TOOLTIP_PADDING + KEY_STROKE_LENGTH + KEY_TEXT_GAP` = 26 in the layout that
- * was measured — the key stroke was 12 then, before D12 shortened it — so that
- * row's real drawn width was 144.63 and its mean advance 6.026, which also
- * confirms the model itself was sound and only this number was wrong, since 5.6
- * predicts the observed 168.4 exactly.
+ * **Trued against a rendered measurement, not guessed**, and re-measured in #463
+ * on the face this repo now ships — Inter, owned with its licence by
+ * `packages/ui/src/tokens/tokens.css` — where it came out a shade narrower than
+ * the platform face the original reading was taken on, and was left alone. The
+ * constant sits a few percent above that measurement on purpose: a mean is not a
+ * bound, the font is proportional, and a row of capitals and digits averages
+ * wider than the string this was fitted to.
  *
- * 6.3 is that measurement plus about 4.5%. The margin is kept rather than
- * rounded away because a mean is not a bound: the font is proportional, so a row
- * of capitals and digits averages wider than the string this was measured on,
- * and a mean-advance model has no way to know which row it is being asked about.
+ * A column is a character count times this number, and the count is taken per
+ * column, over names alone or values alone. The single `value name` run each row
+ * used to be is what the mean fitted worst: it mixed tabular digits with
+ * proportional prose, so one number had to cover both and the widest row decided
+ * a width every row paid for.
  *
- * **D12 kept this constant and retired what it was multiplied over.** The unit
- * survives — a column is still a character count times this number — but the
- * count is now taken per column, over names alone or values alone, instead of
- * over the single `value name` run each row used to be. That run is what the
- * mean fitted worst: it mixed tabular digits with proportional prose, so one
- * number had to cover both and the widest row decided a width every row paid
- * for. Measured per column, each column's mean is taken over content of one
- * kind, and every value starts at one x rather than wherever the text to its
- * left happened to end.
- *
- * **#463 re-measured this on the self-hosted face and left the number alone**,
- * which is the outcome worth recording rather than the change that did not
- * happen. Everything above was a reading taken on whatever `--font-sans`
- * resolved to on the measuring machine — SF Pro, as it happens — so until that
- * ticket this constant was true there and approximately true elsewhere. Inter's
- * mean advance over the same kind of content at `--text-xs`, measured in
- * Chromium over the panel's own name strings, is **6.080px against SF Pro's
- * 6.091px**: 0.2% narrower, and narrower in the only direction that matters
- * here, since the 4.5% margin the paragraph above keeps is spent by a face that
- * runs wide and not by one that runs narrow. What changed is the standing of the
- * number rather than the number: it is now a claim about a file this repo ships
- * (`packages/ui/src/tokens/tokens.css` owns the face and the licence) rather
- * than about the platform the reader happens to be on.
- *
- * One thing that re-measurement found and deliberately did not fix, so the next
- * reader does not have to find it again: the *value* column's content is tabular
- * digits, whose mean advance at this size is 7.375px on Inter and was 7.186px on
- * SF Pro — above this constant in both cases. So a value column has always been
- * modelled narrow, by about 11%, and the panel absorbs the difference in
- * `TOOLTIP_PADDING` rather than clipping. That predates #463, which moved it by
- * 2.6% and did not cause it; a per-column constant is the fix and it is a
- * decision about D12's model, not a font change. Tracked as #470.
+ * Known and deliberately unfixed, so the next reader does not have to find it
+ * again: the *value* column's content is tabular digits, whose mean advance at
+ * this size is above this constant on both faces, so a value column has always
+ * been modelled narrow and the panel absorbs the difference in
+ * `TOOLTIP_PADDING` rather than clipping. A per-column constant is the fix, and
+ * it is a decision about the column model rather than a font change. Tracked as
+ * #470.
  */
 export const TOOLTIP_CHAR_WIDTH = 6.3;
 
 /** One line of the readout: a colour key, the series' name, and its value. */
 export interface TooltipRow {
   /**
-   * The series' own class, so the key cannot drift from the mark it names.
-   *
-   * "The line it names" until #429, which is now true of most rows rather than
-   * of all of them: the range row wears this class over a wash and two bound
-   * hairlines instead of a stroke. The class is still the tie to the series'
-   * ink either way, which is the whole of what this field is for; what shape it
-   * is painted in is `forecast-chart-hover.tsx`'s to decide and nothing here
-   * reads it.
+   * The series' own class, so the key cannot drift from the ink it names — a
+   * line for most rows, a wash between two bound hairlines for the range row.
+   * What shape the key is painted in is `forecast-chart-hover.tsx`'s to decide;
+   * nothing here reads this.
    */
   readonly seriesClassName: string;
   readonly value: string;
@@ -129,9 +93,10 @@ export interface TooltipRow {
    *
    * **What it decides is speech, not ink** (#330): such a row is *drawn*, dash
    * and all, because an absence a reader can see is the honest thing to show
-   * (`design.md` rule 5) — and *skipped* when the same rows are spoken, because
-   * a screen reader at default punctuation verbosity voices an em dash as
-   * silence, so announcing one is announcing a labelled series with no value.
+   * (`docs/standards/design.md` rule 5) — and *skipped* when the same rows are
+   * spoken, because a screen reader at default punctuation verbosity voices an
+   * em dash as silence, so announcing one announces a labelled series with no
+   * value.
    */
   readonly present: boolean;
 }
@@ -161,28 +126,27 @@ export interface TooltipColumns {
 }
 
 /**
- * Two columns measured over the rows they will actually hold — #284 D12, and
- * the reason a row is two texts rather than one run.
+ * Two columns measured over the rows they will actually hold, which is why a row
+ * is two texts rather than one run.
  *
  * Every name starts at `nameX` and every value at `valueX`, so a reader scanning
- * the panel reads a list of series and a list of numbers rather than four
- * differently-indented sentences. The value column is placed past the *widest*
- * name rather than past each row's own name, which is the whole difference
- * between columns and per-row packing: packing puts every number somewhere else
- * and makes comparing two of them an eye-movement rather than a glance.
+ * the panel reads a list of series and a list of numbers. The value column is
+ * placed past the *widest* name rather than past each row's own name, which is
+ * the whole difference between columns and per-row packing: packing puts every
+ * number somewhere else and makes comparing two of them an eye-movement rather
+ * than a glance.
  *
  * **`plotWidth` is here because a column has to be laid out inside the panel it
  * will be drawn in.** `tooltipPanelWidth` caps the panel at the plot, so the
  * width the names *ask* for is not always the width they get, and a name column
  * measured without that ceiling puts `valueX` past the panel's right edge — at
- * the 120 characters `siteSchema` allows, 788 against a 560 cap, which draws the
- * whole value column outside the panel and off the plot. Clamped, the name
+ * the longest name `siteSchema` accepts (`packages/shared/src/site.ts`), far
+ * enough past to draw the whole value column off the plot. Clamped, the name
  * column gives up its width first and the **name** is what overflows, which is
- * the arrangement `tooltipPanelWidth` below claims and the one the pre-column
- * layout had: the number a reader came for stays on screen, and the label they
- * can infer from the key stroke is what runs past the edge. The name then runs
- * under the value column as well as past the panel — one defect, not two, and
- * the elision half of D12 is what retires it.
+ * the arrangement `tooltipPanelWidth` below claims: the number a reader came for
+ * stays on screen, and the label they can infer from the key stroke is what runs
+ * past the edge — under the value column as well as past the panel, one defect
+ * rather than two, retired by the elision this file does not yet do.
  *
  * The names decide where the values go, and the values only decide how far the
  * panel reaches — which is why the width returned here is the second column's
@@ -209,41 +173,30 @@ export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): 
  * routinely one nobody could have guessed at design time, and a fixed width
  * would clip it.
  *
- * **The ceiling is the point of the pair.** `siteSchema` accepts 120 characters
- * of name (`packages/shared/src/site.ts`), and an uncapped panel passes the
- * plot's own width at **76 of them, measured at the 560-unit plot a
+ * **The ceiling is the point of the pair.** An uncapped panel passes the plot's
+ * own width at **76 characters of name, measured at the 560-unit plot a
  * default-width chart draws, over a forecast tooltip's four rows**. Both
  * qualifiers carry weight, and leaving them off is how this figure drifted into
  * two disagreeing numbers in two files: the threshold moves with the plot it is
  * quoted against, and with the widest *value* in the panel, since the value
- * column's width comes out of what the names may have. The number is owned by
- * `tooltip-geometry.test.ts`, which measures it through this function, so a
- * margin change fails a case rather than ageing a sentence — and this docblock
- * is the one place it is written down (`architecture.md` rule 9).
+ * column's width comes out of what the names may have — the unit toggle (#291)
+ * moves it for that second reason, and no threshold is quoted per unit here on
+ * purpose. `tooltip-geometry.test.ts` owns both numbers, measuring them through
+ * this function in *"takes 76 characters of site name to outgrow the plot a
+ * default-width chart draws"*, so a margin change fails a case rather than
+ * ageing a sentence; this docblock is the one place they are written in prose
+ * (`docs/standards/architecture.md` rule 9).
  *
- * The unit toggle (#291) instantiates that second qualifier rather than adding a
- * fact: 76 is measured over kW-shaped rows, and a panel showing percent of
- * capacity moves it, because those values are a different number of characters
- * wide. No second boundary is asserted here on purpose — a threshold quoted per
- * unit would be two numbers to keep true, where the hedge above already says the
- * one number is conditional on what the panel is showing.
- *
- * Past that length the readout would be wider
- * than the chart it is reading, blanketing the marks it exists to explain, and
- * `tooltipAnchorX` could only pin it to the left plot edge and let the rest hang
- * off the canvas. Capped, a name that long overflows its own panel instead —
- * text spilling past one edge is a legible defect confined to one row, where a
- * panel over the whole plot hides the data. D12 laid the rows out as measured
- * columns, which is half of what was promised here and does not retire this
- * arm: columns decide where a name and a value start, and no arrangement of
- * two columns fits 120 characters into a panel narrower than they are. Eliding
- * the name that overflows is the half still open, and until it lands the cap is
- * what bounds the damage.
- *
- * **Which half overflows is a choice, and it is made in `tooltipColumns`, not
- * here.** This function caps the panel; the clamp above is what keeps the value
- * column inside the capped panel, so "a name that long overflows" stays a
- * description of what is drawn rather than of what the cap alone would do.
+ * Past that length the readout would be wider than the chart it is reading,
+ * blanketing the marks it exists to explain, and `tooltipAnchorX` could only pin
+ * it to the left plot edge and let the rest hang off the canvas. Capped, a name
+ * that long overflows its own panel instead — text spilling past one edge is a
+ * legible defect confined to one row, where a panel over the whole plot hides
+ * the data. Columns did not retire this arm: no arrangement of two columns fits
+ * the longest name `siteSchema` accepts into a panel narrower than they are, and
+ * until the overflowing name is elided the cap is what bounds the damage. Which
+ * half overflows is `tooltipColumns`' choice rather than this function's — the
+ * clamp there is what keeps the value column inside the capped panel.
  *
  * The ceiling outranks the floor where the two disagree, which is a plot
  * narrower than `TOOLTIP_MIN_WIDTH` — a panel that cannot be placed inside the
@@ -273,11 +226,9 @@ export const tooltipPanelWidth = (
  * it.** `forecast-chart-tooltip.test.tsx` proves that moving the tooltip does
  * not re-render its content by counting calls to this function, which works only
  * because the memoised panel is the one thing that calls it: "one call" means
- * "the content rendered once". Anything else calling it — the layer wanting the
- * panel's height to place it, a table, a second panel — keeps every assertion
- * green while the probe quietly starts counting something else. Adding a caller
- * is fine; adding one without moving that probe to a seam the new caller does
- * not share is not.
+ * "the content rendered once". Any other caller keeps every assertion green
+ * while the probe quietly counts something else. Adding a caller is fine; adding
+ * one without moving that probe to a seam the new caller does not share is not.
  */
 export const tooltipPanelHeight = (drawnRowCount: number): number =>
   TOOLTIP_PADDING * 2 + TOOLTIP_ROW_HEIGHT * (drawnRowCount + FIRST_SERIES_ROW);

@@ -11,15 +11,15 @@ import {
  * The plot's context layers: the night wash behind the series, and a hairline at
  * each UTC midnight. Both are builders returning arrays that `ForecastChart.tsx`
  * spreads into the plot, exactly as `forecast-chart-axes.tsx` does for the
- * chrome and `-marks.tsx` for the data — a third file for the third kind of
- * thing on this canvas (`structure.md` rule 4).
+ * chrome and `forecast-chart-marks.tsx` for the data — a third file for the
+ * third kind of thing on this canvas (`docs/standards/structure.md` rule 4).
  *
  * **Context is drawn, not written** (`docs/standards/design.md` rule 10). The
  * diurnal shape of a PV series has a cause, and a shaded background says "the
  * sun is down here" without spending a sentence, a legend row or a series slot
  * on it. Which hours are the fleet's night is not decided here: it arrives on
- * the point as `night`, and `dashboard/fleet-night.ts` owns both the definition
- * and the argument for it.
+ * the point as `night`, and `apps/web/src/dashboard/fleet-night.ts` owns both
+ * the definition and the argument for it.
  *
  * **An absent flag draws nothing, and that is not the same as `false`.**
  * `ForecastChartPoint.night` is optional on purpose — absent means nobody asked
@@ -38,11 +38,9 @@ import {
  * two samples therefore goes unshaded until the next sample — late by up to a
  * full sampling step, and **always in that one direction**: fewer hours shaded
  * than are dark, never more. That one-signedness is the property
- * `dashboard/fleet-night.ts`'s whole argument rests on, since the wash sits
- * behind a curve that is non-zero wherever any site still has light. Rounding to
+ * `apps/web/src/dashboard/fleet-night.ts`'s whole argument rests on. Rounding to
  * the nearer sample would be symmetric, and a symmetric rule can shade an hour
- * the classifier called daylight — the contradiction the intersection definition
- * exists to make impossible. It is not an improvement waiting to be made.
+ * the classifier called daylight. It is not an improvement waiting to be made.
  *
  * The midnight hairline misses the other way: `startsUtcDay` below marks a
  * sample that *is* 00:00 UTC and nothing else, so a midnight falling between two
@@ -100,9 +98,7 @@ const MINIMUM_SHADED_SAMPLES = 2;
  *
  * Non-positive and unparseable intervals are not counted: a `NaN` difference
  * fails `> 0`, so a series whose timestamps will not parse yields `null` and —
- * by `withinOneStep`'s answer for it — no wash at all. That is the same
- * direction `startsUtcDay` takes above, and the direction the whole layer takes:
- * where the data cannot answer the question, draw nothing.
+ * by `withinOneStep`'s answer for it — no wash at all.
  */
 const modalStepMs = (points: readonly ForecastChartPoint[]): number | null => {
   const counts = new Map<number, number>();
@@ -187,8 +183,9 @@ const splitAtTimeGaps = (
 /**
  * Whether a sample sits exactly on a UTC day boundary. An unparseable timestamp
  * yields `NaN` for both fields and so is not a boundary — the same direction
- * `fleet-night.ts` takes with a garbled hour, because drawing nothing is the
- * safe answer for a layer whose whole contract is that absence draws nothing.
+ * `apps/web/src/dashboard/fleet-night.ts` takes with a garbled hour, because
+ * drawing nothing is the safe answer for a layer whose whole contract is that
+ * absence draws nothing.
  */
 const startsUtcDay = (validTimeIso: string): boolean => {
   const at = new Date(validTimeIso);
@@ -204,15 +201,13 @@ const startsUtcDay = (validTimeIso: string): boolean => {
  * each direction: the shading is a claim about the hours it covers, and widening
  * it to the midpoints would claim darkness at an hour classified as daylight.
  *
- * **In time, not in the array, and the difference is a whole hour wide.** A
- * series can be missing an hour outright rather than carrying it with null
- * values — `joinFleetSeries` builds its x-domain from the hours either source
- * knows about, so an hour neither forecast nor measured is simply not there.
- * Since #325 that hour still costs its width on the axis, so the two samples
- * either side of it are drawn an hour apart while remaining neighbours in the
- * array. Shading straight across would be the widening this docblock's second
- * paragraph refuses, only larger and about an hour whose classification is not
- * merely daylight but unknown. `splitAtTimeGaps` above is what stops it.
+ * **In time, not in the array.** A series can be missing an hour outright rather
+ * than carrying it with null values — `joinFleetSeries` builds its x-domain from
+ * the hours either source knows about, so an hour neither forecast nor measured
+ * is simply not there. Since #325 that hour still costs its width on the axis,
+ * so the two samples either side of it are drawn an hour apart while remaining
+ * neighbours in the array. `splitAtTimeGaps` above is what stops the wash
+ * shading straight across it, and carries why.
  */
 export const nightElements = (
   points: readonly ForecastChartPoint[],

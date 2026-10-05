@@ -21,28 +21,16 @@ import {
  *
  * The composition's own assertions are `Dashboard.test.tsx`'s and the `?site=`
  * link's are `Dashboard.deep-link.test.tsx`'s; this file is the third subject
- * split off the same mount (`structure.md` rule 4), through the same fixture.
+ * split off the same mount (`docs/standards/structure.md` rule 4), through the
+ * same fixture.
  *
- * The rule it proves is `design.md` rule 11 as #328 settled it, and it has
- * three clauses that only make sense together. **A selection moves focus
- * nowhere**: whoever pressed a marker is still on that marker, and whoever
- * picked a site out of the header's search is still in the search input, which
- * is the combobox discipline that pattern owes anyway. What answers the
- * selection is structure the reader can already reach — the card's own
- * accessible name, the chart legend's row for the site — rather than a page that
- * takes their place away to tell them something. **A `?site=` selection additionally captures no
- * opener**: the card mounts when the fleet listing resolves, which on a deep
- * link is not page load and can be seconds later, so nothing about that instant
- * identifies a control anybody chose (WCAG 3.2.5, #260). **Closing returns
- * focus to whatever held it when the card opened, if the card is holding it by
- * then** — which, with nothing landing anybody inside the card, means exactly
- * the reader who came *into* it, pressing or tabbing to Close.
- *
- * That third clause is why several cases below press Close through {@link press}
- * rather than clicking it: a real pointer press focuses the button it presses,
- * which is how a reader ends up inside the card a moment before it unmounts. A
- * dismissal that never moves focus into the card leaves the reader where they
- * were, and the cases that say so are here too.
+ * The rule it proves is `docs/standards/design.md` rule 11 as #328 settled it, and
+ * it has three clauses that only make sense together. **A selection moves focus
+ * nowhere**. **A `?site=` selection additionally captures no opener** (WCAG
+ * 3.2.5, #260). **Closing returns focus to whatever held it when the card
+ * opened, if the card is holding it by then** — which, with nothing landing
+ * anybody inside the card, means exactly the reader who came *into* it, pressing
+ * or tabbing to Close.
  *
  * The one focus move left on this page is the add-site *dialog*'s, which is a
  * modal — the surface whose own controls are the answer — and it is the last
@@ -50,15 +38,15 @@ import {
  *
  * `document.activeElement` is the whole assertion, and jsdom does implement it.
  * What jsdom cannot show is the focus *ring* — no layout, no painting — so every
- * question about one is a browser criterion (`testing.md` rule 10), and the
- * browser lane splits it across two specs holding a clause each. Whether a ring
- * appears where the reader did *not* ask for one — the pointer flows, meaning
- * *mouse and touch*, which that file carries as two named arms since #440 found
- * a tapped chart taking a ring the mouse path never took — is
- * `e2e/pointer-focus.spec.ts`'s. Whether a keyboard reader still gets one is
- * `e2e/keyboard-focus.spec.ts`'s, which drives the keyboard path in real
- * Chromium and carries the deep-link case in the lane the #260 report was
- * written about. Neither spec means anything without the other, so a change
+ * question about one is a browser criterion (`docs/standards/testing.md` rule 10),
+ * and the browser lane splits it across two specs holding a clause each. Whether
+ * a ring appears where the reader did *not* ask for one — the pointer flows,
+ * meaning *mouse and touch*, which that file carries as two named arms since
+ * #440 found a tapped chart taking a ring the mouse path never took — is
+ * `apps/web/e2e/pointer-focus.spec.ts`'s. Whether a keyboard reader still gets
+ * one is `apps/web/e2e/keyboard-focus.spec.ts`'s, which drives the keyboard path
+ * in real Chromium and carries the deep-link case in the lane the #260 report
+ * was written about. Neither spec means anything without the other, so a change
  * deleting one is deleting half of rule 11.
  */
 
@@ -89,9 +77,8 @@ const press = (control: HTMLElement): void => {
  * the next needs two of them.
  *
  * Asked of the source rather than regenerated from the seed, for the reason
- * `firstListedSite` gives: a test that derived the ids the way the demo fleet
- * does would still pass if both drifted together. Local to this suite because
- * only this suite needs a pair.
+ * `firstListedSite` gives. Local to this suite because only this suite needs a
+ * pair.
  */
 const twoListedSites = async (dataSource: FleetDataSource): Promise<readonly [Site, Site]> => {
   const listed = await dataSource.listSites();
@@ -161,9 +148,8 @@ describe('Dashboard focus on a reader-initiated selection', () => {
 
     // The marker, because that is where the reader put themselves. The card is
     // on screen and named — the assertion below is what keeps this from passing
-    // over a selection that never opened one — and being named is how the card
-    // answers, rather than by taking the reader off the control they pressed
-    // (#328, `design.md` rule 11).
+    // over a selection that never opened one (#328, `docs/standards/design.md`
+    // rule 11).
     expect(document.activeElement).toBe(marker);
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
   });
@@ -201,9 +187,7 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     press(screen.getByRole('button', { name: 'Close' }));
 
     // The card remembers the element that actually held focus when it opened, so
-    // it lands a marker press back on the marker. The panel this replaced
-    // searched the site list instead, which was the right answer only for the
-    // one opener it knew about — and is why the list leaving cost this nothing.
+    // it lands a marker press back on the marker.
     expect(document.activeElement).toBe(marker);
   });
 
@@ -250,11 +234,10 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     press(screen.getByRole('button', { name: `Marker: ${siteA.name}` }));
 
     // Somewhere the opener is not: a *second* site's marker, which the reader
-    // tabs to without selecting it. This was a row of the site table until
-    // 2026-08-12; what the case needs from it is only that it is a focusable
-    // control elsewhere on the page, so the nearest surviving one stands in.
-    // Escape is fired on the card because that is what still owns the handler;
-    // where the *focus* is is the point.
+    // tabs to without selecting it. What the case needs from it is only that it
+    // is a focusable control elsewhere on the page. Escape is fired on the card
+    // because that is what still owns the handler; where the *focus* is is the
+    // point.
     const elsewhere = screen.getByRole('button', { name: `Marker: ${siteB.name}` });
     elsewhere.focus();
     fireEvent.keyDown(screen.getByRole('heading', { name: siteA.name }), { key: 'Escape' });
@@ -295,11 +278,11 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * has come into the card: Escape is handled on the card's container, so it
      * works from every control inside the card and from none outside it. That
      * last half is the accepted cost of adding no document-level key handler
-     * (`map/SitePopoverCard.tsx` states it beside the handler), and this case
-     * puts the focus inside directly. What the *route* into the card costs a
-     * keyboard reader needs a real tab order and a real key modality, which is
-     * the browser lane's (`testing.md` rule 10) and is owned by no spec today —
-     * `docs/tech-debt.md` carries that gap.
+     * (`apps/web/src/map/SitePopoverCard.tsx` states it beside the handler), and
+     * this case puts the focus inside directly. What the *route* into the card
+     * costs a keyboard reader needs a real tab order and a real key modality,
+     * which is the browser lane's (`docs/standards/testing.md` rule 10) and is
+     * owned by no spec today — `docs/tech-debt.md` carries that gap.
      */
     const close = screen.getByRole('button', { name: 'Close' });
     close.focus();
@@ -325,9 +308,7 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     /*
      * The opener this member is named for (#328). A combobox keeps focus in its
      * input when a value is chosen — that is the pattern's own discipline
-     * (`design.md` rule 11) — so a selection that moved focus to a control
-     * elsewhere on the page was taking a reader out of the field they were still
-     * typing in, mid-search, on every hit. Nothing here is a special case for
+     * (`docs/standards/design.md` rule 11). Nothing here is a special case for
      * the search: it selects through `selectSiteForReader` exactly as a marker
      * does, and no selection moves anybody now.
      *
@@ -408,8 +389,7 @@ describe('Dashboard focus on a deep link', () => {
     renderDashboard(dataSource);
     await settle();
 
-    // Reached under the reader's own steam, which is all this needs of it — the
-    // site table's row until 2026-08-12, the site's own marker since.
+    // Reached under the reader's own steam, which is all this needs of it.
     const reached = screen.getByRole('button', { name: `Marker: ${site.name}` });
     reached.focus();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -432,9 +412,7 @@ describe('Dashboard focus around the add-site draft', () => {
     press(screen.getByRole('button', { name: `Marker: ${site.name}` }));
     clickMap();
 
-    // A modal announces itself with its own heading. What changed underneath is
-    // that the site's card it opened over is still on the map behind it rather
-    // than displaced.
+    // A modal announces itself with its own heading.
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Add a site' }));
   });
 

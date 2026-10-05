@@ -17,12 +17,11 @@
  * unit the panel was showing before it took the liberty of switching, and
  * deselecting hands it back.
  *
- * Pure and React-free on purpose (`architecture.md` rule 3): the whole of the
- * semantics is a total function over two small unions and gets tested as a
- * table, while `use-chart-unit.ts` owns nothing but the wiring to a prop and an
- * event handler. It imports nothing from `charts/` either — the dependency runs
- * dashboard → charts, and the chart itself is unit-agnostic apart from its axis
- * title, its percent floor and the word its readout speaks.
+ * Pure and React-free on purpose (`docs/standards/architecture.md` rule 3): the
+ * whole of the semantics is a total function over two small unions and gets
+ * tested as a table, while `use-chart-unit.ts` owns nothing but the wiring to a
+ * prop and an event handler. It imports nothing from `apps/web/src/charts/`
+ * either — the dependency runs dashboard → charts.
  */
 
 /**
@@ -37,11 +36,8 @@ export type ChartUnit = 'kw' | 'percent';
 /**
  * The unit, plus what the panel owes the reader when the selection ends.
  *
- * `idle` is the fleet on its own: there is no selection, so there is nothing to
- * hand back and the unit is simply whatever was last chosen. `selected` is a
- * selection episode, and it carries the debt: `revertTo` is the unit to restore
- * on deselect, or `null` once the reader has taken the decision back by using
- * the toggle themselves.
+ * `idle` is the fleet on its own: nothing to hand back, and the unit is whatever
+ * was last chosen. `selected` is a selection episode and carries the debt.
  */
 export type ChartUnitState =
   | { readonly kind: 'idle'; readonly unit: ChartUnit }
@@ -78,7 +74,8 @@ export const INITIAL_CHART_UNIT_STATE: ChartUnitState = { kind: 'idle', unit: 'k
  * The unit a selection switches to, being the only one both curves fit on.
  *
  * Named rather than inlined because it is the single claim the auto-switch
- * makes, and this declaration owns it (`architecture.md` rule 9).
+ * makes, and this declaration owns it (`docs/standards/architecture.md`
+ * rule 9).
  *
  * Restatement ledger — a floor, not a census; swept with
  * `command grep -rn "percent" apps/web/src/dashboard` on 2026-08-12:
@@ -92,26 +89,18 @@ const SELECTION_UNIT: ChartUnit = 'percent';
 /**
  * The whole state machine: total, pure, and the only place the rules live.
  *
- * The rows, in the order the arms below take them:
+ * What the arms below do not say on their own:
  *
- * - `toggled` from `idle` — the reader's choice, and nothing is owed back.
- * - `toggled` from `selected` — the reader claims the episode. `revertTo` goes
- *   to `null` unconditionally, including when they press the unit already
- *   showing: pressing the control *is* the act that ends the panel's licence to
- *   move, and asking whether the value changed would make a reader who
- *   deliberately re-affirmed percent get moved off it later anyway.
- * - `selected` from `idle` — the courtesy switch, remembering the unit it
- *   displaced. When that unit is already percent the switch changes nothing
- *   visible and `revertTo` records percent, so deselecting is equally a no-op.
- * - `selected` from `selected` — idempotent. A site-to-site move should not
- *   reach here at all, and if it does it must not re-arm the courtesy switch
+ * - `toggled` from `selected` sets `revertTo` to `null` unconditionally,
+ *   including when the reader presses the unit already showing. Pressing the
+ *   control *is* the act that ends the panel's licence to move, and asking
+ *   whether the value changed would make a reader who deliberately re-affirmed
+ *   percent get moved off it later anyway.
+ * - `selected` from `selected` is idempotent because a site-to-site move should
+ *   not reach here at all, and if it does it must not re-arm the courtesy switch
  *   over a reader's manual choice.
- * - `deselected` from `selected` — settle the debt: back to `revertTo`, or stay
- *   put where the reader claimed the episode.
- * - `deselected` from `idle` — idempotent; there was no episode to end.
- *
- * Both idempotent arms return the *same object*, so React bails out of
- * re-rendering rather than committing an identical state.
+ * - Both idempotent arms return the *same object*, so React bails out of
+ *   re-rendering rather than committing an identical state.
  */
 export const chartUnitTransition = (
   state: ChartUnitState,

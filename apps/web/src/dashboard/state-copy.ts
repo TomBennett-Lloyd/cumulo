@@ -15,14 +15,14 @@
  * top to bottom here, which is not true when each phrase lives inside the JSX
  * that happens to render it.
  *
- * One adjective is deliberately gone from the empty-fleet line. The old fleet
- * view qualified its sites with a word asserting a distinction the data model
- * does not make — there is no opposite kind of site to contrast with — and a
- * sentence that implies a state the system cannot be in teaches the reader
- * something false (#104's finding). The word is not written here on purpose:
- * the copy-contract test's acceptance is a grep for it across `apps/web/src`,
- * comments included, and quoting it in the explanation would be the one thing
- * keeping that grep from going quiet.
+ * One adjective is deliberately gone from the empty-fleet line: it asserted a
+ * distinction the data model does not make — there is no opposite kind of site to
+ * contrast with — and a sentence implying a state the system cannot be in teaches
+ * the reader something false (#104). The word is not written here on purpose:
+ * `apps/web/src/dashboard/state-copy-contract.test.ts` greps for it across
+ * `apps/web/src` with comments included, so quoting it would be the one thing
+ * keeping that grep from going quiet. Every other retired line below is unquoted
+ * for the same reason.
  *
  * Scope: async-state and failure copy. Chart *chrome* wording — the words a
  * chart says about itself, the clock included — is owned by
@@ -40,10 +40,9 @@
  * only places a site while the mode is armed, so the invitation this sentence
  * used to extend now sends a reader to do the one thing that does nothing.
  *
- * That older wording is not quoted here, for the reason the retired empty-fleet
- * line is not quoted above: the copy-contract test sweeps for it across
- * `apps/web/src` with comments included, and an explanation containing the
- * phrase would be the one thing keeping that sweep from ever going quiet.
+ * That older wording is not quoted here, for the reason given in the file header:
+ * `apps/web/src/dashboard/state-copy-contract.test.ts` sweeps for it with
+ * comments included.
  *
  * It had a sibling, `ADD_SITE_HINT`, saying the same thing beside the fleet
  * chart for a fleet that already had sites. That one is gone rather than
@@ -54,38 +53,24 @@ export const EMPTY_FLEET_MESSAGE =
   'No sites yet — press “Add a site” on the map, then click where it goes.';
 
 /*
- * The site listing's own pending label stood here until #452, and that round
- * deleted it for a reason one step further along than #448's.
+ * Two pending labels stood here and are deliberately not replaced.
  *
- * #448 took the *fleet chart's* pending sentence out and let the plot draw the
- * wait. #452 took the listing's states off the page altogether: the sites
- * section they were the last occupant of is gone (#451), and what a reader is
- * owed while the listing is in flight is the same thing they are owed while any
- * other read is — the chart drawing its wait, which it does, because a panel
- * with no sites yet has queries that have never run and therefore report
- * `loading` (`data/use-fleet-query.ts`). So the label lost its surface rather
- * than its wording. The retired phrase is deliberately not quoted, for the
- * reason the other retired lines in this file are not.
- */
-
-/*
- * The fleet chart's own pending label stood here until #448, and that round
- * deleted it rather than rewording it.
+ * The fleet chart's went in #448, on the owner's *"graph loading state needs to
+ * be visual not words"*: the sentence arrived above the chart and left again,
+ * moving the page under a reader twice per read, and no wording fixes that. What
+ * draws the wait now is `apps/web/src/charts/chart-loading-curve.ts`, animated by
+ * `apps/web/src/charts/charts.css`, with `aria-busy` on
+ * `apps/web/src/dashboard/fleet-panel-body.tsx` for a reader without eyes.
  *
- * Both halves of the owner's objection are why. The verb named the wrong thing —
- * most of that wait is spent fetching, not summing — which is a rewording. But
- * the sentence also arrived above the chart and left again, moving the page
- * under a reader twice per read, and no wording fixes that. What they asked for
- * instead is that the surface show its own wait: *"graph loading state needs to
- * be visual not words"*. So the state left this module altogether rather than
- * moving to a better sentence, and nothing replaces it here.
+ * The site listing's went in #452, one step further along: its states left the
+ * page altogether with the section that carried them (#451), and a panel with no
+ * sites yet has queries that never ran and therefore report `loading`
+ * (`apps/web/src/data/use-fleet-query.ts`), so the chart draws that wait too. It
+ * lost its surface rather than its wording.
  *
- * Where it went: `charts/chart-loading-curve.ts` draws it, `charts/charts.css`
- * animates it, and `aria-busy` on the panel body (`dashboard/fleet-panel-body.tsx`)
- * is what a reader without eyes gets instead. The retired phrase is deliberately
- * not quoted above, for the same reason the two retired lines further up are
- * not: a comment naming a phrase is the one thing that keeps a sweep for it from
- * ever going quiet.
+ * Neither retired phrase is quoted, for the reason the retired lines throughout
+ * this file are not: a comment naming a phrase is the one thing that keeps the
+ * copy-contract sweep for it from ever going quiet.
  */
 
 /** One site's forecast is being fetched; the site is named because the selection can move. */
@@ -119,15 +104,13 @@ export const ADDING_SITE_LABEL = 'Adding site…';
 export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
 
 /*
- * Three sentences left this module in #265, and the reason is the same for all
- * three: the surface that said them no longer exists. The site detail panel drew
- * a windowed chart of one site's forecasts and measurements, so it owed the
- * reader an empty answer, a "nothing was measured in this range" notice, and a
- * failure sentence naming the site. The site's card on the map draws no chart —
- * one site's forecast is now a series on the fleet's (`site-overlay.ts`) — so
- * there is no window to be empty, no measured half to be missing, and no
- * per-site series call to fail. Copy for a surface that is gone is copy that
- * eventually gets reused by someone who assumes the surface came back.
+ * Three sentences left this module in #265 because the surface that said them no
+ * longer exists: the site detail panel drew a windowed chart of one site, so it
+ * owed the reader an empty answer, a nothing-measured notice and a per-site
+ * failure. The site's card on the map draws no chart — one site's forecast is a
+ * series on the fleet's (`apps/web/src/dashboard/site-overlay.ts`) — so there is
+ * no window to be empty and no per-site series call to fail. Copy for a surface
+ * that is gone is copy that gets reused by someone who assumes it came back.
  */
 
 /**
@@ -171,17 +154,12 @@ export const siteOverlayFailureNotice = (siteName: string): string =>
  * The fleet's forecast arrived; its simulated actuals did not.
  *
  * The third of this family, and it earns its place the same way the second did.
- * The fleet's two reads are two requests over two windows — one metered
- * `/v1/fleet/forecast` call (#296) and one metered `/v1/fleet/actuals` call
- * (#264) — so either can fail without the other, and the panel used to answer a
- * failed actuals read by withdrawing the whole chart under the forecast read's
- * own failure sentence — a line naming the forecast and the source's detail,
- * which {@link CHART_DATA_UNAVAILABLE_MESSAGE} replaced in #452. That blamed
- * the forecast for a failure
- * the forecast had nothing to do with, which is the wrong party named to a
- * reader who might go looking at the wrong thing (`error-handling.md` rule 1's
- * blame tiebreak), and it threw away a complete fleet sum that had already
- * arrived (rule 5).
+ * `/v1/fleet/forecast` (#296) and `/v1/fleet/actuals` (#264) are two metered
+ * requests over two windows, so either can fail without the other — and the panel
+ * used to answer a failed actuals read by withdrawing the whole chart under the
+ * forecast read's own failure sentence. That blamed a party that had not failed
+ * (`error-handling.md` rule 1's blame tiebreak) and threw away a complete fleet
+ * sum that had already arrived (rule 5).
  *
  * A constant rather than a function, unlike its sibling above: there is one
  * fleet, so there is no name to interpolate. The source's own message is left
@@ -203,18 +181,16 @@ export const firstForecastTimeoutMessage = (deadlineSeconds: number): string =>
 /**
  * The deadline passed without the fleet answering at all.
  *
- * Its sibling above claims the pipeline may still be working, which is only
- * true of a wait the fleet confirmed was a wait. A run that never got an answer
- * — every request still in flight at ninety seconds — knows nothing about
- * whether a forecast exists, so this sentence claims nothing about the
- * pipeline and says only what is certain: no answer, and the question is still
- * open. It consumes the tech-debt entry "The timeout copy asserts pipeline
- * generation from a run that never established existence" (#177 review cycle 1,
- * resolved here in #104); `ForecastFailureReason`'s `unanswered` arm is the
- * fact this renders.
+ * Its sibling above claims the pipeline may still be working, which is only true
+ * of a wait the fleet confirmed was a wait. A run whose every request was still
+ * in flight at the deadline knows nothing about whether a forecast exists, so
+ * this sentence claims nothing about the pipeline and says only what is certain.
+ * It consumes the tech-debt entry "The timeout copy asserts pipeline generation
+ * from a run that never established existence" (#177, resolved in #104);
+ * `ForecastFailureReason`'s `unanswered` arm is the fact this renders.
  *
- * The deadline is a parameter for the same reason it is on the sibling: the
- * number belongs to the polling hook that enforces it.
+ * The deadline is a parameter for the sibling's reason: the number belongs to the
+ * polling hook that enforces it.
  */
 export const firstForecastUnansweredMessage = (deadlineSeconds: number): string =>
   `No answer from the fleet within ${String(deadlineSeconds)} seconds — whether a forecast exists yet is unknown. Try again to keep asking.`;
@@ -223,23 +199,16 @@ export const firstForecastUnansweredMessage = (deadlineSeconds: number): string 
  * **No sentence in this module takes the source's own message any more, and
  * #452 is where the last two went.**
  *
- * Two of them used to — the fleet forecast read's and the site listing's — on
- * the argument that the source names the operation that failed and is the only
- * account of what actually went wrong (`error-handling.md` rule 4). That
- * argument was about the *log*, and it had quietly been applied to the *page*.
- * Every other failure sentence in this file had already declined the detail on
- * the ground {@link siteOverlayFailureNotice} states: the recourse a reader has
- * is a button, not a diagnosis, and `fleetForecasts range=24: upstream timed
- * out` tells them nothing they can act on. #452 finished the job from the other
- * end — the owner ruled that a total failure needs no specificity at all
- * (see {@link CHART_DATA_UNAVAILABLE_MESSAGE}) — so the two detail-bearing
- * sentences went with the surfaces that rendered them.
+ * Two of them used to — the fleet forecast read's and the site listing's — on the
+ * argument that the source is the only account of what went wrong
+ * (`error-handling.md` rule 4). That argument was about the *log* and had quietly
+ * been applied to the *page*: the recourse a reader has is a button, not a
+ * diagnosis, which is the ground every other sentence here had already declined
+ * the detail on ({@link siteOverlayFailureNotice}).
  *
- * Rule 4 is untouched by this: the typed error still carries `code` and
- * `message` all the way to the view (`data/use-fleet-query.ts`'s `QueryState`),
- * so nothing is thrown away — it is simply not shown to a reader who cannot use
- * it. A view that one day distinguishes a rate limit from a broken payload has
- * everything it needs.
+ * Rule 4 is untouched: the typed error still carries `code` and `message` all the
+ * way to the view (`apps/web/src/data/use-fleet-query.ts`'s `QueryState`), so
+ * nothing is thrown away — it is simply not shown to a reader who cannot use it.
  */
 
 /**
@@ -250,22 +219,18 @@ export const firstForecastUnansweredMessage = (deadlineSeconds: number): string 
  * try again later"*, ruled generic on purpose — *"this can be the generic error
  * message for anything that means we can't show data on the graph, no need to be
  * too specific if the error state is basically just a total failure"* (#452).
- * The source's detail therefore does not reach the reader by decision rather
- * than by omission, and which failures route here is `dashboard/FleetPanel.tsx`'s
- * to decide, not this sentence's.
+ * The source's detail therefore does not reach the reader by decision rather than
+ * by omission, and which failures route here is
+ * `apps/web/src/dashboard/FleetPanel.tsx`'s to decide, not this sentence's.
  *
- * Three deliberate departures from the dictation. **The plea is dropped**: the
- * quotation above is, after this change, the single occurrence of that word
- * anywhere in `apps/web/src` — swept and verified in #452 — and it is a record
- * of what was asked for rather than anything a reader is shown, so keeping it in
- * the copy would have made this the one sentence in the product that pleads.
- * **"Try again later"
- * became the button**, which carries {@link RETRY_ACTION_LABEL} — one name, so
- * it is one control — and the two could not both stand: a sentence counselling
- * patience beside a button offering action contradicts itself, and the button is
- * the half that can actually work. **No trailing period**, on
- * {@link NO_FLEET_FORECAST_MESSAGE}'s precedent — it is a fragment stating a
- * state, not a sentence addressed to anyone.
+ * Three deliberate departures from the dictation. **The plea is dropped** — the
+ * quotation above is the only occurrence of that word in `apps/web/src`, and it
+ * is a record of what was asked for rather than anything a reader is shown.
+ * **"Try again later" became the button**, which carries
+ * {@link RETRY_ACTION_LABEL}: a sentence counselling patience beside a button
+ * offering action contradicts itself, and the button is the half that can work.
+ * **No trailing period**, on {@link NO_FLEET_FORECAST_MESSAGE}'s precedent — a
+ * fragment stating a state, not a sentence addressed to anyone.
  */
 export const CHART_DATA_UNAVAILABLE_MESSAGE = 'Site data unavailable';
 

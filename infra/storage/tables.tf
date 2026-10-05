@@ -106,14 +106,16 @@
 # infra/README.md's `### Storage stack` series row (already enumerated above),
 # the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx, the
 # `listSites` docblock in apps/web/src/data/fleet-data-source.ts, the
-# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts and
-# the fleet-vs-poll comment in apps/web/src/data/use-first-forecast.test.tsx.
-# One ADR carrier joins them: ADR 0002's 2026-08-10 (#264) Amendments entry,
-# which states the current per-load figure and halves every read-side figure
-# derived from its predecessor — a quoter of this stack's arithmetic rather
-# than an owner of it, and owed the ADR treatment described above rather than
-# an inline true-up. So: change the per-load read arithmetic, and every site
-# named here moves in the same commit.
+# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts —
+# which since #467's prose trim carries the ratio between a per-site read and a
+# fleet fan-out and none of the unit figures themselves — and the fleet-vs-poll
+# comment in apps/web/src/data/use-first-forecast.test.tsx. One ADR carrier
+# joins them: ADR 0002's 2026-08-10 (#264) Amendments entry, which states the
+# current per-load figure and halves every read-side figure derived from its
+# predecessor — a quoter of this stack's arithmetic rather than an owner of it,
+# and owed the ADR treatment described above rather than an inline true-up. So:
+# change the per-load read arithmetic, and every site named here moves in the
+# same commit.
 #
 # Both member lists are a floor rather than a census: one more carrier does not
 # falsify them. The sweep behind the ADR members, run 2026-08-11 with

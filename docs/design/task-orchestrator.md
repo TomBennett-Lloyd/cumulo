@@ -28,6 +28,13 @@ as written, §8's "never write to the main checkout" forbade the first thing `ex
 a task-orchestrator to do, so an agent reading the list as a hard rule would have had to refuse
 its own first step or learn that the list can be broken.
 
+A second amendment, later and larger, and likewise not folded into the body: since
+`.claude/workflow.json` → `orchestration.mode` became `ticket-agent` on 2026-09-10 (#468), a
+single issue takes the ticket-agent lane (`.claude/agents/ticket-agent.md`) and this design
+governs batches. The body below is preserved as reviewed, so where it describes a single
+issue's delegated run in the present tense it is describing the routing at review time, not
+the live routing.
+
 Status: draft for owner review. If accepted, lands via the retro-PR route — this touches
 `.claude/workflow.json` and `CLAUDE.md`, both `humanAlways` paths, so the owner decides.
 

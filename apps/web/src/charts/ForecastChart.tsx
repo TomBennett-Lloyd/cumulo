@@ -40,14 +40,10 @@ import { useChartWidth } from './use-chart-width';
  *
  * **The legend is not here, and since 2026-08-11 it is not this component's at
  * all.** The owner's design round put it behind the (i) that already carries the
- * chart's description — in their words, *"the legend can go in the (i)
- * section"* — so the caller renders `forecast-chart-legend.tsx` into that
- * popover and this file draws only what is on the canvas. `FleetPanel.tsx` is
- * the one caller today and owns the two inputs the legend reads, which are the
- * same two facts this body derives for the plot: whether any drawn point carries
- * a band, and the overlay's label. The treatment's rule is unchanged and is now
- * discharged one press away rather than under the plot — a legend in every
- * state, not a legend on every chart (`docs/design/chart-treatment.md`,
+ * chart's description, so the caller renders `forecast-chart-legend.tsx` into
+ * that popover and this file draws only what is on the canvas. The treatment's
+ * rule is discharged one press away rather than under the plot — a legend in
+ * every state, not a legend on every chart (`docs/design/chart-treatment.md`,
  * "Legend").
  *
  * Presentational only — no fetching, no domain imports. Points arrive as plain
@@ -59,165 +55,134 @@ import { useChartWidth } from './use-chart-width';
  * already normalised by the caller at the panel seam — a ~4 kW site overlaid on
  * a ~330 kW fleet is a flat line on an absolute axis, and re-expressing both
  * against their own capacity is what makes the pair readable on one scale
- * (`docs/design/chart-treatment.md`, "One value axis"). The unit is
- * presentation and reaches this component's arithmetic exactly twice: the axis
- * always shows 100 in percent mode, and the chrome says which unit is showing
- * — the axis title and the spoken readout's frame. Everything between is
- * unit-agnostic, which is why the `*Kw` field spellings on the points are
- * unchanged: a rename is filed as its own change rather than smuggled in here,
- * and the contract that the values carry the *selected* unit is stated on
- * `ForecastChartPoint` (`chart-series.ts`).
+ * (`docs/design/chart-treatment.md`, "One value axis"). The unit is presentation
+ * and reaches this component's arithmetic exactly twice: the percent axis's
+ * fixed maximum, and the chrome that says which unit is showing. Everything
+ * between is unit-agnostic, which is why the `*Kw` field spellings are
+ * unchanged — a rename is its own change — and the contract that the values
+ * carry the *selected* unit is stated on `ForecastChartPoint`
+ * (`chart-series.ts`).
  *
  * Two rules from the token preview carry over: no literal colours or sizes
  * (every visual value is a class consuming a token, in `charts.css`), and the
  * numbers below are geometry — SVG user units, and values in the display unit
  * above — not styling.
  *
- * **A null value breaks its line, and is never bridged.** A missing band or a
- * missing measurement inside the series is a partial result and reads as one:
- * band and actuals are drawn once per contiguous run, so a straight segment is
- * never painted across a gap to imply a value that was never modelled or
- * measured (`error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31). A run
- * left with a single sample has no path to stroke and becomes a marker instead
- * of disappearing — `forecast-chart-marks.tsx` holds that rule and its
- * reasoning. A rule about *nulls* rather than about gaps in general, because
- * that is its reach: an hour absent from the series carries no null for a run to
- * break at, so the marks are still drawn across it. `contiguousRuns` in
- * `chart-series.ts` says why, and `docs/tech-debt.md` (2026-08-11,
+ * **A null value breaks its line, and is never bridged.** A missing band or
+ * measurement inside the series is a partial result and reads as one: band and
+ * actuals are drawn once per contiguous run, so a straight segment is never
+ * painted across a gap to imply a value that was never modelled or measured
+ * (`docs/standards/error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31).
+ * A run left with a single sample becomes a marker rather than disappearing —
+ * `forecast-chart-marks.tsx` holds that rule. It is a rule about *nulls* rather
+ * than about gaps in general: an hour absent from the series carries no null for
+ * a run to break at, so the marks are still drawn across it — `contiguousRuns`
+ * in `chart-series.ts` says why, and `docs/tech-debt.md` (2026-08-11,
  * "`contiguousRuns` splits on array adjacency, not on time adjacency") owns it.
  *
  * **An overlay is one more series, not a second chart.** The optional `overlay`
  * prop puts a second series on the same value axis in slot 2 — the treatment's
- * fixed categorical order, with slot 1 reserved for the forecast everywhere in
- * the product. One axis, never two: a second y-scale would invent a correlation
- * the data does not contain (`docs/design/chart-treatment.md`). It is joined
- * onto this series' x-domain once and then flows to the mark, the table column
- * and the readout from that one join. The legend's row for it is the one surface
- * that no longer reads the join, because it no longer renders here — it takes
- * the label straight off the same `ChartOverlaySeries` this prop carries, so the
- * two still cannot disagree about what the overlay is *called*; what the join
- * decides is what the overlay *says at an hour*, and no legend row asks that.
+ * fixed categorical order, slot 1 reserved for the forecast everywhere in the
+ * product. One axis, never two: a second y-scale would invent a correlation the
+ * data does not contain (`docs/design/chart-treatment.md`). It is joined onto
+ * this series' x-domain once and then flows to the mark, the table column and
+ * the readout from that one join. The legend takes its label straight off the
+ * same `ChartOverlaySeries` this prop carries, so the two cannot disagree about
+ * what the overlay is *called*; what the join decides is what it *says at an
+ * hour*, which no legend row asks.
  *
- * **Loading is a mark on the canvas, not a sentence over it.** The optional
- * `loading` prop puts one more path inside the plot — a stylised solar day that
- * traces itself and restarts, `chart-loading-curve.ts` for the shape and
- * `charts.css` for the motion. The owner asked for it in those terms on
- * 2026-08-12 (*"graph loading state needs to be visual not words"*), and what
- * makes it this component's rather than the panel's is the thing they objected
- * to next: a notice above the chart changes the panel's height when it arrives
- * and again when it goes, so the page jumps twice per read. A mark *inside* the
- * plot occupies the box the chart already has. It is decoration to assistive
- * technology, and the state stays machine-readable where the panel can carry it
- * without words — `aria-busy` on `.fleet-panel-body`
- * (`dashboard/fleet-panel-body.tsx`, and `docs/standards/react.md`'s Pending
- * bullet, amended by the same round). Absent, this prop draws nothing at all,
- * which is the same contract `overlay` keeps.
+ * **Loading is a mark on the canvas, not a sentence over it** (#448) — one more
+ * path inside the plot, a stylised solar day that traces itself and restarts
+ * (`chart-loading-curve.ts` for the shape, `charts.css` for the motion). A
+ * notice *above* the chart changes the panel's height when it arrives and again
+ * when it goes, so the page jumps twice per read; a mark inside the plot
+ * occupies the box the chart already has. It is decoration to assistive
+ * technology, and the state stays machine-readable through `aria-busy` on
+ * `.fleet-panel-body` (`apps/web/src/dashboard/fleet-panel-body.tsx`, and
+ * `docs/standards/react.md`'s Pending bullet).
  *
- * **A total failure is an overlay too, in the same box** (#452). The optional
- * `error` prop puts the owner's one generic account of "we cannot show data on
- * the graph" over the plot — a warning triangle, a sentence and the recourse —
- * and it is positioned inside the figure rather than rendered above it for the
- * reason the loading trace is drawn inside the plot: an absolutely positioned
+ * **A total failure is an overlay too, in the same box** (#452): a warning
+ * triangle, a sentence and the recourse, positioned inside the figure for the
+ * reason the loading trace is drawn inside the plot — an absolutely positioned
  * child cannot change the figure's height, so nothing on the page moves when the
- * state arrives or leaves. That is #448's discipline extended rather than a
- * second idea. `forecast-chart-error.tsx` draws it and holds the argument for why
- * it is not `PanelError`; the wording is the caller's, because this folder spells
- * no state copy of its own.
+ * state arrives or leaves. `forecast-chart-error.tsx` draws it and holds the
+ * argument for why it is not `PanelError`; the wording is the caller's, because
+ * this folder spells no state copy of its own.
  *
  * `loading` and `error` are never both set. The caller's state arms are mutually
  * exclusive by construction — a read is out, or it came back and failed — and
  * that is deliberately *not* re-enforced here: this component would have to
  * invent a resolution for a combination no caller can produce, and a mode flag
- * over two independent by-presence props is the shape `structure.md` rule 7
- * refuses. Two props rather than one `state` union for the same reason they are
- * two different mechanisms: the wait is a `<path>` among the marks, and the
- * failure is text-bearing HTML over the whole figure.
+ * over two independent by-presence props is the shape
+ * `docs/standards/structure.md` rule 7 refuses. Two props rather than one
+ * `state` union for the same reason they are two mechanisms: the wait is a
+ * `<path>` among the marks, the failure is text-bearing HTML over the figure.
  *
- * **The readout has one source of truth, and since #331 it is not this file.**
- * Pointer and keyboard both settle on an `activeIndex`, which
- * `forecast-chart-hover-boundary.tsx` holds — the child this component wraps
- * its chrome in — and `forecast-chart-hover.tsx` draws whatever that index
- * says. There is no separate keyboard rendering path to drift from the hover
- * one, which is what the treatment's "keyboard focus shows exactly what hover
- * shows" costs when it is designed in rather than retrofitted. The pointer
- * carries one thing the keyboard cannot — a continuous position, which the
- * panel follows and the crosshair ignores (#284 D7) — and it is a second field
- * beside the index rather than a second selection, so neither route can end up
- * reading a different sample. It sits one level down rather than here because
- * moving the panel must not re-run this body; that is the whole of what moved,
- * and the single source of truth is the thing the move was careful to keep.
+ * **The readout has one source of truth, and it is not this file.** Pointer and
+ * keyboard both settle on an `activeIndex`, which
+ * `forecast-chart-hover-boundary.tsx` holds and `forecast-chart-hover.tsx`
+ * draws, so there is no separate keyboard rendering path to drift from the hover
+ * one. The pointer carries one thing the keyboard cannot — a continuous position
+ * the panel follows and the crosshair ignores — and it is a second field beside
+ * the index rather than a second selection. It sits one level down rather than
+ * here because moving the panel must not re-run this body.
  *
  * **The chart is drawn 1:1 with the width it is rendered at.** `useChartWidth`
- * measures the figure and the view box takes that width, so one SVG user unit
- * is one pixel and the chrome stops scaling with the panel — an axis label is
- * the same size here as everywhere else on the page. The height does not follow:
- * `CHART_VIEW_BOX_HEIGHT` is an owned constant, because a value axis that
- * rescaled on every resize would be a different chart at every window size. The
- * unit is the one thing that *is* allowed to rescale it, because switching unit
- * is a reader asking for a different reading rather than a window changing size.
+ * measures the figure and the view box takes that width, so one SVG user unit is
+ * one pixel and an axis label is the same size here as everywhere else on the
+ * page. The height does not follow: `CHART_VIEW_BOX_HEIGHT` is an owned
+ * constant, because a value axis that rescaled on every resize would be a
+ * different chart at every window size. The unit is the one thing allowed to
+ * rescale it, because switching unit is a reader asking for a different reading
+ * rather than a window changing size.
  *
  * **The table twin is a panel of its own, after the figure** — the owner's
- * 2026-08-11 ask, in their words: *"i think the raw data could actually live in
- * a collapsible panel rather than inline with the graph etc"*. It has sat behind
- * a closed `<details>` since #284 D3 and still does; what moved is where the
- * disclosure sits. Inside the `<figure>` it was filed alongside the legend as
- * one more piece of the drawing's furniture, which is not what it is — it is the
- * same numbers in another form, offered *after* the chart rather than appended
- * to it. So this component returns a fragment: the figure, then the disclosure
- * as its next sibling, both landing in whatever layout the caller provides
- * (`dashboard/fleet-panel.css`'s `.fleet-panel-body` grid today). Nothing about
- * the fold itself changed — there is one disclosure, closed by default, and
- * `forecast-chart-table.tsx` still owns the argument for it.
+ * 2026-08-11 ask. It is the same numbers in another form, offered *after* the
+ * chart rather than appended to it, so this component returns a fragment: the
+ * figure, then the disclosure as its next sibling, both landing in whatever
+ * layout the caller provides (`apps/web/src/dashboard/fleet-panel.css`'s
+ * `.fleet-panel-body` grid today). There is one disclosure, closed by default,
+ * and `forecast-chart-table.tsx` owns the argument for it.
  *
- * **What the figure holds is a stated contract**, and both moves of
- * 2026-08-11 are what make it worth writing down: the table twin left for the
- * sibling slot and the legend left for the (i), so a `<figure>` that once held
- * four things holds the plot and the announcement about it wherever there is a
- * chart to read — `[svg.forecast-chart, p.forecast-chart-readout]`, in that
- * order, with `.forecast-chart-details` as the figure's next sibling, and the
- * one exception stated in the paragraph below. The order is not
- * cosmetic. The readout is the region a reader meets *after* the plot it
- * describes, which is the arrangement `docs/design/chart-treatment.md`'s
- * live-region bullet states, and #410 asked for it to be pinned rather than left
- * to be read off this file. `dashboard/FleetPanel.structure.test.tsx` is where
- * it is pinned, in every state of the panel.
+ * **What the figure holds is a stated contract**: the plot and the announcement
+ * about it wherever there is a chart to read —
+ * `[svg.forecast-chart, p.forecast-chart-readout]`, in that order, with
+ * `.forecast-chart-details` as the figure's next sibling. The order is not
+ * cosmetic: the readout is the region a reader meets *after* the plot it
+ * describes, which is what `docs/design/chart-treatment.md`'s live-region bullet
+ * states, and #410 asked for it to be pinned rather than read off this file.
+ * `apps/web/src/dashboard/FleetPanel.structure.test.tsx` pins it in every state
+ * of the panel.
  *
- * #452 adds `div.forecast-chart-error` as a **suffix** to that pair, in the one
- * state that has it, and a suffix is what keeps the contract a contract: the two
- * elements above stay in their order and stay the whole of the figure wherever
- * there is a chart to read, and the failure appends rather than displacing
- * either. Last rather than first for the same reason it is an `alert` at all —
- * it announces by arriving, so it does not need to be met first to be met, and
- * putting it ahead of the plot would reorder the figure for every reader in
- * order to serve a state most of them never reach.
+ * `div.forecast-chart-error` is a **suffix** to that pair in the one state that
+ * has it, and a suffix is what keeps the contract a contract: the two elements
+ * stay in their order and stay the whole of the figure, and the failure appends
+ * rather than displacing either. Last rather than first for the same reason it
+ * is an `alert` at all — it announces by arriving, so putting it ahead of the
+ * plot would reorder the figure for every reader to serve a state most never
+ * reach.
  *
- * **Two names, because there are two things to name.** The standing aria
- * decision, written down as a decision rather than left to be read off the
- * markup: the disclosure is named by its `<summary>` ("Raw data") — what a
- * reader meets while it is closed and what they press — and the table is named
- * by its `<caption>`, which states which window and which units the numbers are
- * in. That pair is why the caption is not folded into the summary: a summary
- * names the *disclosure*, and taking it for the table would leave one of the two
- * nameless and the other saying two things at once. Neither name ever came from
- * the figure, so leaving it costs the pair nothing.
+ * **Two names, because there are two things to name**: the disclosure is named
+ * by its `<summary>` — what a reader meets while it is closed and what they
+ * press — and the table by its `<caption>`, which states which window and which
+ * units the numbers are in. Folding the caption into the summary would leave one
+ * of the two nameless and the other saying two things at once.
  *
  * **The time of day is a layer, not a sentence.** Hours the whole fleet is dark
- * get a wash behind the series and each UTC midnight gets a hairline, so the
- * diurnal shape of the curve reads against its cause without a word of copy
- * (`design.md` rule 10). `forecast-chart-context.tsx` draws both; whether an
- * hour is the fleet's night is decided far from here and arrives on the point.
+ * get a wash behind the series and each UTC midnight a hairline, so the diurnal
+ * shape of the curve reads against its cause without a word of copy
+ * (`docs/standards/design.md` rule 10). `forecast-chart-context.tsx` draws both;
+ * whether an hour is the fleet's night is decided far from here and arrives on
+ * the point.
  *
- * This file is composition and nothing else. The plot's chrome, its data marks,
- * the hover layer and the table twin sit beside it — `forecast-chart-axes.tsx`,
- * `-marks.tsx`, `-context.tsx`, `-hover.tsx`, `-table.tsx` — each a piece of the
- * treatment named after the piece it draws,
- * and each well inside `structure.md` rule 4's ceiling. `-legend.tsx` is still
- * in that folder and is no longer one of this file's pieces: it draws a key for
- * a chart rather than a part of one, and its caller is the panel that opens the
- * (i). `-hover-boundary.tsx`
- * joined them in #331 and is the one named after something other than a piece
- * of the drawing: it draws no mark of its own, and the seam it marks is where
- * re-rendering stops.
+ * This file is composition and nothing else — `forecast-chart-axes.tsx`,
+ * `-marks.tsx`, `-context.tsx`, `-hover.tsx` and `-table.tsx` each draw a piece
+ * of the treatment and are named after it, well inside
+ * `docs/standards/structure.md` rule 4's ceiling. `-legend.tsx` sits in the same
+ * folder without being one of this file's pieces: it draws a key for a chart
+ * rather than a part of one. `-hover-boundary.tsx` is the one named after
+ * something other than a piece of the drawing — it draws no mark, and the seam
+ * it marks is where re-rendering stops.
  */
 
 export type {
@@ -245,44 +210,35 @@ export interface ForecastChartProps {
    * The chart is waiting for its numbers, and says so by drawing rather than by
    * saying anything (#448; the docblock's Loading paragraph above).
    *
-   * `true` or absent, never `false`: under `exactOptionalPropertyTypes` an
-   * absent optional prop and one explicitly set to `undefined` are different
-   * values, and the contract this shares with `overlay` is about the *absent*
-   * one — a chart rendered without this prop emits exactly what it emitted
-   * before the loading state existed. So callers set it by presence
-   * (`dashboard/fleet-panel-body.tsx`'s `fleetChart`) rather than passing a flag
-   * that has a false value to forget to handle.
+   * `true` or absent, never `false`. Every optional prop on this interface is
+   * set **by presence**, and that is the contract rather than a style: under
+   * `exactOptionalPropertyTypes` an absent optional prop and one explicitly set
+   * to `undefined` are different values, and what each promises is about the
+   * absent one — a chart rendered without the prop emits exactly what it emitted
+   * before that state existed.
    */
   readonly loading?: true;
   /**
    * The chart's data path failed outright, and the figure says so over its own
-   * box (#452; the docblock's total-failure paragraph above).
+   * box (#452; the docblock's total-failure paragraph above). By presence, as
+   * `loading` is.
    *
-   * By presence, exactly as `overlay` and `loading` are, and for the same
-   * reason: under `exactOptionalPropertyTypes` an absent optional prop and one
-   * set to `undefined` are different values, and the contract is about the
-   * absent one — a chart rendered without this prop emits exactly what it
-   * emitted before the error state existed. Which failures reach it is the
-   * caller's question and deliberately not asked here: a partial answer still
-   * has a chart to draw and must not route into this (`error-handling.md` rule
-   * 5), and `dashboard/FleetPanel.tsx` is where that boundary is drawn.
+   * Which failures reach it is the caller's question and deliberately not asked
+   * here: a partial answer still has a chart to draw and must not route into
+   * this (`docs/standards/error-handling.md` rule 5), and
+   * `apps/web/src/dashboard/FleetPanel.tsx` is where that boundary is drawn.
    */
   readonly error?: ChartErrorNotice;
   /**
    * The values on `points` are percentages of capacity rather than kW, and the
-   * chart's chrome says so (#291; the display-unit paragraph above).
-   *
-   * By presence, exactly as `overlay`, `loading` and `error` are, and for the
-   * same reason: under `exactOptionalPropertyTypes` an absent optional prop and
-   * one set to `undefined` are different values, and the contract is about the
-   * absent one — a chart rendered without this prop emits what it emitted before
-   * the toggle existed, save for the unit word the readout gained.
+   * chart's chrome says so (#291; the display-unit paragraph above). By
+   * presence, as `loading` is.
    *
    * A one-member union rather than a `'kw' | 'percent'` pair or a boolean, so
    * that kW stays the absence and no caller has to spell the default. The
-   * caller's own two-state type stops at the panel seam
-   * (`dashboard/`) — this folder learns only that a chart is in the other unit,
-   * which keeps the dependency direction dashboard → charts.
+   * caller's own two-state type stops at the panel seam — this folder learns
+   * only that a chart is in the other unit, which keeps the dependency direction
+   * dashboard → charts.
    */
   readonly unit?: 'percent';
 }
@@ -297,15 +253,11 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   // Joined once and read by every consumer below, so the mark, the table column
   // and the readout can never disagree about what the overlay says at an hour.
   //
-  // Memoised for identity rather than for speed, and still so after #331 moved
-  // the hover boundary down: this body no longer runs on a pointer frame, but it
-  // does run whenever the fleet, the range or the parent gives it a reason to,
-  // and two shallow compares below the boundary are watching this object. The
-  // reading `ForecastChartHoverBoundary` memoises against it, and through that
-  // the memoised tooltip panel, both survive such a re-render only while the
-  // join keeps its identity — rebuilt each time, they would rebuild with it and
-  // redraw a panel that has nothing new to say. The dependencies are the honest
-  // ones: a new series, or a new x-domain to join it onto, really is a new join.
+  // Memoised for identity rather than for speed: two shallow compares below the
+  // boundary watch this object — the reading `ForecastChartHoverBoundary`
+  // memoises against it, and through that the memoised tooltip panel — and both
+  // survive a re-render of this body only while the join keeps its identity.
+  // Rebuilt each time, they would redraw a panel that has nothing new to say.
   const overlay = useMemo<ChartOverlayColumn | undefined>(
     () =>
       props.overlay === undefined
@@ -321,14 +273,13 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     overlay === undefined ? 0 : highestOverlayKw(overlay.values),
   );
   const plot = chartPlot(width);
-  // The x mapping, computed once here and read by everything below it through
-  // `xAt`. Once, because it is time-proportional (#325) and therefore a property
-  // of the series rather than of each mark's index — a second consumer deriving
-  // it again is a second chance to derive it differently.
+  // The x mapping, computed once here and read below through `xAt`: it is
+  // time-proportional and therefore a property of the series rather than of each
+  // mark's index, and a second consumer deriving it again is a second chance to
+  // derive it differently.
   // The one place the display unit reaches the arithmetic: a percent axis always
   // shows capacity, where a kW axis has no such landmark and is drawn to its own
-  // series (`chart-geometry.ts`'s `percentAxisMax`). Everything else below is
-  // unit-agnostic, because the values arrive already normalised.
+  // series (`chart-geometry.ts`'s `percentAxisMax`).
   const percent = props.unit !== undefined;
   const scale: ChartScale = {
     plot,
@@ -338,8 +289,8 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   const spanHours = seriesSpanHours(points);
   const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
   // Three series, one rule: each is drawn once per contiguous run of hours it
-  // actually has a value for. The median joined that rule in #264, when a union
-  // x-domain gave it hours with no forecast on them.
+  // actually has a value for — the median included, since a union x-domain gives
+  // it hours with no forecast on them.
   const medianRuns = contiguousRuns(points.length, (index) => points[index]?.medianKw != null);
   const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
@@ -349,26 +300,20 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
       <figure className="forecast-chart-figure" ref={figureRef}>
         {/* The chrome, handed down rather than drawn here: the boundary owns the
             `<svg>` these go inside, because it owns the hover state that moves
-            the panel over them (#331). They are elements by the time they cross
-            it, so a pointer frame re-renders the boundary and reconciles
-            straight past them — and, more to the point, never re-runs the
+            the panel over them. They are elements by the time they cross it, so
+            a pointer frame reconciles straight past them and never re-runs the
             producers below.
 
-            Draw order is back to front: night wash → grid → loading trace →
-            day boundaries → band → bounds → horizon → median → overlay →
-            actuals → marker. The trace is in that list rather than above it
-            because it is drawn among the marks and not over them, and its place
-            costs nothing to argue: the only state that renders it is the state
-            with no series yet, so there is nothing below it to hide and nothing
-            above it to be hidden by. The
-            wash is the backmost thing on the canvas — it is what everything else
-            is drawn *against*, so the grid reads over it rather than being
-            tinted out by it — and the day boundaries sit immediately above the
-            grid because they are the same kind of thing, chrome the reader
-            consults, and belong under every data mark. Actuals are drawn last of
-            the data and win every overlap — an added series never covers the
-            measurement — and the hover chrome and its pointer target sit above
-            all of it. */}
+            Draw order is back to front, and the order is the argument: the night
+            wash is backmost, since it is what everything else is drawn
+            *against*; the day boundaries sit immediately above the grid because
+            they are the same kind of thing, chrome the reader consults, and
+            belong under every data mark; actuals are drawn last of the data and
+            win every overlap, so an added series never covers the measurement;
+            and the hover chrome with its pointer target sits above all of it.
+            The loading trace is among the marks rather than over them, which
+            costs nothing to argue — the only state that renders it is the state
+            with no series yet. */}
         <ForecastChartHoverBoundary
           points={points}
           ariaLabel={props.ariaLabel}
@@ -380,15 +325,12 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         >
           {nightElements(points, scale)}
           {gridElements(scale)}
-          {/* The wait, drawn (#448). Immediately over the grid and under
-              everything else, which costs nothing to reason about because a
-              loading chart has no marks to compete with — the state that renders
-              this is the state whose series has not arrived. `pathLength` is
-              normalised to 1 so the dash pattern in `charts.css` is a fraction
-              of the path rather than a length that would have to be re-derived
-              at every column width, and the path itself is decoration: it is
-              `aria-hidden`, so the `role="img"` above keeps its one name and no
-              reader is told about a curve that means nothing. */}
+          {/* The wait, drawn (#448). `pathLength` is normalised to 1 so the dash
+              pattern in `charts.css` is a fraction of the path rather than a
+              length that would have to be re-derived at every column width, and
+              the path is decoration: `aria-hidden`, so the `role="img"` above
+              keeps its one name and no reader is told about a curve that means
+              nothing. */}
           {props.loading === undefined ? null : (
             <path
               className="forecast-chart-loading-trace"
@@ -410,20 +352,17 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {/* The total failure, over everything above it and inside the same box
             (#452). After the boundary rather than among the marks because it is
             HTML and they are SVG, and over the plot rather than above it because
-            `charts.css` takes it out of flow — which is the whole of the no-jump
-            claim: an absolutely positioned child cannot alter the figure's
-            height, so this state costs the page no movement arriving or
-            leaving. It is the figure's own `role="alert"`, and it is inside the
-            figure so that a reader who has scrolled to the chart finds the
-            explanation where the chart is. */}
+            `charts.css` takes it out of flow — the whole of the no-jump claim:
+            an absolutely positioned child cannot alter the figure's height. It
+            is inside the figure so that a reader who has scrolled to the chart
+            finds the explanation where the chart is. */}
         {props.error === undefined ? null : chartErrorOverlay(props.error)}
       </figure>
 
-      {/* The twin, outside the figure since 2026-08-11 and a sibling of it: the
-          drawing is one thing and the numbers behind a press are another, which
-          is what the owner asked the layout to say (docblock above). It is the
-          caller's grid that spaces the two, and `charts.css` that gives this one
-          its surface. */}
+      {/* The twin, a sibling of the figure rather than inside it: the drawing is
+          one thing and the numbers behind a press another (docblock above). The
+          caller's grid spaces the two; `charts.css` gives this one its
+          surface. */}
       {forecastChartTable({ points, spanHours, caption: props.tableCaption, overlay })}
     </>
   );

@@ -8,8 +8,9 @@ These are the owner's standing design decisions, distilled from the #265/#284 de
 open questions (`docs/design/design-principles.md`, from #337, is the distillation record — the
 evidence corpus, the grounding behind each rule, and the owner's answers live there). They are
 prospective rules for choices no design record has decided; the decided surfaces live in
-`docs/design/chart-treatment.md`, `map-treatment.md`, and `dashboard-composition.md`, and a rule
-here that gets decided into a surface lands in that surface's record.
+`docs/design/chart-treatment.md`, `docs/design/map-treatment.md`, and
+`docs/design/dashboard-composition.md`, and a rule here that gets decided into a surface lands in
+that surface's record.
 
 ## Rules
 
@@ -44,7 +45,7 @@ here that gets decided into a surface lands in that surface's record.
    information shrinks so the important content can breathe, and whitespace serving the data is
    not the enemy. Standing acceptance: map + heading row + full chart fit one viewport without
    scrolling, at the desktop reference size and a mobile twin — the e2e lane measures the
-   desktop case today (`chart-surfaces.spec.ts`, D15 case).
+   desktop case today (`apps/web/e2e/chart-surfaces.spec.ts`, D15 case).
    (#265 themes 4–8; #284 D3/D15; #323; owner 2026-08-10)
 
 4. **Adjacency is information.** Elements forming one reading unit touch; a gap or band between
@@ -88,7 +89,8 @@ here that gets decided into a surface lands in that surface's record.
    enumerate the marks it must be told apart from, in both themes. A treatment already carrying
    a meaning (the series hues, the horizon dash) is not available for a new job. This rule
    governs meanings and treatments, not palette values — those stay owned by
-   `chart-treatment.md` and the tokens file, and the accent hue is decided (#273).
+   `docs/design/chart-treatment.md` and `packages/ui/src/tokens/tokens.css`, and the accent hue
+   is decided (#273).
    (#284 D11; #335; #323; owner 2026-08-10)
 
 10. **Context is drawn, not written.** When data needs context — why a series dips, where days

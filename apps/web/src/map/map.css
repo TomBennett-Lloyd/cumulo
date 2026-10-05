@@ -85,25 +85,24 @@
  * came down far enough that it is the only ink the veil still clears AA with
  * (`packages/ui/src/tokens/tokens.css`'s header owns that measurement).
  *
- * `z-index: 2` is what keeps the group on top of the selected site's card, and it
- * is a fix rather than a default. maplibre gives its own markers no stacking
- * order — they are siblings in one pane, all `z-index: auto` — so a marker's
- * hover tooltip has always painted under these controls on document order alone,
- * this group being the later element. The card is the one that does not: its
- * marker is told to outrank its siblings (`.site-popover-anchor`,
- * map/site-popover.css), and that value is not confined to maplibre's pane,
- * because nothing between either element and the document root opens a stacking
- * context — `.map-view` above and maplibre's `.maplibregl-map` are both
- * `position: relative` with no z-index, `.maplibregl-canvas-container` is static,
- * and `app.css`/`dashboard.css` declare no position, transform, filter or
- * opacity at all. So the two competed in the *root* stacking context, where any
- * positive value beats `auto` whatever the document order, and a card panned
+ * The `z-index` keeps the group on top of the selected site's card, and it is a
+ * fix rather than a default. maplibre gives its own markers no stacking order, so
+ * a marker's hover tooltip has always painted under these controls on document
+ * order alone. The card is the one that does not: its marker is told to outrank
+ * its siblings (`.site-popover-anchor`, `apps/web/src/map/site-popover.css`), and
+ * that value is not confined to maplibre's pane, because nothing between either
+ * element and the document root opens a stacking context — `.map-view` above and
+ * maplibre's `.maplibregl-map` are `position: relative` with no z-index,
+ * `.maplibregl-canvas-container` is static, and `apps/web/src/app.css` and
+ * `apps/web/src/dashboard/dashboard.css` declare no position, transform, filter
+ * or opacity at all. So the two competed in the *root* stacking context, where
+ * any positive value beats `auto` whatever the document order, and a card panned
  * under this corner took the reset button with it.
  *
  * `2` is the smallest value that clears the card's `1`, and it stays far under
- * the `10` the header's overlays carry: this group belongs to the map rather
- * than over it, exactly as the card does. `header/header.css` holds the census —
- * the one place these values are read against each other. */
+ * the `10` the header's overlays carry: this group belongs to the map rather than
+ * over it, exactly as the card does. `apps/web/src/header/header.css` holds the
+ * census — the one place these values are read against each other. */
 .map-controls {
   position: absolute;
   inset: var(--space-3) var(--space-3) auto auto;
@@ -118,17 +117,15 @@
  * page chrome and a data control respectively, and both are free to change
  * without dragging map chrome along.
  *
- * One value of padding on all four sides since the labels became glyphs, which
- * is the move `.site-popover-close` made at #340 and `.about-dialog-close` before
- * it, for their reason: a word is wider than it is tall and wants the wider
- * horizontal step to sit in, where a square mark in an oblong box reads as an
- * icon shoved sideways. `--space-2` around a 20px mark is a 36px square, which is
- * the hit target the words used to buy with their own width.
+ * One value of padding on all four sides since the labels became glyphs, the move
+ * `.site-popover-close` made at #340: a word is wider than it is tall and wants
+ * the wider horizontal step to sit in, where a square mark in an oblong box reads
+ * as an icon shoved sideways. The even step around the mark buys back the hit
+ * target the words used to buy with their own width.
  *
- * No type properties either, and the same two rules say why: the only child left
- * is a glyph sized by its own `width`/`height` below and set `display: block`, so
- * it sits on no text baseline, and a font family, size or weight here would set
- * nothing at all. */
+ * No type properties either: the only child left is a glyph sized by its own
+ * `width`/`height` below and set `display: block`, so it sits on no text baseline
+ * and a font family, size or weight here would set nothing at all. */
 .map-control-reset,
 .map-control-add {
   padding: var(--space-2);
@@ -149,18 +146,13 @@
 }
 
 /*
- * The two marks. Six declarations that are word-for-word `.header-menu-icon`'s
- * in `header/header.css`, restated here rather than added to that rule's
- * selector list — the same call `.site-popover-close-icon` documents, on
- * `structure.md` rule 7's test. That rule groups the burger and the magnifier
- * *because they are adjacent on one bar*, where two visibly different weights
- * would be the failure; these two sit on the map's own chrome, and header chrome
- * restyling itself would not make them wrong. If one copy changed, the other
- * would not be wrong until it changed the same way.
- *
- * What each declaration is doing is argued once, at `.header-menu-icon`. The
- * `width`/`height` lengths are the CSS gate's documented length residual
- * (`stylelint.config.mjs`), not a value slipping past it.
+ * The two marks, word-for-word `.header-menu-icon`'s in
+ * `apps/web/src/header/header.css` — which is where each declaration is argued —
+ * restated rather than added to that rule's selector list, on `structure.md`
+ * rule 7's test. That rule groups the burger and the magnifier *because they are
+ * adjacent on one bar*, where two visibly different weights would be the failure;
+ * these sit on the map's own chrome, and header chrome restyling itself would not
+ * make them wrong.
  *
  * `currentColor` is also what carries the pressed state onto the mark: the
  * inversion above moves `color`, and the glyph follows it without a second
@@ -196,7 +188,7 @@
  * auto 0 0 auto`): an absolutely positioned box with `left: auto` takes its
  * shrink-to-fit width, so the veil is as wide as the credits are and no wider,
  * and the map shows through everywhere the credits are not. Out of flow either
- * way, so the canvas keeps the full height and the map gains back the ~34px the
+ * way, so the canvas keeps the full height and the map gains back the row the
  * strip used to cost it.
  *
  * `max-width: 100%` is the clamp on that. Shrink-to-fit is `min(max(preferred
@@ -216,33 +208,29 @@
  * clickable.
  *
  * What the chip does cover is the markers under it: it paints above them, so a
- * site or cluster marker whose centre falls inside *its own footprint* is not
- * pointer-reachable there. Shrinking to the corner narrows that footprint; it
- * does not remove it, and the relief that carries it is owed exactly as before —
- * the map pans, markers stay in the tab order and keyboard-operable, the site
- * table and the header's search reach every site.
- * `docs/design/map-treatment.md`'s Attribution section decides it (#356, #428)
- * and is where the argument lives; this is a pointer, not a second copy of it.
+ * marker whose centre falls inside *its own footprint* is not pointer-reachable
+ * there. Shrinking to the corner narrows that footprint without removing it, and
+ * the relief is owed exactly as before — the map pans, markers stay in the tab
+ * order and keyboard-operable, the header's search reaches every site.
+ * `docs/design/map-treatment.md`'s Attribution section decides it (#356, #428).
  *
- * The corner it exposes is the top-left one, and `--radius-md` is what softens
- * it — the same step the map's own controls take, since the two are now the same
- * kind of object: a veiled chip floating on the tiles rather than an edge of the
- * frame. The radius comes off again where the chip is full width; the rule below
- * owns that width and its derivation.
+ * `--radius-md` softens the corner the chip exposes — the same step the map's own
+ * controls take, since the two are now the same kind of object: a veiled chip
+ * floating on the tiles rather than an edge of the frame. The radius comes off
+ * again where the chip is full width; the rule below owns that width.
  *
  * `flex-wrap: wrap` is still the last resort below the compact row's own width
  * (see the compact-form rule further down); what it is no longer is the *first*
  * answer to a narrow window.
  *
  * The vertical padding is one step below the horizontal one, deliberately. This
- * band is the least-read text on the page (`design.md` rule 8), and every row of
+ * band is the least-read text on the page (`design.md` rule 8) and every row of
  * it is a row the map does not get; a step of veil above and below the line box
- * is enough to keep the ink off the tiles' own edge, and the band still sizes to
- * its content, so the link keeps its full line box and stays clickable. The
- * horizontal padding is untouched: that axis is what holds the credits clear of
- * the veil's own left and right edges. Nothing here moves the compact-form
- * breakpoint below — that threshold is typographic, measured from the row's
- * inline width, and vertical padding is not an input to it. */
+ * keeps the ink off the tiles' own edge, and the band still sizes to its content,
+ * so the link keeps its full line box and stays clickable. The horizontal axis is
+ * what holds the credits clear of the veil's left and right edges, so it is
+ * untouched — and neither axis is an input to the compact-form breakpoint below,
+ * which is typographic and measured from the row's inline width. */
 .map-attribution {
   position: absolute;
   inset: auto 0 0 auto;
@@ -263,32 +251,27 @@
  * against the window, which is the thing `.map-view`'s comment refuses at the
  * top of this file. The radius goes off rather than the layout changing.
  *
- * 25.0625rem is measured rather than picked, the same way 37.25rem below is. At
- * this band's own typography the compact row's box — both credits' compact
- * forms, the separator, and the two `--space-3` of horizontal padding — comes to
- * 401.30px, measured in Chromium against the built app (2026-08-12). So at 402px
- * of layout width the chip still shrink-fits, by under a pixel, and at 401px and
- * below it is clamped to the full width. The breakpoint sits exactly there, at
- * 401px.
+ * The threshold is measured rather than picked, the same way the compact-form
+ * rule's below is: it is the width at which the compact row's own box — both
+ * credits' compact forms, the separator and the horizontal padding — stops
+ * shrink-fitting and is clamped to the map's width. Measured in Chromium against
+ * the built app (2026-08-12).
  *
- * Sitting *at* the floor rather than comfortably above it is the same choice the
+ * Sitting *at* that floor rather than comfortably above it is the same choice the
  * compact-form rule makes and carries the same acceptance: where a platform's
  * fonts run wider than the measurement, the chip reaches full width a few pixels
- * sooner than this fires, and wears a rounded corner against the map's left edge
+ * sooner than this fires and wears a rounded corner against the map's left edge
  * over those few pixels.
  *
  * There is deliberately no second arm for the *full* forms, and that is a
- * measurement rather than an omission. The full row's box comes to 596.20px at
- * the same typography, and the compact-form rule fires at 596px and below — so
- * the full forms are only ever painted at 597px and up, where 596.20px still
- * fits with room beside it. The chip never reaches full width while the full
- * forms are on screen, so there is no band of widths between the two rules for a
- * second query to cover. The one way to open one is a classic scrollbar: a media
- * feature matches the viewport while the box measures the layout width, so at
- * 597px of window less a scrollbar the full row no longer fits and the chip is
- * full width with its radius on. That is the same error, in the same direction,
- * that the compact-form rule below already weighs and accepts — absorbed there
- * rather than chased with a query here. */
+ * measurement rather than an omission: the compact-form rule fires below the
+ * width the full row needs, so the full forms are only ever painted where the row
+ * still shrink-fits with room beside it. The chip never reaches full width while
+ * the full forms are on screen, so there is no band of widths between the two
+ * rules for a second query to cover. The one way to open one is a classic
+ * scrollbar — a media feature matches the viewport while the box measures the
+ * layout width — which is the same error, in the same direction, that the
+ * compact-form rule below already weighs and accepts. */
 @media (max-width: 25.0625rem) {
   .map-attribution {
     border-top-left-radius: 0;
@@ -315,23 +298,20 @@
  * component it otherwise composes untouched, other than the compact-form rule
  * the component delegates to its surface, which is further down this file.
  *
- * `attribution.css` serves five surfaces and four of them are opaque — the
- * dashboard footer, the About dialog, the app error boundary and the tokens
- * preview — where muted ink is the right weight for the least-read line on the
- * page (`design.md` rule 8) and clears the AA bar comfortably. This band is the
- * fifth and the only one on `--color-surface-veil`, so it is the only one where
- * the mix's legibility floor applies at all. Changing the component's own ink
- * would repaint the other four to solve a problem none of them has.
- *
- * So the override is scoped to this band rather than pushed into the component,
- * which is the same call the compact-form rule further down makes for the same
- * reason: the surface owns what the surface's composite requires.
+ * `packages/ui`'s `attribution.css` serves five surfaces and four of them are
+ * opaque — the dashboard footer, the About dialog, the app error boundary and the
+ * tokens preview — where muted ink is the right weight for the least-read line on
+ * the page (`design.md` rule 8) and clears the AA bar comfortably. This band is
+ * the only one on `--color-surface-veil`, so it is the only one where the mix's
+ * legibility floor applies at all, and changing the component's own ink would
+ * repaint the other four to solve a problem none of them has. The surface owns
+ * what the surface's composite requires — the same call the compact-form rule
+ * further down makes.
  *
  * Deliberately no hover or focus rule to go with it. `attribution.css` already
- * brightens the link to `--color-text` on both, and that is now where it rests —
- * so hover and keyboard focus change nothing about the ink. The state is not
- * lost: the focus ring from `@cumulo/ui`'s styles.css is what marks focus, and
- * the underline is what marks the link at rest. What is gone is the *extra*
+ * brightens the link to `--color-text` on both, and that is where it now rests.
+ * The state is not lost: the focus ring from `@cumulo/ui`'s styles.css marks
+ * focus and the underline marks the link at rest. What is gone is the *extra*
  * brightening, which had nowhere left to go once the resting ink was already the
  * brightest the palette has. */
 .map-attribution .cumulo-attribution,
@@ -384,80 +364,60 @@
  * at every width, which is why none of them ever meets the condition the
  * constraint attaches to the compact form.
  *
- * 37.25rem is measured rather than picked. At this band's own typography the
- * full row needs 597px and the compact row 402px, so the full form wraps at
- * 596px and below, and the breakpoint sits exactly there.
+ * The threshold is measured rather than picked: it is the width below which the
+ * row *as composed* — both credits' full forms on one line — stops fitting. Not
+ * where either phrase runs out on its own; the weather phrase alone would still
+ * fit some way further down, and a staged drop with each prefix going at its own
+ * width was weighed and declined (`docs/design/map-treatment.md`'s Attribution
+ * section decides that, #356). Sitting *at* the wrap point rather than
+ * comfortably above it is what makes this under-fire by design where a platform's
+ * fonts run wider than the measurement.
  *
- * What that threshold measures is where the row *as composed* stops fitting —
- * both credits' full forms on one line — not where either phrase runs out on
- * its own. The weather phrase alone would still fit roughly 96px further down
- * (approximate, measured in #284's review; nothing computes with it, so it
- * joins no ledger). A staged drop, each prefix going at its own width, was
- * weighed and declined: `docs/design/map-treatment.md`'s Attribution section
- * decides that (#356) rather than this comment re-arguing it. Sitting *at* the
- * wrap point rather than comfortably above it is what makes this under-fire by
- * design where a platform's fonts run wider than the measurement.
- *
- * Note what it cannot do: the compact row's own 402px is licence-mandated string
- * and nothing here can shorten it, so below roughly 25rem the band wraps in the
- * compact form too. Narrower is fewer lines, never one.
+ * Note what it cannot do: the compact row is licence-mandated string and nothing
+ * here can shorten it, so below the radius-off rule's own width the band wraps in
+ * the compact form too. Narrower is fewer lines, never one.
  *
  * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
  * derived from this measurement, every one of which needs re-deriving if this
  * band's typography moves it:
  *
- * - `apps/web/e2e/composition.spec.ts`, `COMPACT_VIEWPORT` — computes with
- *   37.25rem, 597/596 and 402 to choose a viewport provably inside the
+ * - `apps/web/e2e/composition.spec.ts`, `COMPACT_VIEWPORT` — computes with this
+ *   threshold and both row widths to choose a viewport provably inside the
  *   compacted range and provably clear of the floor below it. A width derived
  *   from the stylesheet would assert nothing, so it spells them out: the
  *   asserting carrier rule 9 ledgers rather than forbids.
  * - `docs/design/map-treatment.md`, the Attribution section — deliberately
  *   carries no number: it names the decision and points here for the width.
- *   Ledgered so it stays that way, since a number is the tempting thing to add
- *   to a paragraph describing a range.
- * - This file's own radius-off rule above (#428) — states both this row's box
- *   width and the compact row's, because it derives its breakpoint from the
- *   second and argues from the first that it needs no second arm. Same file,
- *   still a carrier: a re-measurement that moves this band's typography moves
- *   that breakpoint too, and the "no sliver" argument beside it has to be re-run
- *   rather than assumed to survive.
+ *   Ledgered so it stays that way, since a number is the tempting thing to add to
+ *   a paragraph describing a range.
+ * - This file's own radius-off rule above (#428) — derives its breakpoint from
+ *   the compact row's box and argues from the full row's that it needs no second
+ *   arm. Same file, still a carrier: a re-measurement that moves this band's
+ *   typography moves that breakpoint too, and the "no sliver" argument beside it
+ *   has to be re-run rather than assumed to survive.
  *
  * Measuring the container is the default and a viewport breakpoint is the
  * documented escalation (`design.md` rule 7). This is a breakpoint, and one
  * argument carries it: there is no gap between this row's container and the
  * window worth measuring. The map runs full bleed, so the container *is* the
  * layout viewport, less whatever a classic scrollbar takes out of it. Those two
- * widths are not identical — a media feature matches the viewport, so a
- * container query would fire a scrollbar's width earlier — but the difference
- * runs in the same direction as the wider-fonts case above, the row wrapping
- * slightly before the query fires rather than long after it, so it is absorbed
- * by that same under-fire acceptance instead of being a new kind of error. A
- * container query here would therefore buy a scrollbar's width of precision on
- * an error already accepted, and cost this row a containment it has no other use
- * for.
+ * widths are not identical — a media feature matches the viewport, so a container
+ * query would fire a scrollbar's width earlier — but the difference runs in the
+ * same direction as the wider-fonts case above, so it is absorbed by that same
+ * under-fire acceptance rather than being a new kind of error. A container query
+ * would buy a scrollbar's width of precision on an error already accepted, and
+ * cost this row a containment it has no other use for. Audited rather than
+ * assumed at #326, which converted `apps/web/src/header/header.css`'s fold to
+ * container measurement and deliberately kept this one.
  *
- * That argument was audited rather than assumed at #326, which converted the
- * app's other viewport breakpoint — `header/header.css`'s fold — to container
- * measurement and deliberately kept this one. Nothing about this band moved
- * there: same width, same rule, same behaviour. What did move is that this
- * comment no longer carries a shared argument about a pair of breakpoints, since
- * there is no pair; the reason above is this band's alone and says nothing about
- * any other surface.
+ * Should the layout ever stop running this row full bleed, or widen that gap into
+ * a material one, rule 7's default applies and this band migrates to container
+ * measurement on the pattern the header demonstrates.
  *
- * What the breakpoint owes is a line in the census, and the census — the one list
- * of the app's viewport breakpoints, which this is now the only entry in — is
- * owned by `stylelint.config.mjs`'s residual paragraph. The census and the gate
- * residual are what that paragraph owns; the weighing above is this comment's,
- * and no part of it lives there. Should the layout ever stop running this row
- * full bleed, or widen that gap into a material one — large or variable enough
- * that inferring this row's width from the viewport stops being sound — rule 7's
- * default applies and this band migrates to container measurement, on the
- * pattern the header now demonstrates.
- *
- * Gate residual: the width is a raw length, and there is no breakpoint scale to
- * reach for. `stylelint.config.mjs`'s residual paragraph owns why — media
- * features are the part of the frontend gate's open half no declaration-scoped
- * rule can ever reach — so this is a pointer rather than a second copy of it. */
+ * Census and gate residual: this is the app's one remaining viewport breakpoint,
+ * and `stylelint.config.mjs`'s residual paragraph owns both the census and why
+ * the raw length is out of a declaration-scoped rule's reach. A pointer, not a
+ * second copy. */
 @media (max-width: 37.25rem) {
   .map-attribution .map-attribution-prefix,
   .map-attribution .cumulo-attribution-prefix {
@@ -470,30 +430,27 @@
  * `docs/design/map-treatment.md` made concrete. Three things are worth reading
  * slowly, because each looks like a styling choice and is actually a rule:
  *
- * 1. The button is the *hit target* and the `::before` circle is the *mark*.
- *    A `--space-3` circle is a 12px target — comfortable to look at, hostile to
- *    click — so the button holds a `--space-6` minimum and paints nothing
- *    itself. Every painted state is smaller than the area that responds to it.
+ * 1. The button is the *hit target* and the `::before` circle is the *mark*. The
+ *    painted circle is comfortable to look at and hostile to click, so the button
+ *    holds a larger minimum and paints nothing itself. Every painted state is
+ *    smaller than the area that responds to it.
  * 2. No state is carried by hue alone. Hover and selection each change the
  *    diameter as well as the fill, and hover and focus both name the site in a
  *    tooltip — the relief the light palette's contrast warning on slot 3
- *    requires. A site table under the map used to be a fourth channel, the same
- *    states rendered as rows; it left the page on 2026-08-12, so the relief is
- *    now entirely the marker's own.
+ *    requires. A site table under the map used to be a fourth channel; it left
+ *    the page on 2026-08-12, so the relief is now entirely the marker's own.
  * 3. Crowding is answered by clustering, never by fading: there is deliberately
  *    no `opacity` anywhere below. On this platform a faded mark reads as an
  *    uncertain one, which means something specific and different.
  *
  * The class names are `map-site-*` rather than the `map-marker` the treatment's
- * prose uses. They name what they style — a site on the map — and the tokens
- * they read are still `--color-map-marker-*`, so the treatment's vocabulary is
- * where it matters.
+ * prose uses. The tokens they read are still `--color-map-marker-*`, so the
+ * treatment's vocabulary is where it matters.
  *
  * Focus keeps the outline (no `outline: none` here, ever): the selected fill is
- * the *extra* focus signal, not a replacement for the ring drawn around the
- * marker. That ring is now the design system's own — the `:focus-visible` rule
- * in `@cumulo/ui`'s styles.css paints `--color-focus-ring` app-wide (issue #93),
- * so this button inherits it in place of the user agent's default.
+ * the *extra* focus signal, not a replacement for the ring. That ring is the
+ * design system's own — the `:focus-visible` rule in `@cumulo/ui`'s styles.css
+ * paints `--color-focus-ring` app-wide (#93).
  */
 
 .map-site-marker {

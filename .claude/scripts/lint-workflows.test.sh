@@ -29,7 +29,12 @@
 # Usage: bash .claude/scripts/lint-workflows.test.sh   (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
 set -uo pipefail
-export PATH="/opt/homebrew/bin:$PATH"
+# Appended, not prepended: prepending outranks a shellcheck the caller put
+# ahead of Homebrew on purpose, which is the escape hatch lint-shell.sh's
+# version refusal points at — that file's comment on this same line carries
+# the reasoning, and every step of this chain has to agree or the one that
+# prepends decides. (#502)
+export PATH="$PATH:/opt/homebrew/bin"
 
 SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 
