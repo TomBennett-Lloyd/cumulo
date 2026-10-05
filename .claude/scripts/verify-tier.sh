@@ -102,9 +102,11 @@
 #   * stylelint on the changed .css — the same, for CSS comment rules.
 #   * prettier --check on the changed files — comments are formatted like
 #     anything else.
-#   * check:aws-test-guard — the one check:* gate that greps a .ts file's TEXT
-#     (a vitest config, for a fixed token) rather than its shape, and text is
-#     what a comment is.
+#   * check:aws-test-guard and check:comment-density — the two check:* gates that
+#     read a .ts file's TEXT rather than its shape, and text is what a comment is.
+#     The guard greps a vitest config for a fixed token; the density ratchet
+#     counts comment lines, so this rung is the one tier where it is the only leg
+#     that can observe the change at all (#553).
 #   * check:adr-index and check:markdown-links, when the set also holds .md.
 #   * the observing tests, below.
 #
@@ -562,6 +564,7 @@ build_source_prose_legs() {
   append_file_leg "pnpm exec stylelint --max-warnings 0 --" "$TMP/css"
   append_leg "pnpm typecheck"
   append_leg "pnpm check:aws-test-guard"
+  append_leg "pnpm check:comment-density"
   if grep -qE '\.md$' "$CHANGED"; then
     append_leg "pnpm check:adr-index"
     append_leg "pnpm check:markdown-links"
