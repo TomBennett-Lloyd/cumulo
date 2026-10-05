@@ -27,7 +27,9 @@
 # version readback's mismatch — have their SUCCESS side exercised on every CI run, because
 # the `Install shellcheck (pinned)` step runs the whole happy path before
 # `pnpm verify:full`; a broken fetch or a bad extraction reds the build at once. Their
-# failure sides are unasserted, and belong to #534 along with the pre-network arms above.
+# failure sides are unasserted. #534 does not own them — it names this script's checksum
+# block and nothing else — so they are #550's, together with the pre-network arms above,
+# and `stub_fetch` is what makes them a fixture variation rather than new machinery.
 #
 # Every refusal exits 2 — the installer has no exit 1 — so the cases assert 2 and the
 # message, never merely "non-zero": an installer that fell over for an unrelated reason
@@ -89,12 +91,17 @@ run_installer() { # run_installer [extra env assignments...] — dest is always 
 }
 
 # FIXTURE_VERSION is a version upstream has never released, and that is load-bearing
-# rather than tidy. The two cases below substitute the fetch, and the hazard they have to
-# be proof against is the substitution NOT taking effect — at which point the real curl
+# rather than tidy. Cases 5 and 6 substitute the fetch, and the hazard they have to be
+# proof against is the substitution NOT taking effect — at which point the real curl
 # answers and the case is graded on bytes from the network. A version with no release
 # behind it cannot produce an archive at all: the real curl 404s, `-f` makes that a
 # failure, and the case reds on "download failed" instead of passing for a reason nobody
 # chose. Case 5's assertion on the reported `actual:` sum is the second guard.
+#
+# Every case that writes a version uses this one, cases 3 and 4 included. They refuse
+# before the fetch and do not need the property — until a mutant breaks their refusal and
+# carries them on to the download, which is the caution the INSTALL_SHELLCHECK_SCRIPT note
+# above states and the one moment the property protects them too.
 FIXTURE_VERSION=1.2.3
 
 # A sum nobody computed, for the pin that must not match. All zeroes rather than a
@@ -174,12 +181,13 @@ EOF
 
 # run_installer_offline — the fetch served from $DIR/fixture.tar.xz instead of the network.
 #
-# GITHUB_PATH is passed EMPTY, which is a safety property and not a default. Set, the
-# installer appends $dest to that file, and on Actions — where this harness runs inside
-# `pnpm verify:full` — that would put a fake shellcheck reporting $FIXTURE_VERSION on the
-# PATH of every later step in the job, where `lint:sh` would then refuse it. Empty takes
-# the local branch instead, whose advice line case 6 reads. The runner branch is exercised
-# on every CI build by the `Install shellcheck (pinned)` step itself.
+# GITHUB_PATH is passed EMPTY so that a test never writes to the runner's own PATH file.
+# Set, the installer appends $dest to it; harness-lib.sh's EXIT trap then deletes $dest
+# with the rest of TMP_ROOT, so what would be left behind is a PATH entry pointing at
+# nothing. Today that is inert — `pnpm verify:full` is the LAST step of the `checks` job in
+# .github/workflows/ci.yml, and GITHUB_PATH only reaches later steps — which is exactly why
+# the guard needs an assertion rather than an argument: nothing would go red if it went.
+# Case 6 reads the local branch's advice line, which only an empty GITHUB_PATH produces.
 run_installer_offline() {
   run_installer PATH="$DIR/bin:$PATH" \
     CURL_FIXTURE_ARCHIVE="$DIR/fixture.tar.xz" \
@@ -246,7 +254,7 @@ end
 # directory the case puts at the front stays at the front.
 begin "installer exits 2, naming the platform, when no pinned asset covers it"
 fixture unknown_platform
-must write_pin "$DIR" 'export SHELLCHECK_PIN_VERSION=1.2.3'
+must write_pin "$DIR" "export SHELLCHECK_PIN_VERSION=$FIXTURE_VERSION"
 must mkdir -p "$DIR/bin"
 cat >"$DIR/bin/uname" <<'EOF'
 #!/usr/bin/env bash
@@ -274,7 +282,7 @@ end
 # developer's Mac alike.
 begin "installer exits 2 when the pin declares no SHA-256 for this platform"
 fixture pin_without_sum
-must write_pin "$DIR" 'export SHELLCHECK_PIN_VERSION=1.2.3'
+must write_pin "$DIR" "export SHELLCHECK_PIN_VERSION=$FIXTURE_VERSION"
 run_installer
 expect_rc 2 "$rc"
 expect_stderr "declares no SHA-256 for $(uname -s)/$(uname -m)"
@@ -294,10 +302,10 @@ end
 #
 # Two assertions beyond the headline carry their own weight. The `actual:` line is read BY
 # VALUE against the fixture's own sum: it is what proves the fetch served the fixture's
-# bytes rather than something else's, which is this case's one route to passing for the
-# wrong reason. And the destination is read from the filesystem, because "nothing is
-# installed" is a claim about the tree, not about the message that makes it — a refusal
-# that printed correctly after extracting would satisfy every string assertion here.
+# bytes rather than something else's. And the destination is read from the filesystem,
+# because "nothing is installed" is a claim about the tree, not about the message that
+# makes it — a refusal that printed correctly after extracting would satisfy every string
+# assertion here.
 #
 # The labels are asserted with the installer's own spacing rather than the two sums
 # unlabelled, which would pass a diff that swapped expected for actual.
@@ -330,6 +338,10 @@ end
 # $FIXTURE_VERSION for the installer to reach its final line. Those steps are not this
 # slice's arms; they come along because the only honest way to assert the matching side is
 # to let it finish.
+#
+# The last two assertions are what hold run_installer_offline's empty GITHUB_PATH, for the
+# reason stated over there: the installed-at line is printed by BOTH report branches, so
+# without these the guard is prose and a later edit dropping it reds nothing.
 begin "installer installs the archive whose SHA-256 is the pinned one"
 fixture checksum_match
 fixture_archive
@@ -344,6 +356,8 @@ expect_out "fetching"
 expect_not_out "CHECKSUM MISMATCH"
 expect_stdout "shellcheck $FIXTURE_VERSION installed at $DIR/dest"
 [ -x "$DIR/dest/shellcheck" ] || bad "installed nothing executable at $DIR/dest/shellcheck"
+expect_stdout "put it ahead of any other shellcheck"
+expect_not_stdout "GITHUB_PATH"
 end
 
 # ====================================================================================
