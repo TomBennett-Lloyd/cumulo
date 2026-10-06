@@ -53,9 +53,6 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * the *entire* difference between this roll-up and the fan-out it replaces: no field is lost and
  * nothing is approximated.
  *
- * Rounding partials to watt precision at the write boundary was considered for exactly that reason
- * and **rejected**: a watt of precision is half a watt of error per partial.
- *
  * ## One definition of the fleet total, still
  *
  * Every kilowatt below comes out of `aggregation.ts` — {@link aggregateFleetForecast} and
