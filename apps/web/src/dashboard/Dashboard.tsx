@@ -70,16 +70,6 @@ const draftKey = (position: MapPosition): string =>
 const loadedSites = (load: FleetLoad): readonly Site[] =>
   load.status === 'ready' ? load.sites : [];
 
-/*
- * There is no `FleetSection` here any more (#452). The listing's own account of
- * itself — a pending label, a failure with a retry — went into the chart on the
- * owner's routing: *"the sites fetch error state should show in the graph area …
- * this can be the generic error message for anything that means we can't show
- * data on the graph"*. Its status is a prop of `FleetPanel` now (`listing`,
- * below), so the reader is told where they are looking rather than in a box under
- * it, and one fewer element arrives and leaves above the fold.
- */
-
 export interface DashboardProps {
   readonly theme: Theme;
   /**
@@ -114,9 +104,8 @@ export interface DashboardProps {
  *
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the card on the map, the
- * header's search and the chart's overlay all render from that one value, which
- * is what makes selecting a site on the map and picking it out of the search the
- * same act rather than views that agree by luck. It is also what `?site=`
+ * header's search and the chart's overlay all render from that one value. It is
+ * also what `?site=`
  * addresses: `apps/web/src/dashboard/selection-url.ts` is the whole of the deep
  * link, read once at mount and written whenever the selection moves.
  * `selectionOrigin` is the selection's second half, and exists for one rule: a
@@ -127,21 +116,17 @@ export interface DashboardProps {
  * **Nothing under the map swaps.** A site's detail is a card anchored to its own
  * marker (#265), so the reading below is a plain flow — the fleet's chart, then
  * the credit — and a selection changes what is *drawn on* those surfaces rather
- * than which of them is there. Every state the page can be in is reported on a
- * surface that is already there, so nothing arrives above the fold and pushes the
- * chart down. Placing a site is a modal over the whole page
+ * than which of them is there. Placing a site is a modal over the whole page
  * (`apps/web/src/add-site/AddSiteDialog.tsx`).
  * `docs/design/dashboard-composition.md` records the reasoning.
  *
  * Two things it deliberately never does. **It never re-lists the fleet on a
  * cadence**: the listing is a mount-time request that only an explicit retry asks
  * for again, and polling it would be treating the fleet as something to re-ask on
- * a clock — the habit ADR 0002's review of this ticket priced. The listing is the
- * cheap read; the expensive ones are the two fleet series reads beside it, which
- * cover every site's partition. The per-load arithmetic is owned by the `series`
- * section of `infra/storage/tables.tf`. And **it never invents a site id**: the
- * id it watches for a forecast is the one `createSite` returned, because a
- * locally predicted id addresses a site that does not exist.
+ * a clock — the habit ADR 0002's review of this ticket priced. The per-load
+ * arithmetic is owned by the `series` section of `infra/storage/tables.tf`. And
+ * **it never invents a site id**: the id it watches for a forecast is the one
+ * `createSite` returned.
  */
 export const Dashboard = ({
   theme,
@@ -174,8 +159,7 @@ export const Dashboard = ({
    * carried, and nobody has done anything yet. Every handler that moves the
    * selection sets `'reader'` in the same commit, so the two values cannot
    * disagree about a selection either of them can see. It is deliberately not
-   * cleared alongside a deselection: with no site there is no card to read it,
-   * and a value nothing reads is a value nothing can be wrong about.
+   * cleared alongside a deselection.
    */
   const [selectionOrigin, setSelectionOrigin] = useState<SelectionOrigin>('deep-link');
   /**
@@ -185,8 +169,7 @@ export const Dashboard = ({
    * site: "which site" and "who asked" are one fact about one event, and a call
    * site that set the first without the second would silently reuse the previous
    * origin — the deep-link bug this exists to prevent, reintroduced from the other
-   * end. The number of call sites is deliberately not stated: a helper makes each
-   * new one correct by default rather than by being counted.
+   * end.
    */
   const selectSiteForReader = (siteId: Site['id']): void => {
     setSelectedSiteId(siteId);
@@ -199,10 +182,7 @@ export const Dashboard = ({
    *
    * Here rather than inside the map region because it is the *dashboard's*
    * click handler that has to obey it: the map reports every basemap click it
-   * receives, and what a click means is this component's question. It is also
-   * why the flag can be single-shot without the map knowing — opening a draft
-   * clears it below, so placing a site is one deliberate act rather than a mode
-   * a reader can forget they left on and then be handed a form by.
+   * receives, and what a click means is this component's question.
    */
   const [addSiteArmed, setAddSiteArmed] = useState(false);
   /**
@@ -215,10 +195,8 @@ export const Dashboard = ({
    * The sites created this session, readable from the listing effect without
    * being a dependency of it (`react.md` rule 2).
    *
-   * A dependency would make a creation re-run the listing, and the listing is a
-   * read this dashboard re-spends only when something asks it to: once at mount,
-   * and once more per explicit retry (`listAttempt` above), never as a side
-   * effect of unrelated state moving. But the stale-id guard below still has to
+   * A dependency would make a creation re-run the listing. But the stale-id guard
+   * below still has to
    * count a created site as known: a reader whose listing failed can add a site,
    * select it, and then retry the listing — and a guard that only knew the
    * listing's sites would clear the selection of a site sitting right there in
@@ -256,9 +234,7 @@ export const Dashboard = ({
       // state: this is the moment the question "does that site exist?" gets its
       // answer, so it is the moment a `?site=` naming nobody stops being a
       // selection. Left standing, a dead deep link would have `useFirstForecast`
-      // polling a site that does not exist for its full ninety-second deadline,
-      // and the sync effect below cleans the parameter out of the URL as soon as
-      // the selection goes.
+      // polling a site that does not exist.
       const known = [...result.value, ...createdSitesRef.current];
 
       setSelectedSiteId((current) =>
@@ -280,13 +256,6 @@ export const Dashboard = ({
     writeSiteIdToUrl(selectedSiteId);
   }, [selectedSiteId]);
 
-  // There is no context-scroll effect here any more, and its absence is the
-  // point. A selection used to be written into a region under the map, which the
-  // dashboard then had to scroll back into view (#148). #265 anchored the answer
-  // to the site's own marker, so there is nothing under the reader's scroll
-  // position to chase — the one thing that can be out of view is the *site*,
-  // which `SelectionCamera` brings into frame without moving the page.
-
   // Derived during render rather than mirrored into state. Memoised for
   // identity rather than speed: this array is what the map clusters, and a
   // fresh one every render would rebuild the cluster index every render.
@@ -302,16 +271,6 @@ export const Dashboard = ({
    * the `generating` state the demo's headline minute is made of.
    */
   const { state: forecast, retry: retryForecast } = useFirstForecast(dataSource, selectedSiteId);
-
-  /*
-   * There is no `focusSiteRow` here any more, and nothing should replace it. The
-   * card on the map remembers the element that held focus when it opened and
-   * hands it back on close (`apps/web/src/map/SitePopoverCard.tsx`), which is the
-   * same answer for every opener — a marker, the header's search, a creation —
-   * without the dashboard knowing which happened. This component holds no focus
-   * target of its own: the only landing left here is the dismissed draft's,
-   * below.
-   */
 
   /**
    * Where focus lands when the add-site dialog leaves, and when it lands there
@@ -334,13 +293,11 @@ export const Dashboard = ({
    * site's card takes no focus after it (#328) — which also makes the card's
    * captured opener the add-site control rather than the submit button that just
    * left the document. `apps/web/src/dashboard/Dashboard.focus.test.tsx`'s
-   * creation cases hold both halves honest rather than this comment claiming
-   * them.
+   * creation cases hold both halves honest.
    *
    * The target is the control the reader opened the draft with, matched inside
    * the map's own box rather than across the document: it is the map's control,
-   * the map region is substitutable (see `MapRegion.tsx`), and a document-wide
-   * query would happily find a second one somebody added elsewhere.
+   * the map region is substitutable (see `MapRegion.tsx`).
    */
   const returnFocusFromDraft = (): void => {
     mapRegionRef.current?.querySelector<HTMLElement>('.map-control-add')?.focus();
@@ -393,8 +350,6 @@ export const Dashboard = ({
        * The bar, and the reason it is here rather than in the shell: its search
        * reads `sites` and selects through `selectSiteForReader`, which is the same
        * selection a marker press makes (`apps/web/src/header/AppHeader.tsx`).
-       * Since the fleet's own listing left the page it is one of only two ways to
-       * reach a site at all, the map being the other.
        *
        * A sibling of `<main>` rather than a child of it: a `<header>` inside
        * `<main>` is a section header and carries no banner landmark.
@@ -417,9 +372,7 @@ export const Dashboard = ({
               onMapClick={(position) => {
                 // The gate the add-site control arms. Without it every click on the
                 // basemap opened a draft, so panning past a marker handed the reader
-                // a form they never asked for — and the affordance had to be
-                // explained in prose beside the fleet chart, because nothing on the
-                // map said it.
+                // a form they never asked for.
                 if (!addSiteArmed) {
                   return;
                 }
@@ -456,17 +409,11 @@ export const Dashboard = ({
            * reading, which is #323's structural half. The map and the chart are
            * one reading unit — the same fleet, drawn in space and then in time —
            * and the measure, the padding and the card edge between them were all
-           * claiming a separation nobody meant (`design.md` rule 4). The two
-           * surfaces now share a continuous `--color-surface` band with no gap
-           * between them (`.dashboard { gap: 0 }`), and the centred measure picks
-           * up again below, where the reading genuinely is a separate thing.
+           * claiming a separation nobody meant (`design.md` rule 4).
            *
            * There is no context region here any more: a site's detail is a card on
            * its own marker, so nothing swaps, nothing is hidden, and the fleet
-           * chart is on screen in every state of the page. The selection reaches
-           * it as an overlay rather than a replacement, which is the whole
-           * argument for the move — a reader comparing one roof against the fleet
-           * was previously asked to remember one chart while looking at the other.
+           * chart is on screen in every state of the page.
            *
            * The fleet's sum changes on exactly one event — a site being added —
            * and `refreshToken` is that event, counted.
@@ -484,17 +431,14 @@ export const Dashboard = ({
           />
 
           {/*
-           * A `div` rather than the `<aside>` this used to be. `aside` marks a
-           * complementary landmark — content beside the thing the page is about —
-           * which is what this was while it sat in a column next to the map. It is
-           * the page's own reading now, running under the map inside `<main>`, so
+           * A `div` rather than the `<aside>` this used to be. It is the page's own
+           * reading now, running under the map inside `<main>`, so
            * the landmark would be describing a shape the layout no longer has.
            */}
           <div className="dashboard-content">
             {/*
-             * The credit is all that is left down here; the fleet's table (#451)
-             * and then the listing's own states (#452) were both removed by the
-             * owner. The box stays because the credit is the page's rather than
+             * The credit is all that is left down here (#451, #452). The box stays
+             * because the credit is the page's rather than
              * the chart band's, and the measure and padding that separate the two
              * are this box's (`apps/web/src/dashboard/dashboard.css`).
              */}
@@ -503,7 +447,7 @@ export const Dashboard = ({
              * The page's one weather credit, at the foot of the content rather than
              * inside a panel. Every panel above it shows Open-Meteo-derived numbers,
              * and a credit that lived in one of them would come and go with a
-             * selection — eventually absent exactly when it mattered. The map
+             * selection. The map
              * carries its own, overlaid on its bottom edge; two credits on one
              * screen at rest is the design, not an oversight (CC BY 4.0, CLAUDE.md
              * hard constraints). "At rest" because a surface a reader opens may owe
@@ -521,11 +465,9 @@ export const Dashboard = ({
            *
            * A sibling of the whole surface rather than a child of the reading,
            * because a modal is painted over the whole page — nesting it inside the
-           * flow would only leave a reader of this file placing it there. (It was an
-           * occupant of the context region until #265, and that region is gone
-           * entirely now, so there is not even a box left to nest it in.)
+           * flow would only leave a reader of this file placing it there.
            *
-           * `key={draftKey(draft)}` is unchanged and still load-bearing:
+           * `key={draftKey(draft)}` is load-bearing:
            * `AddSiteForm` reads the coordinates once at mount, so a draft at a new
            * location has to remount rather than re-render (`AddSiteForm.tsx` has the
            * argument). Mounting the dialog *is* opening it, so the same key now

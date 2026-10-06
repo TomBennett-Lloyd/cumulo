@@ -23,37 +23,20 @@ import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
  * Where the chart's hover state lives — and the reason it no longer lives in
  * `ForecastChart` itself.
  *
- * Moving the tooltip is a change to one `transform`; everything else on the
- * figure is the drawing it already was a frame ago. But state re-renders the
- * component holding it, so while `useChartHover` sat in `ForecastChart`'s body
- * every committed pointer frame (one per `POINTER_FRAME_MS`,
- * `apps/web/src/charts/chart-hover-input.ts`) re-ran the whole figure to move
- * that one panel. React reconciled all of it to no DOM change, so nothing looked
- * wrong; the cost was element construction and reconciliation on a surface a
- * reader hovers deliberately (#331, which measured it).
- *
- * So the state moved down to the elements that actually read it: the `<svg>` the
+ * The state moved down to the elements that actually read it: the `<svg>` the
  * pointer and the keyboard land on, the hover layer, and the spoken readout
  * beneath. #331 rules it **one** decision about where the boundary belongs rather
  * than three memos bolted onto the marks, the legend and the table.
  *
  * **The chrome arrives as `children`, already built** — elements rather than
- * functions to call. Two things follow, and only together do they make the
- * saving: `ForecastChart`'s body no longer runs on a hover frame, so those
- * producers are never called; and this component's own re-render walks straight
- * past the elements it was handed, because their references have not changed and
- * React bails out of an unchanged child
- * (`apps/web/src/dashboard/FleetPanel.memo.test.tsx` documents that bailout, and
- * steps around it deliberately). Nothing here is memoised to achieve it — the
- * boundary *is* the mechanism, which is why adding a memo to a mark would answer
- * a question this file has already answered.
- * `apps/web/src/charts/forecast-chart-render-boundary.test.tsx` holds it.
+ * functions to call. Nothing here is memoised to achieve it — the boundary *is*
+ * the mechanism. `apps/web/src/charts/forecast-chart-render-boundary.test.tsx`
+ * holds it.
  *
  * The division of labour around it is unchanged. Which sample an input selected
  * and how often the panel may move are `chart-hover-input.ts`'s; drawing the
  * crosshair and the panel is `forecast-chart-hover.tsx`'s; what the plot looks
- * like underneath is `ForecastChart`'s. This file is the seam, named after the
- * boundary it draws rather than after anything on screen.
+ * like underneath is `ForecastChart`'s.
  */
 
 export interface ForecastChartHoverBoundaryProps {
@@ -92,14 +75,9 @@ export interface ForecastChartHoverBoundaryProps {
  * **What it bounds is one input dispatch, not a gesture.** `endGestureAtLift`
  * below re-stamps the ref on the way up, so the interval this has to survive is
  * the gap between the gesture's last pointer event and the focus that gesture
- * causes — for a finger the lift and the focus it takes, for a mouse the press
- * and its own default action. Neither contains any of the reader's own time.
- * Anchoring at the *press* instead would put the whole dwell inside the window,
- * and `docs/design/chart-treatment.md`'s tap contract names the gesture that then
- * breaks it: a reader who lands an hour off is expected to hold on and correct
- * with a few pixels of drag, which stays inside the tap slop and still ends in a
- * focus — arriving after a press-anchored window had closed, and wearing the ring
- * #440 removed.
+ * causes. Anchoring at the *press* instead would put the whole dwell inside the
+ * window, and `docs/design/chart-treatment.md`'s tap contract names the gesture
+ * that then breaks it (#440).
  *
  * The press this defends against is the one that focuses nothing and never
  * reaches a lift: a finger still on the glass, on a chart that held no focus and
@@ -115,10 +93,7 @@ export interface ForecastChartHoverBoundaryProps {
  *
  * The value sits between two intervals rather than matching a measurement of
  * either: below it, one input dispatch; above it, any plausible gap before a
- * focus that has nothing to do with that gesture. Both failure directions are
- * bounded, which is the property an open-ended flag did not have — err long and
- * an unrelated focus inside the window is marked, err short and a tap whose focus
- * was merely slow to dispatch regains the ring #440 removed.
+ * focus that has nothing to do with that gesture.
  *
  * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
  * derived from this one, which would need re-deriving if it moved:
@@ -130,12 +105,7 @@ export interface ForecastChartHoverBoundaryProps {
  * what `git grep -nE 'PRESS_WINDOW_MS|PRESS_EXPLAINS_FOCUS_MS|press window' --
  * :/` found on 2026-08-12; re-run it before moving this value, and widen it,
  * because a site phrasing the window some other way is invisible to those arms.
- * Nothing in the browser lane restates it. What that lane did measure is why a
- * duration cannot be the whole mechanism: a scrub-then-Tab case there once
- * *failed* against a purely temporal bound, because a test crosses the gap
- * between a finger and a keystroke in a fraction of the time a hand does, and a
- * bound a machine can outrun is not a bound. That is the keydown gate's evidence
- * rather than this window's.
+ * Nothing in the browser lane restates it.
  */
 const PRESS_EXPLAINS_FOCUS_MS = 500;
 
@@ -151,9 +121,7 @@ export const ForecastChartHoverBoundary = (
    * spoken readout, and #421's dismissal is the blur that focus makes possible.
    * What it must not do is *ring* for a finger, and the engine will not decide
    * that for us — a tap on this element leaves `:focus-visible` measurably false
-   * while a ring is painted anyway (measured in a `hasTouch` Chromium probe on
-   * #440), so a rule carrying that conjunct is evaluated by the same engine that
-   * answered false and cannot match. The source of the focus is therefore a fact
+   * while a ring is painted anyway. The source of the focus is therefore a fact
    * we carry ourselves, and `apps/web/src/charts/charts.css` reads it off the
    * attribute below.
    *
@@ -170,12 +138,9 @@ export const ForecastChartHoverBoundary = (
    * - A `blur` clears it, for a *fast* case the window cannot cover: a press on an
    *   *already-focused* chart fires no `focus` for anything to consume, so if
    *   focus leaves and comes straight back with no keystroke between, the
-   *   returning focus would wear a press that had nothing to do with it. Elapsed
-   *   time is exactly what that round trip does not spend.
+   *   returning focus would wear a press that had nothing to do with it.
    * - A keydown anywhere in the document clears it (the effect below), covering
-   *   the press that focused nothing on a chart holding nothing — a finger still
-   *   down when a key arrives, with no focus to consume it and no blur to clear
-   *   it.
+   *   the press that focused nothing on a chart holding nothing.
    * - And it expires (`PRESS_EXPLAINS_FOCUS_MS` above), bounding the arrivals no
    *   keystroke announces.
    *
@@ -251,16 +216,13 @@ export const ForecastChartHoverBoundary = (
    * A lift is the end of a tap: the reader asked a question and the answer is
    * what they lifted their finger to read, so it stands (`clearReadoutForMouse`
    * above). A cancel is the browser taking the gesture away mid-flight — a
-   * vertical drag becoming a page scroll under `touch-action`, most of all — and
-   * the press that opened the reading was the first frame of a gesture that
-   * turned out to be about something else. Nobody asked for that reading.
+   * vertical drag becoming a page scroll under `touch-action`, most of all.
    *
    * Without this the reading has no route out at all on that path. `pointerout`
    * and `pointerleave` follow a cancel with `pointerType: 'touch'`, which the
    * mouse-only clear above ignores by design; and a cancel ends the gesture *in
    * place of* the lift, so `endGestureAtLift` below never runs and the focus a
-   * standing reading is dismissed through is never taken. Withdrawing the reading
-   * is the right answer rather than making it dismissable: nobody asked for it.
+   * standing reading is dismissed through is never taken.
    *
    * The press flag goes with it for the same reason: a gesture that was taken away
    * explains nothing about a focus that arrives afterwards.
@@ -275,18 +237,14 @@ export const ForecastChartHoverBoundary = (
    * not — #421's "a lifted finger keeps what it revealed".
    *
    * The two pointer types leave for opposite reasons, which is why one handler
-   * cannot answer both. A mouse that has left is a reader who has moved on and
-   * is still there to see the chart go quiet. A touch pointer *always* leaves,
+   * cannot answer both. A touch pointer *always* leaves,
    * at the end of every tap and every drag, because the finger is the pointer:
    * clearing on that event would undo the selection the tap just made, in the
    * same frame, and no touch reader could ever see a readout at all.
    *
    * So a touch reading has no leave event to dismiss it, and needs none —
    * dismissal is the blur path (`onBlur` below), which a tap anywhere else fires.
-   * That path is available to every gesture that leaves a reading standing,
-   * because `endGestureAtLift`'s guard below takes the focus in exactly that case
-   * — for a tap as much as for a drag past the tap slop, which fires no click at
-   * all. The one touch reading that goes away without being dismissed is the one
+   * The one touch reading that goes away without being dismissed is the one
    * nobody asked for, and `clearAtCancel` above is where that happens.
    */
   const clearReadoutForMouse = (event: ReactPointerEvent<SVGSVGElement>): void => {
@@ -329,12 +287,6 @@ export const ForecastChartHoverBoundary = (
    * A lift re-stamps the press, and takes the focus the reading it leaves
    * standing is dismissed through.
    *
-   * **The stamp** is what makes the window a measure of one input dispatch rather
-   * than of how long a finger stayed on the glass: the focus a lifted finger
-   * produces arrives after `pointerup`, so the lift is the last thing this element
-   * sees before it and the only endpoint the window can run from without the
-   * reader's own dwell inside it (`PRESS_EXPLAINS_FOCUS_MS` above).
-   *
    * Unconditional rather than guarded on a press still being pending, so a flag a
    * keydown already spent is re-armed here. That is wanted twice over: a reader
    * who pressed a key with a finger still down has still tapped; and it costs the
@@ -346,10 +298,7 @@ export const ForecastChartHoverBoundary = (
    * cancel either: `touch-action: pan-y pinch-zoom`
    * (`apps/web/src/charts/charts.css`) leaves horizontal movement to this chart,
    * so no `pointercancel` arrives, while the engine cancels the tap and with it
-   * the click and the focus that click would have carried. The reading such a drag
-   * leaves standing would then have *no* way to go away. Taking the focus here is
-   * the tap's own dismissal route arriving one dispatch earlier by another road,
-   * not a second route.
+   * the click and the focus that click would have carried.
    *
    * The order is load-bearing: the stamp is written first, so the `focus` this
    * dispatches consumes a stamp of its own age and `readAtFocus` marks it
@@ -357,9 +306,7 @@ export const ForecastChartHoverBoundary = (
    *
    * Guarded on a reading standing, because a focus is not free: `readAtFocus`
    * opens the readout at the first sample when nothing is selected, so focusing
-   * after a lift that read nothing would summon a reading nobody asked for. A
-   * mouse is unaffected whatever the guard says — it focused on the way down, and
-   * focusing the already-focused element fires no event.
+   * after a lift that read nothing would summon a reading nobody asked for.
    *
    * `preventScroll` because this focus is the component's rather than the
    * reader's: a programmatic focus scrolls its element into view, and a reader who
@@ -427,11 +374,9 @@ export const ForecastChartHoverBoundary = (
            two agree, but before one lands the view box is still
            `DEFAULT_CHART_WIDTH` wide in a column of some other width, and an
            unpinned height would draw that pass tall and then collapse it.
-           Still earning its place after #343, which moved the browser's first
-           measurement before paint: that removed the *painted* pre-measurement
-           frame, not the arms where there is no measurement to wait for — an
-           environment with no `ResizeObserver`, and jsdom, which is where every
-           chart suite under `apps/web/src` reads this attribute. */
+           Still earning its place after #343: an environment with no
+           `ResizeObserver`, and jsdom, which is where every chart suite under
+           `apps/web/src` reads this attribute. */
         height={CHART_VIEW_BOX_HEIGHT}
         role="img"
         aria-label={ariaLabel}
@@ -447,19 +392,14 @@ export const ForecastChartHoverBoundary = (
         onKeyDown={readAtKey}
         /* The pointer listens on the whole figure — plot *and* both axis
            gutters — because #421's tap contract is that the target is the graph,
-           not the drawing inside it: a thumb aimed at the start of the day lands
-           on the y axis as often as beside it, and a tap that summons nothing is
-           a chart that looks broken. Selection is still by x alone, and
+           not the drawing inside it. Selection is still by x alone, and
            `pointerSample` clamps that x into the plot, so a gutter tap reads the
            end of the range it is nearest rather than a sample off the canvas.
            `onPointerDown` as well as `onPointerMove`: a finger produces no hover
            stream to be tracked, so the press *is* the reading. */
         onPointerDown={readAtPress}
         /* And the lift re-stamps that press without disturbing the reading it
-           made, then takes the focus that reading is dismissed through: the focus
-           a lifted finger produces arrives after this event, so this is the
-           endpoint `PRESS_EXPLAINS_FOCUS_MS` is measured from, and a drag that
-           fires no `click` has no other way to reach one. */
+           made, then takes the focus that reading is dismissed through. */
         onPointerUp={endGestureAtLift}
         onPointerMove={readAtPointer}
         onPointerLeave={clearReadoutForMouse}
