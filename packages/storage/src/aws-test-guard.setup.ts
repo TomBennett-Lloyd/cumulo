@@ -5,7 +5,9 @@
  * effect purely by being loaded, so it must never be imported by production
  * code or re-exported from any `index.ts` — it is wired in exclusively as a
  * vitest `setupFiles` entry (`packages/storage/vitest.config.ts`, and the same
- * path from the AWS-touching apps).
+ * path from the AWS-touching apps). #112 is the ticket that will rule on where
+ * test-support modules belong; this file migrates with that convention when it
+ * lands.
  *
  * **Why env rather than a mock.** The AWS SDK resolves credentials and endpoints
  * lazily, on the first `send`. A unit test whose mock or endpoint override slips
