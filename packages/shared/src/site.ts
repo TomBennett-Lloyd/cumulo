@@ -122,6 +122,23 @@ export const fleetSiteSchema = siteSchema.extend({
 export type FleetSite = z.infer<typeof fleetSiteSchema>;
 
 /**
+ * The sites a fleet-wide read answers for, and the sites a cycle fetches weather for: the active
+ * ones.
+ *
+ * One declaration rather than a `site.active` filter per caller, because the callers are obliged to
+ * agree and not merely likely to. `SiteAdapter.listFleetSites` returns the fleet active *and*
+ * inactive, so every consumer wanting "the fleet still being forecast" narrows it, and an arm that
+ * narrows differently answers a different question under the same name: a roll-up read whose
+ * expected-partial set and whose nameplate divisor disagreed about one site would report a fleet
+ * under-performing against capacity that cannot generate (#531). Ingestion narrows by this same
+ * predicate (`activeFetchLocations`) before a cycle picks which of those locations it has budget
+ * for, so a producer's locations and a reader's expected locations cannot disagree about *activity*
+ * — which is the dimension this function owns, and the only one it claims.
+ */
+export const activeFleetSites = (sites: readonly FleetSite[]): readonly FleetSite[] =>
+  sites.filter((site) => site.active);
+
+/**
  * How many `user`-origin sites the fleet holds before adding one evicts the
  * oldest.
  *

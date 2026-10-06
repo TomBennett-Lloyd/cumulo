@@ -1,6 +1,7 @@
 import {
   canonicalFleetSeed,
   createSiteInputSchema,
+  FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   forecastSchema,
   generateFleet,
@@ -293,6 +294,10 @@ export class DemoFleetDataSource implements FleetDataSource {
    * partials with and the API's fallback sums with, so this source and the deployed one answer the
    * same question with the same arithmetic — which is what makes the seam's promise ("one
    * definition of the fleet total, two ways of arriving at the shape") true rather than aspirational.
+   *
+   * `FLEET_ROLLUP_FORECAST_KIND` is passed rather than inherited from what `fixture-series.ts`
+   * happens to emit (#531): the deployed arms select a model, so a demo that selected none would be
+   * right only while its fixtures held one.
    */
   readonly fleetForecasts = (
     range: RangeHours,
@@ -302,6 +307,7 @@ export class DemoFleetDataSource implements FleetDataSource {
       value: fleetForecastAggregate(
         this.sites.flatMap((site, siteIndex) => fixtureForecasts(site, siteIndex, range)),
         this.sites,
+        FLEET_ROLLUP_FORECAST_KIND,
       ),
     });
 

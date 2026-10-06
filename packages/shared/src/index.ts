@@ -73,6 +73,7 @@ export {
   type SiteOrigin,
   fleetSiteSchema,
   type FleetSite,
+  activeFleetSites,
   sitePhysicsSchema,
   type SitePhysics,
   MAX_PLAUSIBLE_RESIDENTIAL_KW,
@@ -80,6 +81,7 @@ export {
 } from './site';
 export {
   type SeriesKind,
+  type ForecastSeriesKind,
   seriesSortKey,
   parseSeriesSortKey,
   FLEET_ROLLUP_PARTITION,

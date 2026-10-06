@@ -6,7 +6,7 @@ import {
   type SiteCapacity,
 } from './aggregation';
 import { uncertaintyBandSchema, type Forecast } from './forecast';
-import type { SeriesKind } from './storage-key';
+import type { ForecastSeriesKind, SeriesKind } from './storage-key';
 import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
 
 /**
@@ -90,15 +90,15 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * declaration, because a roll-up written under one kind and read under another is an empty fleet
  * with no error anywhere (`docs/standards/architecture.md` rule 9).
  *
- * **Physics, and stating that fixes a latent bug rather than introducing a restriction.**
- * `aggregateFleetForecast`'s own docblock warns that summing two models' views of the same
- * site-hour double-counts it; today's fan-out route returns every model it finds and leaves the
- * client to sum them, which is only harmless because `packages/forecast` emits physics alone. The
- * roll-up has to name a model — a sort key cannot be vague — so it names the one the dashboard
- * has always effectively been drawing, and the fallback filters to the same one so the two paths
- * cannot answer differently. When the ML correction layer lands, *which* model the fleet chart shows is a
- * product decision that gets made here, once, instead of being decided by what happens to be in the
- * table.
+ * **Physics, and stating that fixes a latent bug rather than introducing a restriction.** Handed two
+ * models' views of one site-hour, `aggregateFleetForecast` does not double-count them: it keeps one
+ * entry per site-hour and collapses the rest by `issuedAt`, with `>=` giving the tie to whichever
+ * arrived last. So an unfiltered fleet total is not inflated — it is a total whose *model* is decided
+ * by row order, which is worse for being plausible. The roll-up has to name a model, a sort key
+ * being unable to be vague, so {@link fleetRollupPartials} filters on this declaration and every
+ * producer of the aggregate passes it (#531). When the ML correction layer lands, *which* model the
+ * fleet chart shows is a product decision made here rather than one decided by what happens to be
+ * in the table.
  */
 export const FLEET_ROLLUP_FORECAST_KIND = {
   kind: 'forecast',
@@ -180,14 +180,22 @@ export type FleetForecastAggregatePoint = z.infer<typeof fleetForecastAggregateP
  * contributes `0` capacity — `contributingCapacityKwByHour`'s rule, kept rather than papered over:
  * capacity that cannot be evidenced is not asserted, and a partial claiming otherwise would inflate
  * the divisor the `%` view reads.
+ *
+ * `kind` selects the model, and it is a required parameter rather than this module's own constant so
+ * that the producer, the API's fallback and the browser's demo source are held to passing the same
+ * one by the compiler (#531). Filtering here rather than in each caller is what makes one model a
+ * property of the arithmetic instead of a convention three call sites keep — `aggregateFleetForecast`
+ * refuses to select a model and says why, and this is the caller making that selection, once.
  */
 export const fleetRollupPartials = (
   forecasts: readonly Forecast[],
   sites: readonly SiteCapacity[],
+  kind: ForecastSeriesKind,
 ): readonly FleetRollupPartial[] => {
-  const capacityKwByHour = contributingCapacityKwByHour(forecasts, sites);
+  const rolledUp = forecasts.filter((forecast) => forecast.model === kind.model);
+  const capacityKwByHour = contributingCapacityKwByHour(rolledUp, sites);
 
-  return aggregateFleetForecast(forecasts).map((point) => ({
+  return aggregateFleetForecast(rolledUp).map((point) => ({
     validTime: point.validTime,
     acPowerKw: point.acPowerKw,
     // The degenerate band, spelled the same way `sumForecastGroup` spells it per site: a point
@@ -282,13 +290,17 @@ export const sumFleetRollupPartials = (
  * cheapest way to guarantee that is for all three to be the same code.
  *
  * It is also the executable statement of this module's additivity claim: summing one group is the
- * degenerate case of summing many, so `fleetForecastAggregate(all, sites)` and
+ * degenerate case of summing many, so `fleetForecastAggregate(all, sites, kind)` and
  * `sumFleetRollupPartials(each location's partials)` must be equal — which is what
  * `fleet-rollup-additivity.test.ts` pins over the canonical 12 × 5 fleet, to within the association
  * bound the section above states.
+ *
+ * `kind` is {@link fleetRollupPartials}'s, passed through: both callers here are summing a group the
+ * producer would have summed, so a different model selection would be a different fleet.
  */
 export const fleetForecastAggregate = (
   forecasts: readonly Forecast[],
   sites: readonly SiteCapacity[],
+  kind: ForecastSeriesKind,
 ): readonly FleetForecastAggregatePoint[] =>
-  sumFleetRollupPartials(fleetRollupPartials(forecasts, sites));
+  sumFleetRollupPartials(fleetRollupPartials(forecasts, sites, kind));
