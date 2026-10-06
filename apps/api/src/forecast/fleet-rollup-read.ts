@@ -42,10 +42,14 @@ import { forecastsIn } from './series-split';
  * sums to a fleet total that looks exactly like a plausible number from a quieter fleet — there is
  * no gap to see, because the missing site does not read as missing, it reads as less generation.
  * That is the half-truth `fleet-series-read.ts` refuses for the fan-out, applied to the roll-up.
- * Completeness is checked per **location**. A cycle that deferred a location for budget is a
- * different dimension and is what `incomplete` is for. The check is **not** per hour, which is a
- * decision rather than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states
- * it and what makes the residual honest rather than silent.
+ * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
+ * every site carries coordinates, so the expected set is the active sites' `locationId`s — the same
+ * `locationId` ingestion keys its messages on, over the same `activeFleetSites` predicate
+ * `activeFetchLocations` takes, so neither set can drift from the other on activity. A cycle that
+ * deferred a location for budget is a different dimension and is what `incomplete` is for. The
+ * check is **not** per hour, which is a decision rather than an omission: ADR 0009's
+ * `## Amendments` entry for 2026-10-05 (#531) states it and what makes the residual honest rather
+ * than silent.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
  * that explain it, so "has a full cycle written every location yet?" is one log query. When the
