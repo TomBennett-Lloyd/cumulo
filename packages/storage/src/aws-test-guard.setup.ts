@@ -5,10 +5,7 @@
  * effect purely by being loaded, so it must never be imported by production
  * code or re-exported from any `index.ts` — it is wired in exclusively as a
  * vitest `setupFiles` entry (`packages/storage/vitest.config.ts`, and the same
- * path from the AWS-touching apps). That places it in the same category as
- * `./recording-http-handler.ts`: test support living in `src/` and absent from
- * `index.ts` on purpose. #112 is the ticket that will rule on where test-support
- * modules belong; this file migrates with that convention when it lands.
+ * path from the AWS-touching apps).
  *
  * **Why env rather than a mock.** The AWS SDK resolves credentials and endpoints
  * lazily, on the first `send`. A unit test whose mock or endpoint override slips
@@ -77,19 +74,13 @@ for (const key of [
   'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
   'AWS_CONTAINER_CREDENTIALS_FULL_URI',
   // (2) decoration `fromEnv` composes onto the sentinel identity rather than
-  // replacing it (@aws-sdk/credential-provider-env 3.972.64: `expiration`,
-  // `credentialScope` and `accountId` are spread onto the env credentials when
-  // present). An inherited account id makes the fake identity claim a real
-  // account; an inherited expiration makes the SDK treat it as refreshable.
+  // replacing it.
   'AWS_CREDENTIAL_EXPIRATION',
   'AWS_CREDENTIAL_SCOPE',
   'AWS_ACCOUNT_ID',
-  // (3) endpoint suppression. @smithy/core 3.31.1 reads this as a boolean and,
-  // when set, resolves endpoints as if no endpoint URL had been configured at
-  // all — which discards the loopback sentinel below wholesale rather than
-  // outranking it. Only the env spelling needs deleting: the config-file
-  // spelling (`ignore_configured_endpoint_urls`) is already unreachable through
-  // the `/dev/null` AWS_CONFIG_FILE set further down.
+  // (3) endpoint suppression. Only the env spelling needs deleting: the
+  // config-file spelling (`ignore_configured_endpoint_urls`) is already
+  // unreachable through the `/dev/null` AWS_CONFIG_FILE set further down.
   'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
   ...Object.keys(process.env).filter((name) => name.startsWith('AWS_ENDPOINT_URL_')),
 ]) {
