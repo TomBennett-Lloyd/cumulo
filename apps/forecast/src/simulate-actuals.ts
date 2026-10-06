@@ -165,9 +165,9 @@ const failedOutcome = (
  *
  * The window arrives as a {@link UtcWindow} rather than as two timestamps, so its two same-shaped
  * bounds cannot be swapped at the call site. No pagination bound is passed: the window is at most
- * `TRAILING_ACTUALS_HOURS` hours of one site's series — which is one Query page with room to
- * spare, and a bound would introduce a `complete: false` case that this caller has no better
- * answer to than reading the whole thing.
+ * `TRAILING_ACTUALS_HOURS` hours of one site's series — a dozen points at the outside — which is
+ * one Query page with room to spare, and a bound would introduce a `complete: false` case that
+ * this caller has no better answer to than reading the whole thing.
  */
 const simulateSiteActuals = async (
   deps: SimulateActualsDeps,
@@ -216,7 +216,8 @@ const simulateSiteActuals = async (
  *
  * Sequential rather than concurrent, and per-site failures converted rather than propagated, for
  * the reason `runLocation` in `apps/ingestion/src/cycle.ts` is written the same way: these sites
- * share one table's capacity, and one site's rejection must not abandon its siblings.
+ * share one table's capacity, and one site's rejection must not abandon its siblings — a fan-out
+ * that failed fast would leave the remaining sites' hours to a later run for no benefit.
  *
  * Each outcome is logged as it is decided, so a run killed mid-way has still said what it did for
  * the sites it reached.
