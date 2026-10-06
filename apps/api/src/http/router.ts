@@ -7,10 +7,7 @@ import { errorResponse, type ApiResponse } from './response';
  *
  * A table rather than a framework. `main.ts`'s route table — a handful of
  * routes, at most one path parameter each, no middleware — does not pay for a
- * dependency, and a framework here would be a dependency whose own types sit
- * between this service and the gateway payload it already parses. What a
- * framework would give us is exactly what this file is: match a method and a
- * path, extract the parameters, and decide what an unmatched request means.
+ * dependency.
  *
  * Matching is **exact, deliberately**, because this table is not the only thing
  * that matches these paths: API Gateway matches its own declared route keys
@@ -45,10 +42,7 @@ export type PathSegment = string | PathParameter;
  * the request: how much time is left before Lambda kills this call
  * (`request-deadline.ts`). It rides here rather than being threaded through
  * every handler's deps because it is a property of this request and not of the
- * container — a deps object is built once per container, and a deadline built
- * once per container would be the same wrong number for every invocation after
- * the first. The router makes no decision with it either; the handlers that
- * loop over storage commands do.
+ * container.
  */
 export interface RouteRequest {
   readonly method: string;
@@ -83,28 +77,22 @@ export interface RouteMatch {
  * matches and `/v1/sites/`, `//v1//sites` and `/v1//sites` do not — they fall
  * through to the 404 below.
  *
- * This used to normalise instead, dropping empty segments so a trailing slash
- * named the same resource. That read as generosity and was a hole. **API
- * Gateway matches its declared route keys against the raw path, exactly**, and
- * `infra/api/gateway.tf` declares `POST /v1/sites`, `PUT /v1/sites/{siteId}`
- * and `DELETE /v1/sites/{siteId}` precisely so the stage can throttle those
- * three at 2 rps / burst 4 instead of the stage-wide 10 / 20 (ADR 0006 layer
- * 2). A request to `POST /v1/sites/` does not match that key, so it fell
- * through to `$default` — and a normalising router then served it as a create.
- * One trailing slash bought a 5× looser write throttle, which is the opposite
- * of a distinction no caller means to draw.
+ * **API Gateway matches its declared route keys against the raw path,
+ * exactly**, and `infra/api/gateway.tf` declares `POST /v1/sites`,
+ * `PUT /v1/sites/{siteId}` and `DELETE /v1/sites/{siteId}` precisely so the
+ * stage can throttle those three (ADR 0006 layer 2). A request to
+ * `POST /v1/sites/` does not match that key, so it fell through to `$default` —
+ * and a normalising router then served it as a create.
  *
  * Refusing to match is the fix that keeps the two tables agreeing on what a
- * route *is*, rather than teaching the gateway every spelling of every path:
- * slash variants declared at the gateway would be six more route keys to keep
- * in step with this file, and the next non-canonical form (`/v1//sites`) would
- * still be uncovered. The cost is that `GET /docs/` is now a 404 where it used
- * to render — accepted: `/docs` is what the runbook and every Swagger UI asset
- * URL use, and those are absolute (`/docs/swagger-ui.css`), so nothing in the
- * page depends on the trailing form.
+ * route *is*, rather than teaching the gateway every spelling of every path.
+ * The cost is that `GET /docs/` is now a 404 where it used to render —
+ * accepted: `/docs` is what the runbook and every Swagger UI asset URL use, and
+ * those are absolute (`/docs/swagger-ui.css`), so nothing in the page depends
+ * on the trailing form.
  *
  * The gateway's exact-match behaviour is confirmed live by issue #29's E2
- * evidence run, which watches the tighter limit bite on `POST /v1/sites`.
+ * evidence run.
  */
 const canonicalPathSegments = (path: string): string[] | undefined => {
   const [leading, ...segments] = path.split('/');
@@ -146,10 +134,6 @@ const matchSegments = (
 
 /**
  * The first route whose method and pattern both match, in table order.
- *
- * Exported because matching is the interesting, entirely pure half of this
- * module — a table with two patterns that can both match one path is a bug
- * worth a test that needs no handlers and no promises.
  */
 export const matchRoute = (
   routes: readonly Route[],
@@ -183,10 +167,6 @@ export const matchRoute = (
  * 404 every preflight, since no table here declares an `OPTIONS` route and none
  * should — the answer is the same for every method the CORS configuration
  * allows.
- *
- * It reuses the same two private helpers as {@link matchRoute}, so a path this
- * says exists is exactly a path some route can serve: a preflight that succeeds
- * for a path the follow-up request would 404 on is a worse lie than a refusal.
  */
 export const matchesAnyRoutePath = (routes: readonly Route[], path: string): boolean => {
   const actual = canonicalPathSegments(path);
@@ -224,34 +204,20 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *
  * - **A CORS preflight** → 204, before matching and before the body parse.
  *   Preflight is a property of the CORS mechanism, not of any resource, so no
- *   route declares `OPTIONS` and the answer is the same for all of them. It is
- *   answered here for the reason the 404 and the 400 are. The gateway would
- *   answer it itself — HTTP APIs auto-answer preflight for an `OPTIONS` request
- *   matching no route — but this API's `$default` catch-all proxies everything
- *   here, so "no route" never happens and the auto-answer never fires.
+ *   route declares `OPTIONS` and the answer is the same for all of them.
  *
  *   The 204 sets **no `Access-Control-*` header**: the gateway attaches the
  *   preflight header set to this response from its own `cors_configuration`
  *   (`infra/api/gateway.tf`), and a header set here would be a second opinion on
- *   the same question. That decoration is claimed for *this* preflight only —
- *   the allow-methods, allow-headers and max-age headers are preflight-only by
- *   the CORS spec, so what an ordinary response carries is a separate question
- *   this comment does not answer. A path no route serves is still a 404,
- *   including a non-canonical one (`/v1/sites/`), for the gateway-parity reason
- *   on {@link canonicalPathSegments} — a preflight that approved a path the real
+ *   the same question. A path no route serves is still a 404, including a
+ *   non-canonical one (`/v1/sites/`), for the gateway-parity reason on
+ *   {@link canonicalPathSegments} — a preflight that approved a path the real
  *   request would 404 on tells the browser a lie.
  * - **No route matches** → 404 `not_found`. Method mismatch included: a 405
  *   would tell an unauthenticated caller which methods a path supports, and the
- *   error contract has one code for "there is nothing here" on purpose. A
- *   non-canonical path (`/v1/sites/`, `//v1//sites`) is "no route matches" for
- *   the gateway-parity reason on {@link canonicalPathSegments}.
+ *   error contract has one code for "there is nothing here" on purpose.
  * - **A body that is not JSON** → 400 `validation_failed`, before the handler
  *   runs. A handler never sees text it would have to `JSON.parse` itself.
- *
- * Answering the preflight before matching is also what keeps it clear of the
- * abuse protections: those wrap individual handlers in `main.ts`, so an
- * `OPTIONS` that returns here has by construction touched neither the origin
- * check nor the rate limiter — a browser's preflight is not a caller's request.
  *
  * **Restatement ledger** (`docs/standards/architecture.md` rule 9). The
  * preflight branch below owns what a preflight gets — 204, no body, no
@@ -267,10 +233,6 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *
  * Neither message quotes the request. Reflecting a caller-controlled path back
  * into a response body is free to do and free to regret.
- *
- * The `deadline` is a parameter rather than something derived here: this module
- * is pure matching, and the only place that knows what an invocation's time
- * budget *is* is the composition root that received the Lambda context.
  */
 export const routeRequest = async (
   routes: readonly Route[],
