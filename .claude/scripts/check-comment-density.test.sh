@@ -169,16 +169,43 @@ expect_stdout "packages/shared/src/only.ts: 33.33% (3333) (new row)"
 end
 
 # The one shape the in-block state machine cannot reach: the opener shares its line with
-# code, so the line is classified as code and the machine never enters the block. The
-# `*`-continuation arm is what counts the rest of it, and only this shape exercises that arm
-# — the repository's own blocks all open on their own line, so a mutant that deleted the arm
-# left every other case in this file green.
+# code, so the machine never enters the block. The `*`-continuation arm counts the
+# continuation lines that begin with `*`, and only this shape exercises that arm — a mutant
+# deleting it left every other case green. A continuation line that does NOT begin with `*`
+# is counted as code; that residual is pinned by the case after this one.
 begin "a block opened after code on the same line still has its continuation lines counted"
 DIR="$TMP_ROOT/classify-midline"
 classify <<'EOF'
 export const a = run(); /* why it is done this way,
  * on a continuation line the state machine never saw open,
  */
+export const b = 2;
+EOF
+expect_rc 0
+expect_stdout "packages/shared/src/only.ts: 50.00% (5000) (new row)"
+end
+
+begin "a block opened after code is not entered, so its bare continuation lines count as code"
+DIR="$TMP_ROOT/classify-midline-bare"
+classify <<'EOF'
+export const a = 1; /*
+prose one
+prose two
+*/
+export const b = 2;
+EOF
+expect_rc 0
+expect_stdout "packages/shared/src/only.ts: 20.00% (2000) (new row)"
+end
+
+# Single-line blocks take the closer arm, which no multi-line case reaches: a mutant that
+# stopped counting them dropped 135 real files' ratios and read as merely "stale".
+begin "single-line /** … */ and {/* … */} blocks each count as one comment line"
+DIR="$TMP_ROOT/classify-single-line-block"
+classify <<'EOF'
+/** what the symbol is for */
+{/* a JSX note */}
+export const a = 1;
 export const b = 2;
 EOF
 expect_rc 0
@@ -207,6 +234,17 @@ expect_stdout "1 file(s) have no non-blank line"
 expect_not_stdout "packages/shared/src/blank.ts: 0.00%"
 end
 
+begin "a zero-byte file is reported unmeasurable too, though awk never sees a record of it"
+DIR="$TMP_ROOT/classify-zero-byte"
+must rm -rf "$DIR"
+must mkdir -p "$DIR/.claude" "$DIR/packages/shared/src"
+must srcfile "$DIR/packages/shared/src/a.ts" 4 6
+must touch "$DIR/packages/shared/src/empty.ts"
+run_check --ratchet
+expect_rc 0
+expect_stdout "1 file(s) have no non-blank line"
+end
+
 # ==========================================================================================
 # 3. the bootstrap, which is the one run with no bar to measure against
 # ==========================================================================================
@@ -232,6 +270,23 @@ expect_stdout "0 lowered, 3 added, 0 dropped"
 [ "$(baseline_of | command grep -c '')" = "3" ] || bad "expected 3 baseline rows, got: $(baseline_of)"
 baseline_of | command grep -qE '^packages/shared/src/a\.ts	2000$' || bad "a.ts row wrong: $(baseline_of)"
 baseline_of | command grep -qE '^apps/web/src/c\.ts	6000$' || bad "c.ts row wrong: $(baseline_of)"
+end
+
+# Only a MISSING baseline bootstraps. One that exists with no row would set the median to
+# the scale's ceiling, admit everything, and let --ratchet pin every file at its current
+# ratio — raising every row.
+begin "a baseline that exists but holds no row is refused in both modes, and left untouched"
+fixture baseline-empty
+must printf '# header only\n' >"$DIR/$BASELINE_REL"
+must cp "$DIR/$BASELINE_REL" "$TMP_ROOT/baseline-empty.before"
+run_check
+expect_rc 2
+expect_stderr "exists but holds no row"
+run_check --ratchet
+expect_rc 2
+expect_stderr "exists but holds no row"
+cmp -s "$TMP_ROOT/baseline-empty.before" "$DIR/$BASELINE_REL" ||
+  bad "a --ratchet run against a row-less baseline wrote it: $(cat "$DIR/$BASELINE_REL")"
 end
 
 begin "a baseline's comment and blank lines are skipped, not parsed as rows"
@@ -392,14 +447,32 @@ expect_rc 1
 expect_stderr "repo median 40.00% (4000)"
 end
 
+# Every other fixture ratio has four digits, where a text sort and a numeric sort agree. Rows
+# of mixed width are what tell them apart: as text, 900 sorts after 6000 and the median
+# becomes 6000 instead of 2000.
+begin "the median sorts numerically, not as text"
+DIR="$TMP_ROOT/median-width"
+must rm -rf "$DIR"
+must mkdir -p "$DIR/.claude"
+must srcfile "$DIR/packages/shared/src/a.ts" 9 91
+must srcfile "$DIR/packages/shared/src/b.ts" 2 8
+must srcfile "$DIR/apps/web/src/c.ts" 6 4
+bootstrap
+must srcfile "$DIR/packages/shared/src/new.ts" 4 6
+run_check
+expect_rc 1
+expect_stderr "repo median 20.00% (2000)"
+end
+
 # ==========================================================================================
 # 7. scope: what the gate does and does not read
 # ==========================================================================================
 
-begin "test and spec files are out of scope however dense they are"
+begin "test, type-test and spec files are out of scope however dense they are"
 fixture scope-tests
 bootstrap
 must srcfile "$DIR/packages/shared/src/a.test.ts" 9 1
+must srcfile "$DIR/packages/shared/src/a.test-d.ts" 9 1
 must srcfile "$DIR/apps/web/src/c.spec.tsx" 9 1
 run_check
 expect_rc 0

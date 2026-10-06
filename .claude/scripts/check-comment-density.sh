@@ -3,23 +3,17 @@
 # Comment-density ratchet (#553): a source file's ratio of comment lines to
 # non-blank lines may fall, never rise.
 #
-# Scope: every non-test `.ts`/`.tsx` file under `apps/*/src` and `packages/*/src`.
-# `.test.*` and `.spec.*` are excluded — docs/standards/testing.md rule 10 splits
-# those lanes, and a test's prose is its own question. `.sh` is NOT scanned: those
-# trees contain none, and the repository's shell lives under `.claude/scripts/`,
-# which this gate's scope does not reach (#558).
+# Scope: every `.ts`/`.tsx` file under `apps/*/src` and `packages/*/src` except
+# `.test.*`, `.test-d.*` and `.spec.*`. `.sh` is NOT scanned: those trees contain
+# none (#558).
 #
-# WHAT A COMMENT LINE IS, and it is a definition rather than a measurement. A
-# non-blank line counts as a comment line when it lies inside a block comment, or
-# when its first non-space characters are `//`, `/*`, `{/*` or `*`. A line that
-# closes a comment and then carries code is a code line. Blank lines are in
-# neither count. The classifier is line-anchored and string-unaware, so a line
-# inside a multi-line template literal that begins with one of those tokens is
-# counted as a comment; the proxy is applied identically to the baseline and to
-# the working tree, so the comparison holds even where the absolute figure is off.
+# WHAT A COMMENT LINE IS is the awk classifier below, a line-anchored,
+# string-unaware proxy; its shapes are pinned case by case in section 2 of
+# check-comment-density.test.sh. The same proxy measures the baseline and the
+# working tree, so the comparison holds where the absolute figure is off.
 #
 # BASELINE — `.claude/comment-density.baseline.tsv`, one `path<TAB>ratio` row per
-# file, ratio in basis points (`6022` = 60.22%). Integer, so the comparison needs
+# file, ratio in basis points (`5000` = 50.00%). Integer, so the comparison needs
 # no float arithmetic, and fine-grained enough that one added comment line always
 # moves the figure for any file this repository holds. A file with no row is
 # admitted at or below the median of the baseline's own rows — the committed
@@ -29,13 +23,13 @@
 # `--ratchet` is what a trim batch commits. It runs the gate first and writes
 # NOTHING if anything is red: a half-lowered baseline banked by a failing run is
 # worse than no write at all. On a green run it lowers every row whose ratio fell,
-# adds a row for each admitted new file, drops rows for files that no longer
-# exist, and prints what moved. It never raises a row.
+# adds a row for each admitted new file, drops rows for files with no measured
+# ratio (deleted, or with no non-blank line), and prints what moved. It never
+# raises a row. A baseline that exists but holds no row is refused in both modes:
+# only a MISSING baseline bootstraps.
 #
-# Wired into the root `verify` composite (CLAUDE.md: gates join `verify`, never a
-# hand-picked subset) and into `.claude/scripts/verify-tier.sh`'s source-prose
-# tier, which is the tier a comment-only change set lands on and therefore the one
-# where this gate is the only thing that can observe the change.
+# Wired into `verify:full` and into `.claude/scripts/verify-tier.sh`'s
+# source-prose tier, which is where a comment-only change set lands.
 #
 # No dependencies: bash (3.2, which macOS ships as /bin/bash), find and awk, with
 # no gawk extensions.
@@ -137,7 +131,7 @@ for ext in "${MODULE_EXTENSIONS[@]}"; do
     exclude_names+=(-o)
   fi
   include_names+=(-name "*.$ext")
-  exclude_names+=(-name "*.test.$ext" -o -name "*.spec.$ext")
+  exclude_names+=(-name "*.test.$ext" -o -name "*.test-d.$ext" -o -name "*.spec.$ext")
 done
 
 if ! find "${search_dirs[@]}" \
@@ -169,8 +163,9 @@ fi
 # One awk pass over every file: `path<TAB>ratio<TAB>comment<TAB>non-blank`, paths
 # relative to ROOT. Files are flushed on each FNR==1 and once more at END rather
 # than with gawk's ENDFILE, which macOS awk does not have. A file with no
-# non-blank line has no ratio to compare and is listed as unmeasurable rather than
-# counted as zero.
+# non-blank line has no ratio and is listed as unmeasurable rather than counted
+# as zero — a zero-byte file never reaches FNR==1, so that list is completed
+# below from the discovered set.
 
 if ! awk -v root="$ROOT/" -v scale="$SCALE" -v skipped="$TMP/unmeasurable" '
 function tail_is_bare(rest) {
@@ -217,6 +212,12 @@ END { flush() }
   exit 2
 fi
 : >>"$TMP/unmeasurable"
+# Every discovered file is either measured or unmeasurable; a zero-byte file
+# yields no record at all, so it is the difference between the two lists.
+awk -v root="$ROOT/" '{ print substr($0, length(root) + 1) }' "$TMP/files" |
+  LC_ALL=C sort >"$TMP/discovered"
+cut -f1 "$TMP/current" | cat - "$TMP/unmeasurable" | LC_ALL=C sort >"$TMP/accounted"
+LC_ALL=C comm -23 "$TMP/discovered" "$TMP/accounted" >>"$TMP/unmeasurable"
 
 measured=$(grep -c '' <"$TMP/current" || true)
 if [ "$measured" -eq 0 ]; then
@@ -266,9 +267,19 @@ fi
 
 baseline_rows=$(grep -c '' <"$TMP/base" || true)
 
-# The median of the committed population. A missing baseline under --ratchet has
-# none and admits every file at its current ratio — the bootstrap run, the only
-# one that pins files with no bar to pin them against.
+# A baseline file with no row would set no bar, and --ratchet would then pin
+# every file at its current ratio — raising every row. Only a missing file is
+# the bootstrap.
+if [ -f "$BASELINE" ] && [ "$baseline_rows" -eq 0 ]; then
+  printf 'check-comment-density: %s exists but holds no row — refusing to measure against no bar
+' \
+    "$BASELINE_REL" >&2
+  printf '  Delete it and run --ratchet to bootstrap, if a fresh baseline is what you mean.\n' >&2
+  exit 2
+fi
+
+# The median of the committed population. The bootstrap has none and admits every
+# file at its current ratio.
 if [ "$baseline_rows" -gt 0 ]; then
   median=$(cut -f2 "$TMP/base" | LC_ALL=C sort -n |
     awk '{ a[NR] = $1 } END { print a[int((NR + 1) / 2)] }') || exit 2
@@ -335,10 +346,9 @@ if [ "$violation_count" -gt 0 ]; then
   printf '(docs/standards/prose.md rule 6). When the ratio fell and the baseline is\n' >&2
   printf 'merely stale, lower it with:\n\n' >&2
   printf '    bash .claude/scripts/check-comment-density.sh --ratchet\n\n' >&2
-  printf 'which lowers rows and never raises one — this gate cannot be satisfied by\n' >&2
-  printf 'editing %s upward by hand. A RENAMED file arrives as a\n' "$BASELINE_REL" >&2
-  printf 'new one and is judged against the median: carry its row across to the new\n' >&2
-  printf 'path by hand, which leaves the ratio alone and is therefore not that edit.\n' >&2
+  printf 'which lowers rows and never raises one.\n\n' >&2
+  printf 'A RENAMED file arrives as a new one and is judged against the median:\n' >&2
+  printf 'carry its row across to the new path in %s.\n' "$BASELINE_REL" >&2
   exit 1
 fi
 
@@ -358,9 +368,9 @@ if [ "$ratchet" = "1" ]; then
       exit 2
     fi
     {
-      printf '# Comment-density baseline — generated, never hand-edited (#553).\n'
-      printf '# One row per non-test source file: path<TAB>comment lines as basis\n'
-      printf '# points of non-blank lines (6022 = 60.22%%). A ratio may fall, never\n'
+      printf '# Comment-density baseline, generated by --ratchet (#553).\n'
+      printf '# One row per scanned source file: path<TAB>comment lines as basis\n'
+      printf '# points of non-blank lines (5000 = 50.00%%). A ratio may fall, never\n'
       printf '# rise. Regenerate with:\n'
       printf '#     bash .claude/scripts/check-comment-density.sh --ratchet\n'
       cat "$TMP/newbase"
