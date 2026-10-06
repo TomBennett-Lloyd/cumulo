@@ -13,14 +13,8 @@ import { MAX_ARCHIVE_REQUEST_DAYS, type ArchiveFetchResult } from './open-meteo-
  * and both live here:
  * - a day is requested only when its marker is absent (`listFetchedArchiveDays`);
  * - a marker is written only with a whole day of readings, in `putArchiveDay`'s
- *   single transaction — so "this day has been fetched" can never be true of a
- *   day whose readings are not there, and re-running a backfill over a window
- *   already covered costs zero calls. `archive-cache.test.ts` proves that
- *   mechanically rather than by inspection.
- *
- * Nothing here is a factory or a client: `ensureArchiveCoverage` is a function of
- * its arguments, with its two collaborators handed to it
- * (`docs/standards/structure.md` rules 1–2), matching `fetchArchiveDays`.
+ *   single transaction. `archive-cache.test.ts` proves that mechanically rather
+ *   than by inspection.
  */
 
 /**
@@ -36,9 +30,7 @@ import { MAX_ARCHIVE_REQUEST_DAYS, type ArchiveFetchResult } from './open-meteo-
  * real adapter is checked against {@link ArchiveDayStore} by the compiler at the
  * one place the two meet — `scripts/run-hindcast.ts`, the operator entry point,
  * which is the package's only importer of `@cumulo/storage` and passes a real
- * `WeatherAdapter` in. This is the port half of one contract, not a second definition of it: there
- * is no second implementation of these semantics anywhere, and if the adapter's
- * answer changed shape, that wiring site would stop compiling.
+ * `WeatherAdapter` in.
  *
  * `undetermined` is its own case for the reason the adapter documents: a day
  * DynamoDB never answered for is *unknown*, and guessing costs either quota
@@ -54,9 +46,7 @@ export type ArchiveDayCoverage =
 
 /**
  * The archive-day surface of the `cumulo-weather` table, narrowed to what
- * backfill uses: ask which days are covered, store a covered day. The reading
- * path (`queryArchiveRange`) is not here because this module never reads weather
- * back — the hindcast replay does, with the adapter it already holds.
+ * backfill uses: ask which days are covered, store a covered day.
  */
 export interface ArchiveDayStore {
   listFetchedArchiveDays(
@@ -69,11 +59,6 @@ export interface ArchiveDayStore {
 /**
  * One archive HTTP request, with the request policy already bound —
  * `fetchArchiveDays` partially applied over its `ArchiveFetchDeps`.
- *
- * Function-typed rather than an object with a `fetchArchiveDays` method, and
- * bound rather than taking the deps through: this module has no opinion about
- * timeouts or which `fetch` implementation is in play, and a signature that
- * cannot express one is the clearest way to say so.
  */
 export type FetchArchiveRun = (
   coords: GeoCoordinates,
@@ -82,12 +67,10 @@ export type FetchArchiveRun = (
 ) => Promise<ArchiveFetchResult>;
 
 /**
- * The two collaborators {@link ensureArchiveCoverage} needs, as one named type
- * so a second entry point wanting the same pair is visibly the same rather than
- * accidentally alike (`docs/standards/typing.md` rule 6).
+ * The two collaborators {@link ensureArchiveCoverage} needs
+ * (`docs/standards/typing.md` rule 6).
  *
- * The store is injected as an **object**, not as two detached methods: a method
- * pulled off a class instance loses its `this`
+ * The store is injected as an **object**, not as two detached methods
  * (`docs/standards/architecture.md` rule 7).
  */
 export interface ArchiveCoverageDeps {
@@ -97,16 +80,12 @@ export interface ArchiveCoverageDeps {
 
 /**
  * What a coverage attempt achieved, as a value rather than a throw
- * (`docs/standards/error-handling.md` rule 1). The caller's next move differs
- * per case, which is why these are three cases and not one bag of optionals:
+ * (`docs/standards/error-handling.md` rule 1).
  *
  * - `ready` — coverage is as complete as the archive allows. `unavailableDays`
  *   is still `ready`: those days are ones Open-Meteo has no whole day of data
  *   for, and no amount of asking again *now* changes that. They carry no marker,
- *   so a later run retries them; whether a hindcast over a window with holes in
- *   it is worth computing is the caller's judgement, not this function's
- *   (`docs/standards/error-handling.md` rule 5 — the hole is reported, never
- *   filled).
+ *   so a later run retries them.
  * - `coverage-unknown` — storage could not say what is cached, so nothing was
  *   fetched at all. Retry when DynamoDB is answering again.
  * - `rate-limited` — the quota is spent. Everything in `fetched` is durably
@@ -137,16 +116,6 @@ export type ArchiveCoverageOutcome =
  * The days a request asked for that its answer never mentioned — in neither
  * `completeDays` nor `incompleteDays`.
  *
- * This is not a hypothetical. A truncated payload produces it directly: 36 hours
- * returned for a three-day request yields one whole day, one short day, and a
- * third day the response simply has no rows for. Without this, that day falls
- * out of `alreadyCached`, `fetched` *and* `unavailableDays` while the outcome
- * stays `ready` — so a hindcast computes metrics over a window with a hole in it
- * that nothing in the outcome reports. That is exactly the half-truth
- * `docs/standards/error-handling.md` rule 5 forbids, and the day is unavailable
- * in precisely the sense the outcome already has a word for: no marker was
- * written, so a later run retries it.
- *
  * Bounds are compared as strings because `UtcDay` is fixed-width `YYYY-MM-DD`,
  * where lexicographic order is calendar order.
  */
@@ -172,8 +141,7 @@ const unansweredDays = (
  *    day gets fetched twice, and the run is cheap to repeat once storage is
  *    healthy.
  * 2. **Group the misses into contiguous runs**, capped at
- *    {@link MAX_ARCHIVE_REQUEST_DAYS} — the frugality step, turning hundreds of
- *    missing days into tens of requests.
+ *    {@link MAX_ARCHIVE_REQUEST_DAYS}.
  * 3. **Fetch sequentially.** No parallel fan-out: Open-Meteo allows 600 calls a
  *    minute (CLAUDE.md) and backfill is not time-critical, so concurrency here
  *    would buy minutes and risk tripping the very limit that stops the run. It
@@ -235,10 +203,7 @@ export const ensureArchiveCoverage = async (
     }
 
     for (const [day, readings] of result.completeDays) {
-      // A day outside the missing set is a day this run did not ask for. Storing
-      // it would be harmless data but a dishonest count, and a marker written
-      // for a day nobody vetted is exactly the claim this module exists to keep
-      // trustworthy.
+      // A day outside the missing set is a day this run did not ask for.
       if (!missingDays.has(day)) {
         continue;
       }

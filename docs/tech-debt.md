@@ -177,3 +177,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/scripts/check-comment-density.sh`, `docs/standards/prose.md` rule 6, `docs/standards/architecture.md` rules 9 and 11
 - What: a row can only fall, but three standing obligations add comment lines to a source file. Architecture rule 9 has the finder write a restatement ledger beside the owner, often in source, and `.claude/agents/reviewer.md` says to do that in the fix round. Rule 11 has arguing prose corrected in the same change. Prose rule 6's own form wants a docblock on a new symbol. A file far below the median has little room, and the zero-ratio barrels (`packages/hindcast/src/index.ts`, `packages/shared/src/index.ts`, `packages/ui/src/index.ts`) can never take a comment line. #535 moves ledgers out of source, which removes the largest of the three. The owner decides what is allowed until then: a reviewed raise, or adding code alongside.
 - Source: #553 review cycle 1
+
+## 2026-10-06 — `ensureArchiveCoverage` restates CLAUDE.md's per-minute quota figure
+
+- Where: `packages/hindcast/src/archive-cache.ts` — the `ensureArchiveCoverage` docblock, step 3 ("Fetch sequentially")
+- What: the step restates CLAUDE.md's per-minute call limit as a figure beside its citation of CLAUDE.md, against `docs/standards/architecture.md` rule 9. #545 batch 6 deleted the sibling restatement of the daily figure from `MAX_ARCHIVE_REQUEST_DAYS`' docblock in `packages/hindcast/src/open-meteo-archive.ts` and left this one, because deleting the figure alone leaves "the very limit that stops the run" without a referent.
+- Source: #545 batch 6, reviewer pass 1 SYSTEMIC
