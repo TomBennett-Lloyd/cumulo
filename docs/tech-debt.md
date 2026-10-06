@@ -172,10 +172,10 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - What: pre-check (a) greps the trimmed subject's identifier only, so a citation naming a trimmed docblock by file path or by path:line is invisible to it
 - Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 84
 
-## 2026-10-06 — pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure such as 'one site's' onto one line trips it, and a spelled-out figure split across a wrap passes
+## 2026-10-06 — pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure count word and a unit noun onto one line trips it (this batch's fleet-api.ts hit), and a spelled-out figure split across a wrap passes
 
 - Where: `.claude/scripts/sweep-report.sh` · `.claude/scripts/sweep-report.sh` carries "SPELLED_RE='"
-- What: pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure such as 'one site's' onto one line trips it, and a spelled-out figure split across a wrap passes
+- What: pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure count word and a unit noun onto one line trips it (this batch's fleet-api.ts hit), and a spelled-out figure split across a wrap passes
 - Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 85
 
 ## 2026-10-06 — the no-new-words half of § Trim batches rule 1 has no mechanical check in sweep-report.sh, so each lane writes its own, and a whole-file vocabulary test passes a sentence assembled from words found elsewhere in the same file
