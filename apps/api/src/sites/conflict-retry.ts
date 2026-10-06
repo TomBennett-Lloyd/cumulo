@@ -10,7 +10,7 @@ import { fullJitterDelayMs } from '@cumulo/storage';
  * that touch that counter are contending with *each other*: a create backing off
  * on one curve while a delete backs off on another is two halves of one policy,
  * and the pair only makes sense stated once (`docs/standards/error-handling.md`
- * rule 3 — the failure policy is visible, and here it is visible in one place).
+ * rule 3).
  *
  * The adapter never retries these itself: ADR 0002 assigns the retry to a
  * deliberate owner, and the SDK gives neither `TransactionCanceledException` nor
@@ -43,14 +43,6 @@ import { fullJitterDelayMs } from '@cumulo/storage';
  *   never reach DynamoDB and never contend. At most 10 invocations run at once,
  *   and the worst case for this policy is that every one of them is a
  *   counter-writing write route.
- *
- * `min(12, 10) = 10`. #29's E2 attempt-2 fired 6 parallel POSTs per round and
- * saw the contention this policy exists for (8 × 500 across 66 requests); 6 was
- * that harness's chosen parallelism rather than a ceiling, and the ceiling above
- * is higher because the DELETE route's bucket is a second, independent one.
- *
- * Not exported: it is the input to the two budgets below, and a caller that
- * wanted it would be re-deriving a budget rather than using one.
  */
 const CONCURRENT_COUNTER_WRITERS = 10;
 
@@ -69,10 +61,6 @@ const CONCURRENT_COUNTER_WRITERS = 10;
  *
  * Bounded rather than unbounded because these routes are unauthenticated: a
  * public write path that can spin holds a Lambda slot out of a pool of 10.
- * Worst case, a request that loses all 9 sleeps 50 + 100 + 200 + 400 × 6 =
- * **2,750 ms** in total (the caps below, summed; full jitter makes the expected
- * total half that). `apps/api/src/request-budget.ts` prices that against the
- * function timeout and says plainly where the sum still does not fit.
  */
 export const MAX_CONFLICT_RETRIES = CONCURRENT_COUNTER_WRITERS - 1;
 
@@ -90,12 +78,11 @@ export const CONFLICT_RETRY_BASE_DELAY_MS = 50;
 /**
  * The ceiling the doubling stops at: **400 ms**.
  *
- * Reached at the fourth retry (50 → 100 → 200 → 400) and held for the rest. It
- * stops there because the sleeps are spent inside a 15-second function timeout
- * that a request must answer within: a curve that kept doubling would spend more
- * of that budget waiting than the remaining attempts could ever use, and a
- * request killed at the timeout does not reach the error boundary at all — the
- * caller gets a gateway 502 with a body that is not an `ApiError`.
+ * Reached at the fourth retry and held for the rest. It stops there because the
+ * sleeps are spent inside a function timeout that a request must answer within:
+ * a curve that kept doubling would spend more of that budget waiting than the
+ * remaining attempts could ever use, and a request killed at the timeout does
+ * not reach the error boundary at all.
  *
  * 400 ms is also wide enough to be a *spread*: full jitter over
  * [0, 400) separates 10 contenders by ~40 ms on average, comfortably more than
@@ -107,11 +94,10 @@ export const CONFLICT_RETRY_MAX_DELAY_MS = 400;
  * How long to sleep before retry number `retryAttempt` (1-based: 1 is the first
  * retry, so its ceiling is exactly {@link CONFLICT_RETRY_BASE_DELAY_MS}).
  *
- * The curve itself is `@cumulo/storage`'s `fullJitterDelayMs` rather than a
- * fourth copy of the same arithmetic — this module supplies the two numbers that
- * are a decision of this API's, and nothing else. `random` is a parameter rather
- * than a default so the delay is a pure function of its inputs and the route's
- * test can assert the sequence it actually slept.
+ * The curve itself is `@cumulo/storage`'s `fullJitterDelayMs` — this module
+ * supplies the two numbers that are a decision of this API's, and nothing else.
+ * `random` is a parameter rather than a default so the delay is a pure function
+ * of its inputs and the route's test can assert the sequence it actually slept.
  */
 export const conflictRetryDelayMs = (retryAttempt: number, random: () => number): number =>
   fullJitterDelayMs(retryAttempt, {

@@ -39,9 +39,6 @@ import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
  * works — so the oldest user site is evicted and the new one stored in a single
  * transaction, which leaves the count unchanged and so leaves the counter
  * untouched.
- *
- * Both the clock and the id generator are injected, so the test that proves a
- * fresh uuid is echoed needs neither a real clock nor a mocked global.
  */
 
 /** Emitted when the attempts below ran out without the site being stored. */
@@ -70,20 +67,6 @@ const INDEX_DRIFT_SLACK = 2;
 /**
  * How many times this route may try to store the site before giving up.
  *
- * An attempt is consumed by any *loss*, and there are three kinds, each losable
- * in a way another attempt can win:
- *
- * - **`conflict`** — DynamoDB cancelled the transaction because a concurrent one
- *   was writing the same row (the counter, in practice). It says nothing about
- *   the cap, so the next attempt simply re-issues the create.
- * - **`cap` then `oldest_gone`** — the last free slot went to someone else's
- *   site, and by the time this request tried to evict the oldest one, another
- *   request had evicted it first. Retrying re-reads the index and evicts
- *   whatever is oldest *now*, so an attempt is never a hot repeat of the same
- *   losing bet.
- * - **`counter_index_drift`** — the counter says full and the `user-sites-by-age`
- *   index offers nothing to evict.
- *
  * **Where the number comes from.** The expression below is the derivation, and
  * its adversarial term is `./conflict-retry.ts`'s rather than a second copy:
  * {@link MAX_CONFLICT_RETRIES} is how many rounds of contention a request can
@@ -91,18 +74,6 @@ const INDEX_DRIFT_SLACK = 2;
  * transactions may be writing the fleet counter at once — is stated there, once.
  * `+ 1` is the attempt that then wins, and {@link INDEX_DRIFT_SLACK} covers the
  * losses that are nobody's race.
- *
- * **Why this is not still 3.** #29's E2 attempt-2 fired 11 rounds of 6 parallel
- * creates and got 8 × 500 back, one of them `"the site could not be added"` —
- * the old 3-attempt budget exhausting under exactly the contention it claimed
- * was implausible. That 500 is the regression this number exists to prevent,
- * and the reason it is derived from a count of contenders instead of from an
- * assertion that the throttle makes contention rare.
- *
- * Bounded rather than unbounded all the same, and for the reason it always was:
- * a public, unauthenticated write path that can spin holds one of ten Lambda
- * slots until the 15-second timeout. Exhausting the budget is a 500 with a log
- * line — an incident to look at — because contention no longer explains it.
  */
 const MAX_STORE_ATTEMPTS = MAX_CONFLICT_RETRIES + 1 + INDEX_DRIFT_SLACK;
 
@@ -138,8 +109,7 @@ type StoreSiteLoss = 'conflict' | 'oldest_gone' | 'counter_index_drift';
  * operator reads it.
  *
  * Neither storing outcome names the evicted site: nothing after the committed
- * write reads it. The departed site's series rows are left to ADR 0002's 90-day
- * TTL, which is the whole of X3's series half (ADR 0007).
+ * write reads it.
  */
 type StoreSiteOutcome =
   | { readonly stored: 'created' }
@@ -215,14 +185,8 @@ const attemptStore = async (
  * Attempt {@link attemptStore} until it stores the site or the budget runs out,
  * sleeping the jittered backoff before every retry.
  *
- * The sleep is what makes a retry worth making: re-issuing a conflicted
- * transaction immediately contends with the same winner still committing, and
- * correlated retries from every loser are what turn contention into a herd
- * (`./conflict-retry.ts` carries the curve and the reasoning).
- *
- * Only a `lost` attempt continues the loop, which is what makes `out_of_time`
- * terminal: a request with no budget left neither sleeps nor re-attempts, it
- * answers.
+ * The sleep is what makes a retry worth making (`./conflict-retry.ts` carries
+ * the curve and the reasoning).
  */
 const storeWithinCap = async (
   deps: CreateSiteDeps,
@@ -275,9 +239,7 @@ export const createSite = async (
     // A 500 rather than a 503: nothing here tells the caller when to come back,
     // and the honest reading is that the fleet lost more races than the number
     // of things that can be racing explains. The log line is the only place
-    // that says so — it names the budget that ran out and the loss that kept
-    // recurring, which is the pair that separates real contention from a
-    // counter and an index that have diverged. The caller gets neither.
+    // that says so.
     deps.log({
       event: createSiteStoreExhaustedEvent,
       siteId: site.id,
