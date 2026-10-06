@@ -18,8 +18,11 @@ import { compareUtcIsoTimestamps, type UtcIsoTimestamp } from './timestamp';
  * correlation model can be fitted before hindcast data (#16); it overstates fleet uncertainty to
  * the extent regions decorrelate.
  *
- * Model selection belongs to the caller: nothing here filters by `model`, so passing physics and
- * ML forecasts in one call would sum two models' views of the same site-hour. Pass a single model.
+ * Model selection belongs to the caller: nothing here filters by `model`. Two models' views of one
+ * site-hour are not both summed — {@link groupOnePerSitePerHour} keeps one entry per site-hour and
+ * {@link forecastSupersedes} is `>=` on `issuedAt`, so same-cycle rows collapse to whichever came
+ * last in input order. The aggregate's model is then decided by row order rather than chosen, which
+ * is worse than a doubled total for being plausible. Pass a single model (#531).
  *
  * The fleet band reuses `UncertaintyBand` as a *type* only. `uncertaintyBandSchema`'s
  * `0`–`MAX_PLAUSIBLE_RESIDENTIAL_KW` bounds are per-site and cannot hold for a 60-site sum, so

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { aggregateFleetForecast } from './aggregation';
 import {
+  FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   fleetRollupPartials,
   sumFleetRollupPartials,
   type FleetRollupPartial,
 } from './fleet-rollup';
 import { forecastSchema } from './forecast';
-import type { Forecast, UncertaintyBand } from './forecast';
+import type { Forecast, ForecastModel, UncertaintyBand } from './forecast';
 import * as packageSurface from './index';
 import { utcIsoTimestampSchema } from './timestamp';
 
@@ -22,6 +24,7 @@ interface ForecastSpec {
   readonly acPowerKw: number;
   readonly issuedAt?: string;
   readonly band?: UncertaintyBand;
+  readonly model?: ForecastModel;
 }
 
 /**
@@ -33,7 +36,7 @@ interface ForecastSpec {
 const buildForecast = (spec: ForecastSpec): Forecast =>
   forecastSchema.parse({
     siteId: spec.siteId,
-    model: 'physics',
+    model: spec.model ?? FLEET_ROLLUP_FORECAST_KIND.model,
     validTime: spec.validTime,
     issuedAt: spec.issuedAt ?? issuedAt,
     weatherSource: 'open-meteo',
@@ -66,6 +69,7 @@ describe('fleetRollupPartials', () => {
         buildForecast({ siteId: siteB, validTime: noon, acPowerKw: 1 }),
       ],
       capacities,
+      FLEET_ROLLUP_FORECAST_KIND,
     );
 
     expect(partials).toEqual([
@@ -103,6 +107,7 @@ describe('fleetRollupPartials', () => {
         }),
       ],
       capacities,
+      FLEET_ROLLUP_FORECAST_KIND,
     );
 
     expect(partials).toEqual([
@@ -122,6 +127,7 @@ describe('fleetRollupPartials', () => {
     const [partial] = fleetRollupPartials(
       [buildForecast({ siteId: siteC, validTime: noon, acPowerKw: 7 })],
       [{ id: siteA, capacityKw: 4 }],
+      FLEET_ROLLUP_FORECAST_KIND,
     );
 
     expect(partial?.contributingCapacityKw).toBe(0);
@@ -129,7 +135,56 @@ describe('fleetRollupPartials', () => {
   });
 
   it('yields nothing for a group with no forecasts', () => {
-    expect(fleetRollupPartials([], capacities)).toEqual([]);
+    expect(fleetRollupPartials([], capacities, FLEET_ROLLUP_FORECAST_KIND)).toEqual([]);
+  });
+});
+
+describe('the rolled-up model', () => {
+  const ML = 'ml';
+
+  it('is the only model summed: another model moves neither the power, the count nor the divisor', () => {
+    const [partial] = fleetRollupPartials(
+      [
+        buildForecast({ siteId: siteA, validTime: noon, acPowerKw: 3 }),
+        buildForecast({ siteId: siteB, validTime: noon, acPowerKw: 50, model: ML }),
+      ],
+      capacities,
+      FLEET_ROLLUP_FORECAST_KIND,
+    );
+
+    expect(partial?.acPowerKw).toBe(3);
+    expect(partial?.contributingSiteCount).toBe(1);
+    // Site B's nameplate is excluded too: capacity is the divisor behind the hours this model
+    // reported, so counting a site whose only row was filtered out would report a fleet
+    // under-performing against capacity nothing here claims generated.
+    expect(partial?.contributingCapacityKw).toBe(4);
+  });
+
+  it('is selectable, so the aggregate is a choice rather than this module’s constant', () => {
+    const physics = buildForecast({ siteId: siteA, validTime: noon, acPowerKw: 3 });
+    const ml = buildForecast({ siteId: siteB, validTime: noon, acPowerKw: 50, model: ML });
+    const mlKind = { kind: 'forecast', model: ML } as const;
+
+    expect(fleetForecastAggregate([physics, ml], capacities, mlKind)).toEqual(
+      fleetForecastAggregate([ml], capacities, mlKind),
+    );
+  });
+
+  /**
+   * Why the filter is load-bearing, stated as the fact rather than as prose: two models for one
+   * site-hour are *not* double-counted — `aggregateFleetForecast` keeps one entry per site-hour and
+   * `forecastSupersedes` is `>=` on `issuedAt`, so same-cycle rows collapse to whichever arrived
+   * last. An unfiltered fleet total is therefore not inflated, it is a total whose model was decided
+   * by row order; the sort key orders `FC#ml` before `FC#physics`, so today that order is luck.
+   */
+  it('matters because an unfiltered site-hour collapses by input order, not by model', () => {
+    const [point] = aggregateFleetForecast([
+      buildForecast({ siteId: siteA, validTime: noon, acPowerKw: 3 }),
+      buildForecast({ siteId: siteA, validTime: noon, acPowerKw: 50, model: ML }),
+    ]);
+
+    expect(point?.contributingSiteCount).toBe(1);
+    expect(point?.acPowerKw).toBe(50);
   });
 });
 

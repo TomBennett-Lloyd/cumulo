@@ -3,10 +3,7 @@ import type { UtcWindow } from '@cumulo/shared';
 /**
  * UTC calendar-day arithmetic for hindcast backfill.
  *
- * Pure (`docs/standards/architecture.md` rule 3): no clock, no I/O, no env. The
- * only `Date` use here is calendar arithmetic on explicit inputs — never
- * `Date.now()` — so a backfill's day list is a function of its window alone and
- * is reproducible for any window a test cares to name.
+ * Pure (`docs/standards/architecture.md` rule 3): no clock, no I/O, no env.
  */
 
 /**
@@ -22,9 +19,8 @@ export type UtcDay = string;
 
 /**
  * A closed, contiguous run of UTC days — inclusive at both ends, because that is
- * how Open-Meteo's `start_date`/`end_date` pair is defined. Named and exported so
- * the fetch adapter and the backfill caller conform to one contract rather than
- * to a shape that exists inside one signature (`docs/standards/typing.md` rule 6).
+ * how Open-Meteo's `start_date`/`end_date` pair is defined. Named and exported
+ * (`docs/standards/typing.md` rule 6).
  */
 export interface DayRun {
   readonly firstDay: UtcDay;
@@ -62,18 +58,15 @@ const dayIndexOfDay = (day: UtcDay): number => {
  * Every UTC calendar day the half-open window `[startInclusive, endExclusive)`
  * touches, in chronological order.
  *
- * Half-open is what makes the day list composable: a caller evaluating "June" and
- * a caller evaluating "July" together cover every day exactly once. Two
- * consequences are deliberate and both are pinned by tests:
+ * Half-open is what makes the day list composable. Two consequences are
+ * deliberate and both are pinned by tests:
  * - an `endExclusive` of exactly midnight does **not** include the day it starts,
  *   because the window contains no instant within that day;
  * - an empty or inverted window covers nothing, so it yields no days at all —
  *   never the single day its bounds happen to sit in.
  *
  * The parameter is `UtcWindow` from `@cumulo/shared` rather than a local
- * shape: the window a hindcast fetches weather for and the window its error
- * metrics are keyed by are the same window, and two declarations of it would be
- * a bug the day they disagreed (`docs/standards/architecture.md` rule 2).
+ * shape (`docs/standards/architecture.md` rule 2).
  */
 export const utcDaysCovering = (period: UtcWindow): UtcDay[] => {
   const startMs = Date.parse(period.startInclusive);
@@ -105,19 +98,13 @@ const toDayRun = (run: { readonly first: number; readonly last: number }): DayRu
  * Collapse a set of days into the fewest closed runs that cover them, subject to
  * a maximum run length.
  *
- * This is the frugality step (CLAUDE.md): backfill turns "these 400 days are
- * missing" into a couple of dozen HTTP requests instead of 400 of them. Input is
- * sorted and de-duplicated first, so callers may hand over whatever order their
- * cache-miss scan produced, and a day listed twice cannot split a run.
+ * This is the frugality step (CLAUDE.md).
  *
- * Runs break at a calendar gap and at `maxRunLength`, whichever comes first. The
- * cap is a parameter rather than a constant because the number that belongs there
+ * The cap is a parameter rather than a constant because the number that belongs there
  * is the *provider's* request limit (`MAX_ARCHIVE_REQUEST_DAYS`), which lives with
  * the adapter that knows about the provider, not with calendar arithmetic.
  *
- * Throws on a `maxRunLength` below 1: a cap that no run can satisfy is a caller
- * bug, and returning "no runs" for days that genuinely need fetching would hide it
- * as a silently empty backfill.
+ * Throws on a `maxRunLength` below 1.
  */
 export const contiguousDayRuns = (days: readonly UtcDay[], maxRunLength: number): DayRun[] => {
   if (!Number.isInteger(maxRunLength) || maxRunLength < 1) {

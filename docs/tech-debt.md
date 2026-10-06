@@ -141,3 +141,45 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Triage note (2026-08-10): considered and left. A singleton below the clustering threshold, and the entry's own condition ("decide next time that path is open") makes it a decision waiting on a diff rather than debt to schedule.
 - Triage note (2026-08-11): condition still unmet — the ingestion write path has not been opened since. Left.
 - Triage note (2026-10-05): condition still unmet; the ingestion write path has not been opened since. Left. (#494's roll-up work is the nearest traffic and it is on the forecast write path, not this one.)
+
+## 2026-10-05 — `sweep-report.sh`'s output can never be byte-identical between two runs
+
+- Where: `.claude/scripts/sweep-report.sh` — the `REFLOW_AWK` and `REFLOW_FIXTURE` assignments, and the `run_shown` call that echoes them in the pre-check (e) block
+- What: both files are written under the script's own `mktemp -d` directory, and `render_cmd` prints the argv it runs, so the pre-check (e) command lines carry a per-run temp path. `docs/standards/prose.md` § Trim batches rule 4 asks a reviewer to re-run the script and diff its output against the PR body; that diff is therefore never empty, and the two spurious lines are indistinguishable from a real divergence except by reading them. A check whose clean result is a two-line diff trains its reader to eyeball the diff, which is the mechanism being defeated. Reproduced on this PR: the reviewer's re-run differed from the pasted report on exactly those two lines and nothing else. Fix direction: write the awk program and its fixture to a stable path, or render the command with a placeholder where the temp directory goes — the executed argv can keep the real path, since `render_cmd` already builds the displayed form separately
+- Source: PR #557 (#545 batch 1), reviewer pass 1 SYSTEMIC
+
+## 2026-10-05 — pre-check (e)'s ragged-continuation detector is scoped by word count, not by width
+
+- Where: `.claude/scripts/sweep-report.sh` — the `short` assignment in `REFLOW_AWK` (`nwords <= 3`), against `docs/standards/prose.md` rule 3(e), which states the rule as "no comment line of three words or fewer ending without punctuation"
+- What: prettier does not reflow comments, so what a trim leaves behind is a line that is _short in columns_ above a full-width one; the number of words in it is incidental. As specified and implemented the check fires only at three words or fewer, so it is silent on every longer ragged line — #545 batch 1 left such lines in `apps/ingestion/src/cycle-budget.ts`'s `SDK_MAXIMUM_RETRY_DELAY_MS` and `FETCH_WORST_MS` docblocks, in `apps/api/src/request-budget.ts`'s admission-invariant paragraph and in `cycle-budget.ts`'s `WORST_COMMANDS_PER_LOCATION` docblock, and the check returned nothing on all of them; they were found by hand and reflowed. Swapping the threshold for a width is not the whole fix, because a short line whose next token is an indivisible `{@link …}` wider than the remaining columns is correctly formatted and a width-scoped check reports it anyway: the detector has to know whether the next token could have fitted. The rule's prose and the implementation move together, since the prose is what the implementation quotes
+- Source: PR #557 (#545 batch 1), reviewer pass 1 SYSTEMIC
+
+## 2026-10-05 — a tech-debt citation in code resolves through a redirect, and the date-keyed form resolves to nothing
+
+- Where: the `## Captured-entry redirects` table in `docs/tech-debt.md`, against its citing sites. Title-keyed, so they resolve through the table: `apps/api/src/request-budget.ts`, `apps/api/src/openapi/responses.ts`, `apps/api/README.md` and `infra/api/lambda.tf`, all citing the entry now titled "The API deadline gates loops, not the straight-line prefix". Date-keyed, so they resolve to nothing: `apps/web/src/charts/ForecastChart.test.tsx`, `apps/web/src/charts/ForecastChart.tsx`, `apps/web/src/charts/chart-geometry.ts`, `apps/web/src/charts/chart-geometry.test.ts` and `apps/web/src/map/site-popover.css`. A **floor, not a census**, as this file's header requires: the date-keyed half is what `git grep -nE 'tech-debt\.md.{0,8}20[0-9]{2}-[0-9]{2}-[0-9]{2}'` and its `-A1` next-line form returned on 2026-10-05, minus the citations that also carry the entry's title, which the table can match
+- What: the redirects table exists precisely so that a pruned entry's citations still land somewhere, and it works for the title-keyed form. The date-keyed form has no title for the table to match, so after the 2026-10-05 pruning those citations point at a file that no longer holds anything answering to them — the reader has to guess which of the captured entries was meant. Two layers of indirection for the title-keyed form is also now the normal case rather than the exception, which is worth deciding about rather than accumulating: either citations name the issue directly (which makes them stable but turns every capture into a source-code edit, the thing the table was built to avoid), or the table grows a date column. #533 owns the adjacent problem of separating live prose carriers from past-tense narration and should probably decide this at the same time
+- Source: PR #557 (#545 batch 1), reviewer pass 1 SYSTEMIC
+
+## 2026-10-05 — `request-budget.ts`'s header names sibling modules by package-relative path
+
+- Where: `apps/api/src/request-budget.ts`'s module header — the `RequestDeadline` sentence naming `http/request-deadline.ts` and the fan-out sentence naming `forecast/fleet-series-read.ts`
+- What: `docs/standards/prose.md` rule 3 permits a bare basename only for a same-directory sibling and requires the repo-relative path for everything else (#482). These spellings are neither: they are relative to `apps/api/src/`, so a `git grep` for the repo-relative path misses them and a reader in another package cannot resolve them. Pre-existing across the whole header rather than introduced by #545 batch 1, which preserved the spellings while trimming the sentences around them. The same header's restatement ledger uses full repo-relative paths for all four carriers, so the file disagrees with itself about the convention. Not fixed in the trim batch because converting them is a claim-bearing edit to prose the batch was otherwise only deleting from, and because the sweep rule 3 implies should run over `apps/api/src` as a whole rather than one file
+- Source: PR #557 (#545 batch 1), reviewer pass 1 SYSTEMIC
+
+## 2026-10-06 — The density ratchet trusts whatever baseline TSV is committed
+
+- Where: `.claude/scripts/check-comment-density.sh` (the baseline parse and compare), `.claude/comment-density.baseline.tsv`
+- What: the gate compares the working tree against the committed TSV and nothing compares that TSV against the merge-base's. A hand-raised row, deleting every row and re-bootstrapping with `--ratchet`, or a renamed file's row carried across at a higher value all pass both `verify` and CI; only a reviewer reading the TSV diff stands in the way. Suspected fix: a "no row rises against `git show <merge-base>:.claude/comment-density.baseline.tsv`" check. `.claude/scripts/verify-tier.sh` already computes the merge-base. The intended exceptions have to be allowed: the gate's own first landing, a rename, and a deliberate re-bootstrap like #553's post-rebase one.
+- Source: #553 review cycle 1
+
+## 2026-10-06 — No sanctioned way to raise a density row, while three rules add comment lines
+
+- Where: `.claude/scripts/check-comment-density.sh`, `docs/standards/prose.md` rule 6, `docs/standards/architecture.md` rules 9 and 11
+- What: a row can only fall, but three standing obligations add comment lines to a source file. Architecture rule 9 has the finder write a restatement ledger beside the owner, often in source, and `.claude/agents/reviewer.md` says to do that in the fix round. Rule 11 has arguing prose corrected in the same change. Prose rule 6's own form wants a docblock on a new symbol. A file far below the median has little room, and the zero-ratio barrels (`packages/hindcast/src/index.ts`, `packages/shared/src/index.ts`, `packages/ui/src/index.ts`) can never take a comment line. #535 moves ledgers out of source, which removes the largest of the three. The owner decides what is allowed until then: a reviewed raise, or adding code alongside.
+- Source: #553 review cycle 1
+
+## 2026-10-06 — `ensureArchiveCoverage` restates CLAUDE.md's per-minute quota figure
+
+- Where: `packages/hindcast/src/archive-cache.ts` — the `ensureArchiveCoverage` docblock, step 3 ("Fetch sequentially")
+- What: the step restates CLAUDE.md's per-minute call limit as a figure beside its citation of CLAUDE.md, against `docs/standards/architecture.md` rule 9. #545 batch 6 deleted the sibling restatement of the daily figure from `MAX_ARCHIVE_REQUEST_DAYS`' docblock in `packages/hindcast/src/open-meteo-archive.ts` and left this one, because deleting the figure alone leaves "the very limit that stops the run" without a referent.
+- Source: #545 batch 6, reviewer pass 1 SYSTEMIC

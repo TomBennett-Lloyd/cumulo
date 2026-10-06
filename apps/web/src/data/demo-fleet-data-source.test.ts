@@ -1,5 +1,6 @@
 import {
   canonicalFleetSeed,
+  FLEET_ROLLUP_FORECAST_KIND,
   forecastSchema,
   generateFleet,
   type CreateSiteInput,
@@ -264,6 +265,45 @@ describe('DemoFleetDataSource window-scoped reads', () => {
     // sum can answer: one more site contributed, and the capacity behind the hour grew with it.
     expect(points[0]?.contributingSiteCount).toBe(beforeCount + 1);
     expect(points[0]?.contributingCapacityKw).toBeGreaterThan(0);
+  });
+
+  /**
+   * The fleet total is the sum of the sites' *rolled-up-model* forecasts, which is what stops this
+   * source being correct by coincidence (#531).
+   *
+   * Before the kind was a parameter, the demo summed whatever `fixture-series.ts` emitted, and that
+   * was one model only because the fixture says so. The assertion is on the kilowatts rather than on
+   * the contributing count because a second model for a site-hour does not add a site — it replaces
+   * the row, so only the power moves. The issue's own proof is the mutant of that fixture, run
+   * against this case and recorded in the PR body.
+   */
+  it('sums only the rolled-up model, so the fixture\u2019s choice of model is not the source of truth', async () => {
+    const source = new DemoFleetDataSource();
+    const fleet = await source.fleetForecasts(24);
+    const firstHour = fleet.kind === 'ok' ? fleet.value[0] : undefined;
+
+    const perSite = await Promise.all(
+      seedFleet.map(async (site) => {
+        const own = await source.siteForecasts(site.id, 24);
+        return own.kind === 'ok'
+          ? own.value
+              .filter(
+                (forecast) =>
+                  forecast.model === FLEET_ROLLUP_FORECAST_KIND.model &&
+                  forecast.validTime === firstHour?.validTime,
+              )
+              .reduce((total, forecast) => total + forecast.acPowerKw, 0)
+          : 0;
+      }),
+    );
+
+    expect(firstHour).toBeDefined();
+    // Close, not exact: the two sums add the same terms in different orders, and IEEE-754 addition
+    // is not associative (ADR 0009 bounds the same effect between its own two arms).
+    expect(firstHour?.acPowerKw).toBeCloseTo(
+      perSite.reduce((total, siteKw) => total + siteKw, 0),
+      9,
+    );
   });
 
   /**

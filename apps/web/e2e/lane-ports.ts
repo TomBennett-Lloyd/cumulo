@@ -6,8 +6,22 @@ import { fileURLToPath } from 'node:url';
 /*
  * Which ports this checkout's servers bind — the one owner, read by
  * `vite.config.ts` (the dev and preview servers) and by
- * `e2e/playwright.config.ts` (the server command, the readiness probe and
- * `baseURL`).
+ * `e2e/playwright.config.ts` (each server command, each readiness probe and
+ * each project's `baseURL`).
+ *
+ * Restatement ledger (`architecture.md` rule 9) — a floor, not a census, swept
+ * 2026-10-05. The derived numbers are spelled out rather than imported in the
+ * per-port docblocks below, and in one file outside this one:
+ * `.claude/agents/browser-smoke.md`'s "Server ownership" section, which
+ * instructs an agent rather than running, and whose kill-or-return rule needs a
+ * reader to recognise a lane port on sight. A base port added below is a change
+ * to that list too (rule 10). Sweep:
+ * `git grep -nE "2[456]173" -- ':/' ':(exclude,top)packages/forecast/fixtures'`
+ * — the family of lane-block lower bounds and not any one phrasing of a range,
+ * because the comma-separated restatement in `BASE_PATH_PREVIEW_BASE_PORT`'s
+ * own docblock is a carrier no en-dash arm returns. The exclusion is
+ * `packages/forecast/fixtures/pvlib-golden.json`, where the digits fall inside
+ * a float.
  *
  * The problem it solves: every worktree serves *its own* build, so two browser
  * sessions from two worktrees are independent work — but while every one of
@@ -64,6 +78,19 @@ export const PREVIEW_BASE_PORT = 4173;
  * `web` configuration it starts against the main checkout.
  */
 export const DEV_SERVER_BASE_PORT = 5173;
+
+/**
+ * The second preview server's base — the one serving the app under a non-root
+ * public base path. `base-path-preview.ts` owns what that path is, and
+ * `base-path.spec.ts` is the only spec that reads it.
+ *
+ * Vite has no default to inherit here, so this number is chosen rather than
+ * kept: 1000 above the dev-server base, which puts the three lane blocks at
+ * 24173, 25173 and 26173 — one glance tells which server a port belongs to —
+ * and leaves the highest of them well under 32768, for the reason
+ * `LANE_BLOCK_OFFSET` gives.
+ */
+export const BASE_PATH_PREVIEW_BASE_PORT = 6173;
 
 /**
  * The lane a given identity falls in.
@@ -169,3 +196,15 @@ export const PREVIEW_PORT = lanePort(PREVIEW_BASE_PORT, CHECKOUT_IDENTITY);
  * tree's e2e lane cannot start, or vice versa.
  */
 export const DEV_SERVER_PORT = lanePort(DEV_SERVER_BASE_PORT, CHECKOUT_IDENTITY);
+
+/**
+ * The port the base-path preview binds here: 6173 in a primary checkout,
+ * somewhere in 26173–26684 in a worktree.
+ *
+ * A third block rather than a neighbour of `PREVIEW_PORT`, and that is the
+ * whole reason the base port above exists: the two previews run *at the same
+ * time* in one lane run, so an offset like `PREVIEW_PORT + 1` would put this
+ * tree's second server on the next lane's first, where `--strictPort` turns a
+ * neighbouring session into this one's startup failure.
+ */
+export const BASE_PATH_PREVIEW_PORT = lanePort(BASE_PATH_PREVIEW_BASE_PORT, CHECKOUT_IDENTITY);

@@ -1,4 +1,5 @@
 import {
+  activeFleetSites,
   fleetActualsResponseSchema,
   openMeteoAttribution,
   type UtcIsoTimestamp,
@@ -15,8 +16,8 @@ import { actualsIn } from './series-split';
 import { hoursBefore } from './series-window';
 
 /**
- * `GET /v1/fleet/actuals` — every fleet site's actuals over one look-back
- * window, in one request.
+ * `GET /v1/fleet/actuals` — every **active** fleet site's actuals over one
+ * look-back window, in one request.
  *
  * **Why the fleet gets its own route.** The web app plots the fleet's actual
  * output beside the fleet forecast, which means it needs every site's readings
@@ -107,7 +108,11 @@ export const getFleetActuals = async (
     );
   }
 
-  const sites = await deps.sites.listFleetSites();
+  // `listFleetSites` returns the fleet active *and* inactive, and a fleet read answers for the
+  // active half — `activeFleetSites` is the one declaration of that predicate, and
+  // `fleet-rollup-read.ts` takes the same one, so the two fleet routes cannot come to disagree
+  // about which sites the fleet is (#531).
+  const sites = activeFleetSites(await deps.sites.listFleetSites());
 
   // One window for the whole fleet, taken from one reading of the clock: a
   // per-site `now()` would give the last site a window a few milliseconds later
