@@ -27,10 +27,8 @@ import type {
  *
  * - **Idempotent.** The draw is deterministic in `(siteId, validTime)` and every write is a Put
  *   over `T#<validTime>#GEN` (ADR 0002), so re-running a window rewrites exactly the rows it wrote
- *   before. A redelivered message costs duplicate work and nothing else.
- * - **Self-healing.** The window is {@link TRAILING_ACTUALS_HOURS} wide rather than one hour, so a
- *   missed cycle, a rate-limited ingestion hour or a partial write is repaired by the next run
- *   instead of leaving a permanent hole in the series.
+ *   before.
+ * - **Self-healing.** The window is {@link TRAILING_ACTUALS_HOURS} wide rather than one hour.
  *
  * `simulateTrailingActuals` does not reject for any failure of the series adapter or of one site's
  * plan: every per-site step is converted to an outcome value, because its caller is the record
@@ -59,8 +57,7 @@ const MILLISECONDS_PER_HOUR = 3_600_000;
  *
  * A deliberate local copy of arithmetic other apps also do over their own read windows
  * (`apps/api`'s series window, `apps/web/src/data/http-fleet-data-source.ts`): apps may not import
- * apps (`docs/standards/architecture.md` rule 1), and the duplication is incidental — each
- * consumer's window is free to change without the others being wrong (`structure.md` rule 7).
+ * apps (`docs/standards/architecture.md` rule 1).
  */
 export const utcHoursBefore = (instant: UtcIsoTimestamp, hours: number): UtcIsoTimestamp =>
   utcIsoTimestampSchema.parse(
@@ -119,9 +116,8 @@ export const simulatedActualsOutcomeEvent = 'forecast.actuals.outcome';
  * What became of one site's trailing window, as a value.
  *
  * `up-to-date` is a success and is deliberately distinct from `written`: a site whose window is
- * already complete — the common case, since only the newest hour is usually missing — issues no
- * write at all, and an operator reading a run of them is reading a healthy fleet rather than a
- * producer that has stopped producing.
+ * already complete issues no write at all, and an operator reading a run of them is reading a
+ * healthy fleet rather than a producer that has stopped producing.
  */
 export type SiteActualsOutcome = { readonly siteId: string } & (
   | { readonly status: 'written'; readonly readingCount: number }
@@ -144,8 +140,7 @@ type SiteActualsOperation = 'querySeriesRange' | 'planSimulatedActuals' | 'putGe
  * `series` is narrowed to the two methods this producer uses, so the read it adds to a service
  * that previously only wrote series (`infra/forecast/iam.tf` carries the matching grant) is a
  * compile-time fact and not merely an IAM one. The adapter is passed whole rather than as
- * `adapter.querySeriesRange`: it holds its client and table name on `this`, so a detached method
- * would arrive already broken (`docs/standards/structure.md` rule 3).
+ * `adapter.querySeriesRange` (`docs/standards/structure.md` rule 3).
  */
 export interface SimulateActualsDeps {
   readonly series: Pick<SeriesAdapter, 'querySeriesRange' | 'putGenerationReadings'>;
@@ -170,9 +165,9 @@ const failedOutcome = (
  *
  * The window arrives as a {@link UtcWindow} rather than as two timestamps, so its two same-shaped
  * bounds cannot be swapped at the call site. No pagination bound is passed: the window is at most
- * `TRAILING_ACTUALS_HOURS` hours of one site's series — a dozen points at the outside — which is
- * one Query page with room to spare, and a bound would introduce a `complete: false` case that
- * this caller has no better answer to than reading the whole thing.
+ * `TRAILING_ACTUALS_HOURS` hours of one site's series — which is one Query page with room to
+ * spare, and a bound would introduce a `complete: false` case that this caller has no better
+ * answer to than reading the whole thing.
  */
 const simulateSiteActuals = async (
   deps: SimulateActualsDeps,
@@ -191,8 +186,7 @@ const simulateSiteActuals = async (
     readings = planSimulatedActuals(range.points, window.endExclusive);
   } catch (error: unknown) {
     // The bug arm, and it is caught for one reason only: this runs beneath a record boundary that
-    // must not fail a message whose forecasts are already stored. The outcome names the operation,
-    // which is how an operator tells a derivation bug from a table (rule 2a).
+    // must not fail a message whose forecasts are already stored (rule 2a).
     return failedOutcome(siteId, 'planSimulatedActuals', error);
   }
 
@@ -222,12 +216,10 @@ const simulateSiteActuals = async (
  *
  * Sequential rather than concurrent, and per-site failures converted rather than propagated, for
  * the reason `runLocation` in `apps/ingestion/src/cycle.ts` is written the same way: these sites
- * share one table's capacity, and one site's rejection must not abandon its siblings — a fan-out
- * that failed fast would leave the remaining sites' hours to a later run for no benefit.
+ * share one table's capacity, and one site's rejection must not abandon its siblings.
  *
  * Each outcome is logged as it is decided, so a run killed mid-way has still said what it did for
- * the sites it reached. The returned array is the same information as a value, for a caller that
- * wants to count rather than read.
+ * the sites it reached.
  */
 export const simulateTrailingActuals = async (
   deps: SimulateActualsDeps,

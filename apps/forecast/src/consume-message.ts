@@ -23,8 +23,7 @@ import type { SqsRecord } from './sqs-event';
  * physics chain — becomes a value the batch can count
  * (`docs/standards/error-handling.md` rule 2a), and where the fan-out's own
  * `implausible-hour` value becomes a `failed` record. A `consumeMessage` that
- * threw would abandon the rest of its batch — today a batch of one, but the
- * mapping's `batch_size` is a number, not a contract.
+ * threw would abandon the rest of its batch.
  *
  * There is no separate "already processed?" check, and there is deliberately no
  * place to put one: SQS is at-least-once, and idempotency here is *structural*.
@@ -32,27 +31,20 @@ import type { SqsRecord } from './sqs-event';
  * FC#physics` for a forecast, `T#<validTime>#GEN` for the simulated actual that
  * follows it (ADR 0002), and `FC#physics#T#<validTime>#L#<locationId>` for this
  * location's fleet roll-up partial (ADR 0009) — so a redelivered message rewrites
- * exactly the rows it wrote the first time. Both writes are deterministic in their inputs, the draw
- * behind a simulated actual included (`simulatedActualFromForecast`), which is
- * what makes the rest of this module's failure policy — fail the record, let the
- * queue redeliver — free rather than merely acceptable.
+ * exactly the rows it wrote the first time. Both writes are deterministic in their
+ * inputs, the draw behind a simulated actual included (`simulatedActualFromForecast`).
  */
 
 /**
  * What became of one message, as a value.
  *
- * The five cases split three ways for the caller, and that split is the reason
- * they are five rather than a boolean:
+ * The five cases split three ways for the caller:
  *
  * - `stored` is the success, with the shape of the work it did.
- * - `no-active-sites` is **also** a success, and the distinction matters: a
- *   location whose sites were all deactivated between publish and delivery has
- *   nothing to forecast, and redelivering that message forever would turn an
- *   ordinary fleet edit into a DLQ entry.
+ * - `no-active-sites` is **also** a success.
  * - `malformed`, `store-partial` and `failed` each fail the record. They are kept
  *   apart because the operator's next step differs: a malformed body means the
- *   ingestion→forecast contract moved and no retry will help (the message is
- *   destined for the DLQ, which is the correct place for it); `store-partial`
+ *   ingestion→forecast contract moved and no retry will help; `store-partial`
  *   means DynamoDB declined writes and the next delivery will likely succeed; and
  *   `failed` names either the operation that threw or the site-hour whose physics
  *   was implausible.
@@ -72,22 +64,19 @@ export type MessageOutcome = { readonly messageId: string } & (
  * least-privilege posture — reads `sites`, writes `series` and, since #264, reads
  * back the trailing window of `series` it just wrote (ADR 0002; `infra/forecast/
  * iam.tf` carries the matching grants) — is a compile-time fact as well as an IAM
- * policy. They are passed as whole objects and never as `adapter.putForecasts`:
- * the adapters hold their client and table name on `this`, so a detached method
- * would arrive already broken (`docs/standards/structure.md` rule 3).
+ * policy. They are passed as whole objects and never as `adapter.putForecasts`
+ * (`docs/standards/structure.md` rule 3).
  *
  * `log` is declared here rather than only on the handler because this is the type
  * the handler binds once and hands down. `consumeMessage` writes no entry of its
  * own — it returns its outcome and the boundary decides what to say about it — but
  * it does hand `log` to `simulateTrailingActuals` and to the fleet roll-up write,
  * whose outcomes are reported where they happen rather than folded into this
- * message's result (`runCycle`'s per-location events in `apps/ingestion` are the
- * same shape).
+ * message's result.
  *
  * `putFleetRollupPartials` joins the `series` narrowing for #494 and adds no AWS
  * permission: it is a Put into the table this function already writes, under the
- * `#FLEET` sentinel partition rather than a site's id, so `infra/forecast/iam.tf`
- * is untouched.
+ * `#FLEET` sentinel partition rather than a site's id.
  */
 export interface ConsumeMessageDeps {
   readonly sites: Pick<SiteAdapter, 'listActiveSitePhysicsAtLocation'>;
@@ -95,16 +84,11 @@ export interface ConsumeMessageDeps {
     SeriesAdapter,
     'putForecasts' | 'querySeriesRange' | 'putGenerationReadings' | 'putFleetRollupPartials'
   >;
-  /**
-   * Structured-logging sink (`docs/standards/error-handling.md` rule 4). Injected
-   * rather than reached for, so no module below the composition root holds a
-   * console and the tests read the entries a reviewer would read in CloudWatch.
-   */
+  /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
   /**
    * The forecast vintage clock. Injected because `issuedAt` is the one input to
-   * an otherwise pure fan-out that depends on when the code ran, and a row whose
-   * vintage a test cannot pin is a row a test cannot assert on.
+   * an otherwise pure fan-out that depends on when the code ran.
    */
   readonly now: () => UtcIsoTimestamp;
 }
@@ -116,15 +100,6 @@ export interface ConsumeMessageDeps {
  * throw is the sites table or its index, a `putForecasts` throw is the series
  * table, and a `locationForecasts` throw is a bug in the physics chain — nothing
  * an operator can fix in AWS.
- *
- * The fan-out is on this list even though it is pure and synchronous, because it
- * is total over *implausibility* only, not over bugs. A physically implausible
- * hour comes back as a value, which this module renders into a `failed` outcome
- * naming the site and the hour rather than an operation that threw — but any
- * other way the chain beneath it can end is still a throw, and it must not leave
- * this module: `handler.ts` does not catch, so an escaping throw would fail the
- * whole invocation and abandon the record's batch-mates, losing the per-record
- * redrive (#136) for exactly the case an operator most needs isolated.
  */
 type MessageOperation = 'listActiveSitePhysicsAtLocation' | 'locationForecasts' | 'putForecasts';
 
@@ -183,15 +158,11 @@ const parseBody = (body: string): ParsedBody => {
  * exactly one.
  *
  * ADR 0004 makes a message *one location's* whole horizon, so a body carrying two
- * is a violated contract rather than a case to handle: fanning it out would run
- * one location's weather against another location's sites and store the result as
- * a forecast. Refusing it is the only honest option.
+ * is a violated contract rather than a case to handle.
  *
  * The zero case is unreachable from a parsed body — `weatherMessageSchema` is
  * `.min(1)` — so the emptiness half of the guard below is the compiler's
- * obligation rather than a branch a mutation could expose. It is written as one
- * condition with the multi-location half because both say the same thing: this
- * message does not name exactly one location.
+ * obligation rather than a branch a mutation could expose.
  */
 const singleLocationId = (readings: readonly ForecastWeatherReading[]): string | undefined => {
   const ids = [...new Set(readings.map((reading) => locationId(reading)))];
@@ -210,8 +181,7 @@ const singleLocationId = (readings: readonly ForecastWeatherReading[]): string |
  *
  * Each fallible step converts its own failure where it happens, so what went
  * wrong survives into the log line — the operation for a throw, the site and
- * hour for an implausible one. That is the difference between an entry an
- * operator can act on and "message X failed", which costs an hour.
+ * hour for an implausible one.
  */
 export const consumeMessage = async (
   deps: ConsumeMessageDeps,
@@ -240,9 +210,6 @@ export const consumeMessage = async (
   }
 
   if (sites.length === 0) {
-    // A success, not a failure. Ingestion publishes for the locations that had
-    // active sites when the cycle ran; a site deactivated in the seconds since is
-    // ordinary, and nothing about it is worth a redelivery.
     return { messageId, status: 'no-active-sites' };
   }
 
@@ -269,10 +236,8 @@ export const consumeMessage = async (
   if (fanOut.status === 'implausible-hour') {
     // A weather hour that every schema accepts and no atmosphere produces: the
     // physics landed outside `forecastSchema`'s bounds. This service's policy is
-    // to fail the record — the queue's redrive (five receives, then the alarmed
-    // DLQ) is both the retry and the operator signal (#136) — and the detail names
-    // the site and the hour, because that pair is what an operator reading the DLQ
-    // has to look up. The blast radius is one location's message, not the batch.
+    // to fail the record — the queue's redrive is both the retry and the operator
+    // signal (#136) — and the detail names the site and the hour.
     return {
       messageId,
       status: 'failed',
@@ -294,15 +259,13 @@ export const consumeMessage = async (
     // `BatchWriteItem` answers HTTP 200 while handing back items it declined, so
     // "the call succeeded" and "the data was written" are different facts (ADR
     // 0002 Consequence 4). Failing the record redelivers the whole message, which
-    // rewrites the rows that did land — free, because every write is an idempotent
-    // Put over a deterministic key.
+    // rewrites the rows that did land.
     return { messageId, status: 'store-partial', unprocessedCount: stored.unprocessedCount };
   }
 
   // The forecasts are stored; now backfill the simulated actuals for the hours that have settled
   // (#264). This runs *after* the store and only on its success, because an actual is derived from
-  // a forecast row: simulating hours whose forecasts were rejected would invent readings for a
-  // series that has no forecast to compare them against.
+  // a forecast row.
   //
   // Its outcome deliberately does not reach `MessageOutcome`. `simulateTrailingActuals` reports
   // each site's result to the log and never rejects, and a simulation failure must not fail this
@@ -317,9 +280,8 @@ export const consumeMessage = async (
   // This location's contribution to the fleet aggregate (ADR 0009, #494), computed from the
   // forecasts already in hand and written as one item per hour. Beside the simulation above and
   // under the identical policy — reported to the log, never failing the record — for the identical
-  // reason: the message's own work is stored, and redelivering a whole location's horizon to retry
-  // a derived write would cost more than the write is worth. Unlike the simulation it reads
-  // nothing, so it runs after both writes without widening the invocation's storage budget.
+  // reason. Unlike the simulation it reads nothing, so it runs after both writes without widening
+  // the invocation's storage budget.
   await reportFleetRollupWrite({ series: deps.series, log: deps.log }, location, forecasts, sites);
 
   return {
