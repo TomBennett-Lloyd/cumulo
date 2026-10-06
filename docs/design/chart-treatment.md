@@ -141,9 +141,9 @@ Composition rules that keep both legible where they overlap:
   confidence of the values on either side of it — partial data is labelled partial
   (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
-  Every case here is an hour the series **has**, carrying a null; an hour the series does not carry
-  at all is a different case with a different answer today, and "Settled, then reversed" below is
-  where it is stated.
+  An hour the series does not carry at all breaks every mark the same way: a run also ends where a
+  sample is more than one sampling step after the one before it (`contiguousRuns` in
+  [`apps/web/src/charts/chart-series.ts`](../../apps/web/src/charts/chart-series.ts), #537).
 - **A run that would be a degenerate path is drawn in the marker vocabulary instead.** Breaking a
   series at every gap can leave a run holding a single sample, and a path with one vertex paints
   nothing at all — so an isolated hour between two gaps would vanish and the chart would silently
@@ -424,18 +424,8 @@ things never done to an absent value; and the gap-breaks-the-line bullet above h
 the same move vertically, where an hour whose value is null ends the run instead of being drawn
 through. One canvas cannot honour an absence down the y axis and compress it away along the x.
 
-**What #325 delivers is the hole's width, not the break across it.** The bullet above cuts a mark at
-a null, so it can only cut at an hour the series has a row for. An hour missing from the series
-outright — which is what the fleet's join produces for an hour that was neither forecast nor
-measured — has no null to be cut at, and its two neighbours stay adjacent in the array that
-`contiguousRuns` reads. The curve is therefore still drawn across the hole; what changed is that the
-hole now has its full width, so the marks no longer draw two instants two hours apart as though they
-were an hour apart. That is the compression artefact gone and the bridge left standing, and it is
-recorded rather than quietly implied away: `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits
-on array adjacency, not on time adjacency") owns the fix. One layer is already exempt — the night
-wash in [`apps/web/src/charts/forecast-chart-context.tsx`](../../apps/web/src/charts/forecast-chart-context.tsx),
-which cuts its runs on time because shading across a hole would assert darkness at an unclassified
-hour.
+**What #325 delivers is the hole's width.** The break across it is the gap bullet's, which since
+#537 cuts at an absent hour as well as at a null.
 
 The old argument was **right about the seam**, and that half stands. What changed at the join is
 that an hour the old placement elided now costs its width on the axis — a full hour of it. Nothing
@@ -829,11 +819,13 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   carries no information to select on. **An x the plot does not contain clamps to the nearest one it
   does**, which is what makes the axes worth listening to: a tap on the y axis reads the _start_ of
   the range, and a tap past the right edge reads the end (owner's amendment on #421, comment
-  5259485326). **A tap pins** — the reading survives the lift, and only a mouse's leave clears it.
-  That asymmetry is mechanism rather than preference: a touch pointer leaves at the end of every
-  tap, because the finger _is_ the pointer, so clearing on that event would undo the selection in
-  the same frame and no touch reader would ever see a readout at all. **A drag scrubs**, by x, the
-  way a mouse crossing the plot does. **A tap anywhere outside the figure dismisses**, through the
+  5259485326). **A tap pins** — the reading survives the lift, where a mouse's leave clears its
+  hover; which leaves clear is `clearAtLeave`'s
+  (`apps/web/src/charts/forecast-chart-hover-boundary.tsx`, #537). That asymmetry is mechanism
+  rather than preference: a touch pointer leaves at the end of every tap, because the finger _is_
+  the pointer, so clearing on that event would undo the selection in the same frame and no touch
+  reader would ever see a readout at all. **A drag scrubs**, by x, the way a mouse crossing the plot
+  does. **A tap anywhere outside the figure dismisses**, through the
   same blur path keyboard readers already have — no second way to dismiss was added and none is
   wanted, because a readout with one way to go away is a readout every input can be reasoned about
   together.
@@ -844,21 +836,15 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   `forecast-chart-hover-boundary.tsx`) — for a tap as much as for a drag past the tap slop, which
   fires no click at all; the `click` the browser synthesizes from a tap brings the focus only where
   no reading stands for the lift to take it. Still one route out and not two: the
-  scrub is being given the tap's dismissal rather than a dismissal of its own. Without it a scrub's
-  reading sits behind no focus, so no blur can reach it, and it stands until the reader taps the
-  chart and then taps off — which is the stranded readout this contract exists to forbid, arriving
-  by the one path the `pointercancel` clear below does not cover.
+  scrub is being given the tap's dismissal rather than a dismissal of its own.
 
   One thing does take a reading away without dismissing it, and the distinction is the contract
   rather than an exception to it: a `pointercancel`, the browser claiming the gesture mid-flight —
   a page scroll that began on the chart, which `touch-action` leaves it free to claim. The press
   had already committed a reading, and it turns out nobody asked for one. A lift is the end of a
   question and its answer stands; a cancel is the question being withdrawn, and the reading goes
-  with it. Nothing else could take it: the leave events that follow a cancel are a touch pointer's,
-  which the mouse-only clear ignores by design, and a cancel ends the gesture in place of the lift,
-  so the chart takes no focus for it and there is no blur to dismiss through. So every reading a
-  reader _asked_ for still has exactly one way to go away, and the one nobody asked for is gone
-  before it needs one.
+  with it. So every reading a reader _asked_ for still has exactly one way to go away, and the one
+  nobody asked for is gone before it needs one.
 
   Two costs this contract accepts out loud rather than designs around. **Fingertip precision is
   accepted as it is**: no coarse-pointer geometry, no widened hit slots, no touch-only variant of

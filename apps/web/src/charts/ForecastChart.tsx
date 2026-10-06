@@ -74,11 +74,8 @@ import { useChartWidth } from './use-chart-width';
  * painted across a gap to imply a value that was never modelled or measured
  * (`docs/standards/error-handling.md` rule 5; `docs/tech-debt.md`, 2026-07-31).
  * A run left with a single sample becomes a marker rather than disappearing —
- * `forecast-chart-marks.tsx` holds that rule. It is a rule about *nulls* rather
- * than about gaps in general: an hour absent from the series carries no null for
- * a run to break at, so the marks are still drawn across it — `contiguousRuns`
- * in `chart-series.ts` says why, and `docs/tech-debt.md` (2026-08-11,
- * "`contiguousRuns` splits on array adjacency, not on time adjacency") owns it.
+ * `forecast-chart-marks.tsx` holds that rule. An hour absent from the series
+ * breaks a run as a null does (`contiguousRuns`, #537).
  *
  * **An overlay is one more series, not a second chart.** The optional `overlay`
  * prop puts a second series on the same value axis in slot 2 — the treatment's
@@ -284,12 +281,12 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
     xs: sampleXs(points, plot),
   };
   const spanHours = seriesSpanHours(points);
-  const bandRuns = contiguousRuns(points.length, (index) => points[index]?.band !== undefined);
+  const bandRuns = contiguousRuns(points, (index) => points[index]?.band !== undefined);
   // Three series, one rule: each is drawn once per contiguous run of hours it
   // actually has a value for — the median included, since a union x-domain gives
   // it hours with no forecast on them.
-  const medianRuns = contiguousRuns(points.length, (index) => points[index]?.medianKw != null);
-  const actualRuns = contiguousRuns(points.length, (index) => points[index]?.actualKw != null);
+  const medianRuns = contiguousRuns(points, (index) => points[index]?.medianKw != null);
+  const actualRuns = contiguousRuns(points, (index) => points[index]?.actualKw != null);
   const lastMeasuredIndex = actualRuns.at(-1)?.indices.at(-1);
 
   return (
@@ -345,7 +342,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
               fleet measured says nothing about what this site measured. */}
           {overlay === undefined
             ? null
-            : overlayElements(overlay.values, scale, overlay.lastMeasuredIndex)}
+            : overlayElements(points, overlay.values, scale, overlay.lastMeasuredIndex)}
           {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
           {xAxisElements(points, scale)}
           {axisTitleElements(scale.plot, percent)}

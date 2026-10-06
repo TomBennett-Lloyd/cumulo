@@ -244,17 +244,6 @@ const plotCentreX = (plot: PlotRect): number => (plot.left + plot.right) / 2;
  * adjacent: the gap closed up, and the compression was itself a shape the reader
  * could mistake for data.
  *
- * **What that does not do is break the line across the hole.** An hour that is
- * *present* in the series carrying null values does break its marks, because the
- * run predicate rejects its index. An hour *absent from the series* does not:
- * `contiguousRuns` (`apps/web/src/charts/chart-series.ts`) cuts runs on adjacency
- * in the array, and the two survivors either side of a missing hour are still
- * array-adjacent, so the curve is drawn straight through. Under index spacing
- * that bridge had no width; this mapping is what gives it one. So what #325
- * removes is the compression artefact, not the bridge — `docs/tech-debt.md`
- * (2026-08-11, "`contiguousRuns` splits on array adjacency, not on time
- * adjacency") owns the fix for the half that is left.
- *
  * **The arithmetic is on epoch milliseconds, and is therefore DST-safe**
  * (`chart-geometry.test.ts`'s "spaces a series evenly across a DST transition,
  * which local time would not").

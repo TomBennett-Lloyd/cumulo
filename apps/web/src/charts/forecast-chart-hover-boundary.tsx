@@ -217,19 +217,12 @@ export const ForecastChartHoverBoundary = (
   };
 
   /**
-   * A cancelled gesture takes its reading with it — which is the one place a
-   * touch pointer going away *does* clear, and the distinction the pin turns on.
+   * A cancelled gesture takes its reading with it.
    *
    * A lift is the end of a tap: the reader asked a question and the answer is
-   * what they lifted their finger to read, so it stands (`clearReadoutForMouse`
-   * above). A cancel is the browser taking the gesture away mid-flight — a
+   * what they lifted their finger to read, so it stands (`clearAtLeave`
+   * below). A cancel is the browser taking the gesture away mid-flight — a
    * vertical drag becoming a page scroll under `touch-action`, most of all.
-   *
-   * Without this the reading has no route out at all on that path. `pointerout`
-   * and `pointerleave` follow a cancel with `pointerType: 'touch'`, which the
-   * mouse-only clear above ignores by design; and a cancel ends the gesture *in
-   * place of* the lift, so `endGestureAtLift` below never runs and the focus a
-   * standing reading is dismissed through is never taken.
    *
    * The press flag goes with it for the same reason: a gesture that was taken away
    * explains nothing about a focus that arrives afterwards.
@@ -240,22 +233,16 @@ export const ForecastChartHoverBoundary = (
   };
 
   /**
-   * A mouse leaving the figure clears the readout; a finger lifting off it does
-   * not — #421's "a lifted finger keeps what it revealed".
+   * A leave clears the reading unless the blur is still to dismiss it — #421's
+   * "a lifted finger keeps what it revealed", for every pointer kind (#537).
    *
-   * The two pointer types leave for opposite reasons, which is why one handler
-   * cannot answer both. A touch pointer *always* leaves,
-   * at the end of every tap and every drag, because the finger is the pointer:
-   * clearing on that event would undo the selection the tap just made, in the
-   * same frame, and no touch reader could ever see a readout at all.
-   *
-   * So a touch reading has no leave event to dismiss it, and needs none —
-   * dismissal is the blur path (`onBlur` below), which a tap anywhere else fires.
-   * The one touch reading that goes away without being dismissed is the one
-   * nobody asked for, and `clearAtCancel` above is where that happens.
+   * A mouse's reading is a hover, so its leave always clears. Any other kind —
+   * `touch`, `pen`, `''`, one not yet named — keeps its reading only while the
+   * chart holds focus, which `endGestureAtLift` takes for the blur to dismiss
+   * through.
    */
-  const clearReadoutForMouse = (event: ReactPointerEvent<SVGSVGElement>): void => {
-    if (event.pointerType === 'mouse') {
+  const clearAtLeave = (event: ReactPointerEvent<SVGSVGElement>): void => {
+    if (event.pointerType === 'mouse' || document.activeElement !== svgRef.current) {
       clearReadout();
     }
   };
@@ -411,10 +398,9 @@ export const ForecastChartHoverBoundary = (
            made, then takes the focus that reading is dismissed through. */
         onPointerUp={endGestureAtLift}
         onPointerMove={readAtPointer}
-        onPointerLeave={clearReadoutForMouse}
-        /* And the one way a touch reading is dismissed without a blur: the
-           browser taking the gesture away. `clearAtCancel` above has why a
-           cancel and a lift are opposite answers. */
+        onPointerLeave={clearAtLeave}
+        /* `clearAtCancel` above has why a cancel and a lift are opposite
+           answers. */
         onPointerCancel={clearAtCancel}
       >
         {children}
