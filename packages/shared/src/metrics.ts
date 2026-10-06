@@ -6,15 +6,13 @@ import { utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
 /**
  * Forecast error metrics — the numbers that answer "is the forecast any good?".
  *
- * Pure by construction (`architecture.md` rule 3): no I/O, no clock, no ambient state. Every value
- * here is a function of its arguments alone, which is what makes the accuracy story cheap to test
- * and safe to run inside a Lambda, a script or a browser.
+ * Pure by construction (`architecture.md` rule 3): no I/O, no clock, no ambient state.
  *
  * Two deliberate `throw`s, both violated invariants rather than domain outcomes
  * (`error-handling.md` rule 1): a duplicate `validTime` within one series, and a metric asked for
- * over an empty set. Neither is a value a caller could act on — both mean the caller assembled the
- * wrong inputs. The one genuinely undefined *result*, a skill score against a baseline that made no
- * error, is a value (`null`), because "the baseline was perfect" is a real state of the world.
+ * over an empty set. The one genuinely undefined *result*, a skill score against a baseline that
+ * made no error, is a value (`null`), because "the baseline was perfect" is a real state of the
+ * world.
  *
  * MAE and RMSE are in kW because both compared series carry `acPowerKw`; the unit suffix on every
  * field name is the convention from #10.
@@ -212,8 +210,7 @@ const MILLISECONDS_PER_HOUR = 60 * 60 * 1000;
 /**
  * Exactly `.000`, never `\.\d{3}`.
  *
- * `toISOString()` always emits milliseconds, which `utcIsoTimestampSchema` rejects on purpose
- * (variable width breaks the chronological string ordering ADR 0002's range queries rely on), so a
+ * `toISOString()` always emits milliseconds, which `utcIsoTimestampSchema` rejects on purpose, so a
  * whole-second instant has to have its `.000` removed before the parse. The narrowness is the point:
  * a pattern matching *any* three digits would strip `.360` just as happily, which silently rounds a
  * sub-second offset down to the second instead of rejecting it — and a baseline point quietly moved
