@@ -5,11 +5,8 @@ import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
  * strings it reports per item in `CancellationReasons`, and the one
  * classification this package acts on rather than merely names.
  *
- * The codes are the *service's*, not either adapter's. Two adapters here send
- * transactions against two different tables and both read the same reason
- * codes, so if one copy changed the other would be wrong until it changed the
- * same way — the test `docs/standards/structure.md` rule 7 puts on a duplicate,
- * and the same reasoning that puts `DYNAMODB_BATCH_WRITE_SIZE` in `batch.ts`.
+ * The codes are the *service's*, not either adapter's
+ * (`docs/standards/structure.md` rule 7).
  *
  * The strings carry no `Exception` suffix — `ProvisionedThroughputExceeded`,
  * not `ProvisionedThroughputExceededException`. That is not a slip: the
@@ -21,9 +18,7 @@ import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
  * `ProvisionedThroughputExceeded`, `ThrottlingError`, `ValidationError`.
  *
  * Nothing here is on the package's public surface (`index.ts` exports none of
- * it): classifying a cancellation is this package's job, and a caller handed
- * these strings would be one step from re-implementing the classification
- * itself.
+ * it).
  */
 
 /**
@@ -67,15 +62,7 @@ const capacityCode = (code: string | undefined): boolean =>
  * Was this rejection a transaction cancelled for capacity, and for nothing
  * else?
  *
- * This is the shape nobody else retries. A `TransactWriteItems` throttled
- * before it starts throws `ProvisionedThroughputExceededException`, which the
- * SDK's classifier knows; a transaction cancelled *mid-flight* for capacity
- * instead answers `TransactionCanceledException`, whose cause is reachable only
- * inside `CancellationReasons[].Code`. Verified against the installed
- * `@aws-sdk/client-dynamodb` 3.1098.0, that exception carries no `$retryable`
- * trait and does not appear in `@smithy/core` 3.31.1's `THROTTLING_ERROR_CODES`
- * — so the SDK layer spends zero retries on it and this predicate is what gives
- * the shape an owner at all (`client-retry-classification.test.ts` pins that at the wire).
+ * This is the shape nobody else retries (`STORAGE_MAX_ATTEMPTS` shape 3).
  *
  * Both clauses are load-bearing, in the same way `conflictCancelled`'s `every`
  * is:
@@ -96,10 +83,7 @@ const capacityCode = (code: string | undefined): boolean =>
  *   however often it is sent.
  *
  * The predicate only *classifies*. Whether a capacity cancellation is retried,
- * and how hard, is each adapter's decision: the weather adapter re-issues
- * `putArchiveDay` under its batch policy, while the site adapter deliberately
- * does not retry at all (its callers hold an API request budget) and lets the
- * cancellation surface as a `StorageError`.
+ * and how hard, is each adapter's decision (`STORAGE_MAX_ATTEMPTS` shape 3).
  */
 export const capacityCancelled = (cause: unknown): boolean => {
   if (!(cause instanceof TransactionCanceledException)) {

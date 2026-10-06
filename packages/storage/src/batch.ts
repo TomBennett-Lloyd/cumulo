@@ -21,16 +21,12 @@ export const MAX_BACKOFF_DELAY_MS = 20_000;
 /**
  * DynamoDB's hard per-request limit for `BatchWriteItem`: 25 items.
  *
- * One copy rather than one per adapter, because it is not a choice either of
- * them made — it is the service's number, and if it ever moved, every adapter
- * that split a write into batches would be wrong until it changed the same way
- * (`docs/standards/structure.md` rule 7).
+ * One copy rather than one per adapter (`docs/standards/structure.md` rule 7).
  *
  * It is on this package's public surface because a caller sizing a *time*
  * budget needs it: how many round trips a write of N items costs is
  * `ceil(N / 25)`, and `@cumulo/ingestion`'s cycle budget derives its per-location
- * worst case from exactly that (#115). A number quoted from memory there would
- * be the assumption this export exists to remove.
+ * worst case from exactly that (#115).
  */
 export const DYNAMODB_BATCH_WRITE_SIZE = 25;
 
@@ -106,11 +102,6 @@ export type DrainOutcome<TReq> =
  * SDK-shaped write requests — transport, not domain — so handing them out would
  * leak the wire format through the package surface. The count is what a caller
  * can act on: log it, alarm on it, or re-derive the items from its own input.
- *
- * It lives here, next to the drain that produces it, because both the series and
- * the weather adapter return exactly this union. Two identical copies would be
- * two things a caller could not pass to one function, and one edit away from
- * disagreeing (architecture rule 2 applied to a type rather than a schema).
  */
 export type BatchWriteOutcome =
   | { readonly status: 'complete' }
@@ -121,10 +112,6 @@ export type BatchWriteOutcome =
  *
  * Exported to this package, not from it: `index.ts` does not carry it, because
  * a caller outside `@cumulo/storage` has no business sleeping on our behalf.
- * Inside, the weather adapter's capacity re-issue reads the same
- * `policy.sleep ?? realSleep` fallback that {@link drainBatches} does, and one
- * default is what keeps "tests inject an instant sleep, production waits" a
- * single fact rather than two that could drift.
  */
 export const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -143,11 +130,8 @@ export const realSleep = (ms: number): Promise<void> =>
  * a violated invariant and throws (rule 1) rather than being quietly clamped to
  * something sane.
  *
- * Shared rather than restated because both callers validate for the same
- * reason: if the rule changed here, an unguarded copy would be wrong until it
- * changed the same way (`docs/standards/structure.md` rule 7). `operation`
- * names the caller so the message points at the loop that refused, not at this
- * helper.
+ * `operation` names the caller so the message points at the loop that
+ * refused, not at this helper.
  */
 export const requireUsablePolicy = (operation: string, policy: BatchPolicy): void => {
   if (!Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
