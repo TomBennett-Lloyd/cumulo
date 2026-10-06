@@ -86,8 +86,9 @@ const now = (): UtcIsoTimestamp =>
  *
  * `sites` and `series` are the full adapters; `ConsumeMessageDeps` narrows each to
  * the methods a message may use, so this service's least-privilege posture (ADR
- * 0002: reads `sites`, writes `series`) is a compile-time fact as well as an IAM
- * policy.
+ * 0002: reads `sites`, writes `series`, and since #264 reads back the trailing
+ * window of `series` to simulate the actuals for the hours that have settled) is a
+ * compile-time fact as well as an IAM policy.
  *
  * The adapters are passed as whole objects, never as `adapter.putForecasts`: they
  * hold their client and table name on `this` (#77), so a detached method would
