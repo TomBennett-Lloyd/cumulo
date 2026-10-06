@@ -124,7 +124,6 @@ Only in those regimes can an invocation reach the timeout, and only there is the
 a killed invocation's logs stop mid-batch, so `forecast.batch.summary` is absent rather than
 reporting failures. Still diagnosable — `cumulo-forecast-<env>-errors` fires, and the storage stack's throttle
 alarm is lit at the same moment — but an absence, which a reader of these logs should know about.
-`handler.ts`'s module doc states the same arithmetic beside the code it governs.
 
 ## Configuration
 

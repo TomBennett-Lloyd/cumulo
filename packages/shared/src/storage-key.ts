@@ -46,8 +46,7 @@ const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  *
  * Shared by {@link seriesSortKey} and {@link fleetRollupTimeBound} rather than
  * spelled twice, because the two keys encode *the same* vocabulary in a
- * different order (`docs/standards/structure.md` rule 7): a third flavour of
- * series row would be wrong in both places or in neither.
+ * different order (`docs/standards/structure.md` rule 7).
  */
 const seriesKindSegment = (kind: SeriesKind): string =>
   kind.kind === 'forecast' ? `${FORECAST_SEGMENT}#${kind.model}` : GENERATION_SEGMENT;
@@ -68,12 +67,11 @@ const LOCATION_SEGMENT = 'L';
  * The partition every fleet roll-up partial is written under, in the
  * `cumulo-series` table (#494, ADR 0009).
  *
- * A sentinel value in the `siteId` partition key, so the roll-up needs no fifth
- * table, no index and no Terraform: the forecast service already writes this
- * table and the API already reads it. The cost, stated rather than hidden, is
- * that `siteId` stops meaning "a site's id" for one kind of item. Collision is
- * structural rather than hoped-for — `#` is not a character `randomUUID` emits,
- * and `siteSchema.id` is `z.uuid()`, so no site can ever own this partition.
+ * A sentinel value in the `siteId` partition key. The cost, stated rather than
+ * hidden, is that `siteId` stops meaning "a site's id" for one kind of item.
+ * Collision is structural rather than hoped-for — `#` is not a character
+ * `randomUUID` emits, and `siteSchema.id` is `z.uuid()`, so no site can ever
+ * own this partition.
  */
 export const FLEET_ROLLUP_PARTITION = '#FLEET';
 
@@ -83,15 +81,7 @@ export const FLEET_ROLLUP_PARTITION = '#FLEET';
  * *without* the location suffix.
  *
  * That missing suffix is the whole mechanism, and it is `series-item.ts`'s
- * `TIME_BOUND_PREFIX` trick applied one level in. DynamoDB offers only
- * `BETWEEN`, which is inclusive at both ends, so a half-open `[from, to)` is a
- * `BETWEEN` from this bound at `from` to this bound at `to`: every real item at
- * `to` is this string plus `#L#<locationId>`, which sorts strictly after it and
- * so falls outside, while items at `from` sort at or after their bound and fall
- * inside. Half-openness comes out of string order and needs no sentinel
- * character — and it holds only because timestamps are fixed-width
- * (`timestamp.ts`), which `storage-key.test.ts` pins as plain string
- * comparisons.
+ * `TIME_BOUND_PREFIX` trick applied one level in.
  */
 export const fleetRollupTimeBound = (kind: SeriesKind, validTime: UtcIsoTimestamp): string =>
   `${seriesKindSegment(kind)}#${TIME_SEGMENT}#${validTime}`;
@@ -110,8 +100,7 @@ export const fleetRollupTimeBound = (kind: SeriesKind, validTime: UtcIsoTimestam
  * past a single actuals item, and `[from, to)` is expressible on the sort key.
  *
  * The location trails the hour because it is not a dimension any read selects
- * on — it is what makes a *partial* addressable, so that twelve locations write
- * twelve items for an hour instead of overwriting one. The sum at read is over
+ * on — it is what makes a *partial* addressable. The sum at read is over
  * whatever locations are there (ADR 0009).
  *
  * `locationId` cannot contain `#` (`location.ts` builds it from two `toFixed(2)`
@@ -222,13 +211,7 @@ export const archiveDayMarkerSortKey = (day: string): string => {
  * distinct results, not a collision.
  *
  * The period is a `UtcWindow` (`timestamp.ts`) — named half-open bounds, so the
- * two same-shaped timestamps cannot be swapped at a call site. #16 settled the
- * granularity question this signature left open: a hindcast evaluates an
- * arbitrary range, routinely shorter than a day (a single cloudy afternoon),
- * which a day-granular key would make unrepresentable — so the timestamp pair
- * stands unchanged, and `errorMetricsSchema.period` (`metrics.ts`) carries
- * exactly this shape so that `metricsSortKey(metrics.period, metrics.model,
- * metrics.baseline)` composes straight from a parsed row.
+ * two same-shaped timestamps cannot be swapped at a call site.
  */
 export const metricsSortKey = (period: UtcWindow, model: ForecastModel, baseline: string): string =>
   `${period.startInclusive}#${period.endExclusive}#${model}#${baseline}`;

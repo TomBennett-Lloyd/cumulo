@@ -16,24 +16,18 @@ import { parseSiteIdParam } from './site-id-param';
  * that answered 204 unconditionally would tell a client that mistyped an id
  * that it had succeeded.
  *
- * **The site is read before it is deleted**, which the previous single-shot
- * delete did not need to do. `origin` decides which delete is correct: a user
- * site is one half of the cap's arithmetic, so it leaves through
- * `deleteUserSiteWithCount` and takes a counter decrement with it in the same
- * transaction; a seed site was never counted, so decrementing for it would
- * quietly raise the effective cap by one per seed site deleted. There is no way
- * to pick between them without knowing what kind of site this is.
+ * **The site is read before it is deleted**. `origin` decides which delete is
+ * correct: a user site is one half of the cap's arithmetic, so it leaves
+ * through `deleteUserSiteWithCount` and takes a counter decrement with it in
+ * the same transaction; a seed site was never counted, so decrementing for it
+ * would quietly raise the effective cap by one per seed site deleted.
  *
  * **The site's series points are left to the TTL** (access pattern X3, ADR
  * 0007): nothing here deletes them, and the row's own deletion is what makes
  * that safe. Every series route resolves the site first and 404s, so from the
  * moment the row goes the points are unreachable — and nothing writes more of
  * them, because ingestion and forecasting only serve fleet-listed sites. What
- * is left is invisible, costs no reads, and expires under ADR 0002's 90-day
- * TTL on `cumulo-series`, which is the whole mechanism rather than a backstop
- * behind an inline pass. ADR 0007 retired that pass: it could only ever remove
- * one batch of a partition holding thousands, and it ran after the caller's
- * write had committed, where its latency was the 204's to lose.
+ * is left is invisible, costs no reads.
  *
  * **Only the counted delete retries.** The user branch writes the fleet counter
  * inside its transaction and so contends with every concurrent capped create
@@ -91,9 +85,7 @@ type SiteDeleteOutcome = 'deleted' | 'already_gone' | 'conflict_exhausted' | 'ou
  * Issue the counted delete, and re-issue it while contention is all that stands
  * in its way — as long as the invocation has time to start another one.
  *
- * The sleep before each retry is what makes the retry worth making: re-issuing
- * immediately contends with the winner still committing, and uncorrelated
- * losers all retrying at once is how contention becomes a herd
+ * The sleep before each retry is what makes the retry worth making
  * (`./conflict-retry.ts` carries the curve, the budget and the reasoning for
  * both write routes).
  *

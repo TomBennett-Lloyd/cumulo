@@ -15,17 +15,14 @@ import { createHandler, jsonLineLog, type ForecastHandler } from './handler';
  *
  * Everything that is a *decision* about the running system lives here and only
  * here: which tables, which clock, which log sink, which client. Every module
- * beneath takes its collaborators as parameters, which is what lets the whole
- * message path — including its failure paths — run in a unit test with no AWS in
- * sight (`docs/standards/architecture.md` rule 3).
+ * beneath takes its collaborators as parameters
+ * (`docs/standards/architecture.md` rule 3).
  *
  * The composition happens at **module scope**, on purpose. AWS reuses a warm
  * container across invocations, so the client built here is built once per
  * container rather than once per message — and, more importantly, a missing or
  * malformed environment variable fails the *initialization*, before any message
- * claims to have been processed. A service that only discovers its table names are
- * nonsense on the first read has already told SQS to redeliver a message that was
- * never going to work.
+ * claims to have been processed.
  */
 
 /**
@@ -35,14 +32,12 @@ import { createHandler, jsonLineLog, type ForecastHandler } from './handler';
  * One variable, and the shortness is the point: a queue consumer is *handed* its
  * messages by the event source mapping, so unlike ingestion it never names the
  * queue at runtime and carries no `QUEUE_URL`. `AWS_REGION` is deliberately absent
- * too — Lambda always sets it and the SDK reads it directly, so restating it would
- * create a second dial that can disagree with the region the tables live in.
+ * too — Lambda always sets it and the SDK reads it directly.
  *
  * `CUMULO_ENV` is checked only for being non-empty. The alphabet a real environment
  * name has to satisfy is `storageTableName`'s, which mirrors
- * `infra/storage/variables.tf`; restating the pattern here would make three copies
- * of it, and `storageTableName` throws at this same startup with a message naming
- * the offending value.
+ * `infra/storage/variables.tf`; `storageTableName` throws at this same startup with
+ * a message naming the offending value.
  */
 export const forecastEnvSchema = z.object({
   CUMULO_ENV: z.string().min(1),
@@ -69,9 +64,7 @@ const env = parseForecastEnv(process.env);
 
 /**
  * One document client for both adapters: a shared connection pool, and one place
- * the storage failure policy (attempt budget, backoff, request timeout) is set —
- * `@cumulo/storage` owns all three, and building the client here rather than per
- * adapter is what keeps that true.
+ * the storage failure policy (attempt budget, backoff, request timeout) is set.
  */
 const documentClient = createStorageDocumentClient();
 
@@ -95,14 +88,11 @@ const now = (): UtcIsoTimestamp =>
  * the methods a message may use, so this service's least-privilege posture (ADR
  * 0002: reads `sites`, writes `series`, and since #264 reads back the trailing
  * window of `series` to simulate the actuals for the hours that have settled) is a
- * compile-time fact as well as an IAM policy. The full `SeriesAdapter` satisfies
- * the widened `Pick` unchanged — the narrowing is the type's job, and widening it
- * costs nothing here.
+ * compile-time fact as well as an IAM policy.
  *
  * The adapters are passed as whole objects, never as `adapter.putForecasts`: they
  * hold their client and table name on `this` (#77), so a detached method would
- * arrive at the message path already broken. The narrowing is the type's job —
- * `Pick<…>` costs nothing at runtime and cannot lose a binding.
+ * arrive at the message path already broken.
  */
 export const handler: ForecastHandler = createHandler({
   sites: new SiteAdapter({

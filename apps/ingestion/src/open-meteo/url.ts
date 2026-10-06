@@ -2,9 +2,7 @@
  * Request construction for the Open-Meteo forecast endpoint.
  *
  * Pure: this module builds a URL string and never fetches it. The adapter that
- * performs the call (and states its timeout/retry policy) lives separately, so
- * every request parameter that matters to correctness is testable without
- * network access.
+ * performs the call (and states its timeout/retry policy) lives separately.
  */
 
 /**
@@ -24,8 +22,7 @@ export interface ForecastLocation {
 /**
  * The hourly variables requested, in request order. Names are Open-Meteo's own;
  * `@cumulo/shared`'s `weatherReadingSchema` carries the camel-cased, unit-suffixed
- * counterpart of each, so the mapping in `response.ts` is a rename a reviewer can
- * check by eye.
+ * counterpart of each.
  */
 export const hourlyVariables = [
   'shortwave_radiation',

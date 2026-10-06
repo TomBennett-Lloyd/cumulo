@@ -13,9 +13,7 @@ import { weatherSourceSchema } from './weather-source';
  * enhancement produces genuine readings above the clear-sky maximum, and those
  * must pass. What the cap catches is an order-of-magnitude unit error, which
  * lands nowhere near it. One number covers all four fields because they are the
- * same physical quantity resolved onto different geometries — a single
- * implausibility threshold governs them all, and lowering it narrows all four
- * bounds in step, which is the point.
+ * same physical quantity resolved onto different geometries.
  *
  * The tests deliberately pin `1500` and `1501` as *literals* rather than deriving
  * them from this constant. Probe values derived from the constant would move with
@@ -63,9 +61,8 @@ export const weatherReadingSchema = z.object({
   validTime: utcIsoTimestampSchema,
   /**
    * Predicted vs historical-archive reading. This is the distinction ADR 0002
-   * calls "source" in the `cumulo-weather` sort key (`FORECAST#T#…` /
-   * `ARCHIVE#T#…`); here `source` means provenance, so the axis is named `kind`
-   * and the adapter maps `kind` → that sort-key segment.
+   * calls "source" in the `cumulo-weather` sort key; here `source` means
+   * provenance, so the axis is named `kind`.
    */
   kind: z.enum(['forecast', 'archive']),
   source: weatherSourceSchema,
@@ -99,9 +96,8 @@ export type WeatherReading = z.infer<typeof weatherReadingSchema>;
  * write paths, which use different sort-key prefixes and different TTLs.
  *
  * They live here, beside the schema they narrow, because they are the same domain
- * concept (`architecture.md` rule 2) — a narrowing restated per consumer would be
- * three definitions to keep in step. Types are inferred rather than written, so
- * the schema stays the single source of truth (`typing.md` rule 3).
+ * concept (`architecture.md` rule 2). Types are inferred rather than written
+ * (`typing.md` rule 3).
  *
  * The narrowing is a compile-time obligation, not a runtime branch: handing a
  * forecast writer archive readings should be a type error rather than a `kind`

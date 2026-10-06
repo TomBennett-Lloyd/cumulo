@@ -18,8 +18,7 @@ import type { ForecastWeatherReading } from '@cumulo/shared';
  * Failure policy: implementations **throw**. A publish that did not happen is not
  * an outcome of this interface's domain — it is an outage of the transport
  * (`docs/standards/error-handling.md` rule 1) — and the cycle converts it into that
- * location's reported failure at its boundary, so one location's queue error can
- * never be mistaken for a delivered message.
+ * location's reported failure at its boundary.
  */
 export interface WeatherPublisher {
   publishLocationReadings(readings: readonly ForecastWeatherReading[]): Promise<void>;

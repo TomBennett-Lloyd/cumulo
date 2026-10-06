@@ -5,9 +5,7 @@ import { z } from 'zod';
  * delivers, and the response `ReportBatchItemFailures` expects back.
  *
  * Both are external data, so the inbound half is a zod schema rather than a
- * hand-written interface (`docs/standards/typing.md` rule 3) — an event is
- * `unknown` until parsed, and "the platform would never send us that" is not a
- * type-system argument.
+ * hand-written interface (`docs/standards/typing.md` rule 3).
  */
 
 /**
@@ -23,12 +21,9 @@ import { z } from 'zod';
  * `messageId` is `.min(1)` because an empty identifier would be reported back to
  * Lambda as a failure it cannot attribute to any message: the whole batch is then
  * retried, which is precisely the silent multiplier `ReportBatchItemFailures`
- * exists to avoid. Refusing the event outright is louder and cheaper.
+ * exists to avoid.
  *
- * `body` is a `string`, not a parsed message. The record boundary and the message
- * contract are different layers with different failure policies: an event that
- * does not look like an SQS event is a platform bug and throws, while a body that
- * does not parse is one message's outcome (`consume-message.ts`).
+ * `body` is a `string`, not a parsed message.
  */
 export const sqsEventSchema = z.object({
   Records: z.array(z.object({ messageId: z.string().min(1), body: z.string() })),
