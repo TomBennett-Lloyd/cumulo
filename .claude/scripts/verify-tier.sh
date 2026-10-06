@@ -102,11 +102,10 @@
 #   * stylelint on the changed .css — the same, for CSS comment rules.
 #   * prettier --check on the changed files — comments are formatted like
 #     anything else.
-#   * check:aws-test-guard and check:comment-density — the two check:* gates that
-#     read a .ts file's TEXT rather than its shape, and text is what a comment is.
-#     The guard greps a vitest config for a fixed token; the density ratchet
-#     counts comment lines, so this rung is the one tier where it is the only leg
-#     that can observe the change at all (#553).
+#   * check:aws-test-guard — greps a .ts file's TEXT (a vitest config, for a
+#     fixed token) rather than its shape, and text is what a comment is.
+#   * check:comment-density — counts comment lines, which is what a change set
+#     on this rung changes (#553).
 #   * check:adr-index and check:markdown-links, when the set also holds .md.
 #   * the observing tests, below.
 #
