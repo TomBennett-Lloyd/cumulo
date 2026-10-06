@@ -259,6 +259,77 @@ describe('ForecastChart', () => {
     expect(markers[0]?.getAttribute('cx')).toBe(String(xOfSample(SERIES, 0)));
   });
 
+  /*
+   * The seam (#530). The overlay is the one mark here carrying both measurement
+   * and projection in one ink, so it carries the seam in its own stroke: solid
+   * over the hours it measured, dashed over the hours it only forecast, a dot
+   * where the two meet. The seam is the *overlay's* — `measured` on its own points — and
+   * `chart-series.test.ts` owns how that resolves to an index.
+   */
+  const SEAMED_OVERLAY: ChartOverlaySeries = {
+    label: 'Baseline',
+    points: SERIES.map((point, index) => ({
+      validTimeIso: point.validTimeIso,
+      kw: 2 + index,
+      measured: index <= 2,
+    })),
+  };
+
+  /** The overlay's solid stretch: the base class without the dashed one. */
+  const SOLID = '.forecast-chart-overlay:not(.forecast-chart-overlay-projected)';
+
+  it('draws the overlay solid to the seam and dashed past it, sharing the seam hour', () => {
+    const container = renderChartWithOverlay(SERIES, SEAMED_OVERLAY);
+    const solid = requireMark(container, SOLID);
+    const dashed = requireMark(container, '.forecast-chart-overlay-projected');
+
+    // Three hours each, and the middle one of five is in both: the solid path
+    // ends at the hour the dashed one starts from, so no hour is left unstroked.
+    expect(anchorCount(solid)).toBe(3);
+    expect(anchorCount(dashed)).toBe(3);
+    expect(pathCoordinates(solid).at(-1)?.x).toBe(xOfSample(SERIES, 2));
+    expect(pathCoordinates(dashed)[0]?.x).toBe(xOfSample(SERIES, 2));
+  });
+
+  it('ends the measured stretch in a dot, as the fleet’s own actuals do', () => {
+    const container = renderChartWithOverlay(SERIES, SEAMED_OVERLAY);
+    const markers = marks(container, '.forecast-chart-overlay-marker');
+
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.getAttribute('cx')).toBe(String(xOfSample(SERIES, 2)));
+  });
+
+  it('dashes the whole overlay where it measured nothing, and draws no dot', () => {
+    // The fleet's seam says nothing about this site: an overlay claiming no
+    // measurement is a projection over every hour it covers.
+    const container = renderChartWithOverlay(SERIES, {
+      label: 'Baseline',
+      points: SERIES.map((point) => ({ validTimeIso: point.validTimeIso, kw: 3 })),
+    });
+
+    expect(marks(container, SOLID)).toHaveLength(0);
+    expect(anchorCount(requireMark(container, '.forecast-chart-overlay-projected'))).toBe(5);
+    expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(0);
+  });
+
+  it('leaves the whole overlay solid where it measured every hour', () => {
+    // The projected stretch is left holding the seam hour alone, and that hour is
+    // already an anchor of the solid path — so it is dropped rather than drawn as
+    // a stray marker on top of a line.
+    const container = renderChartWithOverlay(SERIES, {
+      label: 'Baseline',
+      points: SERIES.map((point) => ({
+        validTimeIso: point.validTimeIso,
+        kw: 3,
+        measured: true,
+      })),
+    });
+
+    expect(marks(container, '.forecast-chart-overlay-projected')).toHaveLength(0);
+    expect(anchorCount(requireMark(container, SOLID))).toBe(5);
+    expect(marks(container, '.forecast-chart-overlay-marker')).toHaveLength(1);
+  });
+
   it('gives the overlay a table column headed by its label', () => {
     const container = renderChartWithOverlay(SERIES, OVERLAY);
     const headers = [...container.querySelectorAll('.forecast-chart-table thead th')];

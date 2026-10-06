@@ -124,9 +124,11 @@ its expensive fleet read survived being displaced.
 - **A selected site's detail is a card on the site's own marker** (`apps/web/src/map/SitePopover.tsx`,
   anchored through `MapMarkerAnchor`). The answer to "which site is this" is drawn where the
   question was asked, and it rides the camera, so panning keeps it over its site.
-- **A selected site's forecast is a second series on the fleet chart**
+- **A selected site's own hours are a second series on the fleet chart**
   (`apps/web/src/dashboard/site-overlay.ts`, drawn by `ForecastChart`'s `overlay` prop on one value
-  axis, in whichever unit the panel is showing). The comparison that used to need two charts and a
+  axis, in whichever unit the panel is showing — its measured hours solid and its forecast ones
+  dashed since [#530](https://github.com/TomBennett-Lloyd/cumulo/issues/530), on the rule
+  `docs/design/chart-treatment.md`'s horizon bullets carry). The comparison that used to need two charts and a
   memory is now one chart with two lines on it — which is the whole reason the card carries no
   chart of its own. #291 is what finished the job: a ~4 kW roof against a ~330 kW fleet is a flat
   line on an absolute axis, so selecting a site switches that axis to percent of capacity, where

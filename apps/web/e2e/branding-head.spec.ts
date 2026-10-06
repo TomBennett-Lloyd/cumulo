@@ -1,7 +1,7 @@
-import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { PRODUCT_TAGLINE } from '../src/header/header-copy';
+import { APPLE_TOUCH_ICON_LINK, PNG_ICON_LINK, SVG_ICON_LINK, fetchLinkedIcon } from './head-icons';
 import { routeBasemap } from './hermetic-basemap';
 
 /*
@@ -32,6 +32,11 @@ import { routeBasemap } from './hermetic-basemap';
  * a line would still serve a tab icon somewhere, which is precisely why the
  * loss needs its own assertion rather than a shared one.
  *
+ * The three selectors and the fetch itself are `head-icons.ts`'s, shared with
+ * `base-path.spec.ts` — which asks a different question of these same
+ * elements, on a document served under a non-root base. Everything below is
+ * about the root-served form, the one #144's CloudFront distribution ships.
+ *
  * Two things here belong to other owners and are deliberately not restated:
  *
  *   * The tagline is imported from `src/header/header-copy.ts`, which owns the
@@ -55,57 +60,6 @@ import { routeBasemap } from './hermetic-basemap';
  * of them disagreeing, and since both are served in this one document the
  * comparison needs no third copy of the sentence to make it.
  */
-
-/** The typed SVG icon — the drawing, and the one browsers with dark tabs prefer. */
-const SVG_ICON_LINK = 'link[rel="icon"][type="image/svg+xml"]';
-
-/** The raster tab icon, for engines that render no SVG favicon. */
-const PNG_ICON_LINK = 'link[rel="icon"][type="image/png"]';
-
-/** The same raster again, as the home-screen icon. */
-const APPLE_TOUCH_ICON_LINK = 'link[rel="apple-touch-icon"]';
-
-/** What the head said, and what came back when it was fetched. */
-interface ServedIcon {
-  readonly href: string;
-  readonly status: number;
-  readonly contentType: string;
-}
-
-/**
- * Read a head `<link>`'s href and fetch it, over the same origin the page was
- * served from.
- *
- * `page.request` inherits the context's `baseURL`, so a root-relative href
- * resolves against the preview server rather than needing one assembled here.
- * The fetch is deliberately outside the page: an icon is not fetched by
- * navigation, and asking the browser to render one would prove the document
- * loaded rather than that the byte stream is an icon of the right type.
- */
-const fetchLinkedIcon = async (page: Page, selector: string): Promise<ServedIcon> => {
-  const link = page.locator(selector);
-
-  await expect(link, `The head declares no \`${selector}\`.`).toHaveCount(1);
-
-  const href = await link.getAttribute('href');
-
-  if (href === null) {
-    throw new Error(`\`${selector}\` carries no href to fetch.`);
-  }
-
-  const response = await page.request.get(href);
-
-  return {
-    href,
-    status: response.status(),
-    /*
-     * Absent rather than wrong is still a failure, and `''` fails every
-     * assertion below — so the default keeps the matcher reporting the content
-     * type instead of reporting `undefined`.
-     */
-    contentType: response.headers()['content-type'] ?? '',
-  };
-};
 
 test.beforeEach(async ({ page }) => {
   await routeBasemap(page);

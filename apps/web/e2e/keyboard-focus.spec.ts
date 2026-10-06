@@ -437,8 +437,8 @@ test.describe('after a finger has been on the chart', () => {
    * offers `tap` and nothing else: there is no primitive that holds a finger down
    * and moves it, which is the same gap `chart-tap.spec.ts`'s header states. This
    * is one level below `Locator.tap`, which dispatches through the same channel,
-   * and it is Chromium-only — which this lane already is, by the single project
-   * in `playwright.config.ts`.
+   * and it is Chromium-only — which this lane already is: every project in
+   * `playwright.config.ts` names Chromium.
    *
    * The y never changes, deliberately. `touch-action: pan-y pinch-zoom` leaves
    * vertical movement to the browser, so a drag with any vertical component
