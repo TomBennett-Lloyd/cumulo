@@ -59,14 +59,6 @@ import {
  */
 
 /**
- * The outcome of a batched write is {@link BatchWriteOutcome}, defined in
- * `batch.ts` and shared with the series adapter. `BatchWriteItem` answers
- * HTTP 200 while handing back the items it declined (`UnprocessedItems`), so
- * "complete" is a claim this adapter only makes when the batch genuinely
- * drained (ADR 0002 Consequence 4).
- */
-
-/**
  * Three-way answer to "which of these location-days has the archive fetch
  * already covered?" (access pattern H2).
  *
@@ -75,8 +67,7 @@ import {
  * never answered for it. Undetermined is deliberately its own outcome rather
  * than being folded into either neighbour: calling it unfetched spends
  * Open-Meteo quota this project is built to respect, and calling it fetched
- * skips data that then never arrives. The caller decides (retry later, or fetch
- * and pay), which it can only do if we tell it the truth.
+ * skips data that then never arrives.
  */
 export type ArchiveDayCoverage =
   | { readonly status: 'complete'; readonly fetched: Set<string> }
@@ -115,8 +106,7 @@ export class WeatherAdapter extends StorageAdapterBase {
     // The items exactly as they will be stored, built once. The precondition
     // below then reads its key off them — `locationId|sk`, the pair DynamoDB
     // actually addresses — instead of re-deriving it from the reading, so the
-    // key that is checked cannot drift from the key that is written
-    // (`series-adapter.ts`'s `putSeriesItems` compares the same way).
+    // key that is checked cannot drift from the key that is written.
     const items = readings.map((reading) => toForecastItem(reading));
 
     // Two readings for one location-hour are refused rather than de-duplicated
@@ -129,9 +119,6 @@ export class WeatherAdapter extends StorageAdapterBase {
       'putForecastWeather',
       items.map((item) => `${item.locationId}|${item.sk}`),
     );
-    // `drainBatches` refuses the same policy, but it does so inside the wrap;
-    // hoisted here, an unusable retry curve is the programming error it is,
-    // reported identically from every entry point on both batching adapters.
     requireUsablePolicy('putForecastWeather', this.batchPolicy);
 
     const requests = items.map((item) => ({
@@ -145,9 +132,6 @@ export class WeatherAdapter extends StorageAdapterBase {
       return response.UnprocessedItems?.[this.tableName] ?? [];
     };
 
-    // Rule 2b: an SDK rejection is unexpected, so it gains context and
-    // propagates — which is exactly what `sending` does. A batch that merely
-    // failed to drain is not that: it is a value, returned below.
     const outcome = await this.sending('putForecastWeather', undefined, () =>
       drainBatches(sendWriteBatch, requests, DYNAMODB_BATCH_WRITE_SIZE, this.batchPolicy),
     );
@@ -161,27 +145,13 @@ export class WeatherAdapter extends StorageAdapterBase {
    * Writes one location-day of archive weather and its marker (H3).
    *
    * This is the package's largest single write: 25 items ≈ 50 WCU in one
-   * instant. Until #156 it was also the package's only `TransactWriteItems`
-   * against a *provisioned* table, and 50 WCU against a 5 WCU ceiling made a
-   * capacity cancellation the expected shape rather than a theoretical one.
-   * `cumulo-weather` is on-demand now, so that arithmetic is gone — but the
-   * shape is not: on-demand still enforces per-partition instantaneous limits,
-   * and every item in this transaction shares one `locationId` partition by
-   * construction, so a burst of location-days can still be cancelled for
-   * capacity. It moves from expected to edge case, which is a reason to keep
-   * the re-issue loop below cheap, not a reason to drop it. And nobody else
-   * would take it over: the cause lives inside `CancellationReasons[].Code`,
-   * where the SDK's retry classifier never looks — on-demand or not — so this
-   * loop remains its only owner (`capacityCancelled`,
-   * `../transaction-cancellation`).
+   * instant. `cumulo-weather` is on-demand now (#156): on-demand still enforces
+   * per-partition instantaneous limits, and every item in this transaction
+   * shares one `locationId` partition by construction, so a burst of
+   * location-days can still be cancelled for capacity (`STORAGE_MAX_ATTEMPTS`
+   * shape 3).
    *
-   * Worst case, on `defaultBatchPolicy`: 3 sends of ≈ 7 s plus ≤ 0.6 s of
-   * jittered sleeps ≈ **21.6 s** before the `StorageError` surfaces. That is
-   * affordable only because of who calls this — `@cumulo/hindcast`'s
-   * `archive-cache.ts`, an offline operator path with no request deadline, and
-   * no Lambda time budget prices this term. Its contract is unchanged: a
-   * `StorageError` from here still means the backfill failed; it now simply
-   * arrives after a bounded push rather than after one refusal.
+   * Worst case: `STORAGE_BATCH_PAGE_WORST_MS`.
    */
   async putArchiveDay(day: string, readings: readonly ArchiveWeatherReading[]): Promise<void> {
     // Preconditions first, and all of them before anything is sent. These are
@@ -234,9 +204,7 @@ export class WeatherAdapter extends StorageAdapterBase {
 
     // One transaction, so the marker and the readings it vouches for land
     // together or not at all: a partial fetch can never leave a marker
-    // claiming coverage it does not have (ADR 0002 §3 / #16). Splitting this
-    // into a batch write plus a marker put would reintroduce exactly the
-    // window that costs Open-Meteo quota to discover.
+    // claiming coverage it does not have (ADR 0002 §3 / #16).
     const transactItems = [
       ...readings.map((reading) => ({
         Put: { TableName: this.tableName, Item: toArchiveItem(reading) },
@@ -247,19 +215,10 @@ export class WeatherAdapter extends StorageAdapterBase {
     // Re-issuing the *same* items is safe: a cancelled transaction is atomic in
     // failure, so nothing was written, and every item here is a plain Put with
     // no condition — a second send either lands the whole day or is cancelled
-    // again. The budget is `batchPolicy`, deliberately not a second knob: it is
-    // this adapter's one answer to "how hard do I push this table before
-    // reporting failure", and a capacity cancellation is the same table running
-    // out of the same capacity as an undrained batch, down to the injected
-    // sleep the tests already use.
+    // again.
     // The loop below is bounded by `maxAttempts`, so a policy below 1 would
     // run no iterations at all and resolve — a day reported written that was
-    // never sent. This hoisted check is not special to this method: every batch
-    // entry point on both batching adapters now refuses the policy here, ahead
-    // of `sending`, so one bad composition root fails identically whichever it
-    // reaches. `drainBatches` still runs the identical check of its own, but
-    // that copy is defence for callers who reach the drain directly — on these
-    // paths it would fire inside the wrap, too late to blame the right party.
+    // never sent.
     // Outside `sending` deliberately: a policy this broken is a programming
     // error, not a storage outage, and dressing it as a `StorageError` would
     // tell an operator DynamoDB was down (error-handling rule 1).
@@ -340,9 +299,6 @@ export class WeatherAdapter extends StorageAdapterBase {
       return response.UnprocessedKeys?.[this.tableName]?.Keys ?? [];
     };
 
-    // Hoisted for the same reason as on the two write paths: `drainBatches`
-    // would refuse this policy from inside the wrap, where a composition-root
-    // bug reads as DynamoDB having failed on the table (#166).
     requireUsablePolicy('listFetchedArchiveDays', this.batchPolicy);
 
     const outcome = await this.sending('listFetchedArchiveDays', { locationId: partitionKey }, () =>
@@ -387,11 +343,7 @@ export class WeatherAdapter extends StorageAdapterBase {
     //   below, a weather sort key ends at the timestamp itself, so there is
     //   nothing left to sort past. Trimming a character off the bound would
     //   work byte-wise but would hard-code the key format outside
-    //   `@cumulo/shared`, so the endpoint is dropped after the read instead —
-    //   at most one extra item, whose cost is trivial whichever way the table
-    //   is billed: every reader of this range is offline, and `cumulo-weather`
-    //   has been on-demand since #156, so that item is paid for per request
-    //   rather than out of a standing read allocation.
+    //   `@cumulo/shared`, so the endpoint is dropped after the read instead.
     const lowerBound = weatherSortKey('archive', fromInclusive);
     const upperBound = weatherSortKey('archive', toExclusive);
 
