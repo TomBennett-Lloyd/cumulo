@@ -41,10 +41,22 @@ export interface PlotRect {
  * measures the 1:1 claim on a rendered page. Anything wanting the chart's height
  * imports this rather than restating it (`architecture.md` rule 9).
  *
- * **The value is what fits, measured rather than chosen** (#284 D15). The
- * clearance under the plot was never headroom the plot may grow into: the plot
- * is not the bottom of the section — the raw-data panel below the figure is
- * (`apps/web/src/charts/ForecastChart.tsx`).
+ * **The value is what fits, measured rather than chosen.** #284 D15 asks that a
+ * desktop viewport hold the map, the row of chrome over the chart and the whole
+ * plot without scrolling, and the chart gets whatever the stack above it leaves:
+ * the header bar, the map band (`apps/web/src/dashboard/dashboard.css`'s
+ * `.dashboard-map`), and the chart section's own top padding and controls row
+ * (`apps/web/src/dashboard/fleet-panel.css`, which owns that row's arithmetic
+ * and points back at this constant rather than restating it —
+ * `architecture.md` rule 9).
+ *
+ * **It has not moved through any of the tickets that reshaped that stack**
+ * (#323's width work, 2026-08-11's controls-row rounds and #291's unit toggle,
+ * #449's step of margin under the row). Each asked for width or spacing and
+ * none asked for height, and the clearance under the plot was never headroom
+ * the plot may grow into: the plot is not the bottom of the section — the
+ * raw-data panel below the figure is (`apps/web/src/charts/ForecastChart.tsx`)
+ * — so slack under the plot is slack the plot was never entitled to spend.
  *
  * The evidence for the fit is `apps/web/e2e/chart-surfaces.spec.ts`'s D15 case
  * measuring a rendered page: it imports this constant and asserts the plot's
@@ -186,9 +198,9 @@ const padded = (value: number): string => value.toString().padStart(2, '0');
  * The plot rect for a chart rendered `width` pixels wide.
  *
  * **One user unit is one rendered pixel** (#284 D15). Drawing at 1:1 makes the
- * margins above real distances rather than ratios — the left gutter is room for a rotated title and
- * a tick label in the units those are set in, not a fraction of the width that
- * means a different distance in every panel.
+ * margins above real distances rather than ratios — the left gutter is room for
+ * a rotated title and a tick label in the units those are set in, not a
+ * fraction of the width that means a different distance in every panel.
  *
  * A function rather than a constant for the same reason: there is no one plot any
  * more, only the plot at the width the chart currently has. Callers that need a
@@ -227,16 +239,19 @@ const plotCentreX = (plot: PlotRect): number => (plot.left + plot.right) / 2;
  *
  *     x_i = left + (right − left) · (t_i − t_0) / (t_n − t_0)
  *
- * **An hour with no data still costs its width on the axis** (#325,
- * `chart-geometry.test.ts`'s "a missing hour keeps its width on the axis").
+ * **An hour with no data still costs its width on the axis** (#325). The axis
+ * used to be index-spaced, so a series missing an hour drew its neighbours as
+ * adjacent: the gap closed up, and the compression was itself a shape the reader
+ * could mistake for data.
  *
  * **What that does not do is break the line across the hole.** An hour that is
  * *present* in the series carrying null values does break its marks, because the
  * run predicate rejects its index. An hour *absent from the series* does not:
  * `contiguousRuns` (`apps/web/src/charts/chart-series.ts`) cuts runs on adjacency
  * in the array, and the two survivors either side of a missing hour are still
- * array-adjacent, so the curve is drawn straight through. So what #325 removes
- * is the compression artefact, not the bridge — `docs/tech-debt.md`
+ * array-adjacent, so the curve is drawn straight through. Under index spacing
+ * that bridge had no width; this mapping is what gives it one. So what #325
+ * removes is the compression artefact, not the bridge — `docs/tech-debt.md`
  * (2026-08-11, "`contiguousRuns` splits on array adjacency, not on time
  * adjacency") owns the fix for the half that is left.
  *

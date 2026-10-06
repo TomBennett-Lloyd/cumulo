@@ -178,8 +178,8 @@ const tooltipRows = (
  * punctuation verbosity voice an em dash as silence, so a dashed row announces a
  * labelled series with no value at all — "Actual" and then nothing.
  *
- * One producer, two filters: nothing can be spoken that was not drawn, and no series can reach one surface without
- * reaching the other.
+ * One producer, two filters: nothing can be spoken that was not drawn, and no
+ * series can reach one surface without reaching the other.
  */
 const spokenTooltipRows = (
   point: ForecastChartPoint,

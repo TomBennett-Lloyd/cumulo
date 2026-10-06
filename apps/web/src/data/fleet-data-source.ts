@@ -185,8 +185,9 @@ export interface FleetSourceCapabilities {
  *
  * The attribution travels with every weather-derived payload and must be
  * displayed wherever the data is (CC BY 4.0, CLAUDE.md). Today the UI renders
- * a static credit; unwrapping it is a decision to revisit here rather than a
- * detail of the transport.
+ * a static credit; an HTTP source that discards this field is only correct for
+ * as long as that stays true, so unwrapping it is a decision to revisit here
+ * rather than a detail of the transport.
  */
 export interface FleetDataSource {
   /**

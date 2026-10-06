@@ -70,6 +70,16 @@ const draftKey = (position: MapPosition): string =>
 const loadedSites = (load: FleetLoad): readonly Site[] =>
   load.status === 'ready' ? load.sites : [];
 
+/*
+ * There is no `FleetSection` here any more (#452). The listing's own account of
+ * itself — a pending label, a failure with a retry — went into the chart on the
+ * owner's routing: *"the sites fetch error state should show in the graph area …
+ * this can be the generic error message for anything that means we can't show
+ * data on the graph"*. Its status is a prop of `FleetPanel` now (`listing`,
+ * below), so the reader is told where they are looking rather than in a box under
+ * it, and one fewer element arrives and leaves above the fold.
+ */
+
 export interface DashboardProps {
   readonly theme: Theme;
   /**

@@ -455,9 +455,11 @@ const stateContent = (
      * the generic in-figure account (#452) rather than a sentence of its own.
      * The *retry* survives on the argument it always had: a fleet read that came
      * back with nothing is exactly the failure a repeat can outlive. That reads
-     * `react.md`'s **Failed** bullet — an interpretation rather than the bullet's
-     * own words, and `docs/tech-debt.md` has why the amendment belongs in
-     * `react.md`.
+     * `react.md`'s **Failed** bullet ("a retry only when retrying can work"; no
+     * retry that "re-runs an identical metered request") as withholding one where
+     * re-running would deterministically return what it already returned — an
+     * interpretation rather than the bullet's own words, and
+     * `docs/tech-debt.md` has why the amendment belongs in `react.md`.
      *
      * The source's own message is deliberately dropped
      * (`apps/web/src/dashboard/state-copy.ts`'s `CHART_DATA_UNAVAILABLE_MESSAGE`).

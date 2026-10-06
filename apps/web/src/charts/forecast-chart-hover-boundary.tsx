@@ -29,9 +29,16 @@ import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
  * than three memos bolted onto the marks, the legend and the table.
  *
  * **The chrome arrives as `children`, already built** — elements rather than
- * functions to call. Nothing here is memoised to achieve it — the boundary *is*
- * the mechanism. `apps/web/src/charts/forecast-chart-render-boundary.test.tsx`
- * holds it.
+ * functions to call. Two things follow, and only together do they make the
+ * saving: `ForecastChart`'s body no longer runs on a hover frame, so those
+ * producers are never called; and this component's own re-render walks straight
+ * past the elements it was handed, because their references have not changed and
+ * React bails out of an unchanged child
+ * (`apps/web/src/dashboard/FleetPanel.memo.test.tsx` documents that bailout, and
+ * steps around it deliberately). Nothing here is memoised to achieve it — the
+ * boundary *is* the mechanism, which is why adding a memo to a mark would answer
+ * a question this file has already answered.
+ * `apps/web/src/charts/forecast-chart-render-boundary.test.tsx` holds it.
  *
  * The division of labour around it is unchanged. Which sample an input selected
  * and how often the panel may move are `chart-hover-input.ts`'s; drawing the
@@ -374,9 +381,11 @@ export const ForecastChartHoverBoundary = (
            two agree, but before one lands the view box is still
            `DEFAULT_CHART_WIDTH` wide in a column of some other width, and an
            unpinned height would draw that pass tall and then collapse it.
-           Still earning its place after #343: an environment with no
-           `ResizeObserver`, and jsdom, which is where every chart suite under
-           `apps/web/src` reads this attribute. */
+           Still earning its place after #343, which moved the browser's first
+           measurement before paint: that removed the *painted* pre-measurement
+           frame, not the arms where there is no measurement to wait for — an
+           environment with no `ResizeObserver`, and jsdom, which is where every
+           chart suite under `apps/web/src` reads this attribute. */
         height={CHART_VIEW_BOX_HEIGHT}
         role="img"
         aria-label={ariaLabel}

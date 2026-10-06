@@ -65,8 +65,9 @@ import { UnitToggle } from './unit-toggle';
  * ## The selected site is one more series, not a second chart
  *
  * One value axis, never two (`docs/design/chart-treatment.md`) — two axes would
- * invent a correlation the numbers do not contain. The chart is the site's *only* chart: its card on the
- * map carries the site's facts and nothing plotted.
+ * invent a correlation the numbers do not contain. The chart is the site's
+ * *only* chart: its card on the map carries the site's facts and nothing
+ * plotted.
  *
  * **What that axis counts is the reader's to choose, and a selection chooses it
  * for them once** (#291). None of those rules live here:
@@ -211,7 +212,12 @@ interface SiteOverlayHours {
  * is honestly answered by no hours rather than by a crash. Top-level and fully
  * parameterised so it reads on its own (`structure.md` rule 1).
  *
- * **Two reads, one metered call** (#530). Asserted where that share lives: `apps/web/src/data/http-fleet-data-source.test.ts`,
+ * **Two reads, one metered call** (#530). `HttpFleetDataSource` answers both out
+ * of the same `GET /v1/sites/{id}/series` payload and shares the in-flight
+ * request between them (`apps/web/src/data/http-fleet-data-source.ts`'s
+ * `seriesFor`), so asking together costs what asking for the forecast alone cost
+ * — which is why the overlay can draw the site's measurements at all. Asserted
+ * where that share lives: `apps/web/src/data/http-fleet-data-source.test.ts`,
  * "serves concurrent forecasts and actuals for one site and range from a single
  * request".
  *
@@ -251,9 +257,11 @@ const siteOverlayHours = async (
  * The selection and the answer about it, collapsed into the one value the body
  * renders from.
  *
- * A `loading` read is `none` rather than a third visible state: a spinner for a
- * line that is about to appear over it would be chrome flashing on top of
- * content the reader is reading. The failure is the one that has to speak.
+ * A `loading` read is `none` rather than a third visible state: the fleet's
+ * chart is already on screen and complete, and a spinner for a line that is
+ * about to appear over it would be chrome flashing on top of content the reader
+ * is reading. The failure is the one that has to speak, because it is the one
+ * that ends with something missing and no other explanation for it.
  */
 const overlayState = (
   site: Site | null,
