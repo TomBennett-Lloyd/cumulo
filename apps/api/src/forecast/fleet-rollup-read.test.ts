@@ -29,8 +29,9 @@ import {
  *
  * Through `readFleetForecastAggregate` directly because the route adds nothing to this question: it
  * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both. What matters
- * here is that a half-written partition is never summed, and that every fallback leaves one line an
- * operator can count while a deployment settles.
+ * here is that a partition missing a whole *location* is never summed — the dimension the check
+ * works in, and the one ADR 0009's 2026-10-05 amendment entry records it as working in — and that
+ * every fallback leaves one line an operator can count while a deployment settles.
  */
 
 const FROM = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
@@ -186,6 +187,39 @@ describe('the roll-up answers', () => {
     expect(logged).toEqual([]);
   });
 
+  /**
+   * The completeness decision, pinned rather than argued: the check is per **location**, so a
+   * location that wrote some of its hours and not others is summed rather than refused, and the
+   * short hour is **labelled** by the `contributingSiteCount` that travels on it — which
+   * `minimumContributingSites` folds and `partialAggregateNotice` renders
+   * (`docs/standards/error-handling.md` rule 5). ADR 0009's 2026-10-05 (#531) amendment states why
+   * an expected-*hours* notion is not this route's to hold.
+   *
+   * This case does not fail on the pre-#531 code. It is here so the amendment has an asserting test
+   * rather than standing prose (`docs/standards/prose.md` rule 2): a change that started refusing
+   * the short hour, or that stopped carrying the count that labels it, fails here.
+   */
+  it('sums a location that wrote half its hours, and the short hour says how thin it is', async () => {
+    const twoPm = '2026-07-31T14:00:00Z';
+    const { deps, siteReads, logged } = harness({
+      rows: [
+        { locationId: DUBLIN, partial: partial({ acPowerKw: 5, contributingSiteCount: 2 }) },
+        {
+          locationId: DUBLIN,
+          partial: partial({ validTime: twoPm, acPowerKw: 6, contributingSiteCount: 2 }),
+        },
+        { locationId: BRISTOL, partial: partial({ acPowerKw: 3, contributingSiteCount: 1 }) },
+      ],
+    });
+
+    const points = pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
+
+    expect(points.map((point) => point.acPowerKw)).toEqual([8, 6]);
+    expect(points.map((point) => point.contributingSiteCount)).toEqual([3, 2]);
+    expect(siteReads).toEqual([]);
+    expect(logged).toEqual([]);
+  });
+
   it('answers an empty fleet without reading anything at all', async () => {
     const { deps, rollupReads, siteReads, logged } = harness();
 
@@ -265,8 +299,11 @@ describe('the fallback', () => {
 
   it('sums one model only, so the two arms cannot answer differently', async () => {
     // The fan-out reads whatever the partition holds, an ML row for the same site-hour included;
-    // the roll-up arm only ever sums the rolled-up model. Unfiltered, this arm would read as twice
-    // the fleet exactly when the fallback fired.
+    // the roll-up arm only ever sums the rolled-up model. Unfiltered, this arm would read 3.1 here
+    // rather than 2.8 — not twice the fleet but the *other model's* fleet, this fixture's ML row
+    // taking the `issuedAt` tie by being listed last. That a model wins is the point, rather than
+    // which one does: `seriesSortKey` puts `FC#ml` before `FC#physics`, so an ascending Query hands
+    // the tie to physics and production survives by sort-key luck (ADR 0009's 2026-10-05 entry).
     const physics = forecast({ acPowerKw: 2.8 });
     const { deps } = harness({
       pointsBySite: {

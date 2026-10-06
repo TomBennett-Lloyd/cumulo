@@ -23,6 +23,15 @@ import { utcIsoTimestampSchema, type UtcIsoTimestamp, type UtcWindow } from './t
 /** Which flavour of series point a `cumulo-series` item holds. */
 export type SeriesKind = { kind: 'forecast'; model: ForecastModel } | { kind: 'generation' };
 
+/**
+ * The forecast arm of {@link SeriesKind} — a kind that names a model.
+ *
+ * Extracted rather than redeclared, so a function taking "the forecast kind" takes the same object
+ * `seriesSortKey` keys items by (`docs/standards/typing.md` rule 6). The narrowing is the point:
+ * aggregation selects on `model`, and `{ kind: 'generation' }` has none to select on.
+ */
+export type ForecastSeriesKind = Extract<SeriesKind, { kind: 'forecast' }>;
+
 const TIME_SEGMENT = 'T';
 const FORECAST_SEGMENT = 'FC';
 const GENERATION_SEGMENT = 'GEN';

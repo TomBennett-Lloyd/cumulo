@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { aggregateFleetForecast, contributingCapacityKwByHour } from './aggregation';
 import { canonicalFleetSeed, generateFleet } from './fleet';
 import {
+  FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   fleetRollupPartials,
   sumFleetRollupPartials,
@@ -90,6 +91,7 @@ const perLocationPartials = () =>
     return fleetRollupPartials(
       allForecasts.filter((forecast) => siteIds.has(forecast.siteId)),
       locationSites,
+      FLEET_ROLLUP_FORECAST_KIND,
     );
   });
 
@@ -157,7 +159,7 @@ describe('partials sum to the whole-fleet aggregate', () => {
   it('agrees on every field, discrete ones exactly and kilowatts to a microwatt', () => {
     expectAggregatesAgree(
       sumFleetRollupPartials(perLocationPartials()),
-      fleetForecastAggregate(allForecasts, fleet),
+      fleetForecastAggregate(allForecasts, fleet, FLEET_ROLLUP_FORECAST_KIND),
     );
   });
 
@@ -190,7 +192,7 @@ describe('partials sum to the whole-fleet aggregate', () => {
    */
   it('differs from the one-pass sum by float association only, under a microwatt', () => {
     const grouped = sumFleetRollupPartials(perLocationPartials());
-    const whole = fleetForecastAggregate(allForecasts, fleet);
+    const whole = fleetForecastAggregate(allForecasts, fleet, FLEET_ROLLUP_FORECAST_KIND);
 
     const worstKw = grouped.reduce(
       (largest, point, index) =>
@@ -210,7 +212,7 @@ describe('the aggregate is what the client used to compute', () => {
 
     // Exact, not close: one group means one addition order — the same terms in the same sequence
     // `aggregateFleetForecast` itself uses, which is what `fleetForecastAggregate` composes.
-    expect(fleetForecastAggregate(allForecasts, fleet)).toEqual(
+    expect(fleetForecastAggregate(allForecasts, fleet, FLEET_ROLLUP_FORECAST_KIND)).toEqual(
       points.map((point) => ({
         validTime: point.validTime,
         acPowerKw: point.acPowerKw,
@@ -222,7 +224,7 @@ describe('the aggregate is what the client used to compute', () => {
   });
 
   it('counts and divides by the whole fleet on an hour every site reported', () => {
-    const noonPoint = fleetForecastAggregate(allForecasts, fleet).find(
+    const noonPoint = fleetForecastAggregate(allForecasts, fleet, FLEET_ROLLUP_FORECAST_KIND).find(
       (point) => point.validTime === noon,
     );
 
