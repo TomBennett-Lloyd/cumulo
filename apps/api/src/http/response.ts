@@ -7,8 +7,7 @@ import type { ZodError, ZodType, output } from 'zod';
  * ever produces one — a validated success body, or an `apiErrorSchema` failure.
  *
  * Nothing below reaches for a framework's `res.json()`, because there is no
- * framework: a response is a value, built and returned like any other, which is
- * what lets every handler be tested by calling it.
+ * framework: a response is a value, built and returned like any other.
  */
 
 /**
@@ -18,8 +17,7 @@ import type { ZodError, ZodType, output } from 'zod';
  * `body` is absent rather than empty for a 204: the gateway distinguishes the
  * two, and an empty-string body on a no-content response is a content-length
  * header nobody asked for. `isBase64Encoded` is here because binary assets are
- * served over this same seam (the Swagger UI bundle); no route in this chunk
- * sets it.
+ * served over this same seam (the Swagger UI bundle).
  */
 export interface ApiResponse {
   readonly statusCode: number;
@@ -43,17 +41,11 @@ export type ApiErrorDetails = NonNullable<ApiError['details']>;
  * mapping is stated in `apiErrorCodeSchema`'s doc comment in `@cumulo/shared`
  * and this is its executable half.
  *
- * 429 appears here now because the service produces one of its own — see
- * {@link rateLimitedResponse}. It is still not the *only* 429 a caller can see:
- * API Gateway's throttles answer before this Lambda is invoked, in a body no
- * code here shapes, which is why the contract tells clients to map on status.
- *
  * `Readonly` is load-bearing rather than tidy: the map is read at **two
  * different times**. `src/openapi/paths.ts` reads it once at module load, to key
  * each documented error response, and {@link errorResponse} reads it again on
  * every request. A write between those two moments would leave the published
- * document promising a status the API no longer answers with — the exact
- * disagreement this map exists to make impossible.
+ * document promising a status the API no longer answers with.
  */
 export const apiErrorStatus: Readonly<Record<ApiErrorCode, number>> = {
   validation_failed: 400,
@@ -79,9 +71,6 @@ const jsonHeaders = (): Record<string, string> => ({ 'content-type': 'applicatio
  * has no natural JSON form and would leak the parser's own vocabulary into the
  * API. `String(...)` rather than a bare `join` because `Array.prototype.join`
  * throws on a symbol key, which a record schema can legitimately produce.
- *
- * Every issue is listed, not the first: a body with three bad fields should take
- * one fix rather than one request per problem.
  */
 export const zodIssueDetails = (error: ZodError): ApiErrorDetails =>
   error.issues.map((issue) => ({
@@ -92,11 +81,7 @@ export const zodIssueDetails = (error: ZodError): ApiErrorDetails =>
 /**
  * The same zod failure rendered as one log line.
  *
- * Defined in terms of {@link zodIssueDetails} rather than beside it, so the path
- * flattening a caller sees in a 400 body and the one an operator sees in
- * CloudWatch cannot drift apart. Used where a parse failure is not a response —
- * the composition root's environment check, and the gateway event that did not
- * look like a gateway event.
+ * Used where a parse failure is not a response.
  */
 export const describeZodIssues = (error: ZodError): string =>
   zodIssueDetails(error)
@@ -111,9 +96,6 @@ export const describeZodIssues = (error: ZodError): string =>
  * document and the bytes on the wire the same fact, and turns a handler that
  * quietly returns the wrong shape into a 500 (via the boundary in `main.ts`)
  * rather than into a client that silently mis-renders.
- *
- * It also normalizes: zod strips keys the schema does not declare, so a stored
- * item that grew an attribute cannot leak it into a public response.
  */
 export const jsonResponse = <TSchema extends ZodType>(
   statusCode: number,
@@ -129,10 +111,8 @@ export const jsonResponse = <TSchema extends ZodType>(
  * The one failure response every route returns, in the one shape every route
  * returns it (`apiErrorSchema`).
  *
- * The status comes from {@link apiErrorStatus}, not from the caller, so the
- * contract is enforced by construction. The body is parsed through
- * `apiErrorSchema` on the way out for the same reason successes are: this is the
- * shape the OpenAPI document will promise from every non-2xx response.
+ * The body is parsed through `apiErrorSchema` on the way out for the same
+ * reason successes are.
  *
  * `details` is omitted rather than passed as `undefined` — `exactOptionalPropertyTypes`
  * is on, and the schema's optionality is meant to carry "there is something
@@ -154,21 +134,11 @@ export const errorResponse = (
  * distinct from the 429 API Gateway's throttles produce before the Lambda is
  * ever invoked.
  *
- * The only response in this API that carries a header beyond `content-type`,
- * and that header is the whole point of the function existing: `retry-after`
- * turns "you are being limited" into "come back at this time", which is the
- * difference between a client that backs off and one that hot-retries into the
- * block already in force. Seconds rather than an HTTP-date because the
- * limiter's window is a *duration*, and a duration cannot be misread by a
- * caller whose clock disagrees with ours.
- *
- * The wait is stated twice on purpose — once machine-readable in the header,
- * once in the message a human sees in a terminal — and both come from the same
- * argument in the same expression, so the two cannot drift.
- *
- * The body is built by {@link errorResponse}, so the status still comes from
- * {@link apiErrorStatus} and is still parsed through `apiErrorSchema`: this
- * adds a header to that response rather than assembling a second one beside it.
+ * `retry-after` turns "you are being limited" into "come back at this time",
+ * which is the difference between a client that backs off and one that
+ * hot-retries into the block already in force. Seconds rather than an HTTP-date
+ * because the limiter's window is a *duration*, and a duration cannot be
+ * misread by a caller whose clock disagrees with ours.
  */
 export const rateLimitedResponse = (retryAfterSeconds: number): ApiResponse => {
   // A violated invariant, not a domain outcome (error-handling rule 1): a

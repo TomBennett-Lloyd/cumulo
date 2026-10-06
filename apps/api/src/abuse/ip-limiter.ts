@@ -5,10 +5,8 @@ import type { AbuseAdapter } from '@cumulo/storage';
  * against a single determined caller.
  *
  * The gateway's throttles (layers 2 and 3) bound the *bill* but treat every
- * caller as one queue — one abuser consuming the whole 10 rps 429s everybody
- * else, which is a cost control wearing an abuse control's clothes. This is the
- * abuse control: it counts per address, and an address that goes over is refused
- * without spending anyone else's budget.
+ * caller as one queue. This is the abuse control: it counts per address, and an
+ * address that goes over is refused without spending anyone else's budget.
  */
 
 /**
@@ -16,8 +14,7 @@ import type { AbuseAdapter } from '@cumulo/storage';
  *
  * They are quoted in three other places — ADR 0006, `apps/api/README.md`'s
  * abuse-protection section, and the live-evidence run on issue #29 — so a change
- * here is a change to all four. That is deliberate: a threshold nobody can find
- * the documentation for is a threshold nobody dares tune.
+ * here is a change to all four.
  *
  * 30 per minute is chosen against what a *human* using the demo does. The
  * add-a-site flow is a handful of requests; a visitor clicking through every
@@ -77,19 +74,14 @@ export class IpLimiter {
    * cache, deliberately not a source of truth.
    *
    * Lambda reuses a warm container across invocations, so an address that got
-   * itself blocked is usually refused by this map with no I/O at all. That is
-   * the whole point: the abuse table is billed per request, and a caller that
-   * has just earned an hour's block is precisely the caller most likely to keep
-   * calling. Paying DynamoDB to re-learn the same fact a thousand times is how
-   * a defence becomes a bill.
+   * itself blocked is usually refused by this map with no I/O at all.
    *
    * It is a cache and not the record: a cold container knows nothing, which is
    * why `check` still reads the table when the map misses. And it stays small
    * by construction — an entry appears only for an address that has already
    * sent 31 requests inside one minute, and the gateway's throttles bound how
-   * many distinct addresses can do that (a few thousand at the very most across
-   * an hour-long block, of a string and a number each), so there is no eviction
-   * policy here and no need for one.
+   * many distinct addresses can do that, so there is no eviction policy here
+   * and no need for one.
    */
   private readonly blockedUntil = new Map<string, number>();
 
@@ -104,22 +96,8 @@ export class IpLimiter {
    * Three steps, cheapest first: the in-memory cache, then the stored block,
    * then the window counter. Only the last one writes.
    *
-   * **Windows are fixed, not sliding, so up to 2× the limit can pass across a
-   * boundary** — 30 requests at 11:00:59 and 30 more at 11:01:00 are two full
-   * windows and neither trips. Accepted rather than fixed: a sliding window
-   * costs a read of every timestamp in the last minute on every request, and
-   * this threshold is friction against scripts, not an invariant anyone's
-   * correctness rests on. A caller sustaining that rate trips the block on its
-   * next window anyway.
-   *
    * **Storage failures propagate, so the limiter fails closed**: no `catch`
-   * here, and the boundary in `main.ts` turns the throw into a 500. The
-   * alternative — treat an unreadable abuse table as "allow" — makes the
-   * defence removable by whatever is already breaking DynamoDB, which is
-   * exactly the moment it is most wanted. A limited route being unavailable
-   * while its state store is down is the honest failure
-   * (`docs/standards/error-handling.md` rule 1: this is a violated
-   * expectation, not a domain outcome the caller could act on).
+   * here, and the boundary in `main.ts` turns the throw into a 500.
    */
   async check(ip: string): Promise<IpDecision> {
     const now = this.deps.nowEpochSeconds();
