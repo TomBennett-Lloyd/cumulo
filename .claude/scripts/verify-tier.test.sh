@@ -304,7 +304,7 @@ for interpreter in $BASHES; do
   expect_rc 0 "$rc"
   expect_stdout "verify tier: source-prose — 1 file(s) proven comment-only; observing tests: none"
   expect_stdout "  src/app.ts"
-  expect_stdout "would run: pnpm exec eslint --no-warn-ignored --max-warnings 0 -- src/app.ts && pnpm typecheck && pnpm check:aws-test-guard && pnpm exec prettier --check --ignore-unknown -- src/app.ts"
+  expect_stdout "would run: pnpm exec eslint --no-warn-ignored --max-warnings 0 -- src/app.ts && pnpm typecheck && pnpm check:aws-test-guard && pnpm check:comment-density && pnpm exec prettier --check --ignore-unknown -- src/app.ts"
   expect_not_out "verify:full"
   expect_not_out "unbound variable"
 done

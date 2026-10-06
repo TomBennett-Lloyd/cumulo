@@ -165,3 +165,21 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/api/src/request-budget.ts`'s module header — the `RequestDeadline` sentence naming `http/request-deadline.ts` and the fan-out sentence naming `forecast/fleet-series-read.ts`
 - What: `docs/standards/prose.md` rule 3 permits a bare basename only for a same-directory sibling and requires the repo-relative path for everything else (#482). These spellings are neither: they are relative to `apps/api/src/`, so a `git grep` for the repo-relative path misses them and a reader in another package cannot resolve them. Pre-existing across the whole header rather than introduced by #545 batch 1, which preserved the spellings while trimming the sentences around them. The same header's restatement ledger uses full repo-relative paths for all four carriers, so the file disagrees with itself about the convention. Not fixed in the trim batch because converting them is a claim-bearing edit to prose the batch was otherwise only deleting from, and because the sweep rule 3 implies should run over `apps/api/src` as a whole rather than one file
 - Source: PR #557 (#545 batch 1), reviewer pass 1 SYSTEMIC
+
+## 2026-10-06 — The density ratchet trusts whatever baseline TSV is committed
+
+- Where: `.claude/scripts/check-comment-density.sh` (the baseline parse and compare), `.claude/comment-density.baseline.tsv`
+- What: the gate compares the working tree against the committed TSV and nothing compares that TSV against the merge-base's. A hand-raised row, deleting every row and re-bootstrapping with `--ratchet`, or a renamed file's row carried across at a higher value all pass both `verify` and CI; only a reviewer reading the TSV diff stands in the way. Suspected fix: a "no row rises against `git show <merge-base>:.claude/comment-density.baseline.tsv`" check. `.claude/scripts/verify-tier.sh` already computes the merge-base. The intended exceptions have to be allowed: the gate's own first landing, a rename, and a deliberate re-bootstrap like #553's post-rebase one.
+- Source: #553 review cycle 1
+
+## 2026-10-06 — No sanctioned way to raise a density row, while three rules add comment lines
+
+- Where: `.claude/scripts/check-comment-density.sh`, `docs/standards/prose.md` rule 6, `docs/standards/architecture.md` rules 9 and 11
+- What: a row can only fall, but three standing obligations add comment lines to a source file. Architecture rule 9 has the finder write a restatement ledger beside the owner, often in source, and `.claude/agents/reviewer.md` says to do that in the fix round. Rule 11 has arguing prose corrected in the same change. Prose rule 6's own form wants a docblock on a new symbol. A file far below the median has little room, and the zero-ratio barrels (`packages/hindcast/src/index.ts`, `packages/shared/src/index.ts`, `packages/ui/src/index.ts`) can never take a comment line. #535 moves ledgers out of source, which removes the largest of the three. The owner decides what is allowed until then: a reviewed raise, or adding code alongside.
+- Source: #553 review cycle 1
+
+## 2026-10-06 — `ensureArchiveCoverage` restates CLAUDE.md's per-minute quota figure
+
+- Where: `packages/hindcast/src/archive-cache.ts` — the `ensureArchiveCoverage` docblock, step 3 ("Fetch sequentially")
+- What: the step restates CLAUDE.md's per-minute call limit as a figure beside its citation of CLAUDE.md, against `docs/standards/architecture.md` rule 9. #545 batch 6 deleted the sibling restatement of the daily figure from `MAX_ARCHIVE_REQUEST_DAYS`' docblock in `packages/hindcast/src/open-meteo-archive.ts` and left this one, because deleting the figure alone leaves "the very limit that stops the run" without a referent.
+- Source: #545 batch 6, reviewer pass 1 SYSTEMIC
