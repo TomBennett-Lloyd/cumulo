@@ -137,13 +137,12 @@ const NARROW_GUTTER_MAX_CHART_WIDTH = 520;
  * `plot.right` is a day label of the `Wed NN` family, and half of one is very
  * nearly this whole margin.
  *
- * The slack is thin on purpose, and thin in *modelled* terms only. What an image
- * whose
- * `system-ui` sets wider glyphs costs is the label reaching the canvas edge, and
- * that is what `apps/web/e2e/chart-surfaces.spec.ts`'s containment poll exists to
- * catch: it fails once a label escapes by more than a quarter of its own height,
- * so it tolerates several percent of glyph growth rather than the first
- * hundredth.
+ * The slack is thin on purpose, and thin in *modelled* terms only. What an
+ * image whose `system-ui` sets wider glyphs costs is the label reaching the
+ * canvas edge, and that is what `apps/web/e2e/chart-surfaces.spec.ts`'s
+ * containment poll exists to catch: it fails once a label escapes by more than
+ * a quarter of its own height, so it tolerates several percent of glyph growth
+ * rather than the first hundredth.
  */
 const PLOT_RIGHT_MARGIN = 24;
 /**

@@ -401,10 +401,9 @@ export const FleetPanel = ({
    * before a `useMemo`: without it the whole fleet's series were re-summed and
    * re-joined every second while a reader watched their new site generate (#293).
    *
-   * The first memo is not about cost but about being an honest dependency for the
-   * second, which a
-   * fresh object per render would defeat. Stabilizing it at its source is what
-   * rule 2 asks for instead of trimming a dependency array.
+   * The first memo is not about cost but about being an honest dependency for
+   * the second, which a fresh object per render would defeat. Stabilizing it at
+   * its source is what rule 2 asks for instead of trimming a dependency array.
    *
    * `sites` (#335) and `unit` (#291) are listed for the same reason rather than
    * trimmed: both are genuine inputs. An aggregate memoized
@@ -453,9 +452,9 @@ export const FleetPanel = ({
   };
   // The legend's fourth row, from the same value the chart's overlay mark is
   // drawn from: a legend naming a line that is not there is the failure the row
-  // is gated
-  // against. Read off `context.overlay` rather than off `selectedSite`, because
-  // a site can be selected without its hours having arrived.
+  // is gated against. Read off `context.overlay` rather than off
+  // `selectedSite`, because a site can be selected without its hours having
+  // arrived.
   const overlayLabel = context.overlay.kind === 'series' ? context.overlay.series.label : undefined;
 
   return (
@@ -500,8 +499,9 @@ export const FleetPanel = ({
          * **It stays in kW while the toggle beside it is on percent** (#291).
          * The line states the fleet's installed capacity, which is the divisor
          * the percentages are taken against, so kW here is informative rather
-         * than inconsistent. `fleetStatsLine`
-         * (`apps/web/src/dashboard/fleet-panel-copy.ts`) carries the argument.
+         * than inconsistent.
+         * `fleetStatsLine` (`apps/web/src/dashboard/fleet-panel-copy.ts`) carries
+         * the argument.
          */}
         <p className="fleet-chart-stats">{fleetStatsLine(sites)}</p>
         {/*
@@ -548,11 +548,11 @@ export const FleetPanel = ({
          * the source nothing whatever the
          * picker says, because `enabled` above gates the queries and not this.
          *
-         * Nothing on this page lands a reader on it (#328, `design.md` rule 11).
-         * What it does do is hand focus *back* on a selection.
-         * `apps/web/src/dashboard/range-picker.tsx`'s docblock
-         * (§ "Dismissal, and why the shape is copied rather than shared") carries
-         * that argument.
+         * Nothing on this page lands a reader on it (#328, `design.md` rule
+         * 11). What it does do is hand focus *back* on a selection.
+         * `apps/web/src/dashboard/range-picker.tsx`'s docblock (§ "Dismissal,
+         * and why the shape is copied rather than shared") carries that
+         * argument.
          */}
         {fleetLookback || fleetActuals ? (
           <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />

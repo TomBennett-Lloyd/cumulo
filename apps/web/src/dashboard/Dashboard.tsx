@@ -105,13 +105,12 @@ export interface DashboardProps {
  * This is where the pieces meet, and it owns exactly the state they share.
  * `selectedSiteId` is the clearest case — the markers, the card on the map, the
  * header's search and the chart's overlay all render from that one value. It is
- * also what `?site=`
- * addresses: `apps/web/src/dashboard/selection-url.ts` is the whole of the deep
- * link, read once at mount and written whenever the selection moves.
- * `selectionOrigin` is the selection's second half, and exists for one rule: a
- * selection nobody asked for is not owed a landing on the way out
- * (`apps/web/src/dashboard/selection-origin.ts`, the clause of #260 that outlived
- * the landing #328 removed).
+ * also what `?site=` addresses: `apps/web/src/dashboard/selection-url.ts` is
+ * the whole of the deep link, read once at mount and written whenever the
+ * selection moves. `selectionOrigin` is the selection's second half, and exists
+ * for one rule: a selection nobody asked for is not owed a landing on the way
+ * out (`apps/web/src/dashboard/selection-origin.ts`, the clause of #260 that
+ * outlived the landing #328 removed).
  *
  * **Nothing under the map swaps.** A site's detail is a card anchored to its own
  * marker (#265), so the reading below is a plain flow — the fleet's chart, then
@@ -444,16 +443,16 @@ export const Dashboard = ({
              */}
 
             {/*
-             * The page's one weather credit, at the foot of the content rather than
-             * inside a panel. Every panel above it shows Open-Meteo-derived numbers,
-             * and a credit that lived in one of them would come and go with a
-             * selection. The map
-             * carries its own, overlaid on its bottom edge; two credits on one
-             * screen at rest is the design, not an oversight (CC BY 4.0, CLAUDE.md
-             * hard constraints). "At rest" because a surface a reader opens may owe
-             * its own: the About dialog (`header/AboutDialog.tsx`) credits every
-             * source it lists, making a third while it is open. More is compliance;
-             * fewer is the failure.
+             * The page's one weather credit, at the foot of the content rather
+             * than inside a panel. Every panel above it shows
+             * Open-Meteo-derived numbers, and a credit that lived in one of
+             * them would come and go with a selection. The map carries its own,
+             * overlaid on its bottom edge; two credits on one screen at rest is
+             * the design, not an oversight (CC BY 4.0, CLAUDE.md hard
+             * constraints). "At rest" because a surface a reader opens may owe
+             * its own: the About dialog (`header/AboutDialog.tsx`) credits
+             * every source it lists, making a third while it is open. More is
+             * compliance; fewer is the failure.
              */}
             <footer className="dashboard-footer">
               <OpenMeteoAttribution />

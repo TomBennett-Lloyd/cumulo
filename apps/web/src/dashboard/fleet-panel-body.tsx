@@ -460,8 +460,8 @@ const stateContent = (
      * `react.md`.
      *
      * The source's own message is deliberately dropped
-     * (`apps/web/src/dashboard/state-copy.ts`'s
-     * `CHART_DATA_UNAVAILABLE_MESSAGE`). `state.error` is still carried this far —
+     * (`apps/web/src/dashboard/state-copy.ts`'s `CHART_DATA_UNAVAILABLE_MESSAGE`).
+     * `state.error` is still carried this far —
      * `apps/web/src/data/use-fleet-query.ts` says why it stays typed.
      */
     return unavailableContent(onRetry);
