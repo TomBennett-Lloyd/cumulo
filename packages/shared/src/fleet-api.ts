@@ -13,9 +13,7 @@ import { fleetSiteSchema } from './site';
  * through the matching schema before it reaches the wire, and the web app parses
  * what it receives back through the same object. `architecture.md` rule 1 forbids
  * `apps/web` importing from `apps/api`, and rule 2 forbids a second definition of
- * a shape both ends depend on — so the envelope a producer guarantees and the one
- * a consumer relies on are one definition, here, or they are two definitions that
- * agree only until someone edits one of them.
+ * a shape both ends depend on.
  *
  * Request-side validation stays in the API. `hours`, `from`/`to` and the bounds
  * they enforce are decisions about what this server is willing to read, not a
@@ -78,21 +76,8 @@ export type FleetActualsResponse = z.infer<typeof fleetActualsResponseSchema>;
  * The fleet's forecast over one forward horizon, **already summed** — one point per hour, carrying
  * the same peer `attribution` as the schemas above.
  *
- * `points`, not `forecasts`, and the rename is the contract change (#494, ADR 0009). This route
- * used to return every site's raw rows and leave the browser to add them up; it now returns the
- * fleet total the dashboard actually draws, read as one Query of the pre-summed `#FLEET` partition.
- * Calling an array of fleet aggregates `forecasts` would invite a consumer to treat a point as one
- * site's row — which is exactly what the old field name meant.
- *
- * The fleet-only siblings this envelope was kept separate for have arrived, which is the other half
- * of the rename's justification: {@link fleetForecastAggregatePointSchema} carries
- * `contributingSiteCount` and `contributingCapacityKw`, so the `%`-of-capacity view divides by a
- * capacity the server evidenced rather than by one the browser re-derived from rows it no longer
- * receives.
- *
- * `fleetActualsResponseSchema` above is deliberately untouched: the actuals roll-up is a fast-follow
- * ticket on the same item shape (ADR 0009), and moving one wire contract per ticket is what keeps
- * each one a revert unit.
+ * `points`, not `forecasts`, and the rename is the contract change (#494, ADR 0009). Calling an
+ * array of fleet aggregates `forecasts` would invite a consumer to treat a point as one site's row.
  */
 export const fleetForecastResponseSchema = z.object({
   points: z.array(fleetForecastAggregatePointSchema),
