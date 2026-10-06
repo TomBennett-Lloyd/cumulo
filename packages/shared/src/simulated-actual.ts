@@ -54,11 +54,8 @@ const fnv1a32 = (text: string): number => {
  * A seeded draw in `[0, 1)` — mulberry32's step arithmetic applied once, keyed by `seed`.
  *
  * Deliberately a local copy of the arithmetic in `fleet.ts` (and of the copy in `apps/web`'s
- * `fixture-series.ts`) rather than an import of either (`docs/standards/structure.md` rule 7):
- * `fleet.ts`'s is a *stream* whose draw order is the canonical fleet's contract, and the web
- * one belongs to a demo fixture the packages must not depend on (`architecture.md` rule 1).
- * This one is a pure hash over an explicit key. Retuning any of the three must not move the
- * other two.
+ * `fixture-series.ts`) rather than an import of either (`docs/standards/structure.md` rule 7).
+ * Retuning any of the three must not move the other two.
  */
 const seededUnit = (seed: number): number => {
   let t = (seed + 0x6d2b79f5) >>> 0;

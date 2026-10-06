@@ -19,11 +19,6 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * request — 1,753.9 ms p50 / 2,998.9 ms p95 warm, on a visitor's first paint. ADR 0002 named
  * exactly that as the trigger for a cached aggregate, and ADR 0009 takes it.
  *
- * The shape is forced by the producer, not chosen: ADR 0004 makes one SQS message one *location's*
- * whole horizon, so there is no "end of a forecast run" event any message could hook. Each message
- * therefore writes only what is already in its hand — its own location's contribution to each hour
- * — and the read sums whatever partials are there.
- *
  * ## Additivity is the load-bearing claim, so it is stated rather than assumed
  *
  * A partial can only carry a field that is an **additive per-hour total**, because the read adds
@@ -53,22 +48,10 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  *
  * ## The one way the two paths differ, stated rather than absorbed
  *
- * IEEE-754 addition is not associative. Adding a fleet's sixty terms grouped by location and adding
- * them in one pass therefore land a bit or two apart — measured on the canonical fleet at **~2e-14
- * kW**, worst case `2.1e-14` on a `50.9` kW hour (the `117.4` kW hour's is `1.4e-14`), with the
- * per-hour contributing-capacity sum differing by `1.1e-13` kW on the same fixture.
- * `fleet-rollup-additivity.test.ts` bounds the power discrepancy at a microwatt — `1e-9` kW, which
- * is `1e-6` W — and would fail if it widened. That is the *entire* difference between this roll-up
- * and the fan-out it replaces: no field is lost and nothing is approximated. The measurement is some
- * **eleven** orders of magnitude below the watt precision a power value in this repo claims, and the
- * microwatt the proof asserts is itself six orders below a watt — so it is invisible to every
- * consumer, but it is why the proof asserts a bound rather than equality, and why it says so out
- * loud.
- *
- * Rounding partials to watt precision at the write boundary was considered for exactly that reason
- * and **rejected**: a watt of precision is half a watt of error per partial, so twelve of them can
- * put the summed fleet **6 W** (`0.006` kW) from the unrounded one — eleven orders of magnitude
- * *worse* than the association error it would be fixing, and six worse than the bound.
+ * IEEE-754 addition is not associative. `fleet-rollup-additivity.test.ts` bounds the power
+ * discrepancy at a microwatt — `1e-9` kW, which is `1e-6` W — and would fail if it widened. That is
+ * the *entire* difference between this roll-up and the fan-out it replaces: no field is lost and
+ * nothing is approximated.
  *
  * ## One definition of the fleet total, still
  *
@@ -76,8 +59,7 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * {@link contributingCapacityKwByHour}. There is no `+` over a power value in this file that is not
  * a fold of values those two produced, which is the rule `apps/web/src/dashboard/fleet-series.ts`
  * already states for the client, applied to the producer. `docs/standards/architecture.md` rule 3
- * is why: a second place that knows how to add up a fleet is a second definition of what the fleet
- * generates, and the two only agree until someone edits one.
+ * is why.
  *
  * Pure by construction: no I/O, no clock, no ambient state. The storage shape of a partial belongs
  * to `@cumulo/storage`; this module owns only the arithmetic and the vocabulary.
@@ -96,9 +78,7 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * arrived last. So an unfiltered fleet total is not inflated — it is a total whose *model* is decided
  * by row order, which is worse for being plausible. The roll-up has to name a model, a sort key
  * being unable to be vague, so {@link fleetRollupPartials} filters on this declaration and every
- * producer of the aggregate passes it (#531). When the ML correction layer lands, *which* model the
- * fleet chart shows is a product decision made here rather than one decided by what happens to be
- * in the table.
+ * producer of the aggregate passes it (#531).
  */
 export const FLEET_ROLLUP_FORECAST_KIND = {
   kind: 'forecast',
@@ -116,17 +96,12 @@ export const FLEET_ROLLUP_FORECAST_KIND = {
  * **A schema rather than an interface**, and the type inferred from it — `forecastSchema`'s shape,
  * for `forecastSchema`'s reason. A partial makes a round trip through DynamoDB, so the thing that
  * comes back is `unknown` until a schema has looked at it (`docs/standards/typing.md` rule 3), and
- * the parse is also what restores the branded `validTime` a stored string has lost. Declaring the
- * type here and the schema in `@cumulo/storage` would be two definitions of one shape free to
- * disagree (`docs/standards/architecture.md` rule 2); this way the arithmetic above and the table
- * below are held to the same object.
+ * the parse is also what restores the branded `validTime` a stored string has lost.
  *
  * The bounds are the weak ones a *sum* can honestly carry. Every term is a non-negative power or a
  * count, so the sum is too — but there is deliberately no upper bound, because the ceiling
  * `forecastSchema` puts on one site's kW (`MAX_PLAUSIBLE_RESIDENTIAL_KW`) says nothing about a
  * fleet's, and a number invented here would start refusing rows the moment the fleet grew.
- * Non-finite values are refused by `z.number()` itself, which is the guard that matters: a `NaN`
- * reaching the sum would poison every hour it touched and render as an empty chart.
  */
 export const fleetRollupPartialSchema = z.object({
   validTime: utcIsoTimestampSchema,
@@ -151,8 +126,7 @@ export type FleetRollupPartial = z.infer<typeof fleetRollupPartialSchema>;
  *
  * `FleetForecastPoint` (`aggregation.ts`) plus the per-hour contributing capacity, which is the
  * divisor the web chart's `%` mode needs and which that type does not carry because
- * `aggregateFleetForecast` is not given the sites. Carrying it here is what lets the client stop
- * holding every site's raw forecast just to compute a divisor from it.
+ * `aggregateFleetForecast` is not given the sites.
  *
  * The band is absent rather than `undefined` when no site had one, matching `FleetForecastPoint`:
  * under `exactOptionalPropertyTypes` those are different values, and only absence is meaningful.
@@ -183,9 +157,7 @@ export type FleetForecastAggregatePoint = z.infer<typeof fleetForecastAggregateP
  *
  * `kind` selects the model, and it is a required parameter rather than this module's own constant so
  * that the producer, the API's fallback and the browser's demo source are held to passing the same
- * one by the compiler (#531). Filtering here rather than in each caller is what makes one model a
- * property of the arithmetic instead of a convention three call sites keep — `aggregateFleetForecast`
- * refuses to select a model and says why, and this is the caller making that selection, once.
+ * one by the compiler (#531).
  */
 export const fleetRollupPartials = (
   forecasts: readonly Forecast[],
@@ -239,8 +211,7 @@ const emptyHourTotal = (): HourTotal => ({
  *
  * Input order is irrelevant and duplicates are *not* de-duplicated: this is addition, and the
  * caller's job is to hand in each group once. That is safe because the only producer of these is
- * keyed by `(kind, hour, location)` and DynamoDB cannot return one key twice from one Query — and
- * it is the reason the module docblock spends a paragraph on disjointness rather than a sentence.
+ * keyed by `(kind, hour, location)` and DynamoDB cannot return one key twice from one Query.
  */
 export const sumFleetRollupPartials = (
   partials: readonly FleetRollupPartial[],
@@ -292,8 +263,8 @@ export const sumFleetRollupPartials = (
  * It is also the executable statement of this module's additivity claim: summing one group is the
  * degenerate case of summing many, so `fleetForecastAggregate(all, sites, kind)` and
  * `sumFleetRollupPartials(each location's partials)` must be equal — which is what
- * `fleet-rollup-additivity.test.ts` pins over the canonical 12 × 5 fleet, to within the association
- * bound the section above states.
+ * `fleet-rollup-additivity.test.ts` pins over the canonical fleet, to within the association bound
+ * the section above states.
  *
  * `kind` is {@link fleetRollupPartials}'s, passed through: both callers here are summing a group the
  * producer would have summed, so a different model selection would be a different fleet.

@@ -4,12 +4,9 @@
  *
  * Shared rather than restated: ingestion's Open-Meteo adapter describes what a
  * failed request threw, its cycle describes what a location's adapter threw, and
- * the forecast service describes what a message's processing threw. Those are
- * several contexts but one intent — turn a `catch`'s `unknown` into something a
- * human reads in CloudWatch — so a change to the format has to change all of
- * them, which is exactly the case the repetition policy says to extract rather
- * than duplicate. It lives here because that set now spans services, and an app
- * may not import another app (`architecture.md` rule 1).
+ * the forecast service describes what a message's processing threw. It lives
+ * here because that set now spans services, and an app may not import another
+ * app (`architecture.md` rule 1).
  *
  * `unknown` is the honest parameter type: JavaScript allows throwing anything, and
  * a thrown string or `undefined` is precisely the case where a naive `.message`

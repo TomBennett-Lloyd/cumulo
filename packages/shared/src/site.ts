@@ -56,10 +56,7 @@ export type Site = z.infer<typeof siteSchema>;
  * The id is the server's to assign, so it cannot be part of the request — a
  * client that predicts an id is a client that can collide with, or overwrite,
  * something it did not create. Derived with `.omit` rather than redeclared so
- * the physics bounds have exactly one definition (`architecture.md` rule 2):
- * the Fleet API's request validation (#14), the add-site form (#17) and the
- * in-memory demo source all validate against this same schema, and a bound
- * changed in `siteSchema` changes all three at once.
+ * the physics bounds have exactly one definition (`architecture.md` rule 2).
  */
 export const createSiteInputSchema = siteSchema.omit({ id: true });
 
@@ -78,8 +75,7 @@ export type CreateSiteInput = z.infer<typeof createSiteInputSchema>;
  * It lives here rather than in `@cumulo/storage` because two services now need
  * it and neither may import the other: the storage adapter parses the projected
  * index items into it (ADR 0002 access pattern F1), and the forecast service
- * takes it as the input to `createPhysicsForecast`. A full `Site` is
- * structurally assignable to it, so callers holding one need no conversion.
+ * takes it as the input to `createPhysicsForecast`.
  */
 export const sitePhysicsSchema = siteSchema.omit({ name: true });
 
@@ -130,10 +126,7 @@ export type FleetSite = z.infer<typeof fleetSiteSchema>;
  * inactive, so every consumer wanting "the fleet still being forecast" narrows it, and an arm that
  * narrows differently answers a different question under the same name: a roll-up read whose
  * expected-partial set and whose nameplate divisor disagreed about one site would report a fleet
- * under-performing against capacity that cannot generate (#531). Ingestion narrows by this same
- * predicate (`activeFetchLocations`) before a cycle picks which of those locations it has budget
- * for, so a producer's locations and a reader's expected locations cannot disagree about *activity*
- * — which is the dimension this function owns, and the only one it claims.
+ * under-performing against capacity that cannot generate (#531).
  */
 export const activeFleetSites = (sites: readonly FleetSite[]): readonly FleetSite[] =>
   sites.filter((site) => site.active);

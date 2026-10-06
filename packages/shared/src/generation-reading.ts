@@ -22,14 +22,10 @@ import { utcIsoTimestampSchema } from './timestamp';
  * conversion — an error metric is a subtraction, not a unit negotiation.
  *
  * There is no provenance field, and its absence is a modelling choice rather
- * than an oversight the simulation exposed. A reading claims one thing —
- * power-at-time — which is the whole of what a meter at the site would claim;
- * there is no upstream weather model for the row itself to attribute. Whether
- * the fleet's readings are measured or simulated is a fact about the deployment
- * rather than about any one hour, so it is stated once where a reader meets it:
- * the UI's labels, and `FleetActualsResponse`'s description in the published
- * OpenAPI document. A per-row field would restate that deployment fact once per
- * site-hour, and would let two rows of the same fleet disagree about it.
+ * than an oversight the simulation exposed. Whether the fleet's readings are
+ * measured or simulated is a fact about the deployment rather than about any one
+ * hour, so it is stated once where a reader meets it: the UI's labels, and
+ * `FleetActualsResponse`'s description in the published OpenAPI document.
  */
 export const generationReadingSchema = z.object({
   siteId: z.uuid(),

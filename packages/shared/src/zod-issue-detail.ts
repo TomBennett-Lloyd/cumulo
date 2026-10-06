@@ -7,8 +7,6 @@ import type { ZodError } from 'zod';
  * Shared for the same reason `thrown-detail.ts` is: ingestion's Open-Meteo parser
  * explains why a response body was rejected and its composition root explains why
  * the environment was, and both mean "say which field, and what was wrong with it".
- * They had drifted while agreeing — one guarded the empty path, the other did not —
- * which is what a duplicated intent looks like just before it becomes two formats.
  *
  * **Every** issue is listed, not the first. A body with three bad columns, or a
  * deployment missing two variables, should take one fix rather than one round trip
