@@ -6,7 +6,7 @@ import {
   contiguousRuns,
   highestOverlayKw,
   highestValueKw,
-  overlayValuesByIndex,
+  overlayColumn,
   seriesSpanHours,
   type ChartOverlayColumn,
   type ChartOverlaySeries,
@@ -259,10 +259,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   // survive a re-render of this body only while the join keeps its identity.
   // Rebuilt each time, they would redraw a panel that has nothing new to say.
   const overlay = useMemo<ChartOverlayColumn | undefined>(
-    () =>
-      props.overlay === undefined
-        ? undefined
-        : { label: props.overlay.label, values: overlayValuesByIndex(points, props.overlay) },
+    () => (props.overlay === undefined ? undefined : overlayColumn(points, props.overlay)),
     [props.overlay, points],
   );
   // An overlay running above the forecast would otherwise be drawn off the top
@@ -344,7 +341,11 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           {boundElements(points, bandRuns, scale)}
           {lastMeasuredIndex === undefined ? null : horizonElements(lastMeasuredIndex, scale)}
           {medianElements(points, medianRuns, scale)}
-          {overlay === undefined ? null : overlayElements(overlay.values, scale)}
+          {/* The overlay's own seam, not `lastMeasuredIndex` above: what the
+              fleet measured says nothing about what this site measured. */}
+          {overlay === undefined
+            ? null
+            : overlayElements(overlay.values, scale, overlay.lastMeasuredIndex)}
           {actualsElements(points, actualRuns, scale, lastMeasuredIndex)}
           {xAxisElements(points, scale)}
           {axisTitleElements(scale.plot, percent)}

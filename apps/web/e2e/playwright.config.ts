@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
-import { PREVIEW_PORT } from './lane-ports';
+import { PROBE_BASE_PATH, PROBE_OUT_DIR } from './base-path-preview';
+import { BASE_PATH_PREVIEW_PORT, PREVIEW_PORT } from './lane-ports';
 
 /*
  * The browser lane: the shipping composition, in a real Chromium.
@@ -13,6 +14,11 @@ import { PREVIEW_PORT } from './lane-ports';
  * suite; it asserts only the things that stop being true the moment the pieces
  * are assembled — plus the one case, at the foot of `composition.spec.ts`, that
  * proves this lane's own measuring instrument.
+ *
+ * One of the things assembly changes is the URL every asset is reached by, so
+ * the lane serves two builds rather than one: the app at a domain root, and the
+ * app under a path, which is the form GitHub Pages ships and the form that used
+ * to be unobservable (`base-path-preview.ts`, `base-path.spec.ts`).
  */
 
 /*
@@ -20,11 +26,11 @@ import { PREVIEW_PORT } from './lane-ports';
  * one number: `lane-ports.ts` derives it from which tree is being served, so
  * this lane and a sibling worktree's lane can run at the same time instead of
  * queueing on 4173 (#459). A plain checkout — CI's, every time — still gets
- * 4173 exactly. The server command, the readiness probe and `baseURL` below all
- * read that one value, as they always have.
+ * 4173 exactly. Each server command, each readiness probe and each project's
+ * `baseURL` below reads one of those derived values, as they always have.
  *
  * `--strictPort` is what keeps the derived port honest, and matters more now
- * than it did: vite's silent hop to the next free port would leave `baseURL`
+ * than it did: vite's silent hop to the next free port would leave a `baseURL`
  * pointing at nothing while the run reported a healthy server, and with lanes
  * hashed rather than reserved, a busy port is a case that can genuinely happen.
  */
@@ -43,6 +49,18 @@ import { PREVIEW_PORT } from './lane-ports';
  * `localhost` resolves the other way round.
  */
 const PREVIEW_HOST = '127.0.0.1';
+
+/**
+ * The one spec that belongs to the base-path preview rather than to the root
+ * one.
+ *
+ * Named once and read twice below — the project that runs it, and the
+ * exclusion that keeps the root project from running it a second time against
+ * a server where none of its assertions could hold. Two patterns derived from
+ * one constant cannot disagree; two literals could, and the way they would
+ * fail is a spec that silently runs nowhere.
+ */
+const BASE_PATH_SPEC = 'base-path.spec.ts';
 
 export default defineConfig({
   testDir: '.',
@@ -97,12 +115,14 @@ export default defineConfig({
   },
 
   /*
-   * One project. The lane costs a production build per run and asserts
-   * composition rather than rendering, so a second engine would roughly double
-   * that cost to re-assert the same three facts. Chromium because it is the
-   * engine whose headless WebGL was measured here (below); adding Firefox or
-   * WebKit is a decision for whoever has a cross-engine bug to catch, and
-   * would need its own GL probe first.
+   * One engine, two servers. The lane asserts composition rather than
+   * rendering, so a second *engine* would roughly double its cost to re-assert
+   * the same facts; what the two projects below buy instead is the same
+   * Chromium pointed at two differently built artefacts — the app served from
+   * a domain root, and the app served from a path under one. Chromium because
+   * it is the engine whose headless WebGL was measured here (below); adding
+   * Firefox or WebKit is a decision for whoever has a cross-engine bug to
+   * catch, and would need its own GL probe first.
    *
    * No `launchOptions.args` override. The assumption that headless Chromium
    * can hand maplibre a GL context was measured rather than hoped: a probe in
@@ -114,44 +134,99 @@ export default defineConfig({
    * assertion in `composition.spec.ts` is what fails, and adding the flag
    * there is the fix.
    */
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { browserName: 'chromium' },
+      /*
+       * Every spec but the base-path one. Without this the second project
+       * below would be additive rather than a routing decision, and the whole
+       * suite would run twice — once against a server where half of it is
+       * asserting the wrong document.
+       */
+      testIgnore: BASE_PATH_SPEC,
+    },
+    {
+      name: 'chromium-base-path',
+      /*
+       * The origin only. The base path belongs in the navigation rather than
+       * in `baseURL`, so that a root-absolute href read off the document —
+       * which is how the rewrite is observed at all — resolves against the
+       * server instead of against a directory inside it.
+       */
+      use: {
+        browserName: 'chromium',
+        baseURL: `http://${PREVIEW_HOST}:${String(BASE_PATH_PREVIEW_PORT)}`,
+      },
+      testMatch: BASE_PATH_SPEC,
+    },
+  ],
 
-  webServer: {
-    /*
-     * `vite build` runs *inside* the server command deliberately: it is what
-     * makes "the lane boots the built app" true rather than aspirational.
-     * `vite preview` serves the emitted `dist/`, so this exercises the
-     * production bundle — minified, code-split, with `LazyMapRegion` fetching
-     * a real hashed chunk over HTTP.
-     */
-    command: `vite build && vite preview --host ${PREVIEW_HOST} --port ${String(PREVIEW_PORT)} --strictPort`,
+  /*
+   * Two servers, started in parallel by Playwright, serving two builds of this
+   * same tree: the app at a domain root, and the app under a path. They cost
+   * one `vite build` each, which is what makes the second one affordable beside
+   * a Chromium boot — `.github/workflows/ci.yml`'s `web-e2e` cost block owns
+   * what that run costs — and they write to separate out dirs, because each
+   * build empties its own first (`base-path-preview.ts` owns that argument).
+   */
+  webServer: [
+    {
+      /*
+       * `vite build` runs *inside* the server command deliberately: it is what
+       * makes "the lane boots the built app" true rather than aspirational.
+       * `vite preview` serves the emitted `dist/`, so this exercises the
+       * production bundle — minified, code-split, with `LazyMapRegion` fetching
+       * a real hashed chunk over HTTP.
+       */
+      command: `vite build && vite preview --host ${PREVIEW_HOST} --port ${String(PREVIEW_PORT)} --strictPort`,
 
-    /*
-     * Resolved against this config's directory by Playwright, so `..` is the
-     * `apps/web` package root — where `vite.config.ts` and `index.html` live.
-     */
-    cwd: '..',
-    port: PREVIEW_PORT,
+      /*
+       * Resolved against this config's directory by Playwright, so `..` is the
+       * `apps/web` package root — where `vite.config.ts` and `index.html` live.
+       */
+      cwd: '..',
+      port: PREVIEW_PORT,
 
-    /*
-     * Empty pins the demo fleet: `selectFleetDataSource` (src/data) treats
-     * empty-after-trim as "no deployment configured" and returns
-     * `DemoFleetDataSource`. Set explicitly rather than left absent so a
-     * developer's `.env` pointing at a live Fleet API cannot silently change
-     * what the lane is asserting against.
-     */
-    env: { VITE_API_BASE_URL: '' },
+      /*
+       * Empty pins the demo fleet: `selectFleetDataSource` (src/data) treats
+       * empty-after-trim as "no deployment configured" and returns
+       * `DemoFleetDataSource`. Set explicitly rather than left absent so a
+       * developer's `.env` pointing at a live Fleet API cannot silently change
+       * what the lane is asserting against.
+       */
+      env: { VITE_API_BASE_URL: '' },
 
-    /*
-     * Never adopt a stray. A server already on this lane's port is some other
-     * build — an old run of this same lane, or the rare sibling worktree that
-     * hashed here — and reusing it would report on code that is not in this
-     * tree. Deriving the port narrows how often that happens; it is not what
-     * decides the question, which is why this stays `false`.
-     */
-    reuseExistingServer: false,
+      /*
+       * Never adopt a stray. A server already on this lane's port is some other
+       * build — an old run of this same lane, or the rare sibling worktree that
+       * hashed here — and reusing it would report on code that is not in this
+       * tree. Deriving the port narrows how often that happens; it is not what
+       * decides the question, which is why this stays `false`.
+       */
+      reuseExistingServer: false,
 
-    /** A cold production build plus server start; generous, not a target. */
-    timeout: 120_000,
-  },
+      /** A cold production build plus server start; generous, not a target. */
+      timeout: 120_000,
+    },
+    {
+      /*
+       * `--base` on both halves, and it means two different things: on the build
+       * it is the prefix Vite writes into every emitted URL, and on the preview
+       * it is the path the server answers on. A flag passed to one and not the
+       * other serves the right document at the wrong URL, or the wrong document
+       * at the right one.
+       */
+      command: [
+        `vite build --base=${PROBE_BASE_PATH} --outDir ${PROBE_OUT_DIR}`,
+        `vite preview --base=${PROBE_BASE_PATH} --outDir ${PROBE_OUT_DIR}` +
+          ` --host ${PREVIEW_HOST} --port ${String(BASE_PATH_PREVIEW_PORT)} --strictPort`,
+      ].join(' && '),
+      cwd: '..',
+      port: BASE_PATH_PREVIEW_PORT,
+      env: { VITE_API_BASE_URL: '' },
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
 });

@@ -76,8 +76,8 @@ const renderCard = (
 
 /**
  * The card's `ready` arm carries the poll's own snapshot, which the card
- * deliberately draws none of: one site's forecast is a series on the fleet chart
- * below the map (`dashboard/site-overlay.ts`), so what the arm holds only has to
+ * deliberately draws none of: one site's own hours are a series on the fleet
+ * chart below the map (`dashboard/site-overlay.ts`), so what the arm holds only has to
  * be a truthful "there is a forecast now".
  */
 const READY: ForecastViewState = { status: 'ready', forecasts: [] };

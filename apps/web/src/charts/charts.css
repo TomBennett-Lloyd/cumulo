@@ -96,13 +96,15 @@
   stroke-width: 1;
 }
 
-/* The measurement seam, and the only dashed mark on this canvas (#284 D11).
- * Same ink and same weight — it is still recessive chrome, not data — but
- * dashed, which is what carries the meaning: `docs/design/chart-treatment.md`
+/* The measurement seam, and the only dashed mark in this canvas's chrome
+ * (#284 D11). Same ink and same weight — it is still recessive chrome, not data
+ * — but dashed, which is what carries the meaning: `docs/design/chart-treatment.md`
  * bans a dashed *grid* precisely because a dash reads as "threshold", and a
- * threshold is what this rule is. Dashing the forecast line instead stays
- * banned; the seam is marked once, in chrome (#290, and the horizon bullet in
- * that document).
+ * threshold is what this rule is. The fleet's own lines are not dashed: its
+ * measurement and its projection are two series in two inks, so the hue is
+ * already the channel a dash would be (#290, and the horizon bullets in that
+ * document). `.forecast-chart-overlay-projected` below is the one mark carrying
+ * both in one ink, and therefore the one that needs the dash.
  *
  * `stroke-dasharray` is a length pair, so it reaches the page through the
  * documented allow-list residual in stylelint.config.mjs, the same way
@@ -197,8 +199,24 @@
   stroke-linejoin: round;
 }
 
-/* An overlay hour left alone between two gaps, in the marker vocabulary the
- * actuals use — same ring, same radius, the overlay's own hue. */
+/* The overlay's stretch past the measurement seam (#530). It is the one mark on
+ * this canvas carrying both measurement and projection in one ink, so the dash is
+ * where a reader learns the site's line has stopped reporting and started
+ * projecting — the horizon bullets in `docs/design/chart-treatment.md` carry the
+ * argument.
+ *
+ * A longer dash and a longer gap than `.forecast-chart-horizon`'s pattern
+ * above, because this is drawn at the data weight rather than the hairline's and
+ * the two have to stay distinguishable where the overlay crosses the rule. Same
+ * allow-list residual route as that rule, and for the same reason: no
+ * dash-scale token to spend. */
+.forecast-chart-overlay-projected {
+  stroke-dasharray: 9 6;
+}
+
+/* The overlay's dots, in the marker vocabulary the actuals use — same ring, same
+ * radius, the overlay's own hue. Two jobs, one rule: the end dot where its
+ * measured run stops (#530), and an overlay hour left alone between two gaps. */
 .forecast-chart-overlay-marker {
   fill: var(--color-chart-2);
   stroke: var(--color-surface);

@@ -54,11 +54,12 @@
       them literal through the build. Worth stating precisely, because the
       obvious reading is wrong: Vite does process meta content. `og:image` is in
       its HTML asset table (`ALLOWED_META_PROPERTY` in `assetSource.ts`), so a
-      relative `content="/brand-512.png"` here would be base-rewritten to
-      `/cumulo/brand-512.png` exactly like the icon hrefs above — verified
-      against Vite 8.1.5 by building that mutation. What spares these two is
-      `isExcludedUrl`, which drops external absolute URLs from the rewrite; and
-      `og:url` is not in that table at all. `.github/workflows/deploy-pages.yml`'s
+      relative `content="/brand-512.png"` here would be base-rewritten
+      exactly like the icon hrefs above — verified against Vite 8.1.5 by
+      building that mutation, and now held by `apps/web/e2e/base-path.spec.ts`,
+      which loads a based build and asserts both directions at once. What
+      spares these two is `isExcludedUrl`, which drops external absolute URLs
+      from the rewrite; and `og:url` is not in that table at all. `.github/workflows/deploy-pages.yml`'s
       header owns that origin and lists this file among the sites carrying it;
       its teardown step 5 repoints both when #144's CloudFront distribution
       lands.

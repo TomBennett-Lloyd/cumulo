@@ -82,10 +82,11 @@ describe('FleetPanel with a site selected', () => {
      * site's own is 4.
      *
      * At 06:00 the fleet forecasts 2 + 4 = 6 kW (75.0%), its band is 1+3 = 4 (50.0%) to 3+6 = 9
-     * (112.5%), and its measured hour is 1.5 + 3.5 = 5 kW (62.5%); site A's own 2 kW is half its
-     * own nameplate (50.0%). At 07:00 the fleet forecasts 3 + 5 = 8 kW (100.0%), band 2+4 = 6
-     * (75.0%) to 4+7 = 11 (137.5%), no measured hour at all, and site A's 3 kW is 75.0% of its
-     * own.
+     * (112.5%), and its measured hour is 1.5 + 3.5 = 5 kW (62.5%); site A's column is its own
+     * *measured* 1.5 kW (37.5%) rather than the 2 kW it forecast, because since #530 the overlay
+     * carries the measurement wherever it has one. At 07:00 the fleet forecasts 3 + 5 = 8 kW
+     * (100.0%), band 2+4 = 6 (75.0%) to 4+7 = 11 (137.5%), no measured hour at all, and site A's
+     * column falls back to its forecast 3 kW — 75.0% of its own roof.
      *
      * **The 112.5 and the 137.5 are the no-clamping rule visible in a suite.** A fleet outrunning
      * the nameplate its inverters are rated at is a real reading, and flattening it to 100 would
@@ -95,12 +96,14 @@ describe('FleetPanel with a site selected', () => {
      * The site's column being *under* the fleet's median at 06:00 and equal to neither at 07:00
      * is the same claim the kW rows used to make, and it survives the unit change: the two
      * divisors differ, so a site at 75% of its own roof under a fleet at 100% of its own is still
-     * the overlay being a component of the sum rather than a second copy of it.
+     * the overlay being a component of the sum rather than a second copy of it. The 37.5 is also
+     * where the seam shows up as a number: a row reading 50.0 there is the panel back to drawing
+     * the site's past forecasts.
      */
     await waitFor(() => {
       expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
         ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual', SITE_A.name],
-        ['06:00', '50.0', '75.0', '112.5', '62.5', '50.0'],
+        ['06:00', '50.0', '75.0', '112.5', '62.5', '37.5'],
         ['07:00', '75.0', '100.0', '137.5', '—', '75.0'],
       ]);
     });
@@ -138,6 +141,7 @@ describe('FleetPanel with a site selected', () => {
     await settle();
 
     expect(dataSource.siteForecastRequests).toEqual([]);
+    expect(dataSource.siteActualsRequests).toEqual([]);
     expect(overlayHeader()).toBeNull();
   });
 
@@ -188,6 +192,7 @@ describe('FleetPanel with a site selected', () => {
     await waitFor(() => {
       expect(dataSource.siteForecastRequests).toEqual([`${SITE_A.id}@24`, `${SITE_A.id}@24`]);
     });
+    expect(dataSource.siteActualsRequests).toEqual(dataSource.siteForecastRequests);
     expect(dataSource.forecastCallCount).toBe(1);
   });
 
@@ -218,9 +223,12 @@ describe('FleetPanel with a site selected', () => {
       expect(screen.queryByRole('columnheader', { name: SITE_B.name })).not.toBeNull();
     });
     expect(dataSource.siteForecastRequests).toEqual([`${SITE_A.id}@24`, `${SITE_B.id}@24`]);
+    // The measured half is asked for alongside, never on its own schedule: one `/series` payload
+    // answers both in the deployed source (#530), so the two logs moving together is the claim.
+    expect(dataSource.siteActualsRequests).toEqual(dataSource.siteForecastRequests);
 
-    // Site B forecasts 4 and 5 kW at these hours where site A forecast 2 and 3 — 100.0% and
-    // 125.0% of its own 4 kW roof, where site A read 50.0 and 75.0. The fleet's own columns are
+    // Site B measured 3.5 kW at 06:00 and forecasts 5 kW at 07:00 — 87.5% and 125.0% of its own
+    // 4 kW roof, where site A read 37.5 and 75.0. The fleet's own columns are
     // unchanged, which is the other half of "a selection redraws one line, not the chart", and
     // the unit is unchanged too: a site-to-site move is one continuous selection episode, so no
     // second courtesy switch fires and nothing about the fleet's rows moves under it.
@@ -231,7 +239,7 @@ describe('FleetPanel with a site selected', () => {
     await waitFor(() => {
       expect(within(table).getAllByRole('row').map(rowCells)).toEqual([
         ['Time (UTC)', 'P10', 'Median', 'P90', 'Actual', SITE_B.name],
-        ['06:00', '50.0', '75.0', '112.5', '62.5', '100.0'],
+        ['06:00', '50.0', '75.0', '112.5', '62.5', '87.5'],
         ['07:00', '75.0', '100.0', '137.5', '—', '125.0'],
       ]);
     });
