@@ -51,16 +51,12 @@ import { UnitToggle } from './unit-toggle';
  *
  * The trade, stated because it was accepted rather than overlooked: **a `?site=`
  * deep link spends the fleet's forecast read**, one metered request to
- * `GET /v1/fleet/forecast` (#296). #178 deferred that spend behind a reveal, for
- * a reader who never looked at the fleet; #265 removed the region that could
- * hide this panel, so that reader no longer exists and deferring a request for a
- * chart already in front of them would buy nothing and cost a visible wait.
+ * `GET /v1/fleet/forecast` (#296; #178, #265).
  *
  * ## The listing is one of this panel's inputs, for one question only
  *
- * Since #452 the fleet listing has no surface of its own — the owner routed what
- * was left of it into the chart: *"the sites fetch error state should show in the
- * graph area"*. So `listing` answers the one question an empty `sites` array
+ * Since #452 the fleet listing has no surface of its own. So `listing` answers
+ * the one question an empty `sites` array
  * cannot: nothing to show because the fleet is empty, or because the read that
  * would have told us failed. The two failing reads stay independent — a listing
  * that failed beside sites already in hand still gets a chart, because the fleet
@@ -68,17 +64,13 @@ import { UnitToggle } from './unit-toggle';
  *
  * ## The selected site is one more series, not a second chart
  *
- * One value axis, never two (`docs/design/chart-treatment.md`) — the point of
- * drawing the site here is that a reader can see how much of the fleet's
- * afternoon is this one roof, and two axes would invent a correlation the
- * numbers do not contain. The chart is the site's *only* chart: its card on the
- * map carries the site's facts and nothing plotted.
+ * One value axis, never two (`docs/design/chart-treatment.md`) — two axes would
+ * invent a correlation the numbers do not contain. The chart is the site's
+ * *only* chart: its card on the map carries the site's facts and nothing
+ * plotted.
  *
  * **What that axis counts is the reader's to choose, and a selection chooses it
- * for them once** (#291). A ~4 kW roof against a ~330 kW fleet is a flat line on
- * an absolute scale, so selecting a site switches the panel to percent of
- * capacity — and a reader who then presses the toggle owns the unit for the rest
- * of that selection. None of those rules live here:
+ * for them once** (#291). None of those rules live here:
  * `apps/web/src/dashboard/chart-unit.ts` is the state machine and
  * `apps/web/src/dashboard/use-chart-unit.ts` the wiring. The unit reaches three
  * places from that one value — the aggregate and the overlay, normalised before
@@ -94,19 +86,16 @@ import { UnitToggle } from './unit-toggle';
  * ## Capability honesty is structural here, not editorial
  *
  * This panel says only what the source it holds can answer
- * (`dataSource.capabilities`). `GET /v1/fleet/forecast` serves *future* hours;
- * fleet actuals are synthesised by the forecast service (#264), and synthesised
+ * (`dataSource.capabilities`). Fleet actuals are synthesised by the forecast
+ * service (#264), and synthesised
  * is not measured, so the arm that mentions them says "simulated actuals" and no
  * arm claims a metered reading. The clause is gated on `fleetActuals` rather
  * than reworded, which decides whether actuals are mentioned anywhere including
- * in the chart's accessible name — #150's review finding, and it asked for a
- * structural fix rather than a rewrite.
+ * in the chart's accessible name (#150).
  *
  * What the *control* is gated on is a wider question, and #284 D5 separated the
  * two. A window is worth choosing wherever a wider one would show more hours,
- * which is true of both flags: `fleetLookback` widens a look-back, and
- * `fleetActuals` alone widens both the horizon the fleet read asks for and the
- * span of simulated actuals behind it. So the picker renders on
+ * which is true of both flags. The picker renders on
  * `fleetLookback || fleetActuals`, and only a source with neither — a bare
  * forward horizon, pinned to {@link DEFAULT_RANGE} because nothing can call
  * `setRange` — goes without one. That pin is what lets `windowLabel`'s
@@ -122,29 +111,24 @@ import { UnitToggle } from './unit-toggle';
  * loss down); what carries it now is the chart's accessible name and its table
  * caption, both from `apps/web/src/dashboard/fleet-panel-copy.ts`.
  *
- * The **legend** joined the sentence behind that press on the owner's routing —
- * *"the legend can go in the (i) section"* — as the same line drawn once more: a
- * key answers "which line is which", is read once, and then occupies a row under
- * the plot for the rest of the reading. So this panel owns two facts the chart
+ * The **legend** joined the sentence behind that press on the owner's routing.
+ * So this panel owns two facts the chart
  * used to derive for itself — whether the drawn points carry a band, and what
  * the overlay is called — and hands them to
  * `apps/web/src/charts/forecast-chart-legend.tsx`;
  * `apps/web/src/charts/ForecastChart.tsx` renders no legend at all.
  *
  * #323 drew that line against the `<h2>` and the stats line too, and **the owner
- * reversed that half on 2026-08-11**: a heading over the page's one chart is not
- * only naming it, and a fleet's size is a fact the plot states nowhere — a plot
- * of output is not a count of roofs, in either unit. Both are visible text, and
+ * reversed that half on 2026-08-11**. Both are visible text, and
  * the section borrows the heading by `aria-labelledby` rather than spelling the
  * name a second time in an `aria-label`. What did *not* come back is the rest of
- * #323, which stands on its own arguments: still a full-width band rather than a
+ * #323: still a full-width band rather than a
  * card (`apps/web/src/dashboard/fleet-panel.css`), and the completeness note
  * still has no complete arm (`fleet-panel-body.tsx`).
  *
  * The stats line is the one thing here allowed to disappear, and it disappears
- * by *width* rather than by state: below a measured container width the row
- * cannot hold every item, and the numbers are the item that yields
- * (`design.md` rule 7 — controls have wrap priority over auxiliary text).
+ * by *width* rather than by state (`design.md` rule 7 — controls have wrap
+ * priority over auxiliary text).
  * `apps/web/src/dashboard/fleet-panel.css` owns and derives that width.
  *
  * ## Attribution
@@ -162,23 +146,19 @@ const DEFAULT_RANGE: RangeHours = 24;
  * Collapse the two queries into the one state the panel renders.
  *
  * **The two failures are not symmetrical, and that asymmetry is the whole of
- * this function.** No state takes the section down, so a state changes what the
- * section *says* and what the plot *has on it*, never whether there is a chart.
- * What differs is weight: a failed forecast is the answer itself not arriving,
+ * this function.** What differs is weight: a failed forecast is the answer
+ * itself not arriving,
  * so it is an `alert` over an empty plot; a failed actuals read is an addition
  * to an answer that did arrive, so it is a `panel-notice` over a plot still
- * carrying every forecast hour. `/v1/fleet/forecast` and `/v1/fleet/actuals` are
- * two metered requests and either can fail alone — a failed actuals read used to
- * be returned here as *the* failure, which withdrew a fleet sum that had already
+ * carrying every forecast hour. A failed actuals read used to be returned here as
+ * *the* failure, which withdrew a fleet sum that had already
  * arrived and reported it under the forecast's name, blaming a party that had
  * not failed (`error-handling.md` rule 1's blame tiebreak) and discarding a
  * complete answer to say so (rule 5).
  *
  * Loading waits for both. A chart that painted the forecast and then grew a past
  * half a moment later would be the panel reflowing under a reader already
- * reading it; the single wait it is traded against costs no reflow of its own,
- * because it is a mark drawn inside the plot's existing box rather than a
- * sentence appearing above it (#448).
+ * reading it (#448).
  */
 const combineFleetQueries = (
   forecasts: QueryState<readonly FleetForecastAggregatePoint[]>,
@@ -251,8 +231,7 @@ interface SiteOverlayHours {
  *
  * Either failure fails the pair, on the arm that failed. A half-answer here
  * would draw a line whose missing half is indistinguishable from a site that had
- * nothing to report, and the panel's one overlay notice already says the honest
- * thing about it.
+ * nothing to report.
  */
 const siteOverlayHours = async (
   dataSource: FleetDataSource,
@@ -308,10 +287,8 @@ const overlayState = (
  *
  * A bare literal union rather than a mirror of the dashboard's own `FleetLoad`
  * (`typing.md` rule 4 asks for a discriminated union where the arms *carry*
- * different data; none of these do). The sites themselves arrive on
- * {@link FleetPanelProps.sites}, already merged with whatever this session
- * created, so a `ready` arm holding a list would be a second copy of a prop —
- * and `FleetLoad['status']` is assignable straight to this, which keeps the
+ * different data; none of these do). `FleetLoad['status']` is assignable
+ * straight to this, which keeps the
  * dashboard from destructuring its own state to satisfy this panel.
  */
 export type FleetListingStatus = 'loading' | 'ready' | 'failed';
@@ -324,8 +301,7 @@ export interface FleetPanelProps {
    * How the fleet listing went — the read that produces {@link FleetPanelProps.sites}.
    *
    * The panel needs it because a listing failure and an empty fleet are the same
-   * `sites: []` and are not the same news: one is the demo's invitation and the
-   * other is the page having nothing to show (#452). It arrives as a prop rather
+   * `sites: []` and are not the same news (#452). It arrives as a prop rather
    * than being asked for here because the listing is the dashboard's one request
    * and this panel must not be a second caller of it.
    */
@@ -338,10 +314,8 @@ export interface FleetPanelProps {
    * Whether {@link FleetPanelProps.selectedSite}'s first forecast has arrived —
    * the dashboard's poll, as one boolean.
    *
-   * It gates the overlay request rather than merely the drawing. A site created
-   * seconds ago has no forecast at all, and asking its `/forecast` window on a
-   * cadence would spend metered requests to be told so; the poll is already
-   * asking that question and is the only surface that should.
+   * It gates the overlay request rather than merely the drawing. The poll is
+   * already asking that question and is the only surface that should.
    */
   readonly selectionReady: boolean;
   /** Bumped by the dashboard when a site is created, to re-sum the fleet. */
@@ -364,22 +338,17 @@ export const FleetPanel = ({
    *
    * The id rather than the site, because that is the whole of what the hook
    * reads: it watches the *edges* of "something is selected" so a move from one
-   * site to another is one continuous episode, and a value that changed on every
-   * site would have to be compared for nullity anyway. Every rule about when the
+   * site to another is one continuous episode. Every rule about when the
    * unit moves lives in `chart-unit.ts`; nothing here re-decides one.
    */
   const { unit, onToggle } = useChartUnit(selectedSite?.id ?? null);
   /*
    * Retrying is a new question, so it is a new query key rather than an
-   * imperative refetch: `useFleetQuery` re-runs on key change and nothing else,
-   * and a counter is the smallest honest way to say "ask again".
+   * imperative refetch: `useFleetQuery` re-runs on key change and nothing else.
    *
-   * Three counters, not one, and the split is about *scope*. Each read answers a
-   * different question — the fleet's forecasts, the fleet's simulated actuals,
-   * one selected site's hours — so a shared counter would make any one recourse
-   * re-ask all three, and a reader pressing "try again" on the single series that
-   * failed would spend two further metered requests refetching answers that had
-   * already arrived. Refetching a series that never failed is waste at any price,
+   * Three counters, not one, and the split is about *scope*. A shared counter
+   * would make any one recourse re-ask all three. Refetching a series that never
+   * failed is waste at any price,
    * which is why the split outlived the price asymmetry #264's review found (both
    * fleet reads are one metered request each since #296).
    */
@@ -388,8 +357,7 @@ export const FleetPanel = ({
   const [overlayAttempt, setOverlayAttempt] = useState(0);
 
   /*
-   * An empty fleet has nothing to sum, so it asks nothing — the whole of the
-   * gate, now that no reveal is left to defer the first fleet read to.
+   * An empty fleet has nothing to sum, so it asks nothing.
    *
    * It matters most on a deep link: the listing is briefly in flight with `sites`
    * empty, and a fleet read fired then would be a sum of nothing followed
@@ -422,9 +390,7 @@ export const FleetPanel = ({
    * under the next site's name.
    *
    * True from the query's effect onwards, and not for the render in between:
-   * that hook resets to `loading` from an effect, so one committed frame after a
-   * selection moves still holds the previous site's data while the label below
-   * has already followed the new prop. `docs/tech-debt.md` has it, with the
+   * `docs/tech-debt.md` has it, with the
    * reason the guard for it belongs in the hooks rather than here.
    */
   const overlayHours = useFleetQuery(
@@ -437,24 +403,18 @@ export const FleetPanel = ({
    * The fleet's answer, and the sum drawn from it — both memoized, and both on
    * the two query states' identities.
    *
-   * `useFleetQuery` holds its state in `useState`, so each of these values is one
-   * object per state transition and unchanged in between; a render caused by
-   * anything else — the range picker, a retry counter, the dashboard's
-   * once-a-second poll during add-a-site — leaves both dependencies untouched and
+   * A render caused by anything else — the dashboard's once-a-second poll during
+   * add-a-site — leaves both dependencies untouched and
    * both memos intact. That poll is the measurement `react.md` rule 2 asks for
    * before a `useMemo`: without it the whole fleet's series were re-summed and
    * re-joined every second while a reader watched their new site generate (#293).
    *
-   * The first memo is not about cost — combining two query states is three
-   * comparisons — but about being an honest dependency for the second, which a
-   * fresh object per render would defeat. Stabilizing it at its source is what
-   * rule 2 asks for instead of trimming a dependency array.
+   * The first memo is not about cost but about being an honest dependency for
+   * the second, which a fresh object per render would defeat. Stabilizing it at
+   * its source is what rule 2 asks for instead of trimming a dependency array.
    *
    * `sites` (#335) and `unit` (#291) are listed for the same reason rather than
-   * trimmed: both are genuine inputs — where the sites are decides which hours
-   * are shaded, and the unit decides what the summed hours are rescaled to — and
-   * neither costs the memo anything, because `Dashboard` memoizes `sites` and the
-   * unit moves only on a toggle press or a selection edge. An aggregate memoized
+   * trimmed: both are genuine inputs. An aggregate memoized
    * past a unit change would leave the chart drawing kW under a percent axis.
    */
   const fleet = useMemo(() => combineFleetQueries(forecasts, actuals), [forecasts, actuals]);
@@ -465,9 +425,7 @@ export const FleetPanel = ({
    * longer renders where that answer is already computed (the (i) below).
    *
    * Memoized on the same grounds as the two memos above rather than by reflex
-   * (`react.md` rule 2): the dashboard's add-a-site poll re-renders this about
-   * once a second, and this is a scan of every hour on the chart for a value that
-   * changes only when a new aggregate does.
+   * (`react.md` rule 2).
    *
    * `.some` over the drawn points rather than a flag threaded down from the
    * aggregation: "does the plot carry a band" is a question about what is on the
@@ -490,9 +448,8 @@ export const FleetPanel = ({
   const retryOverlay = (): void => {
     setOverlayAttempt((previous) => previous + 1);
   };
-  // Derived during render: what the body draws is exactly a function of the
-  // props and the answers about them, and mirroring any of it into state would
-  // be a second copy of a fact those values already carry (`react.md` rule 1).
+  // Derived during render: mirroring any of it into state would be a second copy
+  // of a fact those values already carry (`react.md` rule 1).
   const context: FleetChartContext = {
     siteCount: sites.length,
     chart: chartCopy(windowLabel(range, fleetLookback, fleetActuals), fleetActuals, unit),
@@ -502,10 +459,10 @@ export const FleetPanel = ({
     onRetryActuals: retryActuals,
   };
   // The legend's fourth row, from the same value the chart's overlay mark is
-  // drawn from: `none` and `failed` are both "no second series on the plot", and
-  // a legend naming a line that is not there is the failure the row is gated
-  // against. Read off `context.overlay` rather than off `selectedSite`, because
-  // a site can be selected without its hours having arrived.
+  // drawn from: a legend naming a line that is not there is the failure the row
+  // is gated against. Read off `context.overlay` rather than off
+  // `selectedSite`, because a site can be selected without its hours having
+  // arrived.
   const overlayLabel = context.overlay.kind === 'series' ? context.overlay.series.label : undefined;
 
   return (
@@ -526,13 +483,11 @@ export const FleetPanel = ({
        *
        * It is the positioned ancestor both of its overlays hang from — a contract
        * `apps/web/src/info/InfoTip.tsx` states in its own docblock and this row
-       * has to keep. It is what clamps the tip's panel and the window sheet to
-       * the row's width and right edge instead of letting either run off the
-       * page; `apps/web/src/dashboard/fleet-panel.css` carries the measurements.
+       * has to keep; `apps/web/src/dashboard/fleet-panel.css` carries the
+       * measurements.
        *
        * Document order is the reading order and the tab order at once, which is
-       * why the two controls come last: a reader meets the section's name, then
-       * what it is a summary of, then the things they can press. The controls
+       * why the two controls come last. The controls
        * reach the row's end by a margin on the (i) rather than a
        * `justify-content` that would space all four apart.
        *
@@ -551,18 +506,15 @@ export const FleetPanel = ({
          *
          * **It stays in kW while the toggle beside it is on percent** (#291).
          * The line states the fleet's installed capacity, which is the divisor
-         * the percentages are taken against — in percent mode it is the thing
-         * 100% means — so kW here is informative rather than inconsistent, and a
-         * capacity restated as a percentage of itself would say nothing at all.
+         * the percentages are taken against, so kW here is informative rather
+         * than inconsistent.
          * `fleetStatsLine` (`apps/web/src/dashboard/fleet-panel-copy.ts`) carries
-         * the argument; this note exists so a reader looking at a percent axis
-         * over a kW line does not read it as a bug.
+         * the argument.
          */}
         <p className="fleet-chart-stats">{fleetStatsLine(sites)}</p>
         {/*
          * The subtitle and, since 2026-08-11, the legend — the two things about
-         * this chart that are description rather than state (#265, and the
-         * owner's routing: *"the legend can go in the (i) section"*).
+         * this chart that are description rather than state (#265).
          *
          * `fleetActuals` chooses between two complete sentences rather than
          * assembling a clause, so "simulated actuals" stays readable as belonging
@@ -570,14 +522,12 @@ export const FleetPanel = ({
          *
          * What `docs/design/chart-treatment.md` asks of a legend survives the
          * move: "identity is never carried by colour alone" is discharged by the
-         * key being *reachable* — one press on a named, keyboard-operable
-         * control, the same standard the table twin's disclosure is held to — and
-         * "in every state" structurally, because this row sits outside the state
+         * key being *reachable* and "in every state" structurally, because this
+         * row sits outside the state
          * switch below.
          *
-         * Both inputs are read off the same facts the plot is drawn from —
-         * `hasBand` scans the drawn points, `overlayLabel` comes off the overlay
-         * state the chart's mark reads — so the key cannot name a series the plot
+         * Both inputs are read off the same facts the plot is drawn from, so the
+         * key cannot name a series the plot
          * is not carrying, which is #295's gating rule at its new address.
          */}
         <InfoTip label="About this chart">
@@ -587,13 +537,10 @@ export const FleetPanel = ({
         {/*
          * What the value axis counts, as a control the reader can act on (#291).
          *
-         * **Unconditional, where the picker beside it is not.** A window is only
-         * worth offering where a wider one would show more hours, which is a
-         * capability question; a unit is a way of reading numbers the chart
-         * already has, so every source that can draw a chart can draw it either
-         * way. Gating it would take the toggle away from the demo — the surface
-         * the site overlay was built for, and the one where a ~4 kW roof against
-         * a ~330 kW fleet is most visible.
+         * **Unconditional, where the picker beside it is not.** A unit is a way of
+         * reading numbers the chart already has, so every source that can draw a
+         * chart can draw it either way. Gating it would take the toggle away from
+         * the demo.
          *
          * Outside the state switch below for the reason the (i) and the picker
          * are: this row is the panel's furniture, and furniture that appeared
@@ -605,18 +552,15 @@ export const FleetPanel = ({
         <UnitToggle unit={unit} onSelect={onToggle} />
         {/*
          * A control rather than a caption, on both arms that have a window to
-         * choose. It stays visible for an empty fleet too — furniture that
-         * appeared when the first site landed would rearrange the reading under
-         * the reader — and an empty fleet asks the source nothing whatever the
+         * choose. It stays visible for an empty fleet too, and an empty fleet asks
+         * the source nothing whatever the
          * picker says, because `enabled` above gates the queries and not this.
          *
-         * Nothing on this page lands a reader on it (#328, `design.md` rule 11).
-         * What it does do is hand focus *back* on a selection: choosing a window
-         * closes the popover and the buttons the reader was standing on leave the
-         * document with it, so without the hand-back a keyboard reader is dropped
-         * on `body`. `apps/web/src/dashboard/range-picker.tsx`'s docblock
-         * (§ "Dismissal, and why the shape is copied rather than shared") carries
-         * that argument.
+         * Nothing on this page lands a reader on it (#328, `design.md` rule
+         * 11). What it does do is hand focus *back* on a selection.
+         * `apps/web/src/dashboard/range-picker.tsx`'s docblock (§ "Dismissal,
+         * and why the shape is copied rather than shared") carries that
+         * argument.
          */}
         {fleetLookback || fleetActuals ? (
           <RangePicker range={range} ariaLabel="Aggregation range" onSelect={setRange} />
@@ -629,9 +573,7 @@ export const FleetPanel = ({
        * purpose.** Its queries are gated off by `enabled` above, and a query that
        * was never enabled reports its initial `loading`
        * (`apps/web/src/data/use-fleet-query.ts`), so the chart draws the wait and
-       * the body marks itself busy — the honest answer, and what retires the
-       * false "No sites yet" flash a reader used to get for the length of the
-       * listing read (#452).
+       * the body marks itself busy (#452).
        *
        * (b) **A failed listing beside sites this session created still gets the
        * chart**: the fleet endpoints are independent of the listing, so if the
@@ -640,10 +582,8 @@ export const FleetPanel = ({
        * it would paint the unavailable state over a fleet whose queries can
        * answer.
        *
-       * An empty fleet is not a failure and keeps its own arm: a listing that
-       * succeeded and returned nothing is a complete answer, and the demo's
-       * invitation is what it is owed (`error-handling.md` rule 5 — degrade
-       * honestly, in both directions).
+       * An empty fleet is not a failure and keeps its own arm (`error-handling.md`
+       * rule 5 — degrade honestly, in both directions).
        */}
       {listing === 'failed' && sites.length === 0
         ? unavailableFleetBody(context, onRetryListing)

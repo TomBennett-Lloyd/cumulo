@@ -53,40 +53,17 @@ import {
  *
  * **One partition is not a site**: `FLEET_ROLLUP_PARTITION` (`#FLEET`) holds the fleet roll-up
  * partials ADR 0009 introduced — every location's contribution to every hour, keyed
- * `<kind>#T#<validTime>#L#<locationId>`. That is the inverse segment order of the
- * per-site keys above and for the opposite reason: a site's partition is read *by
- * time*, and this one is read *by kind*, one kind at a time. `fleet-rollup-item.ts`
- * owns its wire format and says why the sentinel is safe; the two roll-up methods
- * below are the only ones in this class that address it.
+ * `<kind>#T#<validTime>#L#<locationId>`. `fleet-rollup-item.ts` owns its wire format and says
+ * why the sentinel is safe; the two roll-up methods below are the only ones in this class that
+ * address it.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
- * comment on `createStorageDocumentClient`. The `series` table's provisioned
- * read capacity (`infra/storage/tables.tf`) was sized against
- * eventually-consistent Query reads, and the fleet routes' per-site fan-out —
- * run here, inside the API, since #264 (actuals) and #296 (forecasts) rather
- * than by the browser — is the one user-visible path on that capacity. The
- * roll-up read replaces that fan-out with one Query and so only ever costs it
- * less.
- */
-
-/**
- * The result of a batch write is {@link BatchWriteOutcome}, defined in
- * `batch.ts` alongside the drain that produces it and shared with the weather
- * adapter. `BatchWriteItem` answers HTTP 200 while handing back the items it
- * declined (`UnprocessedItems`), so "the call succeeded" and "the data was
- * written" are different facts, and that union keeps them different all the way
- * out to the caller (ADR 0002 Consequence 4,
- * `docs/standards/error-handling.md` rule 2).
+ * comment on `createStorageDocumentClient`.
  */
 
 /**
  * One entry of a `BatchWriteItem` request list, as the *document* client types
  * it (native JavaScript values, not `AttributeValue` shapes).
- *
- * Derived from the command input rather than restated, so the type the retry
- * loop carries is the same type the SDK hands back in `UnprocessedItems` —
- * which is what lets unprocessed requests be re-submitted with no assertion
- * anywhere in the loop.
  */
 type SeriesWriteRequest = NonNullable<
   NonNullable<NonNullable<BatchWriteCommandInput['RequestItems']>[string]>[number]
@@ -98,9 +75,7 @@ type SeriesWriteRequest = NonNullable<
  * The two facts travel together because separating them is precisely the bug:
  * `points` alone cannot say whether a short list is a quiet Saturday or a drain
  * that stopped at a caller's page budget with rows still to come. Only a caller
- * that passed a {@link QueryPaginationBound} can ever see `complete: false`, so
- * an unbounded read reads exactly as it always did — with one field it may
- * ignore, rather than one it may not.
+ * that passed a {@link QueryPaginationBound} can ever see `complete: false`.
  *
  * A flat record rather than a discriminated union (`docs/standards/typing.md`
  * rule 4): a truncated read is not a different *mode* of answer, it is the same
@@ -207,11 +182,8 @@ export class SeriesAdapter extends StorageAdapterBase {
    * Writes one location's fleet roll-up partials — its own contribution to each hour of the fleet
    * aggregate (ADR 0009).
    *
-   * Through the same batch drain as `putForecasts`, deliberately: these are `cumulo-series` items
-   * like any other, and `BatchWriteItem`'s habit of answering 200 while declining part of the batch
-   * is not less true for being a roll-up. A partial drain comes back as `partial` and the caller
-   * decides — which for the producer means logging it and moving on, because the next cycle rewrites
-   * every one of these keys.
+   * Through the same batch drain as `putForecasts`, deliberately. A partial drain comes back as
+   * `partial` and the caller decides.
    *
    * One location per call, and the caller supplies it. This adapter never derives a location from a
    * forecast: which location a producer speaks for is settled by the message it consumed (ADR 0004)
@@ -240,11 +212,7 @@ export class SeriesAdapter extends StorageAdapterBase {
    * item at `toExclusive` is that prefix plus `#L#<locationId>`, so it sorts strictly after the
    * bound and falls outside. `storage-key.test.ts` pins that ordering as plain string comparisons.
    *
-   * Pagination is still walked, and still bounded on request, for `querySeriesRange`'s reasons:
-   * DynamoDB pages at 1 MB however few items that is, and a caller with a deadline must be able to
-   * stop. `complete: false` matters more here than there — a truncated roll-up is a fleet total
-   * quietly missing some of its locations, which is a plausible-looking number rather than a visible
-   * gap, so the API treats an incomplete read as a reason to fall back rather than as an answer.
+   * Pagination is still walked, and still bounded on request, for `querySeriesRange`'s reasons.
    */
   async queryFleetRollup(
     kind: SeriesKind,
@@ -315,9 +283,7 @@ export class SeriesAdapter extends StorageAdapterBase {
     // pair and must stay green).
     //
     // Duplicates are refused rather than de-duplicated last-wins — see
-    // `requireUniqueKeys` for why, and note the refusal happens here, ahead of
-    // the `sending` wrap inside `drainWriteRequests`, so a caller bug never
-    // arrives dressed as a table outage.
+    // `requireUniqueKeys` for why.
     requireUniqueKeys(
       operation,
       items.map((item) => `${item.siteId}|${item.sk}`),
@@ -333,13 +299,6 @@ export class SeriesAdapter extends StorageAdapterBase {
   /**
    * Drains a list of write requests through the batch machinery, reporting what
    * never landed.
-   *
-   * Honesty is why the write paths come through here rather than sending a
-   * `BatchWriteCommand` themselves: `BatchWriteItem` answers 200 while handing
-   * back what it declined, so a caller reading the HTTP status alone would
-   * report an ingestion cycle written when part of it was refused. The count
-   * that comes back out is that refusal made visible
-   * (`docs/standards/error-handling.md` rule 2).
    */
   private async drainWriteRequests(
     operation: string,
@@ -350,9 +309,7 @@ export class SeriesAdapter extends StorageAdapterBase {
     // checks the identical policy — but it runs *inside* the wrap below, where
     // a policy that can never send would surface as a `StorageError` claiming
     // DynamoDB failed on the table, sending an operator after an outage that
-    // is really a composition-root bug (#166). `putArchiveDay` on the weather
-    // adapter hoists the same check for the same reason, so the same bad deps
-    // now get the same verdict from every batch entry point.
+    // is really a composition-root bug (#166).
     requireUsablePolicy(operation, policy);
 
     const outcome = await this.sending(operation, undefined, () =>
@@ -379,15 +336,9 @@ export class SeriesAdapter extends StorageAdapterBase {
    * out first.
    *
    * Deliberately *not* `StorageAdapterBase.queryAllPages`, which the unbounded
-   * reads above use. Both walk `LastEvaluatedKey` for the same reason —
-   * DynamoDB pages at 1 MB regardless of how few items that is, and may hand
-   * back a short page while more matching items exist — but this one also
-   * re-computes `Limit` on every page, so that "the next ten points" means ten
-   * points rather than "up to ten, if they all happened to sit in one page",
-   * and stops as soon as the budget is filled. Folding the two together would
-   * take an optional bound and three conditionals reading it: the mode flag
-   * `docs/standards/structure.md` rule 7 names as the tell that two intents
-   * were forced into one function.
+   * reads above use. Folding the two together would take an optional bound and
+   * three conditionals reading it: the mode flag `docs/standards/structure.md`
+   * rule 7 names as the tell that two intents were forced into one function.
    */
   private async queryBoundedPoints(
     operation: string,

@@ -27,10 +27,8 @@ import { hoursAfter } from './series-window';
  * window before the first full cycle has written.
  *
  * **The mirror of `get-fleet-actuals.ts` in shape, no longer in body.** That
- * route still returns raw readings, because the actuals roll-up is the
- * fast-follow ticket on the same item shape; its docblock carries the full
- * argument for reading a fleet server-side in one request, and this one points
- * at it rather than restating it (`docs/standards/architecture.md` rule 9).
+ * route still returns raw readings; its docblock carries the full argument for
+ * reading a fleet server-side in one request.
  *
  * **Forward-looking by definition.** The window opens at the clock and runs
  * `hours` ahead, which is what makes this route the actuals route read
@@ -43,9 +41,7 @@ import { hoursAfter } from './series-window';
  *
  * **An empty fleet, or a fleet whose sites hold no points yet, is a 200 with
  * `points: []`.** A fleet with nothing forecast for it yet is an answer about
- * the schedule rather than about whether the fleet exists — the distinction
- * `get-site-forecast.ts` draws for a site created moments ago, and the one #17's
- * first-forecast poll reads.
+ * the schedule rather than about whether the fleet exists.
  */
 
 /**
@@ -55,13 +51,9 @@ import { hoursAfter } from './series-window';
  * The per-site forecast route owns both values, and this route wants exactly
  * them: same direction, same menu (`RangeHours` in
  * `apps/web/src/data/fleet-data-source.ts` requires every source to serve every
- * member), same assumption when the picker has not been touched. So there is
- * nothing here for a second declaration to say — `docs/standards/architecture.md`
- * rule 9 gives the fact one owner and this file names it.
- *
- * `get-fleet-actuals.ts` declares its own default for the opposite reason: `24`
- * is the window a dashboard shows *behind* a forecast, so its default is
- * genuinely its own value and not this one seen from another route.
+ * member), same assumption when the picker has not been touched.
+ * `docs/standards/architecture.md` rule 9 gives the fact one owner and this
+ * file names it.
  */
 const fleetForecastHoursSchema = z
   .enum(FORECAST_HORIZON_HOURS)
@@ -83,10 +75,7 @@ export const fleetForecastReadDeadlineEvent = 'api.fleet-forecast.read-deadline-
  *
  * `docs/standards/structure.md` rule 7's test — would one be wrong if the other
  * changed? — answers no: these are the dependencies of *this* route, and the
- * two are free to diverge (a fleet forecast that later admitted a model
- * selector, say, would take something the actuals route has no use for). One
- * shared name would couple them on a resemblance that is currently exact and
- * not structural.
+ * two are free to diverge.
  */
 export interface GetFleetForecastDeps extends FleetRollupReadDeps {
   /** Only the listing: this route never writes a site (`typing.md` rule 6, ADR 0002 least privilege). */

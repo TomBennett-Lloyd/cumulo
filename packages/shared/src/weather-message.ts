@@ -23,8 +23,7 @@ import { forecastWeatherReadingSchema } from './weather-reading';
  *   a property of one implementation of the sender.
  *
  * It lives in `@cumulo/shared` because both ends parse it and neither app may
- * import the other (`architecture.md` rules 1 and 2): a wire format defined
- * twice is two definitions that currently agree.
+ * import the other (`architecture.md` rules 1 and 2).
  */
 export const weatherMessageSchema = z.array(forecastWeatherReadingSchema).min(1);
 

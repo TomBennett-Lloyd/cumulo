@@ -177,3 +177,33 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/scripts/check-comment-density.sh`, `docs/standards/prose.md` rule 6, `docs/standards/architecture.md` rules 9 and 11
 - What: a row can only fall, but three standing obligations add comment lines to a source file. Architecture rule 9 has the finder write a restatement ledger beside the owner, often in source, and `.claude/agents/reviewer.md` says to do that in the fix round. Rule 11 has arguing prose corrected in the same change. Prose rule 6's own form wants a docblock on a new symbol. A file far below the median has little room, and the zero-ratio barrels (`packages/hindcast/src/index.ts`, `packages/shared/src/index.ts`, `packages/ui/src/index.ts`) can never take a comment line. #535 moves ledgers out of source, which removes the largest of the three. The owner decides what is allowed until then: a reviewed raise, or adding code alongside.
 - Source: #553 review cycle 1
+
+## 2026-10-06 — `ensureArchiveCoverage` restates CLAUDE.md's per-minute quota figure
+
+- Where: `packages/hindcast/src/archive-cache.ts` — the `ensureArchiveCoverage` docblock, step 3 ("Fetch sequentially")
+- What: the step restates CLAUDE.md's per-minute call limit as a figure beside its citation of CLAUDE.md, against `docs/standards/architecture.md` rule 9. #545 batch 6 deleted the sibling restatement of the daily figure from `MAX_ARCHIVE_REQUEST_DAYS`' docblock in `packages/hindcast/src/open-meteo-archive.ts` and left this one, because deleting the figure alone leaves "the very limit that stops the run" without a referent.
+- Source: #545 batch 6, reviewer pass 1 SYSTEMIC
+
+## 2026-10-06 — the reasons the SDK budget stays 2 now live only in #166's plan comment, while prose.md rule 4 names an ADR or a standard's rule as the owner a docblock cites
+
+- Where: `packages/storage/src/client.ts` · `packages/storage/src/client.ts` carries "re-derived it rather than inheriting #122's number" · `docs/standards/prose.md` carries "cite the owner — an ADR by filename, or a standard's rule by number"
+- What: the reasons the SDK budget stays 2 now live only in #166's plan comment, while prose.md rule 4 names an ADR or a standard's rule as the owner a docblock cites
+- Source: #545 batch 3, reviewer pass 1 SYSTEMIC (ledger row 106)
+
+## 2026-10-06 — pre-check (a) greps the trimmed subject's identifier only, so a citation naming a trimmed docblock by file path or by path:line is invisible to it
+
+- Where: `.claude/scripts/sweep-report.sh` · `.claude/scripts/sweep-report.sh` carries "run_shown git grep -n -F -e "$subject" -- ":!$subj_path"" · `apps/web/src/dashboard/site-overlay.ts` carries "packages/shared/src/site.ts:47"
+- What: pre-check (a) greps the trimmed subject's identifier only, so a citation naming a trimmed docblock by file path or by path:line is invisible to it
+- Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 84
+
+## 2026-10-06 — pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure count word and a unit noun onto one line trips it (this batch's fleet-api.ts hit), and a spelled-out figure split across a wrap passes
+
+- Where: `.claude/scripts/sweep-report.sh` · `.claude/scripts/sweep-report.sh` carries "SPELLED_RE='"
+- What: pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure count word and a unit noun onto one line trips it (this batch's fleet-api.ts hit), and a spelled-out figure split across a wrap passes
+- Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 85
+
+## 2026-10-06 — the no-new-words half of § Trim batches rule 1 has no mechanical check in sweep-report.sh, so each lane writes its own, and a whole-file vocabulary test passes a sentence assembled from words found elsewhere in the same file
+
+- Where: `docs/standards/prose.md` · `docs/standards/prose.md` carries "It does not rephrase."
+- What: the no-new-words half of § Trim batches rule 1 has no mechanical check in sweep-report.sh, so each lane writes its own, and a whole-file vocabulary test passes a sentence assembled from words found elsewhere in the same file
+- Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 86

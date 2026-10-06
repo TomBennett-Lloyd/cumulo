@@ -34,14 +34,9 @@ export type UtcIsoTimestamp = z.infer<typeof utcIsoTimestampSchema>;
  * instead of re-declaring the shape (`docs/standards/typing.md` rule 6).
  *
  * It is the shared window contract for both metrics keying — `metricsSortKey`
- * (`storage-key.ts`), whose `errorMetricsSchema.period` (`metrics.ts`) carries
- * exactly this shape — and hindcast day math (`utcDaysCovering` in
+ * (`storage-key.ts`) — and hindcast day math (`utcDaysCovering` in
  * `@cumulo/hindcast`): the window a hindcast fetches weather for and the window
  * its error metrics are keyed by are the same window.
- *
- * Formerly `MetricsPeriod` in `storage-key.ts`; renamed and moved here by #117
- * once the hindcast consumer made both the `Metrics` prefix and the storage-key
- * home misleading.
  */
 export interface UtcWindow {
   readonly startInclusive: UtcIsoTimestamp;
@@ -59,11 +54,7 @@ export interface UtcWindow {
  * with the one the sort keys are built on.
  *
  * Here rather than in a consumer because the property it exploits is this
- * module's (`docs/standards/architecture.md` rule 9): every caller ordering
- * instants leans on the width guarantee declared a few lines up, so the rule has
- * one implementation and it sits beside the rule. `aggregation.ts`,
- * `fleet-rollup.ts` and `apps/web/src/dashboard/site-overlay.ts` are its callers
- * today.
+ * module's (`docs/standards/architecture.md` rule 9).
  */
 export const compareUtcIsoTimestamps = (left: UtcIsoTimestamp, right: UtcIsoTimestamp): number => {
   if (left < right) {
