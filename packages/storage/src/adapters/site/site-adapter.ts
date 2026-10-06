@@ -38,12 +38,8 @@ import {
  *
  * The whole fleet lives in one partition (`pk = 'FLEET'`, sort key `siteId`) so
  * "list every site" (A2) and "enumerate active locations" (I1) are single
- * Queries rather than Scans. Two sparse GSIs hang off it, and *sparse* is the
- * load-bearing word: the index attributes are written only when the site
- * qualifies, so "inactive sites are invisible to the forecast service" and
- * "seed sites are never evicted" are properties of the data model rather than
- * of filters a later change could forget to apply. `site-item.ts` holds those
- * rules.
+ * Queries rather than Scans. Two sparse GSIs hang off it. `site-item.ts` holds
+ * those rules.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
  * comment on `createStorageDocumentClient`.
@@ -90,11 +86,6 @@ export type EvictAndCreateResult =
  * the site's fate is *unknown* because DynamoDB cancelled the transaction over a
  * collision on one of these rows (see {@link conflictCancelled}), and the same
  * delete issued a moment later may well succeed.
- *
- * Collapsing the pair into one falsy answer would make a lost race look exactly
- * like a 404 — telling a caller its site is gone when the delete never ran, and
- * leaving the counter's contention (#155) as unexplained as it was on the create
- * path.
  */
 export type DeleteUserSiteResult =
   | { readonly deleted: true }
@@ -110,26 +101,9 @@ export type DeleteUserSiteResult =
  *
  * The `every` clause is load-bearing, in the same way {@link cancelledOnlyBy}'s
  * "and by nothing else" is: nothing mixed with `TransactionConflict` is a bare
- * race, so this predicate refuses every such cancellation. What each mix then
- * *becomes* is decided by {@link transactUnless}, which asks
- * {@link cancelledOnlyBy} first, and the two mixes go opposite ways:
+ * race, so this predicate refuses every such cancellation.
  *
- * - **A `ConditionalCheckFailed` on the item whose condition is a domain
- *   answer** wins outright, conflict or no conflict. On a capped create the
- *   domain item is the counter at index 1, so `[TransactionConflict,
- *   ConditionalCheckFailed]` is answered `condition_failed` — a full fleet —
- *   before this predicate is ever asked, and the `every` clause would decline
- *   it in any case. The domain verdict beats a conflict elsewhere in the same
- *   transaction on both counts, and the caller is told the cap, not to retry.
- * - **A `ConditionalCheckFailed` anywhere else** is neither verdict, and stays
- *   a `StorageError`: `[ConditionalCheckFailed, TransactionConflict]` on that
- *   same create is the site put's `attribute_not_exists(siteId)` failing — a
- *   violated invariant no retry may re-run — and it is not the cap either.
- *
- * A conflict mixed with a capacity code (`ProvisionedThroughputExceeded`,
- * `ThrottlingError`) is not a bare race either, and has no domain reading at
- * all: retrying it against a throttled table is the thundering herd. Capacity
- * cancellations are classified by `capacityCancelled` in
+ * Capacity cancellations are classified by `capacityCancelled` in
  * `../transaction-cancellation` and deliberately go unretried on *this*
  * adapter (#166), so they stay a `StorageError` here, mixed with a conflict or
  * not.
@@ -167,12 +141,7 @@ const conflictCancelled = (cause: unknown): boolean => {
  * (a uuid that already exists), and that must not be reported as the domain
  * answer. A cancellation with no failed condition at all is likewise not *this*
  * answer: a pure conflict is {@link conflictCancelled}'s to classify, and a
- * capacity cancellation is `capacityCancelled`'s — note that the SDK does
- * **not** retry `TransactionCanceledException` at all, and nothing on this
- * adapter retries it either (`STORAGE_MAX_ATTEMPTS`'s doc block in `client.ts`
- * holds the per-shape record), so a capacity-cancelled transaction arrives here
- * on its first and only attempt and must surface as a `StorageError`, not as a
- * full fleet.
+ * capacity cancellation is `capacityCancelled`'s.
  */
 const cancelledOnlyBy = (cause: unknown, itemIndex: number): boolean => {
   if (!(cause instanceof TransactionCanceledException)) {
@@ -211,9 +180,6 @@ const requirePositiveInteger = (operation: string, name: string, value: number):
 /**
  * The items of a `TransactWriteItems`, as the *document* client types them
  * (native JavaScript values, not `AttributeValue` shapes).
- *
- * Derived from the command input rather than restated, so the array these
- * methods build is the array the SDK will accept, with no assertion in between.
  */
 type SiteTransactItems = NonNullable<TransactWriteCommandInput['TransactItems']>;
 
@@ -322,9 +288,6 @@ export class SiteAdapter extends StorageAdapterBase {
    * The user site that has been in the fleet longest — the eviction candidate
    * (X2).
    *
-   * The `user-sites-by-age` index is sparse on `origin = 'user'`, so a seed
-   * site cannot be returned here however old it is: "never evict a seed site"
-   * is a property of what is in the index, not of a filter this query applies.
    * Ascending with `Limit: 1` reads exactly one item's worth of capacity.
    */
   async oldestUserSite(): Promise<OldestUserSiteResult> {
@@ -404,9 +367,7 @@ export class SiteAdapter extends StorageAdapterBase {
    *
    * A `conflict` is not that answer and must never be read as it: the delete
    * shares the counter item with every capped create, so it loses the same races
-   * they do. This adapter does not retry it — ADR 0002 puts the retry on the
-   * route handler, which is the layer that knows what a second attempt costs the
-   * request — it only reports it in a form the handler can act on.
+   * they do.
    */
   async deleteUserSiteWithCount(siteId: string): Promise<DeleteUserSiteResult> {
     const outcome = await this.transactUnless(
@@ -474,22 +435,11 @@ export class SiteAdapter extends StorageAdapterBase {
    * The three capped/counted writes above differ only in their items and in
    * which item carries the condition whose failure is a domain answer — same
    * intent, so the mechanism is shared rather than copied three times
-   * (`docs/standards/structure.md` rule 7). What is *not* parameterised is what
-   * counts as a domain answer: that stays two rules, in
-   * {@link cancelledOnlyBy} and {@link conflictCancelled}. The two
-   * classifications are disjoint by construction — `cancelledOnlyBy` requires
-   * exactly one `ConditionalCheckFailed`, `conflictCancelled` requires none —
-   * so no cancellation can satisfy both and their evaluation order is not
-   * load-bearing; the domain check simply runs first.
+   * (`docs/standards/structure.md` rule 7).
    *
    * **This adapter never retries a conflict**, and that is a decision rather
-   * than an omission. ADR 0002's layer-ownership rule (Amendments, #122) gives
-   * each retry layer exactly one job, and the owner of a lost write race is the
-   * API route handler: only it knows that "try again" means re-reading the
-   * oldest site, and only it holds the request's overall time budget. Retrying
-   * here would put a second, invisible curve underneath that one — the stacked
-   * layers #122 pulled apart. Nor does the SDK layer cover this: verified
-   * against `@aws-sdk/client-dynamodb` 3.1098.0, neither
+   * than an omission (`STORAGE_MAX_ATTEMPTS` shape 4). Nor does the SDK layer
+   * cover this: verified against `@aws-sdk/client-dynamodb` 3.1098.0, neither
    * `TransactionCanceledException` nor `TransactionConflictException` carries a
    * `$retryable` trait, and neither name appears in `@smithy/core` 3.31.1's
    * `THROTTLING_ERROR_CODES`/`TRANSIENT_ERROR_CODES` — so both shapes arrive
@@ -497,9 +447,7 @@ export class SiteAdapter extends StorageAdapterBase {
    *
    * Anything else — a different item's condition, a capacity cancellation, a
    * connection reset — is rethrown untouched so that the surrounding `sending`
-   * wraps it in a `StorageError`. That keeps the wrap in one place instead of
-   * giving this package a second `StorageError` construction site whose context
-   * could drift from the first.
+   * wraps it in a `StorageError`.
    */
   private async transactUnless(
     operation: string,

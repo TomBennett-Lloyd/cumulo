@@ -11,10 +11,6 @@ import { z } from 'zod';
  * The wire format of a `cumulo-sites` item: the key attributes ADR 0002's
  * "Key design" table 1 puts around a {@link FleetSite}, and the two functions
  * that add and remove them.
- *
- * These live apart from the adapter because they are the part a reader checks
- * against the ADR and against `infra/storage/tables.tf` — the sparseness rules
- * especially — while the adapter is about which command carries them.
  */
 
 /** The literal partition key value shared by every site item. */
@@ -27,11 +23,6 @@ export const USER_SITES_PARTITION = 'USER';
  * The sort key of the fleet's counter item — ADR 0002's `#META#counters` row,
  * which holds `userSiteCount` and is the item #29's cap transaction conditions
  * on.
- *
- * It shares the `FLEET` partition with the sites it counts, which is the whole
- * point: a `TransactWriteItems` can then hold both the new site and the
- * increment, so "40 user sites" is an invariant DynamoDB enforces rather than
- * one a read-then-write hopes for.
  */
 export const COUNTERS_SORT_KEY = '#META#counters';
 
@@ -40,11 +31,9 @@ export const COUNTERS_SORT_KEY = '#META#counters';
  *
  * Site ids are uuids, so they begin with a hex digit or a letter — all of which
  * sort at or after `'0'`. ADR 0002 also puts metadata in this partition at
- * `#META#…` sort keys — since #29 that is {@link COUNTERS_SORT_KEY}, a real
- * item rather than a hypothetical one — and `'#'` (0x23) sorts *before* `'0'`
- * (0x30). So the range condition excludes non-site items structurally: the
- * counter cannot leak into the fleet list and fail `fleetSiteSchema.parse`, and
- * nobody has to remember to filter it out.
+ * `#META#…` sort keys and `'#'` (0x23) sorts *before* `'0'` (0x30). So the
+ * range condition excludes non-site items structurally: the counter cannot leak
+ * into the fleet list and fail `fleetSiteSchema.parse`.
  */
 export const MIN_SITE_ID = '0';
 
@@ -59,10 +48,7 @@ export const USER_SITES_INDEX = 'user-sites-by-age';
  *
  * The index is KEYS_ONLY, so DynamoDB projects the table keys (`pk`, `siteId`)
  * alongside the index keys and nothing else — which is exactly what eviction
- * needs, an id rather than a site. Parsed rather than trusted because an index
- * response is as much a boundary as a table read is (typing rule 3), and an
- * item without a `siteId` would otherwise become an eviction addressed at
- * `undefined`.
+ * needs, an id rather than a site.
  */
 const userSiteKeySchema = z.object({ siteId: z.string().min(1) });
 
@@ -147,14 +133,9 @@ const domainAttributes = (item: Record<string, unknown>): Record<string, unknown
 /**
  * Stored item → domain object.
  *
- * The parse is not ceremony: a table is a boundary, so its contents are
- * `unknown` until a schema has looked at them (typing rule 3). An item that
- * does not parse means the table holds something this code did not write — a
- * violated invariant, so it throws rather than returning a value
- * (`docs/standards/error-handling.md` rule 1). Deliberately *not* wrapped in a
- * `StorageError`: that type means "the call to AWS failed", and labelling a
- * schema drift as an infrastructure failure would send the reader looking in
- * the wrong place.
+ * An item that does not parse means the table holds something this code did
+ * not write — a violated invariant, so it throws rather than returning a value
+ * (`docs/standards/error-handling.md` rule 1).
  *
  * Exported for its tests; it is not part of the package's public surface.
  */
