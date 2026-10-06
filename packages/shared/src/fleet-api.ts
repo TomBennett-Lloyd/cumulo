@@ -77,7 +77,8 @@ export type FleetActualsResponse = z.infer<typeof fleetActualsResponseSchema>;
  * the same peer `attribution` as the schemas above.
  *
  * `points`, not `forecasts`, and the rename is the contract change (#494, ADR 0009). Calling an
- * array of fleet aggregates `forecasts` would invite a consumer to treat a point as one site's row.
+ * array of fleet aggregates `forecasts` would invite a consumer to treat a point as one
+ * site's row.
  */
 export const fleetForecastResponseSchema = z.object({
   points: z.array(fleetForecastAggregatePointSchema),
