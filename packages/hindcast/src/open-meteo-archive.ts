@@ -47,7 +47,13 @@ export type ArchiveHourlyVariable = (typeof ARCHIVE_HOURLY_VARIABLES)[number];
  *
  * Open-Meteo weights a call by how much data it covers rather than counting every
  * request as one, so a long range is billed as several calls. Budgeting
- * conservatively at one weighted call per 7 days requested.
+ * conservatively at one weighted call per 7 days requested:
+ * - **runs of 31**: two years for one site is 730 ÷ 31 ≈ 24 requests, each
+ *   weighted ⌈31 / 7⌉ = 5 → ≈ 120 weighted calls per site. A 20-site demo fleet
+ *   backfills in ≈ 2,400 — under a quarter of one day's allowance, leaving room
+ *   for the hourly forecast cycle that shares the quota.
+ * - **one request per day**: 730 requests per site, weighted 1 each → 14,600 for
+ *   the same fleet, over the daily limit before a single forecast cycle has run.
  *
  * 31 rather than something larger because a month is the unit an operator reasons
  * about, and it bounds what a single failed request costs: at most one month of a
