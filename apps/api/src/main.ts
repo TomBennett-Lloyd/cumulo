@@ -43,15 +43,12 @@ import { describeThrown } from './thrown-detail';
  *
  * Everything that is a *decision* about the running system lives here and only
  * here: which tables, which routes, which clock, which log sink. Every module
- * beneath takes its collaborators as parameters, which is what lets every route
- * — including its failure paths — run in a unit test with no AWS in sight
+ * beneath takes its collaborators as parameters
  * (`docs/standards/architecture.md` rule 3).
  *
  * The composition happens at **module scope**, on purpose. Lambda reuses a warm
  * container across invocations, so the client built here is built once per
- * container rather than once per request — and a missing or malformed
- * environment variable fails the *initialization*, before any request gets an
- * answer that looks like a product bug.
+ * container rather than once per request.
  */
 
 /**
@@ -60,15 +57,11 @@ import { describeThrown } from './thrown-detail';
  *
  * `AWS_REGION` is deliberately absent: Lambda always sets it and the SDK reads
  * it directly. `CUMULO_ENV` is checked only for being non-empty — the alphabet a
- * real environment name must satisfy is `storageTableName`'s, which mirrors
- * `infra/storage/variables.tf`, and restating the pattern here would make a
- * third copy of it.
+ * real environment name must satisfy is `storageTableName`'s.
  *
  * `CUMULO_WEB_ORIGINS` is optional because the deployment that has no browser
  * front-end yet is a valid deployment: the API's own origin is always allowed
  * (it is where `/docs` is served from), and this variable only ever *adds*.
- * `infra/api/variables.tf` defaults it to the empty string, which parses to no
- * extra origins rather than to a misconfiguration.
  */
 export const apiEnvSchema = z.object({
   CUMULO_ENV: z.string().min(1),
@@ -80,9 +73,7 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>;
 /**
  * Parse the process environment, or fail loudly.
  *
- * A throw rather than a value (`docs/standards/error-handling.md` rule 1): a
- * missing table environment is a deployment that is wrong, not an outcome a
- * request could handle.
+ * A throw rather than a value (`docs/standards/error-handling.md` rule 1).
  */
 export const parseApiEnv = (source: Record<string, string | undefined>): ApiEnv => {
   const parsed = apiEnvSchema.safeParse(source);
@@ -93,10 +84,9 @@ export const parseApiEnv = (source: Record<string, string | undefined>): ApiEnv 
 };
 
 /**
- * The production log sink: one JSON object per line, which is what makes
- * CloudWatch Logs Insights able to query these entries by field rather than by
- * substring. `console.log` is correct *here* and nowhere else — this module is
- * the process boundary `docs/standards/error-handling.md` rule 4 reserves it for.
+ * The production log sink: one JSON object per line. `console.log` is correct
+ * *here* and nowhere else — this module is the process boundary
+ * `docs/standards/error-handling.md` rule 4 reserves it for.
  */
 const jsonLineLog = (entry: Record<string, unknown>): void => {
   console.log(JSON.stringify(entry));
@@ -117,16 +107,12 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter: `querySeriesRange`, for the four read routes and
- * nothing else.
+ * The `cumulo-series` adapter.
  *
- * This function neither writes a series point nor deletes one — forecasts are
- * #12's, the simulated actuals are written by the forecast service's own
- * producer (#264), and a departed site's rows expire on the table's own 90-day
- * TTL rather than being deleted from a request (ADR 0007). So the
- * IAM policy it runs under grants `Query` on this table and no other action
- * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps type
- * is the compile-time half of the same statement.
+ * This function neither writes a series point nor deletes one. So the IAM
+ * policy it runs under grants `Query` on this table and no other action
+ * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps
+ * type is the compile-time half of the same statement.
  */
 const series = new SeriesAdapter({
   client: documentClient,
@@ -149,8 +135,7 @@ const newSiteId = (): string => randomUUID();
 /**
  * The real timer, for the write routes' backoff between contended transaction
  * attempts (`sites/conflict-retry.ts` owns the curve; this is only the clock it
- * runs on). A dependency rather than a `setTimeout` inside the loop, so those
- * routes' tests observe the delays without waiting them out.
+ * runs on).
  */
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -159,8 +144,7 @@ const sleep = (ms: number): Promise<void> =>
 
 /**
  * The `cumulo-abuse` table's adapter and the limiter over it, built once per
- * container so the limiter's block cache survives between invocations — which
- * is the whole reason a repeat offender costs nothing to refuse
+ * container so the limiter's block cache survives between invocations
  * (`abuse/ip-limiter.ts`).
  */
 const abuse = new AbuseAdapter({
@@ -178,9 +162,7 @@ const limiter = new IpLimiter({
  *
  * Comma-separated, trimmed, empties dropped — so `""`, `" "` and an unset
  * variable all mean the same thing, and a trailing comma in a Terraform-built
- * string is not a silently-allowed empty origin. Exported for its test: the
- * behaviour worth pinning is that the sloppy spellings collapse rather than
- * producing an origin no browser will ever send.
+ * string is not a silently-allowed empty origin.
  */
 export const parseWebOrigins = (value: string | undefined): readonly string[] =>
   value === undefined
@@ -202,8 +184,7 @@ const webOrigins = parseWebOrigins(env.CUMULO_WEB_ORIGINS);
  * Query per fleet site. `GET /v1/sites`, `GET /v1/sites/{siteId}/forecast`,
  * `/openapi.json` and the two `/docs` routes are not: they are the pages a
  * reviewer clicks through, their cost per request is fixed and small, and the
- * stage throttle already bounds them. A limiter that made reading the docs
- * spend abuse-table writes would be paying to defend the cheapest thing here.
+ * stage throttle already bounds them.
  */
 const rateLimited = async (
   request: RouteRequest,
@@ -218,13 +199,9 @@ const rateLimited = async (
  *
  * Origin first because it is free — no I/O, no abuse-table write — so a
  * drive-by script that sends no `Origin` is refused without spending anything.
- * Defined in terms of {@link rateLimited} rather than beside it so that the two
- * cannot disagree about what limiting means.
  *
  * `request.ownOrigin` is derived per request from the gateway's `domainName`,
- * so nothing here hard-codes a hostname the stack assigns at create time — and
- * Swagger UI's "try it out", served from this same origin, passes by
- * construction.
+ * so nothing here hard-codes a hostname the stack assigns at create time.
  */
 const guardedWrite = (
   request: RouteRequest,
@@ -246,9 +223,6 @@ const guardedWrite = (
  * The two handlers that change the fleet's size, and so the two that need the
  * counter, the eviction index, the retry timer and a log sink. Neither reaches
  * the series table: what a departing site leaves there is the TTL's (ADR 0007).
- * Named constants rather than object literals in the route table below: both are
- * built once per container, and a reader looking for what a write route can
- * reach finds it here rather than inline among that table's entries.
  */
 const createSiteDeps: CreateSiteDeps = {
   sites,
@@ -271,10 +245,9 @@ const deleteSiteDeps: DeleteSiteDeps = {
  * about the *artifact* rather than about the code that reads them.
  *
  * `import.meta.url` is `dist/main.mjs` in Lambda, so this resolves to
- * `dist/swagger/` — the directory `scripts/copy-swagger-assets.mjs` fills from
- * the pinned `swagger-ui-dist` package and `handler.zip` ships alongside the
- * bundle. The trailing slash is load-bearing: `new URL('swagger-ui.css', …)`
- * resolves inside the directory only if the base names one.
+ * `dist/swagger/`. The trailing slash is load-bearing:
+ * `new URL('swagger-ui.css', …)` resolves inside the directory only if the base
+ * names one.
  */
 const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', import.meta.url) };
 
@@ -284,14 +257,13 @@ const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', imp
  * The adapter is passed whole rather than as `sites.listFleetSites`: it holds
  * its client and table name on `this`, so a detached method would arrive at a
  * handler already broken. The `Pick<SiteAdapter, …>` in each handler's deps type
- * does the narrowing instead — free at runtime, and it cannot lose a binding.
+ * does the narrowing instead.
  *
  * The `guardedWrite`/`rateLimited` wrappers are the abuse protections, and this
- * table is the only place that says which routes carry them. Reading down the
- * `handle` column is how a reviewer answers "what is limited?" — the six
- * wrapped routes and no others. The route keys the gateway throttles separately
- * (`infra/api/gateway.tf`, ADR 0006 layer 2) are the three `guardedWrite` ones,
- * and those two lists have to be edited together.
+ * table is the only place that says which routes carry them. The route keys the
+ * gateway throttles separately (`infra/api/gateway.tf`, ADR 0006 layer 2) are
+ * the three `guardedWrite` ones, and those two lists have to be edited
+ * together.
  */
 export const routes: readonly Route[] = [
   { method: 'GET', segments: ['v1', 'sites'], handle: () => listSites({ sites }) },
@@ -325,12 +297,10 @@ export const routes: readonly Route[] = [
   {
     method: 'GET',
     segments: ['v1', 'sites', { param: siteIdParamName }, 'series'],
-    // The one limited read: `from`/`to` let a caller choose how much of a
-    // partition to read (up to `MAX_SERIES_SPAN_HOURS`), so its cost per
-    // request is the caller's to pick. No origin check — reads are not writes,
-    // and the web app must be able to plot a site from wherever it is served.
-    // Both reads take the log sink for the same one entry: the deadline stopped
-    // their pagination and the caller got a 500 instead of a truncated window.
+    // `from`/`to` let a caller choose how much of a partition to read (up to
+    // `MAX_SERIES_SPAN_HOURS`), so its cost per request is the caller's to
+    // pick. No origin check — reads are not writes, and the web app must be
+    // able to plot a site from wherever it is served.
     handle: (request) =>
       rateLimited(request, () => getSiteSeries({ sites, series, log: jsonLineLog }, request)),
   },
@@ -342,9 +312,7 @@ export const routes: readonly Route[] = [
     //
     // Limited, and for the opposite reason to the route above: the caller picks
     // nothing about its cost, but the *fleet* does — one Query per site, on
-    // every dashboard load. The alternative it replaces is worse on both counts,
-    // a per-site fan-out from the browser that would spend one limited request
-    // per site (`forecast/get-fleet-actuals.ts` has the arithmetic).
+    // every dashboard load.
     handle: (request) =>
       rateLimited(request, () =>
         getFleetActuals({ sites, series, now, log: jsonLineLog }, request),
@@ -354,9 +322,9 @@ export const routes: readonly Route[] = [
     method: 'GET',
     segments: ['v1', 'fleet', 'forecast'],
     // Limited for the reason the route above is: the caller picks nothing about
-    // its cost and the *fleet* picks all of it, one Query per site on every
-    // dashboard load. The two fleet routes are one page view's pair, so a
-    // limiter on one of them only would be a bound on half the load.
+    // its cost and the *fleet* picks all of it. The two fleet routes are one
+    // page view's pair, so a limiter on one of them only would be a bound on
+    // half the load.
     handle: (request) =>
       rateLimited(request, () =>
         getFleetForecast({ sites, series, now, log: jsonLineLog }, request),
@@ -365,8 +333,7 @@ export const routes: readonly Route[] = [
   // The self-documenting half of the API (ADR 0005): the document, the page
   // that renders it, and the page's assets, all from this function and this
   // origin. Same origin is what lets Swagger UI's "try it out" call the routes
-  // above with no CORS negotiation, and one artifact is what stops a deploy
-  // from publishing a document for an API that is not running yet.
+  // above with no CORS negotiation.
   {
     method: 'GET',
     segments: ['openapi.json'],
@@ -387,8 +354,6 @@ export interface ApiBoundaryDeps {
   readonly routes: readonly Route[];
   /**
    * Structured-logging sink (`docs/standards/error-handling.md` rule 4).
-   * Injected rather than called directly so this function stays testable and so
-   * the test reads the entry a reviewer would read in CloudWatch.
    */
   readonly log: (entry: Record<string, unknown>) => void;
 }
@@ -398,19 +363,13 @@ export interface ApiBoundaryDeps {
  * to end a failure rather than convert or rethrow it
  * (`docs/standards/error-handling.md` rule 2c).
  *
- * Everything a route can *predict* — an unknown id, an invalid body, an
- * unmatched path — is already a response by the time it reaches here. So an
- * exception at this point means something nobody predicted: a DynamoDB failure
- * the adapter wrapped, a response that failed its own schema, an event that was
- * not a gateway event. Each is a 500, and each returns a **resolved** promise:
- * a rejected one is an unhandled Lambda error, which the gateway renders as its
- * own HTML-ish 502 and which no client can parse as an `apiErrorSchema` body.
- *
- * The caller gets a generic message; the detail goes to the log. That split is
- * the point — a `StorageError` states its table and operation, and neither is
- * something an unauthenticated caller is entitled to. No account id is logged
- * either: `describeThrown` renders name and message only, never a stack or an
- * SDK response object, both of which can carry an ARN.
+ * Everything a route can *predict* is already a response by the time it reaches
+ * here. So an exception at this point means something nobody predicted: a
+ * DynamoDB failure the adapter wrapped, a response that failed its own schema,
+ * an event that was not a gateway event. Each is a 500, and each returns a
+ * **resolved** promise: a rejected one is an unhandled Lambda error, which the
+ * gateway renders as its own HTML-ish 502 and which no client can parse as an
+ * `apiErrorSchema` body.
  */
 export const handleApiEvent = async (
   deps: ApiBoundaryDeps,
@@ -429,19 +388,17 @@ export const handleApiEvent = async (
  * The Lambda entry point. `dist/main.mjs` is the bundle and `main.handler` is
  * the handler string the API's Terraform configures.
  *
- * The second argument is Lambda's invocation context, and this function used to
- * discard it — the signature named one parameter, so the runtime's second
- * argument fell on the floor. It is the only source of the one fact a handler
- * cannot work out for itself: how long is left before this invocation is killed
- * mid-flight, taking `handleApiEvent`'s error boundary and any 201 body with it
- * (`request-budget.ts` prices what that costs). It stays `unknown` here and is
- * narrowed by a type guard in `http/request-deadline.ts` rather than typed
- * against `@types/aws-lambda`: the boundary already treats its *event* as
- * untrusted, and there is no reason its context is more trustworthy.
+ * The second argument is Lambda's invocation context. It is the only source of
+ * the one fact a handler cannot work out for itself: how long is left before
+ * this invocation is killed mid-flight, taking `handleApiEvent`'s error
+ * boundary and any 201 body with it (`request-budget.ts` prices what that
+ * costs). It stays `unknown` here and is narrowed by a type guard in
+ * `http/request-deadline.ts` rather than typed against `@types/aws-lambda`: the
+ * boundary already treats its *event* as untrusted, and there is no reason its
+ * context is more trustworthy.
  *
  * Optional, because a direct invoke passes no context and because the fallback
- * countdown is a correct answer for one — the budget it counts down from is
- * this function's own configured timeout, mirrored from Terraform.
+ * countdown is a correct answer for one.
  */
 export const handler = (event: unknown, context?: unknown): Promise<ApiResponse> =>
   handleApiEvent(
