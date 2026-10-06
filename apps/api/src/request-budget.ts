@@ -6,47 +6,28 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * The API's counterpart to `apps/ingestion/src/cycle-budget.ts`, and it exists
  * for the same reason: a handler that keeps starting storage work until it runs
  * out of things to do will eventually outlive the function timeout, and a
- * request killed at the timeout does not reach `main.ts`'s error boundary. The
- * caller then gets a gateway 504 whose body is not an `apiErrorSchema` one —
- * and on `POST /v1/sites` that is worse than an error, because the 201 body is
- * the only place the caller ever learns the new site's id. A create that
- * committed and then died in work done afterwards loses the id for good, which
- * is why nothing runs after that write any more (ADR 0007).
+ * request killed at the timeout does not reach `main.ts`'s error boundary —
+ * `apps/api/README.md`'s error contract states what the caller gets instead.
  *
  * **The unit.** Every figure here is a multiple of
- * {@link STORAGE_COMMAND_WORST_MS} — 7,000 ms, which `@cumulo/storage` states
- * about itself and this module imports rather than re-derives (#165: the same
- * number had three derivations and they were free to disagree). It is a
- * **bound, not an expectation**: a healthy command costs tens of milliseconds,
- * and nothing here predicts a duration. It answers one question —
+ * {@link STORAGE_COMMAND_WORST_MS}, which `@cumulo/storage` states about itself
+ * and this module imports rather than re-derives (#165: the same number had
+ * three derivations and they were free to disagree). It is a **bound, not an
+ * expectation**. It answers one question —
  * {@link hasBudgetForStorageCommands}, may this request start another command?
  *
  * **What the deadline buys.** Every request carries a `RequestDeadline`
  * (`http/request-deadline.ts`), and every *looping* term asks it before each
- * command. There are three: series pagination, `POST`'s store-and-evict
- * attempts, and `DELETE`'s counted deletes. None of them can spin an invocation
- * into the timeout — they stop and answer in schema instead, which is the whole
- * of what the deadline is for.
+ * command, so none can spin an invocation into the timeout — they stop and
+ * answer in schema instead. `apps/api/README.md`'s 504 bullet enumerates the
+ * looping terms.
  *
- * **And every admitted unit is now bounded by one
- * {@link STORAGE_COMMAND_WORST_MS} of wall clock.** That is the property that
- * makes admission's promise complete rather than approximate: a unit that could
- * burn more wall clock than the check priced for it would outrun its own
- * admission. Sequential work meets that by pricing *the next command* — one
- * admission, one command. The fleet fan-out (`forecast/fleet-series-read.ts`)
- * meets it a second way: one admission covers a whole batch of up to
- * `FLEET_READ_CONCURRENCY` Queries, dispatched in the same tick and each
- * independently bounded, so their worst cases *overlap* rather than add — the
- * batch's wall clock is the longest of its members, not their sum — and no
- * member starts a further command on that admission, because a next page is
- * re-admitted per page by the Query's own `QueryPaginationBound`, exactly as on
- * the per-site routes.
- *
- * What is still refused is accumulation **in series** behind one admission. The
- * API had one such unit — the inline series cleanup, a Query and *then* a
- * `BatchWriteItem`, sequential behind a single call, so its two worst cases
- * followed one another — and ADR 0007 retired it rather than shrinking it.
- * Nothing here now admits work it has not priced.
+ * **And every admitted unit is bounded by one {@link STORAGE_COMMAND_WORST_MS}
+ * of wall clock.** Sequential work meets that by pricing *the next command* —
+ * one admission, one command. The fleet fan-out meets it a second way, and
+ * `forecast/fleet-series-read.ts` carries that argument. What is still refused
+ * is accumulation **in series** behind one admission, the shape ADR 0007
+ * retired.
  *
  * **Where it stops.** Each route keeps an ungated straight-line prefix: the
  * limiter's own commands (`IpLimiter.check` spends two on the allowed path,
@@ -56,74 +37,44 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * handlers, each unit at most {@link STORAGE_COMMAND_WORST_MS} of wall clock:
  *
  * - `GET /v1/sites` — **1** (`listFleetSites`; ADR 0002 holds the fleet in one
- *   bounded partition, so one page), ≈ 7 s.
- * - `GET /v1/sites/{siteId}` — **1** (`getFleetSite`), ≈ 7 s.
- * - `GET …/forecast` — **2**: `getFleetSite`, then the first series page,
- *   ≈ 14 s.
- * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page,
- *   ≈ 28 s.
+ *   bounded partition, so one page).
+ * - `GET /v1/sites/{siteId}` — **1** (`getFleetSite`).
+ * - `GET …/forecast` — **2**: `getFleetSite`, then the first series page.
+ * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page.
  * - `GET /v1/fleet/actuals` — **4**: limiter 2, `listFleetSites`, then the
- *   fan-out's first batch, ≈ 28 s. That batch is up to
- *   `FLEET_READ_CONCURRENCY` sites' first pages issued in one tick, and it
- *   costs one unit between them rather than one each, because their worst
- *   cases overlap (`forecast/fleet-series-read.ts` carries the argument). The
- *   deadline gate sits *between* batches, so the first one is ungated exactly
- *   as a first page is.
+ *   fan-out's first batch. The deadline gate sits *between* batches, so the
+ *   first one is ungated exactly as a first page is.
  * - `GET /v1/fleet/forecast` — **4** on the roll-up path (limiter 2,
- *   `listFleetSites`, then the first page of the single `#FLEET` Query),
- *   ≈ 28 s; **5** on ADR 0009's fallback, where that Query's first page is
- *   followed by the fan-out's first batch, ≈ 35 s. The fallback is the one
- *   prefix on this API wider than the four above, and it is wider by a whole
- *   command rather than by a coincidence of composition: the roll-up read is
- *   consulted first and only *then* found wanting, so both first-reads are
- *   ungated in the same request. It is temporary by construction — the
- *   fallback comes out at #507 and the prefix returns to 4 — and it sits
- *   inside the same argument the section closes with, since a 35-second worst
- *   case still requires five independent worst cases to coincide.
- * - `POST /v1/sites` — **2**: the limiter's, ≈ 14 s. Everything after is
- *   admitted per command, including the up-to-36 commands of the store loop.
- *   The committed write is the last thing the route does: nothing follows it,
- *   so the 201 and the server-assigned id it carries cannot be lost to work
- *   done after the site exists (ADR 0007).
+ *   `listFleetSites`, then the first page of the single `#FLEET` Query); **5**
+ *   on ADR 0009's fallback, where that Query's first page is followed by the
+ *   fan-out's first batch, because the roll-up read is consulted first and only
+ *   *then* found wanting, so both first-reads are ungated in the same request.
+ *   The fallback comes out at #507 and the prefix returns to 4.
+ * - `POST /v1/sites` — **2**: the limiter's. Everything after is admitted per
+ *   command. The committed write is the last thing the route does: nothing
+ *   follows it, so the 201 and the server-assigned id it carries cannot be lost
+ *   to work done after the site exists (ADR 0007).
  * - `PUT /v1/sites/{siteId}` — **4**: limiter 2, then `getFleetSite` and
- *   `putFleetSite`, ≈ 28 s. The read-modify-write is straight-line, so it has
- *   no loop to gate. It was the widest ungated prefix on the API until ADR
- *   0009's fallback arm above took that title at 5, temporarily, until #507;
- *   below that it is joint-widest at 4, tied with `GET …/series`,
- *   `GET /v1/fleet/actuals`, the fleet-forecast roll-up path and a seed-site
- *   `DELETE`. All five of those are structural, which is the distinction worth
- *   keeping: the only prefix wider than them is one that is on its way out.
+ *   `putFleetSite`. The read-modify-write is straight-line, so it has no loop
+ *   to gate.
  * - `DELETE /v1/sites/{siteId}` — **3** on a user site (limiter 2,
- *   `getFleetSite`), ≈ 21 s, the counted deletes gated after it; **4** on a
- *   seed site, whose single `deleteFleetSite` is a plain
- *   `DeleteItem` with no retry loop of its own to gate, ≈ 28 s.
+ *   `getFleetSite`), the counted deletes gated after it; **4** on a seed site,
+ *   whose single `deleteFleetSite` is a plain `DeleteItem` with no retry loop
+ *   of its own to gate.
  * - Any limited route *refusing* a caller — **3**: the two above plus
- *   `putBlock`, and then the 429, ≈ 21 s.
+ *   `putBlock`, and then the 429.
  *
  * **So the timeout is reachable, and this is exactly when.** Not from any loop,
- * and never from a single command: 7,000 ms is comfortably inside
- * {@link API_LAMBDA_TIMEOUT_MS}. Two independent commands both hitting their
- * worst case in the same request come to 14,000 ms and still land, with
- * {@link API_RESPONSE_MARGIN_MS} of the timeout left; the third coincidence is
- * what crosses it, at 21,000 ms. It therefore takes **three independent
- * per-unit worst cases coinciding in one request's ungated prefix** to kill
- * an invocation — which every prefix above of three units or more can offer,
- * and which is now the only route to it. Each of those worst cases is itself
- * two burnt 3,000 ms deadlines plus a full backoff. That is a coincidence this
- * module declines to size a slack against, for the same reason
- * `cycle-budget.ts` declines to size its
- * every-retry-at-once term: multiplying independent tail events together
- * produces a number nobody can act on. It is stated instead of implied, and
- * `docs/tech-debt.md` carries the residual — gating the prefix per command
- * would close it, at the cost of a deadline check in front of the limiter.
+ * and never from a single command. It takes **three independent per-unit worst
+ * cases coinciding in one request's ungated prefix** to kill an invocation —
+ * `request-budget.test.ts` asserts the arithmetic, and `docs/tech-debt.md`
+ * carries the residual.
  *
  * **Restatement ledger (`docs/standards/architecture.md` rule 9).** This header
  * owns the admission invariant — every admitted unit bounded by one
  * {@link STORAGE_COMMAND_WORST_MS} of wall clock, plus the per-route ungated
- * straight-line prefix counted above. (The millisecond figure itself is
- * `@cumulo/storage`'s, as **The unit** says; what is owned here is what an
- * admission buys.) These sites carry the claim rather than pointing at it, and
- * move with it in the same commit:
+ * straight-line prefix counted above. These sites carry the claim rather than
+ * pointing at it, and move with it in the same commit:
  *
  * - `apps/api/README.md`, the 504 bullet of the error-contract section —
  *   *paraphrasing*: it restates the bound, the fan-out's overlap and the
@@ -137,15 +88,12 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *   `aws_lambda_function.api` — *arguing*: the 504 residual it states turns on a
  *   unit being a bound on wall clock rather than being one command.
  *
- * None of them quotes this header's wording — even the *arguing* pair, which
- * name the constant, state the claim in their own words — so a sweep keyed to
- * the phrasing here finds none of them. Shape it around the claim (rule 10).
- * The one behind this list:
+ * None of them quotes this header's wording, so the sweep behind this list is
+ * shaped around the claim rather than the phrasing (rule 10):
  * `command grep -rnE 'admitted unit|straight-line prefix|STORAGE_COMMAND_WORST_MS|wall clock' apps/api infra/api`,
- * run 2026-08-11. The list is a **floor**, not a census: a claim of completeness
- * is falsified by one more carrier, and this claims only what that sweep found.
- * That sweep also reaches `request-budget.test.ts`, which imports the constant
- * and computes with it rather than restating anything, so it needs no entry.
+ * run 2026-08-11. The list is a **floor**, not a census. That sweep also
+ * reaches `request-budget.test.ts`, which imports the constant and computes
+ * with it rather than restating anything, so it needs no entry.
  */
 
 /**
@@ -153,21 +101,15 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *
  * A mirror, not a source: Terraform owns the deployed value and its comment
  * cites this constant by name, as this one cites the file. The two are held
- * equal by `pnpm check:infra-mirrors` in the `verify` composite, which
- * multiplies the Terraform `timeout` by 1000 and compares
- * (`docs/standards/architecture.md` rule 8 — a comment cannot fail a build, so
- * the pair is declared to the gate rather than merely described here).
+ * equal by `pnpm check:infra-mirrors` in the `verify` composite
+ * (`docs/standards/architecture.md` rule 8).
  *
  * **It stays a plain integer literal on one line**, however tempting it is to
  * write it as an expression of the constants below. The gate's TypeScript
  * reader matches `export const <NAME> = <integer>;` and nothing else — it
- * refuses anything it cannot parse rather than skipping it, so an expression
- * here does not weaken the gate quietly, it stops the build with a non-verdict.
- * The value's *relation* to the gateway ceiling is carried by
- * `request-budget.test.ts` instead — not because the gate holds only
- * equalities (it holds strict bounds and floors too), but because that ceiling
- * has no second declared side here for a record to name, as the constant below
- * spells out.
+ * refuses anything it cannot parse rather than skipping it. The value's
+ * *relation* to the gateway ceiling is carried by `request-budget.test.ts`
+ * instead, for the reason {@link API_GATEWAY_INTEGRATION_TIMEOUT_MS} states.
  */
 export const API_LAMBDA_TIMEOUT_MS = 15_000;
 
@@ -175,20 +117,16 @@ export const API_LAMBDA_TIMEOUT_MS = 15_000;
  * API Gateway's hard integration timeout: 30 s, and not ours to move.
  *
  * The ceiling {@link API_LAMBDA_TIMEOUT_MS} was *chosen* against rather than
- * derived from (ADR 0005, cited by `infra/api/lambda.tf`'s own comment). The
- * ownership chain, end to end: **AWS** owns this 30 s; **Terraform** owns the
- * 15 s and sits it below, so that a hung request produces a Lambda timeout log
- * line and an `Errors` data point rather than a gateway 504 with nothing behind
- * it; the **mirror gate** holds the constant above equal to Terraform; and the
- * **test** holds it under this ceiling.
+ * derived from (ADR 0005, cited by `infra/api/lambda.tf`'s own comment).
+ * **Terraform** owns the 15 s and sits it below, so that a hung request
+ * produces a Lambda timeout log line and an `Errors` data point rather than a
+ * gateway 504 with nothing behind it.
  *
- * That last link is the one that was missing. `check-infra-mirrors.sh` records
- * this inequality as the half of the number it cannot express — not for want of
- * a relation (its records hold strict bounds and floors as well as equalities)
- * but for want of a second side: this ceiling is a value AWS owns and no file
- * in this repo declares, so there is nothing for a record to address.
- * Restating it as a constant moves it somewhere a test can bite, which closes
- * it without pretending the gate grew a feature.
+ * `check:infra-mirrors` cannot hold that inequality, and
+ * `request-budget.test.ts` holds it instead — the test's own case
+ * ("sits below the gateway integration ceiling it was chosen against") says
+ * why: a record addresses two declared sides, and this ceiling is AWS's, with
+ * no declaration in this repo for a record to name.
  */
 export const API_GATEWAY_INTEGRATION_TIMEOUT_MS = 30_000;
 
@@ -198,9 +136,8 @@ export const API_GATEWAY_INTEGRATION_TIMEOUT_MS = 30_000;
  * After the last storage command returns there is still work to do — serialise
  * the body, write the boundary's log line, let the runtime send it — and a
  * budget spent to the last millisecond on storage is a budget that dies during
- * that. A chosen value, not a measured one: the work is microseconds, so a
- * second is deliberately generous, and being generous costs only the odd
- * command that would have fitted.
+ * that. A chosen value, not a measured one: deliberately generous, and being
+ * generous costs only the odd command that would have fitted.
  */
 export const API_RESPONSE_MARGIN_MS = 1_000;
 
