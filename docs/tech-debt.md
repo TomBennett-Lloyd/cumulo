@@ -165,3 +165,21 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/api/src/request-budget.ts`'s module header — the `RequestDeadline` sentence naming `http/request-deadline.ts` and the fan-out sentence naming `forecast/fleet-series-read.ts`
 - What: `docs/standards/prose.md` rule 3 permits a bare basename only for a same-directory sibling and requires the repo-relative path for everything else (#482). These spellings are neither: they are relative to `apps/api/src/`, so a `git grep` for the repo-relative path misses them and a reader in another package cannot resolve them. Pre-existing across the whole header rather than introduced by #545 batch 1, which preserved the spellings while trimming the sentences around them. The same header's restatement ledger uses full repo-relative paths for all four carriers, so the file disagrees with itself about the convention. Not fixed in the trim batch because converting them is a claim-bearing edit to prose the batch was otherwise only deleting from, and because the sweep rule 3 implies should run over `apps/api/src` as a whole rather than one file
 - Source: PR #557 (#545 batch 1), reviewer pass 1 SYSTEMIC
+
+## 2026-10-06 — pre-check (a) greps the trimmed subject's identifier only, so a citation naming a trimmed docblock by file path or by path:line is invisible to it
+
+- Where: `.claude/scripts/sweep-report.sh` · `.claude/scripts/sweep-report.sh` carries "run_shown git grep -n -F -e "$subject" -- ":!$subj_path"" · `apps/web/src/dashboard/site-overlay.ts` carries "packages/shared/src/site.ts:47"
+- What: pre-check (a) greps the trimmed subject's identifier only, so a citation naming a trimmed docblock by file path or by path:line is invisible to it
+- Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 84
+
+## 2026-10-06 — pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure such as 'one site's' onto one line trips it, and a spelled-out figure split across a wrap passes
+
+- Where: `.claude/scripts/sweep-report.sh` · `.claude/scripts/sweep-report.sh` carries "SPELLED_RE='"
+- What: pre-check (c) matches one diff line at a time, so a re-wrap that joins a non-figure such as 'one site's' onto one line trips it, and a spelled-out figure split across a wrap passes
+- Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 85
+
+## 2026-10-06 — the no-new-words half of § Trim batches rule 1 has no mechanical check in sweep-report.sh, so each lane writes its own, and a whole-file vocabulary test passes a sentence assembled from words found elsewhere in the same file
+
+- Where: `docs/standards/prose.md` · `docs/standards/prose.md` carries "It does not rephrase."
+- What: the no-new-words half of § Trim batches rule 1 has no mechanical check in sweep-report.sh, so each lane writes its own, and a whole-file vocabulary test passes a sentence assembled from words found elsewhere in the same file
+- Source: PR #572 (#545 batch 4), reviewer pass 1 SYSTEMIC, ledger row 86
