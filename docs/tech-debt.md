@@ -183,3 +183,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `packages/hindcast/src/archive-cache.ts` — the `ensureArchiveCoverage` docblock, step 3 ("Fetch sequentially")
 - What: the step restates CLAUDE.md's per-minute call limit as a figure beside its citation of CLAUDE.md, against `docs/standards/architecture.md` rule 9. #545 batch 6 deleted the sibling restatement of the daily figure from `MAX_ARCHIVE_REQUEST_DAYS`' docblock in `packages/hindcast/src/open-meteo-archive.ts` and left this one, because deleting the figure alone leaves "the very limit that stops the run" without a referent.
 - Source: #545 batch 6, reviewer pass 1 SYSTEMIC
+
+## 2026-10-06 — The modal sampling step misreads jittered or hole-heavy cadences, and every chart mark now keys off it
+
+- Where: `modalStepMs` and `contiguousRuns` in `apps/web/src/charts/chart-series.ts`
+- What: the run predicate breaks wherever a sample is more than one modal step after its predecessor. When every interval is distinct (jittered timestamps) the mode is the shortest, so every mark fragments into markers; when holes outnumber single steps the mode is the double step, so the bridges come back. Already true of the night wash on `main`; #537 extended it to every mark. Latent while every upstream timestamp is an exact hour
+- Source: #537 review pass 1 SYSTEMIC
+
+## 2026-10-06 — A hover-capable stylus keeps scrubbing after its tap, so the pinned reading is where it left, not where it tapped
+
+- Where: `readAtPointer` (the `onPointerMove` handler) and `clearAtLeave` in `apps/web/src/charts/forecast-chart-hover-boundary.tsx`
+- What: after a pen tap and lift, the pen's hover stream keeps moving the reading, and the focus the lift took keeps it past the leave, so what stands is the sample where the stylus exited rather than the one it tapped. Same on `main`. The CDP pen case in `apps/web/e2e/chart-tap.spec.ts` jumps straight off the chart, so it cannot see this. It is the direct-versus-indirect pointer question #446 leaves open one surface over
+- Source: #537 review pass 1 SYSTEMIC

@@ -269,8 +269,8 @@ const modalStepMs = (samples: readonly TimedSample[]): number | null => {
 
 /**
  * Whether sample `index` is no more than one step after its array predecessor.
- * `<=` so slightly uneven sampling stays one run; a `NaN` interval or a `null`
- * step fails, so an unanswerable question breaks the run.
+ * A `NaN` interval or a `null` step fails, so an unanswerable question breaks
+ * the run.
  */
 const withinOneStep = (
   samples: readonly TimedSample[],

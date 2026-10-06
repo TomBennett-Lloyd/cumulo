@@ -69,8 +69,7 @@ const panelWidth = (container: HTMLElement): number =>
  * A finger pressing the figure at a view-box x. `pointerDown` and not a move: a
  * touch pointer produces no hover stream to be tracked, so the press is the
  * whole of the reading, and `pointerType` is stated on every event here because
- * jsdom defaults it to the empty string — which is neither of the two types the
- * component tells apart.
+ * jsdom defaults it to the empty string.
  */
 const tapAt = (svg: SVGSVGElement, viewBoxX: number): void => {
   fireEvent.pointerDown(svg, { clientX: clientXFor(viewBoxX), pointerType: 'touch' });

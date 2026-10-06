@@ -217,8 +217,7 @@ export const ForecastChartHoverBoundary = (
   };
 
   /**
-   * A cancelled gesture takes its reading with it — which is the one place a
-   * touch pointer going away *does* clear, and the distinction the pin turns on.
+   * A cancelled gesture takes its reading with it.
    *
    * A lift is the end of a tap: the reader asked a question and the answer is
    * what they lifted their finger to read, so it stands (`clearAtLeave`
@@ -239,9 +238,8 @@ export const ForecastChartHoverBoundary = (
    *
    * A mouse's reading is a hover, so its leave always clears. Any other kind —
    * `touch`, `pen`, `''`, one not yet named — keeps its reading only while the
-   * chart holds focus: a direct pointer leaves at every lift, and
-   * `endGestureAtLift` has just taken the focus the blur dismisses through. A
-   * stylus that hovered and never touched holds none, so it clears like a mouse.
+   * chart holds focus, which `endGestureAtLift` takes for the blur to dismiss
+   * through.
    */
   const clearAtLeave = (event: ReactPointerEvent<SVGSVGElement>): void => {
     if (event.pointerType === 'mouse' || document.activeElement !== svgRef.current) {
@@ -401,9 +399,8 @@ export const ForecastChartHoverBoundary = (
         onPointerUp={endGestureAtLift}
         onPointerMove={readAtPointer}
         onPointerLeave={clearAtLeave}
-        /* And the one way a touch reading is dismissed without a blur: the
-           browser taking the gesture away. `clearAtCancel` above has why a
-           cancel and a lift are opposite answers. */
+        /* `clearAtCancel` above has why a cancel and a lift are opposite
+           answers. */
         onPointerCancel={clearAtCancel}
       >
         {children}

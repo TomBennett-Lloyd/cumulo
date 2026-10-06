@@ -819,12 +819,11 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   carries no information to select on. **An x the plot does not contain clamps to the nearest one it
   does**, which is what makes the axes worth listening to: a tap on the y axis reads the _start_ of
   the range, and a tap past the right edge reads the end (owner's amendment on #421, comment
-  5259485326). **A tap pins** — the reading survives the lift. A leave clears it only where no
-  focus is holding it for the blur below: always for a mouse, whose reading is a hover, and for a
-  stylus that hovered without touching (#537). That asymmetry is mechanism rather than preference:
-  a touch pointer leaves at the end of every tap, because the finger _is_ the pointer, so clearing
-  on that event would undo the selection in the same frame and no touch reader would ever see a
-  readout at all. **A drag scrubs**, by x, the way a mouse crossing the plot does. **A tap
+  5259485326). **A tap pins** — the reading survives the lift, where a mouse's leave clears its
+  hover; which leaves clear is `clearAtLeave`'s (`apps/web/src/charts/forecast-chart-hover-boundary.tsx`,
+  #537). That asymmetry is mechanism rather than preference: a touch pointer leaves at the end of
+  every tap, because the finger _is_ the pointer, so clearing on that event would undo the selection
+  in the same frame and no touch reader would ever see a readout at all. **A drag scrubs**, by x, the way a mouse crossing the plot does. **A tap
   anywhere outside the figure dismisses**, through the
   same blur path keyboard readers already have — no second way to dismiss was added and none is
   wanted, because a readout with one way to go away is a readout every input can be reasoned about
