@@ -9,9 +9,7 @@ import { utcIsoTimestampSchema } from './timestamp';
  *
  * One number covers both quantities because output clips at nameplate (ADR
  * 0003): a site can never emit more AC power than the DC capacity it declared,
- * so the widest legitimate AC value is the widest legitimate capacity. That
- * makes the two bounds the same fact stated once, not two facts that happen to
- * agree — a lower ceiling here narrows every schema in step, which is the point.
+ * so the widest legitimate AC value is the widest legitimate capacity.
  *
  * The shared-schema tests deliberately pin `50`, `50.1` and `51` as *literals*
  * rather than deriving them from this constant (`site.test.ts`,
@@ -56,10 +54,7 @@ export type Site = z.infer<typeof siteSchema>;
  * The id is the server's to assign, so it cannot be part of the request — a
  * client that predicts an id is a client that can collide with, or overwrite,
  * something it did not create. Derived with `.omit` rather than redeclared so
- * the physics bounds have exactly one definition (`architecture.md` rule 2):
- * the Fleet API's request validation (#14), the add-site form (#17) and the
- * in-memory demo source all validate against this same schema, and a bound
- * changed in `siteSchema` changes all three at once.
+ * the physics bounds have exactly one definition (`architecture.md` rule 2).
  */
 export const createSiteInputSchema = siteSchema.omit({ id: true });
 
@@ -78,8 +73,7 @@ export type CreateSiteInput = z.infer<typeof createSiteInputSchema>;
  * It lives here rather than in `@cumulo/storage` because two services now need
  * it and neither may import the other: the storage adapter parses the projected
  * index items into it (ADR 0002 access pattern F1), and the forecast service
- * takes it as the input to `createPhysicsForecast`. A full `Site` is
- * structurally assignable to it, so callers holding one need no conversion.
+ * takes it as the input to `createPhysicsForecast`.
  */
 export const sitePhysicsSchema = siteSchema.omit({ name: true });
 
@@ -130,10 +124,7 @@ export type FleetSite = z.infer<typeof fleetSiteSchema>;
  * inactive, so every consumer wanting "the fleet still being forecast" narrows it, and an arm that
  * narrows differently answers a different question under the same name: a roll-up read whose
  * expected-partial set and whose nameplate divisor disagreed about one site would report a fleet
- * under-performing against capacity that cannot generate (#531). Ingestion narrows by this same
- * predicate (`activeFetchLocations`) before a cycle picks which of those locations it has budget
- * for, so a producer's locations and a reader's expected locations cannot disagree about *activity*
- * — which is the dimension this function owns, and the only one it claims.
+ * under-performing against capacity that cannot generate (#531).
  */
 export const activeFleetSites = (sites: readonly FleetSite[]): readonly FleetSite[] =>
   sites.filter((site) => site.active);
@@ -144,21 +135,7 @@ export const activeFleetSites = (sites: readonly FleetSite[]): readonly FleetSit
  *
  * A public, anonymous add-a-site path needs a ceiling that is a number rather
  * than a hope, and this number is argued from the one hard external constraint
- * this project has — Open-Meteo's 10,000 calls/day (CLAUDE.md). Worst case at
- * every step:
- *
- * - the seed fleet is 60 sites over 12 locations (`generateFleet` at
- *   `canonicalFleetSeed`), co-located by construction so a cluster costs one
- *   fetch;
- * - a user site lands wherever its caller chose, so the worst case is 40
- *   distinct buckets — **≤ 52 locations, ≤ 100 sites**;
- * - 52 locations at the hourly cadence is `52 × 24 = 1,248` calls/day, **12% of
- *   the allowance**, leaving the rest for #16's archive backfill and for the
- *   retry each fetch is allowed;
- * - 52 sits well under ingestion's own `MAX_LOCATIONS_PER_CYCLE` (100), so a
- *   full fleet never defers a location;
- * - 100 sites is exactly the row ADR 0002's fleet-headroom table prices, at 14%
- *   of the free write allowance.
+ * this project has — Open-Meteo's 10,000 calls/day (CLAUDE.md; ADR 0006 §2).
  *
  * Two properties this constant relies on rather than states. The cap is applied
  * atomically in storage — a counter item conditioned on this value inside the
@@ -168,8 +145,8 @@ export const activeFleetSites = (sites: readonly FleetSite[]): readonly FleetSit
  * `user-sites-by-age` index, so eviction cannot see a seed site to choose it
  * ({@link siteOriginSchema}).
  *
- * `site.test.ts` holds the arithmetic above against the **generated** fleet, so
- * a seed fleet that grows — or a jitter box widened until a cluster stops being
+ * `site.test.ts` holds the arithmetic against the **generated** fleet, so a
+ * seed fleet that grows — or a jitter box widened until a cluster stops being
  * one bucket — fails there rather than at the quota.
  */
 export const MAX_USER_SITES = 40;
