@@ -156,10 +156,8 @@ export const actualsElements = (
 /**
  * The median, broken at any hour that carries no forecast.
  *
- * It used to run across every sample unbroken, and that was true of every series
- * this chart had ever been given: a point existed because a forecast existed.
- * #264 ended it. The fleet chart's x-domain is now the union of forecast hours
- * and actual hours (`dashboard/fleet-series.ts`), and in live mode those two
+ * The fleet chart's x-domain is the union of forecast hours and actual hours
+ * (#264, `dashboard/fleet-series.ts`), and in live mode those two
  * windows do not overlap at all — the hours behind the horizon were measured and
  * never forecast. So the median obeys the same two rules the actuals and the
  * overlay obey, for the same reasons: an hour carrying `medianKw: null` breaks
@@ -170,11 +168,9 @@ export const actualsElements = (
  * **An hour missing from the series is the case that rule does not reach.** The
  * union domain has no row at all for an hour that was neither forecast nor
  * measured, so there is no `null` for `contiguousRuns` to break on and the two
- * hours either side of it are joined by one segment — at the hole's full width
- * since #325, which is what makes the bridge visible rather than compressed
- * away. Systemic and not fixed here, because every mark in this file inherits
- * it: `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits on array
- * adjacency, not on time adjacency") owns it.
+ * hours either side of it are joined by one segment (#325). `docs/tech-debt.md`
+ * (2026-08-11, "`contiguousRuns` splits on array adjacency, not on time
+ * adjacency") owns it.
  */
 export const medianElements = (
   points: readonly ForecastChartPoint[],
@@ -289,16 +285,10 @@ const overlayStretches = (
  * It obeys the two rules the actuals obey, for the same reasons: a `null` hour
  * breaks the line rather than being bridged, and a run left holding one sample
  * becomes a marker rather than the one-vertex path SVG declines to paint.
- * The runs are derived here rather than passed in because nothing outside this
- * builder needs them.
  *
  * **It is the one mark here carrying both measurement and projection, so it
  * carries the seam in its own stroke** (#530): measured hours solid and ending in
- * a dot, forecast hours dashed. The fleet's two are told apart by being two
- * series in two inks — `actualsElements` and `medianElements` above — and the
- * overlay has one ink for both, which is what leaves the dash as its only
- * channel. Before #530 it had no channel at all: one treatment over the site's
- * forecasts, past ones included. A lone hour stays the marker it was, because a
+ * a dot, forecast hours dashed. A lone hour stays the marker it was, because a
  * dot has no pattern to carry. The reasoning is the horizon bullets' in
  * `docs/design/chart-treatment.md`; the dash pattern is `charts.css`'s.
  *
