@@ -187,11 +187,11 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 ## 2026-10-06 — The modal sampling step misreads jittered or hole-heavy cadences, and every chart mark now keys off it
 
 - Where: `modalStepMs` and `contiguousRuns` in `apps/web/src/charts/chart-series.ts`
-- What: the run predicate breaks wherever a sample is more than one modal step after its predecessor. When every interval is distinct (jittered timestamps) the mode is the shortest, so every mark fragments into markers; when holes outnumber single steps the mode is the double step, so the bridges come back. Already true of the night wash on `main`; #537 extended it to every mark. Latent while every upstream timestamp is an exact hour
+- What: the run predicate breaks wherever a sample is more than one modal step after its predecessor. When every interval is distinct (jittered timestamps) the mode is the shortest, so every mark fragments into markers; when holes outnumber single steps the mode is the double step, so the bridges come back. Already true of the night wash on `main`; #537 extended it to every mark
 - Source: #537 review pass 1 SYSTEMIC
 
 ## 2026-10-06 — A hover-capable stylus keeps scrubbing after its tap, so the pinned reading is where it left, not where it tapped
 
 - Where: `readAtPointer` (the `onPointerMove` handler) and `clearAtLeave` in `apps/web/src/charts/forecast-chart-hover-boundary.tsx`
-- What: after a pen tap and lift, the pen's hover stream keeps moving the reading, and the focus the lift took keeps it past the leave, so what stands is the sample where the stylus exited rather than the one it tapped. Same on `main`. The CDP pen case in `apps/web/e2e/chart-tap.spec.ts` jumps straight off the chart, so it cannot see this. It is the direct-versus-indirect pointer question #446 leaves open one surface over
+- What: after a pen tap and lift, the pen's hover stream keeps moving the reading, and the focus the lift took keeps it past the leave, so what stands is the sample where the stylus exited rather than the one it tapped. Same on `main`. The CDP pen case in `apps/web/e2e/chart-tap.spec.ts` jumps straight off the chart, so it cannot see this
 - Source: #537 review pass 1 SYSTEMIC
