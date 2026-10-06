@@ -12,8 +12,7 @@ import {
  *
  * This is the whole of the service's domain logic and it is pure: no clock, no
  * I/O, no environment (`docs/standards/architecture.md` rule 3). The vintage
- * arrives as a parameter precisely so that it is — a `new Date()` here would make
- * the one function worth testing densely the one function a test cannot pin.
+ * arrives as a parameter precisely so that it is.
  *
  * Site-major rather than reading-major, and the order is not arbitrary: it is the
  * order the rows are written in, and `cumulo-series` partitions by site (ADR
@@ -28,16 +27,12 @@ import {
  * deliberately does not, so the composition cannot happen upstream of here and
  * would need the weather refetched anywhere downstream. That module owns the
  * width model and the argument for attaching it outside the physics core; this
- * is only the seam. `consume-message.ts` uses the same seam one layer out for
- * simulated actuals (#264): simulation composed beside the physics, never
- * folded into it.
+ * is only the seam.
  */
 
 /**
  * Everything the fan-out needs. Named and exported rather than inlined into the
- * signature (`docs/standards/typing.md` rule 6): the caller in
- * `consume-message.ts` assembles this from three different sources and benefits
- * from a contract it can name.
+ * signature (`docs/standards/typing.md` rule 6).
  */
 export interface LocationForecastsInput {
   /**
@@ -57,10 +52,9 @@ export interface LocationForecastsInput {
  *
  * Two arms rather than a partial row list, because this service's policy is
  * all-or-nothing per message and has to stay that way. `consume-message.ts` fails
- * the record on the `implausible-hour` arm, which redelivers the whole message —
- * and that redelivery is only free because every write is an idempotent Put over
- * a deterministic key (ADR 0002). Writing the plausible rows and reporting the
- * rest would make the two halves of a message diverge in vintage on redelivery.
+ * the record on the `implausible-hour` arm, which redelivers the whole message.
+ * Writing the plausible rows and reporting the rest would make the two halves of a
+ * message diverge in vintage on redelivery.
  */
 export type LocationForecastsOutcome =
   | { readonly status: 'complete'; readonly forecasts: Forecast[] }
@@ -75,18 +69,14 @@ export type LocationForecastsOutcome =
  * Every site × every hour, as `Forecast` rows ready to write.
  *
  * `sites.length × readings.length` rows, always — including the hours a site
- * generates nothing. A night hour produces a row with `acPowerKw: 0`, and that
- * row is the point rather than noise: the read side (`querySeriesRange`) plots
- * what it finds, so an absent row and a zero row are the difference between a
- * flat night and a hole in the chart nobody can explain.
+ * generates nothing. A night hour produces a row with `acPowerKw: 0`.
  *
  * The one exception is the site-hour `@cumulo/forecast` reports `implausible` for:
  * a schema-valid weather hour whose physics lands outside `forecastSchema`'s
  * bounds. The fan-out stops at the first one and hands it back, because this
  * service's answer to "who does the operator need to call?" is the queue —
  * `consume-message.ts` fails the record, the redrive retries it, and the DLQ
- * alarm is the signal (#136). Deciding that here would put failure policy in the
- * pure core; reporting it keeps the decision one layer up where the queue is.
+ * alarm is the signal (#136).
  */
 export const locationForecasts = (input: LocationForecastsInput): LocationForecastsOutcome => {
   const forecasts: Forecast[] = [];

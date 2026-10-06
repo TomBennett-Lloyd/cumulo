@@ -263,7 +263,7 @@ describe('locationForecasts', () => {
   });
 
   it('scales a canonical five-site location to 240 rows over a 48-hour horizon', () => {
-    // The number the handler's budget arithmetic is written against.
+    // The number `apps/forecast/README.md` `## No deadline, and why` is written against.
     const sites = Array.from({ length: 5 }, (_unused, index) =>
       sitePhysics({ id: `3f1a2b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5${String(index)}` }),
     );

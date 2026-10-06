@@ -25,9 +25,7 @@ import {
  * `requestHandler instanceof NodeHttpHandler`, and it passed while the deadline
  * did nothing at all. In the installed @smithy/node-http-handler 4.9.13,
  * `requestTimeout` without `throwOnRequestTimeout` only logs a warning and
- * leaves the socket open, so the "~9 s per location" this publisher's own
- * comment claims — and which `cycle-budget.ts` imports as PUBLISH_WORST_MS —
- * was unenforced (#115).
+ * leaves the socket open (#115).
  */
 
 const oneReading = (): ForecastWeatherReading =>

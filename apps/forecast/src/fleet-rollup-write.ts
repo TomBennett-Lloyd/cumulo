@@ -18,16 +18,13 @@ import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
  * the numbers already are, and read back as twelve small items.
  *
  * **Zero extra reads.** The partials are computed from the forecasts this invocation just wrote and
- * the sites it already listed — nothing is re-queried, which is the whole reason this shape was
- * chosen over one that re-derives the fleet from storage on every message. One location's message
- * costs two `BatchWriteItem` calls for a 48-hour horizon and nothing else.
+ * the sites it already listed — nothing is re-queried.
  *
  * **No end-of-run event, and none needed.** ADR 0004 makes one SQS message one *location's* whole
  * horizon, so an ingestion cycle is twelve independent invocations with no last-one signal. Each
  * writes only its own keys — `(kind, hour, location)` — so two invocations of one cycle never touch
  * the same item and there is no last-writer race to lose. The sum happens at read, over whatever is
- * there. A mid-cycle read therefore mixes this cycle's locations with last cycle's, which is exactly
- * what the per-site fan-out did before it and is not new staleness.
+ * there.
  *
  * **It cannot fail the record.** Every failure is converted to a log entry, for the reason
  * `simulate-actuals.ts` states about its own: this runs below the record boundary
@@ -71,9 +68,7 @@ type FleetRollupOperation = 'fleetRollupPartials' | 'putFleetRollupPartials';
  * The collaborators a roll-up write needs.
  *
  * `series` is narrowed to the one method this path uses, so the service's least-privilege posture
- * stays a compile-time fact as well as an IAM one — and narrowing is honest here because the roll-up
- * adds no new AWS permission at all: it is a Put into a table `infra/forecast/iam.tf` already grants
- * this function write access to, under a different partition key value.
+ * stays a compile-time fact as well as an IAM one.
  */
 export interface FleetRollupWriteDeps {
   readonly series: Pick<SeriesAdapter, 'putFleetRollupPartials'>;
@@ -98,11 +93,10 @@ const failedOutcome = (
  * needs — and `SitePhysics` satisfies `SiteCapacity` structurally, so the producer hands over what
  * it already listed rather than fetching a richer site record to reach two fields.
  *
- * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another: there is no `+`
- * over a power value in this file, which is the rule `apps/web/src/dashboard/fleet-series.ts` states
- * for the client, applied to the producer (`docs/standards/architecture.md` rule 3). The model
- * selection is `@cumulo/shared`'s too — `fleetRollupPartials` filters on the kind it is handed, so
- * the producer and the API's fallback cannot select differently (#531).
+ * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another
+ * (`docs/standards/architecture.md` rule 3). The model selection is `@cumulo/shared`'s too —
+ * `fleetRollupPartials` filters on the kind it is handed, so the producer and the API's fallback
+ * cannot select differently (#531).
  */
 export const writeFleetRollup = async (
   deps: FleetRollupWriteDeps,
@@ -142,8 +136,7 @@ export const writeFleetRollup = async (
  *
  * The outcome is logged here rather than returned to the record boundary because it is not the
  * message's result — the message's work is the forecasts, and those are already stored by the time
- * this runs. Folding a derived write into `MessageOutcome` would make a healthy message report a
- * failure and be redelivered for it, which is the opposite of what the roll-up is for.
+ * this runs.
  */
 export const reportFleetRollupWrite = async (
   deps: FleetRollupWriteDeps,

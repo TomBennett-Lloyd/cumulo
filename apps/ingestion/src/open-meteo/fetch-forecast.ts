@@ -11,20 +11,12 @@ import { buildForecastUrl, type ForecastLocation } from './url';
  * the failure policy — timeout, retry, and how each provider answer maps onto an
  * outcome the caller must handle.
  *
- * Standalone functions over an explicit policy, rather than a client object: there
- * is no state here that outlives a call — a resolved timeout, a `fetch` and a
- * jitter source are configuration, not shared mutable state — so every step is a
- * function of its arguments alone, and `attemptFetch`, the piece that carries the
- * whole mapping from provider answer to outcome, is legible without tracing what
- * some enclosing scope captured.
+ * Standalone functions over an explicit policy, rather than a client object.
  */
 
 /**
  * Every way a forecast fetch can end, as a value rather than a throw
- * (error-handling.md rule 1). The four cases exist because the caller's action
- * differs for each: `ok` stores readings, `rate-limited` backs off until the next
- * hourly cycle, `malformed` alerts (the provider contract moved), `unreachable`
- * is logged and left for the next cycle.
+ * (error-handling.md rule 1).
  */
 export type FetchForecastOutcome =
   | { outcome: 'ok'; readings: ForecastWeatherReading[]; droppedHours: number }
@@ -33,10 +25,7 @@ export type FetchForecastOutcome =
   | { outcome: 'unreachable'; detail: string };
 
 /**
- * The parts of the failure policy a caller may override. Every field is optional
- * because production overrides none of them — the defaults *are* the shipped
- * policy — and a test replaces exactly the pieces that would otherwise reach the
- * network or the wall clock.
+ * The parts of the failure policy a caller may override.
  */
 export interface ForecastFetchDeps {
   /** Defaults to the global `fetch`; tests pass a stub so no test hits the network. */
@@ -75,8 +64,7 @@ export interface ForecastAttempt {
 
 /**
  * The adapter as its consumer holds it: one location in, one outcome out, with the
- * policy already applied by the composition root. `cycle.ts` depends on this and on
- * nothing else here, so a cycle cannot reach past its one call.
+ * policy already applied by the composition root.
  */
 export type FetchForecastForLocation = (
   location: ForecastLocation,
@@ -96,13 +84,8 @@ export const retryBaseDelayMs = 1_000;
  * Requests one location's fetch may cost: the initial attempt plus the single
  * retry {@link fetchForecast} makes on a transient failure.
  *
- * Exported because it is a term in `cycle-budget.ts`'s worst-case arithmetic,
- * and a budget that hard-codes `2` there is a *model* of this module rather
- * than a reading of it (#115). It is load-bearing rather than decorative in
- * two ways: the `unreachable` detail below is rendered from it, and
- * `fetch-forecast.test.ts` asserts the request count against it on a
- * persistently-failing fetch — so a third attempt could not be added without
- * this number moving with it.
+ * Exported because it is a term in `cycle-budget.ts`'s worst-case arithmetic
+ * (#115).
  */
 export const FETCH_MAX_ATTEMPTS = 2;
 
@@ -115,7 +98,7 @@ const openMeteoErrorSchema = z.object({ error: z.literal(true), reason: z.string
 /**
  * A transient attempt result. Kept out of {@link FetchForecastOutcome} because
  * "worth one more try" is an internal state of this module, never something the
- * caller sees: by the time {@link fetchForecast} returns, retrying is over.
+ * caller sees.
  */
 type AttemptOutcome = FetchForecastOutcome | { outcome: 'transient'; detail: string };
 
@@ -125,8 +108,7 @@ const truncate = (text: string): string =>
 /**
  * Whatever the provider put in a rejected request's body, as a log-safe string:
  * its `reason` when the body is the documented error envelope, the raw text when
- * it is anything else. Both are useful; guessing between them is not, so the
- * shape is parsed rather than assumed (typing.md rule 3).
+ * it is anything else (typing.md rule 3).
  */
 const describeErrorBody = async (response: Response): Promise<string> => {
   let text: string;
@@ -209,16 +191,13 @@ const attemptFetch = async (attempt: ForecastAttempt): Promise<AttemptOutcome> =
  * library defaults):
  * - every attempt carries a {@link defaultTimeoutMs} deadline;
  * - HTTP 429 → `rate-limited` with **zero** retries. The next hourly cycle is the
- *   retry. Hot-retrying a rate limit spends the very quota that is exhausted, and
- *   free-tier frugality is a hard constraint in CLAUDE.md;
+ *   retry;
  * - 5xx, network error or timeout → exactly one retry after a full-jitter delay
  *   (uniform over [0, {@link retryBaseDelayMs})), then `unreachable`. One retry
  *   absorbs a single-instance blip; more would turn a provider outage into a
  *   fleet-wide burst against the quota;
- * - any other non-2xx → `malformed`. A 400 means our request is wrong, so
- *   repeating it verbatim can only fail again;
- * - 200 → `parseForecastResponse` decides, since a body we cannot trust is
- *   indistinguishable, to the caller, from a wire-format break.
+ * - any other non-2xx → `malformed`;
+ * - 200 → `parseForecastResponse` decides.
  */
 export const fetchForecast = async (
   deps: ForecastFetchDeps,
