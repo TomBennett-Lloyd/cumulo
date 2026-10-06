@@ -141,9 +141,9 @@ Composition rules that keep both legible where they overlap:
   confidence of the values on either side of it — partial data is labelled partial
   (`error-handling.md` rule 5). The gap itself is left empty: no dotted
   connector, no faded segment, nothing that could be read as an estimate of what was missing.
-  Every case here is an hour the series **has**, carrying a null; an hour the series does not carry
-  at all is a different case with a different answer today, and "Settled, then reversed" below is
-  where it is stated.
+  An hour the series does not carry at all breaks every mark the same way: a run also ends where a
+  sample is more than one sampling step after the one before it (`contiguousRuns` in
+  [`apps/web/src/charts/chart-series.ts`](../../apps/web/src/charts/chart-series.ts), #537).
 - **A run that would be a degenerate path is drawn in the marker vocabulary instead.** Breaking a
   series at every gap can leave a run holding a single sample, and a path with one vertex paints
   nothing at all — so an isolated hour between two gaps would vanish and the chart would silently
@@ -424,18 +424,8 @@ things never done to an absent value; and the gap-breaks-the-line bullet above h
 the same move vertically, where an hour whose value is null ends the run instead of being drawn
 through. One canvas cannot honour an absence down the y axis and compress it away along the x.
 
-**What #325 delivers is the hole's width, not the break across it.** The bullet above cuts a mark at
-a null, so it can only cut at an hour the series has a row for. An hour missing from the series
-outright — which is what the fleet's join produces for an hour that was neither forecast nor
-measured — has no null to be cut at, and its two neighbours stay adjacent in the array that
-`contiguousRuns` reads. The curve is therefore still drawn across the hole; what changed is that the
-hole now has its full width, so the marks no longer draw two instants two hours apart as though they
-were an hour apart. That is the compression artefact gone and the bridge left standing, and it is
-recorded rather than quietly implied away: `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits
-on array adjacency, not on time adjacency") owns the fix. One layer is already exempt — the night
-wash in [`apps/web/src/charts/forecast-chart-context.tsx`](../../apps/web/src/charts/forecast-chart-context.tsx),
-which cuts its runs on time because shading across a hole would assert darkness at an unclassified
-hour.
+**What #325 delivers is the hole's width.** The break across it is the gap bullet's, which since
+#537 cuts at an absent hour as well as at a null.
 
 The old argument was **right about the seam**, and that half stands. What changed at the join is
 that an hour the old placement elided now costs its width on the axis — a full hour of it. Nothing

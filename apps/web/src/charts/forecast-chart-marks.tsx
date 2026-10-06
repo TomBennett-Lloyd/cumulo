@@ -164,13 +164,6 @@ export const actualsElements = (
  * the line rather than being bridged, because a segment drawn across it is a
  * forecast nobody made, and a run left holding one sample becomes a ringed dot
  * rather than the one-vertex path SVG declines to paint.
- *
- * **An hour missing from the series is the case that rule does not reach.** The
- * union domain has no row at all for an hour that was neither forecast nor
- * measured, so there is no `null` for `contiguousRuns` to break on and the two
- * hours either side of it are joined by one segment (#325). `docs/tech-debt.md`
- * (2026-08-11, "`contiguousRuns` splits on array adjacency, not on time
- * adjacency") owns it.
  */
 export const medianElements = (
   points: readonly ForecastChartPoint[],
@@ -298,11 +291,12 @@ const overlayStretches = (
  * nothing about this site's.
  */
 export const overlayElements = (
+  points: readonly ForecastChartPoint[],
   values: readonly (number | null)[],
   scale: ChartScale,
   lastMeasuredIndex: number | undefined,
 ): readonly ReactElement[] => {
-  const runs = contiguousRuns(values.length, (index) => values[index] != null);
+  const runs = contiguousRuns(points, (index) => values[index] != null);
   return [
     ...runs
       .filter(spansMultipleSamples)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { chartPlot, sampleXs, yForKw } from './chart-geometry';
 import {
+  contiguousRuns,
   curvedBandPath,
   curvedLinePath,
   highestOverlayKw,
@@ -333,5 +334,25 @@ describe('overlayReadingAt', () => {
 
     expect(overlayReadingAt(column, 1)).toStrictEqual({ label: 'Baseline', kw: null });
     expect(overlayReadingAt(column, 9)).toStrictEqual({ label: 'Baseline', kw: null });
+  });
+});
+
+describe('contiguousRuns', () => {
+  const indicesOf = (hours: readonly number[], includes: (index: number) => boolean) =>
+    contiguousRuns(domain(hours), includes).map((run) => run.indices);
+
+  it('ends a run at an hour absent from the series, not only at a rejected one', () => {
+    expect(indicesOf([0, 1, 2, 4, 5], () => true)).toEqual([
+      [0, 1, 2],
+      [3, 4],
+    ]);
+  });
+
+  it('reads the step from the series, so an even three-hourly cadence stays one run', () => {
+    expect(indicesOf([0, 3, 6, 9], () => true)).toEqual([[0, 1, 2, 3]]);
+  });
+
+  it('still ends a run at a rejected index', () => {
+    expect(indicesOf([0, 1, 2, 3], (index) => index !== 1)).toEqual([[0], [2, 3]]);
   });
 });

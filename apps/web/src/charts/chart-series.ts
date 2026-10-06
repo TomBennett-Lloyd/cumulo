@@ -1,5 +1,5 @@
 import { area, curveMonotoneX, line } from 'd3-shape';
-import { spanHoursBetween, yForKw, type PlotRect } from './chart-geometry';
+import { spanHoursBetween, yForKw, type PlotRect, type TimedSample } from './chart-geometry';
 
 /**
  * The chart's data model and the string-and-number layer beneath its JSX: point
@@ -14,9 +14,7 @@ import { spanHoursBetween, yForKw, type PlotRect } from './chart-geometry';
  * already cut the series into pieces that are all ink. Each run becomes its own
  * path, so `line.defined()` has no gap left to be told about and the rule that a
  * null value is never bridged stays where it was rather than moving into a
- * library callback (`docs/design/chart-treatment.md`). Which absences that rule
- * currently reaches — and the one it does not, an hour missing from the series
- * rather than carrying nulls — is `contiguousRuns`' own docblock below.
+ * library callback (`docs/design/chart-treatment.md`).
  */
 
 export interface ForecastChartBand {
@@ -239,34 +237,72 @@ export const overlayReadingAt = (
   overlay === undefined ? undefined : { label: overlay.label, kw: overlay.values[index] ?? null };
 
 /**
- * Maximal runs of adjacent indices satisfying `includes`. Each run becomes its
- * own path, so a sample the predicate rejects — a null value, an hour with no
- * band — ends the run rather than being drawn through.
+ * The series' sampling step: the interval that occurs most often between
+ * consecutive samples, or `null` where no two samples yield one.
  *
- * **Adjacent in the array, which is not the same as adjacent in time.** An hour
- * missing from the series entirely has no index for the predicate to reject, so
- * its two neighbours stay adjacent here and every consumer draws across it.
- * `joinFleetSeries` produces exactly that shape for an hour neither forecast nor
- * measured, and since #325 the axis gives that hole its full width
- * (`chart-geometry.ts`'s `sampleXs`) — so the mark spanning it is now a visible
- * bridge rather than a compressed one. The fix wants a predicate that also
- * breaks on an interval larger than the series' modal step, and it is systemic
- * rather than local because every mark on the canvas keys off this function:
- * recorded in `docs/tech-debt.md` (2026-08-11, "`contiguousRuns` splits on array
- * adjacency, not on time adjacency"). `forecast-chart-context.tsx`'s night wash
- * is the one layer that does not inherit it, and says there why.
+ * Derived rather than assumed to be an hour, because `sampleXs` would place a
+ * half-hourly or daily series just as well and a constant would cut every run of
+ * it. Ties go to the shorter interval, so a double step reads as the hole it is.
+ */
+const modalStepMs = (samples: readonly TimedSample[]): number | null => {
+  const counts = new Map<number, number>();
+  for (let index = 1; index < samples.length; index += 1) {
+    const from = samples[index - 1];
+    const to = samples[index];
+    if (from === undefined || to === undefined) {
+      continue;
+    }
+    const stepMs = Date.parse(to.validTimeIso) - Date.parse(from.validTimeIso);
+    if (stepMs > 0) {
+      counts.set(stepMs, (counts.get(stepMs) ?? 0) + 1);
+    }
+  }
+
+  let modal: { readonly stepMs: number; readonly count: number } | null = null;
+  for (const [stepMs, count] of counts) {
+    if (modal === null || count > modal.count || (count === modal.count && stepMs < modal.stepMs)) {
+      modal = { stepMs, count };
+    }
+  }
+  return modal?.stepMs ?? null;
+};
+
+/**
+ * Whether sample `index` is no more than one step after its array predecessor.
+ * `<=` so slightly uneven sampling stays one run; a `NaN` interval or a `null`
+ * step fails, so an unanswerable question breaks the run.
+ */
+const withinOneStep = (
+  samples: readonly TimedSample[],
+  index: number,
+  stepMs: number | null,
+): boolean => {
+  const previous = samples[index - 1];
+  const current = samples[index];
+  if (previous === undefined || current === undefined || stepMs === null) {
+    return false;
+  }
+  return Date.parse(current.validTimeIso) - Date.parse(previous.validTimeIso) <= stepMs;
+};
+
+/**
+ * Maximal runs of indices satisfying `includes` and consecutive in time. Each
+ * run becomes its own path, so neither a rejected sample nor an hour absent from
+ * the series is drawn through (`docs/design/chart-treatment.md`, the gap bullet;
+ * #537).
  */
 export const contiguousRuns = (
-  count: number,
+  samples: readonly TimedSample[],
   includes: (index: number) => boolean,
 ): readonly ChartRun[] => {
+  const stepMs = modalStepMs(samples);
   const runs: { startIndex: number; indices: number[] }[] = [];
-  for (let index = 0; index < count; index += 1) {
+  for (let index = 0; index < samples.length; index += 1) {
     if (!includes(index)) {
       continue;
     }
     const open = runs.at(-1);
-    if (open?.indices.at(-1) === index - 1) {
+    if (open?.indices.at(-1) === index - 1 && withinOneStep(samples, index, stepMs)) {
       open.indices.push(index);
     } else {
       runs.push({ startIndex: index, indices: [index] });
