@@ -25,8 +25,8 @@ import { compareUtcIsoTimestamps, type UtcIsoTimestamp } from './timestamp';
  * is worse than a doubled total for being plausible. Pass a single model (#531).
  *
  * The fleet band reuses `UncertaintyBand` as a *type* only. `uncertaintyBandSchema`'s
- * `0`–`MAX_PLAUSIBLE_RESIDENTIAL_KW` bounds are per-site and cannot hold for a 60-site sum, so
- * there is deliberately no fleet-level schema here — fleet response contracts are #14's problem.
+ * `0`–`MAX_PLAUSIBLE_RESIDENTIAL_KW` bounds are per-site and cannot hold for a sum, so there is
+ * deliberately no fleet-level schema here — fleet response contracts are #14's problem.
  */
 
 /** The two fields aggregation groups on: one entry per site per hour. */
@@ -42,8 +42,7 @@ export interface SiteHourEntry {
  * are all {@link contributingCapacityKwByHour} touches, and the narrower parameter is what makes it
  * callable from the forecast producer — which holds `SitePhysics` (a `Site` minus `name`, the
  * projection the `by-location` index carries) and would otherwise have to invent a name to satisfy
- * a type nothing reads it from (`docs/standards/typing.md` rule 6). `Site`, `FleetSite` and
- * `SitePhysics` are all structurally assignable to it, so no call site converts.
+ * a type nothing reads it from (`docs/standards/typing.md` rule 6).
  */
 export interface SiteCapacity {
   readonly id: string;
@@ -198,9 +197,8 @@ export const fleetCapacityKw = (sites: readonly Site[]): number => {
 /**
  * Which of two entries for the same site-hour survives, when the answer cannot matter: capacity is a
  * property of the site, not of the entry, so duplicates for one site-hour carry identical capacity
- * and the choice is arbitrary by construction. Deliberately not `readingSupersedes` reused — that
- * one encodes a claim about readings having no vintage, which is a different reason to reach the
- * same answer and is free to change without this one changing (`structure.md` rule 7).
+ * and the choice is arbitrary by construction. Deliberately not `readingSupersedes` reused
+ * (`structure.md` rule 7).
  */
 const eitherDuplicateSupersedes = (): boolean => true;
 
@@ -214,14 +212,7 @@ const eitherDuplicateSupersedes = (): boolean => true;
  * capacity that cannot be evidenced is not asserted.
  *
  * **Exact, not the `fleetCapacityKw(sites) × contributingSiteCount / sites.length` proxy.** That
- * proxy is mean capacity × count, so it is only right when every site is the same size. On a
- * *partial* hour — dawn and dusk, a site added mid-window, a gap in one site's series — the
- * reporting sites are a biased sample of the fleet whenever capacities are heterogeneous, and the
- * mean then divides the hour's kW by capacity that was never behind it: a partial hour of large
- * sites reads under 100% of a divisor it should saturate, one of small sites can read over 100%.
- * Those partial hours are exactly what a per-hour divisor exists to get right, so the proxy fails
- * precisely where the rule was needed. The entries are already in the caller's hand, so the exact
- * sum costs one pass.
+ * proxy is mean capacity × count, so it is only right when every site is the same size.
  *
  * Deduplicates per site-hour on the same rule as the aggregations above, so an hour's divisor and
  * its summed kW are always drawn from the same set of sites.
@@ -261,16 +252,13 @@ export const contributingCapacityKwByHour = (
  * centroid would answer a different question, and no caller has asked it.
  *
  * **Plane arithmetic, not spherical.** The mean is taken per axis, which is the centroid of the
- * lat/lon rectangle rather than of the sphere. Two consequences, both stated because they are real
- * rather than because they bite here: the answer drifts a little poleward-of-true on a fleet spread
- * over many degrees of latitude, and a fleet straddling the antimeridian averages to the *opposite*
- * side of the planet (+179° and −179° give 0°, not 180°). `fleet-centroid.test.ts` pins that
- * antimeridian answer so the limitation is executable rather than merely written down — this
- * function's suite is that file rather than `aggregation.test.ts`, for the reason its own header
- * gives. Neither
- * matters for a fleet inside one continental span, which is every fleet this repo builds
- * (`fleet.ts`'s cluster centres); a fleet that outgrows that needs a spherical mean here, not a
- * correction at the call site.
+ * lat/lon rectangle rather than of the sphere. Two consequences: the answer drifts a little
+ * poleward-of-true on a fleet spread over many degrees of latitude, and a fleet straddling the
+ * antimeridian averages to the *opposite* side of the planet (+179° and −179° give 0°, not 180°).
+ * `fleet-centroid.test.ts` pins that antimeridian answer so the limitation is executable rather
+ * than merely written down. Neither matters for a fleet inside one continental span, which is
+ * every fleet this repo builds (`fleet.ts`'s cluster centres); a fleet that outgrows that needs a
+ * spherical mean here, not a correction at the call site.
  */
 export const fleetCentroid = (sites: readonly Site[]): GeoCoordinates | null => {
   if (sites.length === 0) {
