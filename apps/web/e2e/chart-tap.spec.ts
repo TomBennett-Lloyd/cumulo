@@ -295,3 +295,59 @@ test('dismisses when the next tap lands outside the figure', async ({ page }) =>
   await expect(figure.locator(TOOLTIP)).toHaveCount(0);
   expect(await chartHasFocus(page)).toBe(false);
 });
+
+/**
+ * A stylus, through CDP because Playwright has no pen API: Chromium's
+ * `Input.dispatchMouseEvent` with `pointerType: 'pen'` hovers between contacts,
+ * as a hover-capable digitiser does. Both cases are one leave rule's two arms
+ * (`clearAtLeave`, #537).
+ */
+const penTo = async (
+  page: Page,
+  type: 'mouseMoved' | 'mousePressed' | 'mouseReleased',
+  x: number,
+  y: number,
+): Promise<void> => {
+  const session = await page.context().newCDPSession(page);
+  const contact = type !== 'mouseMoved';
+  await session.send('Input.dispatchMouseEvent', {
+    type,
+    x,
+    y,
+    pointerType: 'pen',
+    button: contact ? 'left' : 'none',
+    clickCount: contact ? 1 : 0,
+  });
+  await session.detach();
+};
+
+/** Outside the figure and focusable by nothing, so moving there is only a leave. */
+const awayFromChart = async (page: Page): Promise<{ x: number; y: number }> => {
+  const box = await settledBoxOf(page.locator(CHART_TITLE), 'The chart title');
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+
+test('a stylus that hovers and leaves takes its reading with it', async ({ page }) => {
+  const { figure, plotBox } = await openChart(page);
+  const away = await awayFromChart(page);
+
+  await penTo(page, 'mouseMoved', plotBox.x + plotBox.width * TAP_SHARE, midHeight(plotBox));
+  await expect(figure.locator(TOOLTIP)).toHaveCount(1);
+  await penTo(page, 'mouseMoved', away.x, away.y);
+
+  await expect(figure.locator(TOOLTIP)).toHaveCount(0);
+});
+
+test('a stylus tap pins its reading as a finger does', async ({ page }) => {
+  const { figure, plotBox } = await openChart(page);
+  const away = await awayFromChart(page);
+  const x = plotBox.x + plotBox.width * TAP_SHARE;
+
+  await penTo(page, 'mouseMoved', x, midHeight(plotBox));
+  await penTo(page, 'mousePressed', x, midHeight(plotBox));
+  await penTo(page, 'mouseReleased', x, midHeight(plotBox));
+  await penTo(page, 'mouseMoved', away.x, away.y);
+
+  await expect(figure.locator(TOOLTIP)).toHaveCount(1);
+  expect(await chartHasFocus(page)).toBe(true);
+});
