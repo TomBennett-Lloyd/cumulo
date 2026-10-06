@@ -4,8 +4,7 @@
  *
  * This is where CLAUDE.md's API-frugality constraint is enforced in code — "only
  * ever fetch weather for locations where active fleet sites exist" is exactly the
- * filter plus the bucketing below. For the canonical fleet that is 12 calls per
- * cycle instead of 60.
+ * filter plus the bucketing below.
  *
  * Pure: no I/O, no clock. The caller supplies the fleet and fetches the result.
  */
@@ -56,9 +55,7 @@ const fetchLocationOf = (id: string): FetchLocation => {
  * `cumulo-weather` partition key and this de-duplication key, and a drift between
  * the two would either double the fetch volume or write readings into a partition
  * nothing reads back (ADR 0002 §3). `activeFleetSites` is the same predicate the
- * API's fleet reads narrow by, so the locations a cycle writes partials for and
- * the locations a roll-up read expects them from are one predicate's output
- * rather than two copies of it (#531).
+ * API's fleet reads narrow by (#531).
  */
 const activeLocationIds = (sites: readonly FleetSite[]): Set<string> =>
   new Set(activeFleetSites(sites).map((site) => locationId(site)));
@@ -67,8 +64,7 @@ const activeLocationIds = (sites: readonly FleetSite[]): Set<string> =>
  * The weather fetches one ingestion cycle should issue for `sites`.
  *
  * Inactive sites contribute nothing, co-located sites contribute one entry, and
- * the result is ordered by id — stable output for a cycle whose logs and metrics
- * are read by humans, and a deterministic fixture for tests downstream.
+ * the result is ordered by id.
  */
 export const activeFetchLocations = (sites: readonly FleetSite[]): FetchLocation[] =>
   [...activeLocationIds(sites)].sort().map(fetchLocationOf);
@@ -84,30 +80,18 @@ export const CYCLE_ROTATION_PERIOD_MS = 3_600_000;
  * Where in the sorted list this cycle begins.
  *
  * Rotation exists because the cap has to skip *someone*, and always skipping
- * the same tail of an ascending-id list would starve it permanently — a fleet
- * of 130 locations would have 30 that never get weather at all. Since
- * `locationId` sorts by latitude, that tail is a geographic band, and #17's
- * visitor sites land wherever visitors are.
+ * the same tail of an ascending-id list would starve it permanently.
  *
  * The step is one whole window — `windowSize`, the cycle's location cap — not
  * one location, so consecutive windows abut instead of overlapping by
  * `windowSize - 1`. That is what buys the coverage property: any
  * `ceil(length / windowSize)` consecutive cycles serve every location, so a
  * location's worst-case wait between visits is `ceil(length / windowSize)`
- * hours. Stepping by one instead leaves a location unvisited for
- * `length - windowSize + 1` hours, which past ~148 locations (at a cap of 100)
- * outlives the 48 h horizon each visit stores, and coverage develops permanent
- * gaps nothing currently reports (#163).
- *
- * Not binding at today's fleet — 12 seed clusters plus at most 40 user sites
- * stay under the cap, so no cycle defers anything and every hour is full
- * coverage. This is insurance that the rotation is still correct on the day the
- * cap does engage.
+ * hours.
  *
  * Derived from the clock rather than from stored state: ingestion has nowhere
  * to keep a cursor, and a cursor would make two cycles in the same hour
- * disagree about what they had covered. Deterministic for a given hour, which
- * is what lets a test assert the mapping instead of observing a shuffle.
+ * disagree about what they had covered.
  *
  * The product is exact in float64 and needs no widening: hours since the epoch
  * is ~5×10⁵ and the cap ~10², so the product is ~5×10⁷ ≪ 2⁵³.
@@ -139,12 +123,10 @@ export interface CycleSelectionSpec {
  * defers to the next, rotating the starting point so no location is starved.
  *
  * Both halves are returned because the cycle reports on every active location,
- * not only the ones it reached: a cap that silently shortened the list would be
- * the same shape of failure as the Lambda timeout it exists to prevent (#115).
+ * not only the ones it reached (#115).
  *
  * Pure, and separate from the clock on purpose — the caller resolves `offset`
- * from `now()` and hands in a number, so the rotation arithmetic and the
- * capping arithmetic are both testable without a fake clock between them.
+ * from `now()` and hands in a number.
  */
 export const selectCycleLocations = (
   locations: readonly FetchLocation[],
