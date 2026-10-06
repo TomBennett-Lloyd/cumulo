@@ -12,17 +12,14 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * **Two callers, no longer symmetrical.** `GET /v1/fleet/actuals` reads this
  * way as its only path; `GET /v1/fleet/forecast` reads the pre-summed `#FLEET`
  * partition instead and reaches this module only through ADR 0009's fallback,
- * which #507 removes once a full cycle has been observed. Everything below
- * still holds for both — what changes when the fallback goes is how often the
- * forecast side arrives here, and eventually whether it does at all.
+ * which #507 removes once a full cycle has been observed.
  *
  * **The batch is the unit, and the gate sits between batches.** A fleet of 61
- * sites read one site at a time is 61 warm round trips (~2.4 s, measured at
- * #296) for work whose Queries do not depend on one another at all — the window
- * is one window, chosen once by the caller, and no site's read tells the next
- * one anything. So the loop reads {@link FLEET_READ_CONCURRENCY} sites at a
- * time and asks the deadline once per batch, which turns the fleet's cost from
- * one round trip per site into one per batch.
+ * sites read one site at a time is 61 warm round trips for work whose Queries
+ * do not depend on one another at all. So the loop reads
+ * {@link FLEET_READ_CONCURRENCY} sites at a time and asks the deadline once per
+ * batch, which turns the fleet's cost from one round trip per site into one per
+ * batch.
  *
  * **Why one admission prices one command.** The gate asks
  * `hasBudgetForStorageCommands(remaining, 1)` before a batch of many Queries,
@@ -38,14 +35,6 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * re-admitted page by page through the same `bound` below. `request-budget.ts`
  * states the invariant this rests on: what an admission buys is one
  * `STORAGE_COMMAND_WORST_MS` of wall clock.
- *
- * **What survives of the one-at-a-time argument.** The gate is still there, and
- * it still refuses the shape it always refused: the fleet's whole worth of
- * Queries spent with nothing between them to stop. Batching moves the something
- * between them from every site to every batch boundary; it does not remove it. A
- * fan-out with no gate at all — one `Promise.all` over the entire fleet — is
- * still the shape this module declines, because an arbitrarily large fleet would
- * then commit an arbitrary number of Queries on one reading of the clock.
  *
  * **Why this is shared rather than written twice.** `get-fleet-actuals.ts` and
  * `fleet-rollup-read.ts`'s fallback differ in the parts a reader would expect
@@ -64,13 +53,7 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * caller is a module to inline back into it.
  *
  * What comes back is therefore one array of raw {@link SeriesPoint}s per site,
- * unsplit: the split is the caller's half of the job (`series-split.ts`), and
- * doing it here would require exactly the flag this module exists without.
- *
- * **The deadline event is a parameter**, not a constant declared here, because
- * each route owns its own: an operator asking "which fan-out is outgrowing the
- * function timeout?" needs to be able to tell the two apart in a log query, and
- * a single shared event name could not separate them.
+ * unsplit: the split is the caller's half of the job (`series-split.ts`).
  */
 
 /**
@@ -91,10 +74,7 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * how much work one reading of the clock is allowed to commit. A batch is
  * admitted on the deadline as it stood before the batch began, and the fleet
  * cannot be re-asked mid-batch; a width the size of the fleet is the ungated
- * fan-out this module refuses. At this width a 61-site fleet costs eight round
- * trips instead of 61 and the request still stops to check the clock seven
- * times on the way — which is the trade this number *is*, and the reason it is a
- * named constant a test can hold rather than a literal in the loop head.
+ * fan-out this module refuses.
  */
 export const FLEET_READ_CONCURRENCY = 8;
 
@@ -126,8 +106,7 @@ export type FleetSeriesRead =
  * Two call sites — the fan-out stopped between batches, and one site's window
  * stopped mid-page — and deliberately one message: a caller can do nothing
  * different with the two, while an operator reads the difference off the fields
- * in `detail`. One function rather than the message written twice, so the two
- * cannot drift into two contracts (`docs/standards/structure.md` rule 7).
+ * in `detail`.
  */
 const readDeadlineReached = (
   log: FleetSeriesReadDeps['log'],
@@ -141,11 +120,10 @@ const readDeadlineReached = (
 /**
  * Read every site's points over `from`…`to`, or refuse.
  *
- * Every input arrives as a parameter — the sites, the window, the deadline, the
- * event name — so the loop is legible without knowing which handler called it
- * (`docs/standards/structure.md` rule 1). The window is passed already computed
- * rather than as a horizon, because which end of it the clock sits at is the
- * caller's decision and the difference between the two routes.
+ * Every input arrives as a parameter (`docs/standards/structure.md` rule 1).
+ * The window is passed already computed rather than as a horizon, because which
+ * end of it the clock sits at is the caller's decision and the difference
+ * between the two routes.
  */
 export const readFleetSeries = async (
   deps: FleetSeriesReadDeps,
@@ -161,17 +139,14 @@ export const readFleetSeries = async (
   };
 
   // One array per site, flattened once by the caller rather than spread-pushed
-  // per site: the wire order is site by site, chronological within each, which
-  // is the order the demo source produces too and the order the fleet chart's
-  // hour-by-hour aggregation is indifferent to.
+  // per site: the wire order is site by site, chronological within each.
   const perSite: SeriesPoint[][] = [];
 
   for (let start = 0; start < sites.length; start += FLEET_READ_CONCURRENCY) {
     // Gated before every batch *after* the first — the opening batch is this
-    // fan-out's ungated prefix, exactly as the first Query was when the loop
-    // read one site at a time, and as the first page of every Query still is.
-    // `sitesRead` counts sites rather than batches because it is the fleet the
-    // operator is reasoning about, and `start` is already that count.
+    // fan-out's ungated prefix. `sitesRead` counts sites rather than batches
+    // because it is the fleet the operator is reasoning about, and `start` is
+    // already that count.
     if (start > 0 && !hasBudgetForStorageCommands(deadline.remainingMs(), 1)) {
       return {
         complete: false,
@@ -208,11 +183,6 @@ export const readFleetSeries = async (
     // (`docs/standards/error-handling.md` rule 5); labelling the response
     // partial is the richer answer and is the same contract change #165 holds
     // for the per-site routes.
-    //
-    // The batch is judged in site order, so the site named in the log is the
-    // *first* one that stopped short — the one an operator would go and look
-    // at — even though its neighbours were read at the same moment. The next
-    // batch is never started: more sites cannot make this answer whole.
     const stoppedShort = batch.find(({ read }) => !read.complete);
     if (stoppedShort) {
       return {

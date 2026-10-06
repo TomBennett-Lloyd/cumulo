@@ -36,21 +36,16 @@ import { forecastsIn } from './series-split';
  * `@cumulo/shared` — `sumFleetRollupPartials` over stored partials, `fleetForecastAggregate` over
  * raw rows — and `fleet-rollup-additivity.test.ts` is the proof those two agree. What the fallback
  * exists for is the window between deploying this and the first full ingestion cycle writing every
- * location: a `#FLEET` partition that is empty would otherwise be a blank chart for up to an hour,
- * and a 500 would be worse.
+ * location.
  *
  * **Incomplete counts as absent, deliberately.** A partition holding eleven of twelve locations
  * sums to a fleet total that looks exactly like a plausible number from a quieter fleet — there is
  * no gap to see, because the missing site does not read as missing, it reads as less generation.
  * That is the half-truth `fleet-series-read.ts` refuses for the fan-out, applied to the roll-up.
- * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
- * every site carries coordinates, so the expected set is the active sites' `locationId`s — the same
- * `locationId` ingestion keys its messages on, over the same `activeFleetSites` predicate
- * `activeFetchLocations` takes, so neither set can drift from the other on activity. A cycle that
- * deferred a location for budget is a different dimension and is what `incomplete` is for. The
- * check is **not** per hour, which is a decision rather than an omission: ADR 0009's
- * `## Amendments` entry for 2026-10-05 (#531) states it and what makes the residual honest rather
- * than silent.
+ * Completeness is checked per **location**. A cycle that deferred a location for budget is a
+ * different dimension and is what `incomplete` is for. The check is **not** per hour, which is a
+ * decision rather than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states
+ * it and what makes the residual honest rather than silent.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
  * that explain it, so "has a full cycle written every location yet?" is one log query. When the
@@ -59,8 +54,7 @@ import { forecastsIn } from './series-split';
  */
 
 /**
- * The one event a fallback emits — exported so a test asserts on the name an operator greps for
- * rather than on a copy of it, and so the removal ticket has something to search for.
+ * The one event a fallback emits.
  *
  * One event with a `reason` rather than two events, because an operator watching a deployment wants
  * a single line to count: the question is "is the roll-up being used yet", and `absent` versus
@@ -83,10 +77,7 @@ export interface FleetRollupReadDeps extends FleetSeriesReadDeps {
 /**
  * The fleet's summed forecast, or the response that says why it is not coming.
  *
- * {@link FleetSeriesRead}'s shape and its reasoning: a discriminated union rather than points plus
- * an optional error (`docs/standards/typing.md` rule 4), with the failure arm carrying a built
- * {@link ApiResponse} because the only refusal reachable here is the fan-out's deadline and its
- * status, code and message are already that module's to decide.
+ * {@link FleetSeriesRead}'s shape and its reasoning.
  */
 export type FleetForecastAggregateRead =
   | { readonly complete: true; readonly points: readonly FleetForecastAggregatePoint[] }
@@ -97,8 +88,7 @@ export type FleetForecastAggregateRead =
  * in.
  *
  * A `Set` because two sites in one bucket are one expected partial: `locationId` is what the
- * producer's messages are keyed by (ADR 0004), so twelve cluster locations holding sixty sites
- * expect twelve partials and not sixty.
+ * producer's messages are keyed by (ADR 0004).
  *
  * The sites are already the active ones — {@link readFleetForecastAggregate} narrows once, for both
  * arms — which is the half that makes this set the set the producer writes rather than merely a
@@ -113,8 +103,7 @@ const expectedLocations = (sites: readonly FleetSite[]): ReadonlySet<string> =>
  * Whether a roll-up read can answer for this fleet, and if not, why.
  *
  * `expected` is never empty: {@link readFleetForecastAggregate} answers a fleet with no active
- * sites before reaching here, and a site always has a `locationId`. The empty-fleet reasoning lives
- * at that early return, where the answer is given.
+ * sites before reaching here, and a site always has a `locationId`.
  */
 const fallbackReason = (
   read: FleetRollupRangeResult,
@@ -168,13 +157,13 @@ const aggregateFromFanOut = async (
  * The filter is not defensive tidiness; without it a decommissioned location keeps generating. Its
  * partials are written under keys nothing rewrites once ingestion stops publishing for it, and they
  * outlive the last site there by the whole forecast horizon — so a fleet that lost a location would
- * carry a ghost's kilowatts, its site count and its nameplate capacity for about two days. The
- * fan-out arm cannot do that, because it iterates the site list; this makes the roll-up arm answer
- * the same question rather than a question about what the table happens to hold.
+ * carry a ghost's kilowatts, its site count and its nameplate capacity. The fan-out arm cannot do
+ * that, because it iterates the site list; this makes the roll-up arm answer the same question
+ * rather than a question about what the table happens to hold.
  *
- * TTL reaps those items on the series table's own 90-day clock, which is far too slow to be the
- * answer here, and a producer that deleted them would need an end-of-run event this design does not
- * have (ADR 0009). Filtering at read costs one `Set` lookup per row and needs neither.
+ * TTL reaps those items, which is far too slow to be the answer here, and a producer that deleted
+ * them would need an end-of-run event this design does not have (ADR 0009). Filtering at read costs
+ * one `Set` lookup per row and needs neither.
  */
 const summed = (
   rows: readonly FleetRollupRow[],
@@ -216,9 +205,7 @@ export const readFleetForecastAggregate = async (
   // A fleet with no *active* sites is answered without touching the table at all. Not an
   // optimisation: the fleet total of nothing is nothing, there is no partition state that could make
   // it otherwise, and the route's "an empty fleet is a 200 with an empty array" promise should not
-  // be one billed read away from being a 500. A fleet whose every site is deactivated reaches the
-  // same answer by the same argument, and reaching it here rather than through `summed`'s empty
-  // expected set is what spares it the Query.
+  // be one billed read away from being a 500.
   if (active.length === 0) {
     return { complete: true, points: [] };
   }
