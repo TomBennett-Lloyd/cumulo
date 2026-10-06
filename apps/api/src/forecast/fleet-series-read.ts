@@ -15,11 +15,11 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * which #507 removes once a full cycle has been observed.
  *
  * **The batch is the unit, and the gate sits between batches.** A fleet of 61
- * sites read one site at a time is 61 warm round trips for work whose Queries
- * do not depend on one another at all. So the loop reads
- * {@link FLEET_READ_CONCURRENCY} sites at a time and asks the deadline once per
- * batch, which turns the fleet's cost from one round trip per site into one per
- * batch.
+ * sites read one site at a time is 61 warm round trips (~2.4 s, measured at
+ * #296) for work whose Queries do not depend on one another at all. So the loop
+ * reads {@link FLEET_READ_CONCURRENCY} sites at a time and asks the deadline
+ * once per batch, which turns the fleet's cost from one round trip per site
+ * into one per batch.
  *
  * **Why one admission prices one command.** The gate asks
  * `hasBudgetForStorageCommands(remaining, 1)` before a batch of many Queries,
