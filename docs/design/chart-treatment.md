@@ -819,11 +819,13 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   carries no information to select on. **An x the plot does not contain clamps to the nearest one it
   does**, which is what makes the axes worth listening to: a tap on the y axis reads the _start_ of
   the range, and a tap past the right edge reads the end (owner's amendment on #421, comment
-  5259485326). **A tap pins** — the reading survives the lift, and only a mouse's leave clears it.
-  That asymmetry is mechanism rather than preference: a touch pointer leaves at the end of every
-  tap, because the finger _is_ the pointer, so clearing on that event would undo the selection in
-  the same frame and no touch reader would ever see a readout at all. **A drag scrubs**, by x, the
-  way a mouse crossing the plot does. **A tap anywhere outside the figure dismisses**, through the
+  5259485326). **A tap pins** — the reading survives the lift. A leave clears it only where no
+  focus is holding it for the blur below: always for a mouse, whose reading is a hover, and for a
+  stylus that hovered without touching (#537). That asymmetry is mechanism rather than preference:
+  a touch pointer leaves at the end of every tap, because the finger _is_ the pointer, so clearing
+  on that event would undo the selection in the same frame and no touch reader would ever see a
+  readout at all. **A drag scrubs**, by x, the way a mouse crossing the plot does. **A tap
+  anywhere outside the figure dismisses**, through the
   same blur path keyboard readers already have — no second way to dismiss was added and none is
   wanted, because a readout with one way to go away is a readout every input can be reasoned about
   together.
@@ -834,21 +836,15 @@ Actual 3.8, Median 4.0` — and not on any row (#291, closing the unit half of
   `forecast-chart-hover-boundary.tsx`) — for a tap as much as for a drag past the tap slop, which
   fires no click at all; the `click` the browser synthesizes from a tap brings the focus only where
   no reading stands for the lift to take it. Still one route out and not two: the
-  scrub is being given the tap's dismissal rather than a dismissal of its own. Without it a scrub's
-  reading sits behind no focus, so no blur can reach it, and it stands until the reader taps the
-  chart and then taps off — which is the stranded readout this contract exists to forbid, arriving
-  by the one path the `pointercancel` clear below does not cover.
+  scrub is being given the tap's dismissal rather than a dismissal of its own.
 
   One thing does take a reading away without dismissing it, and the distinction is the contract
   rather than an exception to it: a `pointercancel`, the browser claiming the gesture mid-flight —
   a page scroll that began on the chart, which `touch-action` leaves it free to claim. The press
   had already committed a reading, and it turns out nobody asked for one. A lift is the end of a
   question and its answer stands; a cancel is the question being withdrawn, and the reading goes
-  with it. Nothing else could take it: the leave events that follow a cancel are a touch pointer's,
-  which the mouse-only clear ignores by design, and a cancel ends the gesture in place of the lift,
-  so the chart takes no focus for it and there is no blur to dismiss through. So every reading a
-  reader _asked_ for still has exactly one way to go away, and the one nobody asked for is gone
-  before it needs one.
+  with it. So every reading a reader _asked_ for still has exactly one way to go away, and the one
+  nobody asked for is gone before it needs one.
 
   Two costs this contract accepts out loud rather than designs around. **Fingertip precision is
   accepted as it is**: no coarse-pointer geometry, no widened hit slots, no touch-only variant of

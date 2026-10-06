@@ -114,6 +114,7 @@ describe('ForecastChart tap', () => {
   it('keeps what a lifted finger revealed', () => {
     const { container, svg } = renderTappableChart();
     tapAt(svg, xOfSample(SERIES, 2));
+    liftFrom(svg);
 
     // The pin. A finger leaving is the *end of the tap*, not a reader moving on,
     // so the readout the tap just opened has to survive it — otherwise no touch
@@ -137,13 +138,6 @@ describe('ForecastChart tap', () => {
      * the browser taking the gesture away mid-flight, which under
      * `touch-action: pan-y` is what a page scroll starting on the chart *is*:
      * the press already committed a reading, and nobody asked for it.
-     *
-     * Nothing else can dismiss that reading. The `pointerout`/`pointerleave`
-     * that follow a cancel carry `pointerType: 'touch'`, which the mouse-only
-     * clear ignores by design, and a cancel arrives *instead of* the lift, so the
-     * focus a lift takes to keep a reading dismissable is never taken and #421's
-     * blur route never fires. Without this the crosshair, the panel and the live
-     * region stand until the reader taps the chart and then taps off it.
      */
     fireEvent.pointerCancel(svg, { pointerType: 'touch' });
 
@@ -294,5 +288,45 @@ describe('ForecastChart touch scrub', () => {
 
     expect(document.activeElement).not.toBe(svg);
     expect(container.querySelector('.forecast-chart-crosshair')).toBeNull();
+  });
+});
+
+/** One leave rule for every pointer kind (`clearAtLeave`, #537). */
+describe('ForecastChart pointer leave, by kind', () => {
+  const pressAndLift = (svg: SVGSVGElement, pointerType: string): void => {
+    fireEvent.pointerDown(svg, { clientX: clientXFor(xOfSample(SERIES, 2)), pointerType });
+    fireEvent.pointerUp(svg, { pointerType });
+  };
+
+  it.each(['touch', 'pen', ''])(
+    'keeps a %j reading once the lift has focused the chart',
+    (kind) => {
+      const { container, svg } = renderTappableChart();
+      pressAndLift(svg, kind);
+
+      fireEvent.pointerLeave(svg, { pointerType: kind });
+
+      expect(readoutTime(container)).toBe('12:00');
+    },
+  );
+
+  it.each(['pen', ''])('clears a %j reading that hovered and never touched', (kind) => {
+    const { container, svg } = renderTappableChart();
+    fireEvent.pointerMove(svg, { clientX: clientXFor(xOfSample(SERIES, 2)), pointerType: kind });
+    expect(readoutTime(container)).toBe('12:00');
+
+    fireEvent.pointerLeave(svg, { pointerType: kind });
+
+    expect(readoutTime(container)).toBeNull();
+  });
+
+  it('clears a mouse reading even though the click focused the chart', () => {
+    const { container, svg } = renderTappableChart();
+    pressAndLift(svg, 'mouse');
+    expect(document.activeElement).toBe(svg);
+
+    fireEvent.pointerLeave(svg, { pointerType: 'mouse' });
+
+    expect(readoutTime(container)).toBeNull();
   });
 });

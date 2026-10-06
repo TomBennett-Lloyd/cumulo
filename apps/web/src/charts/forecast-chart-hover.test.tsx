@@ -221,10 +221,7 @@ describe('ForecastChart hover layer', () => {
     expect(tooltipText(container)).toBe(READOUT[1]);
   });
 
-  // A *mouse*, and the pointer type is the whole of what the guard reads: a
-  // finger leaves at the end of every tap, so clearing on any pointer type
-  // would undo a tap in the frame that made it (#421, `forecast-chart-tap.test.tsx`
-  // holds the other side).
+  // A *mouse*; every other pointer kind's leave is `forecast-chart-tap.test.tsx`'s.
   it('clears the readout when a mouse leaves the figure', () => {
     const container = renderChart(SERIES);
     stubRenderedSize(requireSvg(container));
