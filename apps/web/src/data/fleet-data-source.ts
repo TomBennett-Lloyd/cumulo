@@ -9,9 +9,9 @@ import type {
 /**
  * Why the fleet could not answer, from the client's point of view.
  *
- * Deliberately the *client's* view rather than a transport code: each arm
- * implies a different recourse, and two transports that imply the same recourse
- * are the same arm here (#162).
+ * Deliberately the *client's* view rather than a transport code: the whole
+ * point of the union is that each arm implies a different recourse, and two
+ * transports that imply the same recourse are the same arm here (#162).
  *
  * A discriminated union rather than one interface with an optional extra, so
  * that `retryAfterSeconds` is representable only on the arm where it means
@@ -22,22 +22,24 @@ import type {
  *   Retryable as-is.
  * - `rate-limited` — the answer was "not now", with `retryAfterSeconds` when
  *   this client could read a stated wait. Back off; never hot-retry
- *   (`error-handling.md` rule 3, and the Open-Meteo budget in CLAUDE.md
- *   upstream of it).
- * - `not-found` — the entity does not exist *yet*, which for a forecast is the
- *   ordinary state of a site created seconds ago; the first-forecast poll
- *   treats it as "keep waiting".
- * - `invalid-response` — server → client: a payload this client cannot
- *   reconcile with the domain schemas. Changing the request cannot help;
- *   *time* can, so the first-forecast poll keeps waiting on this arm instead
- *   of failing fast.
- * - `invalid-request` — client → server: a *different answer* needs a changed
- *   request. A consumer whose request is fixed (the first-forecast poll) can
- *   only wait out its own deadline and report — pinned behaviour, not an
+ *   (`error-handling.md` rule 3).
+ * - `not-found` — the entity does not exist *yet*. For a forecast this is the
+ *   ordinary state of a site created seconds ago, not a fault, which is why
+ *   the first-forecast poll treats it as "keep waiting".
+ * - `invalid-response` — server → client: the fleet sent a payload this client
+ *   cannot reconcile with the domain schemas. Changing the request cannot
+ *   help; *time* can — the same request may parse later, which is why the
+ *   first-forecast poll keeps waiting on this arm instead of failing fast.
+ * - `invalid-request` — client → server: the fleet refused the payload or
+ *   parameters we sent; a *different answer* needs a changed request. A
+ *   consumer whose request is fixed (the first-forecast poll) can only wait
+ *   out its own deadline and report — deliberately pinned behaviour, not an
  *   invitation to hot-retry.
  * - `server-fault` — server → client: the fleet *answered*, and the answer is
- *   that it is broken (a 5xx). Backoff retry like `network`, kept a separate arm
- *   because the operator to call is the fleet's rather than the visitor's.
+ *   that it is broken (a 5xx). Recourse is a backoff retry, the same shape
+ *   `network` has, but the two stay separate arms because the question that
+ *   decides blame is "who does the operator need to call?" — the fleet's
+ *   operator here, the visitor's own connection there.
  * - `forbidden` — the API refused this client on policy, not on content. The one
  *   failure a retry cannot fix: what is wrong is *who is asking*, so the recourse
  *   is a deployment change (`CUMULO_WEB_ORIGINS`).
@@ -88,12 +90,14 @@ export type FleetSourceResult<T> =
  * value, and adding a window should fail to compile everywhere it is switched
  * on rather than silently return nothing.
  *
- * Per-site reads honour the look-back. **Fleet-level _forecasts_ cannot** — the
- * HTTP source's fleet-level forecast reinterprets this window as a forward
- * horizon (#296; see {@link FleetDataSource.fleetForecasts}). Fleet-level range
- * selection is therefore horizon-capped in live mode: it selects how far
- * *ahead* the aggregate reaches, and any two ranges past the deployed
- * pipeline's write depth render identically.
+ * Per-site reads honour the look-back. **Fleet-level _forecasts_ cannot.** The
+ * fleet-wide read of forecasts an HTTP source has is `GET /v1/fleet/forecast`,
+ * one request for the whole fleet (#296), and its window opens at the clock
+ * and runs *ahead* — so the HTTP source's fleet-level forecast reinterprets
+ * this window as a forward horizon (see {@link FleetDataSource.fleetForecasts}).
+ * Fleet-level range selection is therefore horizon-capped in live mode: it
+ * selects how far *ahead* the aggregate reaches, and any two ranges past the
+ * deployed pipeline's write depth render identically.
  *
  * Fleet-level *actuals* are the other half, and they do honour this window even
  * in live mode: `GET /v1/fleet/actuals` takes the look-back and answers for the
@@ -108,7 +112,7 @@ export type RangeHours = 24 | 48 | 168;
  *
  * Copy and controls that promise a chosen history, or actuals of any kind, are
  * only honest against a source that says so here, so they read these instead of
- * assuming ({@link RangeHours} for the range semantics they turn on).
+ * assuming.
  */
 export interface FleetSourceCapabilities {
   /**
@@ -117,8 +121,9 @@ export interface FleetSourceCapabilities {
    *
    * It decides what the panel may *say* about a look-back, and no longer decides
    * on its own whether a window can be chosen (#284 D5). The naming obligation
-   * that leaves is discharged by `apps/web/src/dashboard/fleet-panel-copy.ts`,
-   * and `apps/web/src/dashboard/FleetPanel.tsx` owns the control's gate.
+   * that leaves is discharged by
+   * `apps/web/src/dashboard/fleet-panel-copy.ts`, and
+   * `apps/web/src/dashboard/FleetPanel.tsx` owns the control's gate.
    */
   readonly fleetLookback: boolean;
   /** Fleet-level actuals can ever be non-empty. */
@@ -145,23 +150,23 @@ export interface FleetSourceCapabilities {
  *
  * ## What a transport maps onto `FleetDataError`
  *
- * The one failure that does not arrive in an `apiErrorSchema` body is a
- * gateway-generated 429, so the HTTP source maps on **status**, the one part of
- * the contract every arm is reachable from. Each row below is asserted as its
- * own case in `apps/web/src/data/fleet-api-result.test.ts`:
+ * The Fleet API answers failures with `apiErrorSchema` bodies from
+ * `@cumulo/shared`. The one failure that does *not* arrive in that shape is a
+ * gateway-generated 429. The HTTP source consequently maps on **status**, the
+ * one part of the contract every arm is reachable from
+ * (`apps/web/src/data/fleet-api-result.test.ts`):
  *
  * - **404** (`not_found`) → `not-found`. Covers an unknown site *and* a site
  *   whose first forecast does not exist yet; the poll treats both as "wait".
  * - **429** (a gateway throttle, or the API's own per-IP limiter) →
  *   `rate-limited`, with `retryAfterSeconds` taken from the `Retry-After` header
- *   when this client can read one. The caller floors its own backoff rather than
- *   reading the absence as permission to retry at once.
+ *   when this client can read one. The caller floors its own backoff rather
+ *   than reading the absence as permission to retry at once.
  * - **400** (`validation_failed`) → `invalid-request`.
  * - **A 2xx body that fails its zod parse** → `invalid-response`.
  * - **403** (`forbidden`) → `forbidden`. The API refuses a write whose `Origin`
  *   it does not serve, and refuses any request from a caller it has blocked for
- *   abuse (#29). Its recourse is deployment configuration: the origin the app is
- *   served from has to be in the API's `CUMULO_WEB_ORIGINS`.
+ *   abuse (#29).
  * - **5xx** (`internal`, and any other status at or above 500) →
  *   `server-fault`.
  * - **Any other unlisted 4xx** (401, 405, 409, 422… — statuses this API may
@@ -180,25 +185,25 @@ export interface FleetSourceCapabilities {
  *
  * The attribution travels with every weather-derived payload and must be
  * displayed wherever the data is (CC BY 4.0, CLAUDE.md). Today the UI renders
- * a static credit, so an HTTP source that discards this field is a decision to
- * revisit here rather than a detail of the transport.
+ * a static credit; unwrapping it is a decision to revisit here rather than a
+ * detail of the transport.
  */
 export interface FleetDataSource {
   /**
    * What this source can answer at the fleet level — see
    * {@link FleetSourceCapabilities}.
    *
-   * Required rather than optional so that a source added later cannot omit it
-   * and inherit whichever default happened to flatter it.
+   * A required member rather than an optional one so that a source added later
+   * cannot omit it and inherit whichever default happened to flatter it.
    */
   readonly capabilities: FleetSourceCapabilities;
 
   /**
    * The whole fleet, once. Callers load this on mount and never poll it.
    *
-   * This read is the cheap one; the read-capacity mistake ADR 0002's review
-   * called out belongs to the fleet-level *series* reads it usually precedes,
-   * and polling either of those would still be that mistake. The per-load
+   * This read is the cheap one (ADR 0002). The read-capacity mistake that ADR's
+   * review called out belongs to the fleet-level *series* reads it usually
+   * precedes — polling either of them would still be that mistake. The per-load
    * arithmetic is owned by the `series` section of `infra/storage/tables.tf`.
    */
   readonly listSites: () => Promise<FleetSourceResult<readonly Site[]>>;
@@ -207,8 +212,8 @@ export interface FleetDataSource {
    * Adds a site to the fleet.
    *
    * The returned `Site` carries the **server-assigned id**, and that returned
-   * value is the only legitimate source of it: a locally minted id addresses a
-   * site that does not exist.
+   * value is the only legitimate source of it. Callers must not predict an id
+   * locally: a locally minted id addresses a site that does not exist.
    */
   readonly createSite: (input: CreateSiteInput) => Promise<FleetSourceResult<Site>>;
 
@@ -216,18 +221,18 @@ export interface FleetDataSource {
    * The forecast series for one site as it stands *now* — one partition, never
    * the fleet, and no window to choose.
    *
-   * This is the poll's call (`GET /v1/sites/{siteId}/forecast`). `not-found`
-   * and an empty series are both the normal answer for a site created seconds
-   * ago, so a caller polling for the first forecast treats either as "keep
-   * waiting".
+   * This is the poll's call (`GET /v1/sites/{siteId}/forecast`). `not-found` and
+   * an empty series are both the normal answer for a site created seconds ago, so
+   * a caller polling for the first forecast treats either as "keep waiting".
    */
   readonly getSiteForecast: (siteId: Site['id']) => Promise<FleetSourceResult<readonly Forecast[]>>;
 
   /**
    * One site's forecast over a chosen window (`GET /v1/sites/{siteId}/series`).
    *
-   * Distinct from {@link getSiteForecast}: this one is the chart's, spanning
-   * `range` hours of history plus the horizon.
+   * Distinct from {@link getSiteForecast} because the question is different:
+   * this one is the chart's, spanning `range` hours of history plus the
+   * horizon.
    */
   readonly siteForecasts: (
     siteId: Site['id'],
@@ -249,17 +254,18 @@ export interface FleetDataSource {
   /**
    * The fleet's forecast over the window, **already summed** — one point per hour.
    *
-   * The seam sits above the aggregation rather than below it (#494): the HTTP
-   * source reads `GET /v1/fleet/forecast`, and the demo source computes the
-   * identical shape with `@cumulo/shared`'s `fleetForecastAggregate`. One
-   * definition of the fleet total (`architecture.md` rule 3), two ways of
-   * arriving at the shape. `contributingCapacityKw` travels with each point for
-   * that reason too: the `%`-of-capacity view needs a per-hour divisor it must
-   * not re-derive.
+   * The seam sits above the aggregation rather than below it (#494). The HTTP
+   * source now reads `GET /v1/fleet/forecast`, which serves the total the
+   * forecast producer computed, and the demo source computes the identical shape
+   * with `@cumulo/shared`'s `fleetForecastAggregate`. One definition of the fleet
+   * total (`architecture.md` rule 3), two ways of arriving at the shape.
+   *
+   * `contributingCapacityKw` travels with each point for that reason too: the
+   * `%`-of-capacity view needs a per-hour divisor.
    *
    * It spends `range` as a **forward horizon**, not as the look-back
-   * {@link RangeHours} otherwise describes. An implementation is free to serve
-   * the look-back if it can — the demo source does — but no implementation is
+   * {@link RangeHours} otherwise describes. An implementation is free to serve the
+   * look-back if it can — the demo source does — but no implementation is
    * required to.
    */
   readonly fleetForecasts: (
@@ -270,10 +276,11 @@ export interface FleetDataSource {
    * Every site's generation actuals over the window, unaggregated — simulated
    * in live mode as {@link siteActuals} describes (#264).
    *
-   * Like {@link fleetForecasts} this is one request for the whole fleet
-   * (`GET /v1/fleet/actuals`), but it reads *backwards* from now — so this
-   * member honours `range` as the look-back {@link RangeHours} describes even
-   * where `fleetLookback` is false.
+   * Like {@link fleetForecasts} this is one request for the whole fleet — the
+   * HTTP source reads `GET /v1/fleet/actuals`. That route reads *backwards* from
+   * now, so this member honours `range` as
+   * the look-back {@link RangeHours} describes even where `fleetLookback` is
+   * false.
    */
   readonly fleetActuals: (
     range: RangeHours,
