@@ -78,7 +78,9 @@ type SeriesWriteRequest = NonNullable<
  * that passed a {@link QueryPaginationBound} can ever see `complete: false`.
  *
  * A flat record rather than a discriminated union (`docs/standards/typing.md`
- * rule 4).
+ * rule 4): a truncated read is not a different *mode* of answer, it is the same
+ * answer carrying an honest caveat, and the points of a truncated window are
+ * real points the caller may legitimately log, count or discard.
  */
 export interface SeriesRangeResult {
   readonly points: SeriesPoint[];
@@ -88,6 +90,11 @@ export interface SeriesRangeResult {
 
 /**
  * A window of fleet roll-up partials, and whether the window was read to its end.
+ *
+ * {@link SeriesRangeResult}'s shape, for its reason — a short list cannot say on its own whether it
+ * is the whole answer — and its own type rather than a generic one, because the two carry different
+ * payloads and the honesty flag is the only thing they share
+ * (`docs/standards/structure.md` rule 7).
  *
  * `complete` is read harder here than there. A truncated per-site series is a chart with a gap at
  * the end; a truncated roll-up is a fleet *total* summed from some of its locations, which looks

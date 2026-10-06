@@ -38,8 +38,12 @@ import {
  *
  * The whole fleet lives in one partition (`pk = 'FLEET'`, sort key `siteId`) so
  * "list every site" (A2) and "enumerate active locations" (I1) are single
- * Queries rather than Scans. Two sparse GSIs hang off it. `site-item.ts` holds
- * those rules.
+ * Queries rather than Scans. Two sparse GSIs hang off it, and *sparse* is the
+ * load-bearing word: the index attributes are written only when the site
+ * qualifies, so "inactive sites are invisible to the forecast service" and
+ * "seed sites are never evicted" are properties of the data model rather than
+ * of filters a later change could forget to apply. `site-item.ts` holds those
+ * rules.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
  * comment on `createStorageDocumentClient`.

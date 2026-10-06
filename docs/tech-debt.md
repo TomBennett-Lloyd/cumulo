@@ -183,3 +183,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `packages/hindcast/src/archive-cache.ts` — the `ensureArchiveCoverage` docblock, step 3 ("Fetch sequentially")
 - What: the step restates CLAUDE.md's per-minute call limit as a figure beside its citation of CLAUDE.md, against `docs/standards/architecture.md` rule 9. #545 batch 6 deleted the sibling restatement of the daily figure from `MAX_ARCHIVE_REQUEST_DAYS`' docblock in `packages/hindcast/src/open-meteo-archive.ts` and left this one, because deleting the figure alone leaves "the very limit that stops the run" without a referent.
 - Source: #545 batch 6, reviewer pass 1 SYSTEMIC
+
+## 2026-10-06 — the reasons the SDK budget stays 2 now live only in #166's plan comment, while prose.md rule 4 names an ADR or a standard's rule as the owner a docblock cites
+
+- Where: `packages/storage/src/client.ts` · `packages/storage/src/client.ts` carries "re-derived it rather than inheriting #122's number" · `docs/standards/prose.md` carries "cite the owner — an ADR by filename, or a standard's rule by number"
+- What: the reasons the SDK budget stays 2 now live only in #166's plan comment, while prose.md rule 4 names an ADR or a standard's rule as the owner a docblock cites
+- Source: #545 batch 3, reviewer pass 1 SYSTEMIC (ledger row 106)
