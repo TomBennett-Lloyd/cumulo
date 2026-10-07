@@ -82,10 +82,10 @@ const componentSources = [
     name: 'CreateSiteInput',
     schema: createSiteInputSchema,
     description: [
-      'A site as a caller may describe one. Four fields of a fleet site are absent',
+      'A site as a caller may describe one. Three fields of a fleet site are absent',
       'because the server assigns them: `id` (one supplied by the caller is stripped,',
-      'never honoured), `origin` (always `user` for a site created over HTTP),',
-      '`createdAt`, and `active`. The generated `id` comes back in the 201 body,',
+      'never honoured), `origin` (always `user` for a site created over HTTP), and',
+      '`createdAt`. The generated `id` comes back in the 201 body,',
       'which is the only place a caller can learn it.',
     ].join(' '),
   },

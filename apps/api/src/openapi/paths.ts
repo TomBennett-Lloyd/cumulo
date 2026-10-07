@@ -134,7 +134,7 @@ export const apiPaths: PathsObject = {
       operationId: 'listSites',
       summary: 'List the fleet',
       description: [
-        'Every site, seed and user-created, active and inactive. Unpaginated by design:',
+        'Every site, seed and user-created. Unpaginated by design:',
         'the fleet lives in one partition and #29 caps how many user sites can exist, so',
         '"the whole fleet" is a bounded answer.',
       ].join(' '),
@@ -148,8 +148,8 @@ export const apiPaths: PathsObject = {
       summary: 'Add a site to the fleet',
       description: [
         'Unauthenticated on purpose — this is the demo\'s "add a site" flow. The server',
-        'assigns `id`, sets `origin` to `user`, stamps `createdAt` and marks the site',
-        'active; the 201 body is the only place the caller learns the new id.',
+        'assigns `id`, sets `origin` to `user` and stamps `createdAt`; the 201 body is',
+        'the only place the caller learns the new id.',
         `At most ${String(MAX_USER_SITES)} user-created sites exist at once: a create`,
         'against a full fleet still answers 201, having evicted the oldest user site —',
         "and that site's stored series points — to make room. The seed fleet is exempt",
@@ -181,8 +181,8 @@ export const apiPaths: PathsObject = {
       operationId: 'updateSite',
       summary: 'Replace one site',
       description: [
-        "A full replace of the caller-settable fields; the site's `id`, `origin`,",
-        '`createdAt` and `active` are preserved from the stored row. Last write wins —',
+        "A full replace of the caller-settable fields; the site's `id`, `origin` and",
+        '`createdAt` are preserved from the stored row. Last write wins —',
         'there is no optimistic concurrency on this endpoint. A write, so it requires an',
         'allowed `Origin` header (403 below) and is rate-limited per address.',
       ].join(' '),
