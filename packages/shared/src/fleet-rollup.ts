@@ -5,7 +5,7 @@ import {
   contributingCapacityKwByHour,
   type SiteCapacity,
 } from './aggregation';
-import { uncertaintyBandSchema, type Forecast } from './forecast';
+import type { Forecast } from './forecast';
 import type { ForecastSeriesKind, SeriesKind } from './storage-key';
 import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } from './timestamp';
 
@@ -122,6 +122,18 @@ export const fleetRollupPartialSchema = z.object({
 export type FleetRollupPartial = z.infer<typeof fleetRollupPartialSchema>;
 
 /**
+ * A fleet hour's summed band. `forecast.ts`'s `uncertaintyBandSchema` caps each quantile at one
+ * house; this carries {@link fleetRollupPartialSchema}'s bounds instead, for that schema's reason
+ * (#586).
+ */
+const fleetUncertaintyBandSchema = z
+  .object({ p10AcPowerKw: z.number().gte(0), p90AcPowerKw: z.number().gte(0) })
+  .refine((band) => band.p10AcPowerKw <= band.p90AcPowerKw, {
+    message: 'p10AcPowerKw must not exceed p90AcPowerKw',
+    path: ['p10AcPowerKw'],
+  });
+
+/**
  * One hour of the summed fleet forecast, as a reader of the aggregate sees it.
  *
  * `FleetForecastPoint` (`aggregation.ts`) plus the per-hour contributing capacity, which is the
@@ -134,7 +146,7 @@ export type FleetRollupPartial = z.infer<typeof fleetRollupPartialSchema>;
 export const fleetForecastAggregatePointSchema = z.object({
   validTime: utcIsoTimestampSchema,
   acPowerKw: z.number().gte(0),
-  uncertainty: uncertaintyBandSchema.optional(),
+  uncertainty: fleetUncertaintyBandSchema.optional(),
   contributingSiteCount: z.int().gte(0),
   contributingCapacityKw: z.number().gte(0),
 });

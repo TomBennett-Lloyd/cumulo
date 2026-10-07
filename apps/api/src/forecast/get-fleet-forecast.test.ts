@@ -170,6 +170,25 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     ]);
   });
 
+  it('answers 200 for a 60-site daylight hour whose band sums past one house’s cap', async () => {
+    // #586: the fleet band carried the per-site cap, so `jsonResponse` refused this body as a 500.
+    const sixtySites = partial({
+      acPowerKw: 180,
+      p10AcPowerKw: 140,
+      p90AcPowerKw: 230,
+      contributingSiteCount: 60,
+      contributingCapacityKw: 340,
+    });
+    const { deps } = stub({
+      sites: [RANELAGH],
+      rollupRows: [{ locationId: DUBLIN, partial: sixtySites }],
+    });
+
+    const response = await getFleetForecast(deps, fleetForecastRequest());
+
+    expect(response.statusCode).toBe(200);
+  });
+
   it.each([
     { name: 'no hours parameter at all', query: {}, to: TWO_DAYS_AFTER_NOW },
     { name: 'an explicit hours=24', query: { hours: '24' }, to: DAY_AFTER_NOW },

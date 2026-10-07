@@ -5,13 +5,14 @@ import { canonicalFleetSeed, generateFleet } from './fleet';
 import {
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
+  fleetForecastAggregatePointSchema,
   fleetRollupPartials,
   sumFleetRollupPartials,
   type FleetForecastAggregatePoint,
 } from './fleet-rollup';
 import { forecastSchema, type Forecast } from './forecast';
 import { locationId } from './location';
-import type { Site } from './site';
+import { MAX_PLAUSIBLE_RESIDENTIAL_KW, type Site } from './site';
 
 /**
  * The additivity proof — ADR 0009's load-bearing claim, made executable.
@@ -233,5 +234,20 @@ describe('the aggregate is what the client used to compute', () => {
       fleet.reduce((total, site) => total + site.capacityKw, 0),
       MICROWATT_PLACES,
     );
+  });
+});
+
+describe('the aggregate is a valid wire point', () => {
+  // #586: the API parses its body through this schema before sending it, so a point that fails here
+  // is a production 500. The canonical fleet's afternoon band sums past one house's cap.
+  it('parses every hour of the canonical fleet, including those summing past one house', () => {
+    const points = fleetForecastAggregate(allForecasts, fleet, FLEET_ROLLUP_FORECAST_KIND);
+
+    expect(
+      Math.max(...points.map((point) => point.uncertainty?.p90AcPowerKw ?? 0)),
+    ).toBeGreaterThan(MAX_PLAUSIBLE_RESIDENTIAL_KW);
+    for (const point of points) {
+      expect(fleetForecastAggregatePointSchema.parse(point)).toEqual(point);
+    }
   });
 });

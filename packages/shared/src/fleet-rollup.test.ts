@@ -4,6 +4,7 @@ import { aggregateFleetForecast } from './aggregation';
 import {
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
+  fleetForecastAggregatePointSchema,
   fleetRollupPartials,
   sumFleetRollupPartials,
   type FleetRollupPartial,
@@ -257,6 +258,33 @@ describe('sumFleetRollupPartials', () => {
 
   it('yields no points for no partials', () => {
     expect(sumFleetRollupPartials([])).toEqual([]);
+  });
+});
+
+describe('fleetForecastAggregatePointSchema', () => {
+  const point = (uncertainty: {
+    readonly p10AcPowerKw: number;
+    readonly p90AcPowerKw: number;
+  }) => ({
+    validTime: noon,
+    acPowerKw: 120,
+    uncertainty,
+    contributingSiteCount: 60,
+    contributingCapacityKw: 300,
+  });
+
+  it('accepts a fleet band above one house’s ceiling (#586)', () => {
+    expect(
+      fleetForecastAggregatePointSchema.safeParse(point({ p10AcPowerKw: 90, p90AcPowerKw: 150 }))
+        .success,
+    ).toBe(true);
+  });
+
+  it.each([
+    { name: 'p10 above p90', band: { p10AcPowerKw: 151, p90AcPowerKw: 150 } },
+    { name: 'a negative p10', band: { p10AcPowerKw: -1, p90AcPowerKw: 150 } },
+  ])('still refuses $name', ({ band }) => {
+    expect(fleetForecastAggregatePointSchema.safeParse(point(band)).success).toBe(false);
   });
 });
 

@@ -25,8 +25,8 @@ import { compareUtcIsoTimestamps, type UtcIsoTimestamp } from './timestamp';
  * is worse than a doubled total for being plausible. Pass a single model (#531).
  *
  * The fleet band reuses `UncertaintyBand` as a *type* only. `uncertaintyBandSchema`'s
- * `0`–`MAX_PLAUSIBLE_RESIDENTIAL_KW` bounds are per-site and cannot hold for a sum, so there is
- * deliberately no fleet-level schema here — fleet response contracts are #14's problem.
+ * `0`–`MAX_PLAUSIBLE_RESIDENTIAL_KW` bounds are per-site and cannot hold for a sum; the fleet's
+ * wire schema is `fleet-rollup.ts`'s `fleetForecastAggregatePointSchema`.
  */
 
 /** The two fields aggregation groups on: one entry per site per hour. */

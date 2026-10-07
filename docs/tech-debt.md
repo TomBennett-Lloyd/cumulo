@@ -219,3 +219,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `readAtPointer` (the `onPointerMove` handler) and `clearAtLeave` in `apps/web/src/charts/forecast-chart-hover-boundary.tsx`
 - What: after a pen tap and lift, the pen's hover stream keeps moving the reading, and the focus the lift took keeps it past the leave, so what stands is the sample where the stylus exited rather than the one it tapped. Same on `main`. The CDP pen case in `apps/web/e2e/chart-tap.spec.ts` jumps straight off the chart, so it cannot see this
 - Source: #537 review pass 1 SYSTEMIC
+
+## 2026-10-07 — The OpenAPI `FleetForecastResponse` description never states p10 ≤ p90
+
+- Where: the `FleetForecastResponse` registration in `apps/api/src/openapi/components.ts`; compare the `Forecast` component's description and the assertion in `apps/api/src/openapi/document.test.ts` that pins it
+- What: JSON Schema cannot express the band's `p10 ≤ p90` refine, so the `Forecast` component says it in prose and a test holds that prose in place. The fleet band carries the same refine, but the fleet description does not say so. This predates #586
+- Source: #586 review pass 1 SYSTEMIC
