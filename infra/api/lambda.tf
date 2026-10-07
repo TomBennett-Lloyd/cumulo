@@ -85,7 +85,10 @@ resource "aws_lambda_function" "api" {
   # `request-budget.test.ts` holds this value under it — the inequality the
   # mirror gate has no second side to address, AWS owning that 30 s and no file
   # in this repo declaring it, so raising this past 30 s fails a test instead of
-  # failing in production.
+  # failing in production. Restated (architecture.md rule 9): infra/README.md's
+  # api Lambda compute row computes the canary's GB-seconds bound from it, and
+  # the `getFleetActuals`/`getFleetForecast` docblocks name the 15-second
+  # function.
   timeout = 15
 
   # 256 MB, and this number is load-bearing beyond performance: it is the figure

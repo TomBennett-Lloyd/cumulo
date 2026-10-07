@@ -22,10 +22,11 @@
 #     existence, so a forgotten topic costs nothing (the property every stack in
 #     this repo preserves).
 #   * Email deliveries: the first 1,000/month are free, then $2.00 per 100,000.
-#     Ten alarms that should each fire zero times will not approach 1,000, and
+#     The platform's alarms (infra/README.md's CloudWatch alarm budget owns the
+#     count) should each fire zero times and will not approach 1,000, and
 #     an alarm flapping often enough to would be a much louder problem than its
 #     bill.
-#   * Publishes: the first 1,000,000 requests/month are free. Ten alarms.
+#   * Publishes: the first 1,000,000 requests/month are free. The same alarms.
 
 # The recipient address, read exactly as infra/bootstrap/budget.tf reads it, and
 # for exactly the reasons documented there and in infra/README.md convention 7:

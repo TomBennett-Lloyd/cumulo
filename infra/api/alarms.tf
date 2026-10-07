@@ -133,16 +133,14 @@ resource "aws_cloudwatch_metric_alarm" "api_request_flood" {
   alarm_description = "The Cumulo fleet API is taking sustained traffic far above demo volume — averaging over 6 requests/second for five minutes, against a stage ceiling of 10/second. The bill is bounded by that throttle (ADR 0005, ≈ $36/month worst case), but legitimate visitors are likely being 429ed by whoever is doing this. Read the access pattern before changing anything, and note what this volume implies now that #29's per-IP limiting is in place: a single-source flood is blocked well below this threshold, so reaching it means a distributed source or traffic concentrated on the unlimited read routes. Neither is fixed by a higher ceiling."
 }
 
-# #603. Both alarms above watch the gateway, so with no visitors they watch
-# nothing: `GET /v1/fleet/forecast` answered 500 from 2026-10-05 13:00Z until
-# 2026-10-07 (#586), and `api_5xx` fired only when somebody happened to look.
-# The warmer rule's `canary` target (warmer.tf) is the traffic that closes that,
-# and it reaches the function directly — so it is counted from the function's
-# log, where `handleApiEvent` in `apps/api/src/main.ts` writes one line per 5xx.
+# #603 (#586 is the incident). Both alarms above watch the gateway, so with no
+# visitors they watch nothing. The warmer rule's `canary` target (warmer.tf) is
+# traffic that reaches the function directly, so this counts from the
+# function's log, where `handleApiEvent` in `apps/api/src/main.ts` writes one
+# line per 5xx.
 #
-# A term pattern rather than a JSON one: the Node runtime prefixes each line
-# with a timestamp, request id and level, so the line is not a JSON event.
-# `.claude/scripts/check-infra-mirrors.sh` holds the term equal to
+# A term rather than `{ $.statusCode >= 500 }` so that
+# `.claude/scripts/check-infra-mirrors.sh` can hold it equal to
 # `apiServerErrorEvent`.
 resource "aws_cloudwatch_log_metric_filter" "api_server_error" {
   name           = "cumulo-api-${var.environment}-server-error"
@@ -174,5 +172,5 @@ resource "aws_cloudwatch_metric_alarm" "api_server_error" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "The Cumulo fleet API answered at least one 5xx in ten minutes, counted from the function's own log. The canary (the warmer rule's canary target) requests GET /v1/fleet/forecast every five minutes, so this fires with zero visitors: if ${aws_cloudwatch_metric_alarm.api_5xx.alarm_name} is quiet at the same time, nobody but the canary is reaching the failure. Look for api_response_server_error in the log group, and for the event logged just before it on the same request id. A function that crashes or times out writes no such line; that case is #164's."
+  alarm_description = "The Cumulo fleet API answered at least one 5xx in ten minutes, counted from the function's own log. The warmer rule invokes the function directly every five minutes, its canary target with GET /v1/fleet/forecast, so this fires with zero visitors: if ${aws_cloudwatch_metric_alarm.api_5xx.alarm_name} is quiet at the same time, only the warmer rule (or a manual replay) is reaching the failure. Look for api_response_server_error in the log group, and for the event logged just before it on the same request id. A function that crashes or times out writes no such line; that case is #164's."
 }

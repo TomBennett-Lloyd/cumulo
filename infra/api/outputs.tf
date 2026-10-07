@@ -74,10 +74,8 @@
 #     is a custom metric inside the always-free ten. API Gateway and Lambda
 #     metrics are free.
 #   * API Gateway HTTP API — $1.00 per million requests, no per-hour charge, no
-#     minimum, no per-stage fee. An idle API costs nothing, and one somebody
-#     forgets to destroy costs its log group's fraction of a cent within this
-#     stack — plus, since #473, the warmer rule's DynamoDB requests on another
-#     one's meter (the warmer bullet below). This is
+#     minimum, no per-stage fee. An idle API costs nothing; what a forgotten
+#     stack does cost is the IDLE COST header above. This is
 #     the property ADR 0005 chose it for, against an ALB's ≈ $16.43/month of
 #     standing charge. There are no access logs on the stage to add a second
 #     log group — gateway.tf says why at the point of temptation.
@@ -87,7 +85,7 @@
 #     (order 10,000 requests/month) plus the rule's 25,920 both the always-free
 #     1,000,000 requests and the 400,000 GB-seconds are untouched — the rule is
 #     2.6% of the first; of the second the warmer is 233 GB-seconds and the
-#     canary at most 32,400, its 15 s timeout on every tick; at
+#     canary's bound is infra/README.md's api Lambda compute row; at
 #     256 MB and ~100 ms the compute allowance covers 16 million requests/month.
 #     The stored deployment package is not a third at-rest line: Lambda code
 #     storage carries no charge inside its 75 GB per-Region quota.

@@ -20,10 +20,9 @@
 # second — which is why this rule carries two warming targets rather than one.
 #
 # The third target is #603's canary: `GET /v1/fleet/forecast?hours=48`, the
-# route #586 left answering 500 for two days with nobody looking. An error-count
-# alarm needs traffic; this target is the traffic, and
-# `aws_cloudwatch_metric_alarm.api_server_error` in alarms.tf counts what it
-# gets back.
+# route #586 broke. An error-count alarm needs traffic; this target is the
+# traffic, and `aws_cloudwatch_metric_alarm.api_server_error` in alarms.tf
+# counts what it gets back.
 #
 # ---------------------------------------------------------------------------
 # Restatement ledger (`docs/standards/architecture.md` rule 9) for the values
@@ -37,10 +36,12 @@
 #
 #   git grep -niE '17,?280|34,?560|25,920|8,640|~36,000|233 GB|9 MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|canary|every five minutes|[0-9]+ targets|Plan: [0-9]+ to add|expect [0-9]+ lines|[0-9]+ .resource. blocks|#473' -- :/ ':!docs/tech-debt.md' ':!docs/review-feedback.md' ':!docs/adr/0005-fleet-api-hosting.md'
 #
-# It returns hits in exactly five files — this one, `infra/api/alarms.tf`,
+# It returns hits in exactly seven files — this one, `infra/api/alarms.tf`,
 # `infra/api/outputs.tf`, `infra/README.md` and
-# `.github/workflows/deploy-api.yml`; `git grep -l` on the same pattern is the
-# cheap form of that assertion. The two pathspec exclusions are the append-only logs, which
+# `.github/workflows/deploy-api.yml`, plus `infra/api/lambda.tf` and
+# `infra/storage/tables.tf`, whose ledgers name the canary as a consumer of
+# their own values and carry none of this file's; `git grep -l` on the same
+# pattern is the cheap form of that assertion. The two pathspec exclusions are the append-only logs, which
 # record what was decided rather than carrying a live claim: `docs/tech-debt.md`
 # holds this schedule's residuals and states none of its figures, and
 # `docs/review-feedback.md` matches the plan-count arm on an unrelated 2026

@@ -104,6 +104,8 @@
 # figure is amended (2026-08-10) rather than current. That section states the
 # numbers; this paragraph carries none of its own. Its carriers:
 # infra/README.md's `### Storage stack` series row (already enumerated above),
+# infra/README.md's api cost table DynamoDB row (which computes #603's canary
+# reads from the ~18 and the ~2),
 # the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx, the
 # `listSites` docblock in apps/web/src/data/fleet-data-source.ts, the
 # `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts —
