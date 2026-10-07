@@ -36,9 +36,7 @@ import { forecastsIn } from './series-split';
  *
  * **The fallback is a second path, not a second owner of the numbers.** Both arms end in
  * `@cumulo/shared` — `sumFleetRollupPartials` over stored partials, `fleetForecastAggregate` over
- * raw rows — and `fleet-rollup-additivity.test.ts` is the proof those two agree. What the fallback
- * exists for is the window between deploying this and the first full ingestion cycle writing every
- * location.
+ * raw rows — and `fleet-rollup-additivity.test.ts` is the proof those two agree.
  *
  * **Incomplete counts as absent, deliberately.** A partition holding eleven of twelve locations
  * sums to a fleet total that looks exactly like a plausible number from a quieter fleet — there is

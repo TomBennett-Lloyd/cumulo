@@ -23,8 +23,7 @@ import { hoursAfter } from './series-window';
  * nameplate capacity stood behind it — rather than every site's rows for the
  * browser to add up. The sum is the same on every load, so it is computed once
  * by the forecast producer and read back as one Query of the `#FLEET` partition;
- * `fleet-rollup-read.ts` owns that read and the fan-out fallback that covers the
- * window before the first full cycle has written.
+ * `fleet-rollup-read.ts` owns that read and its fan-out fallback.
  *
  * **The mirror of `get-fleet-actuals.ts` in shape, no longer in body.** That
  * route still returns raw readings; its docblock carries the full argument for

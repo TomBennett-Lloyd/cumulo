@@ -295,7 +295,12 @@ describe('the fallback', () => {
 
     await read(deps, [RANELAGH, BRISTOL_SITE]);
 
-    expect(logged[0]).toMatchObject({ reason: 'incomplete', staleLocations: 1 });
+    expect(logged[0]).toMatchObject({
+      reason: 'incomplete',
+      expectedLocations: 2,
+      presentLocations: 1,
+      staleLocations: 1,
+    });
   });
 
   it('treats a roll-up Query that stopped short as incomplete', async () => {
