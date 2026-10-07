@@ -1,3 +1,4 @@
+import { canonicalFleetSeed, generateFleet } from '@cumulo/shared';
 import type { BlockStatus } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
@@ -217,5 +218,17 @@ describe('IpLimiter', () => {
     const limiter = new IpLimiter({ abuse: store, nowEpochSeconds: () => WINDOW_START + 1 });
 
     expect(await limiter.check(IP)).toEqual({ allowed: false, retryAfterSeconds: 1 });
+  });
+});
+
+describe('MAX_LIMITED_REQUESTS_PER_WINDOW', () => {
+  it('admits a dashboard load plus a selection of every seed site inside one window', () => {
+    // The two fleet reads a dashboard load makes, then one `/series` per site
+    // a visitor selects — none of them yet cached by the browser.
+    const dashboardLoad = 2;
+
+    expect(dashboardLoad + generateFleet(canonicalFleetSeed).length).toBeLessThanOrEqual(
+      MAX_LIMITED_REQUESTS_PER_WINDOW,
+    );
   });
 });

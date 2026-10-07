@@ -17,8 +17,9 @@ name: Deploy Web
 # API Gateway URL directly, baked in at build time below. That is load-bearing:
 # the API's per-IP limiter reads `requestContext.http.sourceIp` (ADR 0006), the
 # direct TCP peer, so routing the API through CloudFront would collapse every
-# visitor onto a handful of edge addresses and 30 requests/minute would
-# auto-block a whole edge POP for an hour. Adding an API origin here — or a
+# visitor onto a handful of edge addresses and one limiter window
+# (`MAX_LIMITED_REQUESTS_PER_WINDOW`) would auto-block a whole edge POP for an
+# hour. Adding an API origin here — or a
 # step that deploys one — needs the limiter's identity source moved to the
 # leftmost-untrusted `x-forwarded-for` hop first.
 #

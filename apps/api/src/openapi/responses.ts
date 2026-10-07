@@ -1,5 +1,6 @@
 import type { ApiErrorCode } from '@cumulo/shared';
 
+import { MAX_LIMITED_REQUESTS_PER_WINDOW, RATE_WINDOW_SECONDS } from '../abuse/ip-limiter';
 import { apiErrorStatus } from '../http/response';
 
 import { componentRef, type ComponentSchemaName } from './components';
@@ -92,8 +93,8 @@ const throttledResponse: ResponsesObject = {
       'Too many requests, from one of two places. API Gateway throttles first — 10',
       'requests/second (burst 20) across the API, and 2/second (burst 4) on the three',
       'write routes — and its 429 carries the gateway’s own `{ "message": … }` body.',
-      'Past that, this service’s per-IP limiter refuses more than 30 requests per',
-      '60-second window to the write routes, `GET /v1/sites/{siteId}/series` and both',
+      `Past that, this service’s per-IP limiter refuses more than ${String(MAX_LIMITED_REQUESTS_PER_WINDOW)} requests per`,
+      `${String(RATE_WINDOW_SECONDS)}-second window to the write routes, \`GET /v1/sites/{siteId}/series\` and both`,
       'fleet routes — `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast`, whose cost',
       'grows with the fleet — and blocks the address for an hour; that 429 is an ApiError',
       'with code `rate_limited` and a `retry-after` header naming the wait in seconds.',
