@@ -75,6 +75,15 @@ describe('parseGatewayEvent', () => {
     expect(parseGatewayEvent(gatewayEvent({ headers: null })).originHeader).toBeUndefined();
   });
 
+  it('carries a revalidation’s If-None-Match through, and its absence as absence', () => {
+    const tag = 'W/"cycle-1791374100"';
+
+    expect(parseGatewayEvent(gatewayEvent({ headers: { 'if-none-match': tag } })).ifNoneMatch).toBe(
+      tag,
+    );
+    expect(parseGatewayEvent(gatewayEvent({ headers: null })).ifNoneMatch).toBeUndefined();
+  });
+
   it('rejects an event with no source address rather than limiting everyone as one caller', () => {
     // Required, unlike the absent-able fields above. A limiter that cannot tell
     // callers apart is not a limiter, so this takes the boundary's 500 path.

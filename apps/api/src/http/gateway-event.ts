@@ -35,12 +35,12 @@ import { describeZodIssues } from './response';
  * takes the boundary's 500 path, rather than every request quietly sharing one
  * `'unknown'` bucket. The gateway sends both on every payload-v2 invocation.
  *
- * `headers` is parsed as part of the v2 shape, and exactly one header reaches
- * {@link ApiRequest}: `origin`. Payload v2 lowercases header names, so `origin`
- * is the key to read and `Origin` would never match — an assumption the fixture
- * encodes and issue #29's live evidence step confirms against the deployed API.
- * The rest stay unsurfaced, because a field on the request type that nothing
- * consumes is an invitation to start branching on transport detail.
+ * `headers` is parsed as part of the v2 shape, and two headers reach
+ * {@link ApiRequest}: `origin` and `if-none-match`. Payload v2 lowercases header
+ * names — an assumption the fixture encodes and issue #29's live evidence step
+ * confirms against the deployed API. The rest stay unsurfaced, because a field
+ * on the request type that nothing consumes is an invitation to start branching
+ * on transport detail.
  */
 const gatewayEventSchema = z.object({
   rawPath: z.string(),
@@ -82,6 +82,8 @@ export interface ApiRequest {
   readonly originHeader: string | undefined;
   /** `https://<this deployment's host>` — the origin a same-origin call sends. */
   readonly ownOrigin: string;
+  /** The validator a browser revalidates a cached read with (`forecast/cycle-cache.ts`). */
+  readonly ifNoneMatch: string | undefined;
 }
 
 /**
@@ -128,5 +130,6 @@ export const parseGatewayEvent = (event: unknown): ApiRequest => {
     // listener, so a request that reached this function reached it over TLS and
     // a browser's `Origin` for it can only ever carry this scheme.
     ownOrigin: `https://${requestContext.domainName}`,
+    ifNoneMatch: headers?.['if-none-match'],
   };
 };

@@ -103,11 +103,24 @@ describe('the OpenAPI document', () => {
   });
 });
 
+describe('the documented revalidation answer', () => {
+  it('documents a bodiless 304 on exactly the three metered reads', () => {
+    const revalidated = allOperations()
+      .filter((operation) => '304' in operation.responses)
+      .map((operation) => operation.operationId);
+
+    expect(revalidated.sort()).toEqual(['getFleetActuals', 'getFleetForecast', 'getSiteSeries']);
+    for (const operation of allOperations()) {
+      expect(operation.responses['304']?.content).toBeUndefined();
+    }
+  });
+});
+
 describe('the documented error contract', () => {
-  it('answers every non-2xx with the ApiError component, except the gateway 429', () => {
+  it('answers every 4xx and 5xx with the ApiError component, except the gateway 429', () => {
     for (const operation of allOperations()) {
       for (const [status, response] of Object.entries(operation.responses)) {
-        if (status.startsWith('2') || status === '429') {
+        if (status.startsWith('2') || status.startsWith('3') || status === '429') {
           continue;
         }
         expect(jsonSchemaOf(response), `${operation.operationId} ${status}`).toEqual({

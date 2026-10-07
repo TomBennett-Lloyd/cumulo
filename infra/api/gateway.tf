@@ -225,10 +225,10 @@ resource "aws_apigatewayv2_stage" "default" {
   #
   # 2 rps is generous for the intended traffic — the demo's add-a-site flow is
   # one POST per human decision — and it is deliberately above the per-IP
-  # limiter's 30-per-60 s, so a single abusive IP meets the *application*
-  # limiter (which can block it for an hour and returns a typed body) before it
-  # meets this one. This layer is what stops many IPs from doing together what
-  # one cannot do alone.
+  # limiter's threshold (`MAX_LIMITED_REQUESTS_PER_WINDOW` per
+  # `RATE_WINDOW_SECONDS`, `apps/api/src/abuse/ip-limiter.ts`), so an address
+  # held to this throttle can still earn the limiter's hour-long block. This
+  # layer is what stops many IPs from doing together what one cannot do alone.
   dynamic "route_settings" {
     for_each = local.write_route_keys
 

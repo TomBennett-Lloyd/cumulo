@@ -105,12 +105,9 @@ export class HttpFleetDataSource implements FleetDataSource {
    * `${siteId}|${range}` → the series request currently in flight for it.
    *
    * The detail view asks for that pair's forecasts and actuals concurrently,
-   * and both are halves of one `/series` payload. `/series` is metered by the
-   * API's per-IP limiter (`apps/api/src/abuse/ip-limiter.ts` owns the policy;
-   * the route table in `apps/api/src/main.ts` owns which routes it is applied
-   * to), so sharing the promise is the difference between one metered request
-   * per selection and two. Even unshared this is far from the limiter, but the
-   * halving is free and it is the frugality posture CLAUDE.md asks for.
+   * and both are halves of one `/series` payload, which the API meters per
+   * address (`apps/api/src/abuse/ip-limiter.ts`): sharing the promise is one
+   * metered request per selection rather than two.
    */
   private readonly seriesInFlight = new Map<
     string,
@@ -154,16 +151,17 @@ export class HttpFleetDataSource implements FleetDataSource {
 
   /**
    * One `/series` read. Knows nothing about the in-flight map — the sharing is
-   * {@link seriesFor}'s, and so is the bookkeeping that goes with it.
+   * {@link seriesFor}'s. Edges on the next whole hour keep the URL — the
+   * browser's cache key — stable for the hour (`apps/api/src/forecast/cycle-cache.ts`).
    */
   private readonly fetchSeries = (
     siteId: string,
     range: RangeHours,
   ): Promise<FleetSourceResult<SiteSeriesResponse>> => {
-    const nowMs = this.now();
+    const edgeMs = Math.ceil(this.now() / MS_PER_HOUR) * MS_PER_HOUR;
     const window = new URLSearchParams({
-      from: utcSecondIso(nowMs - range * MS_PER_HOUR),
-      to: utcSecondIso(nowMs + SERIES_HORIZON_HOURS * MS_PER_HOUR),
+      from: utcSecondIso(edgeMs - range * MS_PER_HOUR),
+      to: utcSecondIso(edgeMs + SERIES_HORIZON_HOURS * MS_PER_HOUR),
     });
 
     return this.requestJson(
@@ -206,8 +204,7 @@ export class HttpFleetDataSource implements FleetDataSource {
      * line after it.
      */
     const request = this.fetchSeries(siteId, range).finally(() => {
-      // Settled, so the next selection of this pair is a fresh read rather than
-      // a cached one — this shares a request, it does not cache a response.
+      // This shares a request, it does not cache a response.
       this.seriesInFlight.delete(key);
     });
     this.seriesInFlight.set(key, request);

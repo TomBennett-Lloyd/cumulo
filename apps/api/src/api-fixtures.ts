@@ -178,6 +178,7 @@ export const apiRequest = (overrides: Partial<ApiRequest> = {}): ApiRequest => (
   sourceIp: SOURCE_IP,
   originHeader: undefined,
   ownOrigin: OWN_ORIGIN,
+  ifNoneMatch: undefined,
   ...overrides,
 });
 
@@ -238,6 +239,7 @@ export const routeRequest = (overrides: Partial<RouteRequest> = {}): RouteReques
   sourceIp: SOURCE_IP,
   originHeader: undefined,
   ownOrigin: OWN_ORIGIN,
+  ifNoneMatch: undefined,
   deadline: fullBudgetDeadline,
   ...overrides,
 });

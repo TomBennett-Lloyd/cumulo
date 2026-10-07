@@ -20,9 +20,11 @@ import {
   RANELAGH_ID,
   RATHMINES_ID,
   routeRequest,
+  VALID_TIME,
 } from '../api-fixtures';
 import type { RequestDeadline } from '../http/request-deadline';
 
+import { cycleOfReading } from './cycle-cache';
 import { FLEET_READ_CONCURRENCY } from './fleet-series-read';
 import {
   fleetActualsReadDeadlineEvent,
@@ -177,6 +179,21 @@ describe('GET /v1/fleet/actuals', () => {
     expect(response.statusCode).toBe(200);
     expect(fleetActualsResponseSchema.parse(jsonBodyOf(response)).actuals).toEqual([]);
     expect(reads).toHaveLength(2);
+    expect(response.headers['cache-control']).toBe('no-store');
+  });
+
+  it('dates the body by its most-behind site, so one late location is not hidden', async () => {
+    const { deps } = stub([RANELAGH, RATHMINES], {
+      [RANELAGH_ID]: [generationPoint()],
+      [RATHMINES_ID]: [
+        generationPoint({ siteId: RATHMINES_ID, validTime: '2026-07-31T12:00:00Z' }),
+      ],
+    });
+
+    const response = await getFleetActuals(deps, fleetActualsRequest());
+
+    expect(response.dataCycleStart).toBe(cycleOfReading('2026-07-31T12:00:00Z'));
+    expect(response.dataCycleStart).toBeLessThan(cycleOfReading(VALID_TIME));
   });
 
   it('credits Open-Meteo in every 200 body', async () => {
@@ -185,6 +202,8 @@ describe('GET /v1/fleet/actuals', () => {
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
     const body = fleetActualsResponseSchema.parse(jsonBodyOf(response));
+    expect(response.headers['cache-control']).toBeUndefined();
+    expect(response.dataCycleStart).toBe(cycleOfReading(VALID_TIME));
     expect(body.attribution).toEqual(openMeteoAttribution);
     expect(body.attribution.text).toBe('Weather data by Open-Meteo.com');
   });

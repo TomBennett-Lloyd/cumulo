@@ -6,10 +6,11 @@ import {
 import type { QueryPaginationBound, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
-import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
+import { errorResponse, jsonResponse, zodIssueDetails } from '../http/response';
 import type { RouteRequest } from '../http/router';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
+import { datedByData, uncacheable, type MeteredResponse } from './cycle-cache';
 import { requireKnownSite } from './known-site';
 import { actualsIn, forecastsIn } from './series-split';
 import { spanHours } from './series-window';
@@ -92,7 +93,7 @@ export interface GetSiteSeriesDeps {
 export const getSiteSeries = async (
   deps: GetSiteSeriesDeps,
   request: RouteRequest,
-): Promise<ApiResponse> => {
+): Promise<MeteredResponse> => {
   // Bounds first, site second: a window this API refuses to read is a 400
   // before anything is billed, and the caller learns which bound was wrong
   // rather than which lookup happened to run first.
@@ -144,9 +145,19 @@ export const getSiteSeries = async (
     return errorResponse('internal', 'the request could not be completed in time');
   }
 
-  return jsonResponse(200, siteSeriesResponseSchema, {
-    forecasts: forecastsIn(points),
-    actuals: actualsIn(points),
+  const forecasts = forecastsIn(points);
+  const actuals = actualsIn(points);
+  const response = jsonResponse(200, siteSeriesResponseSchema, {
+    forecasts,
+    actuals,
     attribution: openMeteoAttribution,
   });
+  return forecasts.length === 0 && actuals.length === 0
+    ? uncacheable(response)
+    : datedByData(response, [
+        {
+          issuedAts: forecasts.map((forecast) => forecast.issuedAt),
+          readingTimes: actuals.map((reading) => reading.validTime),
+        },
+      ]);
 };

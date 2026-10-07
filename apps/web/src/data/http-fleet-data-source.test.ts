@@ -185,6 +185,27 @@ describe('HttpFleetDataSource series window', () => {
     expect(requested.searchParams.get('to')).toBe('2026-08-03T12:00:00Z');
   });
 
+  it('keeps one URL for the whole hour, so the browser cache can answer a re-selection', async () => {
+    const { source, recorder } = sourceAnswering(
+      () => jsonResponse(seriesPayload, 200),
+      clockReading([
+        Date.UTC(2026, 7, 1, 12, 20, 13),
+        Date.UTC(2026, 7, 1, 12, 59, 59),
+        Date.UTC(2026, 7, 1, 13, 0, 1),
+      ]),
+    );
+
+    await source.siteForecasts(SITE_A, 24);
+    await source.siteForecasts(SITE_A, 24);
+    await source.siteForecasts(SITE_A, 24);
+
+    const [first, second, third] = recorder.calls.map((call) => new URL(call.url));
+    expect(first?.searchParams.get('from')).toBe('2026-07-31T13:00:00Z');
+    expect(first?.searchParams.get('to')).toBe('2026-08-03T13:00:00Z');
+    expect(second?.href).toBe(first?.href);
+    expect(third?.searchParams.get('from')).toBe('2026-07-31T14:00:00Z');
+  });
+
   it('shares an in-flight request rather than caching a settled one', async () => {
     const { source, recorder } = sourceAnswering(() => jsonResponse(seriesPayload, 200));
 

@@ -134,24 +134,24 @@ this is the operational summary, with the layer that bites first stated per regi
 | Layer                                  | Limit                                 | Answers    | Bites first when                         |
 | -------------------------------------- | ------------------------------------- | ---------- | ---------------------------------------- |
 | 0. `Origin` check (writes only)        | An allow-list, not a credential       | 403        | A client sends no `Origin` at all.       |
-| 1. Per-IP limiter (`abuse/ip-limiter`) | 30 requests / 60 s → **1-hour block** | 429 + body | One address, low parallelism.            |
+| 1. Per-IP limiter (`abuse/ip-limiter`) | 90 requests / 60 s → **1-hour block** | 429 + body | One address, low parallelism.            |
 | 2. Per-route gateway throttle          | 2 rps, burst 4, on the three writes   | 429        | Sustained write volume from anywhere.    |
 | 3. Stage throttle                      | 10 rps, burst 20 (ADR 0005, ≈ $36/mo) | 429        | Sustained total volume from anywhere.    |
 | 4. Account Lambda concurrency          | 10, shared with ingestion             | 503        | **High parallelism** — measured, see S5. |
 
-**Which routes the limiter covers** is a deliberate list, and it lives in `main.ts`'s route table:
-the three writes plus `GET /v1/sites/{siteId}/series`, each of which either changes state or reads a
-range whose size the caller picks. `GET /v1/sites`, `GET …/forecast`, `/openapi.json` and the two
-`/docs` routes are unlimited — fixed, small cost per request, and already bounded by layer 3. A
-limiter that made loading the docs page spend abuse-table writes would be paying to defend the
-cheapest thing here.
+**Which routes the limiter covers** is a deliberate list, and it lives in `main.ts`'s route table.
+`GET /v1/sites`, `GET …/forecast`, `/openapi.json` and the two `/docs` routes are unlimited — fixed,
+small cost per request, and already bounded by layer 3. A limiter that made loading the docs page
+spend abuse-table writes would be paying to defend the cheapest thing here. A browser revalidating a
+cached series or fleet read with the current data cycle's ETag is answered 304 before the limiter
+and is never counted (`forecast/cycle-cache.ts`).
 
 Three properties of the limiter are deliberate and worth knowing before you tune it:
 
-- **Fixed windows, so up to 2× the limit can pass across a boundary.** 30 requests at `11:00:59` and
-  30 more at `11:01:00` are two full windows and neither trips. A sliding window would cost a read
-  of every timestamp in the last minute, on every request. The threshold is friction against
-  scripts, not an invariant anything's correctness rests on.
+- **Fixed windows, so up to 2× the limit can pass across a boundary.** A full window's worth at
+  `11:00:59` and another at `11:01:00` are two full windows and neither trips. A sliding window
+  would cost a read of every timestamp in the last minute, on every request. The threshold is
+  friction against scripts, not an invariant anything's correctness rests on.
 - **It fails closed.** If the `cumulo-abuse` table is unreadable the limited routes 500 rather than
   waving requests through. Fail-open would make the defence removable by whatever is already
   breaking DynamoDB, at the moment it is most wanted.
@@ -333,10 +333,10 @@ bites first at forty-at-once. A run that is all `200` means something is wrong w
 read the stage back (that runbook's B4).
 
 The `429`s worth deliberately provoking are the per-IP limiter's, which need volume rather than
-parallelism: 31 serial requests to a limited route inside one minute earns a `429` with an
-`apiErrorSchema` body, `"code": "rate_limited"` and a `retry-after` header — and a one-hour block on
-your address, so do this knowing how to clear it (`aws dynamodb delete-item --table-name
-cumulo-abuse-<env> --key '{"pk":{"S":"BLOCK#<your-ip>"}}'`).
+parallelism: `MAX_LIMITED_REQUESTS_PER_WINDOW` + 1 serial requests to a limited route inside one
+window earns a `429` with an `apiErrorSchema` body, `"code": "rate_limited"` and a `retry-after`
+header — and a one-hour block on your address, so do this knowing how to clear it (`aws dynamodb
+delete-item --table-name cumulo-abuse-<env> --key '{"pk":{"S":"BLOCK#<your-ip>"}}'`).
 
 Two details in that one-liner are load-bearing. The `&` is what makes the requests concurrent — a
 serial loop cannot exceed a rate limit of 10 per second by much and will report forty `200`s from a

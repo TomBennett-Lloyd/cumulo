@@ -10,22 +10,22 @@ import type { AbuseAdapter } from '@cumulo/storage';
  */
 
 /**
- * The abuse policy, as three numbers.
+ * The abuse policy, as three numbers. Restatement ledger, a floor — ADR 0006,
+ * ADR 0007 (as-it-stood), `apps/api/README.md`, and `infra/api/gateway.tf`'s
+ * write-throttle comment — swept 2026-10-07 with `git grep -nE
+ * '(^|[^0-9.$])[0-9]+(-request threshold| (limited-route |serial |aggregate )?requests? ?(/ ?60|per|to a limited|spread)| aggregate requests| table round trips)|\(\*\*[0-9]+\*\*; amended'`.
+ * Issue #29's evidence run is not trued.
  *
- * They are quoted in three other places — ADR 0006, `apps/api/README.md`'s
- * abuse-protection section, and the live-evidence run on issue #29 — so a change
- * here is a change to all four.
- *
- * 30 per minute is chosen against what a *human* using the demo does. The
- * add-a-site flow is a handful of requests; a visitor clicking through every
- * site's chart might reach ten. Thirty is comfortably above real use and far
- * below what a script does in its first second, which is the gap a friction
- * threshold wants to sit in. An hour's block is long enough that retrying is
- * pointless and short enough that a NAT'd office sharing one address is not
- * locked out for the day.
+ * The threshold sits above a dashboard load plus a selection of every seed site
+ * inside one window (`ip-limiter.test.ts`) — a repeat view of current data is
+ * a 304 this limiter never counts (`cycleCached` in `apps/api/src/main.ts`)
+ * — and below what the write-route throttle in `infra/api/gateway.tf` admits in
+ * one window, so an address held to that throttle can still be blocked. An
+ * hour's block makes retrying pointless without locking a NAT'd office out for
+ * the day.
  */
 export const RATE_WINDOW_SECONDS = 60;
-export const MAX_LIMITED_REQUESTS_PER_WINDOW = 30;
+export const MAX_LIMITED_REQUESTS_PER_WINDOW = 90;
 export const BLOCK_SECONDS = 3600;
 
 /**
@@ -79,7 +79,7 @@ export class IpLimiter {
    * It is a cache and not the record: a cold container knows nothing, which is
    * why `check` still reads the table when the map misses. And it stays small
    * by construction — an entry appears only for an address that has already
-   * sent 31 requests inside one minute, and the gateway's throttles bound how
+   * gone over the threshold inside one window, and the gateway's throttles bound how
    * many distinct addresses can do that, so there is no eviction policy here
    * and no need for one.
    */
@@ -124,7 +124,7 @@ export class IpLimiter {
     const windowStart = now - (now % RATE_WINDOW_SECONDS);
     // Two windows of slack on the row's TTL, not one: DynamoDB deletes expired
     // rows asynchronously and *early* deletion is the failure that would matter
-    // — a counter reaped mid-window silently hands the caller a fresh 30.
+    // — a counter reaped mid-window silently hands the caller a fresh window.
     const count = await this.deps.abuse.incrementRateWindow(
       ip,
       windowStart,

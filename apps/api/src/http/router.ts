@@ -32,11 +32,10 @@ export type PathSegment = string | PathParameter;
  * keeps a single `validation_failed` shape across both without a `try`/`catch`
  * per handler.
  *
- * `sourceIp`, `originHeader` and `ownOrigin` ride through from
+ * `sourceIp`, `originHeader`, `ownOrigin` and `ifNoneMatch` ride through from
  * {@link ApiRequest} unchanged. The router makes no decision with any of them —
- * the abuse protections are wrappers around individual handlers in `main.ts`,
- * not a middleware layer here — but the wrapper receives a `RouteRequest`, so
- * the three have to survive the trip.
+ * the abuse protections and the cycle cache are wrappers around individual
+ * handlers in `main.ts`, not a middleware layer here.
  *
  * `deadline` is the one field that comes from the *invocation* rather than from
  * the request: how much time is left before Lambda kills this call
@@ -53,6 +52,7 @@ export interface RouteRequest {
   readonly sourceIp: string;
   readonly originHeader: string | undefined;
   readonly ownOrigin: string;
+  readonly ifNoneMatch: string | undefined;
   readonly deadline: RequestDeadline;
 }
 
@@ -266,6 +266,7 @@ export const routeRequest = async (
     sourceIp: request.sourceIp,
     originHeader: request.originHeader,
     ownOrigin: request.ownOrigin,
+    ifNoneMatch: request.ifNoneMatch,
     deadline,
   });
 

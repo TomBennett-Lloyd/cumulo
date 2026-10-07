@@ -7,9 +7,10 @@ import {
 import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
-import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
+import { errorResponse, jsonResponse, zodIssueDetails } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
+import { datedByData, uncacheable, type MeteredResponse } from './cycle-cache';
 import { readFleetSeries } from './fleet-series-read';
 import { FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { actualsIn } from './series-split';
@@ -22,12 +23,11 @@ import { hoursBefore } from './series-window';
  * **Why the fleet gets its own route.** The web app plots the fleet's actual
  * output beside the fleet forecast, which means it needs every site's readings
  * on every load. Assembled in the browser that is one `GET …/series` per site,
- * and that read is rate-limited at 30 requests per 60-second window per address
- * (ADR 0006): a fleet larger than a handful of sites would refuse itself on the
- * first page view, and the refusal would arrive as a partly-drawn chart. One
- * request that fans out server-side spends the same DynamoDB Queries against a
- * budget the *invocation* owns rather than against a limiter meant to price a
- * caller's appetite.
+ * and that read is metered per address (`MAX_LIMITED_REQUESTS_PER_WINDOW` in
+ * `apps/api/src/abuse/ip-limiter.ts`, ADR 0006): every page view would spend a
+ * fleet's worth of the window. One request that fans out server-side spends the
+ * same DynamoDB Queries against a budget the *invocation* owns rather than
+ * against a limiter meant to price a caller's appetite.
  *
  * **The readings are simulated.** The demo fleet has no inverters and no
  * telemetry; the producer synthesizes each reading from the stored physics
@@ -93,7 +93,7 @@ export interface GetFleetActualsDeps {
 export const getFleetActuals = async (
   deps: GetFleetActualsDeps,
   request: RouteRequest,
-): Promise<ApiResponse> => {
+): Promise<MeteredResponse> => {
   // Validated before anything is listed: an unusable `hours` is a 400 whatever
   // the fleet looks like, and answering it here means a malformed request never
   // becomes a billed read.
@@ -142,8 +142,18 @@ export const getFleetActuals = async (
 
   // Split per site and flattened once, rather than a split of one concatenated
   // list: the wire order is site by site, chronological within each.
-  return jsonResponse(200, fleetActualsResponseSchema, {
-    actuals: read.perSite.flatMap((points) => actualsIn(points)),
+  const actuals = read.perSite.flatMap((points) => actualsIn(points));
+  const response = jsonResponse(200, fleetActualsResponseSchema, {
+    actuals,
     attribution: openMeteoAttribution,
   });
+  return actuals.length === 0
+    ? uncacheable(response)
+    : datedByData(
+        response,
+        read.perSite.map((points) => ({
+          issuedAts: [],
+          readingTimes: actualsIn(points).map((reading) => reading.validTime),
+        })),
+      );
 };

@@ -11,7 +11,13 @@ import { siteIdParamName } from '../sites/site-id-param';
 import { componentRef } from './components';
 import type { ParameterObject, PathsObject } from './openapi-types';
 import { docsPaths } from './paths-docs';
-import { commonFailures, componentResponse, errorResponses, jsonContent } from './responses';
+import {
+  commonFailures,
+  componentResponse,
+  errorResponses,
+  jsonContent,
+  notModifiedResponse,
+} from './responses';
 
 /**
  * The `paths` half of the document: one entry per route in `main.ts`'s table.
@@ -251,6 +257,7 @@ export const apiPaths: PathsObject = {
           'Forecasts and actuals over the window, with attribution.',
           'SiteSeriesResponse',
         ),
+        ...notModifiedResponse,
         ...errorResponses('validation_failed', 'not_found'),
         ...commonFailures,
       },
@@ -280,6 +287,7 @@ export const apiPaths: PathsObject = {
           'Simulated actuals for the whole fleet over the requested window, possibly empty, with attribution.',
           'FleetActualsResponse',
         ),
+        ...notModifiedResponse,
         ...errorResponses('validation_failed'),
         ...commonFailures,
       },
@@ -312,6 +320,7 @@ export const apiPaths: PathsObject = {
           'Forecast points for the whole fleet over the requested horizon, possibly empty, with attribution.',
           'FleetForecastResponse',
         ),
+        ...notModifiedResponse,
         ...errorResponses('validation_failed'),
         ...commonFailures,
       },
