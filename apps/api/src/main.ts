@@ -352,10 +352,12 @@ export const apiRequestFailedEvent = 'api.request.failed';
 
 /**
  * Emitted once for every response with `statusCode >= 500`, whichever path built
- * it. `aws_cloudwatch_log_metric_filter.api_server_error` in `infra/api/alarms.tf`
- * counts these lines by their `statusCode` field (#603).
+ * it; `aws_cloudwatch_log_metric_filter.api_server_error` in `infra/api/alarms.tf`
+ * counts these lines (#603). Underscores, not dots: a CloudWatch filter term of
+ * `[A-Za-z0-9_]` needs no quoting, which is what lets
+ * `.claude/scripts/check-infra-mirrors.sh` hold that pattern equal to this.
  */
-export const apiServerErrorEvent = 'api.response.server_error';
+export const apiServerErrorEvent = 'api_response_server_error';
 
 export interface ApiBoundaryDeps {
   readonly routes: readonly Route[];

@@ -61,7 +61,7 @@ harness_init_tmp
 TF_REL=infra/ingestion/lambda.tf
 TS_REL=apps/ingestion/src/cycle-budget.ts
 
-# The other six shipped records' files. Every case below drives its own
+# The other seven shipped records' files. Every case below drives its own
 # assertions through one pair and leaves the rest at agreeing values, because the
 # gate refuses to reach a verdict at all while any declared pair is unreadable —
 # so a fixture missing one would send every case down the BLOCKED path and prove
@@ -75,6 +75,8 @@ VARIABLES_REL=infra/storage/variables.tf
 TABLE_NAME_TS_REL=packages/storage/src/table-name.ts
 QUEUE_REL=infra/ingestion/transport.tf
 FORECAST_REL=infra/forecast/lambda.tf
+API_ALARMS_REL=infra/api/alarms.tf
+API_MAIN_REL=apps/api/src/main.ts
 
 # The `ts-lt` pair, which no shipped record declares since #296. The Terraform
 # half keeps the real gateway path, because the stage block's shape — one
@@ -96,7 +98,8 @@ fixture() { # fixture <name> <tf-timeout> <ts-literal>
   DIR="$TMP_ROOT/$1"
   local rel
   for rel in "$TF_REL" "$TS_REL" "$API_TF_REL" "$API_TS_REL" "$GATEWAY_REL" "$CLIENT_TS_REL" \
-    "$TABLES_REL" "$TTL_TS_REL" "$VARIABLES_REL" "$TABLE_NAME_TS_REL" "$QUEUE_REL" "$FORECAST_REL"; do
+    "$TABLES_REL" "$TTL_TS_REL" "$VARIABLES_REL" "$TABLE_NAME_TS_REL" "$QUEUE_REL" "$FORECAST_REL" \
+    "$API_ALARMS_REL" "$API_MAIN_REL"; do
     must mkdir -p "$DIR/$(dirname "$rel")"
   done
 
@@ -143,6 +146,17 @@ resource "aws_apigatewayv2_stage" "default" {
 
   depends_on = [aws_apigatewayv2_route.write]
 }
+EOF
+  cat >"$DIR/$API_ALARMS_REL" <<'EOF'
+resource "aws_cloudwatch_log_metric_filter" "api_server_error" {
+  name           = "cumulo-api-dev-server-error"
+  log_group_name = aws_cloudwatch_log_group.api.name
+  pattern        = "api_response_server_error"
+}
+EOF
+  cat >"$DIR/$API_MAIN_REL" <<EOF
+/** The term \`$API_ALARMS_REL\`'s metric filter counts. */
+export const apiServerErrorEvent = 'api_response_server_error';
 EOF
   cat >"$DIR/$CLIENT_TS_REL" <<EOF
 /** Held strictly under the stage throttle in \`$GATEWAY_REL\`. */
@@ -403,7 +417,7 @@ begin "a tree where every declared relation holds passes"
 fixture agree 300 300_000
 run_check "$DIR"
 expect_rc 0 "$rc"
-expect_out "check-infra-mirrors: OK — 7 declared mirror relation(s) hold"
+expect_out "check-infra-mirrors: OK — 8 declared mirror relation(s) hold"
 expect_out "aws_lambda_function.ingestion.timeout = 300"
 expect_out "aws_lambda_function.api.timeout = 15"
 expect_out "aws_dynamodb_table.series.ttl.attribute_name"

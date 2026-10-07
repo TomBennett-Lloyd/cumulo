@@ -176,6 +176,7 @@ MIRRORS=(
   "str-eq|infra/storage/tables.tf|aws_dynamodb_table.series|ttl.attribute_name|packages/storage/src/ttl.ts|TTL_ATTRIBUTE_NAME"
   "str-eq|infra/storage/tables.tf|aws_dynamodb_table.weather|ttl.attribute_name|packages/storage/src/ttl.ts|TTL_ATTRIBUTE_NAME"
   "str-eq|infra/storage/tables.tf|aws_dynamodb_table.abuse|ttl.attribute_name|packages/storage/src/ttl.ts|TTL_ATTRIBUTE_NAME"
+  "str-eq|infra/api/alarms.tf|aws_cloudwatch_log_metric_filter.api_server_error|pattern|apps/api/src/main.ts|apiServerErrorEvent"
   "regex-eq|infra/storage/variables.tf|variable.environment|packages/storage/src/table-name.ts|ENVIRONMENT_PATTERN"
   "tf-ge|infra/ingestion/transport.tf|aws_sqs_queue.weather_readings|visibility_timeout_seconds|infra/forecast/lambda.tf|aws_lambda_function.forecast|timeout|6"
 )

@@ -17,7 +17,13 @@
 # `useFleetQuery` calls on the result (`const enabled = sites.length > 0`), so a
 # visitor's first paint is one request followed by a concurrent pair. One warm
 # environment covers the first request and leaves the pair to cold-start a
-# second — which is why this rule carries two targets rather than one.
+# second — which is why this rule carries two warming targets rather than one.
+#
+# The third target is #603's canary: `GET /v1/fleet/forecast?hours=48`, the
+# route #586 left answering 500 for two days with nobody looking. An error-count
+# alarm needs traffic; this target is the traffic, and
+# `aws_cloudwatch_metric_alarm.api_server_error` in alarms.tf counts what it
+# gets back.
 #
 # ---------------------------------------------------------------------------
 # Restatement ledger (`docs/standards/architecture.md` rule 9) for the values
@@ -47,8 +53,10 @@
 # the 233 GB-s as well.
 #
 #   * **The cadence and the target count** — `schedule_expression` below and the
-#     two `aws_cloudwatch_event_target` blocks are the owner. Every monthly
+#     three `aws_cloudwatch_event_target` blocks are the owner. Every monthly
 #     figure anywhere is computed from that pair and from nothing else.
+#     - `infra/api/alarms.tf`, `aws_cloudwatch_metric_alarm.api_server_error` —
+#       *computing*: its `period` is two canary ticks.
 #     - `infra/README.md`, api cost table, the "warmer's arithmetic" bullet —
 #       *computing*: `12 × 2 × 24 × 30 = 17,280` is derived there, and it is the
 #       one site that shows the derivation.
@@ -83,8 +91,8 @@
 #     ≈ 233 GB-s is `17,280 × 0.25 GB × 54 ms`, and by `infra/api/outputs.tf`'s
 #     Lambda bullet, which *asserts* the 233. Re-measure the latency and both
 #     are re-derived in the same change.
-#   * **The payload's markers, `192.0.2.1` and `cumulo-warmer`** — the `locals`
-#     below are the owner. Carried by `infra/README.md`'s B3 payload readback
+#   * **The payload markers, `192.0.2.1`, `cumulo-warmer` and `cumulo-canary`**
+#     — the `locals` below are the owner. Carried by `infra/README.md`'s B3 payload readback
 #     (*asserting*: it tells the operator what the plan must show) and by B7's
 #     note on what the log group cannot separate (*arguing*: the markers are
 #     what it says identify an invocation to a reader).
@@ -109,7 +117,7 @@ resource "aws_cloudwatch_event_rule" "warmer" {
   # the link at 03:00 — which is the entire failure this ticket describes.
   schedule_expression = "cron(0/5 * * * ? *)"
 
-  description = "Keeps two cumulo-api-${var.environment} execution environments warm by invoking GET /v1/sites directly every five minutes (#473). Never reaches the HTTP API."
+  description = "Keeps two cumulo-api-${var.environment} execution environments warm by invoking GET /v1/sites (#473), and probes GET /v1/fleet/forecast as the 5xx canary (#603), directly every five minutes. Never reaches the HTTP API."
 }
 
 locals {
@@ -117,12 +125,25 @@ locals {
   # address cannot collide with a visitor's. It is the payload's marker: an
   # operator who sees it knows the invocation was synthetic.
   #
-  # It also keeps the warmer out of anyone else's limiter bucket. `GET /v1/sites`
-  # is deliberately unlimited today — the route table in `apps/api/src/main.ts`
-  # says which routes are limited and why — so nothing reads this yet; a later
-  # ticket that limited the route would otherwise have the warmer spending a
-  # real caller's window.
+  # It also keeps these pings out of anyone else's limiter bucket: the canary's
+  # route is limited (the route table in `apps/api/src/main.ts`), so it spends
+  # this address's window and never a real caller's.
   warmer_source_ip = "192.0.2.1"
+
+  # Everything but `rawPath`, the query and the user agent is shared by the
+  # warming and canary payloads.
+  warmer_request_context = {
+    http = {
+      method   = "GET"
+      sourceIp = local.warmer_source_ip
+    }
+    # The stack's own endpoint with its scheme removed, which is what the
+    # gateway sends and what `ownOrigin` is rebuilt from. Derived rather than
+    # written down: the api id is server-assigned at create time (ADR 0005),
+    # so any literal here would be a guess that survived until the first
+    # re-create.
+    domainName = trimprefix(aws_apigatewayv2_api.api.api_endpoint, "https://")
+  }
 
   # An API Gateway HTTP API payload-v2 event, carrying exactly the fields
   # `parseGatewayEvent` in `apps/api/src/http/gateway-event.ts` requires:
@@ -162,21 +183,24 @@ locals {
   # no meaning to the handler — only `origin` is surfaced from `headers` — and
   # is here as the second half of the payload's self-identification.
   warmer_event = jsonencode({
-    rawPath = "/v1/sites"
-    requestContext = {
-      http = {
-        method   = "GET"
-        sourceIp = local.warmer_source_ip
-      }
-      # The stack's own endpoint with its scheme removed, which is what the
-      # gateway sends and what `ownOrigin` is rebuilt from. Derived rather than
-      # written down: the api id is server-assigned at create time (ADR 0005),
-      # so any literal here would be a guess that survived until the first
-      # re-create.
-      domainName = trimprefix(aws_apigatewayv2_api.api.api_endpoint, "https://")
-    }
+    rawPath        = "/v1/sites"
+    requestContext = local.warmer_request_context
     headers = {
       "user-agent" = "cumulo-warmer"
+    }
+  })
+
+  # The same mirror as `warmer_event`'s `rawPath`, with a different catch: a
+  # renamed route turns this into a 404, which the canary's alarm does not
+  # count, and the post-deploy probe in `.github/workflows/deploy-api.yml` —
+  # which requests the same path on every `apps/api/**` change — is what goes
+  # red instead.
+  canary_event = jsonencode({
+    rawPath               = "/v1/fleet/forecast"
+    queryStringParameters = { hours = "48" }
+    requestContext        = local.warmer_request_context
+    headers = {
+      "user-agent" = "cumulo-canary"
     }
   })
 }
@@ -208,6 +232,15 @@ resource "aws_cloudwatch_event_target" "warmer_second" {
   target_id = "warm-second"
   arn       = aws_lambda_function.api.arn
   input     = local.warmer_event
+}
+
+# Dispatched with the two above, so in the ordinary case it lands in an
+# environment of its own and keeps a third one warm as a side effect.
+resource "aws_cloudwatch_event_target" "canary" {
+  rule      = aws_cloudwatch_event_rule.warmer.name
+  target_id = "canary"
+  arn       = aws_lambda_function.api.arn
+  input     = local.canary_event
 }
 
 # EventBridge invoking a function is a resource policy on the *function*, not a
