@@ -13,3 +13,7 @@ aws_region = "eu-west-1"
 # default is this repository's; a fork's tokens will never match it. Read yours:
 #   gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
 # github_subject_prefix = "repo:OWNER@000000/REPO@0000000"
+
+# Optional. Defaults to dev; must match the service stacks' `environment`, since
+# the observer identity's log-group grant is assembled from it.
+# observed_environment = "dev"

@@ -32,3 +32,8 @@ output "aws_account_id" {
   description = "Account the stack was applied to. Confirm this matches the intended account before trusting anything else here."
   value       = data.aws_caller_identity.current.account_id
 }
+
+output "observer_user_name" {
+  description = "IAM user the incident-watch skill authenticates as. The operator creates its one access key by hand (infra/README.md, observer runbook)."
+  value       = aws_iam_user.observer.name
+}

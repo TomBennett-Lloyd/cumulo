@@ -56,3 +56,18 @@ variable "github_subject_prefix" {
     error_message = "github_subject_prefix must be GitHub's immutable, id-embedding form — repo:<owner>@<owner-id>/<repo>@<repo-id>, e.g. repo:TomBennett-Lloyd@36540971/cumulo@1316528563. A name-only prefix is rejected because GitHub names can be reassigned after a rename, which would transfer trust to whoever claims the freed name. Read the real value with: gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix"
   }
 }
+
+variable "observed_environment" {
+  description = <<-EOT
+    The environment whose Lambda log groups the observer identity in
+    observer.tf may read, and its user-name suffix. Must match the service
+    stacks' `environment`, or the grant names log groups that do not exist.
+  EOT
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+$", var.observed_environment))
+    error_message = "observed_environment must be lowercase alphanumerics and hyphens, e.g. dev — it is interpolated into the observer's user name and log-group ARNs."
+  }
+}
