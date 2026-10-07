@@ -275,6 +275,6 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 
 ## 2026-10-07 — Contracting a `@cumulo/shared` field ships to every deployable at once, with no expand/contract rule
 
-- Where: `.github/workflows/deploy-api.yml`, `deploy-web.yml`, `deploy-ingestion.yml` and `deploy-forecast.yml`, which all trigger in parallel on `packages/shared/**`. `docs/standards/architecture.md` has no rule on schema contraction.
+- Where: the deploy workflows under `.github/workflows/` that trigger in parallel on `packages/shared/**`: `deploy-api.yml`, `deploy-ingestion.yml`, `deploy-forecast.yml`, `deploy-pages.yml`, which is the live web publish until #144, and `deploy-web.yml`, which is its successor and skips until #144. `docs/standards/architecture.md` has no rule on schema contraction.
 - What: removing a required field from a stored or wire schema reaches the API, the web bundle, ingestion and forecast in one parallel push. Until every deployable has updated, an old one parses the new shape with the old schema and throws. Once the new code has written rows, a revert breaks the readers too. #606 recorded these hazards for `FleetSite.active` rather than building a transition. Candidate standards rule: contract a stored or wire field over two releases, so readers tolerate its absence before writers stop emitting it.
 - Source: #606 review pass 1 SYSTEMIC
