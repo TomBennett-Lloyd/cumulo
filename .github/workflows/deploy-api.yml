@@ -1,7 +1,7 @@
 name: Deploy API
 
 # Ships a rebuilt Lambda bundle to the already-provisioned fleet API function,
-# and does exactly nothing else.
+# then asks it one question through the public endpoint, and does nothing else.
 #
 # The split with Terraform is the same one `deploy-ingestion.yml` describes, and
 # on this stack it guards more than a runtime setting. `infra/api/` owns the
@@ -129,3 +129,22 @@ jobs:
         run: |
           aws lambda wait function-updated-v2 \
             --function-name cumulo-api-dev
+
+      # The update is live, so ask it the dashboard's first fleet question — the
+      # route #586 left answering 500 — and fail the job on anything but a 2xx
+      # (#603). Through the gateway rather than `aws lambda invoke`: the deploy
+      # grant in `infra/api/deploy.tf` holds no `lambda:InvokeFunction`, and this
+      # is the path a visitor takes. The path mirrors `canary_event` in
+      # `infra/api/warmer.tf`, so a renamed route is red here first.
+      - name: Probe the fleet forecast
+        env:
+          API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: |
+          code=$(curl --silent --show-error --max-time 30 \
+            --output "$RUNNER_TEMP/fleet-forecast.json" --write-out '%{http_code}' \
+            "$API_BASE_URL/v1/fleet/forecast?hours=48")
+          echo "GET /v1/fleet/forecast?hours=48 -> $code"
+          case "$code" in
+            2??) ;;
+            *) cat "$RUNNER_TEMP/fleet-forecast.json"; exit 1 ;;
+          esac
