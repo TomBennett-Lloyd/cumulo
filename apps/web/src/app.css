@@ -257,8 +257,7 @@ body {
  *
  * The values themselves stay `packages/ui/src/tokens/tokens.css`'s, which is
  * also where the accent's measured figures against both opaque surfaces are
- * argued — including the light-mode shortfall it has *as ink*, which this
- * control is unaffected by: it spends accent as a fill and puts no text on it. */
+ * argued. */
 .theme-toggle[aria-checked='true'] .theme-toggle-track {
   background: var(--color-accent);
 }

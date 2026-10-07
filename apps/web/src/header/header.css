@@ -33,9 +33,6 @@
   height: 1.75rem;
 }
 
-/* Base ink, not a chart or map slot: those tokens carry data identity, and a
- * brand mark borrowing one would make "the product" and "a selected site" the
- * same colour. `Brand.tsx` says the rest. */
 .brand-mark-sun {
   fill: var(--color-accent);
 }
@@ -723,18 +720,8 @@
  * basemap credits first shipped in this dialog and were caught in a screenshot
  * rather than by lint.
  *
- * These links are knowingly out of step with the map's credits since #265, and
- * the divergence is temporary. Those moved to underlined ink of the palette's
- * own because `--color-accent` is below AA for small text on the translucent
- * `--color-surface-veil` they sit on. This card is opaque, so it is a weaker and
- * mode-dependent case: accent clears AA on `--color-surface` in dark mode and
- * fails it in light. Not fixed locally because the light failure is app-wide
- * rather than this card's, and the fix is one decision about the accent hue
- * rather than a per-surface repaint — routed as its own issue from
- * `docs/tech-debt.md`. The dialog composes `OpenMeteoAttribution`, so the weather
- * credit *inside* this card already wears the new treatment and will not match
- * the links around it until that issue lands. That mismatch is the visible edge
- * of a real defect, not a styling slip to quietly even out.
+ * `apps/web/src/control-contrast.test.ts`'s about-dialog link row asserts the
+ * pairing clears AA in both themes (#273).
  */
 .about-dialog a {
   color: var(--color-accent);

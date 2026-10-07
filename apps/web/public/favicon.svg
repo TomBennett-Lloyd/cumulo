@@ -71,7 +71,7 @@
      * value moves, this file moves with it.
      */
     .sun {
-      fill: #2a78d6;
+      fill: #1d63bd;
     }
     .cloud {
       fill: #58626d;
