@@ -1,5 +1,6 @@
-# Two alarms, both required work rather than monitoring garnish, and chosen so
-# that they do not fire on the same event.
+# Two gateway alarms, both required work rather than monitoring garnish, and
+# chosen so that they do not fire on the same event — and, at the foot of this
+# file, #603's canary alarm, which watches the function's log instead.
 #
 # This is the first Cumulo stack whose input is the public internet, so the two
 # things worth watching are the two things nothing else in the platform reports:
@@ -35,11 +36,9 @@
 # minutes of the traffic starting. A state change nobody is emailed about is a
 # trigger nobody pulls.
 #
-# Cost: two alarms, joining storage's four, ingestion's three and forecast's one
-# — ten of the always-free ten, which are now fully allocated. The platform-wide
-# count lives in the alarm-budget subsection of infra/README.md; the eleventh
-# alarm bills $0.10 each per month, at which point every "$0.00/mo" in that
-# document stops being literally true unless the same PR updates it.
+# Cost: the canary alarm is the platform's eleventh, and bills $0.10/month. The
+# platform-wide count, and what that does to every "$0.00/mo", lives in the
+# CloudWatch alarm budget subsection of infra/README.md.
 
 locals {
   # The alerting stack (infra/alerting) owns this topic. Its ARN is assembled
@@ -132,4 +131,46 @@ resource "aws_cloudwatch_metric_alarm" "api_request_flood" {
   ok_actions    = [local.alerts_topic_arn]
 
   alarm_description = "The Cumulo fleet API is taking sustained traffic far above demo volume — averaging over 6 requests/second for five minutes, against a stage ceiling of 10/second. The bill is bounded by that throttle (ADR 0005, ≈ $36/month worst case), but legitimate visitors are likely being 429ed by whoever is doing this. Read the access pattern before changing anything, and note what this volume implies now that #29's per-IP limiting is in place: a single-source flood is blocked well below this threshold, so reaching it means a distributed source or traffic concentrated on the unlimited read routes. Neither is fixed by a higher ceiling."
+}
+
+# #603 (#586 is the incident). Both alarms above watch the gateway, so with no
+# visitors they watch nothing. The warmer rule's `canary` target (warmer.tf) is
+# traffic that reaches the function directly, so this counts from the
+# function's log, where `handleApiEvent` in `apps/api/src/main.ts` writes one
+# line per 5xx.
+#
+# A term rather than `{ $.statusCode >= 500 }` so that
+# `.claude/scripts/check-infra-mirrors.sh` can hold it equal to
+# `apiServerErrorEvent`.
+resource "aws_cloudwatch_log_metric_filter" "api_server_error" {
+  name           = "cumulo-api-${var.environment}-server-error"
+  log_group_name = aws_cloudwatch_log_group.api.name
+  pattern        = "api_response_server_error"
+
+  metric_transformation {
+    name      = "ServerErrorResponses"
+    namespace = "Cumulo/api-${var.environment}"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_server_error" {
+  alarm_name  = "cumulo-api-${var.environment}-server-error"
+  namespace   = "Cumulo/api-${var.environment}"
+  metric_name = "ServerErrorResponses"
+
+  # Ten minutes is two canary ticks, so a route that is down is alarmed within
+  # ten minutes of breaking whether or not anybody visits. The metric exists
+  # only while something matches, so missing data is the healthy state.
+  statistic           = "Sum"
+  period              = 600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [local.alerts_topic_arn]
+  ok_actions    = [local.alerts_topic_arn]
+
+  alarm_description = "The Cumulo fleet API answered at least one 5xx in ten minutes, counted from the function's own log. The warmer rule invokes the function directly every five minutes, its canary target with GET /v1/fleet/forecast, so this fires with zero visitors: if ${aws_cloudwatch_metric_alarm.api_5xx.alarm_name} is quiet at the same time, only the warmer rule (or a manual replay) is reaching the failure. Look for api_response_server_error in the log group, and for the event logged just before it on the same request id. A function that crashes or times out writes no such line; that case is #164's."
 }

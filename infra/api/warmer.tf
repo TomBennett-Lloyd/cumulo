@@ -17,7 +17,12 @@
 # `useFleetQuery` calls on the result (`const enabled = sites.length > 0`), so a
 # visitor's first paint is one request followed by a concurrent pair. One warm
 # environment covers the first request and leaves the pair to cold-start a
-# second — which is why this rule carries two targets rather than one.
+# second — which is why this rule carries two warming targets rather than one.
+#
+# The third target is #603's canary: `GET /v1/fleet/forecast?hours=48`, the
+# route #586 broke. An error-count alarm needs traffic; this target is the
+# traffic, and `aws_cloudwatch_metric_alarm.api_server_error` in alarms.tf
+# counts what it gets back.
 #
 # ---------------------------------------------------------------------------
 # Restatement ledger (`docs/standards/architecture.md` rule 9) for the values
@@ -27,28 +32,33 @@
 # The sweep is keyed to the CLAIM FAMILY, not to the instances — an arm per
 # literal would miss every carrier holding only a derived figure, which is most
 # of them — and it is case-insensitive, because a table row capitalises what a
-# sentence does not. Run from the repo root, 2026-09-11:
+# sentence does not. Run from the repo root, 2026-10-07 (#603):
 #
-#   git grep -niE '17,?280|34,?560|27,?000|233 GB|6\.8 ?MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|every five minutes|[0-9]+ targets|Plan: [0-9]+ to add|expect [0-9]+ lines|[0-9]+ .resource. blocks|#473' -- :/ ':!docs/tech-debt.md' ':!docs/review-feedback.md'
+#   git grep -niE '17,?280|34,?560|25,920|8,640|~36,000|233 GB|9 MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|canary|every five minutes|[0-9]+ targets|Plan: [0-9]+ to add|expect [0-9]+ lines|[0-9]+ .resource. blocks|#473' -- :/ ':!docs/tech-debt.md' ':!docs/review-feedback.md' ':!docs/adr/0005-fleet-api-hosting.md'
 #
-# It returns hits in exactly three files — this one, `infra/README.md` and
-# `infra/api/outputs.tf`; `git grep -l` on the same pattern is the cheap form of
-# that assertion. The two pathspec exclusions are the append-only logs, which
+# It returns hits in exactly seven files — this one, `infra/api/alarms.tf`,
+# `infra/api/outputs.tf`, `infra/README.md` and
+# `.github/workflows/deploy-api.yml`, plus `infra/api/lambda.tf` and
+# `infra/storage/tables.tf`, whose ledgers name the canary as a consumer of
+# their own values and carry none of this file's; `git grep -l` on the same
+# pattern is the cheap form of that assertion. The two pathspec exclusions are the append-only logs, which
 # record what was decided rather than carrying a live claim: `docs/tech-debt.md`
 # holds this schedule's residuals and states none of its figures, and
 # `docs/review-feedback.md` matches the plan-count arm on an unrelated 2026
 # entry about a `terraform plan -destroy`. Neither is trued by a cadence change,
-# and both would otherwise be permanent noise in this readback. That
-# containment is the ledger's most useful claim: no
-# carrier lives outside the api stack and the README sections describing it,
-# and nothing in `apps/` or `packages/` restates any of this. A cadence change
-# is a three-file edit, and the third file is the easy one to forget —
-# `infra/api/outputs.tf`'s cost commentary carries the 17,280, the ~27,000 and
-# the 233 GB-s as well.
+# and both would otherwise be permanent noise in this readback. The third
+# exclusion is ADR 0005, whose one match is API Gateway's unrelated canary
+# deployments. That containment is the ledger's most useful claim: no carrier
+# lives outside the api stack, its deploy workflow and the README sections
+# describing them, and nothing in `apps/` or `packages/` restates any of this.
+# The file easiest to forget is `infra/api/outputs.tf`, whose cost commentary
+# carries the 25,920, the ~36,000 and the 233 GB-s as well.
 #
 #   * **The cadence and the target count** — `schedule_expression` below and the
-#     two `aws_cloudwatch_event_target` blocks are the owner. Every monthly
+#     three `aws_cloudwatch_event_target` blocks are the owner. Every monthly
 #     figure anywhere is computed from that pair and from nothing else.
+#     - `infra/api/alarms.tf`, `aws_cloudwatch_metric_alarm.api_server_error` —
+#       *computing*: its `period` is two canary ticks.
 #     - `infra/README.md`, api cost table, the "warmer's arithmetic" bullet —
 #       *computing*: `12 × 2 × 24 × 30 = 17,280` is derived there, and it is the
 #       one site that shows the derivation.
@@ -56,35 +66,37 @@
 #       compute, Warmer schedule, DynamoDB reads and CloudWatch-logs rows, the
 #       paragraph above the table, the "meaning of idle" note under it, and the
 #       "nothing here has an hourly rate" bullet: *asserting*, each carrying the
-#       derived 17,280, the ~27,000, the 34,560, the ≈ 6.8 MB or the ≈ $0.005.
+#       derived 17,280, 8,640 or 25,920, the ~36,000, the 34,560, the ≈ 9 MB or
+#       the ≈ $0.04.
 #     - `infra/README.md`, storage cost table — the "everything else" row, the
-#       `series` row's note on what drives it, the standing-bill paragraph, and
-#       the ingestion teardown bullet that contrasts the self-driven stacks:
-#       *asserting*, the same figures.
+#       `series` row's note on what drives it, the "Total, schedule running"
+#       row, the standing-bill paragraph, and the ingestion teardown bullet that
+#       contrasts the self-driven stacks: *asserting*, the same figures.
 #     - `infra/README.md`, the api and web "whether to leave it up" paragraphs
 #       — *arguing*, both from "the rule fires whether or not anybody is
-#       looking" and the api one also from the ≈ $0.005.
-#     - `infra/api/outputs.tf` — the IDLE COST header, the API Gateway, Lambda,
+#       looking" and the api one also from the ≈ $0.04.
+#     - `infra/api/outputs.tf` — the IDLE COST header, the Lambda,
 #       CloudWatch-logs, warmer and IAM bullets: *asserting*, carrying the
-#       17,280, the 233 GB-s, the ≈ 6.8 MB, the ≈ $0.005 and the two-targets /
-#       two-permissions counts.
+#       25,920, the 233 GB-s, the ≈ 9 MB, the ≈ $0.04 and the
+#       three-targets / two-permissions counts.
 #     - `infra/README.md` — the stack table's api row, the api runbook's opening
-#       resource sentence, step B3's `Plan: 20 to add`, step B3's `state list`
-#       expectation of 25, and the teardown's `list-rules` readback:
-#       *asserting* the five resources this file declares. That is the resource
-#       count rather than the cadence, but it moves for the same reason: a third
-#       target changes both, as does the `cron(0/5 * * * ? *)` readback in B7.
+#       resource sentence, step B3's `Plan: 23 to add`, step B3's `state list`
+#       expectation of 28, and the teardown's `list-rules` readback:
+#       *asserting* the six resources this file declares. That is the resource
+#       count rather than the cadence, but it moves for the same reason: a
+#       fourth target changes both, as it does B7's target ids, invocation
+#       counts and `cron(0/5 * * * ? *)` readback.
 #     - `infra/README.md`, the bootstrap cost table's state-bucket row —
 #       *computing*, from a census of `resource` blocks across all seven stacks
-#       that this file's five moved. It records the recipe that re-derives it.
+#       that this file's six moved. It records the recipe that re-derives it.
 #   * **The warm `GET /v1/sites` latency, 54 ms** — measured over the 30 days to
 #     2026-08-24, recorded in #473, restated in the first paragraph above.
 #     Carried by `infra/README.md`'s Lambda compute row, which is *computing*:
 #     ≈ 233 GB-s is `17,280 × 0.25 GB × 54 ms`, and by `infra/api/outputs.tf`'s
 #     Lambda bullet, which *asserts* the 233. Re-measure the latency and both
 #     are re-derived in the same change.
-#   * **The payload's markers, `192.0.2.1` and `cumulo-warmer`** — the `locals`
-#     below are the owner. Carried by `infra/README.md`'s B3 payload readback
+#   * **The payload markers, `192.0.2.1`, `cumulo-warmer` and `cumulo-canary`**
+#     — the `locals` below are the owner. Carried by `infra/README.md`'s B3 payload readback
 #     (*asserting*: it tells the operator what the plan must show) and by B7's
 #     note on what the log group cannot separate (*arguing*: the markers are
 #     what it says identify an invocation to a reader).
@@ -109,7 +121,7 @@ resource "aws_cloudwatch_event_rule" "warmer" {
   # the link at 03:00 — which is the entire failure this ticket describes.
   schedule_expression = "cron(0/5 * * * ? *)"
 
-  description = "Keeps two cumulo-api-${var.environment} execution environments warm by invoking GET /v1/sites directly every five minutes (#473). Never reaches the HTTP API."
+  description = "Keeps two cumulo-api-${var.environment} execution environments warm by invoking GET /v1/sites (#473), and probes GET /v1/fleet/forecast as the 5xx canary (#603), directly every five minutes. Never reaches the HTTP API."
 }
 
 locals {
@@ -117,12 +129,25 @@ locals {
   # address cannot collide with a visitor's. It is the payload's marker: an
   # operator who sees it knows the invocation was synthetic.
   #
-  # It also keeps the warmer out of anyone else's limiter bucket. `GET /v1/sites`
-  # is deliberately unlimited today — the route table in `apps/api/src/main.ts`
-  # says which routes are limited and why — so nothing reads this yet; a later
-  # ticket that limited the route would otherwise have the warmer spending a
-  # real caller's window.
+  # It also keeps these pings out of anyone else's limiter bucket: the canary's
+  # route is limited (the route table in `apps/api/src/main.ts`), so it spends
+  # this address's window and never a real caller's.
   warmer_source_ip = "192.0.2.1"
+
+  # Everything but `rawPath`, the query and the user agent is shared by the
+  # warming and canary payloads.
+  warmer_request_context = {
+    http = {
+      method   = "GET"
+      sourceIp = local.warmer_source_ip
+    }
+    # The stack's own endpoint with its scheme removed, which is what the
+    # gateway sends and what `ownOrigin` is rebuilt from. Derived rather than
+    # written down: the api id is server-assigned at create time (ADR 0005),
+    # so any literal here would be a guess that survived until the first
+    # re-create.
+    domainName = trimprefix(aws_apigatewayv2_api.api.api_endpoint, "https://")
+  }
 
   # An API Gateway HTTP API payload-v2 event, carrying exactly the fields
   # `parseGatewayEvent` in `apps/api/src/http/gateway-event.ts` requires:
@@ -162,21 +187,24 @@ locals {
   # no meaning to the handler — only `origin` is surfaced from `headers` — and
   # is here as the second half of the payload's self-identification.
   warmer_event = jsonencode({
-    rawPath = "/v1/sites"
-    requestContext = {
-      http = {
-        method   = "GET"
-        sourceIp = local.warmer_source_ip
-      }
-      # The stack's own endpoint with its scheme removed, which is what the
-      # gateway sends and what `ownOrigin` is rebuilt from. Derived rather than
-      # written down: the api id is server-assigned at create time (ADR 0005),
-      # so any literal here would be a guess that survived until the first
-      # re-create.
-      domainName = trimprefix(aws_apigatewayv2_api.api.api_endpoint, "https://")
-    }
+    rawPath        = "/v1/sites"
+    requestContext = local.warmer_request_context
     headers = {
       "user-agent" = "cumulo-warmer"
+    }
+  })
+
+  # The same mirror as `warmer_event`'s `rawPath`, with a different catch: a
+  # renamed route turns this into a 404, which the canary's alarm does not
+  # count, and the post-deploy probe in `.github/workflows/deploy-api.yml` —
+  # which requests the same path on every `apps/api/**` change — is what goes
+  # red instead.
+  canary_event = jsonencode({
+    rawPath               = "/v1/fleet/forecast"
+    queryStringParameters = { hours = "48" }
+    requestContext        = local.warmer_request_context
+    headers = {
+      "user-agent" = "cumulo-canary"
     }
   })
 }
@@ -208,6 +236,15 @@ resource "aws_cloudwatch_event_target" "warmer_second" {
   target_id = "warm-second"
   arn       = aws_lambda_function.api.arn
   input     = local.warmer_event
+}
+
+# Dispatched with the two above, so in the ordinary case it lands in an
+# environment of its own and keeps a third one warm as a side effect.
+resource "aws_cloudwatch_event_target" "canary" {
+  rule      = aws_cloudwatch_event_rule.warmer.name
+  target_id = "canary"
+  arn       = aws_lambda_function.api.arn
+  input     = local.canary_event
 }
 
 # EventBridge invoking a function is a resource policy on the *function*, not a

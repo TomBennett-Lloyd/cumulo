@@ -31,12 +31,10 @@
 #     0005's own ~6.5 GB/month at 25.92 M requests works out at ~250 bytes per
 #     *invocation*, and this prices 1 KB per *line* and then charges all
 #     seventeen. The honest claim is a ceiling, not a meter reading.
-#   * CloudWatch alarms — three, alongside storage's four, the api's two and
-#     forecast's one: the always-free ten, fully spent. An alarm is priced at
+#   * CloudWatch alarms — three of the always-free ten. An alarm is priced at
 #     $0.10/month for existing, fired or not, so the ten are a pool rather than
-#     a discount and the eleventh anywhere in the platform is real money.
-#     infra/README.md's alarm budget owns the count. Lambda and SQS metrics are
-#     free.
+#     a discount; infra/README.md's alarm budget owns the count. Lambda and SQS
+#     metrics are free.
 #   * Lambda — ~730 invocations/month (one an hour) against the always-free
 #     1,000,000 requests and 400,000 GB-seconds. At 256 MB and even a full
 #     300-second cycle that is 730 × 300 s × 0.25 GB = 54,750 — ~55,000

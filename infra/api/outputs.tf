@@ -22,13 +22,14 @@
 # runbook says so too; changing this output means visiting them.
 #
 # ---------------------------------------------------------------------------
-# IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
-# a price. Two lines here bill for merely existing: the log group's stored
-# bytes (~$0.0002/month at demo volume, warmer included) and the two alarms
-# ($0.10 per alarm-month at list). Both are absorbed by always-free pools, not
-# free. Since #473 "idle" no longer means "nothing running" either — the
-# warmer's rule fires whether or not anybody is looking, and the bullet on it
-# below carries the one charge that leaves this stack because of it.
+# IDLE COST: $0.10/month — #603's canary alarm, the platform's eleventh and so
+# the first line here priced past an allowance. The other lines that bill for
+# merely existing — the log group's stored bytes (~$0.0003/month at demo
+# volume, warmer rule included) and the two gateway alarms — are absorbed by
+# always-free pools, not free. Since #473 "idle" no longer means "nothing
+# running" either — the warmer's rule fires whether or not anybody is looking,
+# and the bullet on it below carries the one charge that leaves this stack
+# because of it.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
 #     ("no resource that bills for existing") was retired. Retained bytes bill
@@ -56,8 +57,8 @@
 #     *invocation* measures; it was never a per-application-record figure. The
 #     billed unit is the **invocation** rather than the request, which is what
 #     #473's warmer changed: at demo volume (order 10,000 requests/month) plus
-#     the warmer's 17,280 pings a month, **~27,000 × ~250 B ≈ 6.8 MB/month**
-#     retained, ~$0.0002/month at list and $0.00 as billed inside the account's
+#     the warmer rule's 25,920 pings a month, **~36,000 × ~250 B ≈ 9 MB/month**
+#     retained, ~$0.0003/month at list and $0.00 as billed inside the account's
 #     always-free 5 GB of stored logs.
 #     This stack is quoted at that measured size rather than at the 1 KB-per-line
 #     ceiling ingestion and forecast use, and infra/README.md's cost preamble
@@ -67,36 +68,35 @@
 #     is ~1.5 GB past the free 5 GB of storage — ~$0.05/month, immaterial beside
 #     the ≈ $36 the bound is made of, and bounded only because retention is
 #     30 days.
-#   * CloudWatch alarms — two, joining storage's four, ingestion's three and
-#     forecast's one: the always-free ten, fully spent. An alarm is priced at
-#     $0.10/month for existing, fired or not, so the ten are a pool rather than
-#     a discount and the eleventh anywhere in the platform is real money.
-#     infra/README.md's alarm budget owns the count. API Gateway and Lambda
+#   * CloudWatch alarms — three. The third, #603's canary alarm, is the
+#     platform's eleventh and bills $0.10/month for existing, fired or not;
+#     infra/README.md's alarm budget owns the count. Its metric filter's metric
+#     is a custom metric inside the always-free ten. API Gateway and Lambda
 #     metrics are free.
 #   * API Gateway HTTP API — $1.00 per million requests, no per-hour charge, no
-#     minimum, no per-stage fee. An idle API costs nothing, and one somebody
-#     forgets to destroy costs its log group's fraction of a cent within this
-#     stack — plus, since #473, the warmer's DynamoDB reads on another one's
-#     meter (the warmer bullet below). This is
+#     minimum, no per-stage fee. An idle API costs nothing; what a forgotten
+#     stack does cost is the IDLE COST header above. This is
 #     the property ADR 0005 chose it for, against an ALB's ≈ $16.43/month of
 #     standing charge. There are no access logs on the stage to add a second
 #     log group — gateway.tf says why at the point of temptation.
 #   * Lambda — request-driven plus, since #473, clock-driven: an idle stack is
-#     no longer an idle function, because warmer.tf's rule invokes it twice
-#     every five minutes whether or not anybody is looking. At demo volume
-#     (order 10,000 requests/month) plus the warmer's 17,280 both the always-free
-#     1,000,000 requests and the 400,000 GB-seconds are untouched — the warmer is
-#     1.7% of the first and 233 of the 400,000 GB-seconds of the second; at
+#     no longer an idle function, because warmer.tf's rule invokes it three
+#     times every five minutes whether or not anybody is looking. At demo volume
+#     (order 10,000 requests/month) plus the rule's 25,920 both the always-free
+#     1,000,000 requests and the 400,000 GB-seconds are untouched — the rule is
+#     2.6% of the first; of the second the warmer is 233 GB-seconds and the
+#     canary's bound is infra/README.md's api Lambda compute row; at
 #     256 MB and ~100 ms the compute allowance covers 16 million requests/month.
 #     The stored deployment package is not a third at-rest line: Lambda code
 #     storage carries no charge inside its 75 GB per-Region quota.
-#   * The warmer (warmer.tf) — an EventBridge scheduled rule, its two targets and
-#     one Lambda permission, all unpriced (infra/README.md's ingestion cost table
-#     owns that figure). Its invocations ride the Lambda and CloudWatch lines
-#     above. What it does spend outside this stack is one `GET /v1/sites` Query
-#     per ping on `cumulo-sites`: **$0.00/month here, driving ≈ $0.005/month
-#     under storage**, on that table's "everything else" row. It is $0 whenever
-#     the rule is disabled.
+#   * The warmer (warmer.tf) — an EventBridge scheduled rule, its three targets
+#     and one Lambda permission, all unpriced (infra/README.md's ingestion cost
+#     table owns that figure). Its invocations ride the Lambda and CloudWatch
+#     lines above. What it does spend outside this stack is DynamoDB requests —
+#     the warmer's `GET /v1/sites` Query per ping, and the canary's `sites`,
+#     `#FLEET` and limiter requests per tick: **$0.00/month here, driving
+#     ≈ $0.04/month under storage**, on its `series` and "everything else"
+#     rows. It is $0 whenever the rule is disabled.
 #   * IAM — the execution role, its inline policy, the two Lambda permissions
 #     (the gateway's and the warmer's) and the deploy grant are all free. So is
 #     the warmer's rule, its targets and the function's async invoke config.

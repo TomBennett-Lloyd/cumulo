@@ -30,10 +30,8 @@
 # cycle, and without the recovery mail the only way to learn it cleared is to go
 # and look — which is the behaviour these files exist to avoid depending on.
 #
-# Cost: one alarm, the tenth of the always-free 10 CloudWatch alarms (storage's
-# four, ingestion's three, the api's two, this one). $0 — and it is the last
-# free one: the eleventh bills $0.10/month. The platform-wide count and the
-# obligations that come with crossing it live in the "CloudWatch alarm budget"
+# Cost: one of the always-free 10 CloudWatch alarms. $0. The platform-wide
+# count and the obligations past ten live in the "CloudWatch alarm budget"
 # subsection of infra/README.md, which owns that number.
 
 locals {

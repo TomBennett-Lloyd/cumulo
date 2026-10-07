@@ -21,10 +21,9 @@
 # nowhere to send them yet; there is now, and the local below explains why the
 # ARN is assembled rather than read.
 #
-# Cost: three alarms, joining storage's four, the api stack's two and forecast's
-# one — ten of the always-free 10 CloudWatch alarms, now fully allocated. See
-# the alarm-budget subsection in infra/README.md, which owns the platform-wide
-# count and the obligations on any PR that adds an eleventh. $0.
+# Cost: three of the always-free 10 CloudWatch alarms. The alarm-budget
+# subsection in infra/README.md owns the platform-wide count and the
+# obligations past ten. $0.
 
 locals {
   # The alerting stack (infra/alerting) owns this topic. Its ARN is assembled
