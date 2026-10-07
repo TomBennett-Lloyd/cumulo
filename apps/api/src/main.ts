@@ -334,8 +334,8 @@ export const routes: readonly Route[] = [
     // cannot shadow or be shadowed by `GET /v1/sites/{siteId}`.
     //
     // Limited, and for the opposite reason to the route above: the caller picks
-    // nothing about its cost, but the *fleet* does — one Query per site, on
-    // every dashboard load.
+    // nothing about its cost, but the *fleet* does (ADR 0009's roll-up, with a
+    // per-site fallback).
     handle: (request) =>
       cycleCached(request, () =>
         getFleetActuals({ sites, series, now, log: jsonLineLog }, request),
