@@ -221,7 +221,8 @@ resource "aws_cloudwatch_metric_alarm" "billing_trip" {
 
   # AWS's own billing-alarm guidance: Maximum over six hours, one of one, and
   # missing data left as missing. The metric is published only once billing
-  # alerts are enabled — an operator step with no API (infra/README.md) — and
+  # alerts are enabled — an operator prerequisite outside Terraform, a
+  # billing-account preference (infra/README.md, api runbook) — and
   # until then this alarm is INSUFFICIENT_DATA, which trips nothing.
   statistic           = "Maximum"
   period              = 21600

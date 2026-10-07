@@ -82,7 +82,7 @@ The trip function, its topic and its subscriptions cost nothing until a trip.
 
 **This ends the platform's $0 standing cost, on purpose.** ADR 0004 established that nothing in Cumulo bills for existing outside an always-free allowance, and 0005 and 0006 each kept that true. The guard's alarms bill for existing, and ≈ $1.30 a month is what holding the ceiling by reaction costs. ADRs 0004, 0005 and 0006 carry as-it-stood notes and dated entries for the sentences that say otherwise.
 
-**Operator obligations.** Billing alerts have to be enabled once, in the Billing console; there is no API for it. Until then the billing alarm sits in INSUFFICIENT_DATA and trips nothing. The us-east-1 email subscription needs confirming. A trip drill — invoke the function, see 429s, reset — is the acceptance test, and it is the only proof that a zero throttle on this HTTP API rejects every route. All three steps are in the api runbook.
+**Operator obligations.** Billing alerts have to be enabled once. This is a billing-account preference, not a Terraform resource, so the runbook's prerequisite runs `aws billing update-billing-preferences` and reads it back. Until then the billing alarm sits in INSUFFICIENT_DATA and trips nothing. The us-east-1 email subscription needs confirming. A trip drill — invoke the function, see 429s, reset — is the acceptance test, and it is the only proof that a zero throttle on this HTTP API rejects every route. All three steps are in the api runbook.
 
 **What gates stop doing.** `check-infra-mirrors.sh`'s `ts-lt` mode is retired. Its one record went with #296's fan-out, and the per-request cost has no TypeScript twin to mirror.
 

@@ -930,7 +930,17 @@ cd infra/api
 2. **The storage stack applied**, with the same `environment` and in the same region. Not a Terraform dependency: nothing here references storage's state or outputs, and a plan succeeds without it. It is a _runtime_ prerequisite — the IAM policy grants access to `cumulo-sites-<env>` and `cumulo-series-<env>` by name, and the function resolves those same names from `CUMULO_ENV`, so applying against absent tables produces a stack that plans, applies, and then 500s on its first request.
 3. **An operator credential session** — see [Operator prerequisites](#operator-prerequisites).
 4. **A built Lambda artefact**, exactly as the ingestion runbook requires one.
-5. **CloudWatch billing alerts enabled**, once per account. There is no API for it: Billing and Cost Management console → **Billing preferences** → **Alert preferences** → **Edit** → **Receive CloudWatch Billing Alerts** → **Save preferences**, signed in as root or as an identity with billing access. It is free and cannot be switched off once on. Until it is, `AWS/Billing` publishes nothing and the cost guard's billing trip — the leg ADR 0010's bound rests on — sits in `INSUFFICIENT_DATA` and trips nothing. A plan and an apply both succeed without it, which is why it is a prerequisite rather than a step.
+5. **CloudWatch billing alerts enabled**, once per account. It is a billing-account preference, not a Terraform resource, so the operator sets it, as root or as an identity with billing access:
+
+   ```bash
+   aws billing get-billing-preferences --features BILLING_ALERTS --region us-east-1
+   aws billing update-billing-preferences --feature BILLING_ALERTS \
+     --billing-preferences-per-key '[{"key":"cloudwatch","value":"ENABLED"}]' --region us-east-1
+   aws billing get-billing-preferences --features BILLING_ALERTS --region us-east-1
+   # expect: ENABLED for the cloudwatch key (the first read shows DISABLED until this runs)
+   ```
+
+   It is free, and AWS does not stop billing data collection once it is on. Until it is, `AWS/Billing` publishes nothing and the cost guard's billing trip — the leg ADR 0010's bound rests on — sits in `INSUFFICIENT_DATA` and trips nothing. A plan and an apply both succeed without it, which is why it is a prerequisite rather than a step.
 
 **There is no override dance here** (convention 6): the bucket already exists, so this stack inits straight against S3 in both directions.
 
