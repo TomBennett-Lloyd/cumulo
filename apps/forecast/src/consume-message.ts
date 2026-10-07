@@ -282,7 +282,13 @@ export const consumeMessage = async (
   // under the identical policy — reported to the log, never failing the record — for the identical
   // reason. Unlike the simulation it reads nothing, so it runs after both writes without widening
   // the invocation's storage budget.
-  await reportFleetRollupWrite({ series: deps.series, log: deps.log }, location, forecasts, sites);
+  await reportFleetRollupWrite(
+    { series: deps.series, log: deps.log },
+    location,
+    issuedAt,
+    forecasts,
+    sites,
+  );
 
   return {
     messageId,

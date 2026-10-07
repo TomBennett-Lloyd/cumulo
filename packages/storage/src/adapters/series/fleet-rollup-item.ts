@@ -1,8 +1,10 @@
 import {
   FLEET_ROLLUP_PARTITION,
   fleetRollupPartialSchema,
+  fleetRollupProvenanceSchema,
   fleetRollupSortKey,
   type FleetRollupPartial,
+  type FleetRollupProvenance,
   type SeriesKind,
 } from '@cumulo/shared';
 
@@ -18,8 +20,8 @@ import type { SeriesItemKeys } from './series-item';
  * `series-item.ts` is this file's sibling and its opposite: that one stores one site's own points,
  * this one stores a number *about* a group of sites. They share the table, the TTL attribute and
  * the half-open-bound trick, and nothing else — which is why the two live apart rather than as a
- * third branch of `fromItem` (`docs/standards/structure.md` rule 7). A roll-up item has no
- * `issuedAt`, no `model` on the row and no domain schema of its own beyond the partial it carries.
+ * third branch of `fromItem` (`docs/standards/structure.md` rule 7). A roll-up item has no `model`
+ * on the row and no domain schema of its own beyond the partial and the provenance it carries.
  *
  * **What a location is, here.** `locationId` is the weather-grid bucket a site's coordinates round
  * into (`location.ts` in `@cumulo/shared`), which is also the unit one SQS message speaks for (ADR
@@ -28,7 +30,7 @@ import type { SeriesItemKeys } from './series-item';
  * the key rather than defended by a lock.
  *
  * **Idempotent by key.** The sort key is derived from `(kind, validTime, locationId)` and every
- * write is a Put, so a redelivered SQS message rewrites byte-identical items. That is the same
+ * write is a Put, so a redelivered SQS message rewrites the same keys. That is the same
  * property `consume-message.ts` already relies on for the forecasts themselves, extended to the
  * roll-up so that the roll-up inherits the redelivery policy instead of needing one of its own.
  *
@@ -38,8 +40,12 @@ import type { SeriesItemKeys } from './series-item';
  * leaving the `#FLEET` partition as the one thing in this table that grows for ever.
  */
 
-/** The attributes a roll-up item carries beyond the partial itself. */
-export interface FleetRollupItemKeys extends SeriesItemKeys {
+/**
+ * The attributes a roll-up item carries beyond the partial itself. The {@link FleetRollupProvenance}
+ * — which sites the slice summed, as of which run — is here rather than in the partial because it
+ * does not add (#602).
+ */
+export interface FleetRollupItemKeys extends SeriesItemKeys, FleetRollupProvenance {
   /** The `#FLEET` sentinel — this table's partition key, holding a value no site can own. */
   readonly siteId: string;
   /**
@@ -64,26 +70,29 @@ export type FleetRollupItem = FleetRollupPartial & FleetRollupItemKeys;
 export const toFleetRollupItem = (
   kind: SeriesKind,
   locationId: string,
+  provenance: FleetRollupProvenance,
   partial: FleetRollupPartial,
 ): FleetRollupItem => ({
   ...partial,
   siteId: FLEET_ROLLUP_PARTITION,
   sk: fleetRollupSortKey(kind, partial.validTime, locationId),
   locationId,
+  members: provenance.members,
+  issuedAt: provenance.issuedAt,
   [TTL_ATTRIBUTE_NAME]: expiresAtEpochSeconds(partial.validTime, SERIES_RETENTION_DAYS),
 });
 
 /**
- * One stored item, and which location wrote it.
- *
- * The two travel together because the read needs both and for different jobs: the partials are what
- * `sumFleetRollupPartials` adds, and the location set is what tells the API whether the partition is
- * *complete* — whether every location the fleet has sites at has written yet (ADR 0009's fallback
- * condition). Returning only the partials would leave the route unable to tell a quiet fleet from a
- * half-written cycle, which is the one distinction the fallback exists to make.
+ * One stored item: the partial `sumFleetRollupPartials` adds, and the location and provenance the
+ * API's completeness check reads (ADR 0009's fallback condition, and its 2026-10-07 amendment).
  */
 export interface FleetRollupRow {
   readonly locationId: string;
+  /**
+   * `undefined` for an item written before #602 stamped one. Read as stale rather than refused, so
+   * an API deployed ahead of the first stamped cycle falls back instead of failing the route.
+   */
+  readonly provenance: FleetRollupProvenance | undefined;
   readonly partial: FleetRollupPartial;
 }
 
@@ -111,5 +120,12 @@ export const fromFleetRollupItem = (item: Record<string, unknown>): FleetRollupR
     );
   }
 
-  return { locationId, partial: fleetRollupPartialSchema.parse(item) };
+  return {
+    locationId,
+    provenance:
+      item.members === undefined && item.issuedAt === undefined
+        ? undefined
+        : fleetRollupProvenanceSchema.parse(item),
+    partial: fleetRollupPartialSchema.parse(item),
+  };
 };

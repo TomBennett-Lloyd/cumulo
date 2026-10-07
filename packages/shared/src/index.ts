@@ -19,6 +19,13 @@ export {
   sumFleetRollupPartials,
   fleetForecastAggregate,
 } from './fleet-rollup';
+export {
+  fleetRollupMembers,
+  fleetRollupMembersSchema,
+  type FleetRollupMembers,
+  fleetRollupProvenanceSchema,
+  type FleetRollupProvenance,
+} from './fleet-rollup-provenance';
 export { apiErrorCodeSchema, type ApiErrorCode, apiErrorSchema, type ApiError } from './api-error';
 export { attributionSchema, type Attribution, openMeteoAttribution } from './attribution';
 export {

@@ -8,6 +8,7 @@ import {
   FLEET_ROLLUP_PARTITION,
   fleetRollupTimeBound,
   type FleetRollupPartial,
+  type FleetRollupProvenance,
   type Forecast,
   type GenerationReading,
   type SeriesKind,
@@ -192,11 +193,12 @@ export class SeriesAdapter extends StorageAdapterBase {
   async putFleetRollupPartials(
     kind: SeriesKind,
     locationId: string,
+    provenance: FleetRollupProvenance,
     partials: readonly FleetRollupPartial[],
   ): Promise<BatchWriteOutcome> {
     return this.putSeriesItems(
       'putFleetRollupPartials',
-      partials.map((partial) => toFleetRollupItem(kind, locationId, partial)),
+      partials.map((partial) => toFleetRollupItem(kind, locationId, provenance, partial)),
     );
   }
 

@@ -225,3 +225,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: the `FleetForecastResponse` registration in `apps/api/src/openapi/components.ts`; compare the `Forecast` component's description and the assertion in `apps/api/src/openapi/document.test.ts` that pins it
 - What: JSON Schema cannot express the band's `p10 ≤ p90` refine, so the `Forecast` component says it in prose and a test holds that prose in place. The fleet band carries the same refine, but the fleet description does not say so. This predates #586
 - Source: #586 review pass 1 SYSTEMIC
+
+## 2026-10-07 — `FleetRollupRow.provenance` keeps an unstamped arm that only the first post-deploy cycle needs
+
+- Where: `FleetRollupRow` and `fromFleetRollupItem` in `packages/storage/src/adapters/series/fleet-rollup-item.ts`; the unstamped branch of `staleLocations` in `apps/api/src/forecast/fleet-rollup-read.ts`
+- What: items written before #602 carry no provenance, so the row type allows `undefined` and the read treats it as stale. Once a stamped cycle has rewritten every in-window item that arm is dead, but it stays in the type permanently. Remove it with #507, or once the first stamped cycle has run in every deployed environment, so that a missing provenance becomes a parse failure.
+- Source: #602 review pass 1 SYSTEMIC

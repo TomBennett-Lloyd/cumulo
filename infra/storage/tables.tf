@@ -115,9 +115,11 @@
 # true-up: ADR 0002's 2026-08-10 (#264) Amendments entry, which states the
 # per-load figure as it then stood and halves every read-side figure derived
 # from its predecessor — its 2026-09-11 (#494) successor entry marks it
-# as-it-stood and points back here; and ADR 0009's `## Consequences`, which
-# states the roll-up read's own ~18 units and the ≈ $1.78 write line and names
-# this section as the owner of the current per-load total. So: change the
+# as-it-stood and points back here, and is itself marked so by the 2026-10-07
+# (#602) entry; and ADR 0009's `## Consequences`, which states the roll-up
+# read's own ~18 units and the ≈ $1.78 write line, carries a #602 as-it-stood
+# annotation on the first, and names this section as the owner of the current
+# per-load total. So: change the
 # per-load read arithmetic, and every site named here moves in the same commit.
 #
 # Both member lists are a floor rather than a census: one more carrier does not
@@ -319,10 +321,10 @@ resource "aws_dynamodb_table" "sites" {
 #    case is ≤ 52 locations (packages/shared/src/site.ts) and therefore
 #    52 × 48 = 2,496 partials. $0 while the schedule is idle. Reads are
 #    activity-shaped for the same reason and stay negligible: the dashboard
-#    read path the 21 RCU was sized against now costs **≈ 45 a load** at
-#    $0.1415/M — ~43 read units per load on this table and ~2 elsewhere. The
-#    ~43 is ~18 for the fleet's forecasts — one Query of the `#FLEET`
-#    partition since #494 (ADR 0009), ~576 items of ~250 B ≈ 144 KB over a
+#    read path the 21 RCU was sized against now costs **≈ 49 a load** at
+#    $0.1415/M — ~47 read units per load on this table and ~2 elsewhere. The
+#    ~47 is ~22 for the fleet's forecasts — one Query of the `#FLEET`
+#    partition since #494 (ADR 0009), ~576 items of ~300 B ≈ 173 KB over a
 #    48-hour horizon, eventually consistent — plus ~25 covering every site's
 #    partition for its simulated actuals, whose fan-out ADR 0009 leaves in
 #    place until the actuals roll-up lands. (The load's remaining ~2 units are

@@ -1,135 +1,39 @@
-import {
-  fleetRollupPartialSchema,
-  utcIsoTimestampSchema,
-  type FleetRollupPartial,
-  type FleetSite,
-} from '@cumulo/shared';
-import type { FleetRollupRow, SeriesPoint } from '@cumulo/storage';
+import type { FleetSite } from '@cumulo/shared';
+import type { FleetRollupRow } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
-import {
-  fleetSite,
-  forecast,
-  fullBudgetDeadline,
-  generationPoint,
-  RANELAGH_ID,
-  RATHMINES_ID,
-} from '../api-fixtures';
+import { fleetSite, forecast, generationPoint, RANELAGH_ID, RATHMINES_ID } from '../api-fixtures';
 
 import {
-  fleetRollupFallbackEvent,
-  readFleetForecastAggregate,
-  type FleetForecastAggregateRead,
-  type FleetRollupReadDeps,
-} from './fleet-rollup-read';
+  BRISTOL,
+  BRISTOL_SITE,
+  DUBLIN,
+  EARLIER_RUN,
+  harness,
+  ISSUED_AT,
+  partial,
+  pointsOf,
+  RANELAGH,
+  RATHMINES,
+  read,
+  row,
+} from './fleet-rollup-fixtures';
+import { fleetRollupFallbackEvent } from './fleet-rollup-read';
 
 /**
  * Which partition states answer from the roll-up and which fall back — the decision ADR 0009's
  * fallback *is*, tested where it lives rather than through the route.
  *
  * Through `readFleetForecastAggregate` directly because the route adds nothing to this question: it
- * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both. What matters
- * here is that a partition missing a whole *location* is never summed — the dimension the check
- * works in, and the one ADR 0009's 2026-10-05 amendment entry records it as working in — and that
- * every fallback leaves one line an operator can count while a deployment settles.
+ * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both.
  */
-
-const FROM = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
-const TO = utcIsoTimestampSchema.parse('2026-08-02T12:00:00Z');
-const DEADLINE_EVENT = 'api.fleet-forecast.read-deadline-reached';
-
-const RANELAGH = fleetSite();
-const RATHMINES = fleetSite({ id: RATHMINES_ID, name: 'Rathmines terrace' });
-/** Both Dublin fixtures round into one weather bucket — the unit the producer writes a partial for. */
-const DUBLIN = '53.32,-6.26';
-
-const BRISTOL = '51.45,-2.59';
-const BRISTOL_SITE = fleetSite({
-  id: '7c9e6679-7425-40de-944b-e07fc1f90111',
-  name: 'Bristol terrace',
-  latitude: 51.4545,
-  longitude: -2.5879,
-});
-
-const partial = (
-  overrides: Partial<Record<keyof FleetRollupPartial, unknown>> = {},
-): FleetRollupPartial =>
-  fleetRollupPartialSchema.parse({
-    validTime: '2026-07-31T13:00:00Z',
-    acPowerKw: 5,
-    p10AcPowerKw: 4,
-    p90AcPowerKw: 6,
-    hasUncertainty: true,
-    contributingSiteCount: 2,
-    contributingCapacityKw: 8.4,
-    ...overrides,
-  });
-
-interface Harness {
-  readonly deps: FleetRollupReadDeps;
-  readonly rollupReads: number;
-  readonly siteReads: string[];
-  readonly logged: Record<string, unknown>[];
-}
-
-interface HarnessInput {
-  readonly rows?: readonly FleetRollupRow[];
-  readonly rollupComplete?: boolean;
-  readonly pointsBySite?: Readonly<Record<string, readonly SeriesPoint[]>>;
-}
-
-const harness = (input: HarnessInput = {}): Harness => {
-  const siteReads: string[] = [];
-  const logged: Record<string, unknown>[] = [];
-  const state = { rollupReads: 0 };
-
-  return {
-    siteReads,
-    logged,
-    get rollupReads(): number {
-      return state.rollupReads;
-    },
-    deps: {
-      series: {
-        queryFleetRollup: () => {
-          state.rollupReads += 1;
-          return Promise.resolve({
-            rows: [...(input.rows ?? [])],
-            complete: input.rollupComplete ?? true,
-          });
-        },
-        querySeriesRange: (siteId) => {
-          siteReads.push(siteId);
-          return Promise.resolve({
-            points: [...(input.pointsBySite?.[siteId] ?? [])],
-            complete: true,
-          });
-        },
-      },
-      log: (entry) => logged.push(entry),
-    },
-  };
-};
-
-const read = async (
-  deps: FleetRollupReadDeps,
-  sites: readonly FleetSite[],
-): Promise<FleetForecastAggregateRead> =>
-  readFleetForecastAggregate(deps, fullBudgetDeadline, sites, FROM, TO, DEADLINE_EVENT);
-
-const pointsOf = (result: FleetForecastAggregateRead) => {
-  if (!result.complete) {
-    throw new Error('expected a complete read');
-  }
-  return result.points;
-};
 
 describe('the roll-up answers', () => {
   it('sums the partition when every expected location has written', async () => {
     const { deps, siteReads, logged } = harness({
       rows: [
-        { locationId: DUBLIN, partial: partial({ acPowerKw: 5 }) },
-        { locationId: BRISTOL, partial: partial({ acPowerKw: 3 }) },
+        row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5 })),
+        row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3 })),
       ],
     });
 
@@ -144,7 +48,9 @@ describe('the roll-up answers', () => {
     // `locationId` is what the producer's messages are keyed by (ADR 0004), so a fleet of sixty
     // sites in twelve buckets expects twelve partials. Expecting one per *site* would fall back for
     // ever.
-    const { deps, siteReads } = harness({ rows: [{ locationId: DUBLIN, partial: partial() }] });
+    const { deps, siteReads } = harness({
+      rows: [row(DUBLIN, [RANELAGH, RATHMINES], partial())],
+    });
 
     await read(deps, [RANELAGH, RATHMINES]);
 
@@ -158,8 +64,8 @@ describe('the roll-up answers', () => {
     // arm, which cannot do it because it iterates the site list.
     const { deps, siteReads, logged } = harness({
       rows: [
-        { locationId: DUBLIN, partial: partial({ acPowerKw: 5, contributingSiteCount: 2 }) },
-        { locationId: BRISTOL, partial: partial({ acPowerKw: 3, contributingSiteCount: 1 }) },
+        row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5, contributingSiteCount: 2 })),
+        row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3, contributingSiteCount: 1 })),
       ],
     });
 
@@ -178,7 +84,7 @@ describe('the roll-up answers', () => {
     // locations holding an active site. Counting an all-inactive location as expected would pin the
     // route on `incomplete` for ever, logging a line that means the opposite of what it says.
     const { deps, siteReads, logged } = harness({
-      rows: [{ locationId: DUBLIN, partial: partial() }],
+      rows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
     await read(deps, [RANELAGH, { ...BRISTOL_SITE, active: false }]);
@@ -203,12 +109,13 @@ describe('the roll-up answers', () => {
     const twoPm = '2026-07-31T14:00:00Z';
     const { deps, siteReads, logged } = harness({
       rows: [
-        { locationId: DUBLIN, partial: partial({ acPowerKw: 5, contributingSiteCount: 2 }) },
-        {
-          locationId: DUBLIN,
-          partial: partial({ validTime: twoPm, acPowerKw: 6, contributingSiteCount: 2 }),
-        },
-        { locationId: BRISTOL, partial: partial({ acPowerKw: 3, contributingSiteCount: 1 }) },
+        row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5, contributingSiteCount: 2 })),
+        row(
+          DUBLIN,
+          [RANELAGH],
+          partial({ validTime: twoPm, acPowerKw: 6, contributingSiteCount: 2 }),
+        ),
+        row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3, contributingSiteCount: 1 })),
       ],
     });
 
@@ -225,6 +132,103 @@ describe('the roll-up answers', () => {
 
     expect(pointsOf(await read(deps, []))).toEqual([]);
     expect(rollupReads).toBe(0);
+    expect(siteReads).toEqual([]);
+    expect(logged).toEqual([]);
+  });
+});
+
+/**
+ * Membership and vintage (#602, ADR 0009's 2026-10-07 entry): a location that has written is
+ * summed only if its slices were summed from the sites active there now, by one forecast run. Each
+ * stale case below sums on the pre-#602 code — the location-set check alone passes every one.
+ */
+describe('a stale slice', () => {
+  const NEWCOMER = fleetSite({ id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', name: 'Newcomer' });
+  const ranelaghForecast = {
+    [RANELAGH_ID]: [{ type: 'forecast' as const, forecast: forecast({ acPowerKw: 2.8 }) }],
+  };
+
+  const staleRead = async (rows: readonly FleetRollupRow[], sites: readonly FleetSite[]) => {
+    const { deps, siteReads, logged } = harness({ rows, pointsBySite: ranelaghForecast });
+    const points = pointsOf(await read(deps, sites));
+    return { points, siteReads, logged };
+  };
+
+  it('falls back when a site at a surviving location has gone', async () => {
+    // #579: the slice still carries the deleted site's kilowatts, count and capacity.
+    const { points, siteReads, logged } = await staleRead(
+      [row(DUBLIN, [RANELAGH, RATHMINES], partial({ acPowerKw: 5, contributingSiteCount: 2 }))],
+      [RANELAGH],
+    );
+
+    expect(points.map((point) => [point.acPowerKw, point.contributingSiteCount])).toEqual([
+      [2.8, 1],
+    ]);
+    expect(siteReads).toEqual([RANELAGH_ID]);
+    expect(logged).toEqual([
+      {
+        event: fleetRollupFallbackEvent,
+        reason: 'stale',
+        expectedLocations: 1,
+        presentLocations: 1,
+        staleLocations: 1,
+        hours: 1,
+      },
+    ]);
+  });
+
+  it('falls back when one site left and another joined the same bucket', async () => {
+    // Same count, possibly the same capacity: only the membership itself tells these apart.
+    const { logged } = await staleRead(
+      [row(DUBLIN, [RANELAGH, RATHMINES])],
+      [RANELAGH, { ...NEWCOMER, capacityKw: RATHMINES.capacityKw }],
+    );
+
+    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
+  });
+
+  it('falls back when a site’s physics were edited in place', async () => {
+    // `PUT /v1/sites/{siteId}` keeps the id; the slice's capacity divisor and kilowatts do not move.
+    const { logged } = await staleRead([row(DUBLIN, [RANELAGH])], [{ ...RANELAGH, capacityKw: 5 }]);
+
+    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
+  });
+
+  it('falls back when one location’s slices come from two forecast runs', async () => {
+    // A `store-partial` roll-up drain, or a replayed message, leaves part of the horizon on another run.
+    const { logged } = await staleRead(
+      [
+        row(DUBLIN, [RANELAGH], partial(), ISSUED_AT),
+        row(DUBLIN, [RANELAGH], partial({ validTime: '2026-07-31T14:00:00Z' }), EARLIER_RUN),
+      ],
+      [RANELAGH],
+    );
+
+    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1, hours: 2 });
+  });
+
+  it('falls back on a slice written before provenance existed', async () => {
+    const { logged } = await staleRead(
+      [{ locationId: DUBLIN, provenance: undefined, partial: partial() }],
+      [RANELAGH],
+    );
+
+    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
+  });
+
+  it('sums locations written by different runs, each from one run', async () => {
+    // Fresh, and the case that keeps vintage per location: ingestion visits locations with no
+    // end-of-run event, so a fleet-wide vintage test would fall back on every cycle (ADR 0009).
+    const { deps, siteReads, logged } = harness({
+      rows: [
+        row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5 }), ISSUED_AT),
+        row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3 }), EARLIER_RUN),
+      ],
+    });
+
+    expect(pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE])).map((p) => p.acPowerKw)).toEqual([
+      8,
+    ]);
     expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
@@ -256,6 +260,7 @@ describe('the fallback', () => {
         reason: 'absent',
         expectedLocations: 1,
         presentLocations: 0,
+        staleLocations: 0,
         hours: 0,
       },
     ]);
@@ -266,7 +271,7 @@ describe('the fallback', () => {
     // the missing site does not read as missing, it reads as less generation. So a partly-written
     // partition is treated exactly like an absent one.
     const { deps, siteReads, logged } = harness({
-      rows: [{ locationId: DUBLIN, partial: partial() }],
+      rows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
     await read(deps, [RANELAGH, BRISTOL_SITE]);
@@ -277,17 +282,32 @@ describe('the fallback', () => {
         reason: 'incomplete',
         expectedLocations: 2,
         presentLocations: 1,
+        staleLocations: 0,
         hours: 1,
       },
     ]);
     expect(siteReads).toEqual([RANELAGH_ID, BRISTOL_SITE.id]);
   });
 
+  it('reports a missing location as incomplete even when another is stale, and counts both', async () => {
+    // Dublin's slice still sums Rathmines, which has gone; Bristol has not written at all.
+    const { deps, logged } = harness({ rows: [row(DUBLIN, [RANELAGH, RATHMINES])] });
+
+    await read(deps, [RANELAGH, BRISTOL_SITE]);
+
+    expect(logged[0]).toMatchObject({
+      reason: 'incomplete',
+      expectedLocations: 2,
+      presentLocations: 1,
+      staleLocations: 1,
+    });
+  });
+
   it('treats a roll-up Query that stopped short as incomplete', async () => {
     // A read that ran out of page budget and a partition that was never fully written have
     // different causes and the same consequence for the answer, so they share an arm.
     const { deps, siteReads, logged } = harness({
-      rows: [{ locationId: DUBLIN, partial: partial() }],
+      rows: [row(DUBLIN, [RANELAGH], partial())],
       rollupComplete: false,
     });
 
