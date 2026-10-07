@@ -214,6 +214,9 @@
   --color-text: #0f1419;
   --color-text-muted: #58626d;
   --color-border: #dbe2e9;
+  /* A boundary that must clear WCAG 1.4.11 where nothing else identifies the
+     control; `apps/web/src/control-contrast.test.ts` asserts it (#181). */
+  --color-border-strong: #7a8591;
   --color-accent: #2a78d6;
   --color-accent-contrast: #ffffff;
 
@@ -437,6 +440,7 @@
   --color-text: #eef2f6;
   --color-text-muted: #9aa5b1;
   --color-border: #2a2f34;
+  --color-border-strong: #68727c;
   --color-accent: #3987e5;
   --color-accent-contrast: #0d0f10;
 
