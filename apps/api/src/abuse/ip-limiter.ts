@@ -17,8 +17,8 @@ import type { AbuseAdapter } from '@cumulo/storage';
  * Issue #29's evidence run is not trued.
  *
  * The threshold sits above a dashboard load plus a selection of every seed site
- * inside one window (`ip-limiter.test.ts`) — a repeat view inside a data cycle
- * is a 304 this limiter never counts (`cycleCached` in `apps/api/src/main.ts`)
+ * inside one window (`ip-limiter.test.ts`) — a repeat view of current data is
+ * a 304 this limiter never counts (`cycleCached` in `apps/api/src/main.ts`)
  * — and below what the write-route throttle in `infra/api/gateway.tf` admits in
  * one window, so an address held to that throttle can still be blocked. An
  * hour's block makes retrying pointless without locking a NAT'd office out for

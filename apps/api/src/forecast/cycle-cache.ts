@@ -93,7 +93,7 @@ export const cycleOfReading = (validTime: string): number =>
   ) + CYCLE_SETTLE_SECONDS;
 
 /**
- * A metered read's answer, and the cycle its newest data settled into — absent
+ * A metered read's answer, and the cycle `datedByData` dates it to — absent
  * when the read has nothing to date it by. Stripped before the response leaves.
  */
 export interface MeteredResponse extends ApiResponse {
