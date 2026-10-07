@@ -223,5 +223,5 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 ## 2026-10-07 — The OpenAPI `FleetForecastResponse` description never states p10 ≤ p90
 
 - Where: the `FleetForecastResponse` registration in `apps/api/src/openapi/components.ts`; compare the `Forecast` component's description and the assertion in `apps/api/src/openapi/document.test.ts` that pins it
-- What: JSON Schema cannot express the band's `p10 ≤ p90` refine, so the `Forecast` component says it in prose and a test holds that prose in place. The fleet band carries the same refine, but neither the fleet description nor any test says so. This predates #586
+- What: JSON Schema cannot express the band's `p10 ≤ p90` refine, so the `Forecast` component says it in prose and a test holds that prose in place. The fleet band carries the same refine, but the fleet description does not say so. This predates #586
 - Source: #586 review pass 1 SYSTEMIC
