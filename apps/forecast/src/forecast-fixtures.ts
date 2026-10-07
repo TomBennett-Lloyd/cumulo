@@ -2,6 +2,7 @@ import {
   forecastWeatherReadingSchema,
   sitePhysicsSchema,
   utcIsoTimestampSchema,
+  type FleetRollupProvenance,
   type Forecast,
   type ForecastWeatherReading,
   type SitePhysics,
@@ -136,7 +137,11 @@ export interface Recorder {
   /** Site ids whose trailing window was read — the simulated-actuals producer's first move. */
   readonly simulatedFor: string[];
   /** What the fleet roll-up write was handed: which location, and how many hours (#494). */
-  readonly rolledUp: { readonly locationId: string; readonly hourCount: number }[];
+  readonly rolledUp: {
+    readonly locationId: string;
+    readonly provenance: FleetRollupProvenance;
+    readonly hourCount: number;
+  }[];
   readonly entries: Record<string, unknown>[];
 }
 
@@ -200,11 +205,16 @@ export const deps = (input: DepsInput): ConsumeMessageDeps => ({
     // case runs it for real and the claim "the message's outcome does not depend on it" is the
     // default rather than a specially wired case — the same arrangement the trailing window above
     // is in, and for the same reason.
-    putFleetRollupPartials: (_kind, locationId, partials): Promise<BatchWriteOutcome> => {
+    putFleetRollupPartials: (
+      _kind,
+      locationId,
+      provenance,
+      partials,
+    ): Promise<BatchWriteOutcome> => {
       if (input.rollupRejectsWith !== undefined) {
         return rejectedWith(input.rollupRejectsWith);
       }
-      input.recorder.rolledUp.push({ locationId, hourCount: partials.length });
+      input.recorder.rolledUp.push({ locationId, provenance, hourCount: partials.length });
       return Promise.resolve(input.rollupOutcome ?? { status: 'complete' });
     },
   },

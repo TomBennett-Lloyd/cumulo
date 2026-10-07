@@ -1,8 +1,10 @@
 import {
   FLEET_ROLLUP_PARTITION,
   fleetRollupPartialSchema,
+  fleetRollupProvenanceSchema,
   fleetRollupSortKey,
   type FleetRollupPartial,
+  type FleetRollupProvenance,
   type SeriesKind,
 } from '@cumulo/shared';
 
@@ -18,8 +20,8 @@ import type { SeriesItemKeys } from './series-item';
  * `series-item.ts` is this file's sibling and its opposite: that one stores one site's own points,
  * this one stores a number *about* a group of sites. They share the table, the TTL attribute and
  * the half-open-bound trick, and nothing else — which is why the two live apart rather than as a
- * third branch of `fromItem` (`docs/standards/structure.md` rule 7). A roll-up item has no
- * `issuedAt`, no `model` on the row and no domain schema of its own beyond the partial it carries.
+ * third branch of `fromItem` (`docs/standards/structure.md` rule 7). A roll-up item has no `model`
+ * on the row and no domain schema of its own beyond the partial and the provenance it carries.
  *
  * **What a location is, here.** `locationId` is the weather-grid bucket a site's coordinates round
  * into (`location.ts` in `@cumulo/shared`), which is also the unit one SQS message speaks for (ADR
@@ -38,8 +40,12 @@ import type { SeriesItemKeys } from './series-item';
  * leaving the `#FLEET` partition as the one thing in this table that grows for ever.
  */
 
-/** The attributes a roll-up item carries beyond the partial itself. */
-export interface FleetRollupItemKeys extends SeriesItemKeys {
+/**
+ * The attributes a roll-up item carries beyond the partial itself. The {@link FleetRollupProvenance}
+ * — which sites the slice summed, as of which run — is here rather than in the partial because it
+ * does not add (#602).
+ */
+export interface FleetRollupItemKeys extends SeriesItemKeys, FleetRollupProvenance {
   /** The `#FLEET` sentinel — this table's partition key, holding a value no site can own. */
   readonly siteId: string;
   /**
@@ -64,12 +70,15 @@ export type FleetRollupItem = FleetRollupPartial & FleetRollupItemKeys;
 export const toFleetRollupItem = (
   kind: SeriesKind,
   locationId: string,
+  provenance: FleetRollupProvenance,
   partial: FleetRollupPartial,
 ): FleetRollupItem => ({
   ...partial,
   siteId: FLEET_ROLLUP_PARTITION,
   sk: fleetRollupSortKey(kind, partial.validTime, locationId),
   locationId,
+  members: provenance.members,
+  issuedAt: provenance.issuedAt,
   [TTL_ATTRIBUTE_NAME]: expiresAtEpochSeconds(partial.validTime, SERIES_RETENTION_DAYS),
 });
 
@@ -84,6 +93,11 @@ export const toFleetRollupItem = (
  */
 export interface FleetRollupRow {
   readonly locationId: string;
+  /**
+   * `undefined` for an item written before #602 stamped one. Read as stale rather than refused, so
+   * an API deployed ahead of the first stamped cycle falls back instead of failing the route.
+   */
+  readonly provenance: FleetRollupProvenance | undefined;
   readonly partial: FleetRollupPartial;
 }
 
@@ -111,5 +125,12 @@ export const fromFleetRollupItem = (item: Record<string, unknown>): FleetRollupR
     );
   }
 
-  return { locationId, partial: fleetRollupPartialSchema.parse(item) };
+  return {
+    locationId,
+    provenance:
+      item.members === undefined && item.issuedAt === undefined
+        ? undefined
+        : fleetRollupProvenanceSchema.parse(item),
+    partial: fleetRollupPartialSchema.parse(item),
+  };
 };

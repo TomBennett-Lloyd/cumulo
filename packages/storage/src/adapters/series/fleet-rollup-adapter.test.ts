@@ -12,6 +12,7 @@ import {
   mockedAdapter,
   otherRollupItem14h,
   partial,
+  provenance,
   rollupItem14h,
   rollupPage,
   writeRequests,
@@ -41,9 +42,12 @@ describe('putFleetRollupPartials', () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(BatchWriteCommand).resolves({});
 
-    const outcome = await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, [
-      partial(),
-    ]);
+    const outcome = await adapter.putFleetRollupPartials(
+      FLEET_ROLLUP_FORECAST_KIND,
+      LOCATION_ID,
+      provenance(),
+      [partial()],
+    );
 
     expect(outcome).toEqual({ status: 'complete' });
     expect(writeRequests(ddb)).toEqual([[rollupItem14h]]);
@@ -53,16 +57,23 @@ describe('putFleetRollupPartials', () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(BatchWriteCommand).resolves({});
 
-    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, [partial()]);
-    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, OTHER_LOCATION_ID, [
-      partial({
-        acPowerKw: otherRollupItem14h.acPowerKw,
-        p10AcPowerKw: otherRollupItem14h.p10AcPowerKw,
-        p90AcPowerKw: otherRollupItem14h.p90AcPowerKw,
-        contributingSiteCount: otherRollupItem14h.contributingSiteCount,
-        contributingCapacityKw: otherRollupItem14h.contributingCapacityKw,
-      }),
+    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, provenance(), [
+      partial(),
     ]);
+    await adapter.putFleetRollupPartials(
+      FLEET_ROLLUP_FORECAST_KIND,
+      OTHER_LOCATION_ID,
+      provenance(),
+      [
+        partial({
+          acPowerKw: otherRollupItem14h.acPowerKw,
+          p10AcPowerKw: otherRollupItem14h.p10AcPowerKw,
+          p90AcPowerKw: otherRollupItem14h.p90AcPowerKw,
+          contributingSiteCount: otherRollupItem14h.contributingSiteCount,
+          contributingCapacityKw: otherRollupItem14h.contributingCapacityKw,
+        }),
+      ],
+    );
 
     const [first, second] = writeRequests(ddb);
     expect(first).toEqual([rollupItem14h]);
@@ -73,8 +84,12 @@ describe('putFleetRollupPartials', () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(BatchWriteCommand).resolves({});
 
-    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, [partial()]);
-    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, [partial()]);
+    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, provenance(), [
+      partial(),
+    ]);
+    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, provenance(), [
+      partial(),
+    ]);
 
     const [first, second] = writeRequests(ddb);
     expect(first).toEqual(second);
@@ -90,7 +105,12 @@ describe('putFleetRollupPartials', () => {
       }),
     );
 
-    await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, horizon);
+    await adapter.putFleetRollupPartials(
+      FLEET_ROLLUP_FORECAST_KIND,
+      LOCATION_ID,
+      provenance(),
+      horizon,
+    );
 
     expect(writeRequests(ddb).map((batch) => batch.length)).toEqual([25, 25, 25, 25, 25, 25, 18]);
   });
@@ -106,16 +126,24 @@ describe('putFleetRollupPartials', () => {
         [TABLE_NAME]: [
           {
             PutRequest: {
-              Item: toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, partial()),
+              Item: toFleetRollupItem(
+                FLEET_ROLLUP_FORECAST_KIND,
+                LOCATION_ID,
+                provenance(),
+                partial(),
+              ),
             },
           },
         ],
       },
     });
 
-    const outcome = await adapter.putFleetRollupPartials(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, [
-      partial(),
-    ]);
+    const outcome = await adapter.putFleetRollupPartials(
+      FLEET_ROLLUP_FORECAST_KIND,
+      LOCATION_ID,
+      provenance(),
+      [partial()],
+    );
 
     expect(outcome).toEqual({ status: 'partial', unprocessedCount: 1 });
   });
@@ -127,6 +155,7 @@ describe('putFleetRollupPartials', () => {
     const outcome = await adapter.putFleetRollupPartials(
       FLEET_ROLLUP_FORECAST_KIND,
       LOCATION_ID,
+      provenance(),
       [],
     );
 

@@ -1,12 +1,14 @@
 import {
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
+  fleetRollupMembers,
   forecastSchema,
   sumFleetRollupPartials,
   type FleetRollupPartial,
+  type FleetRollupProvenance,
   type Forecast,
   type SeriesKind,
-  type SiteCapacity,
+  type SitePhysics,
 } from '@cumulo/shared';
 import type { BatchWriteOutcome } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
@@ -43,6 +45,7 @@ import {
 interface WriteCall {
   readonly kind: SeriesKind;
   readonly locationId: string;
+  readonly provenance: FleetRollupProvenance;
   readonly partials: readonly FleetRollupPartial[];
 }
 
@@ -61,11 +64,16 @@ const harness = (input: { outcome?: BatchWriteOutcome; rejectsWith?: unknown } =
     entries,
     deps: {
       series: {
-        putFleetRollupPartials: (kind, locationId, partials): Promise<BatchWriteOutcome> => {
+        putFleetRollupPartials: (
+          kind,
+          locationId,
+          provenance,
+          partials,
+        ): Promise<BatchWriteOutcome> => {
           if (input.rejectsWith !== undefined) {
             return rejectedWith(input.rejectsWith);
           }
-          calls.push({ kind, locationId, partials: [...partials] });
+          calls.push({ kind, locationId, provenance, partials: [...partials] });
           return Promise.resolve(input.outcome ?? { status: 'complete' });
         },
       },
@@ -78,9 +86,9 @@ const harness = (input: { outcome?: BatchWriteOutcome; rejectsWith?: unknown } =
 
 const LOCATION = '53.32,-6.26';
 
-const sites: readonly SiteCapacity[] = [
-  { id: RANELAGH_ID, capacityKw: 4.2 },
-  { id: RATHMINES_ID, capacityKw: 6 },
+const sites: readonly SitePhysics[] = [
+  sitePhysics({ id: RANELAGH_ID, capacityKw: 4.2 }),
+  sitePhysics({ id: RATHMINES_ID, capacityKw: 6 }),
 ];
 
 const forecastAt = (siteId: string, hour: string, acPowerKw: number): Forecast =>
@@ -106,7 +114,13 @@ describe('writeFleetRollup', () => {
   it('writes one partial per hour, summed over the location`s sites', async () => {
     const { deps: rollupDeps, calls } = harness();
 
-    const outcome = await writeFleetRollup(rollupDeps, LOCATION, twoSitesTwoHours, sites);
+    const outcome = await writeFleetRollup(
+      rollupDeps,
+      LOCATION,
+      ISSUED_AT,
+      twoSitesTwoHours,
+      sites,
+    );
 
     expect(outcome).toEqual({ locationId: LOCATION, status: 'written', hourCount: 2 });
     expect(calls).toHaveLength(1);
@@ -119,10 +133,23 @@ describe('writeFleetRollup', () => {
     ]);
   });
 
+  it('stamps every slice with the listed sites’ membership and the run’s issuedAt', async () => {
+    const { deps: rollupDeps, calls } = harness();
+
+    await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites);
+
+    // The digest of the sites the message *listed*, not of those that happened to forecast an
+    // hour: it is compared against the active fleet at this location, which is the listing (#602).
+    expect(calls[0]?.provenance).toEqual({
+      members: fleetRollupMembers(sites),
+      issuedAt: ISSUED_AT,
+    });
+  });
+
   it('writes exactly what the read will sum back — the additivity claim, at this boundary', async () => {
     const { deps: rollupDeps, calls } = harness();
 
-    await writeFleetRollup(rollupDeps, LOCATION, twoSitesTwoHours, sites);
+    await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites);
 
     // One location is the whole fleet in this fixture, so summing its partials must reproduce the
     // aggregate computed straight from the raw forecasts. The general case — many locations — is
@@ -140,7 +167,7 @@ describe('writeFleetRollup', () => {
       { ...forecastAt(RANELAGH_ID, '11', 3.1), model: 'ml' as const },
     ];
 
-    await writeFleetRollup(rollupDeps, LOCATION, withMl, sites);
+    await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, withMl, sites);
 
     // 7 kW, not 7.1. Unfiltered, the ML row is not a second site — `aggregateFleetForecast` keeps
     // one entry per site-hour — it *replaces* the physics row, the `issuedAt` tie going to whichever
@@ -154,7 +181,7 @@ describe('writeFleetRollup', () => {
     const { deps: rollupDeps, calls } = harness();
     const mlOnly = twoSitesTwoHours.map((forecast) => ({ ...forecast, model: 'ml' as const }));
 
-    const outcome = await writeFleetRollup(rollupDeps, LOCATION, mlOnly, sites);
+    const outcome = await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, mlOnly, sites);
 
     expect(outcome).toEqual({ locationId: LOCATION, status: 'nothing-to-roll-up' });
     expect(calls).toEqual([]);
@@ -163,7 +190,7 @@ describe('writeFleetRollup', () => {
   it('writes nothing for an empty horizon rather than an empty batch', async () => {
     const { deps: rollupDeps, calls } = harness();
 
-    expect(await writeFleetRollup(rollupDeps, LOCATION, [], sites)).toEqual({
+    expect(await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, [], sites)).toEqual({
       locationId: LOCATION,
       status: 'nothing-to-roll-up',
     });
@@ -175,7 +202,9 @@ describe('writeFleetRollup', () => {
       outcome: { status: 'partial', unprocessedCount: 5 },
     });
 
-    expect(await writeFleetRollup(rollupDeps, LOCATION, twoSitesTwoHours, sites)).toEqual({
+    expect(
+      await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites),
+    ).toEqual({
       locationId: LOCATION,
       status: 'store-partial',
       unprocessedCount: 5,
@@ -185,7 +214,13 @@ describe('writeFleetRollup', () => {
   it('converts a rejected write into a failed outcome naming the operation', async () => {
     const { deps: rollupDeps } = harness({ rejectsWith: new Error('the table said no') });
 
-    const outcome = await writeFleetRollup(rollupDeps, LOCATION, twoSitesTwoHours, sites);
+    const outcome = await writeFleetRollup(
+      rollupDeps,
+      LOCATION,
+      ISSUED_AT,
+      twoSitesTwoHours,
+      sites,
+    );
 
     // Narrowed rather than matched loosely: `toMatchObject` with a matcher types as `any`, which
     // would let a wrong-shaped outcome through the assertion that is checking its shape.
@@ -198,10 +233,10 @@ describe('writeFleetRollup', () => {
   it('is deterministic in its inputs, so a redelivered message writes identical partials', async () => {
     const { deps: rollupDeps, calls } = harness();
 
-    await writeFleetRollup(rollupDeps, LOCATION, twoSitesTwoHours, sites);
-    await writeFleetRollup(rollupDeps, LOCATION, twoSitesTwoHours, sites);
+    await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites);
+    await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites);
 
-    expect(calls[0]?.partials).toEqual(calls[1]?.partials);
+    expect(calls[0]).toEqual(calls[1]);
   });
 
   it('does not assert capacity it cannot evidence', async () => {
@@ -213,8 +248,9 @@ describe('writeFleetRollup', () => {
     await writeFleetRollup(
       rollupDeps,
       LOCATION,
+      ISSUED_AT,
       [forecastAt(RANELAGH_ID, '11', 3)],
-      [{ id: RATHMINES_ID, capacityKw: 6 }],
+      [sitePhysics({ id: RATHMINES_ID, capacityKw: 6 })],
     );
 
     expect(calls[0]?.partials[0]?.contributingCapacityKw).toBe(0);
@@ -225,7 +261,7 @@ describe('reportFleetRollupWrite', () => {
   it('logs one greppable entry carrying the outcome', async () => {
     const { deps: rollupDeps, entries } = harness();
 
-    await reportFleetRollupWrite(rollupDeps, LOCATION, twoSitesTwoHours, sites);
+    await reportFleetRollupWrite(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites);
 
     expect(entries).toEqual([
       {
@@ -241,7 +277,7 @@ describe('reportFleetRollupWrite', () => {
     const { deps: rollupDeps, entries } = harness({ rejectsWith: 'the table is on fire' });
 
     await expect(
-      reportFleetRollupWrite(rollupDeps, LOCATION, twoSitesTwoHours, sites),
+      reportFleetRollupWrite(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites),
     ).resolves.toBeUndefined();
     expect(entries[0]).toMatchObject({ event: fleetRollupWriteEvent, status: 'failed' });
   });
@@ -256,7 +292,17 @@ describe('the roll-up inside one message', () => {
       recordOf('m-1', [reading({ validTime: '2026-07-31T11:00:00Z' }), reading()]),
     );
 
-    expect(recorder.rolledUp).toEqual([{ locationId: '53.32,-6.26', hourCount: 2 }]);
+    expect(recorder.rolledUp).toEqual([
+      {
+        locationId: '53.32,-6.26',
+        // The message's one clock reading, the same `issuedAt` its forecast rows carry.
+        provenance: {
+          members: fleetRollupMembers([sitePhysics(), sitePhysics({ id: RATHMINES_ID })]),
+          issuedAt: ISSUED_AT,
+        },
+        hourCount: 2,
+      },
+    ]);
   });
 
   it('leaves the message stored when the roll-up write throws', async () => {

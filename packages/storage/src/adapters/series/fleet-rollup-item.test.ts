@@ -2,7 +2,7 @@ import { FLEET_ROLLUP_FORECAST_KIND } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import { fromFleetRollupItem, toFleetRollupItem } from './fleet-rollup-item';
-import { EXPIRES_AT_14H, LOCATION_ID, partial, rollupItem14h } from './series-fixtures';
+import { EXPIRES_AT_14H, LOCATION_ID, partial, provenance, rollupItem14h } from './series-fixtures';
 
 /**
  * The roll-up item's wire shape, asserted against fixtures written out literally in
@@ -12,21 +12,36 @@ import { EXPIRES_AT_14H, LOCATION_ID, partial, rollupItem14h } from './series-fi
 
 describe('toFleetRollupItem', () => {
   it('wraps a partial in the sentinel partition, the roll-up sort key and the series TTL', () => {
-    expect(toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, partial())).toEqual(
-      rollupItem14h,
-    );
+    expect(
+      toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, provenance(), partial()),
+    ).toEqual(rollupItem14h);
   });
 
   it('keys the actuals kind apart from the forecast kind at the same hour', () => {
-    const generation = toFleetRollupItem({ kind: 'generation' }, LOCATION_ID, partial());
+    const generation = toFleetRollupItem(
+      { kind: 'generation' },
+      LOCATION_ID,
+      provenance(),
+      partial(),
+    );
 
     expect(generation.sk).toBe(`GEN#T#2026-07-30T14:00:00Z#L#${LOCATION_ID}`);
     expect(generation.sk).not.toBe(rollupItem14h.sk);
   });
 
   it('is deterministic in its inputs, so a redelivered message rewrites identical items', () => {
-    const first = toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, partial());
-    const second = toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, partial());
+    const first = toFleetRollupItem(
+      FLEET_ROLLUP_FORECAST_KIND,
+      LOCATION_ID,
+      provenance(),
+      partial(),
+    );
+    const second = toFleetRollupItem(
+      FLEET_ROLLUP_FORECAST_KIND,
+      LOCATION_ID,
+      provenance(),
+      partial(),
+    );
 
     expect(first).toEqual(second);
   });
@@ -34,9 +49,9 @@ describe('toFleetRollupItem', () => {
   it('expires a partial on the same clock as the rows it was summed from', () => {
     // 2026-07-30T14:00:00Z + 90 days, the same figure `series-fixtures.ts` pins for a forecast at
     // that hour — the point being that the roll-up inherits the retention rather than declaring one.
-    expect(toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, partial()).expiresAt).toBe(
-      EXPIRES_AT_14H,
-    );
+    expect(
+      toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, provenance(), partial()).expiresAt,
+    ).toBe(EXPIRES_AT_14H);
   });
 });
 
@@ -44,18 +59,34 @@ describe('fromFleetRollupItem', () => {
   it('parses a stored item back into its location and its partial, key attributes stripped', () => {
     expect(fromFleetRollupItem(rollupItem14h)).toEqual({
       locationId: LOCATION_ID,
+      provenance: provenance(),
       partial: partial(),
     });
   });
 
-  it('round-trips a partial through the item shape unchanged', () => {
+  it('reads an item written before provenance existed as unstamped rather than refusing it', () => {
+    // Items from before #602 sit in the partition until the first stamped cycle rewrites them; a
+    // throw here would fail the fleet route for that hour instead of letting it fall back.
+    expect(
+      fromFleetRollupItem({ ...rollupItem14h, members: undefined, issuedAt: undefined }).provenance,
+    ).toBeUndefined();
+  });
+
+  it('throws on an item stamped with half a provenance', () => {
+    expect(() => fromFleetRollupItem({ ...rollupItem14h, issuedAt: undefined })).toThrow();
+  });
+
+  it('round-trips a partial and its provenance through the item shape unchanged', () => {
     const original = partial({ acPowerKw: 7.25, hasUncertainty: false, contributingSiteCount: 3 });
 
-    const item = toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, original);
+    const item = toFleetRollupItem(FLEET_ROLLUP_FORECAST_KIND, LOCATION_ID, provenance(), original);
 
     // Spread, because the round trip is through DynamoDB: what `fromFleetRollupItem` is handed on
     // the way back is a plain bag of attributes, not the declared item type.
-    expect(fromFleetRollupItem({ ...item }).partial).toEqual(original);
+    expect(fromFleetRollupItem({ ...item })).toMatchObject({
+      provenance: provenance(),
+      partial: original,
+    });
   });
 
   it('throws on an item with no locationId rather than inventing one', () => {

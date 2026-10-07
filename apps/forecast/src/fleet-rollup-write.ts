@@ -1,10 +1,13 @@
 import {
   FLEET_ROLLUP_FORECAST_KIND,
   describeThrown,
+  fleetRollupMembers,
   fleetRollupPartials,
   type FleetRollupPartial,
+  type FleetRollupProvenance,
   type Forecast,
-  type SiteCapacity,
+  type SitePhysics,
+  type UtcIsoTimestamp,
 } from '@cumulo/shared';
 import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
 
@@ -57,12 +60,11 @@ export type FleetRollupOutcome = { readonly locationId: string } & (
 );
 
 /**
- * The two steps that can throw. A `failed` outcome names which, because the next step differs
+ * The steps that can throw. A `failed` outcome names which, because the next step differs
  * (`docs/standards/error-handling.md` rule 4): a `putFleetRollupPartials` throw is the series table,
- * while a `fleetRollupPartials` throw is a bug in the arithmetic — nothing an operator can fix in
- * AWS.
+ * while the other two are bugs in the arithmetic — nothing an operator can fix in AWS.
  */
-type FleetRollupOperation = 'fleetRollupPartials' | 'putFleetRollupPartials';
+type FleetRollupOperation = 'fleetRollupMembers' | 'fleetRollupPartials' | 'putFleetRollupPartials';
 
 /**
  * The collaborators a roll-up write needs.
@@ -89,9 +91,9 @@ const failedOutcome = (
 /**
  * Compute and write one location's partials, reporting the result and never rejecting.
  *
- * `sites` supplies the nameplate capacity behind each hour — the divisor the dashboard's `%` view
- * needs — and `SitePhysics` satisfies `SiteCapacity` structurally, so the producer hands over what
- * it already listed rather than fetching a richer site record to reach two fields.
+ * `sites` is what the message listed: the nameplate capacity behind each hour, and the membership
+ * the slices are stamped with beside `issuedAt` — the message's one vintage — so the API can tell
+ * these slices from a stale one (#602).
  *
  * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another
  * (`docs/standards/architecture.md` rule 3). The model selection is `@cumulo/shared`'s too —
@@ -101,9 +103,17 @@ const failedOutcome = (
 export const writeFleetRollup = async (
   deps: FleetRollupWriteDeps,
   locationId: string,
+  issuedAt: UtcIsoTimestamp,
   forecasts: readonly Forecast[],
-  sites: readonly SiteCapacity[],
+  sites: readonly SitePhysics[],
 ): Promise<FleetRollupOutcome> => {
+  let provenance: FleetRollupProvenance;
+  try {
+    provenance = { members: fleetRollupMembers(sites), issuedAt };
+  } catch (error: unknown) {
+    return failedOutcome(locationId, 'fleetRollupMembers', error);
+  }
+
   let partials: readonly FleetRollupPartial[];
   try {
     partials = fleetRollupPartials(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND);
@@ -120,6 +130,7 @@ export const writeFleetRollup = async (
     stored = await deps.series.putFleetRollupPartials(
       FLEET_ROLLUP_FORECAST_KIND,
       locationId,
+      provenance,
       partials,
     );
   } catch (error: unknown) {
@@ -141,11 +152,12 @@ export const writeFleetRollup = async (
 export const reportFleetRollupWrite = async (
   deps: FleetRollupWriteDeps,
   locationId: string,
+  issuedAt: UtcIsoTimestamp,
   forecasts: readonly Forecast[],
-  sites: readonly SiteCapacity[],
+  sites: readonly SitePhysics[],
 ): Promise<void> => {
   deps.log({
     event: fleetRollupWriteEvent,
-    ...(await writeFleetRollup(deps, locationId, forecasts, sites)),
+    ...(await writeFleetRollup(deps, locationId, issuedAt, forecasts, sites)),
   });
 };

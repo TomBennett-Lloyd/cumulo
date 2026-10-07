@@ -2,10 +2,12 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
   fleetRollupPartialSchema,
+  fleetRollupProvenanceSchema,
   forecastSchema,
   generationReadingSchema,
   utcIsoTimestampSchema,
   type FleetRollupPartial,
+  type FleetRollupProvenance,
   type Forecast,
   type GenerationReading,
   type UtcIsoTimestamp,
@@ -158,6 +160,13 @@ export const partial = (overrides: PartialOverrides = {}): FleetRollupPartial =>
     ...overrides,
   });
 
+/** What the roll-up fixtures were summed from: a membership digest and the run's `issuedAt`. */
+export const MEMBERS = '58bb8fbd38e3bfdd';
+export const ROLLUP_ISSUED_AT = '2026-07-30T06:07:00Z';
+
+export const provenance = (): FleetRollupProvenance =>
+  fleetRollupProvenanceSchema.parse({ members: MEMBERS, issuedAt: ROLLUP_ISSUED_AT });
+
 /**
  * The stored roll-up item, written out literally for `series-fixtures.ts`'s standing reason. Note
  * what the key says and the per-site keys above do not: kind first, then the hour, then the
@@ -168,6 +177,8 @@ export const rollupItem14h = {
   sk: `FC#physics#T#2026-07-30T14:00:00Z#L#${LOCATION_ID}`,
   expiresAt: EXPIRES_AT_14H,
   locationId: LOCATION_ID,
+  members: MEMBERS,
+  issuedAt: ROLLUP_ISSUED_AT,
   validTime: '2026-07-30T14:00:00Z',
   acPowerKw: 9.6,
   p10AcPowerKw: 8.1,

@@ -1,10 +1,8 @@
 import {
   apiErrorSchema,
   fleetForecastResponseSchema,
-  fleetRollupPartialSchema,
   openMeteoAttribution,
   utcIsoTimestampSchema,
-  type FleetRollupPartial,
   type FleetSite,
 } from '@cumulo/shared';
 import type { FleetRollupRow, SeriesPoint } from '@cumulo/storage';
@@ -13,7 +11,6 @@ import { describe, expect, it } from 'vitest';
 import {
   countdownDeadline,
   fleetOfSize,
-  fleetSite,
   forecast,
   forecastPoint,
   fullBudgetDeadline,
@@ -25,6 +22,15 @@ import {
 import type { RequestDeadline } from '../http/request-deadline';
 
 import { fleetRollupFallbackEvent } from './fleet-rollup-read';
+import {
+  BRISTOL,
+  BRISTOL_SITE,
+  DUBLIN,
+  RANELAGH,
+  RATHMINES,
+  partial,
+  row,
+} from './fleet-rollup-fixtures';
 import { FLEET_READ_CONCURRENCY } from './fleet-series-read';
 import {
   fleetForecastReadDeadlineEvent,
@@ -55,32 +61,6 @@ const NOW = '2026-07-31T12:00:00Z';
 const DAY_AFTER_NOW = '2026-08-01T12:00:00Z';
 const TWO_DAYS_AFTER_NOW = '2026-08-02T12:00:00Z';
 const WEEK_AFTER_NOW = '2026-08-07T12:00:00Z';
-
-const RANELAGH = fleetSite();
-const RATHMINES = fleetSite({ id: RATHMINES_ID, name: 'Rathmines terrace' });
-/** Both fixture sites sit in one weather bucket, which is the location the producer keys on. */
-const DUBLIN = '53.32,-6.26';
-
-/** A second bucket, so "some locations have written and some have not" is expressible. */
-const BRISTOL = '51.45,-2.59';
-const BRISTOL_SITE = fleetSite({
-  id: '7c9e6679-7425-40de-944b-e07fc1f90111',
-  name: 'Bristol terrace',
-  latitude: 51.4545,
-  longitude: -2.5879,
-});
-
-const partial = (overrides: Partial<Record<keyof FleetRollupPartial, unknown>> = {}) =>
-  fleetRollupPartialSchema.parse({
-    validTime: '2026-07-31T13:00:00Z',
-    acPowerKw: 5,
-    p10AcPowerKw: 4,
-    p90AcPowerKw: 6,
-    hasUncertainty: true,
-    contributingSiteCount: 2,
-    contributingCapacityKw: 8.4,
-    ...overrides,
-  });
 
 interface StubInput {
   readonly sites: readonly FleetSite[];
@@ -134,7 +114,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
   it('answers from one storage command when every location has written', async () => {
     const { deps, rollupReads, reads, logged } = stub({
       sites: [RANELAGH, RATHMINES],
-      rollupRows: [{ locationId: DUBLIN, partial: partial() }],
+      rollupRows: [row(DUBLIN, [RANELAGH, RATHMINES], partial())],
     });
 
     const response = await getFleetForecast(deps, fleetForecastRequest());
@@ -150,8 +130,8 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     const { deps } = stub({
       sites: [RANELAGH, BRISTOL_SITE],
       rollupRows: [
-        { locationId: DUBLIN, partial: partial({ acPowerKw: 5, contributingSiteCount: 2 }) },
-        { locationId: BRISTOL, partial: partial({ acPowerKw: 3, contributingSiteCount: 1 }) },
+        row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5, contributingSiteCount: 2 })),
+        row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3, contributingSiteCount: 1 })),
       ],
     });
 
@@ -181,7 +161,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     });
     const { deps } = stub({
       sites: [RANELAGH],
-      rollupRows: [{ locationId: DUBLIN, partial: sixtySites }],
+      rollupRows: [row(DUBLIN, [RANELAGH], sixtySites)],
     });
 
     const response = await getFleetForecast(deps, fleetForecastRequest());
@@ -200,7 +180,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     // 48-hour default is proven by the path a caller that sends nothing actually takes.
     const { deps, rollupReads } = stub({
       sites: [RANELAGH],
-      rollupRows: [{ locationId: DUBLIN, partial: partial() }],
+      rollupRows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
     const response = await getFleetForecast(deps, fleetForecastRequest(query));
@@ -243,7 +223,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
   it('credits Open-Meteo in the roll-up arm', async () => {
     const { deps } = stub({
       sites: [RANELAGH],
-      rollupRows: [{ locationId: DUBLIN, partial: partial() }],
+      rollupRows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
     const body = fleetForecastResponseSchema.parse(
@@ -270,7 +250,7 @@ describe('GET /v1/fleet/forecast, over a fleet holding an inactive site', () => 
   it('expects no partial from the inactive site\u2019s location, so the roll-up still answers', async () => {
     const { deps, rollupReads, reads, logged } = stub({
       sites: [RANELAGH, DEACTIVATED_BRISTOL],
-      rollupRows: [{ locationId: DUBLIN, partial: partial() }],
+      rollupRows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
     const response = await getFleetForecast(deps, fleetForecastRequest());
@@ -309,7 +289,7 @@ describe('GET /v1/fleet/forecast, over a fleet holding an inactive site', () => 
   it('answers a wholly deactivated fleet the way it answers an empty one, reading nothing', async () => {
     const { deps, rollupReads, reads, logged } = stub({
       sites: [{ ...RANELAGH, active: false }],
-      rollupRows: [{ locationId: DUBLIN, partial: partial() }],
+      rollupRows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
     const response = await getFleetForecast(deps, fleetForecastRequest());
@@ -396,9 +376,7 @@ describe('GET /v1/fleet/forecast, falling back to the fan-out', () => {
     // does not describe.
     const { deps } = stub({
       sites: [RANELAGH],
-      rollupRows: [
-        { locationId: DUBLIN, partial: { ...partial(), acPowerKw: -1, p10AcPowerKw: -1 } },
-      ],
+      rollupRows: [row(DUBLIN, [RANELAGH], { ...partial(), acPowerKw: -1, p10AcPowerKw: -1 })],
     });
 
     await expect(getFleetForecast(deps, fleetForecastRequest())).rejects.toThrow();
