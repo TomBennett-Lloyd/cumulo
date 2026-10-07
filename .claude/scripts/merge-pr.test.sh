@@ -843,6 +843,35 @@ expect_stdout 'closed by the merge: #21 #22'
 end
 
 # ==========================================================================================
+# 10e-ii. a lane report whose issue no Closes line names is refused at classify
+# ==========================================================================================
+# The lane closes its own issue (ticket-agent rule 7). Without this, a lane body with
+# no Closes line would skip 10d's refusal and merge with the issue left open.
+begin "a lane report with no Closes line for its issue is refused at classify"
+fixture lane-unclosed
+V_BODY='What and why.\n## Lane report — issue #21'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr 'the lane report names #21 but no Closes line does'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a lane report whose issue is missing from its Closes lines is refused at classify"
+fixture lane-other-closes
+V_BODY='Closes #22.\n## Lane report — issue #21'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'the lane report names #21 but no Closes line does'
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
 # 10f. two lane reports in one body are refused at classify
 # ==========================================================================================
 # A lane PR has one owner; a body naming two is a pasting slip, and squashing a

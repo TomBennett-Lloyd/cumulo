@@ -61,7 +61,7 @@ The counts above — two fix attempts, two re-plans — are provisional, set fro
 
 **PARTIAL is the honest exit** when some acceptance criteria are met and ship standalone: commit and push those, open the PR `--draft`, list the unmet ones. A DONE carrying a known bug or an unmet criterion is the one unforgivable report.
 
-**DONE is final: after it you push nothing.** The merge owner may merge the reported HEAD the moment the report lands, and a later push re-creates the deleted branch and never reaches `main` — #583's lane reported DONE with a reviewer check on its rebase still running, then pushed that check's fix after the merge (2b7e9b9, committed 41 s after it), so it was lost. Anything still running or owed — a review pass, a CI run, a rebase confirmation — makes the report PARTIAL, naming it.
+**DONE is final: after it you push nothing unprompted** — a bounce (rule 8) is the only thing that reopens the branch. The merge owner may merge the reported HEAD the moment the report lands, and a later push re-creates the deleted branch and never reaches `main`: #583's lane reported DONE with a reviewer check on its rebase still running, then pushed that check's fix after the merge (2b7e9b9, committed 41 s after it), so it was lost. Work you still owe the branch — a review pass, a rebase confirmation — makes the report PARTIAL, naming it.
 
 ## 6. Review pass
 

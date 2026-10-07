@@ -251,7 +251,7 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       put("closes", m[1]);
     }
   }
-  // The ticket-agent lane declares itself: its report header (ticket-agent.md
+  // The ticket-agent lane declares itself: its report header (.claude/agents/ticket-agent.md
   // rule 8) names the one issue the lane owns, fenced or not. Read from the body
   // for the reason the Closes read above gives.
   const lanes = new Set();
@@ -386,8 +386,15 @@ merge_method=""
 if [ "${#pr_lanes[@]}" -gt 1 ]; then
   merge_reason="${#pr_lanes[@]} lane reports in one PR body"
 elif [ "${#pr_lanes[@]}" -eq 1 ]; then
-  merge_method="--squash"
-  merge_reason="ticket-agent lane for #${pr_lanes[0]} -> squash"
+  # The lane closes its own issue (.claude/agents/ticket-agent.md rule 7); a report
+  # whose issue no Closes line names is refused rather than merged with it left open.
+  case " ${pr_closes[*]-} " in
+    *" ${pr_lanes[0]} "*)
+      merge_method="--squash"
+      merge_reason="ticket-agent lane for #${pr_lanes[0]} -> squash"
+      ;;
+    *) merge_reason="the lane report names #${pr_lanes[0]} but no Closes line does" ;;
+  esac
 else
   case "${#pr_closes[@]}" in
     0) merge_reason="no Closes line in the PR body" ;;
