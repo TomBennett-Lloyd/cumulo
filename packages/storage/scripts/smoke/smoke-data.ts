@@ -67,7 +67,6 @@ export const smokeSite = (siteId: string): FleetSite =>
     capacityKw: 4,
     origin: 'user',
     createdAt: HOUR_0,
-    active: true,
   });
 
 export const smokeForecast = (

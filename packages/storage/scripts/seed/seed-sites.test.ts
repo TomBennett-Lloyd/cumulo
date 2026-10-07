@@ -27,10 +27,6 @@ describe('buildSeedFleet', () => {
     expect(fleet.every((site) => site.origin === 'seed')).toBe(true);
   });
 
-  it('marks every site active, so the whole fleet is forecast', () => {
-    expect(fleet.every((site) => site.active)).toBe(true);
-  });
-
   it('stamps every site with the canonical seed date', () => {
     expect(fleet.every((site) => site.createdAt === SEED_CREATED_AT)).toBe(true);
   });
@@ -61,10 +57,5 @@ describe('the stored form of a seed site', () => {
   it('carries no gsiCreatedAt attribute, the eviction sort key', () => {
     const withEvictionOrder = fleet.filter((site) => 'gsiCreatedAt' in toItem(site));
     expect(withEvictionOrder).toEqual([]);
-  });
-
-  it('carries gsiLocation, so the forecast cycle finds it by location', () => {
-    const missingLocationIndex = fleet.filter((site) => toItem(site).gsiLocation === undefined);
-    expect(missingLocationIndex).toEqual([]);
   });
 });

@@ -280,23 +280,6 @@ describe('GET /v1/fleet/actuals', () => {
     },
   );
 
-  it('neither reads nor serves an inactive site, taking the same predicate the forecast route takes', async () => {
-    // `activeFleetSites` is `@cumulo/shared`'s, and this route and `fleet-rollup-read.ts` both take
-    // it — so the two arms of one dashboard load cannot come to disagree about which sites the fleet
-    // has (#531). Unreachable in production today: nothing sets `active: false`.
-    const { deps, reads } = stub([RANELAGH, { ...RATHMINES, active: false }], {
-      [RANELAGH_ID]: [generationPoint({ acPowerKw: 2.4 })],
-      [RATHMINES_ID]: [generationPoint({ siteId: RATHMINES_ID, acPowerKw: 1.1 })],
-    });
-
-    const response = await getFleetActuals(deps, fleetActualsRequest());
-
-    expect(reads).toEqual([`${RANELAGH_ID} ${DAY_BEFORE_NOW} ${NOW}`]);
-    expect(
-      fleetActualsResponseSchema.parse(jsonBodyOf(response)).actuals.map((point) => point.siteId),
-    ).toEqual([RANELAGH_ID]);
-  });
-
   it('refuses to serve a stored reading that violates the response contract', async () => {
     // The negative control for `jsonResponse`'s parse. `acPowerKw: -1`
     // type-checks and fails `generationReadingSchema`'s lower bound, so the

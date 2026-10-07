@@ -80,7 +80,6 @@ export {
   type SiteOrigin,
   fleetSiteSchema,
   type FleetSite,
-  activeFleetSites,
   sitePhysicsSchema,
   type SitePhysics,
   MAX_PLAUSIBLE_RESIDENTIAL_KW,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   SteppingClock,
-  activeFleet,
+  testFleet,
   bristolId,
   cycleDeps,
   cycleStartMs,
@@ -44,7 +44,7 @@ describe('runCycle bounds', () => {
     // testing.md rule 7: the tests below narrow the budget to make skipping
     // reachable, so the configuration that actually deploys needs its own
     // assertion — otherwise the suite proves a cap and deadline nobody runs.
-    expect(productionBudget.maxLocations).toBeGreaterThan(activeFleet.length);
+    expect(productionBudget.maxLocations).toBeGreaterThan(testFleet.length);
     expect(productionBudget.deadlineMs).toBeGreaterThan(0);
   });
 
@@ -53,7 +53,7 @@ describe('runCycle bounds', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         budget: { ...productionBudget, maxLocations: 2 },
         record,
       }),
@@ -88,7 +88,7 @@ describe('runCycle bounds', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         budget: { deadlineMs: 1_000, maxLocations: productionBudget.maxLocations },
         now: () => clock.read(),
         record,
@@ -122,7 +122,7 @@ describe('runCycle bounds', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         budget: { deadlineMs: 500, maxLocations: productionBudget.maxLocations },
         now: () => clock.read(),
         record,
@@ -142,7 +142,7 @@ describe('runCycle bounds', () => {
 
     await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         budget: { deadlineMs: 1_000, maxLocations: productionBudget.maxLocations },
         now: () => clock.read(),
         record,
@@ -170,7 +170,7 @@ describe('runCycle bounds', () => {
 
       const report = await runCycle(
         cycleDeps({
-          sites: activeFleet,
+          sites: testFleet,
           budget: { ...productionBudget, maxLocations: 2 },
           now: () => startedAt,
           record,
@@ -194,7 +194,7 @@ describe('runCycle bounds', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         scripts: { [bristolId]: { fetch: 'rate-limited' } },
         budget: { ...productionBudget, maxLocations: 3 },
         record,
@@ -221,7 +221,7 @@ describe('runCycle bounds', () => {
     const record = emptyRecord();
     const clock = new SteppingClock(0);
     const base = cycleDeps({
-      sites: activeFleet,
+      sites: testFleet,
       budget: { deadlineMs: 1_000, maxLocations: productionBudget.maxLocations },
       now: () => clock.read(),
       record,
