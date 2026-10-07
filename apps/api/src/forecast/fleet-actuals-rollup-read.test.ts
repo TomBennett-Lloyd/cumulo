@@ -180,7 +180,7 @@ describe('readFleetActualsAggregate', () => {
     expect(pointsOf(await read(young.deps, settledSites))).toHaveLength(1);
   });
 
-  it('drops a location the fleet no longer has active sites at', async () => {
+  it('drops a location the fleet no longer has sites at', async () => {
     const { deps } = harness([
       row(DUBLIN, DUBLIN_SITES, slice(REWRITTEN_HOUR, 5)),
       row(BRISTOL, [BRISTOL_SITE], slice(REWRITTEN_HOUR, 2)),
@@ -189,10 +189,10 @@ describe('readFleetActualsAggregate', () => {
     expect(pointsOf(await read(deps, DUBLIN_SITES)).map((point) => point.acPowerKw)).toEqual([5]);
   });
 
-  it('answers a fleet with no active sites without touching the table', async () => {
+  it('answers an empty fleet without touching the table', async () => {
     const { deps, kinds, siteReads } = harness([]);
 
-    expect(pointsOf(await read(deps, [{ ...RANELAGH, active: false }]))).toEqual([]);
+    expect(pointsOf(await read(deps, []))).toEqual([]);
     expect(kinds).toEqual([]);
     expect(siteReads).toEqual([]);
   });

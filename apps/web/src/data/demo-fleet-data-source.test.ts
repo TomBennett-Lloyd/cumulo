@@ -232,18 +232,17 @@ describe('DemoFleetDataSource window-scoped reads', () => {
 
     const forecasts = await source.fleetForecasts(24);
     const actuals = await source.fleetActuals(24);
-    const siteIds = (points: readonly { readonly siteId: string }[]): number =>
-      new Set(points.map((point) => point.siteId)).size;
+    const everyHourCarriesTheFleet = (
+      points: readonly { readonly contributingSiteCount: number }[],
+    ): boolean => points.every((point) => point.contributingSiteCount === seedFleet.length);
 
-    // The forecast half is summed by this source now (#494), so "every site is in it" is read off
-    // the contributing count rather than off distinct site ids: 49 hours, every one of them
-    // carrying the whole fleet. The actuals are still raw readings and still counted by site.
+    // Both halves are summed by this source (#494, #506), so "every site is in it" is read off the
+    // contributing count rather than off distinct site ids: 49 forecast hours, every one of them
+    // carrying the whole fleet, and every actuals hour likewise.
     expect(forecasts.kind === 'ok' && forecasts.value).toHaveLength(49);
-    expect(
-      forecasts.kind === 'ok' &&
-        forecasts.value.every((point) => point.contributingSiteCount === seedFleet.length),
-    ).toBe(true);
-    expect(actuals.kind === 'ok' && siteIds(actuals.value)).toBe(seedFleet.length);
+    expect(forecasts.kind === 'ok' && everyHourCarriesTheFleet(forecasts.value)).toBe(true);
+    expect(actuals.kind === 'ok' && actuals.value.length).toBeGreaterThan(0);
+    expect(actuals.kind === 'ok' && everyHourCarriesTheFleet(actuals.value)).toBe(true);
   });
 
   /**

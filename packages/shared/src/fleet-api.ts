@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { attributionSchema } from './attribution';
+import { fleetActualsAggregatePointSchema } from './fleet-actuals-rollup';
 import { fleetForecastAggregatePointSchema } from './fleet-rollup';
 import { forecastSchema } from './forecast';
 import { generationReadingSchema } from './generation-reading';
@@ -58,15 +59,14 @@ export const siteSeriesResponseSchema = z.object({
 export type SiteSeriesResponse = z.infer<typeof siteSeriesResponseSchema>;
 
 /**
- * Fleet-wide actuals over one window, carrying the same peer `attribution` as the schemas above.
+ * Fleet-wide actuals over one window, **already summed** — one point per hour, carrying the same
+ * peer `attribution` as the schemas above.
  *
- * Actuals alone rather than forecasts beside them: the web app already reads the fleet forecast
- * on its own route, and pairing the two here would make one slow read of two independent ones.
- * The readings are simulated (`simulated-actual.ts`, #264) — the wire shape is identical either
- * way, and the "simulated" claim is the UI's to make, not a field on every point.
+ * `points`, not `actuals`, for {@link fleetForecastResponseSchema}'s reason (#506, ADR 0009). The
+ * readings are simulated (`simulated-actual.ts`, #264); that claim is the UI's to make.
  */
 export const fleetActualsResponseSchema = z.object({
-  actuals: z.array(generationReadingSchema),
+  points: z.array(fleetActualsAggregatePointSchema),
   attribution: attributionSchema,
 });
 

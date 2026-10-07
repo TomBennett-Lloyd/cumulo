@@ -25,9 +25,8 @@ import { hoursAfter } from './series-window';
  * by the forecast producer and read back as one Query of the `#FLEET` partition;
  * `fleet-rollup-read.ts` owns that read and its fan-out fallback.
  *
- * **The mirror of `get-fleet-actuals.ts` in shape, no longer in body.** That
- * route still returns raw readings; its docblock carries the full argument for
- * reading a fleet server-side in one request.
+ * **The mirror of `get-fleet-actuals.ts`**, whose docblock carries the full
+ * argument for reading a fleet server-side in one request.
  *
  * **Forward-looking by definition.** The window opens at the clock and runs
  * `hours` ahead, which is what makes this route the actuals route read

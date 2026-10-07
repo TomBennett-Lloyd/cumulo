@@ -1,5 +1,6 @@
 import {
   FLEET_ROLLUP_FORECAST_KIND,
+  fleetActualsAggregate,
   fleetForecastAggregate,
   forecastSchema,
   generationReadingSchema,
@@ -89,7 +90,7 @@ const percentPoints = (
   // this pipeline since #494, and a hand-built one could carry a divisor no real fleet would.
   fleetChartAggregate(
     fleetForecastAggregate(forecasts, twoSizeFleet, FLEET_ROLLUP_FORECAST_KIND),
-    readings,
+    fleetActualsAggregate(readings, twoSizeFleet),
     twoSizeFleet,
     'percent',
   ).points;

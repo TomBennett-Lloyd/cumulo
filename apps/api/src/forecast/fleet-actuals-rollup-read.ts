@@ -1,5 +1,4 @@
 import {
-  activeFleetSites,
   compareUtcIsoTimestamps,
   FLEET_ROLLUP_ACTUALS_KIND,
   fleetActualsAggregate,
@@ -41,8 +40,16 @@ import { hoursAfter, hoursBefore } from './series-window';
 /** The one event a fallback emits — this route's own, for `fleetRollupFallbackEvent`'s reason. */
 export const fleetActualsRollupFallbackEvent = 'api.fleet-actuals.rollup-fallback';
 
+/**
+ * The summed actuals, and the hours behind them grouped by what wrote them — one group per
+ * location's slices, or per site on the fallback — which is what dates the response (#608).
+ */
 export type FleetActualsAggregateRead =
-  | { readonly complete: true; readonly points: readonly FleetActualsAggregatePoint[] }
+  | {
+      readonly complete: true;
+      readonly points: readonly FleetActualsAggregatePoint[];
+      readonly readingTimesByGroup: readonly (readonly UtcIsoTimestamp[])[];
+    }
   | { readonly complete: false; readonly response: ApiResponse };
 
 /** Locations with a slice in the rewritten hours whose digest is not the live one. */
@@ -65,7 +72,7 @@ const staleLocations = (
   );
 
 /**
- * Locations whose oldest active site predates the window by the trailing hours yet hold no slice for
+ * Locations whose oldest site predates the window by the trailing hours yet hold no slice for
  * its first hour. Such a site has a reading there unless the pipeline was idle, and either way the
  * fan-out is the answer that knows.
  */
@@ -91,7 +98,7 @@ const uncoveredLocations = (
 
 /**
  * Read the fleet's summed actuals over `from`…`to`: the roll-up if it can answer, the fan-out if
- * not. `activeFleetSites` is applied once, here, for `readFleetForecastAggregate`'s reason (#531).
+ * not.
  */
 export const readFleetActualsAggregate = async (
   deps: FleetRollupReadDeps,
@@ -101,27 +108,28 @@ export const readFleetActualsAggregate = async (
   to: UtcIsoTimestamp,
   deadlineEvent: string,
 ): Promise<FleetActualsAggregateRead> => {
-  const active = activeFleetSites(sites);
-  if (active.length === 0) {
-    return { complete: true, points: [] };
+  if (sites.length === 0) {
+    return { complete: true, points: [], readingTimesByGroup: [] };
   }
 
   const bound: QueryPaginationBound = {
     hasBudgetForNextPage: () => hasBudgetForStorageCommands(deadline.remainingMs(), 1),
   };
   const rollup = await deps.series.queryFleetRollup(FLEET_ROLLUP_ACTUALS_KIND, from, to, bound);
-  const expected = expectedLocations(active);
+  const expected = expectedLocations(sites);
   const stale = staleLocations(rollup.rows, expected, hoursBefore(to, TRAILING_ACTUALS_HOURS));
-  const uncovered = uncoveredLocations(rollup.rows, active, from);
+  const uncovered = uncoveredLocations(rollup.rows, sites, from);
   const base = fallbackReason(rollup, expected, stale);
   const reason: FallbackReason | undefined =
     base === undefined && uncovered.size > 0 ? 'incomplete' : base;
 
   if (reason === undefined) {
+    const rows = rollup.rows.filter((row) => expected.has(row.locationId));
     return {
       complete: true,
-      points: sumFleetActualsRollupPartials(
-        rollup.rows.filter((row) => expected.has(row.locationId)).map((row) => row.partial),
+      points: sumFleetActualsRollupPartials(rows.map((row) => row.partial)),
+      readingTimesByGroup: [...expected.keys()].map((location) =>
+        rows.filter((row) => row.locationId === location).map((row) => row.partial.validTime),
       ),
     };
   }
@@ -136,14 +144,14 @@ export const readFleetActualsAggregate = async (
     hours: new Set(rollup.rows.map((row) => row.partial.validTime)).size,
   });
 
-  const read = await readFleetSeries(deps, deadline, active, from, to, deadlineEvent);
-  return read.complete
-    ? {
-        complete: true,
-        points: fleetActualsAggregate(
-          read.perSite.flatMap((points) => actualsIn(points)),
-          active,
-        ),
-      }
-    : read;
+  const read = await readFleetSeries(deps, deadline, sites, from, to, deadlineEvent);
+  if (!read.complete) {
+    return read;
+  }
+  const perSite = read.perSite.map((points) => actualsIn(points));
+  return {
+    complete: true,
+    points: fleetActualsAggregate(perSite.flat(), sites),
+    readingTimesByGroup: perSite.map((readings) => readings.map((reading) => reading.validTime)),
+  };
 };

@@ -3,21 +3,23 @@ import {
   openMeteoAttribution,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
+import type { SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
 import { errorResponse, jsonResponse, zodIssueDetails } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
 import { datedByData, uncacheable, type MeteredResponse } from './cycle-cache';
-import { readFleetSeries } from './fleet-series-read';
+import { readFleetActualsAggregate } from './fleet-actuals-rollup-read';
+import type { FleetRollupReadDeps } from './fleet-rollup-read';
 import { FORECAST_HORIZON_HOURS } from './get-site-forecast';
-import { actualsIn } from './series-split';
 import { hoursBefore } from './series-window';
 
 /**
- * `GET /v1/fleet/actuals` — every fleet site's actuals over one
- * look-back window, in one request.
+ * `GET /v1/fleet/actuals` — every fleet site's actuals over one look-back
+ * window, in one request, **already summed** — one point per hour, read from
+ * the `#FLEET` partition's `GEN` slices by `fleet-actuals-rollup-read.ts`,
+ * which owns the fan-out fallback (#506).
  *
  * **Why the fleet gets its own route.** The web app plots the fleet's actual
  * output beside the fleet forecast, which means it needs every site's readings
@@ -30,9 +32,8 @@ import { hoursBefore } from './series-window';
  *
  * **The readings are simulated.** The demo fleet has no inverters and no
  * telemetry; the producer synthesizes each reading from the stored physics
- * forecast (#264). That is a claim about provenance rather than about shape —
- * `generationReadingSchema` is the same object a real meter would fill — so it
- * is stated in the OpenAPI description and in the UI's own copy rather than
+ * forecast (#264). That is a claim about provenance rather than about shape, so
+ * it is stated in the OpenAPI description and in the UI's own copy rather than
  * carried as a field on every point.
  *
  * **Frugality holds here as everywhere in this folder**: stored rows only, zero
@@ -40,7 +41,7 @@ import { hoursBefore } from './series-window';
  * obliges every consumer of this data to display.
  *
  * **An empty fleet, or a fleet whose sites have no readings yet, is a 200 with
- * `actuals: []`.** A fleet with no readings behind it yet is an answer about the
+ * `points: []`.** A fleet with no readings behind it yet is an answer about the
  * schedule, not about whether the fleet exists — the same distinction
  * `get-site-forecast.ts` draws for a site created moments ago.
  */
@@ -78,15 +79,11 @@ const fleetLookbackHoursSchema = z
  */
 export const fleetActualsReadDeadlineEvent = 'api.fleet-actuals.read-deadline-reached';
 
-export interface GetFleetActualsDeps {
+export interface GetFleetActualsDeps extends FleetRollupReadDeps {
   /** Only the listing: this route never writes a site (`typing.md` rule 6, ADR 0002 least privilege). */
   readonly sites: Pick<SiteAdapter, 'listFleetSites'>;
-  /** Reads only: the simulated readings are written by the forecast service, not here. */
-  readonly series: Pick<SeriesAdapter, 'querySeriesRange'>;
   /** Injected, so the window a test asserts on is a window the test chose. */
   readonly now: () => UtcIsoTimestamp;
-  /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
-  readonly log: (entry: Record<string, unknown>) => void;
 }
 
 export const getFleetActuals = async (
@@ -115,14 +112,10 @@ export const getFleetActuals = async (
   const to = deps.now();
   const from = hoursBefore(to, hours.data);
 
-  // The batched, deadline-gated fan-out, and its refusal: shared with
-  // `GET /v1/fleet/forecast`'s ADR 0009 fallback, which reads the same sites
-  // over the same kind of window in the opposite direction
-  // (`fleet-series-read.ts` argues the split). This route is the fan-out's
-  // remaining *primary* caller until the actuals roll-up lands (#506).
-  // `deps` goes in whole — `GetFleetActualsDeps` is a superset of what the read
-  // needs, and the `Pick` in `FleetSeriesReadDeps` is what narrows it.
-  const read = await readFleetSeries(
+  // One Query of the `GEN` slices, or the deadline-gated fan-out when they cannot answer — and
+  // the log says which (ADR 0009). The deadline event is passed so this route keeps owning the
+  // name an operator greps for when *it* runs out of time.
+  const read = await readFleetActualsAggregate(
     deps,
     request.deadline,
     sites,
@@ -135,20 +128,15 @@ export const getFleetActuals = async (
     return read.response;
   }
 
-  // Split per site and flattened once, rather than a split of one concatenated
-  // list: the wire order is site by site, chronological within each.
-  const actuals = read.perSite.flatMap((points) => actualsIn(points));
   const response = jsonResponse(200, fleetActualsResponseSchema, {
-    actuals,
+    points: [...read.points],
     attribution: openMeteoAttribution,
   });
-  return actuals.length === 0
+  // Dated by its laggard (#608): one group per location's slices, or per site on the fallback.
+  return read.points.length === 0
     ? uncacheable(response)
     : datedByData(
         response,
-        read.perSite.map((points) => ({
-          issuedAts: [],
-          readingTimes: actualsIn(points).map((reading) => reading.validTime),
-        })),
+        read.readingTimesByGroup.map((readingTimes) => ({ issuedAts: [], readingTimes })),
       );
 };
