@@ -266,3 +266,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/web/e2e/` — `ATTRIBUTION` in `pointer-focus.spec.ts` and `attribution-band.spec.ts`; `SITE_CARD` / `CARD_CLOSE` in both `pointer-focus.spec.ts` and `keyboard-focus.spec.ts`; `.map-control-add` and `.maplibregl-canvas` inlined across many specs; `ANY_MARKER` in `map-regressions.spec.ts` and the marker union in `header.spec.ts`
 - What: the same selector, declared once per spec, with no owner. `marker-reveal.ts` now exports `SITE_MARKER`, `CLUSTER_MARKER` and `markerByName` (this PR), which covers the marker subset only. A renamed class has to be found in every spec by hand (structure.md rule 7). Root cause: no module owns the lane's DOM vocabulary
 - Source: PR for #276/#446/#273/#181 (branch `276-a11y-batch`), review cycle 2 SYSTEMIC
+
+## 2026-10-07 — `check-oidc-workflows.sh` checks the allowlist, not how the trust policy uses it
+
+- Where: `.claude/scripts/check-oidc-workflows.sh`; `infra/bootstrap/oidc.tf` (`local.deploy_role_workflows`, the `sub` condition)
+- What: the gate proves `local.deploy_role_workflows` and `.github/workflows/` agree, but not that the `sub` condition is still built from that list — a condition rewritten to a literal or a wildcard leaves the gate green. Nor does it refuse `environment:` on an allowlisted workflow's job, which turns the token's `context` into `environment:<name>` and locks that workflow out at runtime (fails closed). Root cause: the gate reads Terraform by line shape, so it can see a list but not an expression's meaning.
+- Source: PR for #605 (review cycle 1)
