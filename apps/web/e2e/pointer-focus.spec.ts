@@ -2,7 +2,13 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
-import { reachableCluster, revealSiteMarker } from './marker-reveal';
+import {
+  CLUSTER_MARKER,
+  SITE_MARKER,
+  markerByName,
+  reachableCluster,
+  revealSiteMarker,
+} from './marker-reveal';
 import { RANGE_TRIGGER } from './range-picker';
 
 /*
@@ -89,13 +95,8 @@ const RAW_DATA_SUMMARY = '.forecast-chart-summary';
  */
 const CHART_SVG = 'svg.forecast-chart';
 
-const SITE_MARKER = '.map-site-marker';
-const CLUSTER_MARKER = '.map-cluster-marker';
 const SITE_CARD = '.site-popover';
 const CARD_CLOSE = '.site-popover-close';
-
-/** One named site's marker, built as `keyboard-focus.spec.ts` builds it. */
-const markerByName = (name: string): string => `${SITE_MARKER}[aria-label="${name}"]`;
 
 /** Zoom until a site stands alone, and name its marker: the clustering reorders the drawn set. */
 const revealedMarker = async (page: Page): Promise<string> => {
@@ -507,6 +508,27 @@ test('focuses a cluster the map’s edge clips without scrolling the map under t
   expect(during.scroll, 'A scroll offset above the pressed cluster moved under the press.').toBe(
     before,
   );
+});
+
+test('moves the focus onto the map when a pointer arms add-site, and paints no ring', async ({
+  page,
+}) => {
+  const control = page.locator('.map-control-add');
+  const canvas = '.maplibregl-canvas';
+
+  await control.click();
+  await expect(page.locator(canvas)).toBeFocused();
+
+  const ring = await focusRing(page, canvas);
+
+  expect(
+    paintsARing(ring),
+    `The map canvas painted ${ring.style} at ${String(ring.widthPx)}px after a pointer armed add-site.`,
+  ).toBe(false);
+
+  // Disarmed again, so the page is left as every other case expects to find it.
+  await control.click();
+  await expect(control).toHaveAttribute('aria-pressed', 'false');
 });
 
 /*

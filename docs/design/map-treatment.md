@@ -203,11 +203,13 @@ values, read against each other, is the census in `apps/web/src/header/header.cs
   axes somebody happened to think of is not a smaller version of this control, it is a broken one:
   maplibre gives every reader drag-rotate and pitch by default, so the forgotten axes are one
   gesture away.
-- **Add a site** is a two-state control rather than a button, because it arms the next click on the
-  basemap instead of doing something itself. It carries `aria-pressed`, and the armed state changes
-  the basemap cursor to a crosshair — so the mode is legible on the control, in the accessibility
-  tree, and under the pointer that is about to act on it. Disarmed, a click on the basemap does
-  nothing; the mode is spent on the click that uses it.
+- **Add a site** is a two-state control rather than a button, because it arms the next placement on
+  the basemap instead of doing something itself. It carries `aria-pressed`, and the armed state
+  changes the basemap cursor to a crosshair — so the mode is legible on the control, in the
+  accessibility tree, and under the pointer that is about to act on it. Disarmed, a click or Enter on
+  the basemap does nothing; the mode is spent on the placement that uses it. From the keyboard,
+  arming moves focus to the map, Enter places the site at the map centre under a reticle, and the
+  arrow keys pan the map beneath it.
 
 The pressed fill is base ink (`--color-text` on `--color-bg`), deliberately **not** a marker slot.
 The `--color-map-marker-*` family carries data identity, and a control borrowing one would make

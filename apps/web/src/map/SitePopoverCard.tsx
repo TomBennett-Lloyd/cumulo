@@ -193,8 +193,8 @@ export interface SitePopoverCardProps {
  * the old panel did — it searched the site list for the matching row — and that
  * answer was wrong for every opener that is not a row. The capture happens
  * *inside* the effect, after React has flushed the commit's unmount cleanups, so
- * a creation captures the map's add-site control (where the dismissed dialog put
- * it) rather than the submit button that is no longer in the document.
+ * a creation captures wherever the dismissed dialog put the focus rather than
+ * the submit button that is no longer in the document.
  *
  * **It gives focus back only if it still has focus to give**, which is the whole
  * of the cleanup's guard below and is not a detail — an unconditional restore

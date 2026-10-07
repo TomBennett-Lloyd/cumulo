@@ -36,8 +36,8 @@
  * The empty fleet is the demo's invitation, so it names the next action.
  *
  * The action it names is the map's add-site control, not a bare click. Clicking
- * the basemap stopped being enough when that control arrived (#265): a click
- * only places a site while the mode is armed, so the invitation this sentence
+ * the basemap stopped being enough when that control arrived (#265): a click or
+ * Enter only places a site while the mode is armed, so the invitation this sentence
  * used to extend now sends a reader to do the one thing that does nothing.
  *
  * That older wording is not quoted here, for the reason given in the file header:
@@ -50,7 +50,7 @@
  * explaining a visible button is the kind of copy that goes stale next.
  */
 export const EMPTY_FLEET_MESSAGE =
-  'No sites yet — press “Add a site” on the map, then click where it goes.';
+  'No sites yet — press “Add a site” on the map, then choose where it goes.';
 
 /*
  * Two pending labels stood here and are deliberately not replaced.

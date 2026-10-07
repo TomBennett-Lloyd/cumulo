@@ -70,9 +70,9 @@ export const StubMapRegion = ({
     {/*
      * Named and classed exactly as `MapControls` names and classes it. The name
      * is how the suites press it; the class is how the *dashboard* finds it,
-     * since a closing draft returns focus by querying `.map-control-add` inside
-     * the map's box. A stand-in that dropped either would let the real control
-     * be renamed or reclassed without a single test noticing.
+     * since a closing draft returns focus by querying `.map-control-add` (or,
+     * after a creation, the selected `.map-site-marker`) inside the map's box. A
+     * stand-in that dropped either would let the real classes drift unnoticed.
      */}
     <button
       type="button"
@@ -101,6 +101,7 @@ export const StubMapRegion = ({
       <button
         key={site.id}
         type="button"
+        className="map-site-marker"
         aria-current={site.id === selectedSiteId ? true : undefined}
         onClick={() => {
           onSelectSite(site.id);
