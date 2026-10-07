@@ -22,14 +22,16 @@
 # runbook says so too; changing this output means visiting them.
 #
 # ---------------------------------------------------------------------------
-# IDLE COST: $0.10/month — #603's canary alarm, the platform's eleventh and so
-# the first line here priced past an allowance. The other lines that bill for
-# merely existing — the log group's stored bytes (~$0.0003/month at demo
-# volume, warmer rule included) and the two gateway alarms — are absorbed by
-# always-free pools, not free. Since #473 "idle" no longer means "nothing
-# running" either — the warmer's rule fires whether or not anybody is looking,
-# and the bullet on it below carries the one charge that leaves this stack
-# because of it.
+# IDLE COST: ≈ $1.40/month, all of it alarms the always-free ten could not
+# absorb: #603's canary alarm, the platform's eleventh ($0.10), and the cost
+# guard's five (cost-guard.tf, ≈ $1.30: two anomaly alarms at $0.30 each, the
+# burn-rate and billing alarms at $0.10 each, the composite at $0.50). The other
+# lines that bill for merely existing — the log groups' stored bytes
+# (~$0.0003/month at demo volume, warmer rule included) and the two gateway
+# alarms — are absorbed by always-free pools, not free. Since #473 "idle" no
+# longer means "nothing running" either — the warmer's rule fires whether or not
+# anybody is looking, and the bullet on it below carries the one charge that
+# leaves this stack because of it.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
 #     ("no resource that bills for existing") was retired. Retained bytes bill
@@ -63,16 +65,16 @@
 #     This stack is quoted at that measured size rather than at the 1 KB-per-line
 #     ceiling ingestion and forecast use, and infra/README.md's cost preamble
 #     states the rule: with no application line on the dominant path there is
-#     nothing to cushion against, and the same figure feeds the ≈ $36 bound, which
-#     a 4× cushion would overstate rather than bound. At the bound itself the same line
-#     is ~1.5 GB past the free 5 GB of storage — ~$0.05/month, immaterial beside
-#     the ≈ $36 the bound is made of, and bounded only because retention is
-#     30 days.
-#   * CloudWatch alarms — three. The third, #603's canary alarm, is the
-#     platform's eleventh and bills $0.10/month for existing, fired or not;
-#     infra/README.md's alarm budget owns the count. Its metric filter's metric
-#     is a custom metric inside the always-free ten. API Gateway and Lambda
-#     metrics are free.
+#     nothing to cushion against, and the same figure feeds cost-guard.tf's
+#     per-request cost, which a 4× cushion would overstate rather than price.
+#     Under sustained abuse the line grows with traffic until a trip stops it,
+#     and is bounded in storage only because retention is 30 days.
+#   * CloudWatch alarms — three in alarms.tf and five in cost-guard.tf. An
+#     alarm is priced for existing, fired or not, and the platform's always-free
+#     ten were spent before #603's canary alarm and the cost guard's arrived, so
+#     those six are the IDLE COST above; infra/README.md's alarm budget owns the
+#     count. The canary's metric filter's metric is a custom metric inside the
+#     always-free ten. API Gateway, Lambda and billing metrics are free.
 #   * API Gateway HTTP API — $1.00 per million requests, no per-hour charge, no
 #     minimum, no per-stage fee. An idle API costs nothing; what a forgotten
 #     stack does cost is the IDLE COST header above. This is
@@ -100,10 +102,13 @@
 #   * IAM — the execution role, its inline policy, the two Lambda permissions
 #     (the gateway's and the warmer's) and the deploy grant are all free. So is
 #     the warmer's rule, its targets and the function's async invoke config.
+#   * The cost trip (cost-guard.tf) — a function, its log group, role, policy
+#     and two permissions, and a us-east-1 topic with two subscriptions: $0,
+#     invoked only on a trip.
 #
-# The worst case is bounded rather than free, which is the honest version:
-# ≈ $36/month with the stage throttle pegged continuously for a month (ADR
-# 0005's arithmetic). `terraform destroy` takes all of it to $0 with no ordered
+# The worst case is bounded rather than free, which is the honest version: the
+# cost guard trips the stage on sustained projected spend or on $70 of actual
+# spend, and ADR 0010 derives the month that leaves under the ~$100 ceiling. `terraform destroy` takes all of it to $0 with no ordered
 # dependencies and nothing left behind — including the log group, which is
 # Terraform's here precisely so that teardown is complete.
 
@@ -127,4 +132,9 @@ output "function_name" {
 output "environment" {
   description = "Environment suffix this stack was applied with (echoes var.environment). Must match the storage stack's `environment` output: the IAM policy grants access to cumulo-sites-<environment> and cumulo-series-<environment>, and the function resolves the same names from CUMULO_ENV at runtime, so a mismatch is an API with permissions on tables that do not exist."
   value       = var.environment
+}
+
+output "cost_trip_function_name" {
+  description = "Name of the cost-trip function (cost-guard.tf, ADR 0010), for the runbook's trip drill — `aws lambda invoke --function-name <name>` throttles the stage to zero exactly as an alarm would — and for `aws logs tail /aws/lambda/<name>` after a real trip."
+  value       = aws_lambda_function.cost_trip.function_name
 }
