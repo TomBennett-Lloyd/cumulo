@@ -352,15 +352,15 @@ describe('simulating the trailing window for a run’s sites', () => {
       input: { storeOutcome: { status: 'partial', unprocessedCount: 1 } as const },
     },
   ])(
-    'hands back no settled readings when $name — the window is not known in full',
+    'hands back no settled readings when $name — a later site’s success does not recover it',
     async ({ input }) => {
       const { settled } = await simulateTrailingActuals(
         deps({
           recorder: emptyRecorder(),
-          pointsBySite: { [RANELAGH_ID]: [forecastPoint()] },
+          pointsBySite: { [RATHMINES_ID]: [forecastPoint({ siteId: RATHMINES_ID })] },
           ...input,
         }),
-        [RANELAGH_ID],
+        [RANELAGH_ID, RATHMINES_ID],
       );
 
       expect(settled).toBeUndefined();

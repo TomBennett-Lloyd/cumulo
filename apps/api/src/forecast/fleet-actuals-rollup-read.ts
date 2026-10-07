@@ -120,8 +120,9 @@ export const readFleetActualsAggregate = async (
   const stale = staleLocations(rollup.rows, expected, hoursBefore(to, TRAILING_ACTUALS_HOURS));
   const uncovered = uncoveredLocations(rollup.rows, sites, from);
   const base = fallbackReason(rollup, expected, stale);
+  // An uncovered first hour is part of the window unwritten, so it ranks as `incomplete` does.
   const reason: FallbackReason | undefined =
-    base === undefined && uncovered.size > 0 ? 'incomplete' : base;
+    base !== 'absent' && uncovered.size > 0 ? 'incomplete' : base;
 
   if (reason === undefined) {
     const rows = rollup.rows.filter((row) => expected.has(row.locationId));

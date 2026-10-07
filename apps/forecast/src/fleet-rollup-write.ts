@@ -16,16 +16,16 @@ import {
 import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
 
 /**
- * The fleet roll-up producer: having stored a location's forecasts, write that location's
- * contribution to each hour of the fleet aggregate (ADR 0009, #494).
+ * The fleet roll-up producers: having stored a location's forecasts and settled its actuals, write
+ * that location's contribution to each hour of each fleet aggregate (ADR 0009, #494, #506).
  *
  * **Why it lives in the producer at all.** `GET /v1/fleet/forecast` used to answer by reading every
  * site's partition and summing in the request — 1,753.9 ms p50 warm, on a visitor's first paint, and
  * paid again by every visitor. The sum is the same every time, so it is computed once here, where
  * the numbers already are, and read back as twelve small items.
  *
- * **Zero extra reads.** The partials are computed from the forecasts this invocation just wrote and
- * the sites it already listed — nothing is re-queried.
+ * **Zero extra reads.** The partials are computed from rows this invocation already holds and the
+ * sites it already listed — nothing is re-queried.
  *
  * **No end-of-run event, and none needed.** ADR 0004 makes one SQS message one *location's* whole
  * horizon, so an ingestion cycle is twelve independent invocations with no last-one signal. Each
@@ -35,9 +35,8 @@ import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
  * **It cannot fail the record.** Every failure is converted to a log entry, for the reason
  * `simulate-actuals.ts` states about its own: this runs below the record boundary
  * (`consume-message.ts`) and after the message's real work is already stored, so a throw crossing it
- * would redeliver a whole location's horizon to retry a derived write. The next cycle rewrites every
- * one of these keys an hour later, so a missed roll-up repairs itself; and when a location has never
- * written one, the API's fallback answers from the fan-out and says so in the log.
+ * would redeliver a whole location's horizon to retry a derived write. What repairs a missed write,
+ * and what the API's fallback does meanwhile, is ADR 0009's (its #506 entry for actuals).
  */
 
 /**
@@ -53,10 +52,8 @@ export const fleetActualsRollupWriteEvent = 'forecast.fleet-actuals-rollup.outco
  * What became of one location's roll-up, as a value.
  *
  * `nothing-to-roll-up` is a success and is deliberately not folded into `written` with a zero: a
- * location whose sites produced no forecast of the rolled-up model has nothing to contribute, and an
- * operator reading a run of those is reading a fleet that is not forecasting rather than a producer
- * that is failing. It is unreachable today — `packages/forecast` emits physics for every hour it is
- * given — which is precisely why it must not be silence.
+ * location with nothing of the rolled-up kind has nothing to contribute, and an operator reading a
+ * run of those is reading a fleet that is not producing rather than a producer that is failing.
  */
 export type FleetRollupOutcome = { readonly locationId: string } & (
   | { readonly status: 'written'; readonly hourCount: number }
@@ -72,7 +69,11 @@ export type FleetRollupOutcome = { readonly locationId: string } & (
  * (`docs/standards/error-handling.md` rule 4): a `putFleetRollupPartials` throw is the series table,
  * while the other two are bugs in the arithmetic — nothing an operator can fix in AWS.
  */
-type FleetRollupOperation = 'fleetRollupMembers' | 'fleetRollupPartials' | 'putFleetRollupPartials';
+type FleetRollupOperation =
+  | 'fleetRollupMembers'
+  | 'fleetRollupPartials'
+  | 'fleetActualsRollupPartials'
+  | 'putFleetRollupPartials';
 
 /**
  * The collaborators a roll-up write needs.
@@ -96,17 +97,20 @@ const failedOutcome = (
   detail: `${operation} threw — ${describeThrown(error)}`,
 });
 
-/**
- * Stamp, compute and write one location's partials of one kind, reporting the result and never
- * rejecting. `partialsOf` is deferred so its throw is converted here with the others.
- */
+/** Which kind a write is for, and how its partials are computed — deferred, so a throw is caught. */
+interface SliceSpec {
+  readonly kind: SeriesKind;
+  readonly operation: 'fleetRollupPartials' | 'fleetActualsRollupPartials';
+  readonly partialsOf: () => readonly FleetRollupPartial[];
+}
+
+/** Stamp, compute and write one location's partials of one kind, never rejecting. */
 const writePartials = async (
   deps: FleetRollupWriteDeps,
-  kind: SeriesKind,
   locationId: string,
   issuedAt: UtcIsoTimestamp,
   sites: readonly SitePhysics[],
-  partialsOf: () => readonly FleetRollupPartial[],
+  { kind, operation, partialsOf }: SliceSpec,
 ): Promise<FleetRollupOutcome> => {
   let provenance: FleetRollupProvenance;
   try {
@@ -119,7 +123,7 @@ const writePartials = async (
   try {
     partials = partialsOf();
   } catch (error: unknown) {
-    return failedOutcome(locationId, 'fleetRollupPartials', error);
+    return failedOutcome(locationId, operation, error);
   }
 
   if (partials.length === 0) {
@@ -157,9 +161,11 @@ export const writeFleetRollup = (
   forecasts: readonly Forecast[],
   sites: readonly SitePhysics[],
 ): Promise<FleetRollupOutcome> =>
-  writePartials(deps, FLEET_ROLLUP_FORECAST_KIND, locationId, issuedAt, sites, () =>
-    fleetRollupPartials(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND),
-  );
+  writePartials(deps, locationId, issuedAt, sites, {
+    kind: FLEET_ROLLUP_FORECAST_KIND,
+    operation: 'fleetRollupPartials',
+    partialsOf: () => fleetRollupPartials(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND),
+  });
 
 /**
  * Compute and write one location's actuals partials for the trailing window's settled hours
@@ -178,9 +184,11 @@ export const writeFleetActualsRollup = (
 ): Promise<FleetRollupOutcome> =>
   settled === undefined
     ? Promise.resolve({ locationId, status: 'inputs-incomplete' })
-    : writePartials(deps, FLEET_ROLLUP_ACTUALS_KIND, locationId, issuedAt, sites, () =>
-        fleetActualsRollupPartials(settled, sites),
-      );
+    : writePartials(deps, locationId, issuedAt, sites, {
+        kind: FLEET_ROLLUP_ACTUALS_KIND,
+        operation: 'fleetActualsRollupPartials',
+        partialsOf: () => fleetActualsRollupPartials(settled, sites),
+      });
 
 /**
  * The roll-up write as `consume-message.ts` calls it: run it, say what happened, return nothing.

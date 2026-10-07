@@ -153,7 +153,7 @@ describe('the actuals roll-up inside one message', () => {
     poaIrradianceWm2: 600,
     acPowerKw: 2,
   });
-  const storedReading = readingAt(RATHMINES_ID, '10', 3);
+  const storedReading = readingAt(RATHMINES_ID, '09', 3);
   const trailingPointsBySite: Record<string, readonly SeriesPoint[]> = {
     [RANELAGH_ID]: [{ type: 'forecast', forecast: trailingForecast }],
     [RATHMINES_ID]: [{ type: 'generation', reading: storedReading }],
@@ -173,7 +173,8 @@ describe('the actuals roll-up inside one message', () => {
         kind: FLEET_ROLLUP_ACTUALS_KIND,
         locationId: LOCATION,
         provenance: { members: fleetRollupMembers(bothSites), issuedAt: ISSUED_AT },
-        hourCount: 1,
+        // 09:00 was stored before the run and 10:00 was written by it: dropping either is one hour.
+        hourCount: 2,
       },
     ]);
     expect(recorder.rolledUp.map((call) => call.kind)).toEqual([

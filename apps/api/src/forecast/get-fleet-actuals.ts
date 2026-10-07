@@ -26,9 +26,7 @@ import { hoursBefore } from './series-window';
  * on every load. Assembled in the browser that is one `GET …/series` per site,
  * and that read is metered per address (`MAX_LIMITED_REQUESTS_PER_WINDOW` in
  * `apps/api/src/abuse/ip-limiter.ts`, ADR 0006): every page view would spend a
- * fleet's worth of the window. One request that fans out server-side spends the
- * same DynamoDB Queries against a budget the *invocation* owns rather than
- * against a limiter meant to price a caller's appetite.
+ * fleet's worth of the window.
  *
  * **The readings are simulated.** The demo fleet has no inverters and no
  * telemetry; the producer synthesizes each reading from the stored physics

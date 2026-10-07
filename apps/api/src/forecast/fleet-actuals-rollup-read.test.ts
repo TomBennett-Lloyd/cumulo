@@ -34,6 +34,7 @@ const TO = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
 const FIRST_HOUR = '2026-07-30T12:00:00Z';
 const SETTLED_HOUR = '2026-07-31T06:00:00Z';
 const REWRITTEN_HOUR = '2026-07-31T10:00:00Z';
+const LONG_AGO = utcIsoTimestampSchema.parse('2026-07-01T00:00:00Z');
 
 /** A GEN slice: no band, as `fleetActualsRollupPartials` writes it. */
 const slice = (validTime: string, acPowerKw: number) =>
@@ -195,5 +196,54 @@ describe('readFleetActualsAggregate', () => {
     expect(pointsOf(await read(deps, []))).toEqual([]);
     expect(kinds).toEqual([]);
     expect(siteReads).toEqual([]);
+  });
+
+  it('ranks an uncovered first hour as incomplete even when a location is also stale', async () => {
+    const old = DUBLIN_SITES.map((site) => ({ ...site, createdAt: LONG_AGO }));
+    const { deps, logged } = harness([row(DUBLIN, [RANELAGH], slice(REWRITTEN_HOUR, 5))]);
+
+    await read(deps, old);
+
+    expect(logged[0]).toMatchObject({
+      reason: 'incomplete',
+      staleLocations: 1,
+      uncoveredLocations: 1,
+    });
+  });
+});
+
+describe('the first-hour check against a window that opens off the hour', () => {
+  // `from = now − hours` is almost never on the hour: the first hour-ending slice is the next one.
+  const offFrom = utcIsoTimestampSchema.parse('2026-07-30T12:23:10Z');
+  const offTo = utcIsoTimestampSchema.parse('2026-07-31T12:23:10Z');
+  const readOff = (deps: FleetRollupReadDeps, sites: readonly FleetSite[]) =>
+    readFleetActualsAggregate(deps, fullBudgetDeadline, sites, offFrom, offTo, 'deadline-event');
+  const old = DUBLIN_SITES.map((site) => ({ ...site, createdAt: LONG_AGO }));
+  const recent = row(DUBLIN, old, slice(REWRITTEN_HOUR, 5));
+
+  it('is covered by the slice for the hour ending after `from`', async () => {
+    const { deps, logged } = harness([recent, row(DUBLIN, old, slice('2026-07-30T13:00:00Z', 1))]);
+
+    expect(pointsOf(await readOff(deps, old))).toHaveLength(2);
+    expect(logged).toEqual([]);
+  });
+
+  it('is not covered by a slice an hour later', async () => {
+    const { deps, logged } = harness([recent, row(DUBLIN, old, slice('2026-07-30T14:00:00Z', 1))]);
+
+    await readOff(deps, old);
+
+    expect(logged[0]).toMatchObject({ reason: 'incomplete', uncoveredLocations: 1 });
+  });
+
+  it('is owed by no site created inside the trailing hours before `from`', async () => {
+    const lastMinute = DUBLIN_SITES.map((site) => ({
+      ...site,
+      createdAt: utcIsoTimestampSchema.parse('2026-07-30T11:23:10Z'),
+    }));
+    const { deps, logged } = harness([row(DUBLIN, lastMinute, slice(REWRITTEN_HOUR, 5))]);
+
+    expect(pointsOf(await readOff(deps, lastMinute))).toHaveLength(1);
+    expect(logged).toEqual([]);
   });
 });

@@ -65,8 +65,9 @@ resource "aws_lambda_event_source_mapping" "weather_readings" {
   # items — 288 since #494 added a fleet roll-up partial per hour of the
   # location's horizon, 291 since #506's actuals slices. Unbounded, Lambda would
   # take all twelve at once and drive ~3,492 write units simultaneously at a
-  # table provisioned for a small fraction of that — throttling, retries, and the storage stack's own throttle alarm
-  # firing on what is really a concurrency decision made three stacks away. At
+  # table provisioned for a small fraction of that — throttling, retries, and
+  # the storage stack's own throttle alarm firing on what is really a
+  # concurrency decision made three stacks away. At
   # 2, the same work arrives as a short queue-paced stream instead of a burst,
   # and SQS's redelivery absorbs whatever still throttles: the messages are not
   # lost, they are simply processed a moment later, which for an hourly pipeline

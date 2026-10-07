@@ -30,9 +30,10 @@ import type { SqsRecord } from './sqs-event';
  * Every row is a Put over a sort key derived from the row itself — `T#<validTime>#
  * FC#physics` for a forecast, `T#<validTime>#GEN` for the simulated actual that
  * follows it (ADR 0002), and `FC#physics#T#<validTime>#L#<locationId>` or
- * `GEN#T#…#L#…` for this location's fleet roll-up slices (ADR 0009) — so a redelivered message rewrites
- * exactly the rows it wrote the first time. Both writes are deterministic in their
- * inputs, the draw behind a simulated actual included (`simulatedActualFromForecast`).
+ * `GEN#T#…#L#…` for this location's fleet roll-up slices (ADR 0009) — so a
+ * redelivered message rewrites exactly the rows it wrote the first time. The
+ * writes are deterministic in their inputs, the draw behind a simulated actual
+ * included (`simulatedActualFromForecast`).
  */
 
 /**

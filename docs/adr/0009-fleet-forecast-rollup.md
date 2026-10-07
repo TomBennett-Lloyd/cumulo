@@ -206,7 +206,7 @@ The read computes the same digest per location from the active fleet it already 
 
 ### 2026-10-07 (#506) — the actuals producer, and what "complete" means for a look-back
 
-**What landed.** The `GEN` kind has its producer, with no change to the key or the partial schema. `fleetActualsRollupPartials` (`packages/shared/src/fleet-actuals-rollup.ts`) writes a reading as a partial with the degenerate band and `hasUncertainty: false`. `fleet-rollup-additivity.test.ts` extends the additivity proof to that path.
+**What landed.** The `GEN` kind has its producer, with no change to the key or the partial schema. `fleetActualsRollupPartials` (`packages/shared/src/fleet-actuals-rollup.ts`) writes a reading as a partial with the degenerate band and `hasUncertainty: false`. `packages/shared/src/fleet-rollup-additivity.test.ts` extends the additivity proof to that path.
 
 The forecast service sums each location's slices from the readings its trailing-actuals step already holds, so it does zero extra reads. It re-Puts every hour of the `TRAILING_ACTUALS_HOURS` window on every run, which is what lets a slice pick up a membership change at its next cycle. If any site's window is unknown (a failed read, or a write that did not fully land), nothing is written. A partial slice would read as a quieter fleet.
 
@@ -216,18 +216,27 @@ The forecast service sums each location's slices from the readings its trailing-
 
 - **No vintage check.** A 24-hour window carries 24 runs' `issuedAt`s by construction.
 - **Membership is checked only on the hours the producer still rewrites**: the last `TRAILING_ACTUALS_HOURS` before the read's `to`. Older settled hours are summed as written. After an add, this agrees with the fan-out, because a new site has no earlier readings. After a delete or a capacity edit, it does not. Historical hours keep the departed site's generation and the capacity it had then, where the fan-out, which reads only today's sites, drops or reprices them. That is accepted. Checking every hour would send every actuals read down the fan-out for a whole look-back after any change, including every add-a-site.
-- **One check the forecast read does not need.** A location whose oldest active site predates the window by `TRAILING_ACTUALS_HOURS` must hold a slice for the window's first hour, or the read falls back as `incomplete`. Without this check, for the first week after deploy, a history the producer has not yet written would be served as a whole one. That is the half-truth this ADR's fallback exists to refuse. The same check also sends a window that opens inside an idle-schedule gap down the fan-out, which answers with the same gap.
+- **One check the forecast read does not need.** A location whose oldest active site predates the window by `TRAILING_ACTUALS_HOURS` must hold a slice for the window's first hour, or the read falls back as `incomplete`. Without this check, for the first week after deploy, a history the producer has not yet written would be served as a whole one. That is the half-truth this ADR's fallback exists to refuse. The same check also sends a window that opens inside an idle-schedule gap down the fan-out, which answers with the same gap. **Its largest cost:** `PUT /v1/sites/{siteId}` can move a site to a new bucket and keeps its `createdAt`. That leaves the new bucket owing a first hour it cannot hold, so every actuals read falls back for a whole look-back (24 h by default, 168 h for the week view). The fan-out's answer is correct, so this costs money but not correctness. It is the same cost the membership bullet above rejects, paid here only on a bucket move.
 
 `apps/api/src/forecast/fleet-actuals-rollup-read.test.ts` pins each case.
 
-**What it costs.** Writes: up to three slices per location per cycle, `12 × 3 = 36`. That moves `infra/storage/tables.tf`'s write line to ≈ $1.80/month (≈ $6.36 at the 100-site cap), and the `## Consequences` write line is annotated as-it-stood. Reads: the default 24-hour actuals window is 288 items, about 11 units, where the fan-out it replaces cost about 25. The per-load figure falls to ≈ 35, and `tables.tf` owns it. At the 52-location cap, a 168-hour window is about 320 units, above the 30-unit request ADR 0010 prices its burn-rate projection on. The billing leg covers that, and compacting settled hours is [#615](https://github.com/TomBennett-Lloyd/cumulo/issues/615).
+**What it costs.** Writes: up to three slices per location per cycle, `12 × 3 = 36`. That moves `infra/storage/tables.tf`'s write line to ≈ $1.80/month (≈ $6.36 at the 100-site cap), and the `## Consequences` write line is annotated as-it-stood. Reads: the default 24-hour actuals window is 288 items, about 11 units, where the fan-out it replaces cost about 25. The per-load figure falls to ≈ 35, and `infra/storage/tables.tf` owns it. A 168-hour window is about 74 units at the canonical fleet and about 320 at the 52-location cap. Both are above the 30-unit request that [#588](https://github.com/TomBennett-Lloyd/cumulo/issues/588)'s cost guard (PR #613, open at this writing) prices its burn-rate projection on. That PR prices the same read at ≈ 270, using the pre-#602 item size, so whichever merges second reconciles the figures. Compacting settled hours is [#615](https://github.com/TomBennett-Lloyd/cumulo/issues/615).
 
-**Quoters of the moved figures.** This is a floor, not a census. The sweep was run 2026-10-07 with `git grep -nE` over `docs infra apps packages`, on the arms `1\.78|6\.28|2\.52 ?M|3,456|12,196|2\.79|5,426|2\.08` (write line) and `≈ 49|~47|~25 covering|read units? (a|per) load|per-dashboard-load|per-load read` (per-load read). Every hit was read. Trued up in the same change:
+**Quoters of the moved figures.** This is a floor, not a census. The sweep was run 2026-10-07 with `git grep -nE` over `docs infra apps packages`, on five arms:
+
+- `1\.78|6\.28|2\.52 ?M|3,456|12,196|2\.79|5,426|2\.08`: the write line.
+- `≈ ?\$(1\.8|2\.1)|[0-9.]+% of the ~\$100|between them|two together|two cliffs|this stack('s)? (≈|costs)`: the storage stack total. In review, the first arm's literal replacement had re-minted these as the `series` line.
+- `≈ 49|~47|~25 covering|read units? (a|per) load|per-dashboard-load|per-load read`: the per-load read.
+- `(ten|eleven|[0-9]+) billed lines|[0-9]+ lines per invocation|[0-9]+ ?MB`: the forecast log census, which grows by one line per invocation.
+- `fan(s|-)? ?out|only path|one caller|not yet produce|future actuals|per-site Queries`: prose describing the old actuals path.
+
+Every hit was read. Trued up in the same change:
 
 - `infra/storage/tables.tf`: the owner, plus its header ledger.
-- `infra/README.md`: the storage `series` row, the three-fleet-sizes note, the running total, the forgotten-stack and teardown notes, and the forecast DynamoDB driver row.
-- `infra/forecast/outputs.tf` and `infra/forecast/event-source.tf`.
+- `infra/README.md`: the storage `series` row, the three-fleet-sizes note, the running total and the stack-total prose around it, the forgotten-stack and teardown notes, the forecast DynamoDB driver row, and the forecast log row and census.
+- `infra/forecast/outputs.tf` (DynamoDB driver and log census) and `infra/forecast/event-source.tf`.
 - `infra/ingestion/outputs.tf`.
 - The fleet-vs-poll comment in `apps/web/src/data/use-first-forecast.test.tsx`.
+- Old-path prose in `apps/api/src/forecast/fleet-series-read.ts`, `apps/api/src/forecast/get-fleet-actuals.ts`, `apps/web/src/data/use-first-forecast.ts`, `docs/design/dashboard-composition.md`, `packages/shared/src/storage-key.ts` and `packages/storage/src/adapters/series/fleet-rollup-item.ts`.
 
 Annotated as-it-stood: `## Consequences` above. The remaining hits are ADR 0002's historical entries, `docs/review-feedback.md`'s records, and unrelated numbers that share a literal (fixture data, `apps/web/src/map/clustering.test.ts`).

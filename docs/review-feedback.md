@@ -425,7 +425,7 @@ A category going quiet across consecutive reviews is the evidence for graduating
   - the completeness rule for an actuals look-back: no vintage check, membership checked only on the trailing-window hours, settled hours summed as written, and a location older than the window must hold the window's first hour;
   - the moved write line (≈ $1.78 → ≈ $1.80/month).
 
-  The second is **ADR 0002's matching entry**: A5's fan-out is now superseded for the actuals read too. The completeness rule's first three clauses are the owner's 2026-10-07 decision on the issue. The first-hour check is this lane's addition, and the owner is asked to ratify or strike it.
+  The second is **ADR 0002's matching entry**: A5's fan-out is now superseded for the actuals read too. The completeness rule's first three clauses are the owner's 2026-10-07 decision on the issue. The first-hour check is this lane's addition, and the owner is asked to ratify or strike it. Its largest cost: a site that `PUT /v1/sites/{siteId}` moves to a new bucket keeps its `createdAt`, so every actuals read falls back to the fan-out for a whole look-back (up to 168 h). That costs money, not correctness, and it is the cost Q2 rejected for the membership check.
 
 - **Why**: `docs/adr/**` is a `humanAlways` path, so the owner is the gate on what an ADR records. The entry lands on the branch before the `awaiting-review` label because `merge.humanAlwaysRule` orders it that way.
 - **How applied**: Commits on `506-actuals-read`:

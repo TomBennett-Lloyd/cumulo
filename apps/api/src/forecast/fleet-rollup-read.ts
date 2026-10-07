@@ -65,8 +65,8 @@ export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';
 
 /**
  * Why the roll-up could not answer. `absent`: nothing written at all. `incomplete`: some of it.
- * `stale`: every location wrote, but at least one location's slices were summed from a different
- * site set than the one there now, or from more than one forecast run.
+ * `stale`: every location wrote, but some location's slices fail its kind's provenance rule — this
+ * module's for forecasts, `fleet-actuals-rollup-read.ts`'s for actuals.
  */
 export type FallbackReason = 'absent' | 'incomplete' | 'stale';
 

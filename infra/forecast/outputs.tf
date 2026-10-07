@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 # IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
 # a price. Two lines here bill for merely existing: the log group's stored
-# bytes (~$0.0026/month at current volume) and the alarm ($0.10/alarm-month at
+# bytes (~$0.0032/month at current volume) and the alarm ($0.10/alarm-month at
 # list). Both are absorbed by always-free pools rather than being free.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
@@ -19,22 +19,23 @@
 #     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
 #     archive — and a group Lambda auto-creates instead would never expire (see
 #     the comment on the function's `depends_on`). Size, counted rather than
-#     assumed: **eleven billed lines per invocation** —
+#     assumed: **twelve billed lines per invocation** —
 #     `forecast.message.outcome` and `forecast.batch.summary` from handler.ts,
 #     one of each because `batch_size = 1` (event-source.tf) makes a batch a
 #     single record; one `forecast.actuals.outcome` from simulate-actuals.ts
 #     per site of the one location that record speaks for, which is five in the
 #     canonical fleet (#264); one `forecast.fleet-rollup.outcome` from
-#     fleet-rollup-write.ts for that location itself (#494); plus Lambda's own
-#     START, END and REPORT. At ~8,760 invocations/month that is ~96,400 lines,
-#     so **11 × 8,760 × 1 KB ≈ 96 MB/month** retained — ~$0.0029/month at
+#     fleet-rollup-write.ts for that location itself (#494), and one
+#     `forecast.fleet-actuals-rollup.outcome` beside it (#506); plus Lambda's
+#     own START, END and REPORT. At ~8,760 invocations/month that is ~105,100
+#     lines, so **12 × 8,760 × 1 KB ≈ 105 MB/month** retained — ~$0.0032/month at
 #     ~$0.03/GB-month, and $0.00 as
 #     billed because it sits inside the account's always-free 5 GB of stored
-#     logs. That ~96 MB is a **bound, not a measurement**, and generously so:
+#     logs. That ~105 MB is a **bound, not a measurement**, and generously so:
 #     ADR 0005's own ~6.5 GB/month at 25.92 M requests works out at ~250 bytes
 #     per *invocation*, and this prices 1 KB per *line* and then charges all
-#     eleven of them. The honest claim is a ceiling, not a meter reading. What moves
-#     the total is the location count rather than the site count — infra/
+#     twelve of them. The honest claim is a ceiling, not a meter reading. What
+#     moves the total is the location count rather than the site count — infra/
 #     README.md's forecast cost notes own that arithmetic.
 #   * CloudWatch alarms — one of the always-free ten. An alarm is priced at
 #     $0.10/month for existing, fired or not; the ten are a pool, not a
