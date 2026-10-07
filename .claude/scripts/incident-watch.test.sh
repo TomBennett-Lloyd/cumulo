@@ -177,7 +177,7 @@ fixture firing '{"MetricAlarms": [{"AlarmName": "cumulo-weather-readings-dlq-dev
 run_watch
 expect_rc 1
 log_has "GROUP /aws/lambda/cumulo-forecast-dev"
-log_has 'PATTERN { ($.event = "forecast.message.outcome") && ($.status = "failed") }'
+log_has 'PATTERN { ($.event = "forecast.message.outcome") && ($.status != "stored") && ($.status != "no-active-sites") }'
 log_lacks "GROUP /aws/lambda/cumulo-api-dev"
 expect_stdout "no matching lines"
 end
@@ -310,6 +310,15 @@ for owned in \
   "$(owned_string "$REPO/apps/forecast/src/handler.ts" "^export const messageOutcomeEvent = '([^']+)';")"; do
   [ -n "$owned" ] || bad "an owning constant was not found — has it moved?"
   grep -qF "$owned" "$WATCH" || bad "incident-watch.sh does not carry the event name '$owned'"
+done
+end
+
+new_case "the forecast filter excludes exactly the statuses failsTheRecord keeps off the DLQ"
+kept=$(sed -n '/^const failsTheRecord/,/;$/p' "$REPO/apps/forecast/src/handler.ts" | grep -oE "!== '[a-z-]+'" | tr -d "!=' " | sort)
+[ "$kept" = "no-active-sites
+stored" ] || bad "failsTheRecord in apps/forecast/src/handler.ts now keeps: $(printf '%s' "$kept" | tr '\n' ' ')— update forecast_failures in incident-watch.sh"
+for status in $kept; do
+  grep -qF "(\$.status != \"$status\")" "$WATCH" || bad "forecast_failures does not exclude '$status'"
 done
 end
 
