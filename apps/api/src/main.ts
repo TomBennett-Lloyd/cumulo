@@ -350,6 +350,13 @@ export const routes: readonly Route[] = [
 /** Emitted when a request reached the boundary as a throw rather than a response. */
 export const apiRequestFailedEvent = 'api.request.failed';
 
+/**
+ * Emitted once for every response with `statusCode >= 500`, whichever path built
+ * it. `aws_cloudwatch_log_metric_filter.api_server_error` in `infra/api/alarms.tf`
+ * counts these lines by their `statusCode` field (#603).
+ */
+export const apiServerErrorEvent = 'api.response.server_error';
+
 export interface ApiBoundaryDeps {
   readonly routes: readonly Route[];
   /**
@@ -371,7 +378,7 @@ export interface ApiBoundaryDeps {
  * gateway renders as its own HTML-ish 502 and which no client can parse as an
  * `apiErrorSchema` body.
  */
-export const handleApiEvent = async (
+const routeOrFail = async (
   deps: ApiBoundaryDeps,
   event: unknown,
   deadline: RequestDeadline,
@@ -382,6 +389,19 @@ export const handleApiEvent = async (
     deps.log({ event: apiRequestFailedEvent, detail: describeThrown(error) });
     return errorResponse('internal', 'the request could not be completed');
   }
+};
+
+/** The routed response, logged as {@link apiServerErrorEvent} when it is a 5xx. */
+export const handleApiEvent = async (
+  deps: ApiBoundaryDeps,
+  event: unknown,
+  deadline: RequestDeadline,
+): Promise<ApiResponse> => {
+  const response = await routeOrFail(deps, event, deadline);
+  if (response.statusCode >= 500) {
+    deps.log({ event: apiServerErrorEvent, statusCode: response.statusCode });
+  }
+  return response;
 };
 
 /**

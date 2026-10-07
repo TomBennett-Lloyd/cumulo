@@ -125,8 +125,34 @@ describe('the top-level error boundary', () => {
     // which the gateway renders as a body no client can parse.
     expect(response.statusCode).toBe(500);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    expect(logged).toHaveLength(1);
+    expect(logged).toHaveLength(2);
     expect(logged[0]?.event).toBe(apiRequestFailedEvent);
+  });
+
+  it('logs one server-error line, carrying the status, for a 5xx whichever path built it', async () => {
+    const { handleApiEvent, apiServerErrorEvent } = await import('./main');
+    const answering = (statusCode: number): Route => ({
+      method: 'GET',
+      segments: ['v1', 'sites'],
+      handle: () => Promise.resolve({ statusCode, headers: {} }),
+    });
+    const loggedFor = async (routes: Route[]): Promise<Record<string, unknown>[]> => {
+      const logged: Record<string, unknown>[] = [];
+      await handleApiEvent(
+        { routes, log: (e) => logged.push(e) },
+        gatewayEvent(),
+        fullBudgetDeadline,
+      );
+      return logged.filter((entry) => entry.event === apiServerErrorEvent);
+    };
+
+    expect(await loggedFor([answering(503)])).toEqual([
+      { event: apiServerErrorEvent, statusCode: 503 },
+    ]);
+    expect(await loggedFor([throwingRoute(new Error('boom'))])).toEqual([
+      { event: apiServerErrorEvent, statusCode: 500 },
+    ]);
+    expect(await loggedFor([answering(499)])).toEqual([]);
   });
 
   it('keeps the operator detail in the log and out of the response', async () => {
