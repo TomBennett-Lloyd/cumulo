@@ -6,15 +6,8 @@
  * The link is muted ink and underlined rather than accent-coloured, which is a
  * legibility decision and not a stylistic one (#265). This credit is a CC BY 4.0
  * licence condition, so it has to be readable on every surface it can land on.
- * `--color-accent` is not that ink anywhere: in light mode it is below AA for
- * small text on the opaque surfaces themselves — 4.30:1 on --color-surface —
- * and in dark mode, where it does clear AA on its own opaque surfaces, it fails
- * on the translucent one. The measured record lives in
- * `../tokens/tokens.css`'s header, which owns those numbers; they are quoted
- * here because the argument turns on how far under the bar accent falls and on
- * which surfaces — an *arguing* carrier under `architecture.md` rule 9 — and
- * that header's restatement ledger names this docblock, so a re-measurement
- * finds it.
+ * `--color-accent` is below AA for small text on the translucent surface in both
+ * modes; `../tokens/tokens.css`'s header owns that record.
  *
  * The translucent surface is what the ink below is *not* chosen for, and that is
  * the one thing this file does not decide. Since #265 the map's credits sit on
@@ -26,11 +19,6 @@
  * the fifth overrides it beside its own veil, in `apps/web/src/map/map.css`. A
  * component serving five surfaces does not get to pick one composite's answer
  * for all of them.
- *
- * That is also why the accent figures above are the opaque-surface ones. The
- * veil-composited accent figures moved with the mix and are the header's to
- * state; what does not move, and what carries the argument here, is that light
- * accent is under the bar before any veil is involved.
  *
  * The underline is what pays for dropping the colour. WCAG 1.4.1 wants a link
  * distinguishable from surrounding text by more than colour alone, and with the

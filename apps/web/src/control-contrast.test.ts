@@ -16,6 +16,9 @@ import { describe, expect, it } from 'vitest';
 /** WCAG 1.4.11: the floor for the visual information that identifies a control. */
 const MEANINGFUL_BOUNDARY = 3;
 
+/** WCAG 1.4.3: the floor for small text — a control's label, a link. */
+const SMALL_TEXT = 4.5;
+
 interface ThemeBlock {
   /** The theme's name, so a failure says which of the two fell short. */
   readonly theme: string;
@@ -47,6 +50,9 @@ const UNIT_TOGGLE_CSS = stylesheet('./dashboard/unit-toggle.css');
 const RANGE_PICKER_CSS = stylesheet('./dashboard/range-picker.css');
 const ADD_SITE_CSS = stylesheet('./add-site/add-site.css');
 const INFO_CSS = stylesheet('./info/info.css');
+const HEADER_CSS = stylesheet('./header/header.css');
+const PANEL_STATES_CSS = stylesheet('./dashboard/panel-states.css');
+const MAP_CSS = stylesheet('./map/map.css');
 
 /* Through `@cumulo/ui`'s declared `./tokens.css` export, the package's published
    surface, rather than a relative path across the package boundary
@@ -60,11 +66,19 @@ const tokensCss = withoutComments(
  *
  * The line anchor tells a control's own rule from a state rule that repaints it
  * (`.theme-toggle[aria-checked='true'] .theme-toggle-track`,
- * `.range-picker-trigger:hover`). A missing rule throws rather than returning an
- * empty block a row could pass against vacuously (error-handling.md rule 1).
+ * `.range-picker-trigger:hover`), and skips a grouped rule's last line
+ * (`.add-site-cancel,\n.add-site-submit {`), which starts a line too. A missing
+ * rule throws rather than returning an empty block a row could pass against
+ * vacuously (error-handling.md rule 1).
  */
 const declarationsFor = (css: Stylesheet, selector: string): string => {
-  const opensAt = css.text.indexOf(`\n${selector} {`);
+  const opener = `\n${selector} {`;
+  const ownsRule = (at: number): boolean => !css.text.slice(0, at).trimEnd().endsWith(',');
+  let opensAt = css.text.indexOf(opener);
+
+  while (opensAt !== -1 && !ownsRule(opensAt)) {
+    opensAt = css.text.indexOf(opener, opensAt + 1);
+  }
 
   if (opensAt === -1) {
     throw new Error(`${css.name} declares no top-level rule for '${selector}'`);
@@ -226,6 +240,30 @@ const PAIRINGS: readonly Pairing[] = [
     against: { css: INFO_CSS, selector: '.info-tip-button', property: 'background' },
     floor: MEANINGFUL_BOUNDARY,
   },
+  {
+    control: 'about-dialog link',
+    part: { css: HEADER_CSS, selector: '.about-dialog a', property: 'color' },
+    against: { css: HEADER_CSS, selector: '.about-dialog', property: 'background' },
+    floor: SMALL_TEXT,
+  },
+  {
+    control: 'add-site submit',
+    part: { css: ADD_SITE_CSS, selector: '.add-site-submit', property: 'color' },
+    against: { css: ADD_SITE_CSS, selector: '.add-site-submit', property: 'background' },
+    floor: SMALL_TEXT,
+  },
+  {
+    control: 'panel retry',
+    part: { css: PANEL_STATES_CSS, selector: '.panel-retry', property: 'color' },
+    against: { css: PANEL_STATES_CSS, selector: '.panel-retry', property: 'background' },
+    floor: SMALL_TEXT,
+  },
+  {
+    control: 'cluster marker',
+    part: { css: MAP_CSS, selector: '.map-cluster-marker', property: 'color' },
+    against: { css: MAP_CSS, selector: '.map-cluster-marker', property: 'background' },
+    floor: SMALL_TEXT,
+  },
 ];
 
 describe('every declared control pairing clears its floor', () => {
@@ -244,12 +282,18 @@ describe('every declared control pairing clears its floor', () => {
     expect(replaced.length).toBe(2 * THEME_BLOCKS.length);
   });
 
+  it('still measures border ink as text on the surface as falling short of the small-text floor, in both themes', () => {
+    expect(
+      shortfalls('border vs surface', '--color-border', '--color-surface', SMALL_TEXT),
+    ).toHaveLength(THEME_BLOCKS.length);
+  });
+
   it.each(PAIRINGS.map((row): [string, Pairing] => [describePairing(row), row]))(
     '%s',
     (label, row) => {
       expect(
         shortfalls(label, tokenFor(row.part), tokenFor(row.against), row.floor),
-        `WCAG 1.4.11 — the part that identifies this control needs ${String(row.floor)}:1 against its backdrop.`,
+        `This part of the control needs ${String(row.floor)}:1 against its backdrop (WCAG 1.4.11 for a boundary, 1.4.3 for text).`,
       ).toEqual([]);
     },
   );

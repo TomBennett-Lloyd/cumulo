@@ -396,13 +396,10 @@ Placement:
   the muted treatment, because none of them has the composite that forced the change. The size,
   the underline and the wording are untouched.
 
-  The link is not accent-coloured, and that is a legibility rule rather than a stylistic
-  preference: on the veil, `--color-accent` is below AA for small text in **both** modes. Tuning
-  the mix is not the way out of that, and for different reasons per mode — in light the accent is
-  under the bar on the opaque surfaces too, so it has no ceiling to reach; in dark it would need a
-  mix with essentially no translucency left. The per-mode numbers are
-  [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s to state. Dropping the colour means
-  the underline is the only thing left marking the link as a link, which is exactly what WCAG
-  1.4.1 asks for and why the underline is permanent rather than revealed on hover. The tile credit
-  beside it takes the identical treatment — the same obligation on the same surface, so the two
-  would be wrong if only one changed.
+  The link is not accent-coloured, and that is a legibility rule rather than a stylistic preference:
+  on the veil, `--color-accent` is below AA for small text in **both** modes. The per-mode numbers
+  are [`tokens.css`](../../packages/ui/src/tokens/tokens.css)'s to state. Dropping the colour means
+  the underline is the only thing left marking the link as a link, which is exactly what WCAG 1.4.1
+  asks for and why the underline is permanent rather than revealed on hover. The tile credit beside
+  it takes the identical treatment — the same obligation on the same surface, so the two would be
+  wrong if only one changed.

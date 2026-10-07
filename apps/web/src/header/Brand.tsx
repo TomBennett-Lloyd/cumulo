@@ -19,9 +19,8 @@ import type { ReactElement } from 'react';
  * the frontend gate is a stylesheet gate: `fill` is on stylelint's guarded
  * property list, so `header.css` is where a colour can be judged. `--color-accent`
  * and `--color-text-muted` are base tokens deliberately — the chart and map
- * slots carry data identity, and a brand mark borrowing one would make "the
- * product" and "a selected site" the same colour. A final mark wanting its own
- * hue asks the design system for a brand token rather than spelling one here.
+ * slots carry data identity. A final mark wanting its own hue asks the design
+ * system for a brand token rather than spelling one here.
  *
  * `aria-hidden` because the wordmark beside it already says "Cumulo": a reader
  * who hears both hears the product named twice.

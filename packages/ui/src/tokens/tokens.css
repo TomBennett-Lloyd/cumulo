@@ -24,9 +24,11 @@
  *   light: --pairs adjacent, surface #fbfcfd → ALL CHECKS PASS
  *          (contrast WARN on #1baf7a / #eda100 / #e87ba4 → relief rule:
  *           direct labels or the table view, never colour alone)
+ *          re-run 2026-10-07 for #273's slot 1 → ALL CHECKS PASS
  *   dark:  --pairs adjacent, surface #16181a → ALL CHECKS PASS
  *   map marker triad (slots 1–3) additionally validated with --pairs all in
- *   both modes, because default/hover/selected markers are on screen together.
+ *   both modes, because default/hover/selected markers are on screen together;
+ *   light re-run 2026-10-07 for #273's slot 1 → ALL CHECKS PASS.
  *
  * --color-surface-veil is a THIRD surface, and it is validated differently
  * because text on it reads against a *composite*: the surface at the mix
@@ -39,7 +41,10 @@
  *   veil 70% (shipped)   LIGHT           DARK
  *     --color-text        9.14:1 PASS     6.22:1 PASS   ← the shipped ink
  *     --color-text-muted  3.06:1 FAIL     2.80:1 FAIL   ← not used here
- *     --color-accent      2.18:1 FAIL     1.92:1 FAIL   ← not used here
+ *     --color-accent      2.89:1 FAIL*    1.92:1 FAIL   ← not used here
+ *
+ *   * Re-measured for #273 with --color-text standing in for the basemap label
+ *     ink, which no token holds.
  *
  * Each figure is the worst of the five backdrops, and in every row that worst
  * case is the basemap label ink — the darkest thing a light composite can be
@@ -63,14 +68,14 @@
  * the map stops showing through, which is the whole purpose of a veil. Re-run
  * the measurement before changing either.
  *
- * Accent is a harder no than muted and stays one at any mix. In LIGHT mode it is
- * below AA on the opaque surfaces too — #2a78d6 is 4.30:1 on --color-surface and
- * 3.92:1 on --color-bg — so there is no mix ratio to find: the ink's own ceiling
- * is under the bar. In DARK mode accent does clear AA on its opaque surfaces
- * (#3987e5 is 4.89:1 on --color-surface, 5.28:1 on --color-bg), and on the veil
- * it only reached AA at about 97% back when the mix was 90%, which was already a
- * mix with no translucency left to give. The light-mode opaque failure is
- * app-wide and predates the veil; it is tracked in docs/tech-debt.md.
+ * Accent is a harder no than muted and stays one at any mix: it is unused on the
+ * veil in both modes because it fails there in both (the table above). On the
+ * opaque surfaces it clears AA in both modes — LIGHT #1d63bd is 5.72:1 on
+ * --color-surface and 5.23:1 on --color-bg (#273, owner decision 2026-08-09),
+ * DARK #3987e5 is 4.89:1 and 5.28:1 — and --color-accent-contrast on an accent
+ * fill is 5.88:1 light, 5.28:1 dark. In dark mode, on the veil, it only reached
+ * AA at about 97% back when the mix was 90%, which was already a mix with no
+ * translucency left to give.
  *
  * Restatement ledger (`docs/standards/architecture.md` rule 9). This block owns
  * the ratios above and the mix they were measured at. These sites quote them to
@@ -80,29 +85,25 @@
  *   * docs/design/map-treatment.md, `## Attribution`, the first placement
  *     bullet: quotes the shipped ink's figures to state the legibility floor the
  *     band's placement rests on.
- *   * ../attribution/attribution.css's module docblock: quotes the accent
- *     figures — both modes on the veil, light on the opaque surface — as the
- *     reason that credit's link is not accent, and the muted figures as the
- *     reason its ink is scoped per surface rather than chosen once.
- *   * apps/web/src/header/header.css's `.about-dialog a` docblock: quotes the
- *     light and dark accent figures on --color-surface to argue the dialog's
- *     links are a weaker, mode-dependent case of the same defect. Those two are
- *     opaque-surface figures and did not move with the mix.
+ *   * ../attribution/attribution.css's module docblock: quotes the muted
+ *     figures as the reason its ink is scoped per surface rather than chosen
+ *     once.
  *
- * Sweep behind this list, re-run 2026-08-12 for #428: the ratio literals
+ * Sweep behind this list, re-run 2026-10-07 for #273: the ratio literals
  * (`4\.91|12\.16|3\.49|3\.76|4\.30|4\.40|9\.14|6\.22|3\.06|2\.80|2\.18|1\.92`
- * `|3\.92:1|4\.89:1|5\.28:1` — the accent-on-opaque figures, added 2026-08-12 so
- * the arm reaches every figure this block owns, and written with the `:1` this
- * family always gives a contrast ratio, which is what keeps unrelated decimals
- * elsewhere in the repo out of the result)
+ * `|3\.92:1|4\.89:1|5\.28:1|2\.89:1|5\.72:1|5\.23:1|5\.88:1` — the accent
+ * figures, added 2026-08-12 and 2026-10-07 so the arm reaches every figure this
+ * block owns, and written with the `:1` this family always gives a contrast
+ * ratio, which is what keeps unrelated decimals elsewhere in the repo out of the
+ * result)
  * and the claim family (`clears AA|below AA|legibility floor`) across *.css,
  * *.md, *.ts and *.tsx. It is a FLOOR, not a census — completeness here is
  * falsified by one more carrier, so this claims only what that sweep found.
  * Sites the claim sweep reaches that carry no figure of their own
- * (apps/web/src/map/map.css, docs/tech-debt.md, map-treatment.md's later accent
- * note) restate nothing and are deliberately unlisted: they state the verdict,
- * not the measurement, so a re-measurement that moved a figure without flipping
- * a verdict leaves them true.
+ * (apps/web/src/map/map.css, apps/web/src/header/header.css,
+ * map-treatment.md's later accent note) restate nothing and are deliberately
+ * unlisted: they state the verdict, not the measurement, so a re-measurement
+ * that moved a figure without flipping a verdict leaves them true.
  *
  * Some figures in this header are history rather than current measurement —
  * taken at a mix this surface no longer ships, and kept because what a mix
@@ -217,7 +218,7 @@
   /* A boundary that must clear WCAG 1.4.11 where nothing else identifies the
      control; `apps/web/src/control-contrast.test.ts` asserts it (#181). */
   --color-border-strong: #7a8591;
-  --color-accent: #2a78d6;
+  --color-accent: #1d63bd;
   --color-accent-contrast: #ffffff;
 
   /* Restatement ledger (`architecture.md` rule 9) for `--color-accent` and
@@ -240,42 +241,33 @@
        this carrier exists.
 
      Also a carrier, inside this file and owned by the paragraph holding it: the
-     accent-contrast argument in this file's own header states `#2a78d6` and
+     accent-contrast argument in this file's own header states `#1d63bd` and
      `#3987e5` with measured ratios against named surfaces. It computes with the
      values, so it is a restatement to be re-measured rather than re-typed when
-     either moves — see #273, the open owner decision on this very blue.
+     either moves — #273, the owner decision of 2026-08-09 on this very blue, is
+     applied here.
 
      A floor, not a census, and keyed to the claim rather than to one literal:
-     established by `git grep -nE "#2a78d6|#58626d|#3987e5|#9aa5b1" -- :/` on
-     2026-08-11 — `git grep` rather than a recursive `grep` so that the sweep
+     established by `git grep -nE "#1d63bd|#58626d|#3987e5|#9aa5b1" -- :/` on
+     2026-10-07 — `git grep` rather than a recursive `grep` so that the sweep
      covers tracked files and not build output, and `-- :/` so that it covers
      the whole repository wherever it is run from. Without that operand, run
      from beside this file, it reports only this file and silently drops the
-     carrier named above. Two families it returns are
-     deliberately NOT carriers, named so the next reader does not re-adjudicate
-     them.
+     carrier named above. Four families it returns need naming so the next
+     reader does not re-adjudicate them.
 
-     `--color-focus-ring`, `--color-chart-1` and `--color-map-marker` below
-     merely coincide in value with accent today, and their distinctness is
-     argued in two different places rather than beside each of them. All three
-     are declared twice, and the per-token commentary sits entirely in the light
-     block — the dark block is a bare list of re-declarations carrying only two
-     comments of its own — so "beside it" here always means beside the light
-     declaration. `--color-focus-ring` makes the case there: focus is a distinct
-     job from accent, so a ring that later diverges must not drag every accented
-     border with it. The chart and marker slots make it nowhere —
-     `--color-chart-1` has a section divider above it in the light block and
-     nothing at all in the dark, and `--color-map-marker`'s light-block comment
-     derives which slot it takes rather than why it is a token of its own. Their
-     distinctness is owned
-     by this file's header instead, which states that the categorical slots are
-     the `dataviz` skill's fixed hue order (slot 1 of it being blue) and that the
-     marker triad is validated as slots 1–3. They hold this blue because the
-     skill fixes it, not because accent does — so in all three cases a swap that
-     drags them along is the bug.
+     `--color-focus-ring`, `--color-chart-1` and `--color-map-marker` below are
+     separate declarations so they can diverge; today they follow the accent by
+     decision (#273).
+
+     `--color-chart-axis-label`, in both blocks, lands on the muted literals;
+     the light block's declaration dispositions both.
 
      And `docs/design/exploration/design-directions.html` is a snapshot of the
      candidates considered, not a live surface; it ages as a record, correctly.
+     So do `docs/design/design-principles.md`'s two quotations of `#1d63bd`
+     (P9's boundary, and item 4 of `## 5. Open questions — RESOLVED`), each a
+     dated decision record of #273.
      Consumers that reference these tokens rather than copying them — the header
      mark's own `apps/web/src/header/header.css` among them — are not carriers
      at all. */
@@ -326,7 +318,7 @@
      decision to make the ring diverge (a higher-contrast hue, or one that reads
      against accent-filled surfaces) must not drag every accented border with
      it. Consumed app-wide by the `:focus-visible` rule in ../styles.css. */
-  --color-focus-ring: #2a78d6;
+  --color-focus-ring: #1d63bd;
 
   /* Status steps are fixed by the dataviz skill and mode-invariant; they ship
      with an icon + label so colour never carries the state alone. */
@@ -335,7 +327,7 @@
   --color-success: #0ca30c;
 
   /* ── Chart ───────────────────────────────────────────────────────────── */
-  --color-chart-1: #2a78d6;
+  --color-chart-1: #1d63bd;
   --color-chart-2: #eb6834;
   --color-chart-3: #1baf7a;
   --color-chart-4: #eda100;
@@ -349,8 +341,8 @@
   /* Uncertainty band: slot-1 hue as a ~10% wash per the skill's area-fill
      spec, with a stronger same-hue edge so the P10/P90 bounds stay readable
      while staying recessive against the median line. */
-  --color-chart-band-fill: rgba(42, 120, 214, 0.1);
-  --color-chart-band-stroke: rgba(42, 120, 214, 0.35);
+  --color-chart-band-fill: rgba(29, 99, 189, 0.1);
+  --color-chart-band-stroke: rgba(29, 99, 189, 0.35);
 
   --color-chart-grid: #e3e9ef;
 
@@ -389,7 +381,7 @@
   /* Slots 1–3: default blue, selected takes the warm slot-2 pop (best light
      contrast of the three), hover takes slot 3. Stroke is the surface colour —
      the skill's 2px surface ring, so overlapping markers stay legible. */
-  --color-map-marker: #2a78d6;
+  --color-map-marker: #1d63bd;
   --color-map-marker-hover: #1baf7a;
   --color-map-marker-selected: #eb6834;
   --color-map-marker-stroke: #fbfcfd;
