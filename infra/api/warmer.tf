@@ -80,8 +80,8 @@
 #       25,920, the 233 GB-s, the ≈ 9 MB, the ≈ $0.04 and the
 #       three-targets / two-permissions counts.
 #     - `infra/README.md` — the stack table's api row, the api runbook's opening
-#       resource sentence, step B3's `Plan: 23 to add`, step B3's `state list`
-#       expectation of 28, and the teardown's `list-rules` readback:
+#       resource sentence, step A5's `Plan: N to add`, step B2's `state list`
+#       expectation, and the teardown's `list-rules` readback:
 #       *asserting* the six resources this file declares. That is the resource
 #       count rather than the cadence, but it moves for the same reason: a
 #       fourth target changes both, as it does B7's target ids, invocation
