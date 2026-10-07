@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import type { Site } from '@cumulo/shared';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DemoFleetDataSource } from '../data/demo-fleet-data-source';
 import type { FleetDataSource } from '../data/fleet-data-source';
+import { Dashboard } from './Dashboard';
 import {
   addSite,
   clickMap,
@@ -13,8 +15,10 @@ import {
   firstListedSite,
   renderDashboard,
   settle,
+  StubMapRegion,
   visit,
 } from './dashboard-test-fixture';
+import type { MapRegionProps } from './MapRegion';
 
 /*
  * Where focus goes when a selection arrives, and where it goes back to.
@@ -95,6 +99,14 @@ const twoListedSites = async (dataSource: FleetDataSource): Promise<readonly [Si
 
   return [first, second];
 };
+
+/**
+ * A map region that draws no marker for a site created this session — the real
+ * map's state while the new site sits inside a cluster.
+ */
+const RegionWithoutCreatedMarker = (props: MapRegionProps): ReactElement => (
+  <StubMapRegion {...props} sites={props.sites.filter(({ name }) => name !== CREATED_SITE_NAME)} />
+);
 
 /**
  * A fleet whose listing never arrives, wrapping the demo fleet for everything else.
@@ -251,19 +263,6 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     expect(document.activeElement).toBe(elsewhere);
   });
 
-  /*
-   * There is no row-opener case here any more, and both halves of what it proved
-   * have surviving carriers — which is why it went rather than being re-pointed
-   * at a marker, where it would have been a verbatim copy of an existing case.
-   *
-   * "Focus lands on the opener and comes back to it from inside the card" is
-   * `hands focus back to the marker when the reader closes the card from inside
-   * it`, above. "And the card does not need to be told *which* opener" — the
-   * generality a second kind of opener was what demonstrated — is `returns a
-   * created site's card to the control the draft was opened with`, below, where
-   * the hand-back lands on the map's add-site control rather than on any marker.
-   */
-
   it('closes on Escape from inside the card, and lands the same way', async () => {
     const dataSource = new DemoFleetDataSource();
     const site = await firstListedSite(dataSource);
@@ -319,8 +318,8 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     expect(screen.getByRole('heading', { name: site.name })).toBeDefined();
   });
 
-  it('leaves a creation’s focus on the map control the dialog returned it to', async () => {
-    const container = renderDashboard(new DemoFleetDataSource());
+  it('lands a creation’s focus on the new site’s marker as the dialog leaves', async () => {
+    renderDashboard(new DemoFleetDataSource());
     await settle();
 
     await addSite();
@@ -332,12 +331,32 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * that still grabbed focus here would win this assertion; that ordering is
      * the reason this case is the one that would notice.
      */
-    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: `Marker: ${CREATED_SITE_NAME}` }),
+    );
     expect(screen.getByRole('heading', { name: CREATED_SITE_NAME })).toBeDefined();
   });
 
-  it('returns a created site’s card to the control the draft was opened with', async () => {
-    const container = renderDashboard(new DemoFleetDataSource());
+  it('lands a creation’s focus on the add-site control when the new site has no marker', async () => {
+    const { container } = render(
+      <Dashboard
+        theme="light"
+        onToggleTheme={() => undefined}
+        dataSource={new DemoFleetDataSource()}
+        mapRegion={RegionWithoutCreatedMarker}
+      />,
+    );
+    await settle();
+
+    await addSite();
+
+    // Owner decision, #276: the control the draft was opened with.
+    expect(screen.getByRole('heading', { name: CREATED_SITE_NAME })).toBeDefined();
+    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
+  });
+
+  it('returns a created site’s card to the new site’s marker', async () => {
+    renderDashboard(new DemoFleetDataSource());
     await settle();
 
     await addSite();
@@ -346,8 +365,8 @@ describe('Dashboard focus on a reader-initiated selection', () => {
     /*
      * The ordering this depends on, stated because it is easy to break and
      * invisible when it is: React flushes a commit's unmount cleanups before its
-     * mount effects, so the dismissed dialog has already put focus on the map's
-     * add-site control by the time the new card captures its opener. Capture the
+     * mount effects, so the dismissed dialog has already put focus on the new
+     * site's marker by the time the new card captures its opener. Capture the
      * opener a moment earlier — in the dashboard's creation handler, say — and it
      * would be the dialog's submit button, which is no longer in the document,
      * and this close would strand the reader on `body`.
@@ -357,7 +376,9 @@ describe('Dashboard focus on a reader-initiated selection', () => {
      * the hand-back is owed only once they have come into it themselves — and
      * this is the case that keeps the capture *ordering* observable at all.
      */
-    expect(document.activeElement).toBe(container.querySelector('.map-control-add'));
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: `Marker: ${CREATED_SITE_NAME}` }),
+    );
   });
 });
 

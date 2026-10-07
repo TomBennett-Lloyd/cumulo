@@ -29,8 +29,21 @@ import { expect } from '@playwright/test';
  */
 const MAX_CLUSTER_EXPANSIONS = 6;
 
-const SITE_MARKER = '.map-site-marker';
-const CLUSTER_MARKER = '.map-cluster-marker';
+/** One site's mark on the map — a real `<button>` (`src/map/MarkerButton.tsx`). */
+export const SITE_MARKER = '.map-site-marker';
+export const CLUSTER_MARKER = '.map-cluster-marker';
+
+/**
+ * The marker for one named site.
+ *
+ * By accessible name rather than by position: the drawn set is reordered by the
+ * clustering. The name is safe to interpolate: the demo fleet composes it from a
+ * place and an index (`packages/shared/src/fleet.ts`), and a created site's
+ * default from its coordinates (`defaultSiteName`,
+ * `apps/web/src/add-site/AddSiteForm.tsx`), so it carries no quote to close the
+ * attribute selector early.
+ */
+export const markerByName = (name: string): string => `${SITE_MARKER}[aria-label="${name}"]`;
 
 /**
  * What the overlay is currently showing, as one string: every marker's

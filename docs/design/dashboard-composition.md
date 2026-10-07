@@ -147,10 +147,11 @@ rule the old arrangement had to state — a draft outranks a selection but never
 physical now: the page behind is inert, so there is nothing to outrank, and cancelling hands the
 reader back exactly the page they had, selection included.
 
-Opening the draft is also no longer a bare click on the basemap: the map carries an add-site
-control that arms the next click, and the mode is spent on the click that uses it. A click on an
-empty spot with the mode disarmed does nothing at all. The control itself is the map's own chrome
-and is recorded there — [`map-treatment.md`](map-treatment.md)'s "Map chrome" section, over
+Opening the draft is also no longer a bare click on the basemap: the map carries an add-site control
+that arms the next placement — a click, or Enter at the map centre — and the mode is spent on the
+placement that uses it. A click on an empty spot with the mode disarmed does nothing at all. The
+control itself is the map's own chrome and is recorded there —
+[`map-treatment.md`](map-treatment.md)'s "Map chrome" section, over
 `apps/web/src/map/MapControls.tsx`.
 
 **The one thing that can still be out of view is the site**, not the reading. A selection can
@@ -214,7 +215,8 @@ not landing — is what the dashboard carries beside the selection itself
   card the reader was never inside stands aside and leaves them where they already were. The
   hand-back still fires for a reader who came into the card, which pressing Close does.
 - **A dismissed draft returns focus to the map's add-site control**, the control the reader opened
-  it with.
+  it with — and a submitted one to the new site's marker, or to that control when the marker is not
+  drawn (owner decision, #276).
 
 That last one is the modal's bill, and it is worth naming because the platform normally pays it: a
 `<dialog>` closed with `close()` restores focus itself, but this one closes by being _unmounted_,
@@ -222,9 +224,9 @@ and a removed dialog never runs the close steps. So the dashboard supplies the l
 from the dialog's effect cleanup rather than from its `cancel` handler — on the Escape path the
 browser's own restoration is still running while `cancel` is being dispatched, and would overwrite
 a focus set there. React flushes a commit's unmount cleanups before its mount effects, which is
-what makes a creation land correctly without a special case anywhere: the dialog's cleanup puts
-focus on the add-site control, and the new site's card — mounting in the same commit — captures
-_that_ as its opener and then moves nobody, which leaves the dialog's return as the last word.
+what makes a creation land correctly: the dialog's cleanup puts focus on the new site's marker, and
+the new site's card — mounting in the same commit — captures _that_ as its opener and then moves
+nobody, which leaves the dialog's return as the last word.
 
 `react.md`'s focus paragraphs own the rule, five of them for the four bullets above — "whether a
 selection is the reader's" owns the second bullet, "where the focus lands on a selection" owns the

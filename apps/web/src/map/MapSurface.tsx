@@ -32,7 +32,7 @@ export type MapCanvasSlot =
       readonly kind: 'map';
       readonly containerRef: Ref<HTMLDivElement>;
       /**
-       * Whether the next click on this canvas drops a site.
+       * Whether the next placement on this canvas drops a site.
        *
        * On the `map` arm alone, because it is the only arm with a basemap to
        * click: a placeholder that could be "armed" would be a state no caller

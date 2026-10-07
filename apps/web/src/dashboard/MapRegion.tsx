@@ -17,15 +17,15 @@ export interface MapRegionProps {
   readonly selectedSiteId: Site['id'] | null;
   readonly onSelectSite: (siteId: Site['id']) => void;
   /**
-   * A click on the basemap itself — where a new site would go. Markers handle
-   * their own.
+   * A click on the basemap, or Enter on the focused canvas at the map centre —
+   * where a new site would go. Markers handle their own.
    *
-   * Reported whether or not add-site mode is armed: whether a click *means*
+   * Reported whether or not add-site mode is armed: whether a placement *means*
    * anything is the dashboard's question, and a region that filtered on its own
    * would put the same rule in two places.
    */
   readonly onMapClick: (position: MapPosition) => void;
-  /** Whether the next basemap click drops a draft — drawn on the toggle and on the cursor. */
+  /** Whether the next placement drops a draft — drawn on the toggle, cursor and reticle. */
   readonly addSiteArmed: boolean;
   readonly onToggleAddSite: () => void;
   /**
@@ -56,7 +56,7 @@ export interface MapRegionProps {
  *
  * This exists so the dashboard can be rendered without WebGL. jsdom implements
  * none of it, so a `MapView` mounted in a test throws before any of the wiring
- * this chunk is about — selection, click-to-add, the pending forecast — has run.
+ * this chunk is about — selection, add-a-site, the pending forecast — has run.
  * The two usual escapes are both worse than a seam: mocking maplibre leaves the
  * suite asserting that a mock was called (`testing.md` rule 3), and leaving the
  * dashboard untested leaves its whole reason for existing unproven.

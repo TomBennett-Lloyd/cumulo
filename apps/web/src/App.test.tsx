@@ -43,7 +43,7 @@ import { THEME_STORAGE_KEY } from './theme';
  * obligation wherever weather-derived data is displayed, and a stand-in without
  * it would let the attribution assertions below pass against a page that never
  * had to show one — theatre. Nothing else about it is interactive: selection and
- * click-to-add are the dashboard's tests to run
+ * add-a-site are the dashboard's tests to run
  * (`dashboard/Dashboard.test.tsx`), not the shell's.
  */
 const StandInMapRegion: MapRegionComponent = (): ReactElement => (

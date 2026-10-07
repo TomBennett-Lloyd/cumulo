@@ -60,7 +60,8 @@ export type { MapPosition };
 export interface MapViewProps {
   readonly theme: Theme;
   /**
-   * Fired for clicks on the basemap itself.
+   * Fired for a click on the basemap itself, or for Enter on the focused canvas
+   * reported at the map centre.
    *
    * Overlay clicks are excluded here rather than by each overlay: maplibre
    * mounts markers inside the very container this handler is bound to, so
@@ -69,8 +70,8 @@ export interface MapViewProps {
    */
   readonly onMapClick?: (position: MapPosition) => void;
   /**
-   * Whether the next basemap click drops a site, which the canvas says with a
-   * crosshair.
+   * Whether the next placement drops a site, which the canvas says with a
+   * crosshair and a centre reticle.
    *
    * Passed through to the canvas slot rather than applied to maplibre's own
    * container in an effect. The imperative form — reaching for
@@ -96,7 +97,7 @@ export interface MapViewProps {
  * tested on their own terms.
  *
  * Three effects, three external systems (react.md rule 1): the map's lifetime,
- * its style, and its click subscription. They are separate because they have
+ * its style, and its input subscription. They are separate because they have
  * different dependencies — folding the style into the lifetime effect would
  * make `theme` a dependency of map *creation*, and the map would be destroyed
  * and rebuilt every time the visitor flipped the toggle.
@@ -197,10 +198,23 @@ export const MapView = ({
       onMapClickRef.current?.({ longitude: event.lngLat.lng, latitude: event.lngLat.lat });
     };
 
+    const canvas = map.getCanvas();
+    const handleKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Enter' || event.repeat) {
+        return;
+      }
+
+      const centre = map.getCenter();
+
+      onMapClickRef.current?.({ longitude: centre.lng, latitude: centre.lat });
+    };
+
     map.on('click', handleClick);
+    canvas.addEventListener('keydown', handleKey);
 
     return () => {
       map.off('click', handleClick);
+      canvas.removeEventListener('keydown', handleKey);
     };
   }, [map]);
 

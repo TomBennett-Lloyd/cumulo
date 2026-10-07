@@ -26,7 +26,7 @@ import { MapContext } from './MapContext';
  */
 
 export interface MapControlsProps {
-  /** Whether the next basemap click drops a draft. Owned by the dashboard. */
+  /** Whether the next placement drops a draft. Owned by the dashboard. */
   readonly armed: boolean;
   readonly onToggleArmed: () => void;
 }
@@ -130,7 +130,13 @@ export const MapControls = ({ armed, onToggleArmed }: MapControlsProps): ReactEl
         className="map-control-add"
         aria-label="Add a site"
         aria-pressed={armed}
-        onClick={onToggleArmed}
+        onClick={(event) => {
+          onToggleArmed();
+
+          if (!armed && map !== null) {
+            map.getCanvas().focus({ focusVisible: event.detail === 0 });
+          }
+        }}
       >
         <svg className="map-control-icon" viewBox="0 0 20 20" aria-hidden="true">
           <path d="M10 17c3.2-4.2 4.5-6.6 4.5-8.5a4.5 4.5 0 0 0-9 0c0 1.9 1.3 4.3 4.5 8.5z" />
