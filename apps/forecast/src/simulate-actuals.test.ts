@@ -357,7 +357,7 @@ describe('simulating the trailing window for a run’s sites', () => {
       const { settled } = await simulateTrailingActuals(
         deps({
           recorder: emptyRecorder(),
-          pointsBySite: { [RATHMINES_ID]: [forecastPoint({ siteId: RATHMINES_ID })] },
+          pointsBySite: { [RANELAGH_ID]: [forecastPoint()] },
           ...input,
         }),
         [RANELAGH_ID, RATHMINES_ID],

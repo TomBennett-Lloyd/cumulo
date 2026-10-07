@@ -237,6 +237,7 @@ Every hit was read. Trued up in the same change:
 - `infra/forecast/outputs.tf` (DynamoDB driver and log census) and `infra/forecast/event-source.tf`.
 - `infra/ingestion/outputs.tf`.
 - The fleet-vs-poll comment in `apps/web/src/data/use-first-forecast.test.tsx`.
+- `apps/api/src/request-budget.ts`'s per-route ungated-prefix ledger: the actuals route now has the forecast route's shape, 4 on the roll-up path and 5 on fallback.
 - Old-path prose in `apps/api/src/forecast/fleet-series-read.ts`, `apps/api/src/forecast/get-fleet-actuals.ts`, `apps/web/src/data/use-first-forecast.ts`, `docs/design/dashboard-composition.md`, `packages/shared/src/storage-key.ts` and `packages/storage/src/adapters/series/fleet-rollup-item.ts`.
 
 Annotated as-it-stood: `## Consequences` above. The remaining hits are ADR 0002's historical entries, `docs/review-feedback.md`'s records, and unrelated numbers that share a literal (fixture data, `apps/web/src/map/clustering.test.ts`).

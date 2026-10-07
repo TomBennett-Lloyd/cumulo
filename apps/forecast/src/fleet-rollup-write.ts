@@ -67,7 +67,7 @@ export type FleetRollupOutcome = { readonly locationId: string } & (
 /**
  * The steps that can throw. A `failed` outcome names which, because the next step differs
  * (`docs/standards/error-handling.md` rule 4): a `putFleetRollupPartials` throw is the series table,
- * while the other two are bugs in the arithmetic — nothing an operator can fix in AWS.
+ * while the others are bugs in the arithmetic — nothing an operator can fix in AWS.
  */
 type FleetRollupOperation =
   | 'fleetRollupMembers'
