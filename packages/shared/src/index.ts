@@ -20,6 +20,14 @@ export {
   fleetForecastAggregate,
 } from './fleet-rollup';
 export {
+  FLEET_ROLLUP_ACTUALS_KIND,
+  fleetActualsAggregatePointSchema,
+  type FleetActualsAggregatePoint,
+  fleetActualsRollupPartials,
+  sumFleetActualsRollupPartials,
+  fleetActualsAggregate,
+} from './fleet-actuals-rollup';
+export {
   fleetRollupMembers,
   fleetRollupMembersSchema,
   type FleetRollupMembers,
