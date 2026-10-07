@@ -168,11 +168,12 @@ log_lines() { # log_lines <service> <filter pattern>
 }
 
 # Event names are owned by apiServerErrorEvent and apiRequestFailedEvent in
-# apps/api/src/main.ts and messageOutcomeEvent in apps/forecast/src/handler.ts;
+# apps/api/src/main.ts and messageOutcomeEvent in apps/forecast/src/handler.ts,
+# and the statuses that keep a record off the DLQ by failsTheRecord there;
 # incident-watch.test.sh fails if they move without this file.
 api_errors='?api_response_server_error ?"api.request.failed"'
 lambda_errors='?ERROR ?"Task timed out"'
-forecast_failures='{ ($.event = "forecast.message.outcome") && ($.status = "failed") }'
+forecast_failures='{ ($.event = "forecast.message.outcome") && ($.status != "stored") && ($.status != "no-active-sites") }'
 
 alarmed="$firing
 $raised"
