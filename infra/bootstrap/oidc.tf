@@ -12,7 +12,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 locals {
   # The workflow files under .github/workflows/ that may assume the deploy role.
-  # check-oidc-workflows.sh reads this list; keep one quoted file name per line.
+  # .claude/scripts/check-oidc-workflows.sh reads this list; keep one quoted
+  # file name per line.
   deploy_role_workflows = [
     "deploy-api.yml",
     "deploy-forecast.yml",
@@ -48,10 +49,8 @@ data "aws_iam_policy_document" "github_actions_trust" {
     # file, no wildcard. It holds only under the repository's customised subject
     # template (repo, context, job_workflow_ref); the switch and its ordering are
     # infra/README.md's "Runbook: switch the OIDC subject template" (#605).
-    # Nothing an unmerged contributor controls belongs in this list (#7, #11).
-    # .claude/scripts/check-oidc-workflows.sh fails verify when the list and the
-    # workflows disagree, or a token-minting workflow takes a fork-triggerable
-    # event.
+    # Nothing an unmerged contributor controls belongs in this list (#7, #11);
+    # .claude/scripts/check-oidc-workflows.sh is its gate.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"

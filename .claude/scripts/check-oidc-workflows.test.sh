@@ -17,7 +17,7 @@ harness_init_tmp
 # --- fixtures ----------------------------------------------------------------------------
 
 # fixture <name> -> DIR, a clean tree: deploy.yml assumes the role and is allowlisted;
-# pages.yml mints a token without AWS (deploy-pages.yml's shape); ci.yml mints nothing.
+# pages.yml mints a token without AWS (.github/workflows/deploy-pages.yml's shape); ci.yml mints nothing.
 fixture() {
   DIR="$TMP_ROOT/$1"
   must mkdir -p "$DIR/infra/bootstrap" "$DIR/.github/workflows"
@@ -145,8 +145,8 @@ expect_rc 1 "$rc"
 expect_out "allowlists pages.yml, which is not a workflow"
 end
 
-# --- rule 3, every forbidden event in every trigger shape ------------------------------------
-for event in pull_request_target issue_comment issues workflow_run; do
+# --- rule 3: a permit list, so an event nobody enumerated fails ------------------------------
+for event in pull_request_target issue_comment issues workflow_run workflow_call watch discussion; do
   begin "rule 3: $event on a token-minting workflow fails (block form)"
   fixture "block_$event"
   aws_workflow deploy.yml "  push:
@@ -154,9 +154,46 @@ for event in pull_request_target issue_comment issues workflow_run; do
     types: [created]"
   run_check "$DIR"
   expect_rc 1 "$rc"
-  expect_out "deploy.yml can mint an OIDC token and is triggered by $event"
+  expect_out "deploy.yml can mint an OIDC token and is triggered by $event, which is not in PERMITTED_TRIGGERS"
   end
 done
+
+begin "rule 3: schedule is permitted"
+fixture schedule
+aws_workflow deploy.yml "  schedule:
+    - cron: '0 3 * * *'"
+run_check "$DIR"
+expect_rc 0 "$rc"
+end
+
+begin "rule 3: a column-0 block sequence under on: is read, not skipped"
+fixture column0
+cat >"$DIR/.github/workflows/pages.yml" <<'EOF'
+on:
+- push
+- issue_comment
+permissions:
+  id-token: write
+EOF
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "pages.yml can mint an OIDC token and is triggered by issue_comment"
+end
+
+begin "rule 3: a caller granting id-token in a flow mapping is a minter"
+fixture flow_permissions
+cat >"$DIR/.github/workflows/caller.yml" <<'EOF'
+on:
+  pull_request_target:
+jobs:
+  call:
+    permissions: { id-token: write, contents: read }
+    uses: ./.github/workflows/deploy.yml
+EOF
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "caller.yml can mint an OIDC token and is triggered by pull_request_target"
+end
 
 begin "rule 3: flow-list form, on the non-AWS minter"
 fixture flow_list
@@ -234,6 +271,30 @@ must sed -i.bak '/^on:/d' "$DIR/.github/workflows/pages.yml"
 run_check "$DIR"
 expect_rc 2 "$rc"
 expect_out "pages.yml has no top-level on: key"
+end
+
+begin "refuses an on: written as a flow mapping"
+fixture flow_map
+must sed -i.bak '1,3d' "$DIR/.github/workflows/pages.yml"
+must sed -i.bak '1i\
+on: { push: { branches: [main] }, pull_request_target: {} }
+' "$DIR/.github/workflows/pages.yml"
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "pages.yml writes on: as a flow mapping or a multi-line flow sequence"
+expect_not_out "check-oidc-workflows: OK"
+end
+
+begin "refuses an on: flow sequence that does not close on its line"
+fixture flow_multiline
+must sed -i.bak '1,3d' "$DIR/.github/workflows/pages.yml"
+must sed -i.bak '1i\
+on: [push,\
+  issues]
+' "$DIR/.github/workflows/pages.yml"
+run_check "$DIR"
+expect_rc 2 "$rc"
+expect_out "pages.yml writes on: as a flow mapping or a multi-line flow sequence"
 end
 
 begin "refuses a missing REPO_ROOT"

@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # OIDC workflow gate (#605): the deploy role's workflow allowlist in
 # infra/bootstrap/oidc.tf (`local.deploy_role_workflows`) and .github/workflows
-# must agree, and no workflow that can mint an OIDC token may take an event a
-# fork author can trigger.
+# must agree, and a workflow that can mint an OIDC token is triggered only by
+# events no outsider can fire.
 #
 #   1. A workflow using aws-actions/configure-aws-credentials is allowlisted and
 #      declares `id-token: write`.
 #   2. Every allowlist entry is a workflow that uses that action.
-#   3. A workflow with `id-token: write` (or `permissions: write-all`) has no
-#      pull_request_target, issue_comment, issues or workflow_run trigger — they
-#      run in main's context, so their tokens carry the subject the trust policy
-#      admits (#358, 2026-10-07 infra review, entry 2).
+#   3. A workflow that can mint a token has no trigger outside PERMITTED_TRIGGERS.
+#      Events such as issue_comment or workflow_run, and a workflow_call from
+#      any caller, run with main's subject (#358, 2026-10-07 infra review,
+#      entry 2); a permit list fails closed on events nobody enumerated.
 #
 # Rule 1 keys on the action rather than on `id-token: write` alone because
-# deploy-pages.yml mints a token for GitHub Pages, not AWS (#605 plan comment).
-# Line-based, comment lines skipped; a shape it cannot read is refused (exit 2).
+# .github/workflows/deploy-pages.yml mints a token for GitHub Pages, not AWS
+# (#605 plan comment). Minting and the action are matched on any non-comment
+# line, over-approximating; an `on:` shape the parser cannot read is refused.
 #
 # Usage: bash .claude/scripts/check-oidc-workflows.sh [REPO_ROOT]
 # Exit:  0 agree, 1 a violation, 2 no verdict (bad invocation or unreadable input).
@@ -33,7 +34,7 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 
 TRUST_REL=infra/bootstrap/oidc.tf
 WORKFLOWS_REL=.github/workflows
-FORK_EVENTS=" pull_request_target issue_comment issues workflow_run "
+PERMITTED_TRIGGERS=" push workflow_dispatch schedule "
 
 [ -f "$ROOT/$TRUST_REL" ] || refuse "missing $TRUST_REL"
 [ -d "$ROOT/$WORKFLOWS_REL" ] || refuse "missing $WORKFLOWS_REL/"
@@ -70,11 +71,13 @@ done <"$ROOT/$TRUST_REL"
 
 # --- the workflows ------------------------------------------------------------------------
 
-# events_of <file> -> prints the workflow's trigger names, one per line; exit 2 if no `on:`.
+# events_of <file> -> prints the workflow's trigger names, one per line.
+# Exit 2: no top-level `on:`. Exit 3: an inline flow mapping, or a flow sequence
+# that does not close on its own line.
 events_of() {
   awk '
     function emit(text,   word) {
-      gsub(/[][{}:,"'\'']/, " ", text)
+      gsub(/[][,"'\'']/, " ", text)
       while (match(text, /[A-Za-z_]+/)) {
         word = substr(text, RSTART, RLENGTH)
         print word
@@ -90,26 +93,33 @@ events_of() {
       in_on = 1
       inline = $0
       sub(/^[^:]*:[[:space:]]*/, "", inline)
-      if (inline != "") { emit(inline); in_on = 0 }
+      if (inline != "") {
+        if (inline ~ /[{}]/ || gsub(/\[/, "[", inline) != gsub(/\]/, "]", inline)) { refused = 1; exit 3 }
+        emit(inline)
+        in_on = 0
+      }
       next
     }
-    in_on && /^[^[:space:]]/ { in_on = 0 }
+    in_on && /^[^[:space:]-]/ { in_on = 0 }
     in_on {
       match($0, /^[[:space:]]*/)
       indent = RLENGTH
-      if (key_indent == 0) key_indent = indent
+      if (!have_indent) { key_indent = indent; have_indent = 1 }
       if (indent != key_indent) next
       item = substr($0, indent + 1)
       sub(/^-[[:space:]]*/, "", item)
       sub(/:.*$/, "", item)
       emit(item)
     }
-    END { if (!found) exit 2 }
+    END {
+      if (refused) exit 3
+      if (!found) exit 2
+    }
   ' "$1"
 }
 
-USES_AWS='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*["'\'']?aws-actions/configure-aws-credentials@'
-MINTS='^[[:space:]]*(id-token:[[:space:]]*["'\'']?write|permissions:[[:space:]]*["'\'']?write-all)'
+USES_AWS='aws-actions/configure-aws-credentials@'
+MINTS='id-token["'\'']?[[:space:]]*:[[:space:]]*["'\'']?write|write-all'
 
 errors=()
 minting=0
@@ -141,10 +151,18 @@ for path in "${workflows[@]}"; do
 
   if [ "$mints" -eq 1 ]; then
     minting=$((minting + 1))
-    events=$(events_of "$path") || refuse "$WORKFLOWS_REL/$name has no top-level on: key this gate can read"
+    events_rc=0
+    events=$(events_of "$path") || events_rc=$?
+    case "$events_rc" in
+      0) ;;
+      2) refuse "$WORKFLOWS_REL/$name has no top-level on: key" ;;
+      3) refuse "$WORKFLOWS_REL/$name writes on: as a flow mapping or a multi-line flow sequence; write it in block style" ;;
+      *) refuse "$WORKFLOWS_REL/$name: reading its on: block failed" ;;
+    esac
     while IFS= read -r event; do
-      case "$FORK_EVENTS" in
-        *" $event "*) errors+=("$WORKFLOWS_REL/$name can mint an OIDC token and is triggered by $event, which a fork author can fire") ;;
+      case "$PERMITTED_TRIGGERS" in
+        *" $event "*) ;;
+        *) errors+=("$WORKFLOWS_REL/$name can mint an OIDC token and is triggered by $event, which is not in PERMITTED_TRIGGERS ($PERMITTED_TRIGGERS)") ;;
       esac
     done <<<"$events"
   fi
@@ -165,5 +183,5 @@ if [ ${#errors[@]} -ne 0 ]; then
   exit 1
 fi
 
-printf 'check-oidc-workflows: OK — %d allowlisted workflow(s) in %s, each assuming the role; %d token-minting workflow(s), none fork-triggerable\n' \
+printf 'check-oidc-workflows: OK — %d allowlisted workflow(s) in %s, each assuming the role; %d token-minting workflow(s), each triggered only by permitted events\n' \
   "${#allowlist[@]}" "$TRUST_REL" "$minting"

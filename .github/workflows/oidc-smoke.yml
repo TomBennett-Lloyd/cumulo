@@ -65,6 +65,7 @@ jobs:
       # Prints two claims of the token, never the token, so a failed assume
       # shows the exact `sub` to compare with infra/bootstrap/oidc.tf (#605).
       - name: OIDC token claims
+        shell: bash
         run: |
           token=$(curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
