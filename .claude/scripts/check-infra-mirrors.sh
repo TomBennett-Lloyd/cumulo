@@ -30,8 +30,8 @@
 # one pair it shipped for, in three directions — the extraction (a Terraform
 # integer, a Terraform double-quoted string, or a variable's validation
 # pattern), the addressing (a dotted path into sub-blocks, not only a top-level
-# attribute), and the relation itself (equality up to a scale, a strict bound,
-# and a floor at a declared factor). So it now checks names as well as numbers:
+# attribute), and the relation itself (equality up to a scale, and a floor at a
+# declared factor). So it now checks names as well as numbers:
 # the `expiresAt` TTL attribute is three of the records below.
 #
 # What it deliberately does NOT check is prose. A value restated in a comment,
@@ -101,23 +101,6 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #              because "300 vs 300000" is only agreement if somebody says which
 #              unit is which.
 #
-#   `ts-lt`    tf-file | address | attr-path | ts-file | constant | ts-per-tf
-#              TS integer STRICTLY LESS THAN TF integer x ts-per-tf. The
-#              mechanical form of "sized under the ceiling with room left", for
-#              a client constant sized against a deployed limit. Strict on
-#              purpose — equality there means the client is provisioned to spend
-#              the whole ceiling, and if that is ever wanted it is a record edit
-#              (`ts-lt` becomes `eq`) and therefore a visible decision.
-#              NO SHIPPED RECORD USES THIS MODE TODAY. The one it was written
-#              for (#133) held the web fleet fan-out's launch rate under the API
-#              stage's throttle, and #296 retired the fan-out itself — the fleet
-#              reads one endpoint now, so there is no client-side launch rate
-#              left to bound. The mode is kept rather than deleted because the
-#              relation is the one a client sizing itself against any deployed
-#              ceiling needs, and its grammar stays exercised: the harness next
-#              door declares its own `ts-lt` pair on a gate copy, the same way
-#              it reaches every other branch MIRRORS cannot express.
-#
 #   `str-eq`   tf-file | address | attr-path | ts-file | constant
 #              TF double-quoted string == TS `export const NAME = '<text>';`
 #              (single quotes, this repo's prettier style). A backslash or an
@@ -140,6 +123,11 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #              sides, and a floor rather than an equality: ADR 0004's rule that
 #              the queue's visibility timeout must be at least six times the
 #              consumer's function timeout.
+#
+# A fifth mode, `ts-lt` (a client constant held strictly under a deployed
+# ceiling), was retired by #588: its one record went with #296's fan-out, and
+# no client constant has been sized against a deployed limit since. It is in
+# git history for the next one.
 #
 # Addresses are `<resource_type>.<label>` (matching `resource "<type>" "<label>"
 # {`) or `variable.<label>` (matching `variable "<label>" {`).
@@ -563,9 +551,9 @@ require_files() { # require_files <record-number> <repo-relative path>... -> 1 i
   return 0
 }
 
-check_numeric_relation() { # <n> <mode> <tf-file> <address> <attr-path> <ts-file> <constant> <scale>
-  local number="$1" mode="$2" tf_file="$3" address="$4" attr_path="$5"
-  local ts_file="$6" constant="$7" scale="$8"
+check_numeric_relation() { # <n> <tf-file> <address> <attr-path> <ts-file> <constant> <scale>
+  local number="$1" tf_file="$2" address="$3" attr_path="$4"
+  local ts_file="$5" constant="$6" scale="$7"
   local tf_value ts_value expected actual
 
   require_files "$number" "$tf_file" "$ts_file" || return 0
@@ -581,23 +569,11 @@ check_numeric_relation() { # <n> <mode> <tf-file> <address> <attr-path> <ts-file
   expected=$((10#$tf_value * scale))
   actual=$((10#$ts_value))
 
-  if [ "$mode" = "eq" ]; then
-    if [ "$actual" -ne "$expected" ]; then
-      offenders+=("ERROR $tf_file  $address.$attr_path = $tf_value")
-      offenders+=("      $ts_file  $constant = $actual, but $tf_value * $scale = $expected")
-    else
-      agreements+=("$address.$attr_path = $tf_value  ==  $constant = $actual  (x$scale)")
-    fi
-    return 0
-  fi
-
-  # ts-lt. Strict: `actual == expected` is the client provisioned to spend the
-  # whole ceiling, which is the thing the record says it must not be.
-  if [ "$actual" -lt "$expected" ]; then
-    agreements+=("$address.$attr_path = $tf_value  >  $constant = $actual  (strictly under, x$scale)")
-  else
+  if [ "$actual" -ne "$expected" ]; then
     offenders+=("ERROR $tf_file  $address.$attr_path = $tf_value")
-    offenders+=("      $ts_file  $constant = $actual, which is not strictly under $tf_value * $scale = $expected")
+    offenders+=("      $ts_file  $constant = $actual, but $tf_value * $scale = $expected")
+  else
+    agreements+=("$address.$attr_path = $tf_value  ==  $constant = $actual  (x$scale)")
   fi
 }
 
@@ -679,12 +655,12 @@ for record in "${MIRRORS[@]}"; do
   IFS='|' read -r mode f1 f2 f3 f4 f5 f6 f7 <<<"$record"
 
   case $mode in
-    eq | ts-lt) arity=6 ;;
+    eq) arity=6 ;;
     str-eq) arity=5 ;;
     regex-eq) arity=4 ;;
     tf-ge) arity=7 ;;
     *)
-      blockers+=("MIRRORS[$index]: unknown mode '${mode:-<empty>}' — the modes are eq, ts-lt, str-eq, regex-eq and tf-ge")
+      blockers+=("MIRRORS[$index]: unknown mode '${mode:-<empty>}' — the modes are eq, str-eq, regex-eq and tf-ge")
       continue
       ;;
   esac
@@ -706,7 +682,7 @@ for record in "${MIRRORS[@]}"; do
 
   ok=1
   case $mode in
-    eq | ts-lt)
+    eq)
       validate_field "$index" "tf-file" "$f1" "$PATH_FIELD_RE" || ok=0
       validate_field "$index" "address" "$f2" "$ADDRESS_FIELD_RE" || ok=0
       validate_field "$index" "attr-path" "$f3" "$ATTR_PATH_FIELD_RE" || ok=0
@@ -714,7 +690,7 @@ for record in "${MIRRORS[@]}"; do
       validate_field "$index" "constant" "$f5" "$CONSTANT_FIELD_RE" || ok=0
       validate_field "$index" "ts-per-tf" "$f6" "$FACTOR_FIELD_RE" || ok=0
       [ "$ok" -eq 1 ] || continue
-      check_numeric_relation "$index" "$mode" "$f1" "$f2" "$f3" "$f4" "$f5" "$f6"
+      check_numeric_relation "$index" "$f1" "$f2" "$f3" "$f4" "$f5" "$f6"
       ;;
     str-eq)
       validate_field "$index" "tf-file" "$f1" "$PATH_FIELD_RE" || ok=0
