@@ -48,18 +48,8 @@ import { firstSiteIdentity } from './site-identity';
  * ring, and `pointer-focus.spec.ts` is satisfied by a page with no rings
  * anywhere.
  *
- * What it leaves uncovered is worth naming here rather than leaving to be
- * inferred. The card's hand-back on the way out is owed only to a reader who has
- * come *into* the card, which since #328 no selection does for them — that path
- * is `document.activeElement` again, so `map/SitePopoverCard.test.tsx` and
- * `Dashboard.focus.test.tsx` keep it in the lane that can see it rather than
- * this one re-proving it slowly. But the *journey* into the card is exactly this
- * lane's kind of question and no case here asks it. The card is portaled into
- * maplibre's marker overlay, as the markers themselves are, so where it lands
- * relative to the marker that opened it is decided by the order maplibre
- * appended the two elements in rather than by anything this repo writes down.
- * Only a real tab order can say whether a reader arrives. `docs/tech-debt.md`
- * carries that gap; this comment is not a claim that it is covered.
+ * The card's way out by keyboard — Tab from the marker into the card, then Close
+ * or Escape — is the `a keyboard reader leaving the card` describe (#446).
  *
  * The second case measures the same ring on the fleet chart, and it exists
  * because #440 gave that chart the only pointer-ring suppression on this page
@@ -87,7 +77,7 @@ import { firstSiteIdentity } from './site-identity';
  * focus so taken paints no ring, and that the ring is waiting when the reader
  * comes back to the chart by Tab.
  *
- * The last case is the other half of the same rule, and it is the reason #260
+ * The `?site=` case is the other half of the same rule, and it is the reason #260
  * was routed to this lane at all. A `?site=` link is *not* a reader asking for
  * anything now, so the card must take no focus — and "no focus was taken" is a
  * claim about the whole assembled page arriving over HTTP, which is what this
@@ -385,6 +375,67 @@ test('takes no focus at all when ?site= opens the card (issue 260)', async ({ pa
   const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
 
   expect(focusedTag).toBe('BODY');
+});
+
+test.describe('a keyboard reader leaving the card', () => {
+  const SITE_CARD = '.site-popover';
+  const CARD_CLOSE = '.site-popover-close';
+
+  /** Tab to a revealed site's marker, open its card with Enter, and Tab on to Close. */
+  const tabIntoCard = async (page: Page): Promise<string> => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    const name = await (await revealSiteMarker(page)).getAttribute('aria-label');
+
+    if (name === null) {
+      throw new Error('The revealed site marker carries no accessible name to tab to.');
+    }
+
+    await tabToMarker(page, name);
+    await page.keyboard.press('Enter');
+    await expect(page.locator(SITE_CARD)).toBeVisible();
+
+    for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
+      if (await page.locator(CARD_CLOSE).evaluate((close) => close === document.activeElement)) {
+        return markerByName(name);
+      }
+
+      await page.keyboard.press('Tab');
+    }
+
+    throw new Error(
+      `The card's Close took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
+    );
+  };
+
+  /** The card gone, and the reader back on its marker with the ring painted. */
+  const expectRingedHandBack = async (page: Page, marker: string): Promise<void> => {
+    await expect(page.locator(SITE_CARD)).toHaveCount(0);
+    await expect(page.locator(marker)).toBeFocused();
+
+    const ring = await focusRing(page, marker);
+
+    expect(ring.style).toBe('solid');
+    expect(ring.widthPx).toBeGreaterThan(0);
+  };
+
+  test('hands focus back to the marker, ring and all, when Enter presses Close', async ({
+    page,
+  }) => {
+    const marker = await tabIntoCard(page);
+
+    await page.keyboard.press('Enter');
+    await expectRingedHandBack(page, marker);
+  });
+
+  test('hands focus back to the marker, ring and all, when Escape closes the card', async ({
+    page,
+  }) => {
+    const marker = await tabIntoCard(page);
+
+    await page.keyboard.press('Escape');
+    await expectRingedHandBack(page, marker);
+  });
 });
 
 /*
