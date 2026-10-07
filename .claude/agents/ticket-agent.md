@@ -31,7 +31,7 @@ Plan revisions edit that one comment fetch-modify-push (`.claude/agents/task-orc
 
 ## 3. Inline first
 
-Planning, implementation, tests and fix rounds run in your own context. No planner, implementer or general-purpose dispatch by default — the lane's cost advantage is that the ticket's whole reasoning happens once, in one context. The named exceptions, every one of them `run_in_background: false`:
+Planning, implementation, tests and fix rounds run in your own context. No planner, implementer or general-purpose dispatch by default — the lane's cost advantage is that the ticket's whole reasoning happens once, in one context. The named exceptions, every one of them a fresh `run_in_background: false` dispatch — never a `SendMessage` to an agent you dispatched earlier, whose reply reaches the top level instead of you (`.claude/agents/task-orchestrator.md` rule 4):
 
 - **(a) `browser-smoke`** for any acceptance criterion measured in a browser; its dispatch contract in `.claude/agents/browser-smoke.md` governs.
 - **(b) `consultant`** on STRUGGLING (rule 5(a)).
@@ -61,11 +61,13 @@ The counts above — two fix attempts, two re-plans — are provisional, set fro
 
 **PARTIAL is the honest exit** when some acceptance criteria are met and ship standalone: commit and push those, open the PR `--draft`, list the unmet ones. A DONE carrying a known bug or an unmet criterion is the one unforgivable report.
 
+**DONE is final: after it you push nothing.** The merge owner may merge the reported HEAD the moment the report lands, and a later push re-creates the deleted branch and never reaches `main` — #583's lane reported DONE with a reviewer check on its rebase still running, then pushed that check's fix after the merge (2b7e9b9, committed 41 s after it), so it was lost. Anything still running or owed — a review pass, a CI run, a rebase confirmation — makes the report PARTIAL, naming it.
+
 ## 6. Review pass
 
 Source diffs only: a diff holding none of the source extensions `.claude/workflow.json` → `merge.autoRule` lists owes no review.
 
-One synchronous `reviewer` dispatch scoped to `git diff main...HEAD`, naming the prose you wrote yourself — PR body, `docs/tech-debt.md` entries, issue bodies — per `.claude/skills/review-loop/SKILL.md` step 1. FIX-NOW findings are fixed inline, then one reviewer pass scoped to the fix commits alone, in the confirmation-pass shape and under the termination rule that skill's Exit conditions state. Correctness findings iterate until none; claim-accuracy findings are fixed, never deferred; isolable findings become their own issue, named in the PR body. Cap: one full pass plus confirmation passes on fix commits — a pass returning new correctness findings on a third fix diff → STRUGGLING.
+One synchronous `reviewer` dispatch scoped to `git diff main...HEAD`, naming the prose you wrote yourself — PR body, `docs/tech-debt.md` entries, issue bodies — per `.claude/skills/review-loop/SKILL.md` step 1. FIX-NOW findings are fixed inline, then one fresh `reviewer` dispatch scoped to the fix commits alone, in the confirmation-pass shape and under the termination rule that skill's Exit conditions state. Correctness findings iterate until none; claim-accuracy findings are fixed, never deferred; isolable findings become their own issue, named in the PR body. Cap: one full pass plus confirmation passes on fix commits — a pass returning new correctness findings on a third fix diff → STRUGGLING.
 
 This pass is what `.claude/workflow.json` → `merge.reviewedSourceRule` accepts from this lane. Your own read of your own diff is not a review and never satisfies it.
 

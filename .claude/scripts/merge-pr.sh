@@ -251,6 +251,13 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       put("closes", m[1]);
     }
   }
+  // The ticket-agent lane declares itself: its report header (ticket-agent.md
+  // rule 8) names the one issue the lane owns, fenced or not. Read from the body
+  // for the reason the Closes read above gives.
+  const lanes = new Set();
+  const laneRe = /^## Lane report — issue #(\d+)/gm;
+  while ((m = laneRe.exec(pr.body || ""))) lanes.add(m[1]);
+  for (const n of lanes) put("lane", n);
   process.stdout.write(out.join("\n") + "\n");
 });
 '
@@ -282,6 +289,7 @@ pr_merge_state=""
 pr_url=""
 pr_labels=()
 pr_closes=()
+pr_lanes=()
 pr_commits=()
 check_names=()
 check_statuses=()
@@ -311,6 +319,7 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
   pr_url=""
   pr_labels=()
   pr_closes=()
+  pr_lanes=()
   pr_commits=()
   check_names=()
   check_statuses=()
@@ -328,6 +337,7 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
       url) pr_url="$a" ;;
       label) pr_labels+=("$a") ;;
       closes) pr_closes+=("$a") ;;
+      lane) pr_lanes+=("$a") ;;
       commit) pr_commits+=("$a") ;;
       check)
         check_names+=("$a")
@@ -366,26 +376,36 @@ already_merged=0
 # step below, which needs a second call to read the diff; it still lands before
 # update-branch, which is the property that matters.)
 
+# "Batch" is a run-issue lane property — `orchestration.routeRule`'s 2-6 members,
+# one agent, one in-flight row — and a Closes count only correlates with it: PR
+# #611, one ticket-agent lane that also closed the issue it resolved, carried two
+# Closes lines and was refused as a batch. So the lane's own declaration is read
+# first, and the Closes count decides only for a body without one. Two lane
+# reports in one body declare nothing this script can act on, so they refuse.
 merge_method=""
-case "${#pr_closes[@]}" in
-  0) merge_reason="no Closes line in the PR body" ;;
-  1)
-    merge_method="--squash"
-    merge_reason="single issue #${pr_closes[0]} -> squash"
-    ;;
-  *)
-    merge_method="--rebase"
-    closes_list=$(printf ' #%s' "${pr_closes[@]}")
-    merge_reason="batch of ${#pr_closes[@]} issues (${closes_list# }) -> rebase"
-    ;;
-esac
+if [ "${#pr_lanes[@]}" -gt 1 ]; then
+  merge_reason="${#pr_lanes[@]} lane reports in one PR body"
+elif [ "${#pr_lanes[@]}" -eq 1 ]; then
+  merge_method="--squash"
+  merge_reason="ticket-agent lane for #${pr_lanes[0]} -> squash"
+else
+  case "${#pr_closes[@]}" in
+    0) merge_reason="no Closes line in the PR body" ;;
+    1)
+      merge_method="--squash"
+      merge_reason="single issue #${pr_closes[0]} -> squash"
+      ;;
+    *)
+      merge_method="--rebase"
+      closes_list=$(printf ' #%s' "${pr_closes[@]}")
+      merge_reason="batch of ${#pr_closes[@]} issues (${closes_list# }) -> rebase"
+      ;;
+  esac
+fi
 
-# An explicit --method overrides the inference, and exists because the inference
-# is a heuristic rather than a fact. "Batch" is a run-issue lane property —
-# `orchestration.routeRule`'s 2-6 members, one agent, one in-flight row — and a
-# Closes count only correlates with it: PR #414 carried four Closes lines and was
-# squash-merged. The inference stays the default because the issue asks for it;
-# an operator who knows the lane says so and is believed.
+# An explicit --method overrides the inference, which stays a heuristic for any
+# body without a lane report: PR #414 carried four Closes lines and was
+# squash-merged. An operator who knows the lane says so and is believed.
 if [ -n "$method_override" ]; then
   merge_method="--$method_override"
   merge_reason="$merge_reason, overridden to $method_override"
@@ -499,7 +519,7 @@ step 'classify' "PR #$pr_number is $pr_state on '$pr_head_ref'; $merge_reason; $
 # run — the cost this script exists to save.
 if [ "$already_merged" = "0" ]; then
   [ -n "$merge_method" ] || fail 'classify' \
-    "$merge_reason — cannot tell a single-issue squash from a batch rebase. Add the Closes line to the body, or pass --method squash|rebase"
+    "$merge_reason — cannot tell a single-issue squash from a batch rebase. Correct the Closes lines or the lane report in the body, or pass --method squash|rebase"
   if [ "$merge_method" = "--rebase" ]; then
     curated_reason=$(curated_history_ok) || fail 'classify' "$curated_reason"
   fi

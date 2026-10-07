@@ -819,6 +819,50 @@ expect_not_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================
+# 10e. a ticket-agent lane squashes however many issues it closes
+# ==========================================================================================
+# PR #611 was one lane that also closed the issue it resolved: two Closes lines, six
+# commits, and the Closes count called it a batch and refused it on curated history.
+# The lane report header is the lane declaring itself, so it outranks the count.
+# Fenced (#611 used backticks; tildes here keep shellcheck quiet), so the header is read
+# wherever a line starts with it.
+begin "a lane report with two Closes lines merges --squash, not as a batch"
+fixture lane-two-closes
+V_BODY='Closes #21. Closes #22.\n\n~~~\n## Lane report — issue #21\nSTATUS: DONE\n~~~'
+V_COMMITS="#21: the first,#21: the second,#21: the third"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'ticket-agent lane for #21 -> squash'
+expect_not_stdout 'batch of 2 issues'
+expect_called "pr update-branch $PR"
+expect_called "pr merge $PR --squash"
+expect_not_called "pr merge $PR --rebase"
+expect_stdout 'closed by the merge: #21 #22'
+end
+
+# ==========================================================================================
+# 10f. two lane reports in one body are refused at classify
+# ==========================================================================================
+# A lane PR has one owner; a body naming two is a pasting slip, and squashing a
+# body that may be a batch is the irreversible direction.
+begin "a body with two lane reports is refused at classify"
+fixture lane-two-reports
+V_BODY='Closes #21. Closes #22.\n## Lane report — issue #21\n## Lane report — issue #22'
+V_COMMITS="#21: the first,#22: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr '2 lane reports in one PR body'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+expect_not_called "pr merge $PR --rebase"
+end
+
+# ==========================================================================================
 # 11. a failing check exits non-zero and names the check
 # ==========================================================================================
 begin "a failing check exits non-zero, naming it, and never merges"
