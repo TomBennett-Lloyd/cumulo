@@ -272,3 +272,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/scripts/check-oidc-workflows.sh`; `infra/bootstrap/oidc.tf` (`local.deploy_role_workflows`, the `sub` condition)
 - What: the gate proves `local.deploy_role_workflows` and `.github/workflows/` agree, but not that the `sub` condition is still built from that list — a condition rewritten to a literal or a wildcard leaves the gate green. Nor does it refuse `environment:` on an allowlisted workflow's job, which turns the token's `context` into `environment:<name>` and locks that workflow out at runtime (fails closed). Root cause: the gate reads Terraform by line shape, so it can see a list but not an expression's meaning.
 - Source: PR for #605 (review cycle 1)
+
+## 2026-10-07 — Contracting a `@cumulo/shared` field ships to every deployable at once, with no expand/contract rule
+
+- Where: `.github/workflows/deploy-api.yml`, `deploy-web.yml`, `deploy-ingestion.yml` and `deploy-forecast.yml`, which all trigger in parallel on `packages/shared/**`. `docs/standards/architecture.md` has no rule on schema contraction.
+- What: removing a required field from a stored or wire schema reaches the API, the web bundle, ingestion and forecast in one parallel push. Until every deployable has updated, an old one parses the new shape with the old schema and throws. Once the new code has written rows, a revert breaks the readers too. #606 recorded these hazards for `FleetSite.active` rather than building a transition. Candidate standards rule: contract a stored or wire field over two releases, so readers tolerate its absence before writers stop emitting it.
+- Source: #606 review pass 1 SYSTEMIC

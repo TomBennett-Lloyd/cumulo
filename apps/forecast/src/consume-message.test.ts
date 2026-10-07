@@ -90,7 +90,7 @@ describe('consuming one weather message', () => {
     ]);
   });
 
-  it('succeeds without writing when every site at the location has been deactivated', async () => {
+  it('succeeds without writing when every site at the location has been deleted', async () => {
     const recorder = emptyRecorder();
 
     const outcome = await consumeMessage(

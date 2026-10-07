@@ -44,13 +44,12 @@ import { forecastsIn } from './series-split';
  * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
  * every site carries coordinates, so the expected set is the listed sites' `locationId`s — the same
  * `locationId` ingestion keys its messages on, over the same unfiltered listing
- * `activeFetchLocations` takes. A cycle that
- * deferred a location for budget is a different dimension and is what `incomplete` is for. The
- * check is **not** per hour, which is a decision rather than an omission: ADR 0009's
- * `## Amendments` entry for 2026-10-05 (#531) states it and what makes the residual honest rather
- * than silent. A location that has written is also checked for **membership and vintage** (#602,
- * the 2026-10-07 entry): its slices must carry the digest of the sites there now, and one
- * `issuedAt` between them.
+ * `activeFetchLocations` takes. A cycle that deferred a location for budget is a different
+ * dimension and is what `incomplete` is for. The check is **not** per hour, which is a decision
+ * rather than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states it and
+ * what makes the residual honest rather than silent. A location that has written is also checked
+ * for **membership and vintage** (#602, the 2026-10-07 entry): its slices must carry the digest of
+ * the sites there now, and one `issuedAt` between them.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent}; #507 removes the
  * fallback and this module's second arm, and ADR 0009's 2026-10-07 entry says what `stale` leaves
@@ -236,8 +235,9 @@ export const readFleetForecastAggregate = async (
   deadlineEvent: string,
 ): Promise<FleetForecastAggregateRead> => {
   // An empty fleet is answered without touching the table at all. Not an optimisation: the fleet
-  // total of nothing is nothing, there is no partition state that could make it otherwise, and the route's "an empty fleet is a 200 with an empty array" promise should not
-  // be one billed read away from being a 500.
+  // total of nothing is nothing, there is no partition state that could make it otherwise, and
+  // the route's "an empty fleet is a 200 with an empty array" promise should not be one billed
+  // read away from being a 500.
   if (sites.length === 0) {
     return { complete: true, points: [] };
   }

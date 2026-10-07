@@ -71,11 +71,12 @@ Three choices in that one-line script are load-bearing:
 ## Open-Meteo call budget
 
 CLAUDE.md's frugality constraint is "only ever fetch weather for locations where active fleet sites
-exist", and that is exactly what `activeFetchLocations` computes: co-located sites collapse to one fetch keyed by the `locationId` bucket the readings are stored
-under. For the canonical demo fleet — 60 sites in 12 clusters — that is **12 calls per cycle instead
-of 60**, and since #78 the 12 is structural rather than incidental: cluster centres sit at the centre
-of their `locationId` bucket and the jitter half-width is strictly less than half a bucket, so no
-site can round into a neighbour's bucket (`docs/design/fleet-simulation.md`).
+exist", and that is exactly what `activeFetchLocations` computes: co-located sites collapse to one
+fetch keyed by the `locationId` bucket the readings are stored under. For the canonical demo fleet —
+60 sites in 12 clusters — that is **12 calls per cycle instead of 60**, and since #78 the 12 is
+structural rather than incidental: cluster centres sit at the centre of their `locationId` bucket
+and the jitter half-width is strictly less than half a bucket, so no site can round into a
+neighbour's bucket (`docs/design/fleet-simulation.md`).
 
 A location costs **one or two calls, not one**: `fetch-forecast.ts` retries a transient failure
 (5xx, network error, timeout) exactly once, so a cycle's call count is between one and two per

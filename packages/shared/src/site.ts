@@ -100,7 +100,6 @@ export type SiteOrigin = z.infer<typeof siteOriginSchema>;
  * - `origin` — see {@link siteOriginSchema}
  * - `createdAt` — the eviction order for user sites (#29), and the reason
  *   `gsiCreatedAt` sorts the way it does
-
  *
  * Derived with `.extend` rather than redeclared, so the physics fields have
  * exactly one definition (architecture rule 2). No key attribute appears here:
