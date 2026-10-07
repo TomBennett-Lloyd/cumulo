@@ -13,7 +13,7 @@ import {
   recordOf,
   sitePhysics,
 } from './forecast-fixtures';
-import { fleetRollupWriteEvent } from './fleet-rollup-write';
+import { fleetActualsRollupWriteEvent, fleetRollupWriteEvent } from './fleet-rollup-write';
 import { simulatedActualsOutcomeEvent } from './simulate-actuals';
 
 /**
@@ -286,12 +286,13 @@ describe('consuming one weather message', () => {
 
     await consumeMessage(deps({ recorder }), recordOf('m-1', [reading()]));
 
-    // The only entries belong to the two derived writers — the simulated-actuals producer (#264)
-    // and the fleet roll-up (#494) — each of which reports where it happens rather than folding
+    // The only entries belong to the derived writers — the simulated-actuals producer (#264) and
+    // the fleet roll-ups (#494, #506) — each of which reports where it happens rather than folding
     // its result into this message's outcome. Nothing here describes the message.
     expect(recorder.entries.map((entry) => entry.event)).toEqual([
       simulatedActualsOutcomeEvent,
       fleetRollupWriteEvent,
+      fleetActualsRollupWriteEvent,
     ]);
   });
 

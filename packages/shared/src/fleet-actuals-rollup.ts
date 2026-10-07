@@ -16,6 +16,13 @@ import { utcIsoTimestampSchema } from './timestamp';
  */
 export const FLEET_ROLLUP_ACTUALS_KIND = { kind: 'generation' } as const satisfies SeriesKind;
 
+/**
+ * How far back each forecast run re-simulates actuals and rewrites their slices — three hours, so
+ * a missed cycle is repaired by the next. The API reads it too: only these hours' slices are checked
+ * for membership (ADR 0009's #506 amendment).
+ */
+export const TRAILING_ACTUALS_HOURS = 3;
+
 /** One hour of the summed fleet actuals: `fleetForecastAggregatePointSchema` without a band. */
 export const fleetActualsAggregatePointSchema = z.object({
   validTime: utcIsoTimestampSchema,

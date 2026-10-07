@@ -1,4 +1,5 @@
 import {
+  TRAILING_ACTUALS_HOURS,
   forecastSchema,
   generationReadingSchema,
   simulatedActualFromForecast,
@@ -13,7 +14,6 @@ import { describe, expect, it } from 'vitest';
 
 import { RANELAGH_ID, RATHMINES_ID, rejectedWith } from './forecast-fixtures';
 import {
-  TRAILING_ACTUALS_HOURS,
   planSimulatedActuals,
   simulateTrailingActuals,
   simulatedActualsOutcomeEvent,
@@ -217,7 +217,7 @@ describe('simulating the trailing window for a run’s sites', () => {
   it('reads the trailing window ending now for each site, and writes what is missing', async () => {
     const recorder = emptyRecorder();
 
-    const outcomes = await simulateTrailingActuals(
+    const { outcomes } = await simulateTrailingActuals(
       deps({ recorder, pointsBySite: { [RANELAGH_ID]: [forecastPoint()] } }),
       [RANELAGH_ID],
     );
@@ -232,7 +232,7 @@ describe('simulating the trailing window for a run’s sites', () => {
   it('reports a window that needs nothing as up-to-date, without issuing a write', async () => {
     const recorder = emptyRecorder();
 
-    const outcomes = await simulateTrailingActuals(
+    const { outcomes } = await simulateTrailingActuals(
       deps({
         recorder,
         pointsBySite: { [RANELAGH_ID]: [forecastPoint(), generationPoint(at('11:00:00'))] },
@@ -245,7 +245,7 @@ describe('simulating the trailing window for a run’s sites', () => {
   });
 
   it('reports an incomplete drain as store-partial, with the count', async () => {
-    const outcomes = await simulateTrailingActuals(
+    const { outcomes } = await simulateTrailingActuals(
       deps({
         recorder: emptyRecorder(),
         pointsBySite: { [RANELAGH_ID]: [forecastPoint()] },
@@ -260,7 +260,7 @@ describe('simulating the trailing window for a run’s sites', () => {
   });
 
   it('converts a rejected write into a failed outcome naming that operation', async () => {
-    const outcomes = await simulateTrailingActuals(
+    const { outcomes } = await simulateTrailingActuals(
       deps({
         recorder: emptyRecorder(),
         pointsBySite: { [RANELAGH_ID]: [forecastPoint()] },
@@ -275,7 +275,7 @@ describe('simulating the trailing window for a run’s sites', () => {
   it('lets one site fail without abandoning its siblings', async () => {
     const recorder = emptyRecorder();
 
-    const outcomes = await simulateTrailingActuals(
+    const { outcomes } = await simulateTrailingActuals(
       deps({
         recorder,
         queryRejectsFor: [RANELAGH_ID],
@@ -320,10 +320,57 @@ describe('simulating the trailing window for a run’s sites', () => {
     });
   });
 
+  it('hands back every site’s settled readings: those already stored and those just written', async () => {
+    const storedReading = generationReadingSchema.parse({
+      siteId: RANELAGH_ID,
+      validTime: at('10:00:00'),
+      acPowerKw: 1.9,
+    });
+    const stored: SeriesPoint = { type: 'generation', reading: storedReading };
+    const { settled } = await simulateTrailingActuals(
+      deps({
+        recorder: emptyRecorder(),
+        pointsBySite: {
+          [RANELAGH_ID]: [forecastPoint(), stored],
+          [RATHMINES_ID]: [forecastPoint({ siteId: RATHMINES_ID })],
+        },
+      }),
+      [RANELAGH_ID, RATHMINES_ID],
+    );
+
+    expect(settled).toEqual([
+      storedReading,
+      simulatedActualFromForecast(aForecast()),
+      simulatedActualFromForecast(aForecast({ siteId: RATHMINES_ID })),
+    ]);
+  });
+
+  it.each([
+    { name: 'a read failed', input: { queryRejectsFor: [RANELAGH_ID] } },
+    {
+      name: 'a write landed in part',
+      input: { storeOutcome: { status: 'partial', unprocessedCount: 1 } as const },
+    },
+  ])(
+    'hands back no settled readings when $name — the window is not known in full',
+    async ({ input }) => {
+      const { settled } = await simulateTrailingActuals(
+        deps({
+          recorder: emptyRecorder(),
+          pointsBySite: { [RANELAGH_ID]: [forecastPoint()] },
+          ...input,
+        }),
+        [RANELAGH_ID],
+      );
+
+      expect(settled).toBeUndefined();
+    },
+  );
+
   it('does nothing at all for an empty site list', async () => {
     const recorder = emptyRecorder();
 
-    const outcomes = await simulateTrailingActuals(deps({ recorder }), []);
+    const { outcomes } = await simulateTrailingActuals(deps({ recorder }), []);
 
     expect(outcomes).toEqual([]);
     expect(recorder.windows).toEqual([]);

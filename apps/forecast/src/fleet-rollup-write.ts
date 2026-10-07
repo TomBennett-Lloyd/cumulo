@@ -1,11 +1,15 @@
 import {
+  FLEET_ROLLUP_ACTUALS_KIND,
   FLEET_ROLLUP_FORECAST_KIND,
   describeThrown,
+  fleetActualsRollupPartials,
   fleetRollupMembers,
   fleetRollupPartials,
   type FleetRollupPartial,
   type FleetRollupProvenance,
   type Forecast,
+  type GenerationReading,
+  type SeriesKind,
   type SitePhysics,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
@@ -42,6 +46,9 @@ import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
  */
 export const fleetRollupWriteEvent = 'forecast.fleet-rollup.outcome';
 
+/** The actuals kind's event — its own, so an operator counts the two producers apart (#506). */
+export const fleetActualsRollupWriteEvent = 'forecast.fleet-actuals-rollup.outcome';
+
 /**
  * What became of one location's roll-up, as a value.
  *
@@ -54,6 +61,8 @@ export const fleetRollupWriteEvent = 'forecast.fleet-rollup.outcome';
 export type FleetRollupOutcome = { readonly locationId: string } & (
   | { readonly status: 'written'; readonly hourCount: number }
   | { readonly status: 'nothing-to-roll-up' }
+  /** Actuals only: a site's trailing window is not known in full, so no slice is summed from it. */
+  | { readonly status: 'inputs-incomplete' }
   | { readonly status: 'store-partial'; readonly unprocessedCount: number }
   | { readonly status: 'failed'; readonly detail: string }
 );
@@ -88,23 +97,16 @@ const failedOutcome = (
 });
 
 /**
- * Compute and write one location's partials, reporting the result and never rejecting.
- *
- * `sites` is what the message listed: the nameplate capacity behind each hour, and the membership
- * the slices are stamped with beside `issuedAt` — the message's one vintage — so the API can tell
- * these slices from a stale one (#602).
- *
- * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another
- * (`docs/standards/architecture.md` rule 3). The model selection is `@cumulo/shared`'s too —
- * `fleetRollupPartials` filters on the kind it is handed, so the producer and the API's fallback
- * cannot select differently (#531).
+ * Stamp, compute and write one location's partials of one kind, reporting the result and never
+ * rejecting. `partialsOf` is deferred so its throw is converted here with the others.
  */
-export const writeFleetRollup = async (
+const writePartials = async (
   deps: FleetRollupWriteDeps,
+  kind: SeriesKind,
   locationId: string,
   issuedAt: UtcIsoTimestamp,
-  forecasts: readonly Forecast[],
   sites: readonly SitePhysics[],
+  partialsOf: () => readonly FleetRollupPartial[],
 ): Promise<FleetRollupOutcome> => {
   let provenance: FleetRollupProvenance;
   try {
@@ -115,7 +117,7 @@ export const writeFleetRollup = async (
 
   let partials: readonly FleetRollupPartial[];
   try {
-    partials = fleetRollupPartials(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND);
+    partials = partialsOf();
   } catch (error: unknown) {
     return failedOutcome(locationId, 'fleetRollupPartials', error);
   }
@@ -126,12 +128,7 @@ export const writeFleetRollup = async (
 
   let stored: BatchWriteOutcome;
   try {
-    stored = await deps.series.putFleetRollupPartials(
-      FLEET_ROLLUP_FORECAST_KIND,
-      locationId,
-      provenance,
-      partials,
-    );
+    stored = await deps.series.putFleetRollupPartials(kind, locationId, provenance, partials);
   } catch (error: unknown) {
     return failedOutcome(locationId, 'putFleetRollupPartials', error);
   }
@@ -140,6 +137,50 @@ export const writeFleetRollup = async (
     ? { locationId, status: 'store-partial', unprocessedCount: stored.unprocessedCount }
     : { locationId, status: 'written', hourCount: partials.length };
 };
+
+/**
+ * Compute and write one location's forecast partials.
+ *
+ * `sites` is what the message listed: the nameplate capacity behind each hour, and the membership
+ * the slices are stamped with beside `issuedAt` — the message's one vintage — so the API can tell
+ * these slices from a stale one (#602).
+ *
+ * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another
+ * (`docs/standards/architecture.md` rule 3). The model selection is `@cumulo/shared`'s too —
+ * `fleetRollupPartials` filters on the kind it is handed, so the producer and the API's fallback
+ * cannot select differently (#531).
+ */
+export const writeFleetRollup = (
+  deps: FleetRollupWriteDeps,
+  locationId: string,
+  issuedAt: UtcIsoTimestamp,
+  forecasts: readonly Forecast[],
+  sites: readonly SitePhysics[],
+): Promise<FleetRollupOutcome> =>
+  writePartials(deps, FLEET_ROLLUP_FORECAST_KIND, locationId, issuedAt, sites, () =>
+    fleetRollupPartials(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND),
+  );
+
+/**
+ * Compute and write one location's actuals partials for the trailing window's settled hours
+ * (#506): every hour re-Put whole on every run, as the window is re-simulated.
+ *
+ * `settled` is `simulateTrailingActuals`'s — the readings stored before this run plus those it
+ * wrote — so this reads nothing. `undefined` means some site's window is unknown, and a slice
+ * summed without it would be a quieter fleet rather than a gap; the next run rewrites these hours.
+ */
+export const writeFleetActualsRollup = (
+  deps: FleetRollupWriteDeps,
+  locationId: string,
+  issuedAt: UtcIsoTimestamp,
+  settled: readonly GenerationReading[] | undefined,
+  sites: readonly SitePhysics[],
+): Promise<FleetRollupOutcome> =>
+  settled === undefined
+    ? Promise.resolve({ locationId, status: 'inputs-incomplete' })
+    : writePartials(deps, FLEET_ROLLUP_ACTUALS_KIND, locationId, issuedAt, sites, () =>
+        fleetActualsRollupPartials(settled, sites),
+      );
 
 /**
  * The roll-up write as `consume-message.ts` calls it: run it, say what happened, return nothing.
@@ -158,5 +199,19 @@ export const reportFleetRollupWrite = async (
   deps.log({
     event: fleetRollupWriteEvent,
     ...(await writeFleetRollup(deps, locationId, issuedAt, forecasts, sites)),
+  });
+};
+
+/** {@link reportFleetRollupWrite}, for the actuals kind. */
+export const reportFleetActualsRollupWrite = async (
+  deps: FleetRollupWriteDeps,
+  locationId: string,
+  issuedAt: UtcIsoTimestamp,
+  settled: readonly GenerationReading[] | undefined,
+  sites: readonly SitePhysics[],
+): Promise<void> => {
+  deps.log({
+    event: fleetActualsRollupWriteEvent,
+    ...(await writeFleetActualsRollup(deps, locationId, issuedAt, settled, sites)),
   });
 };

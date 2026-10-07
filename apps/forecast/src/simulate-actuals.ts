@@ -1,4 +1,5 @@
 import {
+  TRAILING_ACTUALS_HOURS,
   describeThrown,
   simulatedActualFromForecast,
   utcIsoTimestampSchema,
@@ -38,13 +39,6 @@ import type {
  * not have been assembled correctly, and that is a bug which should surface (rule 1).
  */
 
-/**
- * How far back a run looks. Three hours rather than one so that a cycle missed for any reason —
- * a rate-limited ingestion hour, a Lambda that timed out, a drain DynamoDB declined — is repaired
- * by the next run rather than leaving a hole in the series.
- */
-export const TRAILING_ACTUALS_HOURS = 3;
-
 const MILLISECONDS_PER_HOUR = 3_600_000;
 
 /**
@@ -65,6 +59,10 @@ export const utcHoursBefore = (instant: UtcIsoTimestamp, hours: number): UtcIsoT
       .toISOString()
       .replace(/\.\d{3}Z$/u, 'Z'),
   );
+
+/** The generation rows a window already holds. */
+const storedReadings = (points: readonly SeriesPoint[]): GenerationReading[] =>
+  points.flatMap((point) => (point.type === 'generation' ? [point.reading] : []));
 
 /** The hours in a window that already hold a generation row, keyed by `validTime`. */
 const hoursAlreadyActual = (points: readonly SeriesPoint[]): ReadonlySet<string> =>
@@ -150,6 +148,29 @@ export interface SimulateActualsDeps {
   readonly now: () => UtcIsoTimestamp;
 }
 
+/**
+ * One site's outcome, plus the readings its window holds once the run is done — `undefined` when
+ * the run cannot say, because a read failed or a write did not land in full.
+ */
+interface SiteActualsRun {
+  readonly outcome: SiteActualsOutcome;
+  readonly settled: readonly GenerationReading[] | undefined;
+}
+
+const unsettled = (outcome: SiteActualsOutcome): SiteActualsRun => ({
+  outcome,
+  settled: undefined,
+});
+
+/**
+ * What a run did, and every site's settled readings over the window — the fleet actuals producer's
+ * input, so it reads nothing (#506). `settled` is `undefined` when any site's is.
+ */
+export interface TrailingActualsRun {
+  readonly outcomes: readonly SiteActualsOutcome[];
+  readonly settled: readonly GenerationReading[] | undefined;
+}
+
 const failedOutcome = (
   siteId: string,
   operation: SiteActualsOperation,
@@ -173,12 +194,12 @@ const simulateSiteActuals = async (
   deps: SimulateActualsDeps,
   siteId: string,
   window: UtcWindow,
-): Promise<SiteActualsOutcome> => {
+): Promise<SiteActualsRun> => {
   let range: SeriesRangeResult;
   try {
     range = await deps.series.querySeriesRange(siteId, window.startInclusive, window.endExclusive);
   } catch (error: unknown) {
-    return failedOutcome(siteId, 'querySeriesRange', error);
+    return unsettled(failedOutcome(siteId, 'querySeriesRange', error));
   }
 
   let readings: GenerationReading[];
@@ -187,28 +208,33 @@ const simulateSiteActuals = async (
   } catch (error: unknown) {
     // The bug arm, and it is caught for one reason only: this runs beneath a record boundary that
     // must not fail a message whose forecasts are already stored (rule 2a).
-    return failedOutcome(siteId, 'planSimulatedActuals', error);
+    return unsettled(failedOutcome(siteId, 'planSimulatedActuals', error));
   }
 
+  const settled = [...storedReadings(range.points), ...readings];
   if (readings.length === 0) {
-    return { siteId, status: 'up-to-date' };
+    return { outcome: { siteId, status: 'up-to-date' }, settled };
   }
 
   let stored: BatchWriteOutcome;
   try {
     stored = await deps.series.putGenerationReadings(readings);
   } catch (error: unknown) {
-    return failedOutcome(siteId, 'putGenerationReadings', error);
+    return unsettled(failedOutcome(siteId, 'putGenerationReadings', error));
   }
 
   if (stored.status === 'partial') {
     // `BatchWriteItem` answers HTTP 200 while handing back items it declined (ADR 0002
     // Consequence 4). Nothing retries here and nothing needs to: the next run's window still
     // covers this hour and will find it missing again.
-    return { siteId, status: 'store-partial', unprocessedCount: stored.unprocessedCount };
+    return unsettled({
+      siteId,
+      status: 'store-partial',
+      unprocessedCount: stored.unprocessedCount,
+    });
   }
 
-  return { siteId, status: 'written', readingCount: readings.length };
+  return { outcome: { siteId, status: 'written', readingCount: readings.length }, settled };
 };
 
 /**
@@ -225,7 +251,7 @@ const simulateSiteActuals = async (
 export const simulateTrailingActuals = async (
   deps: SimulateActualsDeps,
   siteIds: readonly string[],
-): Promise<SiteActualsOutcome[]> => {
+): Promise<TrailingActualsRun> => {
   const endExclusive = deps.now();
   const window: UtcWindow = {
     startInclusive: utcHoursBefore(endExclusive, TRAILING_ACTUALS_HOURS),
@@ -233,10 +259,13 @@ export const simulateTrailingActuals = async (
   };
 
   const outcomes: SiteActualsOutcome[] = [];
+  let settled: GenerationReading[] | undefined = [];
   for (const siteId of siteIds) {
-    const outcome = await simulateSiteActuals(deps, siteId, window);
-    deps.log({ event: simulatedActualsOutcomeEvent, ...outcome });
-    outcomes.push(outcome);
+    const run = await simulateSiteActuals(deps, siteId, window);
+    deps.log({ event: simulatedActualsOutcomeEvent, ...run.outcome });
+    outcomes.push(run.outcome);
+    settled =
+      settled === undefined || run.settled === undefined ? undefined : [...settled, ...run.settled];
   }
-  return outcomes;
+  return { outcomes, settled };
 };

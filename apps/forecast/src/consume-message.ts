@@ -9,7 +9,7 @@ import {
 } from '@cumulo/shared';
 import type { BatchWriteOutcome, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 
-import { reportFleetRollupWrite } from './fleet-rollup-write';
+import { reportFleetActualsRollupWrite, reportFleetRollupWrite } from './fleet-rollup-write';
 import { locationForecasts, type LocationForecastsOutcome } from './location-forecasts';
 import { simulateTrailingActuals } from './simulate-actuals';
 import type { SqsRecord } from './sqs-event';
@@ -29,8 +29,8 @@ import type { SqsRecord } from './sqs-event';
  * place to put one: SQS is at-least-once, and idempotency here is *structural*.
  * Every row is a Put over a sort key derived from the row itself — `T#<validTime>#
  * FC#physics` for a forecast, `T#<validTime>#GEN` for the simulated actual that
- * follows it (ADR 0002), and `FC#physics#T#<validTime>#L#<locationId>` for this
- * location's fleet roll-up partial (ADR 0009) — so a redelivered message rewrites
+ * follows it (ADR 0002), and `FC#physics#T#<validTime>#L#<locationId>` or
+ * `GEN#T#…#L#…` for this location's fleet roll-up slices (ADR 0009) — so a redelivered message rewrites
  * exactly the rows it wrote the first time. Both writes are deterministic in their
  * inputs, the draw behind a simulated actual included (`simulatedActualFromForecast`).
  */
@@ -272,7 +272,7 @@ export const consumeMessage = async (
   // record: the forecasts — the message's actual work — are already written, the trailing window
   // is `TRAILING_ACTUALS_HOURS` wide so the next hour's run repairs whatever this one missed, and
   // failing the record would redeliver the whole location's horizon to retry a cosmetic write.
-  await simulateTrailingActuals(
+  const actuals = await simulateTrailingActuals(
     { series: deps.series, log: deps.log, now: () => issuedAt },
     sites.map((site) => site.id),
   );
@@ -287,6 +287,15 @@ export const consumeMessage = async (
     location,
     issuedAt,
     forecasts,
+    sites,
+  );
+
+  // The same location's actuals slices (#506), from the readings the simulation already holds.
+  await reportFleetActualsRollupWrite(
+    { series: deps.series, log: deps.log },
+    location,
+    issuedAt,
+    actuals.settled,
     sites,
   );
 

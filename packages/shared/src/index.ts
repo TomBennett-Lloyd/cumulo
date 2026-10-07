@@ -20,6 +20,7 @@ export {
   fleetForecastAggregate,
 } from './fleet-rollup';
 export {
+  TRAILING_ACTUALS_HOURS,
   FLEET_ROLLUP_ACTUALS_KIND,
   fleetActualsAggregatePointSchema,
   type FleetActualsAggregatePoint,
