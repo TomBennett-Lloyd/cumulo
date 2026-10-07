@@ -20,9 +20,11 @@ import {
   RANELAGH_ID,
   RATHMINES_ID,
   routeRequest,
+  VALID_TIME,
 } from '../api-fixtures';
 import type { RequestDeadline } from '../http/request-deadline';
 
+import { cycleOfReading } from './cycle-cache';
 import { FLEET_READ_CONCURRENCY } from './fleet-series-read';
 import {
   fleetActualsReadDeadlineEvent,
@@ -187,6 +189,7 @@ describe('GET /v1/fleet/actuals', () => {
 
     const body = fleetActualsResponseSchema.parse(jsonBodyOf(response));
     expect(response.headers['cache-control']).toBeUndefined();
+    expect(response.dataCycleStart).toBe(cycleOfReading(VALID_TIME));
     expect(body.attribution).toEqual(openMeteoAttribution);
     expect(body.attribution.text).toBe('Weather data by Open-Meteo.com');
   });

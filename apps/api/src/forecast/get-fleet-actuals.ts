@@ -7,10 +7,10 @@ import {
 import type { SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
-import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
+import { errorResponse, jsonResponse, zodIssueDetails } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
-import { uncacheable } from './cycle-cache';
+import { datedByData, uncacheable, type MeteredResponse } from './cycle-cache';
 import { readFleetSeries } from './fleet-series-read';
 import { FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { actualsIn } from './series-split';
@@ -93,7 +93,7 @@ export interface GetFleetActualsDeps {
 export const getFleetActuals = async (
   deps: GetFleetActualsDeps,
   request: RouteRequest,
-): Promise<ApiResponse> => {
+): Promise<MeteredResponse> => {
   // Validated before anything is listed: an unusable `hours` is a 400 whatever
   // the fleet looks like, and answering it here means a malformed request never
   // becomes a billed read.
@@ -147,5 +147,11 @@ export const getFleetActuals = async (
     actuals,
     attribution: openMeteoAttribution,
   });
-  return actuals.length === 0 ? uncacheable(response) : response;
+  return actuals.length === 0
+    ? uncacheable(response)
+    : datedByData(
+        response,
+        [],
+        actuals.map((reading) => reading.validTime),
+      );
 };

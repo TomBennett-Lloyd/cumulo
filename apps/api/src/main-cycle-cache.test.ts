@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MAX_LIMITED_REQUESTS_PER_WINDOW } from './abuse/ip-limiter';
 import { RANELAGH_ID, fleetSite, forecastPoint, gatewayEvent } from './api-fixtures';
-import { dataCycleAt } from './forecast/cycle-cache';
+import { STALE_RETRY_SECONDS, dataCycleAt } from './forecast/cycle-cache';
 
 /**
  * A third test file over `main.ts`, beside `main-deadline.test.ts`, because
@@ -21,8 +21,11 @@ beforeEach(() => {
  */
 describe('the cycle cache on the metered reads', () => {
   const MID_CYCLE = new Date('2026-10-07T12:20:00Z');
+  /** Issued by the 12:07 run, which settles into the 12:15 cycle `MID_CYCLE` sits in. */
+  const THIS_RUN = '2026-10-07T12:09:00Z';
+  const LAST_RUN = '2026-10-07T11:09:00Z';
 
-  const stubStorage = async () => {
+  const stubStorage = async (issuedAt = THIS_RUN) => {
     const storage = await import('@cumulo/storage');
 
     const incrementRateWindow = vi
@@ -38,7 +41,7 @@ describe('the cycle cache on the metered reads', () => {
         .mockResolvedValue({ found: true, site: fleetSite() }),
       vi
         .spyOn(storage.SeriesAdapter.prototype, 'querySeriesRange')
-        .mockResolvedValue({ points: [forecastPoint()], complete: true }),
+        .mockResolvedValue({ points: [forecastPoint({ issuedAt })], complete: true }),
       vi
         .spyOn(storage.SeriesAdapter.prototype, 'queryFleetRollup')
         .mockResolvedValue({ rows: [], complete: true }),
@@ -103,6 +106,37 @@ describe('the cycle cache on the metered reads', () => {
       `public, max-age=${String(cycle.secondsToNext)}`,
     );
     expect(response.headers.etag).toBe(cycle.etag);
+    expect(response).not.toHaveProperty('dataCycleStart');
+    expect(incrementRateWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves a late run’s data briefly, under that run’s own cycle tag', async () => {
+    await stubStorage(LAST_RUN);
+    const { handler } = await import('./main');
+    const lastCycle = dataCycleAt(MID_CYCLE.getTime() / 1000 - 3600);
+
+    const response = await handler(seriesEvent({}));
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe(
+      `public, max-age=${String(STALE_RETRY_SECONDS)}`,
+    );
+    expect(response.headers.etag).toBe(lastCycle.etag);
+  });
+
+  it('reads again on a stale tag rather than answering 304, and picks up the run that landed', async () => {
+    const { incrementRateWindow } = await stubStorage(THIS_RUN);
+    const { handler } = await import('./main');
+    const lastCycle = dataCycleAt(MID_CYCLE.getTime() / 1000 - 3600);
+    const cycle = dataCycleAt(MID_CYCLE.getTime() / 1000);
+
+    const response = await handler(seriesEvent({ 'if-none-match': lastCycle.etag }));
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers.etag).toBe(cycle.etag);
+    expect(response.headers['cache-control']).toBe(
+      `public, max-age=${String(cycle.secondsToNext)}`,
+    );
     expect(incrementRateWindow).toHaveBeenCalledTimes(1);
   });
 

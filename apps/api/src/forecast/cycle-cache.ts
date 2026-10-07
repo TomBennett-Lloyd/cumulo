@@ -19,10 +19,16 @@ export const INGESTION_SCHEDULE_EXPRESSION = 'cron(7 * * * ? *)';
 /**
  * How long after the schedule fires a cycle's rows are taken as written: the
  * ingestion function's full timeout (`infra/ingestion/lambda.tf`) plus the
- * forecast passes it enqueues. A pass landing later is served the previous
- * cycle's body until the next boundary — the residual #583 states.
+ * forecast passes it enqueues. A pass landing later is caught by
+ * {@link STALE_RETRY_SECONDS}.
  */
 export const CYCLE_SETTLE_SECONDS = 480;
+
+/**
+ * The max-age of a body older than its cycle: the warmer's cadence, so a late
+ * forecast pass is picked up long before the next boundary (#583).
+ */
+export const STALE_RETRY_SECONDS = 300;
 
 const SECONDS_PER_HOUR = 3600;
 
@@ -37,9 +43,20 @@ const scheduleMinute = (expression: string): number => {
   return minute;
 };
 
+const SCHEDULE_OFFSET_SECONDS = scheduleMinute(INGESTION_SCHEDULE_EXPRESSION) * 60;
+
 /** Seconds past the hour at which one cycle's data is settled and the next cycle begins. */
-const CYCLE_OFFSET_SECONDS =
-  scheduleMinute(INGESTION_SCHEDULE_EXPRESSION) * 60 + CYCLE_SETTLE_SECONDS;
+const CYCLE_OFFSET_SECONDS = SCHEDULE_OFFSET_SECONDS + CYCLE_SETTLE_SECONDS;
+
+/** The latest instant at or before `epochSeconds` that lies `offsetSeconds` past an hour. */
+const hourlyAtOrBefore = (epochSeconds: number, offsetSeconds: number): number => {
+  const since = epochSeconds - offsetSeconds;
+  return (
+    since - (((since % SECONDS_PER_HOUR) + SECONDS_PER_HOUR) % SECONDS_PER_HOUR) + offsetSeconds
+  );
+};
+
+const cycleEtag = (startEpochSeconds: number): string => `W/"cycle-${String(startEpochSeconds)}"`;
 
 export interface DataCycle {
   readonly startEpochSeconds: number;
@@ -49,17 +66,54 @@ export interface DataCycle {
   readonly etag: string;
 }
 
+/** The cycle the clock says should be served. */
 export const dataCycleAt = (nowEpochSeconds: number): DataCycle => {
-  const sinceFirst = nowEpochSeconds - CYCLE_OFFSET_SECONDS;
-  const startEpochSeconds =
-    sinceFirst -
-    (((sinceFirst % SECONDS_PER_HOUR) + SECONDS_PER_HOUR) % SECONDS_PER_HOUR) +
-    CYCLE_OFFSET_SECONDS;
+  const startEpochSeconds = hourlyAtOrBefore(nowEpochSeconds, CYCLE_OFFSET_SECONDS);
   return {
     startEpochSeconds,
     secondsToNext: startEpochSeconds + SECONDS_PER_HOUR - nowEpochSeconds,
-    etag: `W/"cycle-${String(startEpochSeconds)}"`,
+    etag: cycleEtag(startEpochSeconds),
   };
+};
+
+/**
+ * The start of the cycle a forecast settles into: that of the run fired at or
+ * before its `issuedAt`, which is the forecast consumer's clock rather than the
+ * schedule's (`apps/forecast/src/consume-message.ts`), so a late pass still
+ * dates to its own run.
+ */
+export const cycleOfIssue = (issuedAt: string): number =>
+  hourlyAtOrBefore(Date.parse(issuedAt) / 1000, SCHEDULE_OFFSET_SECONDS) + CYCLE_SETTLE_SECONDS;
+
+/**
+ * The start of the cycle a simulated reading settles into: the first run at or
+ * after its hour writes it (`planSimulatedActuals` in
+ * `apps/forecast/src/simulate-actuals.ts`).
+ */
+export const cycleOfReading = (validTime: string): number =>
+  hourlyAtOrBefore(
+    Date.parse(validTime) / 1000 + SCHEDULE_OFFSET_SECONDS,
+    SCHEDULE_OFFSET_SECONDS,
+  ) + CYCLE_SETTLE_SECONDS;
+
+/**
+ * A metered read's answer, and the cycle its newest data settled into — absent
+ * when the read has nothing to date it by. Stripped before the response leaves.
+ */
+export interface MeteredResponse extends ApiResponse {
+  readonly dataCycleStart?: number;
+}
+
+/** `response` dated by the newest cycle its forecasts' vintages and readings' hours settle into. */
+export const datedByData = (
+  response: ApiResponse,
+  issuedAts: readonly string[],
+  readingTimes: readonly string[],
+): MeteredResponse => {
+  const cycles = [...issuedAts.map(cycleOfIssue), ...readingTimes.map(cycleOfReading)];
+  return cycles.length === 0
+    ? response
+    : { ...response, dataCycleStart: cycles.reduce((newest, cycle) => Math.max(newest, cycle)) };
 };
 
 /** The opaque part of an entity tag, so `W/"x"` and `"x"` compare equal (RFC 9110 §8.8.3.2). */
@@ -86,20 +140,33 @@ export const notModifiedResponse = (cycle: DataCycle): ApiResponse => ({
 });
 
 /**
- * A 200 made cacheable until the next cycle. A non-200, or a response that
+ * A 200 made cacheable: to the next boundary when its data is the cycle's, or
+ * for {@link STALE_RETRY_SECONDS} under its data's own tag when older, so a
+ * revalidation misses the 304 and reads again. A non-200, or a response that
  * already set its own `cache-control` ({@link uncacheable}), passes unchanged.
  */
-export const cachedForCycle = (response: ApiResponse, cycle: DataCycle): ApiResponse =>
-  response.statusCode !== 200 || 'cache-control' in response.headers
-    ? response
-    : { ...response, headers: { ...response.headers, ...cycleHeaders(cycle) } };
+export const cachedForCycle = (read: MeteredResponse, cycle: DataCycle): ApiResponse => {
+  const { dataCycleStart, ...response } = read;
+  if (response.statusCode !== 200 || 'cache-control' in response.headers) {
+    return response;
+  }
+  const headers =
+    dataCycleStart !== undefined && dataCycleStart < cycle.startEpochSeconds
+      ? {
+          'cache-control': `public, max-age=${String(STALE_RETRY_SECONDS)}`,
+          etag: cycleEtag(dataCycleStart),
+          vary: 'origin',
+        }
+      : cycleHeaders(cycle);
+  return { ...response, headers: { ...response.headers, ...headers } };
+};
 
 /**
  * An answer that must not be kept: an empty series is what a site whose first
  * forecast is still pending reads, and caching it would hide that forecast for
  * up to a cycle.
  */
-export const uncacheable = (response: ApiResponse): ApiResponse => ({
+export const uncacheable = (response: MeteredResponse): MeteredResponse => ({
   ...response,
   headers: { ...response.headers, 'cache-control': 'no-store' },
 });

@@ -17,6 +17,7 @@ import {
   dataCycleAt,
   notModifiedResponse,
   revalidatesCycle,
+  type MeteredResponse,
 } from './forecast/cycle-cache';
 import { getFleetActuals } from './forecast/get-fleet-actuals';
 import { getFleetForecast } from './forecast/get-fleet-forecast';
@@ -207,13 +208,13 @@ const rateLimited = async (
  */
 const cycleCached = async (
   request: RouteRequest,
-  handle: () => Promise<ApiResponse>,
+  handle: () => Promise<MeteredResponse>,
 ): Promise<ApiResponse> => {
   const cycle = dataCycleAt(nowEpochSeconds());
   if (revalidatesCycle(request.ifNoneMatch, cycle)) {
     return notModifiedResponse(cycle);
   }
-  return cachedForCycle(await rateLimited(request, handle), cycle);
+  return rateLimited(request, async () => cachedForCycle(await handle(), cycle));
 };
 
 /**

@@ -4,8 +4,12 @@ import { jsonBodyOf } from '../api-fixtures';
 import type { ApiResponse } from '../http/response';
 
 import {
+  STALE_RETRY_SECONDS,
   cachedForCycle,
+  cycleOfIssue,
+  cycleOfReading,
   dataCycleAt,
+  datedByData,
   notModifiedResponse,
   revalidatesCycle,
   uncacheable,
@@ -97,6 +101,56 @@ describe('the cycle headers', () => {
       'content-type': 'application/json',
       'cache-control': 'no-store',
     });
-    expect(cachedForCycle(missing, cycle)).toBe(missing);
+    expect(cachedForCycle(missing, cycle)).toEqual(missing);
+  });
+});
+
+describe('the cycle a body’s data settled into', () => {
+  it('dates a forecast to the run fired at or before its issue, however late the pass', () => {
+    // The consumer stamps `issuedAt` with its own clock, so a pass of the 12:07
+    // run can land long after 12:15 and still belongs to the 12:15 cycle.
+    expect(cycleOfIssue('2026-10-07T12:07:00Z')).toBe(BOUNDARY);
+    expect(cycleOfIssue('2026-10-07T12:40:00Z')).toBe(BOUNDARY);
+    expect(cycleOfIssue('2026-10-07T12:06:59Z')).toBe(BOUNDARY - 3600);
+  });
+
+  it('dates a reading to the first run at or after its hour', () => {
+    expect(cycleOfReading('2026-10-07T12:00:00Z')).toBe(BOUNDARY);
+    expect(cycleOfReading('2026-10-07T11:00:00Z')).toBe(BOUNDARY - 3600);
+  });
+
+  it('takes the newest of everything a body holds, and leaves an undatable body undated', () => {
+    const dated = datedByData(ok, ['2026-10-07T11:09:00Z'], ['2026-10-07T12:00:00Z']);
+
+    expect(dated.dataCycleStart).toBe(BOUNDARY);
+    expect(datedByData(ok, [], [])).not.toHaveProperty('dataCycleStart');
+  });
+});
+
+describe('a body older than its cycle', () => {
+  const cycle = dataCycleAt(at('2026-10-07T12:20:00Z'));
+  const stale = { ...ok, dataCycleStart: BOUNDARY - 3600 };
+
+  it('is kept briefly under its own cycle’s tag, so a revalidation is read again', () => {
+    const cached = cachedForCycle(stale, cycle);
+
+    expect(cached.headers).toEqual({
+      'content-type': 'application/json',
+      'cache-control': `public, max-age=${String(STALE_RETRY_SECONDS)}`,
+      etag: dataCycleAt(BOUNDARY - 1).etag,
+      vary: 'origin',
+    });
+    expect(revalidatesCycle(cached.headers.etag, cycle)).toBe(false);
+    expect(cached).not.toHaveProperty('dataCycleStart');
+  });
+
+  it('is not what this cycle’s own data gets', () => {
+    expect(
+      cachedForCycle({ ...ok, dataCycleStart: BOUNDARY }, cycle).headers['cache-control'],
+    ).toBe('public, max-age=3300');
+  });
+
+  it('still never caches an empty answer', () => {
+    expect(cachedForCycle(uncacheable(stale), cycle).headers['cache-control']).toBe('no-store');
   });
 });

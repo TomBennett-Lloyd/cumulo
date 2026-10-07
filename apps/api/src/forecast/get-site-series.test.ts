@@ -16,6 +16,7 @@ import {
 } from '../api-fixtures';
 import type { RequestDeadline } from '../http/request-deadline';
 
+import { cycleOfIssue } from './cycle-cache';
 import {
   getSiteSeries,
   MAX_SERIES_SPAN_HOURS,
@@ -112,8 +113,9 @@ describe('GET /v1/sites/{siteId}/series', () => {
     const body = siteSeriesResponseSchema.parse(jsonBodyOf(response));
     expect(body.forecasts).toEqual([early, late]);
     expect(body.actuals).toEqual([actual]);
-    // Left for `cycleCached` in `main.ts` to make cacheable.
+    // Left for `cycleCached` in `main.ts` to make cacheable, dated by its newest run.
     expect(response.headers['cache-control']).toBeUndefined();
+    expect(response.dataCycleStart).toBe(cycleOfIssue(late.issuedAt));
   });
 
   it('answers 200 with empty arrays for a window that holds nothing', async () => {
