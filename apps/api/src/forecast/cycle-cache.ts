@@ -72,9 +72,11 @@ const opaqueTag = (tag: string): string => tag.trim().replace(/^W\//, '');
 export const revalidatesCycle = (ifNoneMatch: string | undefined, cycle: DataCycle): boolean =>
   (ifNoneMatch ?? '').split(',').some((tag) => opaqueTag(tag) === opaqueTag(cycle.etag));
 
+/** `vary: origin` because the gateway's CORS headers depend on the request's `Origin`. */
 const cycleHeaders = (cycle: DataCycle): Record<string, string> => ({
   'cache-control': `public, max-age=${String(cycle.secondsToNext)}`,
   etag: cycle.etag,
+  vary: 'origin',
 });
 
 /** RFC 9110 §15.4.5: a 304 carries the validators and freshness a 200 would have. */

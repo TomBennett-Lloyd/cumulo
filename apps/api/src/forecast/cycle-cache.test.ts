@@ -30,7 +30,7 @@ describe('dataCycleAt', () => {
     expect(cycle.secondsToNext).toBe(3600);
   });
 
-  it('one second before the boundary is the previous cycle with one second left', () => {
+  it('1 s before the boundary is the previous cycle with 1 s left', () => {
     const cycle = dataCycleAt(BOUNDARY - 1);
 
     expect(cycle.startEpochSeconds).toBe(BOUNDARY - 3600);
@@ -70,7 +70,11 @@ describe('revalidatesCycle', () => {
 
 describe('the cycle headers', () => {
   const cycle = dataCycleAt(at('2026-10-07T12:20:00Z'));
-  const expectedHeaders = { 'cache-control': 'public, max-age=3300', etag: cycle.etag };
+  const expectedHeaders = {
+    'cache-control': 'public, max-age=3300',
+    etag: cycle.etag,
+    vary: 'origin',
+  };
 
   it('marks a 200 cacheable until the next boundary, body untouched', () => {
     const cached = cachedForCycle(ok, cycle);

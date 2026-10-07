@@ -231,3 +231,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `FleetRollupRow` and `fromFleetRollupItem` in `packages/storage/src/adapters/series/fleet-rollup-item.ts`; the unstamped branch of `staleLocations` in `apps/api/src/forecast/fleet-rollup-read.ts`
 - What: items written before #602 carry no provenance, so the row type allows `undefined` and the read treats it as stale. Once a stamped cycle has rewritten every in-window item that arm is dead, but it stays in the type permanently. Remove it with #507, or once the first stamped cycle has run in every deployed environment, so that a missing provenance becomes a parse failure.
 - Source: #602 review pass 1 SYSTEMIC
+
+## 2026-10-07 — ADR 0006 never recorded the two fleet routes joining the limited set
+
+- Where: `docs/adr/0006-demo-abuse-protection.md` § 1 "Which routes are limited", and option A's route count under "Options considered"
+- What: both name only the three writes plus `GET /v1/sites/{siteId}/series`; `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast` have been limited in `apps/api/src/main.ts` since #264/#296 with no amendment entry. The route choice is a premise, so it wants an as-it-stood annotation plus a dated entry rather than an inline edit
+- Source: #583 review pass 1 SYSTEMIC
+
+## 2026-10-07 — two code-to-Terraform relations the limiter and the cycle cache lean on are asserted by no gate
+
+- Where: `MAX_LIMITED_REQUESTS_PER_WINDOW` in `apps/api/src/abuse/ip-limiter.ts` against the write-route `route_settings` throttle in `infra/api/gateway.tf`; `CYCLE_SETTLE_SECONDS` in `apps/api/src/forecast/cycle-cache.ts` against `aws_lambda_function.ingestion`'s `timeout` in `infra/ingestion/lambda.tf`
+- What: the threshold must stay below the write throttle times the window, and the settle margin must stay above the ingestion timeout; `check-infra-mirrors.sh`'s unused `ts-lt` mode could express the first if its reader can address the dynamic block, and no mode expresses "code value greater than Terraform value" for the second (apps cannot import `INGESTION_LAMBDA_TIMEOUT_MS` across app boundaries). Moving either Terraform value fails nothing (architecture rule 8)
+- Source: #583 review pass 1 SYSTEMIC

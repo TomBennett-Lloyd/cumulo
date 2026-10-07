@@ -45,9 +45,9 @@ resource "aws_cloudfront_distribution" "web" {
   # 0006) — the direct TCP peer. Behind CloudFront that becomes the edge
   # location's address, so every visitor served by one POP would share a single
   # identity: one limiter window (`MAX_LIMITED_REQUESTS_PER_WINDOW`) across all
-  # of them would trip it and auto-block the whole POP for an hour. The demo's browser therefore calls the
-  # API Gateway URL directly, cross-origin, and this distribution serves static
-  # files and nothing else.
+  # of them would trip it and auto-block the whole POP for an hour. The demo's
+  # browser therefore calls the API Gateway URL directly, cross-origin, and this
+  # distribution serves static files and nothing else.
   #
   # If #21 wants the API behind the CDN (for WAF, or to collapse the origins
   # under one domain), the limiter's identity source moves to the

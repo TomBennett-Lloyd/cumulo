@@ -10,16 +10,17 @@ import type { AbuseAdapter } from '@cumulo/storage';
  */
 
 /**
- * The abuse policy, as three numbers. Restatement ledger, a floor (swept
- * 2026-10-07: `git grep -nE '(^|[^0-9.$])90 (requests|aggregate|table)|\(\*\*90\*\*'`):
- * ADR 0006 and `apps/api/README.md`. Issue #29's evidence run measured the
- * policy as it then stood and is not trued.
+ * The abuse policy, as three numbers. Restatement ledger, a floor — ADR 0006,
+ * ADR 0007 (as-it-stood), `apps/api/README.md`, and `infra/api/gateway.tf`'s
+ * write-throttle comment — swept 2026-10-07 with `git grep -nE
+ * '(^|[^0-9.$])[0-9]+(-request threshold| (limited-route |serial |aggregate )?requests? ?(/ ?60|per|to a limited|spread)| aggregate requests| table round trips)|\(\*\*[0-9]+\*\*; amended'`.
+ * Issue #29's evidence run is not trued.
  *
  * The threshold sits above a dashboard load plus a selection of every seed site
  * inside one window (`ip-limiter.test.ts`) — a repeat view inside a data cycle
  * is a 304 this limiter never counts (`cycleCached` in `apps/api/src/main.ts`)
  * — and below what the write-route throttle in `infra/api/gateway.tf` admits in
- * one window, so a write flood from one address meets this limiter first. An
+ * one window, so an address held to that throttle can still be blocked. An
  * hour's block makes retrying pointless without locking a NAT'd office out for
  * the day.
  */

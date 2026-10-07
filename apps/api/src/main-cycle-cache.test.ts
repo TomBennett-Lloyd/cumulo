@@ -82,6 +82,7 @@ describe('the cycle cache on the metered reads', () => {
         headers: {
           'cache-control': `public, max-age=${String(cycle.secondsToNext)}`,
           etag: cycle.etag,
+          vary: 'origin',
         },
       });
       for (const call of calls) {

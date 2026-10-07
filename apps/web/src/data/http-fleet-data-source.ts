@@ -204,8 +204,7 @@ export class HttpFleetDataSource implements FleetDataSource {
      * line after it.
      */
     const request = this.fetchSeries(siteId, range).finally(() => {
-      // Settled, so the next selection of this pair is a fresh read rather than
-      // a cached one — this shares a request, it does not cache a response.
+      // This shares a request, it does not cache a response.
       this.seriesInFlight.delete(key);
     });
     this.seriesInFlight.set(key, request);
