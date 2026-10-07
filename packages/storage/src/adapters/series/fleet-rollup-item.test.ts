@@ -29,7 +29,7 @@ describe('toFleetRollupItem', () => {
     expect(generation.sk).not.toBe(rollupItem14h.sk);
   });
 
-  it('is deterministic in its inputs, so a redelivered message rewrites identical items', () => {
+  it('is deterministic in its inputs', () => {
     const first = toFleetRollupItem(
       FLEET_ROLLUP_FORECAST_KIND,
       LOCATION_ID,

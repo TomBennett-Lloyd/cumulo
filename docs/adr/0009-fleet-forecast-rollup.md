@@ -79,6 +79,8 @@ For **one release**, a `#FLEET` window that is missing — or that is missing an
 
 **Incomplete is treated exactly like absent**, which is the only judgement call in the fallback. Eleven of twelve locations sums to a fleet total that looks like a plausible number from a quieter fleet: the missing site does not read as missing, it reads as less generation. That is the half-truth the fan-out already refuses for itself.
 
+> **Amended 2026-10-07 (#602)**: a location that has written is also checked for membership and vintage, and the event gains `reason: 'stale'` and a `staleLocations` count. See `## Amendments`.
+
 Both arms end in the same `@cumulo/shared` functions, so this is a second _path_ and not a second owner of the numbers. **Removal trigger:** the event absent from the logs for 24 hours after the first post-deploy cycle. Tracked as [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507), which states the condition in the form a log query can answer.
 
 ### The client seam moves up
@@ -115,6 +117,8 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 
 **Cost, stated because 0002's cost sections are what a reader will check this against.** Writes: one partial per location-hour, `12 × 48 = 576` items a cycle at the canonical fleet, on top of the ~2,880 forecast items — a term that grows with **locations**, not sites. That is ~2.52 M write units a month at $0.705/M, ≈ **$1.78/month** against ≈ $1.48 before. Reads: a 48-hour fleet forecast is ~576 items of ~250 B ≈ 144 KB, ≈ **18 eventually-consistent read units** against the ~25 the forecast fan-out was sized at — a modest unit saving, and **the units were never the problem**. The whole point is the round trips: `infra/storage/tables.tf`'s `series` section owns the current per-load figure.
 
+> **Amended 2026-10-07 (#602)**: the read figures above (~250 B, 144 KB, ~18 units) are as they stood before each item carried its provenance. The write line is unchanged. See `## Amendments`.
+
 **Zero Open-Meteo calls** on either side. This path reads and writes stored rows only, as both fleet routes' docblocks already state.
 
 **What would make us revisit.**
@@ -126,7 +130,7 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 
 ## Amendments
 
-No stated value has moved — the 2026-10-05 entry below records two corrections that are not value moves. This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
+No stated value has moved. The 2026-10-05 entry below records two corrections that are not value moves, and the 2026-10-07 entry moves only quotations of figures `infra/storage/tables.tf` owns. This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
 
 **The value: the fan-out's measured latency, 1,753.9 ms p50 / 2,998.9 ms p95 warm** at the canonical 12-location × 5-site fleet. It is stated in `## Context` above, it is the whole reason ADR 0002's revisit trigger 4 is met, and it is quoted by five sites that argue from it rather than merely citing it:
 
@@ -170,3 +174,24 @@ The filter also moved, which is what #531 changed in code: `fleetForecastAggrega
 - `### One model, named once` above — immutable, annotated inline rather than reworded.
 
 Everything else both arms returned is unrelated: `apps/ingestion/src/cycle-budget.test.ts` (visit hours), `packages/storage/scripts/smoke/series-checks.ts` (a window boundary), `infra/README.md` (cross-stack cost rows), and the `two models` hits in ADR 0002, `docs/tech-debt.md` and the storage fixtures, which count models rather than claiming anything about summing them.
+
+### 2026-10-07 (#602) — completeness by membership and vintage, not by location set only
+
+**What changed.** `### The fallback` compares location _sets_, but the fleet changes one _site_ at a time. A delete, an eviction, a delete-plus-add in one bucket, or a `PUT /v1/sites/{siteId}` that resizes or re-angles a site leaves its location expected. That location's slices keep summing the old sites until its next cycle ([#579](https://github.com/TomBennett-Lloyd/cumulo/issues/579)). Each slice now carries a provenance (`fleetRollupProvenanceSchema`, `packages/shared/src/fleet-rollup-provenance.ts`). It sits beside `locationId` and outside the additive partial, because neither of its two fields adds:
+
+- `members`: a digest of the sorted `(siteId, capacityKw, tiltDegrees, azimuthDegrees, locationId)` tuples of the sites the producer listed;
+- `issuedAt`: the forecast run the slice was summed from.
+
+The read computes the same digest per location from the active fleet it already lists. If any of a written location's slices carries a different digest, no provenance (an item written before this change), or a second `issuedAt`, the read falls back with `reason: 'stale'`. `apps/api/src/forecast/fleet-rollup-read.test.ts` pins each case.
+
+**Vintage is compared within a location, never across locations.** The first reason the 2026-10-05 entry gives against an expected-hours notion applies here too: locations are written by independent invocations on their own schedule, so they legitimately differ by a run. Within one location, a run's horizon (`forecastHours`, `apps/ingestion/src/open-meteo/url.ts`) covers every hour a read window can reach. Two vintages therefore mean part of the horizon did not land — a `store-partial` roll-up drain whose per-site rows did — and at those hours the roll-up and the fan-out disagree. The 2026-10-05 entry's per-location, not per-hour, decision is untouched: a location short of an hour is still summed and labelled.
+
+**What it does not catch.** `issuedAt` is the instant the message was consumed (`apps/forecast/src/consume-message.ts`), so a redriven dead letter is stamped newest and reads as fresh. [#587](https://github.com/TomBennett-Lloyd/cumulo/issues/587)'s replay is not closed by this entry. A coordinate edit that stays inside one bucket is not in the tuple either: the tuple carries the bucket, not the coordinates.
+
+**What it costs.** Two attributes, about 50 B an item, still one write unit at every fleet size, so the write line is unchanged. The roll-up read grows from ~18 to ~22 read units at the canonical fleet; `infra/storage/tables.tf`'s `series` section owns that figure and is trued up in the same change. The larger cost is the fallback rate. Any membership change at a location now sends reads down the fan-out until that location's next cycle, and that includes an _add_ at an existing bucket, because a digest cannot tell an add from a delete-plus-add. A new bucket already fell back this way.
+
+**Rejected** (priced on #579, 2026-10-07). A `siteIds` set detects as much and costs a second Query page at the site cap. A per-site contributions map would let the read subtract a departed site instead of falling back, at roughly three times the item size and two pages. Refusing an older vintage at write needs a condition `BatchWriteItem` cannot carry: either a conditional Put per hour (a round trip each) or a transaction per location (double the write units).
+
+**What would reopen it.** [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507) removes the fan-out arm, and with it the answer `stale` falls back to. Before that, #507 has to decide what a stale location gets instead, given that an add now produces one.
+
+**Quoters of the moved read figure.** This is a floor, not a census. The sweep was run 2026-10-07 from the worktree root with `command grep -rnE` over `docs infra apps packages`, on the arm `≈ 45|~43|~18( |$)|144 KB|~250 B|read units? (a|per) load|per-dashboard-load|roll-up read`, and every hit was read. Trued up in the same change: `infra/storage/tables.tf`'s `series` section (the owner) and its header ledger, `infra/README.md`'s storage `series` cost row, and the fleet-vs-poll comment in `apps/web/src/data/use-first-forecast.test.tsx`. Annotated as-it-stood: `## Consequences` above, and ADR 0002's 2026-09-11 (#494) entry, through ADR 0002's own 2026-10-07 entry. `docs/review-feedback.md`'s entries are records and are left as written. The remaining hits are other quantities that share a literal (ADR 0005's log bytes, `infra/api/outputs.tf`'s warmer) or prose that names the read without a figure.

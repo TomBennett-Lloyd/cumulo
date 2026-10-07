@@ -230,7 +230,7 @@ describe('writeFleetRollup', () => {
     expect(outcome.detail).toContain('putFleetRollupPartials threw');
   });
 
-  it('is deterministic in its inputs, so a redelivered message writes identical partials', async () => {
+  it('is deterministic in its inputs', async () => {
     const { deps: rollupDeps, calls } = harness();
 
     await writeFleetRollup(rollupDeps, LOCATION, ISSUED_AT, twoSitesTwoHours, sites);

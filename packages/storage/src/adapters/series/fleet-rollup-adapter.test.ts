@@ -80,7 +80,7 @@ describe('putFleetRollupPartials', () => {
     expect(second).toEqual([otherRollupItem14h]);
   });
 
-  it('rewrites byte-identical items when a message is redelivered', async () => {
+  it('rewrites byte-identical items for identical inputs', async () => {
     const { adapter, ddb } = mockedAdapter();
     ddb.on(BatchWriteCommand).resolves({});
 

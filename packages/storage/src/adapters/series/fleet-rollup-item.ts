@@ -30,7 +30,7 @@ import type { SeriesItemKeys } from './series-item';
  * the key rather than defended by a lock.
  *
  * **Idempotent by key.** The sort key is derived from `(kind, validTime, locationId)` and every
- * write is a Put, so a redelivered SQS message rewrites byte-identical items. That is the same
+ * write is a Put, so a redelivered SQS message rewrites the same keys. That is the same
  * property `consume-message.ts` already relies on for the forecasts themselves, extended to the
  * roll-up so that the roll-up inherits the redelivery policy instead of needing one of its own.
  *
@@ -83,13 +83,8 @@ export const toFleetRollupItem = (
 });
 
 /**
- * One stored item, and which location wrote it.
- *
- * The two travel together because the read needs both and for different jobs: the partials are what
- * `sumFleetRollupPartials` adds, and the location set is what tells the API whether the partition is
- * *complete* — whether every location the fleet has sites at has written yet (ADR 0009's fallback
- * condition). Returning only the partials would leave the route unable to tell a quiet fleet from a
- * half-written cycle, which is the one distinction the fallback exists to make.
+ * One stored item: the partial `sumFleetRollupPartials` adds, and the location and provenance the
+ * API's completeness check reads (ADR 0009's fallback condition, and its 2026-10-07 amendment).
  */
 export interface FleetRollupRow {
   readonly locationId: string;
