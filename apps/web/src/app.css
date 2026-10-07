@@ -208,16 +208,14 @@ body {
  * control families (`apps/web/src/dashboard/range-picker.css`,
  * `apps/web/src/map/map.css`), so spending it on this switch's *off* state would
  * give one treatment two opposite meanings (docs/standards/design.md rule 9).
- * Muted ink carries no such job, and it is also the only neutral left that
- * clears the bar — `--color-bg` and `--color-border` both sit within a hair of
- * the surface in both themes, which is the whole defect.
+ * Muted ink carries no such job.
  *
  * That leaves the gallery, where this switch sits on `--color-bg` instead
  * (`apps/web/src/preview/TokensHarness.tsx`, on the shared `.app-header`). The
  * two backdrops are near-identical in luminance in both themes, so the pairing
  * that clears the popover clears that header too, comfortably.
  *
- * No figures written down here: `theme-toggle-contrast.test.ts` recomputes them
+ * No figures written down here: `control-contrast.test.ts` recomputes them
  * from this declaration, the thumb's below and the token file, in both themes,
  * which is the only thing that can still be true after someone edits either. */
 .theme-toggle-track {
@@ -255,7 +253,7 @@ body {
  * reads against the popover" are the same inequality, and a track colour
  * satisfying one satisfies the other. So the claim to check when either track
  * colour changes is a single one, which is the shape
- * `theme-toggle-contrast.test.ts` asserts.
+ * `control-contrast.test.ts` asserts.
  *
  * The values themselves stay `packages/ui/src/tokens/tokens.css`'s, which is
  * also where the accent's measured figures against both opaque surfaces are

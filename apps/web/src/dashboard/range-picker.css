@@ -201,14 +201,6 @@
  * choice among three, and borrowing the toggle's selector would tie a data
  * control to a chrome control that is free to change.
  *
- * The unpressed fill is `--color-bg`, not `--color-surface`: the chips sit on a
- * `--color-surface` ground — the popover above — so a surface-on-surface chip
- * has no edge at all and the two windows the reader has *not* chosen read as
- * plain text rather than as controls. `--color-bg` against that ground is the
- * app's standing answer to the inversion rather than a border invented here.
- * What the ground is a *shape* of does not enter into it. The toggle this shape
- * came from sits on the page background, where the inversion never arises.
- *
  * `white-space: nowrap` is the second half of #344's never-wrap belt: every
  * label here holds a space (`24 h`, `7 d`), and a chip that broke at it would
  * make the sheet two lines tall while the sheet itself was still, technically,
@@ -227,7 +219,9 @@
 .range-picker-button {
   padding: var(--space-1) var(--space-3);
   white-space: nowrap;
-  border: none;
+  border-style: solid;
+  border-width: calc(var(--space-1) / 4);
+  border-color: var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-bg);
   color: var(--color-text);
@@ -242,6 +236,7 @@
  * reason: those tokens carry data identity, and a control borrowing one would
  * make "this window is selected" and "this site is selected" the same colour. */
 .range-picker-button[aria-pressed='true'] {
+  border-color: var(--color-text);
   background: var(--color-text);
   color: var(--color-bg);
 }

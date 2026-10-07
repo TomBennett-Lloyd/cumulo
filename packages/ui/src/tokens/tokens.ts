@@ -14,6 +14,7 @@ export const tokens = {
     text: 'var(--color-text)',
     textMuted: 'var(--color-text-muted)',
     border: 'var(--color-border)',
+    borderStrong: 'var(--color-border-strong)',
     accent: 'var(--color-accent)',
     accentContrast: 'var(--color-accent-contrast)',
     surfaceVeil: 'var(--color-surface-veil)',
