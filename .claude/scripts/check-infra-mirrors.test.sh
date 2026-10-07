@@ -856,7 +856,7 @@ begin "a str-eq record with a trailing empty sixth field exits 2"
 fixture trailing_field 300 300_000
 gate_copy check-infra-mirrors-trailing-field.sh
 # \K rather than a capture group, for the reason case 20 states. The `series`
-# address is what keeps the edit on ONE of the three str-eq records, so the
+# address is what keeps the edit on ONE of the three TTL records, so the
 # refusal below is about that record rather than about all of them.
 must perl -pi -e 's/aws_dynamodb_table\.series\|.*TTL_ATTRIBUTE_NAME\K"/|"/' "$COPY"
 fixture_has "$COPY" 'TTL_ATTRIBUTE_NAME|"'
