@@ -241,7 +241,7 @@ terraform init
 terraform plan -no-color | tee ~/cumulo-bootstrap-plan.txt
 ```
 
-Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, and the AWS Budgets cost-ceiling budget. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
+Expect **`Plan: 10 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, the AWS Budgets cost-ceiling budget, and the observer user with its inline policy. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
 
 **A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). `oidc-smoke` does not run on the PR at all — it has not been a pre-merge check since #11 (convention 8) — so there is no red check to explain here; B7 runs it by hand once the variables exist.
 
@@ -268,10 +268,10 @@ aws s3api head-object --bucket "$BUCKET" --key bootstrap/terraform.tfstate
 terraform state list   # now read from S3
 ```
 
-Expect **11 lines**: the 8 managed resources from A5 plus the three data sources
+Expect **14 lines**: the 10 managed resources from A5 plus the four data sources
 (`data.aws_caller_identity.current`, `data.aws_iam_policy_document.github_actions_trust`,
-`data.aws_ssm_parameter.notification_email`), which `state list` prints alongside them.
-Only the 8 are created, billed, or destroyed.
+`data.aws_iam_policy_document.observer`, `data.aws_ssm_parameter.notification_email`), which `state list` prints alongside them.
+Only the 10 are created, billed, or destroyed.
 
 **B4. Remove the local state files.** They are gitignored, but a stale local state that still describes live resources is a trap for the next operator:
 
@@ -376,7 +376,7 @@ Teardown is a first-class requirement, not a paragraph of good intentions: the c
 terraform -chdir=infra/bootstrap plan -destroy -no-color
 ```
 
-Expect **`Plan: 0 to add, 0 to change, 10 to destroy.`** with the new resource among the enumerated destroys — for the observer identity, `aws_iam_user.observer` and `aws_iam_user_policy.observer`. A resource that Terraform plans to destroy is a resource Terraform owns, which is the whole claim. Full rehearsals are reserved for changes to the teardown procedure itself (the override dance, the backend, the ordering below), where the procedure is what is in doubt. Everything from T1 onward describes a real teardown, for when one is actually wanted.
+Expect **`Plan: 0 to add, 0 to change, 10 to destroy.`** with the new resources among the enumerated destroys — for the observer identity, `aws_iam_user.observer` and `aws_iam_user_policy.observer`. A resource that Terraform plans to destroy is a resource Terraform owns, which is the whole claim. Full rehearsals are reserved for changes to the teardown procedure itself (the override dance, the backend, the ordering below), where the procedure is what is in doubt. Everything from T1 onward describes a real teardown, for when one is actually wanted.
 
 The ordering matters more than anything else here. **The state that describes the bucket lives in the bucket.** Destroy the bucket while state is still remote and Terraform loses the record of what it was deleting mid-operation. So the state comes home first.
 
@@ -396,7 +396,7 @@ terraform init -migrate-state
 
 ```bash
 ls -l terraform.tfstate
-terraform state list   # expect the same 11 lines as B3 — 8 resources + 3 data sources
+terraform state list   # expect the same 14 lines as B3 — 10 resources + 4 data sources
 ```
 
 This step is load-bearing, not ceremony. T1's prompt accepts only the literal string `yes`; anything else — including `y` — is taken as "start with an empty state", and Terraform then reports a _successful_ init while `terraform.tfstate` never appears and the real state stays in S3. A `terraform destroy` from that position would have no idea what it owns. If `ls` finds no file, nothing has been lost yet: re-init back to S3 with `terraform init -reconfigure -backend-config=backend.hcl` and start T1 again.
@@ -488,7 +488,7 @@ The `alerting` stack does not overturn that reasoning; it is the case where the 
 
 One IAM user, `cumulo-observer-<env>`, and its inline policy, from `infra/bootstrap/observer.tf` — the identity `.claude/skills/incident-watch/SKILL.md` reads CloudWatch as, so the orchestrating session can see an alarm without the owner's login, which expires ([#604](https://github.com/TomBennett-Lloyd/cumulo/issues/604)). It is the one long-lived credential in the project: local, read-only, operator-held, never in CI.
 
-**Every action it holds**, and nothing else — an explicit `Deny` with `NotAction` on these four outranks any policy attached later:
+**Every action it holds**, and nothing else — an explicit `Deny` with `NotAction` on these outranks any policy attached later:
 
 | Action                            | Resource                                                                       | Read for                                      |
 | --------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------- |
@@ -497,7 +497,7 @@ One IAM user, `cumulo-observer-<env>`, and its inline policy, from `infra/bootst
 | `cloudwatch:GetMetricData`        | `*` (the action takes no resource ARN)                                         | the API's 5xx count over the last hour        |
 | `logs:FilterLogEvents`            | `/aws/lambda/cumulo-{api,ingestion,forecast}-<env>` log groups, in this region | the error lines behind a firing alarm         |
 
-No `iam:*`, no write action of any kind. `.claude/scripts/incident-watch.test.sh` holds `observer.tf` to exactly these four.
+No `iam:*`, no write action of any kind. `.claude/scripts/incident-watch.test.sh` holds both `observer.tf`'s `observer_actions` and this table to the same list.
 
 **Terraform creates the user and the policy, never the access key.** A key in Terraform is a secret in state; created by hand, it exists only in the operator's `~/.aws/credentials`.
 
@@ -525,14 +525,15 @@ terraform -chdir=infra/bootstrap apply
 aws iam create-access-key --user-name cumulo-observer-dev \
   --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text |
   {
-    read -r key_id key_secret
-    aws configure set aws_access_key_id "$key_id" --profile cumulo-observer
-    aws configure set aws_secret_access_key "$key_secret" --profile cumulo-observer
+    read -r key_id key_secret && [ -n "$key_secret" ] &&
+      aws configure set aws_access_key_id "$key_id" --profile cumulo-observer &&
+      aws configure set aws_secret_access_key "$key_secret" --profile cumulo-observer
+    unset key_id key_secret
   }
 aws configure set region eu-west-1 --profile cumulo-observer
 ```
 
-The region must be the one the stacks are applied to. Never copy the key anywhere else — not into this repo, a `.env`, an Actions secret, an issue, a PR, or a chat; gitleaks in CI and the harness's key-prefix scan are the backstop, not the plan.
+If `create-access-key` fails — two keys already exist, say — nothing is written and the profile keeps its working key. The region must be the one the stacks are applied to. Never copy the key anywhere else — not into this repo, a `.env`, an Actions secret, an issue, a PR, or a chat; gitleaks in CI and the harness's key-prefix scan are the backstop, not the plan.
 
 **O3. Prove the identity, the reads, and a refused write:**
 
@@ -544,7 +545,9 @@ AWS_PROFILE=cumulo-observer bash .claude/scripts/incident-watch.sh
 aws cloudwatch disable-alarm-actions --alarm-names cumulo-observer-write-probe --profile cumulo-observer
 # expect: AccessDenied — a write the policy does not hold (harmless if it ever succeeded: no such alarm)
 aws iam list-users --profile cumulo-observer
-# expect: AccessDenied — the explicit Deny covers reads outside the four too
+# expect: AccessDenied — the explicit Deny covers reads outside the table too
+aws logs filter-log-events --log-group-name /aws/lambda/cumulo-api-dev --limit 1 --profile cumulo-observer
+# expect: events (possibly none), not AccessDenied — the script reads logs only when something fires, so this proves the log-group grant
 ```
 
 An `AccessDenied` on `DescribeAlarms` or `DescribeAlarmHistory` in the second command means AWS evaluated the prefix listing against `*` rather than the alarm ARNs; the fix is a PR widening the `ReadAlarms` statement's resource to `*` in `observer.tf`, which stays read-only.
@@ -1811,10 +1814,11 @@ Three conventions hold across every table below (the third has one recorded gap:
 | **State bucket — requests** (state reads/writes plus native lockfile PUT/GET/DELETE) | ~$0.005/1,000 PUT, ~$0.0004/1,000 GET. **Activity, not standing**: an idle stack issues none, and only an `init`, `plan` or `apply` issues any                                                                                                                                                                                                                                                                                                                                                                                   | < $0.01/mo (hundreds of ops) |
 | **Bucket configuration** (versioning, SSE-S3, public access block, lifecycle rule)   | No charge for the configuration; versions bill as storage above                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | $0.00/mo                     |
 | **IAM** (`aws_iam_openid_connect_provider.github`, `aws_iam_role.github_actions`)    | IAM roles and OIDC providers are free                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | $0.00/mo                     |
-| **Observer identity** (`aws_iam_user.observer`, `aws_iam_user_policy.observer`)      | IAM users and their policies are free. Its reads bill elsewhere: `GetMetricData` at $0.01 per 1,000 metrics, one metric per `incident-watch` run, so an hourly wake-up is under a cent a month; the describe and filter calls carry no per-request charge at this volume                                                                                                                                                                                                                                                         | $0.00/mo                     |
+| **Observer identity** (`aws_iam_user.observer`, `aws_iam_user_policy.observer`)      | IAM users and their policies are free                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | $0.00/mo                     |
+| **Observer reads** (`.claude/scripts/incident-watch.sh`)                             | `GetMetricData` at $0.01 per 1,000 metrics, one metric per run; the describe and filter calls sit inside CloudWatch's free API allowance. **Activity, not standing**: nothing runs unless a session's wake-up does                                                                                                                                                                                                                                                                                                               | < $0.01/mo (hourly runs)     |
 | **Cost-ceiling budget** (`aws_budgets_budget.monthly_cost_ceiling`)                  | Notification-only budgets are free of charge; only _action-enabled_ budgets bill (first two free, then $0.10/day), and this budget has no actions                                                                                                                                                                                                                                                                                                                                                                                | $0.00/mo                     |
 | **Notification parameter** (`/cumulo/notification-email`, read via data source)      | SSM Parameter Store standard tier, encrypted with the default KMS key — no charge for the parameter and none for the key                                                                                                                                                                                                                                                                                                                                                                                                         | $0.00/mo                     |
-| **Standing total**                                                                   | The at-rest row plus the zeros — the request line is excluded because an idle stack issues no requests                                                                                                                                                                                                                                                                                                                                                                                                                           | **≈ $0.0005/mo**             |
+| **Standing total**                                                                   | The at-rest row plus the zeros — the request and observer-reads lines are excluded because an idle stack issues neither                                                                                                                                                                                                                                                                                                                                                                                                          | **≈ $0.0005/mo**             |
 
 **Standing cost is ~$0.0005/month, and it is arithmetic rather than a marker.** Seven state files at ~0.2 MB of current state, and 90 days of noncurrent versions on top: at a deliberately generous **100 applies per 90 days**, counting each as though it rewrote all seven states rather than the one it touched, the bucket holds about **20 MB** (the real census is ~0.17 MB of current state, so ~17 MB — the round figure is the generous end). That is 0.02 GB at $0.023/GB-month — **$0.00046**. It is labelled a **ceiling** rather than an estimate because the apply rate is the one term nobody has measured, which is this document's standing convention for an unmeasured term.
 
