@@ -337,9 +337,9 @@ resource "aws_dynamodb_table" "sites" {
 #    #264 gave a load its second `series` read, and is amended (2026-08-10)
 #    rather than current; every carrier is named in this file's header ledger.
 #    So the loads it takes to spend a cent still number in the thousands, and
-#    the bound on a determined caller is ADR 0005's gateway throttle rather
-#    than a read allocation — which is what the 21 RCU had become in practice
-#    anyway.
+#    the bound on a determined caller is ADR 0010's cost guard rather than a
+#    read allocation — the 21 RCU had stopped being one in practice, and the
+#    gateway throttle that replaced it stopped bounding reads once they billed.
 #
 #    There is deliberately no `on_demand_throughput` block, for the same reason
 #    3 below states: a `max_write_request_units` ceiling is a per-second cap, so
