@@ -42,7 +42,7 @@ The issue asked for "API Gateway throttling/usage plans before reaching for WAF,
 
 ## Decision
 
-**Four layers, one of which we build; a cap of 40 user sites with oldest-first eviction; a per-IP limiter backed by an on-demand DynamoDB table; origin checking as friction, not authentication; and alarm notifications finally wired to an SNS topic. Standing cost stays $0.** [As it stood when this was written: since ADR 0010 (2026-10-07, #588) the platform carries ≈ $1.30/month of alarms that bill for existing, on purpose — see Amendments.]
+**Four layers, one of which we build; a cap of 40 user sites with oldest-first eviction; a per-IP limiter backed by an on-demand DynamoDB table; origin checking as friction, not authentication; and alarm notifications finally wired to an SNS topic. Standing cost stays $0.** [As it stood when this was written: since #603's canary alarm and ADR 0010's cost guard (both 2026-10-07) the platform carries alarms that bill for existing, on purpose — `infra/README.md`'s CloudWatch alarm budget owns the figure; see Amendments.]
 
 ### 1. The four layers, and which one bites first
 
@@ -187,7 +187,7 @@ The stage throttle held at its ceiling continuously for a 30-day month is `10 ×
 
 **Roughly half the ~$100 ceiling, under continuous distributed abuse, forever** — up from ADR 0005's ≈ $39, and the increase is entirely the price of knowing who is calling. Single-IP abuse costs a few cents, because the block cache serves the denial. At the expected regime the abuse table bills fractions of a cent and the whole platform still rounds to about one cent a month.
 
-**Standing cost stays $0.** [As it stood when this was written: since ADR 0010 (2026-10-07, #588) the platform carries ≈ $1.30/month of alarms that bill for existing, on purpose — see Amendments.] The abuse table is on-demand and bills only for requests; the SNS topic has no per-topic charge; the alarms are held at exactly the always-free ten. ADR 0004's headline — no resource in Cumulo bills for existing outside an always-free allowance (as amended 2026-08-10) — survives this ticket, which is the single strongest reason WAF was not bought.
+**Standing cost stays $0.** [As it stood when this was written: since #603's canary alarm and ADR 0010's cost guard (both 2026-10-07) the platform carries alarms that bill for existing, on purpose — `infra/README.md`'s CloudWatch alarm budget owns the figure; see Amendments.] The abuse table is on-demand and bills only for requests; the SNS topic has no per-topic charge; the alarms are held at exactly the always-free ten. ADR 0004's headline — no resource in Cumulo bills for existing outside an always-free allowance (as amended 2026-08-10) — survives this ticket, which is the single strongest reason WAF was not bought.
 
 ### What becomes easier
 

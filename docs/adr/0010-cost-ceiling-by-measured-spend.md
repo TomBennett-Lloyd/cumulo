@@ -80,7 +80,7 @@ The composite does not enter this arithmetic. It only ends an episode sooner: at
 
 The trip function, its topic and its subscriptions cost nothing until a trip.
 
-**This ends the platform's $0 standing cost, on purpose.** ADR 0004 established that nothing in Cumulo bills for existing outside an always-free allowance, and 0005 and 0006 each kept that true. The guard's alarms bill for existing, and ≈ $1.30 a month is what holding the ceiling by reaction costs. ADRs 0004, 0005 and 0006 carry as-it-stood notes and dated entries for the sentences that say otherwise.
+**This takes the platform further past its $0 standing cost, on purpose.** ADR 0004 established that nothing in Cumulo bills for existing outside an always-free allowance, and 0005 and 0006 each kept that true. #603's canary alarm, the eleventh, ended it first at $0.10 a month. The guard's alarms add ≈ $1.30 a month, which is what holding the ceiling by reaction costs. ADRs 0004, 0005 and 0006 carry as-it-stood notes and dated entries for the sentences that say otherwise.
 
 **Operator obligations.** Billing alerts have to be enabled once. This is a billing-account preference, not a Terraform resource, so the runbook's prerequisite runs `aws billing update-billing-preferences` and reads it back. Until then the billing alarm sits in INSUFFICIENT_DATA and trips nothing. The us-east-1 email subscription needs confirming. A trip drill — invoke the function, see 429s, reset — is the acceptance test, and it is the only proof that a zero throttle on this HTTP API rejects every route. All three steps are in the api runbook.
 

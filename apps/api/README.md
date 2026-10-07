@@ -147,7 +147,7 @@ two things, and `aws apigatewayv2 get-stage` tells you which.
 
 **Which routes the limiter covers** is a deliberate list, and it lives in `main.ts`'s route table.
 `GET /v1/sites`, `GET …/forecast`, `/openapi.json` and the two `/docs` routes are unlimited — fixed,
-small cost per request, and already bounded by layer 3. A limiter that made loading the docs page
+small cost per request, and already rate-capped by layer 3. A limiter that made loading the docs page
 spend abuse-table writes would be paying to defend the cheapest thing here. A browser revalidating a
 cached series or fleet read with the current data cycle's ETag is answered 304 before the limiter
 and is never counted (`forecast/cycle-cache.ts`).
