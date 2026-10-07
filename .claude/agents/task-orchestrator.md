@@ -138,7 +138,7 @@ your issue's comments; the top-level never posts them for you.
    the branch ADDS, assert no earlier commit references it (`git log --oneline -S<path>`,
    `git ls-tree`) before writing any commit message that claims a split — two commits in
    the #327 batch asserted a split that was false and named a file two commits away, on
-   causation reasoning that was coherent and wrong where two git commands settled it. PR body carries one `Closes #<m>` per surviving member and, on a line of its own, the TASK REPORT header in its batch form (`## TASK REPORT — batch: anchor #<a>, members <#a #b>`): `merge-pr.sh` merges `--rebase` on that line, because a Closes count misread two single-issue lanes as batches (#611, #626). Every report
+   causation reasoning that was coherent and wrong where two git commands settled it. PR body carries one `Closes #<m>` per surviving member and, on a line of its own, the TASK REPORT header in its batch form (`## TASK REPORT — batch: anchor #<a>, members <#a #b>`): `merge-pr.sh` merges `--rebase` on that line rather than inferring a batch from the Closes count, which a batch with one surviving member would read as a squash (#533). Every report
    includes the per-ticket block and the branch commit list.
 8. **The scratchpad is shared; treat every path in it as contested.** The session scratchpad
    directory is not isolated per agent, and concurrent orchestrators pick the same obvious

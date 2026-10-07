@@ -73,7 +73,7 @@ This pass is what `.claude/workflow.json` → `merge.reviewedSourceRule` accepts
 
 ## 7. PR and CI
 
-`gh pr create --head <branch>`, `Closes #<n>`, body = what and why plus the `## Lane report` below. A closing keyword (close, fix or resolve, in any tense) before any other `#<m>` closes that issue at merge, whatever words follow: #626's "Resolves #358's entry 2" closed #358 with three entries still open. Partial progress is written `Part of #<m>`. Then `.claude/skills/review-loop/SKILL.md` step 4 governs: check mergeability before watching checks, and re-run a red lane once only for a signature an open issue already owns.
+`gh pr create --head <branch>`, `Closes #<n>`, body = what and why plus the `## Lane report` below. A closing keyword (close, fix or resolve, in any tense) immediately before any other `#<m>` closes that issue at merge, whatever words follow the number: #626's "Resolves #358's entry 2" closed #358 with entries still open. Partial progress is written `Part of #<m>`. Then `.claude/skills/review-loop/SKILL.md` step 4 governs: check mergeability before watching checks, and re-run a red lane once only for a signature an open issue already owns.
 
 Classify per `.claude/workflow.json` → `merge.autoRule` and `merge.humanAlways`. HUMAN → the `docs/review-feedback.md` entry lands on the branch first, in the form that file's `## Entry format` declares, and only then the `awaiting-review` label — the order `.claude/skills/review-loop/SKILL.md` step 5 states, and for the reason it gives there.
 
