@@ -63,10 +63,9 @@ resource "aws_lambda_event_source_mapping" "weather_readings" {
   # An hourly ingestion cycle publishes its ~12 location messages within a few
   # seconds of each other, and each one produces on the order of 240 series
   # items — 288 since #494 added a fleet roll-up partial per hour of the
-  # location's horizon. Unbounded, Lambda would take all twelve at once and
-  # drive ~3,456 write units simultaneously at a table provisioned for a
-  # small fraction of
-  # that — throttling, retries, and the storage stack's own throttle alarm
+  # location's horizon, 291 since #506's actuals slices. Unbounded, Lambda would
+  # take all twelve at once and drive ~3,492 write units simultaneously at a
+  # table provisioned for a small fraction of that — throttling, retries, and the storage stack's own throttle alarm
   # firing on what is really a concurrency decision made three stacks away. At
   # 2, the same work arrives as a short queue-paced stream instead of a burst,
   # and SQS's redelivery absorbs whatever still throttles: the messages are not

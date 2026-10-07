@@ -58,9 +58,10 @@
 #     are metered rather than drawn from a free allocation. So this is a driver
 #     row under infra/README.md's cost convention 3 — the line lives in the
 #     **storage** stack's cost table, because storage owns the resource, and
-#     this stack says so here: **$0.00/month here, driving ≈ $1.78/month under
-#     storage** at the canonical fleet (~3,456 items/hour — ~2,880 forecast
-#     items plus #494's 576 fleet roll-up partials). It is $0 whenever
+#     this stack says so here: **$0.00/month here, driving ≈ $1.80/month under
+#     storage** at the canonical fleet (~3,492 items/hour — ~2,880 forecast
+#     items plus #494's 576 fleet roll-up partials and #506's 36 actuals
+#     slices). It is $0 whenever
 #     ingestion's schedule is off, because there are then no messages to drain.
 #   * IAM — the execution role, its inline policy, and the deploy grant are all
 #     free. So is the event source mapping resource itself.
@@ -73,7 +74,7 @@
 # either: it keeps draining ingestion's queue, and every
 # message it drains meters series write units on the storage stack's bill. That
 # is still usually the behaviour you want — an undrained queue is worse — but it
-# is ≈ $1.78/month of somebody's meter rather than nothing at all.
+# is ≈ $1.80/month of somebody's meter rather than nothing at all.
 
 output "function_name" {
   description = "Name of the forecast function, for `aws lambda invoke` and for `aws logs tail /aws/lambda/<name>`. Echoes the cumulo-forecast-<environment> convention so an operator reads the value Terraform actually applied instead of retyping it — the deploy workflow hardcodes the same name."

@@ -416,3 +416,22 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Why**: `docs/adr/**` is a `humanAlways` path, so the owner is the gate on what an ADR records. The retirement itself is the owner's chat decision of 2026-10-07 (#592 option B). What this PR adds is the interpretation of it in the ADR's own terms: amendment rather than supersession, and an annotation rather than an inline true-up.
 - **How applied**: Commits on `606-retire-active`. `fleetSiteSchema` drops `active`. `activeFleetSites` and its three callers' narrowing are deleted. `toItem` writes `gsiLocation` unconditionally, and `FleetSiteItem.gsiLocation` is now required. Tests that built an inactive site are deleted along with the predicate. A `site.test.ts` case pins that a stored row still carrying `active: true` parses and loses the key.
 - **Verdict**: Approved without changes — owner, in chat, 2026-10-08 ("okay nice can we do 613 and 620"), after reading the three asks in chat: (a) retiring the flag is an ADR 0002 amendment, not a supersession; (b) the four identifiers that still say "active" are renamed separately under #618; (c) the three rollout hazards (old web bundle until refresh, one failing old-Lambda ingestion run healed by the next hour, revert breaks fleet reads until the flag is restored) are accepted for a single-operator demo rather than building a two-release transition; the missing expand/contract rule stays in docs/tech-debt.md. Filled on the branch by the merge owner before the label came off.
+
+## 2026-10-07 — issue #506 — actuals-rollup-completeness
+
+- **Category**: pending — filled at merge
+- **Feedback**: The owner is asked to ratify two amendment entries. The first is **ADR 0009's 2026-10-07 (#506) entry**, which records three things:
+  - the `GEN` producer;
+  - the completeness rule for an actuals look-back: no vintage check, membership checked only on the trailing-window hours, settled hours summed as written, and a location older than the window must hold the window's first hour;
+  - the moved write line (≈ $1.78 → ≈ $1.80/month).
+
+  The second is **ADR 0002's matching entry**: A5's fan-out is now superseded for the actuals read too. The completeness rule's first three clauses are the owner's 2026-10-07 decision on the issue. The first-hour check is this lane's addition, and the owner is asked to ratify or strike it.
+
+- **Why**: `docs/adr/**` is a `humanAlways` path, so the owner is the gate on what an ADR records. The entry lands on the branch before the `awaiting-review` label because `merge.humanAlwaysRule` orders it that way.
+- **How applied**: Commits on `506-actuals-read`:
+  - `packages/shared/src/fleet-actuals-rollup.ts` holds the arithmetic.
+  - `apps/forecast/src/fleet-rollup-write.ts` holds the producer.
+  - `apps/api/src/forecast/fleet-actuals-rollup-read.ts` holds the read and its fallback.
+  - The web seam now carries summed points.
+  - `infra/storage/tables.tf` owns the moved figures. Its quoters are trued up in the same change.
+- **Verdict**: pending — filled at merge
