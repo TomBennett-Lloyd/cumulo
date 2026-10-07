@@ -45,8 +45,15 @@ const overlayNames = async (page: Page): Promise<string> =>
     .locator(`${SITE_MARKER}, ${CLUSTER_MARKER}`)
     .evaluateAll((markers) => markers.map((marker) => marker.getAttribute('aria-label')).join('|'));
 
+/** A cluster a pointer can press: its index among the drawn clusters, and its centre. */
+export interface ReachableCluster {
+  readonly index: number;
+  readonly x: number;
+  readonly y: number;
+}
+
 /**
- * Which cluster a pointer can actually reach — its index, or -1 if none can.
+ * Which cluster a pointer can actually reach, and where its centre is.
  *
  * Bubbles overlap. Two knots a few pixels apart draw two circles that intersect,
  * and the one mounted later wins the pixels they share; Playwright refuses to
@@ -58,15 +65,28 @@ const overlayNames = async (page: Page): Promise<string> =>
  * which for a cluster is the button, and for a site marker could be the tooltip
  * span inside it.
  */
-const reachableClusterIndex = async (page: Page): Promise<number> =>
-  page.locator(CLUSTER_MARKER).evaluateAll((clusters) =>
-    clusters.findIndex((cluster) => {
+export const reachableCluster = async (page: Page): Promise<ReachableCluster> => {
+  const found = await page.locator(CLUSTER_MARKER).evaluateAll((clusters) => {
+    for (const [index, cluster] of clusters.entries()) {
       const box = cluster.getBoundingClientRect();
-      const topmost = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      const topmost = document.elementFromPoint(x, y);
 
-      return topmost !== null && cluster.contains(topmost);
-    }),
-  );
+      if (topmost !== null && cluster.contains(topmost)) {
+        return { index, x, y };
+      }
+    }
+
+    return null;
+  });
+
+  if (found === null) {
+    throw new Error('Every cluster on the map is buried under another one.');
+  }
+
+  return found;
+};
 
 /**
  * Zoom in until one site is drawn on its own, and hand back its locator.
@@ -87,12 +107,7 @@ export const revealSiteMarker = async (page: Page): Promise<Locator> => {
       return siteMarker;
     }
 
-    const index = await reachableClusterIndex(page);
-
-    if (index < 0) {
-      throw new Error('Every cluster on the map is buried under another one.');
-    }
-
+    const { index } = await reachableCluster(page);
     const before = await overlayNames(page);
 
     await page.locator(CLUSTER_MARKER).nth(index).click();
