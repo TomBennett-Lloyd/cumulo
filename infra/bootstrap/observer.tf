@@ -12,7 +12,7 @@ locals {
   observer_user_name = "cumulo-observer-${var.observed_environment}"
 
   # The policy's whole vocabulary. .claude/scripts/incident-watch.test.sh holds
-  # the Allow statements to exactly this list and fails on a write action.
+  # every action in this file, and infra/README.md's observer table, to it.
   observer_actions = [
     "cloudwatch:DescribeAlarms",
     "cloudwatch:DescribeAlarmHistory",
@@ -62,7 +62,7 @@ data "aws_iam_policy_document" "observer" {
   }
 
   # An explicit Deny outranks any Allow, so a policy attached to this user by
-  # mistake later cannot widen it past the four reads.
+  # mistake later cannot widen it past observer_actions.
   statement {
     sid         = "DenyEverythingElse"
     effect      = "Deny"

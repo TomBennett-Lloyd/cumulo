@@ -278,3 +278,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: the deploy workflows under `.github/workflows/` that trigger in parallel on `packages/shared/**`: `deploy-api.yml`, `deploy-ingestion.yml`, `deploy-forecast.yml`, `deploy-pages.yml`, which is the live web publish until #144, and `deploy-web.yml`, which is its successor and skips until #144. `docs/standards/architecture.md` has no rule on schema contraction.
 - What: removing a required field from a stored or wire schema reaches the API, the web bundle, ingestion and forecast in one parallel push. Until every deployable has updated, an old one parses the new shape with the old schema and throws. Once the new code has written rows, a revert breaks the readers too. #606 recorded these hazards for `FleetSite.active` rather than building a transition. Candidate standards rule: contract a stored or wire field over two releases, so readers tolerate its absence before writers stop emitting it.
 - Source: #606 review pass 1 SYSTEMIC
+
+## 2026-10-07 — the observer policy is checked by reading its HCL, not by evaluating the rendered document
+
+- Where: `policy_violations` in `.claude/scripts/incident-watch.test.sh`, against `data.aws_iam_policy_document.observer` in `infra/bootstrap/observer.tf`
+- What: the harness greps the HCL for the widening shapes someone thought of (extra actions, `not_actions` in an Allow, a narrowed or commented-out Deny, `jsonencode`, a managed attachment), each with a negative control. A shape nobody listed passes. The sound check evaluates the rendered JSON, e.g. `terraform console` in CI's existing bootstrap validate job, or `aws accessanalyzer validate-policy`, which is a CI change across stacks
+- Source: #604 review pass 1 SYSTEMIC
+
+## 2026-10-07 — the mirror gate has no mode for a shell or skill carrier of an app-owned string
+
+- Where: `.claude/scripts/check-infra-mirrors.sh`; carriers such as the log filters in `.claude/scripts/incident-watch.sh`
+- What: `check-infra-mirrors` pairs Terraform with TypeScript only, so a script quoting a log event name (`apiServerErrorEvent`, `messageOutcomeEvent`) or an alarm name drifts silently. #604 pins its own carriers with harness cases ("the log filters carry the event names their owners export"); the general fix is a gate mode, not one more harness per script
+- Source: #604 review pass 1 SYSTEMIC
