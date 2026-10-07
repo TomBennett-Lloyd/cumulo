@@ -10,6 +10,7 @@ import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '
 import type { RouteRequest } from '../http/router';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
+import { uncacheable } from './cycle-cache';
 import { requireKnownSite } from './known-site';
 import { actualsIn, forecastsIn } from './series-split';
 import { spanHours } from './series-window';
@@ -144,9 +145,12 @@ export const getSiteSeries = async (
     return errorResponse('internal', 'the request could not be completed in time');
   }
 
-  return jsonResponse(200, siteSeriesResponseSchema, {
-    forecasts: forecastsIn(points),
-    actuals: actualsIn(points),
+  const forecasts = forecastsIn(points);
+  const actuals = actualsIn(points);
+  const response = jsonResponse(200, siteSeriesResponseSchema, {
+    forecasts,
+    actuals,
     attribution: openMeteoAttribution,
   });
+  return forecasts.length === 0 && actuals.length === 0 ? uncacheable(response) : response;
 };

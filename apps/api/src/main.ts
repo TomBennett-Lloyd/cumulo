@@ -12,6 +12,12 @@ import { z } from 'zod';
 
 import { IpLimiter } from './abuse/ip-limiter';
 import { checkWriteOrigin } from './abuse/origin-check';
+import {
+  cachedForCycle,
+  dataCycleAt,
+  notModifiedResponse,
+  revalidatesCycle,
+} from './forecast/cycle-cache';
 import { getFleetActuals } from './forecast/get-fleet-actuals';
 import { getFleetForecast } from './forecast/get-fleet-forecast';
 import { getSiteForecast } from './forecast/get-site-forecast';
@@ -152,10 +158,9 @@ const abuse = new AbuseAdapter({
   tableName: storageTableName('abuse', env.CUMULO_ENV),
 });
 
-const limiter = new IpLimiter({
-  abuse,
-  nowEpochSeconds: () => Math.floor(Date.now() / 1000),
-});
+const nowEpochSeconds = (): number => Math.floor(Date.now() / 1000);
+
+const limiter = new IpLimiter({ abuse, nowEpochSeconds });
 
 /**
  * The browser origins allowed on write routes *in addition to* the API's own.
@@ -192,6 +197,23 @@ const rateLimited = async (
 ): Promise<ApiResponse> => {
   const decision = await limiter.check(request.sourceIp);
   return decision.allowed ? handle() : rateLimitedResponse(decision.retryAfterSeconds);
+};
+
+/**
+ * A metered read. A revalidation naming the current data cycle is answered 304
+ * before the limiter counts it and before any storage read; anything else is
+ * limited, and its 200 made cacheable to the next cycle
+ * (`forecast/cycle-cache.ts`, #583).
+ */
+const cycleCached = async (
+  request: RouteRequest,
+  handle: () => Promise<ApiResponse>,
+): Promise<ApiResponse> => {
+  const cycle = dataCycleAt(nowEpochSeconds());
+  if (revalidatesCycle(request.ifNoneMatch, cycle)) {
+    return notModifiedResponse(cycle);
+  }
+  return cachedForCycle(await rateLimited(request, handle), cycle);
 };
 
 /**
@@ -259,7 +281,7 @@ const docsAssetDeps: DocsAssetDeps = { assetDirectory: new URL('./swagger/', imp
  * handler already broken. The `Pick<SiteAdapter, …>` in each handler's deps type
  * does the narrowing instead.
  *
- * The `guardedWrite`/`rateLimited` wrappers are the abuse protections, and this
+ * The `guardedWrite`/`cycleCached` wrappers are the abuse protections, and this
  * table is the only place that says which routes carry them. The route keys the
  * gateway throttles separately (`infra/api/gateway.tf`, ADR 0006 layer 2) are
  * the three `guardedWrite` ones, and those two lists have to be edited
@@ -302,7 +324,7 @@ export const routes: readonly Route[] = [
     // pick. No origin check — reads are not writes, and the web app must be
     // able to plot a site from wherever it is served.
     handle: (request) =>
-      rateLimited(request, () => getSiteSeries({ sites, series, log: jsonLineLog }, request)),
+      cycleCached(request, () => getSiteSeries({ sites, series, log: jsonLineLog }, request)),
   },
   {
     method: 'GET',
@@ -314,7 +336,7 @@ export const routes: readonly Route[] = [
     // nothing about its cost, but the *fleet* does — one Query per site, on
     // every dashboard load.
     handle: (request) =>
-      rateLimited(request, () =>
+      cycleCached(request, () =>
         getFleetActuals({ sites, series, now, log: jsonLineLog }, request),
       ),
   },
@@ -326,7 +348,7 @@ export const routes: readonly Route[] = [
     // page view's pair, so a limiter on one of them only would be a bound on
     // half the load.
     handle: (request) =>
-      rateLimited(request, () =>
+      cycleCached(request, () =>
         getFleetForecast({ sites, series, now, log: jsonLineLog }, request),
       ),
   },

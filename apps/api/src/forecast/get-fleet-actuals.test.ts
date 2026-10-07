@@ -177,6 +177,7 @@ describe('GET /v1/fleet/actuals', () => {
     expect(response.statusCode).toBe(200);
     expect(fleetActualsResponseSchema.parse(jsonBodyOf(response)).actuals).toEqual([]);
     expect(reads).toHaveLength(2);
+    expect(response.headers['cache-control']).toBe('no-store');
   });
 
   it('credits Open-Meteo in every 200 body', async () => {
@@ -185,6 +186,7 @@ describe('GET /v1/fleet/actuals', () => {
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
     const body = fleetActualsResponseSchema.parse(jsonBodyOf(response));
+    expect(response.headers['cache-control']).toBeUndefined();
     expect(body.attribution).toEqual(openMeteoAttribution);
     expect(body.attribution.text).toBe('Weather data by Open-Meteo.com');
   });

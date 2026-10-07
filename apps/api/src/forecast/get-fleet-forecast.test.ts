@@ -218,6 +218,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     expect(rollupReads).toEqual([]);
     expect(reads).toEqual([]);
     expect(logged).toEqual([]);
+    expect(response.headers['cache-control']).toBe('no-store');
   });
 
   it('credits Open-Meteo in the roll-up arm', async () => {
@@ -226,10 +227,10 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
       rollupRows: [row(DUBLIN, [RANELAGH], partial())],
     });
 
-    const body = fleetForecastResponseSchema.parse(
-      jsonBodyOf(await getFleetForecast(deps, fleetForecastRequest())),
-    );
+    const response = await getFleetForecast(deps, fleetForecastRequest());
+    const body = fleetForecastResponseSchema.parse(jsonBodyOf(response));
 
+    expect(response.headers['cache-control']).toBeUndefined();
     expect(body.attribution).toEqual(openMeteoAttribution);
     expect(body.attribution.text).toBe('Weather data by Open-Meteo.com');
   });

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
+import { uncacheable } from './cycle-cache';
 import { readFleetForecastAggregate, type FleetRollupReadDeps } from './fleet-rollup-read';
 import { DEFAULT_FORECAST_HORIZON_HOURS, FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { hoursAfter } from './series-window';
@@ -129,8 +130,9 @@ export const getFleetForecast = async (
     return read.response;
   }
 
-  return jsonResponse(200, fleetForecastResponseSchema, {
+  const response = jsonResponse(200, fleetForecastResponseSchema, {
     points: [...read.points],
     attribution: openMeteoAttribution,
   });
+  return read.points.length === 0 ? uncacheable(response) : response;
 };

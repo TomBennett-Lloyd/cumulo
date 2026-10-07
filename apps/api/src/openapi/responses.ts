@@ -112,6 +112,17 @@ const throttledResponse: ResponsesObject = {
   },
 };
 
+/** The metered reads' revalidation answer (`../forecast/cycle-cache.ts`). */
+export const notModifiedResponse: ResponsesObject = {
+  '304': {
+    description: [
+      'The `If-None-Match` named the current data cycle’s ETag, so the cached body is',
+      'still current. A 200 carries that ETag and a `Cache-Control` max-age running to the',
+      'next cycle; this answer reads nothing and is not counted by the per-IP limiter.',
+    ].join(' '),
+  },
+};
+
 /**
  * The two failures every operation shares, whatever it does.
  *

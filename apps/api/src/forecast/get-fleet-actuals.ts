@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
+import { uncacheable } from './cycle-cache';
 import { readFleetSeries } from './fleet-series-read';
 import { FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { actualsIn } from './series-split';
@@ -142,8 +143,10 @@ export const getFleetActuals = async (
 
   // Split per site and flattened once, rather than a split of one concatenated
   // list: the wire order is site by site, chronological within each.
-  return jsonResponse(200, fleetActualsResponseSchema, {
-    actuals: read.perSite.flatMap((points) => actualsIn(points)),
+  const actuals = read.perSite.flatMap((points) => actualsIn(points));
+  const response = jsonResponse(200, fleetActualsResponseSchema, {
+    actuals,
     attribution: openMeteoAttribution,
   });
+  return actuals.length === 0 ? uncacheable(response) : response;
 };
