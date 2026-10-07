@@ -75,9 +75,9 @@
 #     - `infra/README.md`, the api and web "whether to leave it up" paragraphs
 #       — *arguing*, both from "the rule fires whether or not anybody is
 #       looking" and the api one also from the ≈ $0.04.
-#     - `infra/api/outputs.tf` — the IDLE COST header, the API Gateway, Lambda,
+#     - `infra/api/outputs.tf` — the IDLE COST header, the Lambda,
 #       CloudWatch-logs, warmer and IAM bullets: *asserting*, carrying the
-#       25,920, the 233 and 32,400 GB-s, the ≈ 9 MB, the ≈ $0.04 and the
+#       25,920, the 233 GB-s, the ≈ 9 MB, the ≈ $0.04 and the
 #       three-targets / two-permissions counts.
 #     - `infra/README.md` — the stack table's api row, the api runbook's opening
 #       resource sentence, step B3's `Plan: 23 to add`, step B3's `state list`
