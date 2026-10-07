@@ -55,18 +55,15 @@ import { forecastsIn } from './series-split';
  * the 2026-10-07 entry): its slices must carry the digest of the sites active there now, and one
  * `issuedAt` between them.
  *
- * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent} with the counts
- * that explain it, so "has a full cycle written every location yet?" is one log query. When the
- * event has been absent for 24 hours after the first post-deploy cycle, the fallback and this
- * module's second arm come out — #507, which states the condition in the form a log query can answer.
+ * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent}; #507 removes the
+ * fallback and this module's second arm, and ADR 0009's 2026-10-07 entry says what `stale` leaves
+ * it to decide.
  */
 
 /**
  * The one event a fallback emits.
  *
- * One event with a `reason` rather than two events, because an operator watching a deployment wants
- * a single line to count: the question is "is the roll-up being used yet", and `absent` versus
- * `incomplete` is the detail that says how far through the first cycle the answer is.
+ * One event with a `reason` rather than one event per reason, so an operator counts a single line.
  */
 export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';
 
@@ -125,8 +122,7 @@ const expectedLocations = (
 /**
  * The expected locations whose slices cannot be summed as they stand: a slice with no provenance
  * (written before #602), a membership digest that is not the live one, or a location whose slices
- * carry more than one `issuedAt` — a `store-partial` drain or a replay left part of its horizon on
- * an older run, which the per-site rows do not share.
+ * carry more than one `issuedAt` — part of its horizon was written by another run.
  *
  * Vintage is compared within a location and never across them: ingestion visits locations on
  * their own schedule and with no end-of-run event (ADR 0009), so locations legitimately differ.

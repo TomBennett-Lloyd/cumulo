@@ -25,10 +25,7 @@ import { fleetRollupFallbackEvent } from './fleet-rollup-read';
  * fallback *is*, tested where it lives rather than through the route.
  *
  * Through `readFleetForecastAggregate` directly because the route adds nothing to this question: it
- * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both. What matters
- * here is that a partition missing a whole *location* is never summed — the dimension the check
- * works in, and the one ADR 0009's 2026-10-05 amendment entry records it as working in — and that
- * every fallback leaves one line an operator can count while a deployment settles.
+ * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both.
  */
 
 describe('the roll-up answers', () => {
@@ -198,7 +195,7 @@ describe('a stale slice', () => {
   });
 
   it('falls back when one location’s slices come from two forecast runs', async () => {
-    // A `store-partial` drain or a replay left part of the horizon on the older run.
+    // A `store-partial` roll-up drain, or a replayed message, leaves part of the horizon on another run.
     const { logged } = await staleRead(
       [
         row(DUBLIN, [RANELAGH], partial(), ISSUED_AT),
@@ -290,6 +287,15 @@ describe('the fallback', () => {
       },
     ]);
     expect(siteReads).toEqual([RANELAGH_ID, BRISTOL_SITE.id]);
+  });
+
+  it('reports a missing location as incomplete even when another is stale, and counts both', async () => {
+    // Dublin's slice still sums Rathmines, which has gone; Bristol has not written at all.
+    const { deps, logged } = harness({ rows: [row(DUBLIN, [RANELAGH, RATHMINES])] });
+
+    await read(deps, [RANELAGH, BRISTOL_SITE]);
+
+    expect(logged[0]).toMatchObject({ reason: 'incomplete', staleLocations: 1 });
   });
 
   it('treats a roll-up Query that stopped short as incomplete', async () => {

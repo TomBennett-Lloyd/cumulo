@@ -26,8 +26,7 @@ import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
  * **No end-of-run event, and none needed.** ADR 0004 makes one SQS message one *location's* whole
  * horizon, so an ingestion cycle is twelve independent invocations with no last-one signal. Each
  * writes only its own keys — `(kind, hour, location)` — so two invocations of one cycle never touch
- * the same item and there is no last-writer race to lose. The sum happens at read, over whatever is
- * there.
+ * the same item and there is no last-writer race to lose.
  *
  * **It cannot fail the record.** Every failure is converted to a log entry, for the reason
  * `simulate-actuals.ts` states about its own: this runs below the record boundary
