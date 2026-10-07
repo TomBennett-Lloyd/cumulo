@@ -47,9 +47,9 @@
 #   * Invalidations — the deploy workflow issues one `/*`, which counts as a
 #     single path, so a deploy every working day stays inside 1,000/month with
 #     two orders of magnitude to spare.
-#   * CloudWatch — this stack adds **no alarms**. The always-free ten are fully
-#     allocated (see the alarm budget in infra/README.md), and CloudFront's own
-#     metrics are free.
+#   * CloudWatch — this stack adds **no alarms**. The always-free ten are spent
+#     (see the alarm budget in infra/README.md), and CloudFront's own metrics
+#     are free.
 #
 # The worst case is bounded rather than free, and this stack is the honest
 # exception to how the others are bounded: there is no CloudFront analogue of

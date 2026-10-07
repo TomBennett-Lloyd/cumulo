@@ -36,10 +36,10 @@
 #     eleven of them. The honest claim is a ceiling, not a meter reading. What moves
 #     the total is the location count rather than the site count — infra/
 #     README.md's forecast cost notes own that arithmetic.
-#   * CloudWatch alarms — one alarm, the tenth and last of the always-free ten.
-#     An alarm is priced at $0.10/month for existing, fired or not; the ten are
-#     a pool the platform has fully spent, not a discount, and infra/README.md's
-#     alarm budget owns the count. Lambda metrics are free.
+#   * CloudWatch alarms — one of the always-free ten. An alarm is priced at
+#     $0.10/month for existing, fired or not; the ten are a pool, not a
+#     discount, and infra/README.md's alarm budget owns the count. Lambda
+#     metrics are free.
 #   * Lambda — invoked only when ingestion publishes: ~12 messages an hour,
 #     ~8,760 invocations/month against the always-free 1,000,000 requests. At
 #     256 MB (0.25 GiB, the unit AWS bills), even a full 50-second invocation is

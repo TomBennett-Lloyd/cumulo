@@ -33,24 +33,25 @@
 # The sweep is keyed to the CLAIM FAMILY, not to the instances — an arm per
 # literal would miss every carrier holding only a derived figure, which is most
 # of them — and it is case-insensitive, because a table row capitalises what a
-# sentence does not. Run from the repo root, 2026-09-11:
+# sentence does not. Run from the repo root, 2026-10-07 (#603):
 #
-#   git grep -niE '17,?280|34,?560|27,?000|233 GB|6\.8 ?MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|every five minutes|[0-9]+ targets|Plan: [0-9]+ to add|expect [0-9]+ lines|[0-9]+ .resource. blocks|#473' -- :/ ':!docs/tech-debt.md' ':!docs/review-feedback.md'
+#   git grep -niE '17,?280|34,?560|25,920|8,640|~36,000|233 GB|9 MB|54 ms|192\.0\.2\.1|cumulo-warmer|cron\(0/5|warmer|canary|every five minutes|[0-9]+ targets|Plan: [0-9]+ to add|expect [0-9]+ lines|[0-9]+ .resource. blocks|#473' -- :/ ':!docs/tech-debt.md' ':!docs/review-feedback.md' ':!docs/adr/0005-fleet-api-hosting.md'
 #
-# It returns hits in exactly three files — this one, `infra/README.md` and
-# `infra/api/outputs.tf`; `git grep -l` on the same pattern is the cheap form of
-# that assertion. The two pathspec exclusions are the append-only logs, which
+# It returns hits in exactly five files — this one, `infra/api/alarms.tf`,
+# `infra/api/outputs.tf`, `infra/README.md` and
+# `.github/workflows/deploy-api.yml`; `git grep -l` on the same pattern is the
+# cheap form of that assertion. The two pathspec exclusions are the append-only logs, which
 # record what was decided rather than carrying a live claim: `docs/tech-debt.md`
 # holds this schedule's residuals and states none of its figures, and
 # `docs/review-feedback.md` matches the plan-count arm on an unrelated 2026
 # entry about a `terraform plan -destroy`. Neither is trued by a cadence change,
-# and both would otherwise be permanent noise in this readback. That
-# containment is the ledger's most useful claim: no
-# carrier lives outside the api stack and the README sections describing it,
-# and nothing in `apps/` or `packages/` restates any of this. A cadence change
-# is a three-file edit, and the third file is the easy one to forget —
-# `infra/api/outputs.tf`'s cost commentary carries the 17,280, the ~27,000 and
-# the 233 GB-s as well.
+# and both would otherwise be permanent noise in this readback. The third
+# exclusion is ADR 0005, whose one match is API Gateway's unrelated canary
+# deployments. That containment is the ledger's most useful claim: no carrier
+# lives outside the api stack, its deploy workflow and the README sections
+# describing them, and nothing in `apps/` or `packages/` restates any of this.
+# The file easiest to forget is `infra/api/outputs.tf`, whose cost commentary
+# carries the 25,920, the ~36,000 and the 233 GB-s as well.
 #
 #   * **The cadence and the target count** — `schedule_expression` below and the
 #     three `aws_cloudwatch_event_target` blocks are the owner. Every monthly
@@ -64,27 +65,29 @@
 #       compute, Warmer schedule, DynamoDB reads and CloudWatch-logs rows, the
 #       paragraph above the table, the "meaning of idle" note under it, and the
 #       "nothing here has an hourly rate" bullet: *asserting*, each carrying the
-#       derived 17,280, the ~27,000, the 34,560, the ≈ 6.8 MB or the ≈ $0.005.
+#       derived 17,280, 8,640 or 25,920, the ~36,000, the 34,560, the ≈ 9 MB or
+#       the ≈ $0.04.
 #     - `infra/README.md`, storage cost table — the "everything else" row, the
-#       `series` row's note on what drives it, the standing-bill paragraph, and
-#       the ingestion teardown bullet that contrasts the self-driven stacks:
-#       *asserting*, the same figures.
+#       `series` row's note on what drives it, the "Total, schedule running"
+#       row, the standing-bill paragraph, and the ingestion teardown bullet that
+#       contrasts the self-driven stacks: *asserting*, the same figures.
 #     - `infra/README.md`, the api and web "whether to leave it up" paragraphs
 #       — *arguing*, both from "the rule fires whether or not anybody is
-#       looking" and the api one also from the ≈ $0.005.
+#       looking" and the api one also from the ≈ $0.04.
 #     - `infra/api/outputs.tf` — the IDLE COST header, the API Gateway, Lambda,
 #       CloudWatch-logs, warmer and IAM bullets: *asserting*, carrying the
-#       17,280, the 233 GB-s, the ≈ 6.8 MB, the ≈ $0.005 and the two-targets /
-#       two-permissions counts.
+#       25,920, the 233 and 32,400 GB-s, the ≈ 9 MB, the ≈ $0.04 and the
+#       three-targets / two-permissions counts.
 #     - `infra/README.md` — the stack table's api row, the api runbook's opening
-#       resource sentence, step B3's `Plan: 20 to add`, step B3's `state list`
-#       expectation of 25, and the teardown's `list-rules` readback:
-#       *asserting* the five resources this file declares. That is the resource
-#       count rather than the cadence, but it moves for the same reason: a third
-#       target changes both, as does the `cron(0/5 * * * ? *)` readback in B7.
+#       resource sentence, step B3's `Plan: 23 to add`, step B3's `state list`
+#       expectation of 28, and the teardown's `list-rules` readback:
+#       *asserting* the six resources this file declares. That is the resource
+#       count rather than the cadence, but it moves for the same reason: a
+#       fourth target changes both, as it does B7's target ids, invocation
+#       counts and `cron(0/5 * * * ? *)` readback.
 #     - `infra/README.md`, the bootstrap cost table's state-bucket row —
 #       *computing*, from a census of `resource` blocks across all seven stacks
-#       that this file's five moved. It records the recipe that re-derives it.
+#       that this file's six moved. It records the recipe that re-derives it.
 #   * **The warm `GET /v1/sites` latency, 54 ms** — measured over the 30 days to
 #     2026-08-24, recorded in #473, restated in the first paragraph above.
 #     Carried by `infra/README.md`'s Lambda compute row, which is *computing*:
