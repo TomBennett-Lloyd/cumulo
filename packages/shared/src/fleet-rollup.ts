@@ -123,8 +123,8 @@ export type FleetRollupPartial = z.infer<typeof fleetRollupPartialSchema>;
 
 /**
  * A fleet hour's summed band. `forecast.ts`'s `uncertaintyBandSchema` caps each quantile at one
- * house; this carries {@link fleetRollupPartialSchema}'s bounds instead, for that schema's reason —
- * reusing the per-site cap 500'd every daylight fleet response (#586).
+ * house; this carries {@link fleetRollupPartialSchema}'s bounds instead, for that schema's reason
+ * (#586).
  */
 const fleetUncertaintyBandSchema = z
   .object({ p10AcPowerKw: z.number().gte(0), p90AcPowerKw: z.number().gte(0) })

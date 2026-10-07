@@ -170,7 +170,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     ]);
   });
 
-  it('answers 200 for a 60-site daylight hour whose band sums past one house’s 50 kW', async () => {
+  it('answers 200 for a 60-site daylight hour whose band sums past one house’s cap', async () => {
     // #586: the fleet band carried the per-site cap, so `jsonResponse` refused this body as a 500.
     const sixtySites = partial({
       acPowerKw: 180,
