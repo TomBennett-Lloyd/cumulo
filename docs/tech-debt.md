@@ -243,3 +243,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `MAX_LIMITED_REQUESTS_PER_WINDOW` in `apps/api/src/abuse/ip-limiter.ts` against the write-route `route_settings` throttle in `infra/api/gateway.tf`; `CYCLE_SETTLE_SECONDS` in `apps/api/src/forecast/cycle-cache.ts` against `aws_lambda_function.ingestion`'s `timeout` in `infra/ingestion/lambda.tf`
 - What: the threshold must stay below the write throttle times the window, and the settle margin must stay above the ingestion timeout; `check-infra-mirrors.sh`'s unused `ts-lt` mode could express the first if its reader can address the dynamic block, and no mode expresses "code value greater than Terraform value" for the second (apps cannot import `INGESTION_LAMBDA_TIMEOUT_MS` across app boundaries). Moving either Terraform value fails nothing (architecture rule 8)
 - Source: #583 review pass 1 SYSTEMIC
+
+## 2026-10-07 — a metered body is dated by the wall clock of the pass that wrote it, so a pass about an hour late reads as current
+
+- Where: `cycleOfIssue` and `cycleOfReading` in `apps/api/src/forecast/cycle-cache.ts`
+- What: the run behind a forecast is inferred from its `issuedAt`, which is the forecast consumer's clock (`apps/forecast/src/consume-message.ts`), and the run behind a reading from its hour. A previous run's pass landing at or after the next schedule minute, or a pass that writes the next hour's reading, dates to the current cycle and is cached to the boundary as current. The exact fix is a vintage stamped from the run's scheduled time on the message and the row, which crosses `apps/ingestion` and `apps/forecast`
+- Source: PR #608 (#583) owner-feedback confirmation pass, SYSTEMIC
+
+## 2026-10-07 — a `/series` window wholly in the past is always dated stale, so it is never answered 304
+
+- Where: `getSiteSeries` in `apps/api/src/forecast/get-site-series.ts`, `cachedForCycle` in `apps/api/src/forecast/cycle-cache.ts`
+- What: a window whose newest data predates the clock's cycle gets the short stale max-age under an older tag, so every revalidation is a metered read even though that data can no longer change. The web's window always reaches forward (`fetchSeries` in `apps/web/src/data/http-fleet-data-source.ts`), so only direct API callers meet it
+- Source: PR #608 (#583) owner-feedback confirmation pass, SYSTEMIC

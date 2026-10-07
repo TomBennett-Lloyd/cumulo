@@ -151,7 +151,9 @@ export const getFleetActuals = async (
     ? uncacheable(response)
     : datedByData(
         response,
-        [],
-        actuals.map((reading) => reading.validTime),
+        read.perSite.map((points) => ({
+          issuedAts: [],
+          readingTimes: actualsIn(points).map((reading) => reading.validTime),
+        })),
       );
 };

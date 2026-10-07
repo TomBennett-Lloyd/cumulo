@@ -119,11 +119,25 @@ describe('the cycle a body’s data settled into', () => {
     expect(cycleOfReading('2026-10-07T11:00:00Z')).toBe(BOUNDARY - 3600);
   });
 
-  it('takes the newest of everything a body holds, and leaves an undatable body undated', () => {
-    const dated = datedByData(ok, ['2026-10-07T11:09:00Z'], ['2026-10-07T12:00:00Z']);
+  it('dates a site by its newest data, and leaves an undatable body undated', () => {
+    const dated = datedByData(ok, [
+      { issuedAts: ['2026-10-07T11:09:00Z'], readingTimes: ['2026-10-07T12:00:00Z'] },
+    ]);
 
     expect(dated.dataCycleStart).toBe(BOUNDARY);
-    expect(datedByData(ok, [], [])).not.toHaveProperty('dataCycleStart');
+    expect(datedByData(ok, [{ issuedAts: [], readingTimes: [] }])).not.toHaveProperty(
+      'dataCycleStart',
+    );
+  });
+
+  it('dates a fleet by its most-behind site, so one late location is not hidden', () => {
+    const dated = datedByData(ok, [
+      { issuedAts: [], readingTimes: ['2026-10-07T12:00:00Z'] },
+      { issuedAts: [], readingTimes: ['2026-10-07T11:00:00Z'] },
+      { issuedAts: [], readingTimes: [] },
+    ]);
+
+    expect(dated.dataCycleStart).toBe(BOUNDARY - 3600);
   });
 });
 

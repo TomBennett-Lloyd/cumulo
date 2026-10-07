@@ -154,9 +154,10 @@ export const getSiteSeries = async (
   });
   return forecasts.length === 0 && actuals.length === 0
     ? uncacheable(response)
-    : datedByData(
-        response,
-        forecasts.map((forecast) => forecast.issuedAt),
-        actuals.map((reading) => reading.validTime),
-      );
+    : datedByData(response, [
+        {
+          issuedAts: forecasts.map((forecast) => forecast.issuedAt),
+          readingTimes: actuals.map((reading) => reading.validTime),
+        },
+      ]);
 };

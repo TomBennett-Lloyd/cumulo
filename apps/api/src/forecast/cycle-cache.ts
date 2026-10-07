@@ -19,15 +19,11 @@ export const INGESTION_SCHEDULE_EXPRESSION = 'cron(7 * * * ? *)';
 /**
  * How long after the schedule fires a cycle's rows are taken as written: the
  * ingestion function's full timeout (`infra/ingestion/lambda.tf`) plus the
- * forecast passes it enqueues. A pass landing later is caught by
- * {@link STALE_RETRY_SECONDS}.
+ * forecast passes it enqueues.
  */
 export const CYCLE_SETTLE_SECONDS = 480;
 
-/**
- * The max-age of a body older than its cycle: the warmer's cadence, so a late
- * forecast pass is picked up long before the next boundary (#583).
- */
+/** The max-age of a body older than its cycle (#583). */
 export const STALE_RETRY_SECONDS = 300;
 
 const SECONDS_PER_HOUR = 3600;
@@ -86,8 +82,8 @@ export const cycleOfIssue = (issuedAt: string): number =>
   hourlyAtOrBefore(Date.parse(issuedAt) / 1000, SCHEDULE_OFFSET_SECONDS) + CYCLE_SETTLE_SECONDS;
 
 /**
- * The start of the cycle a simulated reading settles into: the first run at or
- * after its hour writes it (`planSimulatedActuals` in
+ * The start of the cycle a simulated reading settles into, by the earliest run
+ * that can write its hour (`planSimulatedActuals` in
  * `apps/forecast/src/simulate-actuals.ts`).
  */
 export const cycleOfReading = (validTime: string): number =>
@@ -104,16 +100,28 @@ export interface MeteredResponse extends ApiResponse {
   readonly dataCycleStart?: number;
 }
 
-/** `response` dated by the newest cycle its forecasts' vintages and readings' hours settle into. */
+/** A site's data in a body: its forecasts' vintages and its readings' hours. */
+export interface DatedGroup {
+  readonly issuedAts: readonly string[];
+  readonly readingTimes: readonly string[];
+}
+
+/**
+ * `response` dated by its laggard: each group dates to its newest cycle and the
+ * body to the oldest of those, so one location's late pass is not hidden by
+ * another's on-time one.
+ */
 export const datedByData = (
   response: ApiResponse,
-  issuedAts: readonly string[],
-  readingTimes: readonly string[],
+  groups: readonly DatedGroup[],
 ): MeteredResponse => {
-  const cycles = [...issuedAts.map(cycleOfIssue), ...readingTimes.map(cycleOfReading)];
-  return cycles.length === 0
+  const newestPerGroup = groups.flatMap(({ issuedAts, readingTimes }) => {
+    const cycles = [...issuedAts.map(cycleOfIssue), ...readingTimes.map(cycleOfReading)];
+    return cycles.length === 0 ? [] : [cycles.reduce((a, b) => Math.max(a, b))];
+  });
+  return newestPerGroup.length === 0
     ? response
-    : { ...response, dataCycleStart: cycles.reduce((newest, cycle) => Math.max(newest, cycle)) };
+    : { ...response, dataCycleStart: newestPerGroup.reduce((a, b) => Math.min(a, b)) };
 };
 
 /** The opaque part of an entity tag, so `W/"x"` and `"x"` compare equal (RFC 9110 §8.8.3.2). */

@@ -203,7 +203,7 @@ const rateLimited = async (
 /**
  * A metered read. A revalidation naming the current data cycle is answered 304
  * before the limiter counts it and before any storage read; anything else is
- * limited, and its 200 made cacheable to the next cycle
+ * limited, and its 200 made cacheable by `cachedForCycle`
  * (`forecast/cycle-cache.ts`, #583).
  */
 const cycleCached = async (
