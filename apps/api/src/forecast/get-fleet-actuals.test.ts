@@ -221,7 +221,9 @@ describe('GET /v1/fleet/actuals', () => {
   it('dates a roll-up answer by its most-behind location, as the fallback dates by site', async () => {
     const at = (validTime: string) => partial({ validTime, hasUncertainty: false });
     const { deps, reads } = stub([RANELAGH, RATHMINES, BRISTOL_SITE], {}, true, [
-      row(DUBLIN, [RANELAGH, RATHMINES], at('2026-07-31T10:00:00Z')),
+      // Bristol's newest sits between Dublin's two, so neither the window's oldest hour nor its
+      // newest is the answer — only each location's newest, then the oldest of those.
+      row(DUBLIN, [RANELAGH, RATHMINES], at('2026-07-31T09:00:00Z')),
       row(DUBLIN, [RANELAGH, RATHMINES], at('2026-07-31T11:00:00Z')),
       row(BRISTOL, [BRISTOL_SITE], at('2026-07-31T10:00:00Z')),
     ]);

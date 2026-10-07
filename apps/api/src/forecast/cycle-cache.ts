@@ -100,7 +100,7 @@ export interface MeteredResponse extends ApiResponse {
   readonly dataCycleStart?: number;
 }
 
-/** A site's data in a body: its forecasts' vintages and its readings' hours. */
+/** One group's data in a body: its forecasts' vintages and its readings' hours. */
 export interface DatedGroup {
   readonly issuedAts: readonly string[];
   readonly readingTimes: readonly string[];
