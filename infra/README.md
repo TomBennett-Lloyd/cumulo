@@ -95,11 +95,11 @@ The first grant landed with the ingestion stack (#11): `infra/ingestion/deploy.t
 aws iam list-role-policies --role-name cumulo-github-actions
 ```
 
-The trust policy is the security boundary, and it is worth reading `oidc.tf` before changing: the `sub` condition is a single-value `StringEquals` allowlist — `…:ref:refs/heads/main` — not a `:*` wildcard, so tags, other branch refs and every event context GitHub has or later adds cannot assume the role at all. It held a second value until #11: a PR-context subject, present only so `oidc-smoke` could run pre-merge against a role with no permissions. That entry was deleted by the same change that attached the first grant, as the rule then required, because a PR-context run is triggerable by any fork author and must never hold deploy permissions. **The rule outlives its first application** — nothing an unmerged contributor controls goes back into that list. What it cost is pre-merge OIDC verification, and the recovery, if that coverage is ever wanted again, is a second, permanently permissionless role trusted for the PR context alone; see the header comment in `.github/workflows/oidc-smoke.yml`, which now runs on `main` pushes and `workflow_dispatch` for exactly this reason.
+The trust policy is the security boundary, and it is worth reading `oidc.tf` before changing: the `sub` condition is an exact-match allowlist of workflow files, `local.deploy_role_workflows`, each admitted only as it is on `main` and running in `main`'s branch context. There is no wildcard, so tags, other refs, PR contexts, environments and every workflow not on the list cannot assume the role. That shape exists only under the repository's customised subject template (`repo`, `context`, `job_workflow_ref`). Under GitHub's default template the `sub` names the ref and nothing else, so every job running on `main` with `id-token: write` matched, whatever triggered it — including events any GitHub user can fire (#358, infra review of 2026-10-07; fixed by #605). The template is repository state that no stack here owns; switching it is [Runbook: switch the OIDC subject template](#runbook-switch-the-oidc-subject-template). `.claude/scripts/check-oidc-workflows.sh`, in `verify`, fails when the list and `.github/workflows/` disagree, or when a workflow that can mint a token takes a fork-triggerable event — those run in `main`'s context, so the list alone would admit them. **Nothing an unmerged contributor controls goes into that list.** A PR-context subject sat there until #11 attached the first grant; recovering pre-merge OIDC coverage needs a second, permanently permissionless role, not an entry here — see the header comment in `.github/workflows/oidc-smoke.yml`.
 
 Checking `aud` is necessary and nowhere near sufficient — every GitHub Actions token in the world carries `aud=sts.amazonaws.com`, so a trust policy that stops at the audience lets any repository on GitHub assume the role while still looking like it has a condition block that does something.
 
-The prefix in front of those two claims is GitHub's **immutable subject**, `repo:<owner>@<owner-id>/<repo>@<repo-id>`, and it is the part worth getting right. Almost every GitHub-OIDC tutorial shows the name-based form `repo:<owner>/<repo>:…`; current GitHub does not issue that, so a policy written from those examples matches nothing and every assume fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity` — a failure that reads like a missing permission and is actually a string mismatch. Embedding the ids is also the stricter choice, not merely the working one: GitHub names are reassignable, so a name-based policy would keep trusting whoever registered the org or repo name this project released, while numeric ids are never reissued.
+The prefix in front of every value is GitHub's **immutable subject**, `repo:<owner>@<owner-id>/<repo>@<repo-id>`, and it is the part worth getting right. Almost every GitHub-OIDC tutorial shows the name-based form `repo:<owner>/<repo>:…`; current GitHub does not issue that, so a policy written from those examples matches nothing and every assume fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity` — a failure that reads like a missing permission and is actually a string mismatch. Embedding the ids is also the stricter choice, not merely the working one: GitHub names are reassignable, so a name-based policy would keep trusting whoever registered the org or repo name this project released, while numeric ids are never reissued.
 
 Because the ids are not derivable from the names, the value is read from GitHub rather than assembled, and lives in `var.github_subject_prefix` (`variables.tf`), whose `validation` block rejects a name-only prefix outright:
 
@@ -192,7 +192,7 @@ aws sts get-caller-identity --query Account --output text
 
 `backend.hcl`'s `region` and `bootstrap.auto.tfvars`'s `aws_region` must be the same value: the backend and the provider have to agree on where the bucket lives. `github_repository` needs no entry — it defaults to `TomBennett-Lloyd/cumulo`.
 
-**Applying against your own fork or account?** Then `github_subject_prefix` does need an entry, because its default is this repository's immutable subject and no other repository's tokens will ever match it. Re-derive yours and put it in `bootstrap.auto.tfvars` alongside the region (convention 8 explains why this is the security boundary):
+**Applying against your own fork or account?** Then `github_subject_prefix` does need an entry, because its default is this repository's immutable subject and no other repository's tokens will ever match it. Re-derive yours and put it in `bootstrap.auto.tfvars` alongside the region (convention 8 explains why this is the security boundary), and switch your repository's subject template ([its runbook](#runbook-switch-the-oidc-subject-template), steps S2 and S4) before B7:
 
 ```bash
 gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
@@ -312,6 +312,57 @@ gh run list --workflow oidc-smoke.yml --repo TomBennett-Lloyd/cumulo --limit 1
 `workflow_dispatch` is the whole of the manual path, and since #11 it is also the only way to run this check other than merging an `infra/**` change to `main`. So run it here rather than assuming a PR check covered it.
 
 The evidence is the `aws sts get-caller-identity` output in the run log: an account, and a caller ARN of the form `arn:aws:sts::<account-id>:assumed-role/cumulo-github-actions/cumulo-oidc-smoke-<run-id>`. Confirm the account matches the one from `terraform output -raw aws_account_id`.
+
+---
+
+## Runbook: switch the OIDC subject template
+
+Once per repository (#605). The trust policy in `oidc.tf` matches only the customised subject (`repo`, `context`, `job_workflow_ref`), and the template that makes GitHub issue it is repository state, not anything Terraform here owns. It survives a teardown, so a re-apply of this stack does not repeat this runbook.
+
+**The ordering is the whole risk.** The template switch changes every token's `sub` at once, and the trust policy matches exactly one shape. Between the switch (S2) and the apply (S3) the two disagree, and every allowlisted workflow fails to assume the role. That is fail-closed: nothing deploys, nothing is granted. It is also a lockout that lasts until one side is changed to match the other, so run S2 and S3 back to back, with #605 merged and no deploy run in flight.
+
+**S1. Plan, changing nothing.**
+
+```bash
+terraform -chdir=infra/bootstrap plan -no-color
+```
+
+Expect **`Plan: 0 to add, 1 to change, 0 to destroy.`** — `aws_iam_role.github_actions`, its `assume_role_policy` updated in place, one `sub` value per allowlisted workflow. Anything else: stop.
+
+**S2. Switch the template, then read it back.**
+
+```bash
+gh api -X PUT repos/TomBennett-Lloyd/cumulo/actions/oidc/customization/sub -F use_default=false -F 'include_claim_keys[]=repo' -F 'include_claim_keys[]=context' -F 'include_claim_keys[]=job_workflow_ref'
+gh api repos/TomBennett-Lloyd/cumulo/actions/oidc/customization/sub
+```
+
+`-F`, not `-f`, on `use_default`: `gh api -f` sends every value as a string, and the field is a boolean. The read-back must show `"use_default":false`, the three keys, `"use_immutable_subject":true`, and a `sub_claim_prefix` equal to `var.github_subject_prefix`. The REST body carries `use_immutable_subject` as a field of its own, which this call does not send; if the read-back shows it `false`, re-run the PUT with `-F use_immutable_subject=true` added before going on, because the policy's prefix embeds the ids and a name-only subject matches nothing.
+
+**S3. Apply, immediately.**
+
+```bash
+terraform -chdir=infra/bootstrap apply
+```
+
+The plan it shows is S1's.
+
+**S4. Prove it.**
+
+```bash
+gh workflow run oidc-smoke.yml --repo TomBennett-Lloyd/cumulo
+gh run list --workflow oidc-smoke.yml --repo TomBennett-Lloyd/cumulo --limit 1
+```
+
+The run's `OIDC token claims` step prints the token's `sub` — it must be the `oidc-smoke.yml` value from S1's plan, character for character — and the assume step must go green, with the evidence B7 describes.
+
+**Rollback**, if S4 is red and the printed `sub` is not the planned one: put both sides back, template first.
+
+```bash
+gh api -X PUT repos/TomBennett-Lloyd/cumulo/actions/oidc/customization/sub -F use_default=true
+gh api repos/TomBennett-Lloyd/cumulo/actions/oidc/customization/sub   # "use_default":true, prefix unchanged
+```
+
+Then re-apply the previous trust policy from the commit before #605's merge, in the checkout that holds this stack's gitignored `backend.hcl` and `bootstrap.auto.tfvars`: `git switch --detach <merge-commit>^`, `terraform -chdir=infra/bootstrap apply`, `git switch main`. Re-run S4's `oidc-smoke` to see it green, then revert #605 on `main` by PR so the code and the account agree again. Restoring only one side leaves the lockout in place.
 
 ---
 
