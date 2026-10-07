@@ -8,7 +8,7 @@
 
 ## Context
 
-ADR 0005 bounded the bill with arithmetic: the stage throttle (10 requests/second, burst 20) held continuously for a 30-day month is 25.92M requests, and at ≈ $1.31 per million that was ≈ $39/month — "roughly a third of the ~$100/month ceiling, sustained, under continuous abuse, forever". The bound priced gateway requests, Lambda requests and compute, and log ingestion. It carried no DynamoDB term, because when it was written every table sat inside provisioned free capacity and a read flood surfaced as throttling rather than as a bill.
+ADR 0005 bounded the bill with arithmetic: the stage throttle (10 requests/second, burst 20) held continuously for a 30-day month is 25.92M requests, which 0005's Consequences priced at ≈ $39/month — "roughly a third of the ~$100/month ceiling, sustained, under continuous abuse, forever". The bound priced gateway requests, Lambda requests and compute, and log ingestion. It carried no DynamoDB term, because when it was written every table sat inside provisioned free capacity and a read flood surfaced as throttling rather than as a bill.
 
 That premise went with ADR 0002's amendments (#156, #258), which moved every table to on-demand. #200 stated the bound's scope instead of re-deriving it, and #375 was filed to re-derive it. #322 then found that the throttle was guarded by nothing mechanical any more. Both issues close into this one, and their evidence stands.
 
@@ -40,7 +40,7 @@ The owner's decision (chat, 2026-10-07), in their words: "having the throttle at
 
 - **Actual spend.** An alarm on `AWS/Billing EstimatedCharges` above **$70** (Maximum, 6-hour period, 1 of 1). Billing metrics exist only in us-east-1, so this alarm lives there under a provider alias. A composite reads alarms only in its own Region, so this is not a third clause in the composite's rule. It is a second path to the same function: a us-east-1 topic delivering cross-Region to the eu-west-1 trip, with an email subscription beside it. The threshold was $80 in the issue. The bound below is why it is $70.
 - **The trip** is one function (`apps/api/src/cost-trip`, its own bundle). It sends one `UpdateStage` that sets the stage's default throttle and every write-route override to zero. The overrides have to go too, because they outrank the default, so a default-only trip would leave the writes open. It trips on any invocation, so its two invoke permissions are its guard. Its role holds `apigateway:PATCH` on this one stage, plus writes to its own log group, and nothing else. It sits outside the CI deploy grant, so it changes only through an apply.
-- **Reset is manual.** The reset is an apply of the api stack, which restores `gateway.tf`'s values. The trip alarms are then forced to OK so that one still breaching fires again. An automatic month-start reset would let an attacker spend the trip threshold every month. The runbook in `infra/README.md` owns the commands. One consequence follows: any apply of the stack undoes a trip, and the runbook's plan readback says so.
+- **Reset is manual.** The throttle is written back from the api stack's state, the values `gateway.tf` last applied, so no figure is retyped and nothing is deployed. After a billing-leg trip the billing alarm is forced to OK, so that it trips again while spend is still above the threshold rather than sitting silently in ALARM. After a composite trip nothing is forced: an M-of-N alarm forced to OK re-reads the same window and trips again, so the projections are left to return to OK on their own once their window ages. An automatic month-start reset would let an attacker spend the trip threshold every month. The runbook in `infra/README.md` owns the commands. One consequence follows: an apply restores the same values, so any apply of the stack undoes a trip, and the runbook's plan readback says so.
 
 ## Options considered
 
@@ -79,6 +79,8 @@ The composite does not enter this arithmetic. It only ends an episode sooner: at
 - the composite at $0.50.
 
 The trip function, its topic and its subscriptions cost nothing until a trip.
+
+**This ends the platform's $0 standing cost, on purpose.** ADR 0004 established that nothing in Cumulo bills for existing outside an always-free allowance, and 0005 and 0006 each kept that true. The guard's alarms bill for existing, and ≈ $1.30 a month is what holding the ceiling by reaction costs. ADRs 0004, 0005 and 0006 carry as-it-stood notes and dated entries for the sentences that say otherwise.
 
 **Operator obligations.** Billing alerts have to be enabled once, in the Billing console; there is no API for it. Until then the billing alarm sits in INSUFFICIENT_DATA and trips nothing. The us-east-1 email subscription needs confirming. A trip drill — invoke the function, see 429s, reset — is the acceptance test, and it is the only proof that a zero throttle on this HTTP API rejects every route. All three steps are in the api runbook.
 

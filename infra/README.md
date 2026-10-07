@@ -18,7 +18,7 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 
 `ingestion` depends on `bootstrap` in exactly the same one direction, for exactly the same reason: its state lives in `bootstrap`'s bucket, and nothing else. Its relationship to `storage` is deliberately weaker than a dependency — **there is no cross-stack reference of any kind**. No `terraform_remote_state` data source, no output consumed, no ARN passed in. `ingestion`'s IAM policy names `cumulo-sites-<env>` and `cumulo-weather-<env>` by assembling them from the naming convention ADR 0002 fixed, which `storageTableName()` in `@cumulo/storage` also mirrors, so the two stacks share a convention rather than a wire. `ingestion` therefore plans and applies while `storage` is mid-apply, or before `storage` exists at all; what it cannot do is run a _cycle_ against tables that are not there. The one operator obligation that follows is that both stacks are applied with the same `environment` and into the same region, since a table ARN is regional and the suffix is in the name.
 
-`api` sits in exactly the same shape as `ingestion`, one stack later: its state lives in `bootstrap`'s bucket, it attaches its own deploy grant to `bootstrap`'s shared role, and **it has no cross-stack reference to `storage` at all** — `cumulo-sites-<env>` and `cumulo-series-<env>` are assembled from the naming convention, not read from an output. The same operator obligation follows (same region, same `environment`), plus one that is unique to this stack: it is the only one whose input is the public internet, so the stage throttle in `infra/api/gateway.tf` is load-bearing configuration rather than tuning. [ADR 0005](../docs/adr/0005-fleet-api-hosting.md) computes the worst-case bill from those two numbers; changing them changes the bound.
+`api` sits in exactly the same shape as `ingestion`, one stack later: its state lives in `bootstrap`'s bucket, it attaches its own deploy grant to `bootstrap`'s shared role, and **it has no cross-stack reference to `storage` at all** — `cumulo-sites-<env>` and `cumulo-series-<env>` are assembled from the naming convention, not read from an output. The same operator obligation follows (same region, same `environment`), plus one that is unique to this stack: it is the only one whose input is the public internet, so its bill is held by a cost guard that throttles the stage to zero on sustained or actual spend ([ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md), `infra/api/cost-guard.tf`). The stage throttle in `infra/api/gateway.tf` is a capacity cap, and still a premise of that bound: changing it moves the bound.
 
 `forecast` is where that shape stops being uniform, and the difference is worth knowing before the first apply. Its state lives in `bootstrap`'s bucket and it attaches its own deploy grant there, like the other two; its relationship to `storage` is the same convention-not-a-wire arrangement, with `cumulo-sites-<env>`'s `by-location` index and `cumulo-series-<env>` assembled from the naming convention. But its relationship to `ingestion` is **stronger than either**, because it is the first stack that names another stack's resource in something other than an IAM policy: `aws_lambda_event_source_mapping` in `infra/forecast/event-source.tf` targets `cumulo-weather-readings-<env>` by ARN. Still no `terraform_remote_state` — the ARN is assembled from region, account and the name ADR 0004 fixed — but the consequence differs in kind. A missing table is a stack that applies and then fails at runtime; a missing **queue** is a stack that fails at `terraform apply`, because Lambda validates the event source when the mapping is created. So `ingestion` is a genuine apply-order prerequisite for `forecast`, and the only one in the platform that is not simply "bootstrap first".
 
@@ -984,9 +984,9 @@ terraform init -backend-config=backend.hcl
 terraform plan -no-color | tee ~/cumulo-api-plan.txt
 ```
 
-Expect **`Plan: 37 to add, 0 to change, 0 to destroy.`** — the function, its log group, the HTTP API, the integration, the `$default` route, the **three declared write routes** (`aws_apigatewayv2_route.write` is a `for_each` over three route keys, so it counts as three), the `$default` stage, the gateway's Lambda permission, the execution role, its inline policy, the two gateway alarms, the deploy grant on `cumulo-github-actions`, #473's five — the warmer rule, its two warming targets, the warmer's Lambda permission, and the function's async invoke config — #603's three — the canary target, the log metric filter, and the alarm on it — and #588's fourteen: the two anomaly alarms (one `for_each` resource), the burn-rate alarm, the composite, the trip function, its log group, its role, its inline policy, its two Lambda permissions, and in us-east-1 the billing alarm, its topic and the topic's two subscriptions. Any other count means the configuration is not what this document describes; stop and find out why. The seven data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, four IAM policy documents (Lambda trust, execution, deploy, cost trip) and the `/cumulo/notification-email` parameter — are read rather than created and add nothing to the count. On a stack applied before #588 the same plan is **`Plan: 14 to add, 0 to change, 0 to destroy.`** — the cost guard alone.
+Expect **`Plan: 37 to add, 0 to change, 0 to destroy.`** — the function, its log group, the HTTP API, the integration, the `$default` route, the **three declared write routes** (`aws_apigatewayv2_route.write` is a `for_each` over three route keys, so it counts as three), the `$default` stage, the gateway's Lambda permission, the execution role, its inline policy, the two gateway alarms, the deploy grant on `cumulo-github-actions`, #473's five — the warmer rule, its two warming targets, the warmer's Lambda permission, and the function's async invoke config — #603's three — the canary target, the log metric filter, and the alarm on it — and #588's fourteen: the two anomaly alarms (one `for_each` resource), the burn-rate alarm, the composite, the trip function, its log group, its role, its inline policy, its two Lambda permissions, and in us-east-1 the billing alarm, its topic and the topic's two subscriptions. Any other count means the configuration is not what this document describes; stop and find out why. The seven data sources — `aws_caller_identity`, the existing `cumulo-github-actions` role, four IAM policy documents (Lambda trust, execution, deploy, cost trip) and the `/cumulo/notification-email` parameter — are read rather than created and add nothing to the count. On a stack applied before #588 the same plan is **`Plan: 14 to add`** — the cost guard alone — with **`1 to change`** beside it when the rebuilt `handler.zip` differs from the one last applied: `aws_lambda_function.api`'s `source_code_hash`, the same cause B6 describes.
 
-**On an existing stack, a throttle in the plan that moves `0 -> 10` or `0 -> 2` means the stage is tripped and this apply resets it.** That is the reset, not drift — read [Reset after a cost trip](#reset-after-a-cost-trip) before approving it.
+**On an existing stack, a throttle in the plan that moves `0 -> 10` or `0 -> 2` means the stage is tripped and this apply resets it.** That is an apply undoing a trip, not drift — read [Reset after a cost trip](#reset-after-a-cost-trip) before approving it.
 
 **Read both throttles in the plan before approving it.** `default_route_settings` should show `throttling_rate_limit = 10` and `throttling_burst_limit = 20` — the capacity cap, and a premise of ADR 0010's bound. The three `route_settings` blocks should show `2` and `4` on the write route keys, which is ADR 0006's layer 2. A plan that does not show them is a plan that costs something else.
 
@@ -1119,12 +1119,14 @@ aws cloudwatch get-metric-statistics --namespace AWS/Events --metric-name Invoca
 # periods, and the total is the claim rather than any one of them.
 ```
 
-**B8. Confirm the cost guard is armed.** Four checks, because each leg can be applied and still be dead.
+**B8. Confirm the cost guard is armed**, leg by leg, because each can be applied and still be dead.
 
 ```bash
 ENV="$(terraform output -raw environment)"
 aws cloudwatch describe-alarms --alarm-names "cumulo-api-$ENV-cost-anomaly" "cumulo-api-$ENV-cost-anomaly-held" "cumulo-api-$ENV-cost-burn-rate" \
   --query 'MetricAlarms[].{Name:AlarmName,State:StateValue}'
+# expect: OK for all three on a quiet API — INSUFFICIENT_DATA for the two anomaly
+# alarms while the model is untrained (the anomaly-detector check below)
 aws cloudwatch describe-alarms --alarm-types CompositeAlarm --alarm-names "cumulo-api-$ENV-cost-trip" \
   --query 'CompositeAlarms[].{Rule:AlarmRule,Actions:AlarmActions}'
 # expect: the rule ANDs the -held anomaly alarm with the burn-rate alarm, and the
@@ -1159,24 +1161,39 @@ Then reset exactly as below and expect `200` from the first `curl` again. A dril
 
 ### Reset after a cost trip
 
-A trip arrives as an email: `ALARM: cumulo-api-<env>-cost-trip` from the alerts topic, or `ALARM: cumulo-api-<env>-billing-trip` from the us-east-1 topic. Read it, and decide whether the traffic was real, before resetting — an automatic reset is what [ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md) declined, because it would let an attacker spend the trip threshold every month. Then:
+A trip arrives as an email: `ALARM: cumulo-api-<env>-cost-trip` from the alerts topic, or `ALARM: cumulo-api-<env>-billing-trip` from the us-east-1 topic. Read it, and decide whether the traffic was real, before resetting — an automatic reset is what [ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md) declined, because it would let an attacker spend the trip threshold every month.
+
+**Restore the throttle from Terraform's own record of it.** The trip changed AWS, not state, so state still holds the values `gateway.tf` last applied; writing them back needs no build and deploys nothing:
 
 ```bash
-pnpm --filter @cumulo/api build
-terraform plan    # expect: 1 to change — aws_apigatewayv2_stage.default, throttles 0 -> 10/20 and 0 -> 2/4
-terraform apply
-ENV="$(terraform output -raw environment)"
-for alarm in cost-anomaly-held cost-burn-rate cost-trip; do
-  aws cloudwatch set-alarm-state --alarm-name "cumulo-api-$ENV-$alarm" \
-    --state-value OK --state-reason "manual reset after a cost trip"
-done
-aws cloudwatch set-alarm-state --region us-east-1 --alarm-name "cumulo-api-$ENV-billing-trip" \
-  --state-value OK --state-reason "manual reset after a cost trip"
+STAGE="$(terraform show -json | jq '.values.root_module.resources[] | select(.address == "aws_apigatewayv2_stage.default") | .values')"
+aws apigatewayv2 update-stage --api-id "$(jq -r .api_id <<<"$STAGE")" --stage-name '$default' \
+  --default-route-settings "$(jq -c '.default_route_settings[0] | {ThrottlingRateLimit: .throttling_rate_limit, ThrottlingBurstLimit: .throttling_burst_limit}' <<<"$STAGE")" \
+  --route-settings "$(jq -c '[.route_settings[] | {key: .route_key, value: {ThrottlingRateLimit: .throttling_rate_limit, ThrottlingBurstLimit: .throttling_burst_limit}}] | from_entries' <<<"$STAGE")" \
+  --query '{Default: DefaultRouteSettings, Routes: RouteSettings}'
+# expect: the default at 10/20 and the three write routes at 2/4 — the same readback as B4
 ```
 
-**The apply is the reset**, which is why it is a plan-and-apply rather than a CLI call: the throttle values stay owned by `gateway.tf`, never retyped here. **The alarm resets re-arm the guard.** An alarm acts only when its state changes, so a child left in ALARM would never trip again; forced to OK, each re-evaluates within its next period — an hour for the projections, six hours for billing — and trips again if its condition still holds. So a reset during a flood that has not stopped is a reset that lasts about an hour.
+A `terraform apply` would restore the same values, which is the other half of this: **any apply of this stack resets a trip**, and A5 says so. It is not the reset this section uses because the apply rebuilds first, and a rebuilt artefact moves `source_code_hash` on both functions (B6) — a mid-incident apply would ship whatever API code the checkout builds over what CI deployed.
 
-**A billing-leg trip lasts for the rest of the calendar month** unless `billing_trip_usd` in `cost-guard.tf` is raised: month-to-date spend does not fall, so the re-armed alarm returns to ALARM at its next evaluation. That is the meaning of an actual-spend line, and raising it is a reviewed change against ADR 0010's bound.
+**Then the alarms — and only the billing one is touched.**
+
+- **After a billing-leg trip**, force the billing alarm to OK. Month-to-date spend does not fall, so at its next six-hourly evaluation it returns to ALARM and trips again unless `billing_trip_usd` in `cost-guard.tf` has been raised by a reviewed change and an apply. That is the meaning of an actual-spend line: **a billing-leg trip lasts for the rest of the calendar month** unless the threshold moves. Not forcing it would be worse — left in ALARM, it never changes state, so it would never trip again this month.
+
+  ```bash
+  aws cloudwatch set-alarm-state --region us-east-1 --alarm-name "cumulo-api-$(terraform output -raw environment)-billing-trip" \
+    --state-value OK --state-reason "manual reset after a cost trip"
+  ```
+
+- **After a composite trip, force nothing.** Forcing an M-of-N alarm to OK does not clear its window: at its next evaluation it reads the same 24 hourly datapoints, finds the same breaching hours, and trips again — even if the flood stopped hours ago. Left alone, the anomaly and burn-rate alarms return to OK on their own once fewer than 20 of their last 24 hours breach, and the composite follows. Until they do, the composite cannot fire again, and the billing leg — which the bound rests on anyway — is the guard.
+
+```bash
+ENV="$(terraform output -raw environment)"
+aws cloudwatch describe-alarms --alarm-names "cumulo-api-$ENV-cost-anomaly-held" "cumulo-api-$ENV-cost-burn-rate" \
+  --alarm-types MetricAlarm CompositeAlarm --query '[MetricAlarms[].[AlarmName, StateValue], CompositeAlarms[].[AlarmName, StateValue]]'
+# expect: ALARM until the window ages, then OK on their own; the composite
+# (cumulo-api-<env>-cost-trip) is listed only if named, and follows them
+```
 
 ### The deploy path: what CI ships for the API
 
@@ -1427,7 +1444,7 @@ One private S3 bucket, its public-access block and its origin-access-control pol
 cd infra/web
 ```
 
-**This is the second stack reachable from the public internet, and the only one with no throttle in front of it.** The API's bill is bounded by a stage throttle; CloudFront has no analogue, so the bound here is the bootstrap stack's budget alarm and the free tier's size (see [Web stack](#web-stack) in the Cost section). It is also, deliberately, a stack that serves static files and nothing else — the SPA-only constraint in the overview above and in `cloudfront.tf` is a correctness property of ADR 0006's limiter, not a preference.
+**This is the second stack reachable from the public internet, and the only one with no throttle in front of it.** The API's bill is held by a cost guard that throttles its stage to zero ([ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md)); CloudFront has no analogue, so the bound here is the bootstrap stack's budget alarm and the free tier's size (see [Web stack](#web-stack) in the Cost section). It is also, deliberately, a stack that serves static files and nothing else — the SPA-only constraint in the overview above and in `cloudfront.tf` is a correctness property of ADR 0006's limiter, not a preference.
 
 **Prerequisites:**
 
@@ -1641,7 +1658,7 @@ Keep `backend.hcl` and `web.auto.tfvars` — both are still correct for the next
 Three conventions hold across every table below (the third has one recorded gap: the api stack does not cost its own `series` reads, [#243](https://github.com/TomBennett-Lloyd/cumulo/issues/243) — it has carried a DynamoDB row since #473, but that row is the warmer rule's clock-driven requests and not the visitor traffic #243 is about). They are stated once here rather than restated per stack, because the previous edition of this document quietly used two different ones and the tables disagreed with each other:
 
 - **A month is 730 hours** (8,760 ÷ 12), which is what AWS's own pricing pages mean by "per month". Every clock-driven volume below is that times its rate: an hourly cycle is **~730 invocations/month**, twelve messages an hour is **~8,760/month**. Three figures are deliberately _not_ restated on it, because they are quoted from decisions this document only mirrors: the api stack's 25.92M-request bound is ADR 0005's 10 rps over a **30-day** month, the alerting stack's email arithmetic is quoted over a 30-day month too, and DynamoDB's free 18,600 unit-hours are AWS's own per-calendar-month (744-hour) allowance. The first two stay as they are until the ADR moves; the differences are ~1.4–1.9% and never change a conclusion.
-- **A log group's size is a census times a line size**, and the census includes Lambda's own `START`, `END` and `REPORT` — CloudWatch bills those exactly like an application line, and omitting them is how a log estimate ends up several times under. Where a group carries application JSON lines whose size nobody has measured, they are priced at a deliberately generous **1 KB per line** and the result is labelled a ceiling rather than an estimate. Where the dominant path carries only Lambda's own three — the api stack, whose successful requests log no application line, read or write, and whose failure paths add at most a line or two — ADR 0005's **measured ~250 bytes per invocation** is used instead: there is no unmeasured application line on that path to cushion against, and that same figure feeds the ≈ $36 worst case below, which an arbitrary 4× cushion would misstate rather than bound.
+- **A log group's size is a census times a line size**, and the census includes Lambda's own `START`, `END` and `REPORT` — CloudWatch bills those exactly like an application line, and omitting them is how a log estimate ends up several times under. Where a group carries application JSON lines whose size nobody has measured, they are priced at a deliberately generous **1 KB per line** and the result is labelled a ceiling rather than an estimate. Where the dominant path carries only Lambda's own three — the api stack, whose successful requests log no application line, read or write, and whose failure paths add at most a line or two — ADR 0005's **measured ~250 bytes per invocation** is used instead: there is no unmeasured application line on that path to cushion against, and that same figure feeds the per-request worst case `infra/api/cost-guard.tf` prices traffic at, which an arbitrary 4× cushion would misstate rather than bound.
 - **A resource's cost line lives in the stack that owns the resource, and a stack that drives another stack's meter says so on its own row** — `$0.00/mo here; drives ≈ $X/mo under <stack>` — with the owning row naming its driver in return, so neither end of the arrangement can be read alone and believed (the api stack's return row for its own visitor-driven `series` reads is the gap #243 tracks; its clock-driven requests are the api cost table's DynamoDB row). The alternative is the two ways a cross-stack charge goes missing: costed in both stacks and double-counted, or costed in the driving stack and orphaned when the resource moves. A row that adds load inside another stack's _free_ allowance is the same shape and gets the same treatment — it points at that stack's capacity row rather than reading as free by nature, because the figure that makes it free is over there and this table does not own it.
 
 ### Bootstrap stack
@@ -1669,7 +1686,7 @@ Notes on why nothing here grows:
 
 ### Alerting stack
 
-Sized against the thing it is built to carry: **eleven alarms that should each fire zero times.**
+Sized against the thing it is built to carry: **a handful of alarms that should each fire zero times** ([CloudWatch alarm budget](#cloudwatch-alarm-budget) owns the count).
 
 | Resource group                                                                  | Billing basis                                                                                                            | Estimate     |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------ |
@@ -1684,7 +1701,7 @@ The alarms themselves are **not** costed here. They belong to the stacks that cr
 Notes on what would change that:
 
 - **Encryption is the line item deliberately absent.** Server-side encryption with a customer-managed KMS key would add ~$1/month plus request charges — and, before that, it would break delivery: the AWS-managed `alias/aws/sns` key does not grant CloudWatch permission to publish, so an encrypted topic accepts alarm actions and silently drops them. `topic.tf` says so at the point of temptation. The content being protected is an alarm name and a state reason, both already public in this repository.
-- **The free delivery tier is 1,000 emails/month, and reaching it is the alarm.** Every state change is one delivery — an alarm that fires and recovers sends two — so eleven alarms cross 1,000 in a 30-day month only by averaging more than **three state changes each per day**. That is not a bill, it is a platform on fire.
+- **The free delivery tier is 1,000 emails/month, and reaching it is the alarm.** Every state change is one delivery — an alarm that fires and recovers sends two — so the platform's alarms cross 1,000 in a 30-day month only by averaging more than **two state changes each per day**. That is not a bill, it is a platform on fire.
 - **Nothing here has an hourly rate**, the property every stack in this repo preserves.
 
 ### Storage stack
@@ -1766,7 +1783,7 @@ The figures are [ADR 0005](../docs/adr/0005-fleet-api-hosting.md)'s, restated he
 | **IAM** (execution role, inline policies, two Lambda permissions)                                   | Roles and policies are free                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | **$0.00/mo**                                       |
 | **Standing total**                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | **≈ $1.40/mo**                                     |
 
-**Standing cost is ≈ $1.40: the canary alarm** (#603, the platform's eleventh, $0.10) **and the cost guard's five** (#588, ≈ $1.30) are the lines in this stack priced past an allowance. The log group's retained bytes and the two gateway alarms still reach $0 by allowance rather than by pricing. That is the precise version of the property ADR 0004 established and ADR 0005 was written to protect, and the part that decided ADR 0005 is untouched: the gateway, its stage, its routes and its integration really do charge nothing for existing, which is the whole of the comparison against an ALB's ≈ $16.43/month. An API somebody forgets to destroy costs ≈ $1.40 a month and a fraction rather than nothing, and the 30-day retention is what keeps the fraction from becoming a slope.
+**Standing cost is ≈ $1.40: the canary alarm** (#603, the platform's eleventh, $0.10) **and the cost guard's five** (#588, ≈ $1.30) are the lines in this stack priced past an allowance. The log group's retained bytes and the two gateway alarms still reach $0 by allowance rather than by pricing. The property ADR 0004 established — nothing bills for existing outside an always-free allowance — ends here, on purpose: [ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md) buys the ceiling's guard for ≈ $1.30/month, and #603's canary costs the other $0.10. The part that decided ADR 0005 is untouched: the gateway, its stage, its routes and its integration really do charge nothing for existing, which is the whole of the comparison against an ALB's ≈ $16.43/month. An API somebody forgets to destroy costs ≈ $1.40 a month and a fraction rather than nothing, and the 30-day retention is what keeps the fraction from becoming a slope.
 
 **What #473 changed is not the total but the meaning of "idle".** A forgotten api stack is no longer inert: the warmer's rule fires three times every five minutes whether or not anybody is looking, which is the property the ingestion stack used to hold alone — a clock of its own, firing unprompted. The forecast stack's long-poll of ingestion's queue is activity with nobody looking too, but what it does unprompted is wait: its polling floor stands whether or not ingestion is running, and everything downstream of it — the invocations, the `series` writes — fires only when ingestion's schedule hands it something. The warmer answers to nothing, which is the property being named. Every row it touches here is still $0, and it costs ≈ $0.04/month on the storage stack's meter — half a cent of that to keep the demo's first paint warm, the rest for #603's canary. The lever if that is ever unwanted is the rule's own `state`: disabling it takes the DynamoDB row to nothing without moving a resource, and silences the canary with it.
 

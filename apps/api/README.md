@@ -337,8 +337,8 @@ forty parallel requests returned 11 × `200` and 29 × `503`, with **zero** `429
 layer 4 of the [abuse-protection table](#abuse-protection). The account's Lambda concurrency limit
 is 10 and it is shared with ingestion, so at this parallelism requests are rejected _at Lambda_
 before enough of them reach the gateway's per-second bucket to exhaust a burst of 20. The stage
-throttle is real and is what bounds the bill under sustained load; it is simply not the layer that
-bites first at forty-at-once. A run that is all `200` means something is wrong with both — stop and
+throttle is real and caps sustained load (the bill is the cost guard's, ADR 0010); it is simply not
+the layer that bites first at forty-at-once. A run that is all `200` means something is wrong with both — stop and
 read the stage back (that runbook's B4).
 
 The `429`s worth deliberately provoking are the per-IP limiter's, which need volume rather than

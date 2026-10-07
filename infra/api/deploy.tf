@@ -39,8 +39,8 @@ data "aws_iam_policy_document" "github_actions_deploy" {
   # out from under Terraform — the code is the one field CI owns and every other
   # field stays a reviewable diff in this directory. Nothing in the
   # `apigatewayv2` API is here at all, which matters more on this stack than on
-  # ingestion's: the throttle in gateway.tf is the cost guard, and CI must not
-  # be able to move it. There is no `lambda:InvokeFunction` either: deploying is
+  # ingestion's: the throttle in gateway.tf is what the cost guard trips and an
+  # apply restores (cost-guard.tf, ADR 0010), and CI must not be able to move it. There is no `lambda:InvokeFunction` either: deploying is
   # not running, and this function is reachable from the public internet anyway.
   statement {
     sid = "UpdateApiFunctionCode"

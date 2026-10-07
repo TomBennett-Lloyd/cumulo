@@ -18,23 +18,24 @@
 #
 # Both invoke `cumulo-api-cost-trip-<env>` (apps/api/src/cost-trip), which zeroes
 # the stage's default throttle and every route override. Reset is manual and is
-# a runbook step (infra/README.md, api stack): an apply of this stack restores
-# gateway.tf's values — so ANY apply of this stack resets a trip — and the three
-# trip alarms are then forced to OK so that one still breaching fires again.
+# a runbook step (infra/README.md, api stack): the throttle is written back from
+# this stack's state, the values gateway.tf last applied. An apply restores the
+# same values, so ANY apply of this stack resets a trip.
 #
 # ---------------------------------------------------------------------------
 # Restatement ledger (`docs/standards/architecture.md` rule 9) for the values
 # this file owns. A floor rather than a census: what this sweep found, run
 # 2026-10-07 from the repo root —
 #
-#   git grep -nE 'cost-trip|cost guard|7\.31|19,0[0-9]{2}|billing trip|\$70' -- ':!docs/tech-debt.md' ':!docs/review-feedback.md'
+#   git grep -nE 'cost-trip|cost guard|7\.31|19,0[0-9]{2}|billing trip|\$70|1\.30' -- ':!docs/tech-debt.md' ':!docs/review-feedback.md'
 #
-#   * `worst_case_usd_per_request` and its terms — ADR 0010 (Decision, the
-#     table it is derived in); infra/README.md's api cost section.
+#   * `worst_case_usd_per_request` and its terms — ADR 0010's Decision.
 #   * `billing_trip_usd` — ADR 0010 (the bound); infra/README.md (runbook,
 #     cost); outputs.tf's closing worst-case note.
-#   * the five alarms' prices — outputs.tf's IDLE COST banner;
-#     infra/README.md's alarm budget, which owns the count.
+#   * the five alarms' prices and their ≈ $1.30/month — outputs.tf's IDLE COST
+#     banner; ADR 0010's Consequences; infra/README.md's api cost table and its
+#     standing paragraph, the api teardown and "whether to leave it up"
+#     paragraphs, and the alarm budget, which owns the count.
 #   * `monthly_ceiling_usd` — restates infra/bootstrap/budget.tf's
 #     `limit_amount = "100"`, which restates CLAUDE.md's hard constraint. The
 #     two Terraform figures move together or the burn projection and the budget
@@ -158,7 +159,10 @@ resource "aws_cloudwatch_metric_alarm" "cost_anomaly" {
   alarm_actions = each.value.notify ? [local.alerts_topic_arn] : []
   ok_actions    = each.value.notify ? [local.alerts_topic_arn] : []
 
-  alarm_description = each.value.notify ? "Requests to the Cumulo fleet API this hour are above the band CloudWatch expects. Nothing is tripped by this alarm; the stage is tripped only if this persists for 20 of 24 hours alongside a projected month above $${local.monthly_ceiling_usd}, or if actual spend passes $${local.billing_trip_usd} (ADR 0010)." : "Input to cumulo-api-${var.environment}-cost-trip: request volume above the expected band for ${local.hold_breaching_hours} of the last ${local.hold_hours} hours. No actions of its own (ADR 0010)."
+  # `format` rather than interpolation for every dollar figure in these
+  # descriptions: in HCL `$${` is the escape for a literal `${`, so a "$" set
+  # directly before an interpolation prints the expression's source, not its value.
+  alarm_description = each.value.notify ? format("Requests to the Cumulo fleet API this hour are above the band CloudWatch expects. Nothing is tripped by this alarm; the stage is tripped only if this persists for %d of %d hours alongside a projected month above $%d, or if actual spend passes $%d (ADR 0010).", local.hold_breaching_hours, local.hold_hours, local.monthly_ceiling_usd, local.billing_trip_usd) : "Input to cumulo-api-${var.environment}-cost-trip: request volume above the expected band for ${local.hold_breaching_hours} of the last ${local.hold_hours} hours. No actions of its own (ADR 0010)."
 }
 
 resource "aws_cloudwatch_metric_alarm" "cost_burn_rate" {
@@ -191,7 +195,7 @@ resource "aws_cloudwatch_metric_alarm" "cost_burn_rate" {
     }
   }
 
-  alarm_description = "Input to cumulo-api-${var.environment}-cost-trip: this hour's requests, priced at the worst case in infra/api/cost-guard.tf, project a month above $${local.monthly_ceiling_usd} — for ${local.hold_breaching_hours} of the last ${local.hold_hours} hours. No actions of its own (ADR 0010)."
+  alarm_description = format("Input to cumulo-api-%s-cost-trip: this hour's requests, priced at the worst case in infra/api/cost-guard.tf, project a month above $%d — for %d of the last %d hours. No actions of its own (ADR 0010).", var.environment, local.monthly_ceiling_usd, local.hold_breaching_hours, local.hold_hours)
 }
 
 # --- the trips -----------------------------------------------------------------
@@ -204,7 +208,7 @@ resource "aws_cloudwatch_composite_alarm" "cost_trip" {
   # function: every invocation trips, so an OK transition must never reach it.
   alarm_actions = [aws_lambda_function.cost_trip.arn, local.alerts_topic_arn]
 
-  alarm_description = "TRIPPED: the Cumulo fleet API stage is throttled to zero. Request volume was anomalous and projected a month above $${local.monthly_ceiling_usd} for ${local.hold_breaching_hours} of ${local.hold_hours} hours (ADR 0010). Reset is manual — infra/README.md, api stack, 'Reset after a cost trip'."
+  alarm_description = format("TRIPPED: the Cumulo fleet API stage is throttled to zero. Request volume was anomalous and projected a month above $%d for %d of %d hours (ADR 0010). Reset is manual — infra/README.md, api stack, 'Reset after a cost trip'.", local.monthly_ceiling_usd, local.hold_breaching_hours, local.hold_hours)
 }
 
 resource "aws_cloudwatch_metric_alarm" "billing_trip" {
@@ -231,7 +235,7 @@ resource "aws_cloudwatch_metric_alarm" "billing_trip" {
   # stage on the month-start reset.
   alarm_actions = [aws_sns_topic.billing_trip.arn]
 
-  alarm_description = "TRIPPED: actual month-to-date AWS spend passed $${local.billing_trip_usd}, and the Cumulo fleet API stage (eu-west-1) is throttled to zero (ADR 0010). It stays tripped for the rest of the calendar month unless the threshold is raised; reset is in infra/README.md, api stack."
+  alarm_description = format("TRIPPED: actual month-to-date AWS spend passed $%d, and the Cumulo fleet API stage (eu-west-1) is throttled to zero (ADR 0010). It stays tripped for the rest of the calendar month unless the threshold is raised; reset is in infra/README.md, api stack, 'Reset after a cost trip'.", local.billing_trip_usd)
 }
 
 resource "aws_sns_topic" "billing_trip" {
