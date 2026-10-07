@@ -872,6 +872,53 @@ expect_not_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================
+# 10e-iii. a task-orchestrator batch merges --rebase by its TASK REPORT header
+# ==========================================================================================
+# task-orchestrator rule 7 puts the header line in the body. With it, a batch whose
+# other members dropped still rebases on one Closes line, where the count says squash.
+begin "a batch TASK REPORT header merges --rebase"
+fixture batch-header
+V_BODY='Closes #21\nCloses #22\n## TASK REPORT — batch: anchor #21, members #21 #22'
+V_COMMITS="#21: the first,#22: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'task-orchestrator batch, anchor #21 -> rebase'
+expect_not_called "pr update-branch $PR"
+expect_called "pr merge $PR --rebase"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a batch TASK REPORT header with one surviving member still merges --rebase"
+fixture batch-header-one
+V_BODY='Closes #21\n## TASK REPORT — batch: anchor #21, members #21'
+V_COMMITS="#21: the only member left"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'task-orchestrator batch, anchor #21 -> rebase'
+expect_not_stdout 'single issue #21 -> squash'
+expect_called "pr merge $PR --rebase"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a lane report beside a batch TASK REPORT header is refused at classify"
+fixture lane-and-batch
+V_BODY='Closes #21\nCloses #22\n## Lane report — issue #21\n## TASK REPORT — batch: anchor #21, members #21 #22'
+V_COMMITS="#21: the first,#22: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr '2 lane declarations'
+expect_not_called "pr merge $PR --rebase"
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
 # 10f. two lane reports in one body are refused at classify
 # ==========================================================================================
 # A lane PR has one owner; a body naming two is a pasting slip, and squashing a
@@ -885,7 +932,7 @@ write_merged_view
 run_merge
 expect_rc 1
 expect_stderr 'classify — FAILED'
-expect_stderr '2 lane reports in one PR body'
+expect_stderr '2 lane declarations'
 expect_not_called "pr update-branch $PR"
 expect_not_called "pr merge $PR --squash"
 expect_not_called "pr merge $PR --rebase"
