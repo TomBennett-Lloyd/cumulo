@@ -5,6 +5,7 @@ import { canonicalFleetSeed, generateFleet } from './fleet';
 import {
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
+  fleetForecastAggregatePointSchema,
   fleetRollupPartials,
   sumFleetRollupPartials,
   type FleetForecastAggregatePoint,
@@ -233,5 +234,20 @@ describe('the aggregate is what the client used to compute', () => {
       fleet.reduce((total, site) => total + site.capacityKw, 0),
       MICROWATT_PLACES,
     );
+  });
+});
+
+describe('the aggregate is a valid wire point', () => {
+  // #586: the API parses its body through this schema before sending it, so a point that fails here
+  // is a production 500. The canonical fleet's afternoon band sums past one house's 50 kW cap.
+  it('parses every hour of the canonical fleet, including those summing past 50 kW', () => {
+    const points = fleetForecastAggregate(allForecasts, fleet, FLEET_ROLLUP_FORECAST_KIND);
+
+    expect(
+      Math.max(...points.map((point) => point.uncertainty?.p90AcPowerKw ?? 0)),
+    ).toBeGreaterThan(50);
+    for (const point of points) {
+      expect(fleetForecastAggregatePointSchema.parse(point)).toEqual(point);
+    }
   });
 });
