@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@aws-sdk/client-apigatewayv2':
+        specifier: ^3.1098.0
+        version: 3.1098.0
       '@cumulo/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -332,6 +335,10 @@ packages:
   '@asamuzakjp/dom-selector@8.3.0':
     resolution: {integrity: sha512-UJLfKXBhrc8i1vH2eJXuYQMwlsLKWFw3O+CPqXSuVEiikeAim3UgrfWX0k4tA/X8cRFM8iZ7OaqBokFGbYusdg==}
     engines: {node: ^22.13.0 || >=24.0.0}
+
+  '@aws-sdk/client-apigatewayv2@3.1098.0':
+    resolution: {integrity: sha512-pvmPfB57rt6GXlfgWyj0gnNarLp9N0zvIqarCaalNspskKkRMivtClxEdz/aHounHqdfI1FJJ1Cv7HWPbXOyuw==}
+    engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-dynamodb@3.1098.0':
     resolution: {integrity: sha512-7o/3jD4/F8fo5BE9uMgsbIoaArlcnCNv6Bu11zUeF4Bgm6hYskQIGTK4UMTJ+qawez+FZ0Sg1E69woGd6gDabA==}
@@ -2476,6 +2483,17 @@ snapshots:
       css-tree: 3.2.1
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.2
+
+  '@aws-sdk/client-apigatewayv2@3.1098.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.3
+      '@aws-sdk/credential-provider-node': 3.972.75
+      '@aws-sdk/types': 3.974.2
+      '@smithy/core': 3.31.1
+      '@smithy/fetch-http-handler': 5.6.13
+      '@smithy/node-http-handler': 4.9.13
+      '@smithy/types': 4.16.1
+      tslib: 2.8.1
 
   '@aws-sdk/client-dynamodb@3.1098.0':
     dependencies:
