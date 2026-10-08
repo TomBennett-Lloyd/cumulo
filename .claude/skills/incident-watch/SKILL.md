@@ -13,6 +13,10 @@ AWS_PROFILE=cumulo-observer bash .claude/scripts/incident-watch.sh
 
 Its options and defaults are in `bash .claude/scripts/incident-watch.sh --help`. The script refuses any identity but `user/cumulo-observer-<env>`, so it cannot run on the operator's own login. The profile, the access key and every action the identity holds are in `infra/README.md`'s observer runbook — the key lives only in `~/.aws/credentials`; never print, paste or copy it anywhere, including into this chat.
 
+## What it covers
+
+Every `cumulo-*` alarm in ALARM, or raised within the hour, in the home region and in us-east-1 — so the cost guard's composite trip and its billing alarm ([#613](https://github.com/TomBennett-Lloyd/cumulo/pull/613)) appear beside the service alarms. The listing is by name prefix, so a new `cumulo-*` alarm (a p95 latency alarm, say) is reported with no change here. A cost-guard alarm also prints the trip function's log lines and names the api runbook's "Reset after a cost trip" section: a trip throttles the API to zero until the owner resets it, so tell the owner first, quoting the alarm and the reason text, then decide among the three outcomes below.
+
 ## The wake-up
 
 The orchestrating session starts one recurring check when it begins a working stretch:

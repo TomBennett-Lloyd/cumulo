@@ -60,6 +60,9 @@ case "$1 $2" in
     ;;
   *) exit 99 ;;
 esac
+case " $* " in
+  *" --region us-east-1 "*) fixture="$fixture-billing" ;;
+esac
 if [ ! -f "$STUB_FIXTURES/$fixture.json" ]; then
   printf 'An error occurred (AccessDenied): User: arn:aws:iam::123456789012:user/cumulo-observer-dev is not authorized\n' >&2
   exit 254
@@ -80,6 +83,8 @@ new_case() {
   : >"$LOG"
   fixture identity '{"Arn": "arn:aws:iam::000000000000:user/cumulo-observer-dev"}'
   fixture firing '{"MetricAlarms": [], "CompositeAlarms": []}'
+  fixture firing-billing '{"MetricAlarms": [], "CompositeAlarms": []}'
+  fixture history-billing '{"AlarmHistoryItems": []}'
   fixture api-alarm '{"MetricAlarms": [{"AlarmName": "cumulo-api-dev-5xx", "Namespace": "AWS/ApiGateway", "MetricName": "5xx", "Dimensions": [{"Name": "ApiId", "Value": "abc123"}]}]}'
   fixture history '{"AlarmHistoryItems": [
     {"Timestamp": "2020-01-01T12:55:00Z", "AlarmName": "cumulo-api-dev-5xx", "HistorySummary": "Alarm updated from OK to ALARM"},
@@ -187,8 +192,8 @@ fixture firing '{"MetricAlarms": [], "CompositeAlarms": [{"AlarmName": "cumulo-c
 run_watch
 expect_rc 1
 expect_stdout "cumulo-composite-dev since 2020-01-01T09:00:00Z"
-[ "$(grep -c '^ARGS .*--alarm-types MetricAlarm CompositeAlarm' "$LOG")" = "2" ] ||
-  bad "expected --alarm-types on both listings; log: $(calls)"
+[ "$(grep -c '^ARGS .*--alarm-types MetricAlarm CompositeAlarm' "$LOG")" = "4" ] ||
+  bad "expected --alarm-types on both listings in both regions; log: $(calls)"
 end
 
 new_case "history keeps only cumulo- alarms"
@@ -230,6 +235,53 @@ expect_not_stdout "123456789012"
 expect_stdout "arn:aws:sns:eu-west-1:<account-id>:cumulo-alerts-dev"
 expect_stdout "arn:aws:dynamodb:eu-west-1:<account-id>:table/x"
 expect_stdout '"at":1791377700000'
+end
+
+new_case "both listings are also read in us-east-1, where the billing alarm lives, and stay reads"
+run_watch
+expect_rc 0
+log_has "ARGS cloudwatch describe-alarms --region us-east-1 --alarm-name-prefix cumulo- --state-value ALARM"
+log_has "ARGS cloudwatch describe-alarm-history --region us-east-1 --history-item-type StateUpdate"
+[ "$(grep -c -- '--region' "$LOG")" = "2" ] || bad "expected exactly the two us-east-1 reads; log: $(calls)"
+expect_only_read_calls
+end
+
+new_case "a tripped billing alarm in us-east-1: act, its region named, the trip's log read, the reset named"
+fixture firing-billing '{"MetricAlarms": [{"AlarmName": "cumulo-api-dev-billing-trip", "StateUpdatedTimestamp": "2020-01-01T08:00:00Z", "StateReason": "Threshold Crossed: EstimatedCharges"}], "CompositeAlarms": []}'
+run_watch
+expect_rc 1
+expect_stdout "cumulo-api-dev-billing-trip since 2020-01-01T08:00:00Z (us-east-1)"
+expect_stdout "Threshold Crossed: EstimatedCharges"
+log_has "GROUP /aws/lambda/cumulo-api-cost-trip-dev"
+expect_stdout "LOG /aws/lambda/cumulo-api-cost-trip-dev, LAST HOUR, every line"
+expect_stdout 'Reset after a cost trip'
+expect_stdout "VERDICT act"
+end
+
+new_case "a tripped composite cost alarm in the home region reads the trip's log and names the reset"
+fixture firing '{"MetricAlarms": [], "CompositeAlarms": [{"AlarmName": "cumulo-api-dev-cost-trip", "StateUpdatedTimestamp": "2020-01-01T08:00:00Z", "StateReason": "alarm rule true"}]}'
+run_watch
+expect_rc 1
+expect_stdout "cumulo-api-dev-cost-trip since 2020-01-01T08:00:00Z
+"
+log_has "GROUP /aws/lambda/cumulo-api-cost-trip-dev"
+expect_stdout 'Reset after a cost trip'
+end
+
+new_case "an alarm nobody anticipated is reported by its cumulo- name alone"
+fixture firing '{"MetricAlarms": [{"AlarmName": "cumulo-api-dev-p95-latency", "StateUpdatedTimestamp": "2020-01-01T08:00:00Z", "StateReason": "p95 above threshold"}], "CompositeAlarms": []}'
+run_watch
+expect_rc 1
+expect_stdout "cumulo-api-dev-p95-latency since 2020-01-01T08:00:00Z"
+expect_not_stdout "COST GUARD"
+end
+
+new_case "us-east-1 transitions are merged into the history, newest first"
+fixture history-billing '{"AlarmHistoryItems": [{"Timestamp": "2020-01-01T12:58:00Z", "AlarmName": "cumulo-api-dev-billing-trip", "HistorySummary": "Alarm updated from OK to ALARM"}]}'
+run_watch
+expect_stdout "LAST 10 TRANSITIONS
+  2020-01-01T12:58:00Z  cumulo-api-dev-billing-trip  Alarm updated from OK to ALARM
+  2020-01-01T12:55:00Z  cumulo-api-dev-5xx"
 end
 
 # --- the identity --------------------------------------------------------------------------
@@ -382,6 +434,16 @@ policy_violations() {
   case "$squeezed" in
     *condition*) printf 'the Deny statement is conditional\n' ;;
   esac
+  local regions functions
+  regions=$(printf '%s\n' "$code" | grep -E '^[[:space:]]*for region in \[' | tr -s '[:space:]' ' ')
+  [ "$regions" = ' for region in [var.aws_region, "us-east-1"] : ' ] ||
+    printf 'the alarm reads do not name both the home region and us-east-1: %s\n' "$regions"
+  printf '%s\n' "$code" | grep -qE ':alarm:\*"$' || printf 'the alarm ARN pattern is not alarm:*\n'
+  statement_of "$1" ReadAlarms | grep -qE 'resources[[:space:]]*=[[:space:]]*local\.observed_alarm_arns$' ||
+    printf 'ReadAlarms does not read local.observed_alarm_arns\n'
+  functions=$(printf '%s\n' "$code" | grep -E '^[[:space:]]*for function in \[' | tr -s '[:space:]' ' ')
+  [ "$functions" = ' for function in ["api", "ingestion", "forecast", "api-cost-trip"] : ' ] ||
+    printf 'the log reads are not the three service Lambdas and the trip function: %s\n' "$functions"
 }
 
 new_case "the shipped policy allows exactly observer_actions and denies everything else"
@@ -434,6 +496,18 @@ end
 new_case "negative control: a Deny that survives only in a comment is caught"
 commented=$(mutant commented 's/^( *)effect( *)= "Deny"/\1# effect = "Deny"\n\1effect = "Allow"/')
 expect_violation "$commented" 'the Deny statement lacks effect = "Deny"'
+end
+
+new_case "negative control: dropping us-east-1 from the alarm reads is caught"
+expect_violation "$(mutant homeonly 's/\[var\.aws_region, "us-east-1"\]/[var.aws_region]/')" "us-east-1"
+end
+
+new_case "negative control: dropping the trip function's log group is caught"
+expect_violation "$(mutant notrip 's/, "api-cost-trip"\]/]/')" "the trip function"
+end
+
+new_case "negative control: ReadAlarms back on a single-region ARN is caught"
+expect_violation "$(mutant oneregion 's/resources = local\.observed_alarm_arns/resources = ["arn:aws:cloudwatch:eu-west-1:000000000000:alarm:*"]/')" "ReadAlarms does not read"
 end
 
 # The runbook's table of actions is the owner-facing copy of observer_actions.
