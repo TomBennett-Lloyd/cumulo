@@ -58,7 +58,8 @@ locals {
   # site (≈ 300 RRU at the 100-site fleet today) — an owner decision, 2026-10-07.
   # #506 is therefore a carrier of this figure. Even then two reads exceed it at
   # the fleet's 52-location ceiling (`packages/shared/src/site.ts`): the
-  # roll-up's 168-hour actuals read, ≈ 270 RRU, and `GET /v1/fleet/forecast`,
+  # roll-up's 168-hour actuals read, ≈ 320 RRU at infra/storage/tables.tf's
+  # item size (ADR 0010's 2026-10-08 amendment), and `GET /v1/fleet/forecast`,
   # ≈ 78 RRU. Traffic concentrated on those is under-counted here and is caught
   # by the billing leg, which ADR 0010's bound is computed on.
   # ---------------------------------------------------------------------------
