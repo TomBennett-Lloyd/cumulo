@@ -35,9 +35,7 @@ import { ForecastChartHoverLayer, readoutText } from './forecast-chart-hover';
  * past the elements it was handed, because their references have not changed and
  * React bails out of an unchanged child
  * (`apps/web/src/dashboard/FleetPanel.memo.test.tsx` documents that bailout, and
- * steps around it deliberately). Nothing here is memoised to achieve it — the
- * boundary *is* the mechanism, which is why adding a memo to a mark would answer
- * a question this file has already answered.
+ * steps around it deliberately). Nothing here is memoised to achieve it.
  * `apps/web/src/charts/forecast-chart-render-boundary.test.tsx` holds it.
  *
  * The division of labour around it is unchanged. Which sample an input selected
@@ -98,10 +96,6 @@ export interface ForecastChartHoverBoundaryProps {
  * focus no key and no press caused — a programmatic `focus()`, a browser handing
  * focus back to a restored page.
  *
- * The value sits between two intervals rather than matching a measurement of
- * either: below it, one input dispatch; above it, any plausible gap before a
- * focus that has nothing to do with that gesture.
- *
  * Restatement ledger (`architecture.md` rule 9) — the sites carrying a literal
  * derived from this one, which would need re-deriving if it moved:
  *   - `apps/web/src/charts/forecast-chart-focus-source.test.tsx`:
@@ -151,9 +145,6 @@ export const ForecastChartHoverBoundary = (
    * - And it expires (`PRESS_EXPLAINS_FOCUS_MS` above), bounding the arrivals no
    *   keystroke announces.
    *
-   * `clearAtCancel` clears it as well, as a consequence of the reading being
-   * withdrawn rather than as a gate this needs.
-   *
    * Pointer state stays imprisoned in this component, per #331/#347: nothing above
    * the boundary learns that a finger was involved.
    */
@@ -177,8 +168,7 @@ export const ForecastChartHoverBoundary = (
    * arrivals, as that constant's docblock states.
    *
    * An effect because it is a subscription to something outside this tree
-   * (`react.md` rule 1). It reads and sets a ref, so it subscribes once for the
-   * component's life and never re-runs.
+   * (`react.md` rule 1).
    */
   useEffect(() => {
     const forgetPress = (): void => {
@@ -206,9 +196,7 @@ export const ForecastChartHoverBoundary = (
 
   /**
    * Leaving the chart clears the readout and forgets how the focus arrived —
-   * both flags, not just the state. The next focus event is entitled to be
-   * judged on its own arrival, and a ref left set here would hand a keyboard
-   * reader a pointer verdict on their way in.
+   * both flags, not just the state.
    */
   const clearAtBlur = (): void => {
     setFocusViaPointer(false);
@@ -299,15 +287,10 @@ export const ForecastChartHoverBoundary = (
    * pointer-sourced — a scrub must no more paint a ring than a tap does.
    *
    * Guarded on a reading standing, because a focus is not free: `readAtFocus`
-   * opens the readout at the first sample when nothing is selected, so focusing
-   * after a lift that read nothing would summon a reading nobody asked for.
+   * opens the readout at the first sample when nothing is selected.
    *
    * `preventScroll` because this focus is the component's rather than the
-   * reader's: a programmatic focus scrolls its element into view, and a reader who
-   * has just dragged a finger across a chart put the page where they want it.
-   *
-   * A lift changes no selection: #421's "a lifted finger keeps what it revealed"
-   * is the whole of what happens to the readout here.
+   * reader's.
    */
   const endGestureAtLift = (): void => {
     pressStampRef.current = performance.now();
@@ -323,10 +306,9 @@ export const ForecastChartHoverBoundary = (
    * It also consumes the press flag, first and unconditionally, because that is
    * what makes this focus's *source* known: a gesture that touched this element a
    * moment ago is this focus's cause, and one that touched it and focused nothing
-   * is spent either way. A stamp older than the window is not this focus's cause
-   * — it is a gesture that ended without focusing anything — so it is spent
-   * without marking. The readout logic below is #421's and is untouched by both — the
-   * two share the handler because a tap fires one focus event, not two.
+   * is spent either way. The readout logic below is #421's and is untouched by
+   * both — the two share the handler because a tap fires one focus event, not
+   * two.
    */
   const readAtFocus = (): void => {
     const pressStamp = pressStampRef.current;
@@ -367,12 +349,7 @@ export const ForecastChartHoverBoundary = (
         /* Pinned, and not left to the aspect ratio. Once a measurement lands the
            two agree, but before one lands the view box is still
            `DEFAULT_CHART_WIDTH` wide in a column of some other width, and an
-           unpinned height would draw that pass tall and then collapse it.
-           Still earning its place after #343, which moved the browser's first
-           measurement before paint: that removed the *painted* pre-measurement
-           frame, not the arms where there is no measurement to wait for — an
-           environment with no `ResizeObserver`, and jsdom, which is where every
-           chart suite under `apps/web/src` reads this attribute. */
+           unpinned height would draw that pass tall and then collapse it. */
         height={CHART_VIEW_BOX_HEIGHT}
         role="img"
         aria-label={ariaLabel}
@@ -388,9 +365,7 @@ export const ForecastChartHoverBoundary = (
         onKeyDown={readAtKey}
         /* The pointer listens on the whole figure — plot *and* both axis
            gutters — because #421's tap contract is that the target is the graph,
-           not the drawing inside it. Selection is still by x alone, and
-           `pointerSample` clamps that x into the plot, so a gutter tap reads the
-           end of the range it is nearest rather than a sample off the canvas.
+           not the drawing inside it.
            `onPointerDown` as well as `onPointerMove`: a finger produces no hover
            stream to be tracked, so the press *is* the reading. */
         onPointerDown={readAtPress}

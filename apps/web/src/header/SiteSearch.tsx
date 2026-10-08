@@ -9,8 +9,7 @@ import { capacityLabel } from '../dashboard/site-format';
  *
  * A ceiling on the *list*, not on the search: a query that matches most of the
  * fleet still shows only this many, because a popup taller than the map it hangs
- * over stops being a shortcut and starts being a second site list. Narrowing the
- * query is the affordance for the rest, and it is one more keystroke.
+ * over stops being a shortcut and starts being a second site list.
  *
  * That the cap is silent — nothing says how many matched — is recorded in
  * `docs/tech-debt.md` rather than answered here, because the count it wants is
@@ -32,10 +31,7 @@ const SEARCH_PLACEHOLDER = 'Search sites';
 /**
  * What the status region says once a site has been picked.
  *
- * Copy this control owns, for the reason the two above are: it says what just
- * happened, which is neither what the product is (`header-copy.ts`) nor the
- * app's pending, failure and empty-fleet vocabulary
- * (`apps/web/src/dashboard/state-copy.ts`).
+ * Copy this control owns, for the reason the two above are.
  *
  * A function rather than a template spelled at the call site so the sentence,
  * word order included, is legible in one place — the name leads because it is
@@ -50,9 +46,7 @@ const selectionAnnouncement = (name: string): string => `${name} selected`;
  * Deliberately not the words "no sites": that phrase belongs to the empty
  * *fleet*, which `apps/web/src/dashboard/state-copy.ts` answers in one sentence
  * and `apps/web/src/dashboard/state-copy-contract.test.ts` sweeps the app to
- * keep unique. A populated fleet with a query matching none of it is a different
- * fact, and saying it in the fleet's words would make the two indistinguishable
- * to the sweep and to a reader.
+ * keep unique.
  */
 const NO_MATCHES_LABEL = 'No matching sites';
 
@@ -78,13 +72,10 @@ const matchingSites = (sites: readonly Site[], query: string): readonly Site[] =
  * Where the active option lands after a step of `step` through `count` options.
  *
  * Top-level and pure, taking the count as a parameter rather than reading the
- * match list out of the component's scope (docs/standards/structure.md rule 1)
- * — which is also what makes the clamping legible without the caller.
+ * match list out of the component's scope (docs/standards/structure.md rule 1).
  *
  * It clamps rather than wraps. Wrapping is optional in the WAI-ARIA combobox
- * pattern, and clamping is the half that cannot surprise: a reader holding
- * ArrowDown to the end of the list never finds themselves back at the top
- * wondering whether they missed one.
+ * pattern, and clamping is the half that cannot surprise.
  */
 const stepActiveIndex = (current: number, step: number, count: number): number =>
   Math.max(0, Math.min(current + step, count - 1));
@@ -99,10 +90,7 @@ export interface SiteSearchProps {
    *
    * Optional, and unset on the copy that sits on the bar: nothing focuses that
    * one but the reader. `AppHeader` passes one to the copy inside the collapsed
-   * search bar because opening that bar and putting the caret in it are one
-   * gesture, and a mobile browser only raises its keyboard for a `focus()` made
-   * inside the press that asked for it — so the focus cannot wait for an effect
-   * a render later (`AppHeader.tsx` states the whole of it).
+   * search bar (`AppHeader.tsx` states the whole of it).
    *
    * A ref rather than an `autoFocus` prop, because `autoFocus` fires on mount
    * and this control is also mounted permanently on the wide bar, where taking
@@ -114,11 +102,8 @@ export interface SiteSearchProps {
 /**
  * Find a site by name from the header, without hunting the map for it.
  *
- * The fleet is dozens of markers on two islands, most of them in knots that
- * only separate two or three zooms in, so reaching one site meant either
- * scrolling the list under the map or expanding clusters until the marker
- * appeared. The header carries the fleet's index instead, and a selection made
- * here is the same selection a marker makes.
+ * The header carries the fleet's index, and a selection made here is the same
+ * selection a marker makes.
  *
  * ## The ARIA semantics, stated because nothing lints them
  *
@@ -174,9 +159,7 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
   const optionId = (index: number): string => `${baseId}-option-${String(index)}`;
 
   // Derived during render rather than mirrored into state
-  // (docs/standards/react.md rule 1): the matches are a function of the query
-  // and the fleet, and a copy in state would be a copy free to go stale the
-  // moment a site is added.
+  // (docs/standards/react.md rule 1).
   const matches = matchingSites(sites, query);
   const expanded = listOpen && query.length > 0;
   // Clamped here rather than trusted from state: the fleet can gain a site while
@@ -198,9 +181,7 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
   const select = (site: Site): void => {
     onSelectSite(site.id);
     // The whole of what a reader is told, now that a selection moves the focus
-    // nowhere (#328, docs/standards/design.md rule 11). The card opens over a map the reader
-    // is not looking at and the field they are still standing in goes blank, so
-    // without this the answer to a search is silence.
+    // nowhere (#328, docs/standards/design.md rule 11).
     setAnnouncement(selectionAnnouncement(site.name));
     // Cleared on the way out, so the next search starts from the fleet rather
     // than from the last answer — and so the popup cannot sit open over the map
@@ -219,9 +200,6 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
      * word, and would `preventDefault` the navigation the candidate list needs
      * — so the composition is left entirely alone and the keys mean what they
      * mean again once it ends.
-     *
-     * Read off the native event because that is where the flag lives; React's
-     * synthetic event wraps it rather than restating it.
      */
     if (event.nativeEvent.isComposing) {
       return;
@@ -325,10 +303,7 @@ export const SiteSearch = ({ sites, onSelectSite, inputRef }: SiteSearchProps): 
        * What a selection says, given that it now says nothing by moving.
        *
        * Mounted from first paint and empty until a reader picks something
-       * (docs/standards/react.md's first-paint rule): an announcement reaches
-       * anybody only by *arriving* in a region that was already there, so a
-       * region rendered with its text already inside it would look accessible
-       * and announce nothing.
+       * (docs/standards/react.md's first-paint rule).
        *
        * The header panel's one live region, and it stays the only one
        * (docs/standards/react.md's at-most-one rule). The two `SiteSearch`
