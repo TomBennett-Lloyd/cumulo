@@ -247,8 +247,8 @@ live mode is **one metered request** — `GET /v1/fleet/forecast`, with `GET /v1
 beside it for the measured half — so the question that matters is how often those are spent. That
 is #296's shape. Until it landed there was no fleet-level endpoint at all and the sum was a
 client-side request per site, released slowly enough to stay inside the API's per-IP limiter and
-taking seconds to finish over a fleet of sixty; the per-site Queries still happen, but server-side,
-inside the one request the browser makes.
+taking seconds to finish over a fleet of sixty. Since #494 and #506 each request is one Query of
+the pre-summed `#FLEET` partition (ADR 0009).
 
 It is spent on mount, and re-spent on exactly one event: a site being added, which is the only
 thing that changes the sum. `refreshToken={createdSites.length}` is that event, counted.

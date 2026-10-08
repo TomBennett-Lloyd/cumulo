@@ -79,7 +79,7 @@
 # with every driver row convention 3 requires. Two further prose sites carry
 # figures of their own rather than pointing here without one:
 # infra/README.md's ingestion teardown paragraph and its "a forgotten stack is
-# nearly free" cost note both carry the ≈ $0.30 and ≈ $1.78 estimates, and move
+# nearly free" cost note both carry the ≈ $0.30 and ≈ $1.80 estimates, and move
 # with them.
 #
 # ADRs are carriers here like anything else. An ADR's decision and its
@@ -119,9 +119,9 @@
 # from its predecessor — its 2026-09-11 (#494) successor entry marks it
 # as-it-stood and points back here, and is itself marked so by the 2026-10-07
 # (#602) entry; and ADR 0009's `## Consequences`, which states the roll-up
-# read's own ~18 units and the ≈ $1.78 write line, carries a #602 as-it-stood
-# annotation on the first, and names this section as the owner of the current
-# per-load total. So: change the
+# read's own ~18 units and the ≈ $1.78 write line, carries as-it-stood
+# annotations on both (#602 on the first, #506 on the second), and names this
+# section as the owner of the current per-load total. So: change the
 # per-load read arithmetic, and every site named here moves in the same commit.
 #
 # Both member lists are a floor rather than a census: one more carrier does not
@@ -311,27 +311,28 @@ resource "aws_dynamodb_table" "sites" {
 #    receive — but the thing absorbing the cliff was redelivery patience rather
 #    than capacity, and the alarm mailed on every occurrence (#258).
 #
-#    Cost is activity-shaped rather than standing: ~2.52 M write units/month at
-#    the canonical 12-location fleet (~3,456 items per cycle — ~2,880 forecast
+#    Cost is activity-shaped rather than standing: ~2.55 M write units/month at
+#    the canonical 12-location fleet (~3,492 items per cycle — ~2,880 forecast
 #    items, the figure the forecast stack's cost table carries, plus 12 × 48 =
-#    576 fleet roll-up partials since #494, a term that is `locations × 48`
-#    and so grows with *locations* rather than with sites) ≈ $1.78/month,
-#    ≈ $2.79 at ADR 0002's ~50-site planning envelope of 4,850 units per cycle
-#    plus the same 576 — that envelope states no location count, so the
-#    canonical 12 is assumed — and ≈ $6.28 at #29's 100-site cap, whose worst
-#    case is ≤ 52 locations (packages/shared/src/site.ts) and therefore
-#    52 × 48 = 2,496 partials. $0 while the schedule is idle. Reads are
-#    activity-shaped for the same reason and stay negligible: the dashboard
-#    read path the 21 RCU was sized against now costs **≈ 49 a load** at
-#    $0.1415/M — ~47 read units per load on this table and ~2 elsewhere. The
-#    ~47 is ~22 for the fleet's forecasts — one Query of the `#FLEET`
-#    partition since #494 (ADR 0009), ~576 items of ~300 B ≈ 173 KB over a
-#    48-hour horizon, eventually consistent — plus ~25 covering every site's
-#    partition for its simulated actuals, whose fan-out ADR 0009 leaves in
-#    place until the actuals roll-up lands. (The load's remaining ~2 units are
-#    one Query over the `FLEET` partition on `sites`, not this table.) **The
-#    units were never what #494 was filed about**: the forecast half went from
-#    eight batched round trips to one, and the unit saving is incidental. This
+#    576 fleet roll-up partials since #494 and 12 × 3 = 36 actuals slices since
+#    #506, each location re-Putting its trailing window's hours — terms that
+#    are `locations × 51` and so grow with *locations* rather than with sites)
+#    ≈ $1.80/month, ≈ $2.81 at ADR 0002's ~50-site planning envelope of 4,850
+#    units per cycle plus the same 612 — that envelope states no location
+#    count, so the canonical 12 is assumed — and ≈ $6.36 at #29's 100-site
+#    cap, whose worst case is ≤ 52 locations (packages/shared/src/site.ts) and
+#    therefore 52 × 51 = 2,652 partials and slices. $0 while the schedule is
+#    idle. Reads are activity-shaped for the same reason and stay negligible:
+#    the dashboard read path the 21 RCU was sized against now costs **≈ 35 a
+#    load** at $0.1415/M — ~33 read units per load on this table and ~2
+#    elsewhere. The ~33 is two Queries of the `#FLEET` partition (ADR 0009),
+#    both eventually consistent over items of ~300 B: ~22 for the fleet's
+#    forecasts, ~576 items ≈ 173 KB over a 48-hour horizon (#494), and ~11 for
+#    its actuals, 288 items ≈ 86 KB over the default 24-hour look-back (#506;
+#    the 168-hour look-back is ~74). (The load's remaining ~2 units are one
+#    Query over the `FLEET` partition on `sites`, not this table.) **The
+#    units were never what #494 or #506 was filed about**: each half went from
+#    a per-site fan-out to one Query, and the unit saving is incidental. This
 #    paragraph owns the per-load figure — ADR 0002's ≈ 27 was honest until
 #    #264 gave a load its second `series` read, and is amended (2026-08-10)
 #    rather than current; every carrier is named in this file's header ledger.

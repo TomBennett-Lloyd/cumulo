@@ -2,10 +2,12 @@ import {
   canonicalFleetSeed,
   createSiteInputSchema,
   FLEET_ROLLUP_FORECAST_KIND,
+  fleetActualsAggregate,
   fleetForecastAggregate,
   forecastSchema,
   generateFleet,
   type CreateSiteInput,
+  type FleetActualsAggregatePoint,
   type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
@@ -311,11 +313,15 @@ export class DemoFleetDataSource implements FleetDataSource {
       ),
     });
 
+  /** The fixture readings, summed by the API fallback's own function (#506). */
   readonly fleetActuals = (
     range: RangeHours,
-  ): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
+  ): Promise<FleetSourceResult<readonly FleetActualsAggregatePoint[]>> =>
     Promise.resolve({
       kind: 'ok',
-      value: this.sites.flatMap((site, siteIndex) => fixtureActuals(site, siteIndex, range)),
+      value: fleetActualsAggregate(
+        this.sites.flatMap((site, siteIndex) => fixtureActuals(site, siteIndex, range)),
+        this.sites,
+      ),
     });
 }

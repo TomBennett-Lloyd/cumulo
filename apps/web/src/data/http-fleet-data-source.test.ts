@@ -297,16 +297,23 @@ describe('HttpFleetDataSource fleet forecast', () => {
 
 describe('HttpFleetDataSource fleet actuals', () => {
   const actualsBody = {
-    actuals: [{ siteId: SITE_A, validTime: '2026-08-01T11:00:00Z', acPowerKw: 2.2 }],
+    points: [
+      {
+        validTime: '2026-08-01T11:00:00Z',
+        acPowerKw: 2.2,
+        contributingSiteCount: 1,
+        contributingCapacityKw: 4,
+      },
+    ],
     attribution: openMeteoAttribution,
   };
 
-  it('fleetActuals unwraps the actuals array from the fleet endpoint', async () => {
+  it('fleetActuals unwraps the summed points from the fleet endpoint', async () => {
     const { source, recorder } = sourceAnswering(() => jsonResponse(actualsBody, 200));
 
     const actuals = expectValue(await source.fleetActuals(24));
 
-    expect(actuals).toEqual(actualsBody.actuals);
+    expect(actuals).toEqual(actualsBody.points);
     // One request, and the fleet route rather than a per-site fan-out: this is
     // the read the API's per-IP limiter meters, so its count is the behaviour.
     expect(recorder.calls.map((call) => call.url)).toEqual([

@@ -108,26 +108,48 @@ describe('siteSeriesResponseSchema', () => {
 });
 
 describe('fleetActualsResponseSchema', () => {
-  it('accepts fleet-wide actuals carrying the attribution as a peer of the data it credits', () => {
-    const result = fleetActualsResponseSchema.safeParse({
-      actuals: [generationReading],
-      attribution: openMeteoAttribution,
-    });
+  /** One hour of the fleet's actuals, as the roll-up read serves it (#506): summed, no band. */
+  const point = {
+    validTime: '2026-07-30T14:00:00Z',
+    acPowerKw: 11.2,
+    contributingSiteCount: 3,
+    contributingCapacityKw: 18.6,
+  };
 
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts an empty actuals array — a fleet whose window holds no readings is a 200', () => {
+  it('accepts summed fleet actuals carrying the attribution as a peer of the data it credits', () => {
     expect(
-      fleetActualsResponseSchema.safeParse({ actuals: [], attribution: openMeteoAttribution })
+      fleetActualsResponseSchema.safeParse({ points: [point], attribution: openMeteoAttribution })
         .success,
     ).toBe(true);
   });
 
+  it('accepts an empty points array — a fleet whose window holds no readings is a 200', () => {
+    expect(
+      fleetActualsResponseSchema.safeParse({ points: [], attribution: openMeteoAttribution })
+        .success,
+    ).toBe(true);
+  });
+
+  it('rejects the raw per-site readings the route served before #506', () => {
+    expect(
+      fleetActualsResponseSchema.safeParse({
+        actuals: [generationReading],
+        attribution: openMeteoAttribution,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a point with no divisor — the percent view would have nothing to divide by', () => {
+    expect(
+      fleetActualsResponseSchema.safeParse({
+        points: [{ ...point, contributingCapacityKw: undefined }],
+        attribution: openMeteoAttribution,
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects a body missing attribution', () => {
-    expect(fleetActualsResponseSchema.safeParse({ actuals: [generationReading] }).success).toBe(
-      false,
-    );
+    expect(fleetActualsResponseSchema.safeParse({ points: [point] }).success).toBe(false);
   });
 });
 

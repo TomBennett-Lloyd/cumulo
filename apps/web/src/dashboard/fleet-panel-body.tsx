@@ -1,4 +1,4 @@
-import type { FleetForecastAggregatePoint, GenerationReading } from '@cumulo/shared';
+import type { FleetActualsAggregatePoint, FleetForecastAggregatePoint } from '@cumulo/shared';
 import type { ReactElement } from 'react';
 
 import { ForecastChart } from '../charts/ForecastChart';
@@ -116,7 +116,7 @@ import {
  * notice it produces names no detail.
  */
 export type FleetActualsState =
-  | { readonly kind: 'readings'; readonly readings: readonly GenerationReading[] }
+  | { readonly kind: 'points'; readonly points: readonly FleetActualsAggregatePoint[] }
   | { readonly kind: 'failed' };
 
 /** The two source calls this panel makes, once the forecast has answered. */

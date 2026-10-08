@@ -7,6 +7,7 @@ import {
   siteSeriesResponseSchema,
   utcIsoTimestampSchema,
   type CreateSiteInput,
+  type FleetActualsAggregatePoint,
   type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
@@ -329,12 +330,12 @@ export class HttpFleetDataSource implements FleetDataSource {
     );
 
   /**
-   * The whole fleet's readings, in one request — never a fan-out.
+   * The whole fleet's readings, summed, in one request — never a fan-out.
    *
    * The forecast service's simulated-actuals producer writes generation
-   * readings from each site's stored physics forecast (#264), and
-   * `GET /v1/fleet/actuals` serves every site's readings over the look-back in
-   * a single response. So unlike {@link fleetForecasts} above, this member
+   * readings from each site's stored physics forecast (#264) and sums them per
+   * location, and `GET /v1/fleet/actuals` serves the fleet total over the
+   * look-back in a single response (#506). So unlike {@link fleetForecasts} above, this member
    * spends `range` as the look-back {@link RangeHours} describes.
    *
    * That route *is* metered by the API's per-IP limiter, and one request per
@@ -347,7 +348,7 @@ export class HttpFleetDataSource implements FleetDataSource {
    */
   readonly fleetActuals = async (
     range: RangeHours,
-  ): Promise<FleetSourceResult<readonly GenerationReading[]>> =>
+  ): Promise<FleetSourceResult<readonly FleetActualsAggregatePoint[]>> =>
     mapOk(
       await this.requestJson(
         `fleetActuals (${String(range)}h)`,
@@ -355,6 +356,6 @@ export class HttpFleetDataSource implements FleetDataSource {
         fleetActualsResponseSchema,
         GET_INIT,
       ),
-      (payload) => payload.actuals,
+      (payload) => payload.points,
     );
 }

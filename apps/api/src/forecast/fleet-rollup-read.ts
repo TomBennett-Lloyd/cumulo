@@ -65,10 +65,10 @@ export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';
 
 /**
  * Why the roll-up could not answer. `absent`: nothing written at all. `incomplete`: some of it.
- * `stale`: every location wrote, but at least one location's slices were summed from a different
- * site set than the one there now, or from more than one forecast run.
+ * `stale`: every location wrote, but some location's slices fail its kind's provenance rule — this
+ * module's for forecasts, `fleet-actuals-rollup-read.ts`'s for actuals.
  */
-type FallbackReason = 'absent' | 'incomplete' | 'stale';
+export type FallbackReason = 'absent' | 'incomplete' | 'stale';
 
 export interface FleetRollupReadDeps extends FleetSeriesReadDeps {
   /**
@@ -96,7 +96,7 @@ export type FleetForecastAggregateRead =
  * the producer's messages are keyed by (ADR 0004). The digest is over the same sites the producer
  * lists for that bucket, so a slice summed before a delete, an add or a physics edit there misses.
  */
-const expectedLocations = (
+export const expectedLocations = (
   sites: readonly FleetSite[],
 ): ReadonlyMap<string, FleetRollupMembers> => {
   const sitesByLocation = new Map<string, FleetSite[]>();
@@ -145,7 +145,7 @@ const staleLocations = (
  * `expected` is never empty: {@link readFleetForecastAggregate} answers an empty fleet before
  * reaching here, and a site always has a `locationId`.
  */
-const fallbackReason = (
+export const fallbackReason = (
   read: FleetRollupRangeResult,
   expected: ReadonlyMap<string, FleetRollupMembers>,
   stale: ReadonlySet<string>,
