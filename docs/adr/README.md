@@ -106,7 +106,8 @@ reaches it.
 - [0002 — Storage split](0002-storage-split.md) — A5's fleet fan-out superseded in part by 0009
 - [0003 — PV physics model runtime](0003-pv-model-runtime.md)
 - [0004 — Ingestion transport](0004-ingestion-transport.md)
-- [0005 — Fleet API compute and hosting](0005-fleet-api-hosting.md)
+- [0005 — Fleet API compute and hosting](0005-fleet-api-hosting.md) — the stage throttle as cost guard superseded in part by 0010
 - [0006 — Demo abuse and cost protection](0006-demo-abuse-protection.md)
 - [0007 — Series deletion is TTL-only](0007-series-deletion-is-ttl-only.md)
 - [0009 — Fleet forecast roll-up](0009-fleet-forecast-rollup.md)
+- [0010 — Cost ceiling held by measured spend](0010-cost-ceiling-by-measured-spend.md)

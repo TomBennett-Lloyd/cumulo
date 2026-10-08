@@ -6,8 +6,8 @@
 # ceiling that is not a concurrency ceiling. `default_route_settings` below is
 # that property, and it was the whole of the abuse posture #14 shipped. #29 adds
 # the second gateway layer: a tighter per-route throttle on the three writes.
-# Read ADR 0005 and ADR 0006 before changing anything in this file; the numbers
-# in them are the ones the worst-case bill is computed from.
+# Read ADR 0005, ADR 0006 and ADR 0010 before changing anything in this file;
+# ADR 0010's bound reads the stage throttle as one of its premises.
 
 resource "aws_apigatewayv2_api" "api" {
   name          = "cumulo-api-${var.environment}"
@@ -168,31 +168,28 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 
   # ---------------------------------------------------------------------------
-  # THE COST GUARD. Do not remove or raise without re-reading ADR 0005.
+  # THE CAPACITY CAP — no longer the cost guard (ADR 0010 supersedes ADR 0005
+  # in part). Read cost-guard.tf before changing it.
   # ---------------------------------------------------------------------------
   # A token bucket: 10 requests/second sustained, 20 in a burst above it,
-  # expressed independently of concurrency. The write endpoint is
-  # unauthenticated by design and its URL is printed in a README, so what bounds
-  # the bill is not the expected traffic but this ceiling. Held at the ceiling
-  # continuously for a 30-day month it is 25.92M requests ≈ $36 — roughly a
-  # third of the ~$100/month ceiling, forever, under continuous abuse. Delete
-  # either line of the block below and that half of the bound is gone silently;
-  # the bootstrap stack's budget alarm is the only backstop left.
+  # expressed independently of concurrency. It is sized to what the function
+  # can serve — the account's 10-slot Lambda concurrency pool (ADR 0006) at
+  # about a second per heavy request — so the gateway answers the excess with a
+  # 429 rather than forwarding requests the function would 503 anyway.
   #
-  # `throttling_rate_limit` USED TO BE the half a gate would catch (#133). The
-  # web dashboard fanned one forecast request out per site, and
-  # `check:infra-mirrors` held that client-side launch rate STRICTLY BELOW this
-  # number, so the fleet view could not be provisioned to spend a bucket every
-  # other caller draws on too. #296 retired the fan-out: the fleet view reads
-  # `GET /v1/fleet/forecast` and `GET /v1/fleet/actuals` beside its one site
-  # listing — three requests a load, whatever the fleet's size — so there is no
-  # client-side launch rate left to bound, and the pair is gone from
-  # .claude/scripts/check-infra-mirrors.sh. Both halves here are therefore
-  # silent again: deleting either reds nothing, and the budget alarm is the only
-  # backstop for both.
+  # It stopped bounding the bill when the tables went on-demand: held at this
+  # ceiling on the heaviest read, a month costs far more than the ~$100 ceiling
+  # (ADR 0010 derives it). The bill is held by cost-guard.tf instead, which sets
+  # this stage to zero when spend says so — and that is why this block and the
+  # one below are what a trip overwrites and an apply restores.
   #
-  # It is a *cost* control that looks like an abuse control, and ADR 0005 says
-  # so: one caller consuming the full 10 rps 429s everybody else. Per-IP
+  # It is still a premise of the bound, through one term: the most the platform
+  # can spend in the hours before a trip lands is min(this rate, concurrency ÷
+  # duration) × the heaviest request's cost. Raising it, or the account's
+  # concurrency quota, moves that term; ADR 0010's revisit triggers name both.
+  #
+  # It is a *capacity* control that looks like an abuse control, and ADR 0005
+  # says so: one caller consuming the full 10 rps 429s everybody else. Per-IP
   # limiting and the site-cap counter live in apps/api (#29); the per-route
   # overrides ADR 0005 pre-declared are the block below.
   default_route_settings {

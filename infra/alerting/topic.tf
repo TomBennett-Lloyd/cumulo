@@ -94,7 +94,7 @@ resource "aws_sns_topic" "alerts" {
   # transition to ALARM, attempt to publish, fail invisibly, and the topic looks
   # healthy. Fixing it properly means a customer-managed key with a key policy
   # for the CloudWatch service principal — ~$1/month plus request charges, added
-  # to a platform whose entire standing cost is currently $0 — in order to
+  # to a platform whose only standing charge is its alarms — in order to
   # encrypt an alarm name, a state, and a description that are all public in
   # this repo already. The one piece of personal data in the pipeline is the
   # subscriber's address, and that is held in the subscription, not in a

@@ -16,12 +16,11 @@
 # gate that cannot fail, and this one's whole job is to fail on an edit that is
 # trivially easy to make.
 #
-# Since #133 there are five relations rather than one, so the fixture builds
+# Since #133 there are several relations rather than one, so the fixture builds
 # every file the nine shipped records name, plus the two files the harness's
-# OWN `ts-lt` pair needs: #296 retired the only shipped record of that mode
-# along with the web fan-out it bounded, so cases 18 and 19 declare their pair
-# on a gate copy instead (the gate's own mode doc states why the mode outlived
-# its record). Three of the fixture's files carry a shape the reader has to
+# OWN gateway pair needs: no shipped record addresses a sub-block holding a
+# same-named attribute at a second depth, so case 18 declares one on a gate
+# copy. Three of the fixture's files carry a shape the reader has to
 # survive rather than parse: the API stage's
 # `dynamic "route_settings" { content { … } }` sibling holding a DIFFERENT
 # throttle, the `<<-EOT` description above `variables.tf`'s validation block,
@@ -80,17 +79,16 @@ API_MAIN_REL=apps/api/src/main.ts
 SCHEDULE_REL=infra/ingestion/schedule.tf
 CYCLE_TS_REL=apps/api/src/forecast/cycle-cache.ts
 
-# The `ts-lt` pair, which no shipped record declares since #296. The Terraform
-# half keeps the real gateway path, because the stage block's shape — one
-# attribute name at two depths — is exactly what case 18 is about. The
+# The harness's own gateway pair, which no shipped record declares. The
+# Terraform half keeps the real gateway path, because the stage block's shape —
+# one attribute name at two depths — is exactly what case 18 is about. The
 # TypeScript half is a path NO REPO FILE OCCUPIES, deliberately: this pair lives
-# only inside the gate copies cases 18 and 19 run, and pointing it at a real
-# constant would quietly re-attach the mode's coverage to a mirror nobody
-# declares.
+# only inside the gate copy case 18 runs, and pointing it at a real constant
+# would quietly re-attach the reader's coverage to a mirror nobody declares.
 GATEWAY_REL=infra/api/gateway.tf
 CLIENT_TS_REL=apps/web/src/data/api-rate-budget.ts
 CLIENT_CONSTANT=CLIENT_REQUEST_RATE
-TS_LT_RECORD="ts-lt|$GATEWAY_REL|aws_apigatewayv2_stage.default|default_route_settings.throttling_rate_limit|$CLIENT_TS_REL|$CLIENT_CONSTANT|1"
+GATEWAY_RECORD="eq|$GATEWAY_REL|aws_apigatewayv2_stage.default|default_route_settings.throttling_rate_limit|$CLIENT_TS_REL|$CLIENT_CONSTANT|1"
 
 # fixture <name> <tf-timeout-seconds> <ts-literal> -> sets DIR to a fresh tree
 # holding the files the gate reads. The Terraform files are written in
@@ -161,8 +159,8 @@ EOF
 export const apiServerErrorEvent = 'api_response_server_error';
 EOF
   cat >"$DIR/$CLIENT_TS_REL" <<EOF
-/** Held strictly under the stage throttle in \`$GATEWAY_REL\`. */
-export const $CLIENT_CONSTANT = 8;
+/** The stage throttle in \`$GATEWAY_REL\`, mirrored. */
+export const $CLIENT_CONSTANT = 10;
 EOF
 
   # Three tables carrying the same declared TTL attribute name, so the per-record
@@ -377,20 +375,17 @@ gate_copy() { # gate_copy <basename>
   must cp "$CHECK" "$COPY"
 }
 
-# gate_with_ts_lt <basename> -> COPY, a gate copy carrying the harness's own
-# `ts-lt` record as MIRRORS' first entry.
+# gate_with_record <basename> <record> -> COPY, a gate copy carrying <record> as
+# MIRRORS' first entry.
 #
 # The same technique as gate_copy's other callers and for the same reason —
-# MIRRORS is baked into the script — but reaching a mode rather than a malformed
-# record: since #296 no shipped record uses `ts-lt`, so the two cases that prove
-# the strict relation and the sub-block addressing declare the pair themselves
-# against files the fixture writes. What this can no longer catch is a shipped
-# `ts-lt` record whose paths have moved, which is case 2's job and which has
-# nothing to check while the shipped list holds none.
-gate_with_ts_lt() { # gate_with_ts_lt <basename>
+# MIRRORS is baked into the script — but adding a record rather than breaking
+# one: case 18's addressing needs a record no shipped one is, and case 19 needs
+# the retired tag back in the list to prove it is refused.
+gate_with_record() { # gate_with_record <basename> <record>
   gate_copy "$1"
-  must perl -pi -e "s{^MIRRORS=\\(\$}{MIRRORS=(\n  \"$TS_LT_RECORD\"}" "$COPY"
-  fixture_has "$COPY" "  \"$TS_LT_RECORD\""
+  must perl -pi -e "s{^MIRRORS=\\(\$}{MIRRORS=(\n  \"$2\"}" "$COPY"
+  fixture_has "$COPY" "  \"$2\""
 }
 
 # ==========================================================================================
@@ -536,10 +531,9 @@ end
 begin "a gate with no records left exits 2 rather than reporting OK"
 fixture empty_list 300 300_000
 EMPTY_GATE="$TMP_ROOT/check-infra-mirrors-no-records.sh"
-must grep -v -F -e '"eq|' -e '"ts-lt|' -e '"str-eq|' -e '"regex-eq|' -e '"tf-ge|' "$CHECK" >"$EMPTY_GATE"
+must grep -v -F -e '"eq|' -e '"str-eq|' -e '"regex-eq|' -e '"tf-ge|' "$CHECK" >"$EMPTY_GATE"
 fixture_has "$EMPTY_GATE" 'MIRRORS=('
 fixture_lacks "$EMPTY_GATE" '"eq|'
-fixture_lacks "$EMPTY_GATE" '"ts-lt|'
 fixture_lacks "$EMPTY_GATE" '"str-eq|'
 fixture_lacks "$EMPTY_GATE" '"regex-eq|'
 fixture_lacks "$EMPTY_GATE" '"tf-ge|'
@@ -680,16 +674,16 @@ end
 # attribute. The stage block declares `throttling_rate_limit` twice: 10 inside
 # `default_route_settings`, and 2 inside `dynamic "route_settings" { content { … } }`
 # — different depths, different paths, and a genuine difference in meaning (the
-# second governs three write routes). Reporting 2 here would hold the client
-# constant against the wrong ceiling and pass, which is the quiet kind of wrong.
+# second governs three write routes). Reporting 2 here would compare the
+# constant against the wrong throttle, which is the quiet kind of wrong.
 #
-# On a gate copy carrying the harness's own `ts-lt` record, for the reason
-# gate_with_ts_lt states. The property under test is the READER's, so it does not
-# care which record sends it into that block — but it does need a record that
-# addresses it, and no shipped one does since #296.
+# On a gate copy carrying the harness's own gateway record, for the reason
+# gate_with_record states. The property under test is the READER's, so it does
+# not care which record sends it into that block — but it does need a record
+# that addresses it, and no shipped one does.
 begin "the addressed sub-block's attribute is read, not the dynamic block's"
 fixture sub_block 300 300_000
-gate_with_ts_lt check-infra-mirrors-sub-block.sh
+gate_with_record check-infra-mirrors-sub-block.sh "$GATEWAY_RECORD"
 run_script_with bash "$COPY" "$DIR"
 expect_rc 0 "$rc"
 expect_out "default_route_settings.throttling_rate_limit = 10"
@@ -697,22 +691,17 @@ expect_not_out "throttling_rate_limit = 2"
 end
 
 # ==========================================================================================
-# 19. the strict bound is strict, at exactly the edge
+# 19. the retired `ts-lt` tag is refused, not silently honoured
 # ==========================================================================================
-# The whole content of `ts-lt` as opposed to a `<=` relation, and the case that
-# kills the mutant relaxing it: lowering the ceiling to the client constant's own
-# value is the client provisioned to spend the entire bucket, which is the state
-# the mode exists to forbid. One below is fine; equal is not. On the same gate
-# copy case 18 uses, for the same reason.
-begin "a stage throttle lowered to the client constant's own value fails the strict bound"
-fixture ts_lt_edge 300 300_000
-gate_with_ts_lt check-infra-mirrors-ts-lt-edge.sh
-must perl -pi -e 's/^    throttling_rate_limit  = 10$/    throttling_rate_limit  = 8/' "$DIR/$GATEWAY_REL"
-fixture_has "$DIR/$GATEWAY_REL" '    throttling_rate_limit  = 8'
-fixture_lacks "$DIR/$GATEWAY_REL" '    throttling_rate_limit  = 10'
+# #588 retired the strict-bound mode. A record carrying the tag again — pasted
+# from history, say — must meet the unknown-mode refusal case 25 proves in
+# general, rather than a leftover branch that still half-understands it.
+begin "a record using the retired ts-lt tag exits 2 as an unknown mode"
+fixture retired_ts_lt 300 300_000
+gate_with_record check-infra-mirrors-retired-ts-lt.sh "ts-lt${GATEWAY_RECORD#eq}"
 run_script_with bash "$COPY" "$DIR"
-expect_rc 1 "$rc"
-expect_out "$CLIENT_CONSTANT = 8, which is not strictly under 8 * 1 = 8"
+expect_rc 2 "$rc"
+expect_out "unknown mode 'ts-lt'"
 expect_not_out "check-infra-mirrors: OK"
 end
 
@@ -867,7 +856,7 @@ begin "a str-eq record with a trailing empty sixth field exits 2"
 fixture trailing_field 300 300_000
 gate_copy check-infra-mirrors-trailing-field.sh
 # \K rather than a capture group, for the reason case 20 states. The `series`
-# address is what keeps the edit on ONE of the three str-eq records, so the
+# address is what keeps the edit on ONE of the three TTL records, so the
 # refusal below is about that record rather than about all of them.
 must perl -pi -e 's/aws_dynamodb_table\.series\|.*TTL_ATTRIBUTE_NAME\K"/|"/' "$COPY"
 fixture_has "$COPY" 'TTL_ATTRIBUTE_NAME|"'

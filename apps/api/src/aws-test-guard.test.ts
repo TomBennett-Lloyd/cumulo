@@ -17,8 +17,8 @@ import { describe, expect, it } from 'vitest';
  * The send is probed through `SiteAdapter` rather than through a raw
  * `GetCommand`: `@aws-sdk/lib-dynamodb` reaches this app only as a transitive
  * dependency of `@cumulo/storage`, and pnpm's isolated `node_modules` makes it
- * unresolvable from here — correctly so, since this app owns no AWS dependency
- * of its own. The adapter is also the surface this app actually sends through,
+ * unresolvable from here — correctly so, since this app's one AWS dependency
+ * of its own is the cost trip's API Gateway client (ADR 0010). The adapter is also the surface this app actually sends through,
  * which is what makes the probe a measurement of the shipped path. Its one cost
  * is that the refusal arrives wrapped: `StorageAdapterBase.sending` converts a
  * failed send into a `StorageError` carrying the original as `cause`, so the
