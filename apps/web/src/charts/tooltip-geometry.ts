@@ -11,10 +11,7 @@
  */
 
 /**
- * The panel never shrinks below this, whatever its content measures: a readout
- * that resized to hug two short numbers would jitter as the reader moves along
- * the series, and the minimum is what keeps a narrow sample the same shape as
- * its neighbours.
+ * The panel never shrinks below this, whatever its content measures.
  */
 export const TOOLTIP_MIN_WIDTH = 104;
 export const TOOLTIP_PADDING = 8;
@@ -22,9 +19,7 @@ export const TOOLTIP_ROW_HEIGHT = 14;
 /** Clear of the plot ceiling so the panel border does not sit on the top grid line. */
 export const TOOLTIP_TOP_GAP = 4;
 /**
- * Long enough to read as a mark of the series, short enough to stay a key: with
- * the rows in columns the key is read against the name beside it rather than
- * against a run of text it introduces.
+ * Long enough to read as a mark of the series, short enough to stay a key.
  *
  * Despite the name it is a *footprint*, not a stroke length — most rows key a
  * line and draw one this long, but the range row keys the band and draws a wash
@@ -52,17 +47,13 @@ export const FIRST_SERIES_ROW = 1;
  *
  * **Trued against a rendered measurement, not guessed**, and re-measured in #463
  * on the face this repo now ships — Inter, owned with its licence by
- * `packages/ui/src/tokens/tokens.css` — where it came out a shade narrower than
- * the platform face the original reading was taken on, and was left alone. The
- * constant sits a few percent above that measurement on purpose: a mean is not a
- * bound, the font is proportional, and a row of capitals and digits averages
- * wider than the string this was fitted to.
+ * `packages/ui/src/tokens/tokens.css`. The constant sits a few percent above
+ * that measurement on purpose: a mean is not a bound, the font is proportional,
+ * and a row of capitals and digits averages wider than the string this was
+ * fitted to.
  *
  * A column is a character count times this number, and the count is taken per
- * column, over names alone or values alone. The single `value name` run each row
- * used to be is what the mean fitted worst: it mixed tabular digits with
- * proportional prose, so one number had to cover both and the widest row decided
- * a width every row paid for.
+ * column, over names alone or values alone.
  *
  * Known and deliberately unfixed, so the next reader does not have to find it
  * again: the *value* column's content is tabular digits, whose mean advance at
@@ -94,9 +85,7 @@ export interface TooltipRow {
    * **What it decides is speech, not ink** (#330): such a row is *drawn*, dash
    * and all, because an absence a reader can see is the honest thing to show
    * (`docs/standards/design.md` rule 5) — and *skipped* when the same rows are
-   * spoken, because a screen reader at default punctuation verbosity voices an
-   * em dash as silence, so announcing one announces a labelled series with no
-   * value.
+   * spoken.
    */
   readonly present: boolean;
 }
@@ -132,9 +121,7 @@ export interface TooltipColumns {
  * Every name starts at `nameX` and every value at `valueX`, so a reader scanning
  * the panel reads a list of series and a list of numbers. The value column is
  * placed past the *widest* name rather than past each row's own name, which is
- * the whole difference between columns and per-row packing: packing puts every
- * number somewhere else and makes comparing two of them an eye-movement rather
- * than a glance.
+ * the whole difference between columns and per-row packing.
  *
  * **`plotWidth` is here because a column has to be laid out inside the panel it
  * will be drawn in.** `tooltipPanelWidth` caps the panel at the plot, so the
@@ -149,8 +136,7 @@ export interface TooltipColumns {
  * rather than two, retired by the elision this file does not yet do.
  *
  * The names decide where the values go, and the values only decide how far the
- * panel reaches — which is why the width returned here is the second column's
- * right edge plus padding, not a maximum over rows.
+ * panel reaches.
  */
 export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): TooltipColumns => {
   const nameX = TOOLTIP_PADDING + KEY_STROKE_LENGTH + KEY_TEXT_GAP;
@@ -187,10 +173,7 @@ export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): 
  * ageing a sentence; this docblock is the one place they are written in prose
  * (`docs/standards/architecture.md` rule 9).
  *
- * Past that length the readout would be wider than the chart it is reading,
- * blanketing the marks it exists to explain, and `tooltipAnchorX` could only pin
- * it to the left plot edge and let the rest hang off the canvas. Capped, a name
- * that long overflows its own panel instead — text spilling past one edge is a
+ * Capped, a name that long overflows its own panel instead — text spilling past one edge is a
  * legible defect confined to one row, where a panel over the whole plot hides
  * the data. Columns did not retire this arm: no arrangement of two columns fits
  * the longest name `siteSchema` accepts into a panel narrower than they are, and
@@ -218,9 +201,6 @@ export const tooltipPanelWidth = (
 
 /**
  * Height for the rows that are actually drawn, padded equally top and bottom.
- * Symmetry is the whole point: with the time label's centre one padding plus
- * half a row below the ceiling, this puts the last row's centre exactly that far
- * above the floor.
  *
  * **Warning — this export is a test seam, and a second caller silently breaks
  * it.** `forecast-chart-tooltip.test.tsx` proves that moving the tooltip does
