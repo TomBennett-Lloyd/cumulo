@@ -47,9 +47,9 @@ on:
   # bucket exists and is empty, and the tree it should hold is already on main),
   # and a repo-variable change — a new `VITE_API_BASE_URL` after the API is
   # re-applied — changes no file, so nothing would redeploy the build that bakes
-  # it in. Safe to expose: the OIDC trust policy admits only
-  # `ref:refs/heads/main`, so a dispatch from any other ref gets no credentials
-  # — the exact path `oidc-smoke.yml` already exercises.
+  # it in. Safe to expose: the OIDC trust policy admits this file only as it is
+  # on main, running in main's context, so a dispatch from any other ref gets no
+  # credentials (infra/bootstrap/oidc.tf).
   workflow_dispatch:
 
 # id-token: write is what lets the runner mint the OIDC token AWS trades for

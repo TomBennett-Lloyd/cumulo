@@ -10,6 +10,19 @@ resource "aws_iam_openid_connect_provider" "github" {
   # security and schedule an outage for GitHub's next certificate rotation.
 }
 
+locals {
+  # The workflow files under .github/workflows/ that may assume the deploy role.
+  # .claude/scripts/check-oidc-workflows.sh reads this list; keep one quoted
+  # file name per line.
+  deploy_role_workflows = [
+    "deploy-api.yml",
+    "deploy-forecast.yml",
+    "deploy-ingestion.yml",
+    "deploy-web.yml",
+    "oidc-smoke.yml",
+  ]
+}
+
 data "aws_iam_policy_document" "github_actions_trust" {
   statement {
     sid     = "GitHubActionsAssumeViaOIDC"
@@ -31,53 +44,20 @@ data "aws_iam_policy_document" "github_actions_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # The `sub` condition is the actual security boundary, and its shape is the
-    # one thing most GitHub-OIDC material gets wrong. The tokens this repo's
-    # runners actually present carry GitHub's *immutable* subject —
-    # `repo:<owner>@<owner-id>/<repo>@<repo-id>:<claim>` — embedding the numeric
-    # owner and repository ids. The name-only form
-    # (`repo:TomBennett-Lloyd/cumulo:...`) that nearly every tutorial shows is
-    # stale; a policy written that way matches nothing and every assume fails.
-    # The prefix comes from `var.github_subject_prefix`, which is read from
-    # GitHub, not assembled from the repo name (see variables.tf).
-    #
-    # Embedding ids is strictly *stronger* than naming the repo. Names are
-    # reassignable: rename this repo or this org and the freed name is available
-    # to anyone, whose new repo would then mint tokens matching a name-based
-    # policy. Numeric ids are never reissued, so a rename can move the repo but
-    # cannot transfer this trust to a stranger.
-    #
-    # The owner and repo segments must stay literal — a wildcard anywhere left
-    # of the last colon reopens exactly the hole the `aud` check above fails to
-    # close, while still looking like a condition block that does something.
-    #
-    # The trailing claim is an exact-match allowlist rather than a `:*`
-    # wildcard: a wildcard would let *any* workflow context in this repo assume
-    # the role, including tags, non-main branch refs, and whatever event
-    # contexts GitHub adds to the `sub` claim in future. One value, no more:
-    # **only a push to `main` may assume this role.**
-    #
-    # That one value used to be two. A PR-context subject sat alongside it for
-    # exactly one reason — so the `oidc-smoke` check could run pre-merge — and
-    # that was safe only while this role had ZERO attached permissions:
-    # assuming it proved the trust path and granted nothing. The comment that
-    # used to be here said the change attaching the first permission had to
-    # delete that entry in the same PR. Issue #11 attached it
-    # (`infra/ingestion/deploy.tf`, updating the ingestion function's code), so
-    # the entry is gone. A PR-context run is triggerable by any fork author, so
-    # it must never hold deploy permissions (issue #7 security constraints,
-    # 2026-07-30).
-    #
-    # THE RULE OUTLIVES ITS FIRST APPLICATION. Nothing an unmerged contributor
-    # controls goes back in this list — not a PR context, not a branch pattern,
-    # not a workflow-dispatch-from-a-fork context. Pre-merge OIDC coverage is
-    # what was traded away here; recovering it needs a *second* role that is
-    # permanently permissionless, not a second entry here. See the header
-    # comment in .github/workflows/oidc-smoke.yml.
+    # The `sub` condition is the security boundary: these workflow files, as
+    # they are on main, running in main's branch context — one exact value per
+    # file, no wildcard. It holds only under the repository's customised subject
+    # template (repo, context, job_workflow_ref); the switch and its ordering are
+    # infra/README.md's "Runbook: switch the OIDC subject template" (#605).
+    # Nothing an unmerged contributor controls belongs in this list (#7, #11);
+    # .claude/scripts/check-oidc-workflows.sh is its gate.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["${var.github_subject_prefix}:ref:refs/heads/main"]
+      values = [
+        for workflow in local.deploy_role_workflows :
+        "${var.github_subject_prefix}:ref:refs/heads/main:job_workflow_ref:${var.github_repository}/.github/workflows/${workflow}@refs/heads/main"
+      ]
     }
   }
 }
