@@ -1,0 +1,19 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for --color-accent and
+# --color-text-muted, owned by the light and dark blocks of
+# packages/ui/src/tokens/tokens.css. Keyed to the four hex literals, not the token
+# names: a consumer writing var(--color-accent) is not a carrier; a file writing the
+# hex is one whatever it calls it.
+#
+# apps/web/public/favicon.svg carries all four literally because a favicon is fetched
+# as a standalone document with no stylesheet context, so var() resolves to nothing
+# there (#282; #424 redraws it). Excluded: docs/design/design-principles.md quotes
+# #1d63bd twice as a dated decision record of #273, and
+# docs/design/exploration/design-directions.html is a snapshot of the candidates
+# considered, not a live surface.
+owner: packages/ui/src/tokens/tokens.css
+claim: the accent and muted-ink hex values, light and dark
+sweep: #1d63bd|#58626d|#3987e5|#9aa5b1
+scope: :!docs/tech-debt.md :!docs/friction-log.md :!docs/review-feedback.md
+carrier: apps/web/public/favicon.svg
+excluded: docs/design/design-principles.md
+excluded: docs/design/exploration/design-directions.html

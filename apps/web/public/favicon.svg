@@ -63,11 +63,9 @@
      * this was written. They are literals because there is no mechanism that
      * would let them be anything else: a favicon is fetched as a standalone
      * document with no stylesheet context, so var(--color-accent) resolves to
-     * nothing here. No gate is being dodged, and none is watching either — this
-     * file's type is outside the scope of every one of them, stylelint's
-     * included, since stylelint here only ever reads CSS files. The restatement
-     * ledger beside those two definitions in tokens.css, plus this note, are
-     * therefore the only controls in either direction. When either token's
+     * nothing here. `.claude/ledgers/color-accent.ledger` lists this file as a
+     * carrier, and `check:ledgers` refuses the tree if this file stops matching
+     * that ledger's sweep; nothing compares the values themselves. When either token's
      * value moves, this file moves with it.
      */
     .sun {
