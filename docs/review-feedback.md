@@ -369,3 +369,36 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Why**: the gap the PR had stated — a forecast pass landing after HH:15 served as the previous cycle's body for a whole cycle — is detectable from the body itself. Each forecast's `issuedAt` and each reading's hour date it, so a body older than the clock's cycle is known to be stale at the moment it is served, and no cache lifetime has to be guessed.
 - **How applied**: `datedByData` in `apps/api/src/forecast/cycle-cache.ts` dates the series and fleet-actuals 200s, and a body older than the clock's cycle gets `max-age=STALE_RETRY_SECONDS` under its own run's tag, so a revalidation misses the 304 and reads again. Covered for the series and fleet-actuals reads (the latter dated by its most-behind site); the fleet-forecast route is not dated yet (#614), so it still caches to the boundary (stated in the PR's lane report). Follow-up filed as #614 (dates `/v1/fleet/forecast` via the #611 provenance stamp).
 - **Verdict**: Change delivered and approved — owner, in chat, 2026-10-07: "with the forecast landing after quarter past, can't we just put a shorter cache time on responses where the forecast data is known to be older than we're expecting?" Landed as `datedByData`: a body older than the clock's cycle is cached for `STALE_RETRY_SECONDS` under its own run's ETag; a fleet is dated by its most-behind site; the run fired at or before `issuedAt` is the dating rule. `/v1/fleet/forecast` is not dated yet (#614), told to the owner in chat with the reason. Filled on the branch by the merge owner before the label came off.
+
+## 2026-10-07 — issue #588 — cost-ceiling-by-measured-spend
+
+- **Category**: design-question-then-approval
+- **Feedback**: The owner is asked to ratify the design as built. This entry states the ask only and predicts no part of the answer. There are four parts.
+  - (a) **ADR 0010** (`docs/adr/0010-cost-ceiling-by-measured-spend.md`). It supersedes ADR 0005 **in part**: the stage throttle's role as the cost guard. The throttle stays at 10/20 as a capacity cap. The ceiling is held instead by two trip paths into one function that zeroes the stage:
+    - an anomaly alarm and a burn-rate alarm, each held for 20 of 24 hours, joined by a composite;
+    - a us-east-1 billing alarm at $70.
+
+    The function is reset by hand.
+
+  - (b) **The bound as derived.** $70 + 12 h × at most ≈ $1.76/h + baseline ≈ **$94**. It is computed on the most expensive request that exists, not on the burn-rate constant. That constant follows the owner's 2026-10-07 scoping: the series read is the priced request, on the premise that #506 lands. The ADR states that the roll-up's 168-hour actuals read (≈ 270 RRU) and the fleet forecast at 52 locations (≈ 78 RRU) still exceed it. Traffic on those routes is caught by the billing leg rather than the composite.
+  - (c) **Four places the build diverges from the issue**, each recorded in the plan comment:
+    - the billing alarm is a second input to the trip, not a clause in the composite, because billing metrics exist only in us-east-1;
+    - each composite child carries its own 20-of-24 hold, since a composite has none;
+    - the running cost is ≈ $1.30/month, not ≈ $0.80;
+    - the reset forces only the billing alarm to OK, because a forced-OK M-of-N alarm re-reads its window and trips again.
+  - (d) **The end of the platform's $0 standing cost.** It is recorded as deliberate in ADR 0010, and ADRs 0004, 0005 and 0006 are annotated as-it-stood.
+
+  What the owner decides goes in **Verdict** below, at merge.
+
+- **Why**: `docs/adr/**` is a `humanAlways` path, so the owner is the gate on the decision. The ask is put provisionally because `merge.humanAlwaysRule` orders this entry ahead of the `awaiting-review` label. The parts worth the one-read are (b) and (d). (b) rests on four stated premises: the 10-slot concurrency quota, the 10 rps stage cap, no request above ≈ 300 RRU, and billing data within 12 h. (d) is a property three ADRs argued from.
+- **How applied**: The lane is the ticket-agent's, on `588-cost-guard`. Each verified step is committed:
+  - the `ts-lt` mirror mode retired (#322 option 3);
+  - the trip function and its bundle;
+  - `infra/api/cost-guard.tf` and the us-east-1 provider alias;
+  - ADR 0010 and the 0005/0006 annotations;
+  - the runbook and cost carriers;
+  - review pass 1's fixes: dollar figures in the alarm descriptions that now render, a reset that writes the throttle back from state without a rebuild, and the remaining carriers of the old bound and of the $0 headline.
+
+  Nothing is applied. The owner's apply (`Plan: 14 to add`, plus a function update if the rebuilt artefact differs) and the runbook's B9 drill are the live acceptance. At merge, whoever merges fills **Category** and **Verdict** on the branch before the label comes off.
+
+- **Verdict**: Approved after two design questions — owner, in chat, 2026-10-07/08. The owner asked why the 10 rps throttle stays now that measured-spend guards exist (answer: a capacity cap sized to the function, and the term that bounds the 12 h of spend before the billing metric catches up) and whether the billing alarm auto-resets with the calendar month (answer: the alarm clears itself; the trip does not, and only the runbook reset restores the throttle). Both answers were accepted without change. The owner asked for the billing-alerts prerequisite to be a CLI step rather than console-only; delivered in a0facbc, and the owner ran it on 2026-10-08 (readback ENABLED). Approval: "okay nice can we do 613 and 620". ADR 0010, the $70 billing threshold, the 20-of-24 composite hold and the manual reset are ratified as written. Filled on the branch by the merge owner before the label came off.

@@ -6,12 +6,12 @@ name: Deploy API
 # The split with Terraform is the same one `deploy-ingestion.yml` describes, and
 # on this stack it guards more than a runtime setting. `infra/api/` owns the
 # function's runtime, handler, memory, environment and execution role — and it
-# also owns the HTTP API, its `$default` stage, and the stage throttle
-# (10 rps, burst 20) that turns an unauthenticated public write endpoint into an
-# arithmetic cost bound. The deploy grant in `infra/api/deploy.tf` is two Lambda
-# actions and no `apigatewayv2` permission at all, so no workflow — this one
-# included — can move that throttle. Changing the bound requires a reviewed diff
-# in a `.tf` file, which is the entire point.
+# also owns the HTTP API, its `$default` stage, the stage throttle, and the cost
+# guard that sets that throttle to zero when spend says so (ADR 0010). The
+# deploy grant in `infra/api/deploy.tf` is two Lambda actions on the API
+# function and no `apigatewayv2` permission at all, so no workflow — this one
+# included — can move the throttle or reach the cost-trip function. Changing
+# either requires a reviewed diff in a `.tf` file, which is the entire point.
 #
 # The one seam it leaves is the ingestion workflow's: after a deploy, Terraform's
 # recorded `source_code_hash` describes the artefact of the last *apply*, so the

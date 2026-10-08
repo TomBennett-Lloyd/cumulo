@@ -136,12 +136,18 @@ this is the operational summary, with the layer that bites first stated per regi
 | 0. `Origin` check (writes only)        | An allow-list, not a credential       | 403        | A client sends no `Origin` at all.       |
 | 1. Per-IP limiter (`abuse/ip-limiter`) | 90 requests / 60 s → **1-hour block** | 429 + body | One address, low parallelism.            |
 | 2. Per-route gateway throttle          | 2 rps, burst 4, on the three writes   | 429        | Sustained write volume from anywhere.    |
-| 3. Stage throttle                      | 10 rps, burst 20 (ADR 0005, ≈ $36/mo) | 429        | Sustained total volume from anywhere.    |
+| 3. Stage throttle                      | 10 rps, burst 20 (a capacity cap)     | 429        | Sustained total volume from anywhere.    |
 | 4. Account Lambda concurrency          | 10, shared with ingestion             | 503        | **High parallelism** — measured, see S5. |
+
+None of these layers bounds the bill any more. The cost guard does
+([ADR 0010](../../docs/adr/0010-cost-ceiling-by-measured-spend.md)): alarms on projected and actual
+spend that set the stage throttle to zero — every route then answers 429 — until an operator resets
+it (`infra/README.md`, "Reset after a cost trip"). A demo that 429s everything is therefore one of
+two things, and `aws apigatewayv2 get-stage` tells you which.
 
 **Which routes the limiter covers** is a deliberate list, and it lives in `main.ts`'s route table.
 `GET /v1/sites`, `GET …/forecast`, `/openapi.json` and the two `/docs` routes are unlimited — fixed,
-small cost per request, and already bounded by layer 3. A limiter that made loading the docs page
+small cost per request, and already rate-capped by layer 3. A limiter that made loading the docs page
 spend abuse-table writes would be paying to defend the cheapest thing here. A browser revalidating a
 cached series or fleet read with the current data cycle's ETag is answered 304 before the limiter
 and is never counted (`forecast/cycle-cache.ts`).
@@ -192,10 +198,13 @@ teardown.
 ## Build
 
 ```sh
-pnpm --filter @cumulo/api build   # → dist/main.mjs, dist/swagger/*, dist/handler.zip
+pnpm --filter @cumulo/api build   # → dist/handler.zip (main.mjs + swagger/*), dist/cost-trip.zip
 ```
 
-The zip is the artifact the API's Terraform uploads; the Lambda handler string is `main.handler`.
+`handler.zip` is the artifact the API's Terraform uploads; the Lambda handler string is
+`main.handler`. `cost-trip.zip` is the second function this package ships, the cost trip
+(`src/cost-trip`, ADR 0010), bundled from its own entry point so it carries none of the API — and
+uploaded only by `terraform apply`, never by the deploy workflow below.
 The three load-bearing choices in that one-line script are the same ones `apps/ingestion/README.md`
 argues at length: the AWS SDK is bundled rather than `--external` (the runtime's own SDK version
 changes without notice), `--main-fields=module,main` bundles the SDK's ESM build so no dynamic
@@ -224,8 +233,8 @@ Two mechanisms, and which one you need depends entirely on what changed.
 `UpdateFunctionCode` on `cumulo-api-dev`, and waits for the update to leave `InProgress` so a bundle
 that fails validation fails the job rather than the next request. Its grant is two Lambda actions on
 one function ARN (`infra/api/deploy.tf`) and **no `apigatewayv2` permission at all** — the stage
-throttle that bounds this stack's bill is unreachable from CI by construction, and moving it takes a
-reviewed `.tf` diff.
+throttle, and the cost trip that zeroes it, are unreachable from CI by construction, and moving
+either takes a reviewed `.tf` diff.
 
 The workflow deploys code onto infrastructure that must already exist. First time through, that
 means the operator apply below.
@@ -328,8 +337,8 @@ forty parallel requests returned 11 × `200` and 29 × `503`, with **zero** `429
 layer 4 of the [abuse-protection table](#abuse-protection). The account's Lambda concurrency limit
 is 10 and it is shared with ingestion, so at this parallelism requests are rejected _at Lambda_
 before enough of them reach the gateway's per-second bucket to exhaust a burst of 20. The stage
-throttle is real and is what bounds the bill under sustained load; it is simply not the layer that
-bites first at forty-at-once. A run that is all `200` means something is wrong with both — stop and
+throttle is real and caps sustained load (the bill is the cost guard's, ADR 0010); it is simply not
+the layer that bites first at forty-at-once. A run that is all `200` means something is wrong with both — stop and
 read the stage back (that runbook's B4).
 
 The `429`s worth deliberately provoking are the per-IP limiter's, which need volume rather than

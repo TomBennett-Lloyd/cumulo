@@ -1,14 +1,14 @@
 # Two gateway alarms, both required work rather than monitoring garnish, and
 # chosen so that they do not fire on the same event — and, at the foot of this
-# file, #603's canary alarm, which watches the function's log instead.
+# file, #603's canary alarm, which watches the function's log instead. The cost
+# guard's five are in cost-guard.tf, which owns them and their reasoning.
 #
 # This is the first Cumulo stack whose input is the public internet, so the two
 # things worth watching are the two things nothing else in the platform reports:
 # whether the API is failing its callers, and whether somebody is hammering it.
-# The bootstrap stack's budget alarm is the money backstop, but it is a *monthly
-# actual spend* alarm at 50% of ~$100 — under ADR 0005's ≈ $36 worst case it
-# would never fire at all. Abuse has to be visible some other way, and that is
-# what the second alarm below is.
+# Money is cost-guard.tf's: it trips the stage on projected and on actual spend
+# (ADR 0010). Neither of its projections reacts within minutes, so a flood has
+# to be visible some other way, and that is what the second alarm below is.
 #
 # `treat_missing_data = "notBreaching"` on both: API Gateway publishes these
 # metrics only when the API is called, and an idle demo is the normal state.
@@ -36,9 +36,9 @@
 # minutes of the traffic starting. A state change nobody is emailed about is a
 # trigger nobody pulls.
 #
-# Cost: the canary alarm is the platform's eleventh, and bills $0.10/month. The
-# platform-wide count, and what that does to every "$0.00/mo", lives in the
-# CloudWatch alarm budget subsection of infra/README.md.
+# Cost: three alarms here and five in cost-guard.tf. The platform is past the
+# always-free ten, so each one past it is priced; the count and the price live in
+# one place only, the CloudWatch alarm budget subsection of infra/README.md.
 
 locals {
   # The alerting stack (infra/alerting) owns this topic. Its ARN is assembled
@@ -108,8 +108,8 @@ resource "aws_cloudwatch_metric_alarm" "api_request_flood" {
   # sustained for five minutes, which the expected regime cannot reach and the
   # abusive one crosses immediately.
   #
-  # It is not a cost alarm — the throttle already bounds the bill, and this
-  # volume is pennies. It is the *visibility* the throttle does not provide:
+  # It is not a cost alarm — cost-guard.tf holds the bill, over hours rather
+  # than minutes. It is the *visibility* the throttle does not provide:
   # ADR 0005 records that one abusive caller consuming the ceiling 429s every
   # legitimate visitor, and that availability failure is invisible in every
   # other signal the platform has.
@@ -119,7 +119,7 @@ resource "aws_cloudwatch_metric_alarm" "api_request_flood" {
   # crossing 1,800 in five minutes implies either a distributed source or a
   # concentration on the read routes the limiter deliberately leaves alone. The
   # response is still to read the access pattern rather than to raise the
-  # throttle — the ceiling is what bounds the bill.
+  # throttle.
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1
@@ -130,7 +130,7 @@ resource "aws_cloudwatch_metric_alarm" "api_request_flood" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "The Cumulo fleet API is taking sustained traffic far above demo volume — averaging over 6 requests/second for five minutes, against a stage ceiling of 10/second. The bill is bounded by that throttle (ADR 0005, ≈ $36/month worst case), but legitimate visitors are likely being 429ed by whoever is doing this. Read the access pattern before changing anything, and note what this volume implies now that #29's per-IP limiting is in place: a single-source flood is blocked well below this threshold, so reaching it means a distributed source or traffic concentrated on the unlimited read routes. Neither is fixed by a higher ceiling."
+  alarm_description = "The Cumulo fleet API is taking sustained traffic far above demo volume — averaging over 6 requests/second for five minutes, against a stage ceiling of 10/second. The bill is held by the cost guard (ADR 0010), which trips only on hours of sustained spend, but legitimate visitors are likely being 429ed by whoever is doing this. Read the access pattern before changing anything, and note what this volume implies now that #29's per-IP limiting is in place: a single-source flood is blocked well below this threshold, so reaching it means a distributed source or traffic concentrated on the unlimited read routes. Neither is fixed by a higher ceiling."
 }
 
 # #603 (#586 is the incident). Both alarms above watch the gateway, so with no

@@ -7,9 +7,10 @@
     "lint": "eslint --max-warnings 0 .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/main.mjs && node scripts/copy-swagger-assets.mjs && cd dist && zip -q -X -r handler.zip main.mjs swagger"
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/main.mjs && esbuild src/cost-trip/main.ts --bundle --platform=node --format=esm --target=node22 --main-fields=module,main --outfile=dist/cost-trip/main.mjs && node scripts/copy-swagger-assets.mjs && cd dist && zip -q -X -r handler.zip main.mjs swagger && cd cost-trip && zip -q -X ../cost-trip.zip main.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-apigatewayv2": "^3.1098.0",
     "@cumulo/shared": "workspace:*",
     "@cumulo/storage": "workspace:*",
     "swagger-ui-dist": "5.32.11",
