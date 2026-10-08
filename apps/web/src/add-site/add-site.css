@@ -5,9 +5,9 @@
  * rule in CLAUDE.md. Two consequences worth naming, because they look like
  * omissions otherwise:
  *
- * - No `:focus` rules. The platform focus ring is the accessible default and
- *   the map treatment forbids suppressing it; a custom ring here would be a
- *   worse one, drawn from tokens that exist for data identity.
+ * - No `:focus` rules. The design system's ring (`packages/ui/src/styles.css`)
+ *   applies and the map treatment forbids suppressing it; a custom ring here
+ *   would be a worse one, drawn from tokens that exist for data identity.
  * - The disabled submit button changes colour rather than fading. Opacity is
  *   how a control becomes unreadable while still looking present; the border
  *   and muted-ink pair stays legible at the contrast the palette was validated
@@ -84,7 +84,7 @@
   padding: var(--space-2);
   border-style: solid;
   border-width: calc(var(--space-1) / 4);
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-bg);
   color: var(--color-text);

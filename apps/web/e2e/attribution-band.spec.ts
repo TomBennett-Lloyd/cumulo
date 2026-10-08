@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import { routeBasemap } from './hermetic-basemap';
 import type { LayoutBox } from './layout-box';
 import { boxOf } from './layout-box';
-import { revealSiteMarker } from './marker-reveal';
+import { SITE_MARKER, revealSiteMarker } from './marker-reveal';
 import { SMALL_PHONE_VIEWPORT } from './viewports';
 
 /*
@@ -106,7 +106,6 @@ const MIN_PAN_PX = 1;
  */
 const DRAG_SETTLE_MS = 300;
 
-const SITE_MARKER = '.map-site-marker';
 const ATTRIBUTION = '.map-attribution';
 const MAP_CANVAS = '.map-canvas';
 

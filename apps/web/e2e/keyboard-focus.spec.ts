@@ -2,8 +2,9 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import type { LayoutBox } from './layout-box';
 import { settledBoxOf } from './layout-box';
-import { revealSiteMarker } from './marker-reveal';
+import { SITE_MARKER, markerByName, revealSiteMarker } from './marker-reveal';
 import { firstSiteIdentity } from './site-identity';
 
 /*
@@ -48,18 +49,9 @@ import { firstSiteIdentity } from './site-identity';
  * ring, and `pointer-focus.spec.ts` is satisfied by a page with no rings
  * anywhere.
  *
- * What it leaves uncovered is worth naming here rather than leaving to be
- * inferred. The card's hand-back on the way out is owed only to a reader who has
- * come *into* the card, which since #328 no selection does for them — that path
- * is `document.activeElement` again, so `map/SitePopoverCard.test.tsx` and
- * `Dashboard.focus.test.tsx` keep it in the lane that can see it rather than
- * this one re-proving it slowly. But the *journey* into the card is exactly this
- * lane's kind of question and no case here asks it. The card is portaled into
- * maplibre's marker overlay, as the markers themselves are, so where it lands
- * relative to the marker that opened it is decided by the order maplibre
- * appended the two elements in rather than by anything this repo writes down.
- * Only a real tab order can say whether a reader arrives. `docs/tech-debt.md`
- * carries that gap; this comment is not a claim that it is covered.
+ * The card's way out by keyboard — Tab from the marker into the card, then Close
+ * or Escape — is the `a keyboard reader leaving the card` describe (#446). The
+ * way *in* to a new site — arm, Enter at the map centre, submit — is #276's case.
  *
  * The second case measures the same ring on the fleet chart, and it exists
  * because #440 gave that chart the only pointer-ring suppression on this page
@@ -87,7 +79,7 @@ import { firstSiteIdentity } from './site-identity';
  * focus so taken paints no ring, and that the ring is waiting when the reader
  * comes back to the chart by Tab.
  *
- * The last case is the other half of the same rule, and it is the reason #260
+ * The `?site=` case is the other half of the same rule, and it is the reason #260
  * was routed to this lane at all. A `?site=` link is *not* a reader asking for
  * anything now, so the card must take no focus — and "no focus was taken" is a
  * claim about the whole assembled page arriving over HTTP, which is what this
@@ -117,20 +109,6 @@ interface FocusRing {
   readonly widthPx: number;
 }
 
-/** One site's mark on the map — a real `<button>` (`src/map/MarkerButton.tsx`). */
-const SITE_MARKER = '.map-site-marker';
-
-/**
- * The marker for one named site.
- *
- * By accessible name rather than by position, because "the marker I revealed" is
- * what every caller here means and the drawn set is reordered by the clustering.
- * The name is safe to interpolate: the demo fleet composes it from a place and
- * an index (`packages/shared/src/fleet.ts`), so it carries no quote to close the
- * attribute selector early.
- */
-const markerByName = (name: string): string => `${SITE_MARKER}[aria-label="${name}"]`;
-
 /**
  * The focused site marker's name, or `null` when focus is anywhere else.
  *
@@ -145,6 +123,27 @@ const focusedMarkerName = async (page: Page): Promise<string | null> =>
 
     return active?.matches(selector) === true ? active.getAttribute('aria-label') : null;
   }, SITE_MARKER);
+
+/** Tab until `arrived` holds; the ceiling and the throw every `tabTo…` route shares. */
+const tabUntil = async (
+  page: Page,
+  arrived: () => Promise<boolean>,
+  what: string,
+): Promise<void> => {
+  for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
+    if (await arrived()) {
+      return;
+    }
+
+    await page.keyboard.press('Tab');
+  }
+
+  throw new Error(`${what} took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`);
+};
+
+/** Whether the one element `selector` names is what the document would send a key to. */
+const holdsFocus = (page: Page, selector: string): Promise<boolean> =>
+  page.locator(selector).evaluate((element) => element === document.activeElement);
 
 /**
  * Tab from wherever the focus is until one named site's marker is holding it.
@@ -162,17 +161,10 @@ const focusedMarkerName = async (page: Page): Promise<string | null> =>
  */
 const tabToMarker = async (page: Page, name: string): Promise<void> => {
   await expect(page.locator(markerByName(name))).toBeVisible();
-
-  for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
-    if ((await focusedMarkerName(page)) === name) {
-      return;
-    }
-
-    await page.keyboard.press('Tab');
-  }
-
-  throw new Error(
-    `The marker for ${name} took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
+  await tabUntil(
+    page,
+    async () => (await focusedMarkerName(page)) === name,
+    `The marker for ${name}`,
   );
 };
 
@@ -190,18 +182,7 @@ const tabToChart = async (page: Page): Promise<void> => {
   const chart = page.locator(CHART_SVG);
 
   await expect(chart).toBeVisible();
-
-  for (let press = 0; press < MAX_TAB_PRESSES; press += 1) {
-    if (await chart.evaluate((element) => element === document.activeElement)) {
-      return;
-    }
-
-    await page.keyboard.press('Tab');
-  }
-
-  throw new Error(
-    `The forecast chart took no focus within ${String(MAX_TAB_PRESSES)} Tab presses.`,
-  );
+  await tabUntil(page, () => holdsFocus(page, CHART_SVG), 'The forecast chart');
 };
 
 /**
@@ -385,6 +366,116 @@ test('takes no focus at all when ?site= opens the card (issue 260)', async ({ pa
   const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
 
   expect(focusedTag).toBe('BODY');
+});
+
+test('adds a site end-to-end from the keyboard, placed at the map centre', async ({ page }) => {
+  const control = page.locator('.map-control-add');
+  const canvas = page.locator('.maplibregl-canvas');
+  const dialog = page.locator('dialog.add-site-dialog');
+  /** The armed map's reticle, drawn as `::after` content — `none` once nothing is drawn. */
+  const reticle = (): Promise<string> =>
+    page.locator('.map-canvas').evaluate((map) => getComputedStyle(map, '::after').content);
+  const centreOf = (box: LayoutBox): { x: number; y: number } => ({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  });
+
+  await expect(canvas).toBeVisible();
+  await tabUntil(page, () => holdsFocus(page, '.map-control-add'), 'The add-site control');
+
+  // Arming moves the reader onto the canvas (`design.md` rule 11's exception),
+  // ringed because they arrived by keyboard, with the reticle marking the centre.
+  await page.keyboard.press('Enter');
+  await expect(control).toHaveAttribute('aria-pressed', 'true');
+  await expect(canvas).toBeFocused();
+
+  const ring = await focusRing(page, '.maplibregl-canvas');
+
+  expect(ring.style).toBe('solid');
+  expect(ring.widthPx).toBeGreaterThan(0);
+  expect(await reticle()).not.toBe('none');
+
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement?.closest('dialog') !== null)).toBe(true);
+
+  await tabUntil(page, () => holdsFocus(page, '.add-site-submit'), 'The draft’s submit');
+  await page.keyboard.press('Enter');
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get('site')).not.toBeNull();
+  await expect(page.locator('.site-popover-title')).toHaveText(/^Site at /u);
+
+  // The hand-back lands on the new site's marker (owner decision, #276).
+  const name = await page.locator('.site-popover-title').textContent();
+
+  if (name === null) {
+    throw new Error('The new site’s card carries no title to find its marker by.');
+  }
+
+  await expect(page.locator(markerByName(name))).toBeFocused();
+
+  // "Placed at the centre", mechanically: the created marker sits on the canvas's
+  // own centre, within a tolerance well under the marker's size.
+  const marker = centreOf(
+    await settledBoxOf(page.locator(`${SITE_MARKER}[aria-current="true"]`), 'The new marker'),
+  );
+  const map = centreOf(await settledBoxOf(page.locator('.map-canvas'), 'The map'));
+
+  expect(Math.abs(marker.x - map.x)).toBeLessThanOrEqual(4);
+  expect(Math.abs(marker.y - map.y)).toBeLessThanOrEqual(4);
+  expect(await reticle()).toBe('none');
+});
+
+test.describe('a keyboard reader leaving the card', () => {
+  const SITE_CARD = '.site-popover';
+  const CARD_CLOSE = '.site-popover-close';
+
+  /** Tab to a revealed site's marker, open its card with Enter, and Tab on to Close. */
+  const tabIntoCard = async (page: Page): Promise<string> => {
+    await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+
+    const name = await (await revealSiteMarker(page)).getAttribute('aria-label');
+
+    if (name === null) {
+      throw new Error('The revealed site marker carries no accessible name to tab to.');
+    }
+
+    await tabToMarker(page, name);
+    await page.keyboard.press('Enter');
+    await expect(page.locator(SITE_CARD)).toBeVisible();
+    await tabUntil(page, () => holdsFocus(page, CARD_CLOSE), "The card's Close");
+
+    return markerByName(name);
+  };
+
+  /** The card gone, and the reader back on its marker with the ring painted. */
+  const expectRingedHandBack = async (page: Page, marker: string): Promise<void> => {
+    await expect(page.locator(SITE_CARD)).toHaveCount(0);
+    await expect(page.locator(marker)).toBeFocused();
+
+    const ring = await focusRing(page, marker);
+
+    expect(ring.style).toBe('solid');
+    expect(ring.widthPx).toBeGreaterThan(0);
+  };
+
+  test('hands focus back to the marker, ring and all, when Enter presses Close', async ({
+    page,
+  }) => {
+    const marker = await tabIntoCard(page);
+
+    await page.keyboard.press('Enter');
+    await expectRingedHandBack(page, marker);
+  });
+
+  test('hands focus back to the marker, ring and all, when Escape closes the card', async ({
+    page,
+  }) => {
+    const marker = await tabIntoCard(page);
+
+    await page.keyboard.press('Escape');
+    await expectRingedHandBack(page, marker);
+  });
 });
 
 /*

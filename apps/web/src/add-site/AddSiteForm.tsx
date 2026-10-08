@@ -202,7 +202,7 @@ const AddSiteField = ({
 };
 
 export interface AddSiteFormProps {
-  /** Where the visitor clicked. Displayed, never edited — the map owns them. */
+  /** Displayed, never edited — the map owns them. */
   readonly latitude: number;
   readonly longitude: number;
   /** Called only with input the shared schema has already accepted. */
@@ -221,7 +221,7 @@ export interface AddSiteFormProps {
 }
 
 /**
- * The click-to-add-a-site form.
+ * The add-a-site form.
  *
  * Presentational (`react.md` rule 4): it owns what the visitor has typed and
  * nothing else. Whether a creation is permitted, whether one is in flight and
@@ -235,7 +235,7 @@ export interface AddSiteFormProps {
  * worded gate that jsdom does not run, so the tests would prove a path the
  * browser never takes.
  *
- * The coordinates are read at mount, so a second map click must give the form a
+ * The coordinates are read at mount, so a second placement must give the form a
  * new `key` rather than new props — remounting is how a new location becomes a
  * fresh draft, without an effect choreographing "when the coordinates change,
  * reset the fields" (`react.md` rule 1).

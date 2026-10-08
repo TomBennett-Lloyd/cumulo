@@ -5,6 +5,7 @@ import { useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { MapPosition } from './clustering';
+import { focusPressedControl } from './marker-press-focus';
 
 export interface MapMarkerAnchorProps {
   readonly map: MapLibreMap;
@@ -87,7 +88,12 @@ export const MapMarkerAnchor = ({
       .setLngLat([position.longitude, position.latitude])
       .addTo(map);
 
+    // After the constructor: same-element listeners fire in registration order,
+    // so this one sees maplibre's `preventDefault` (`marker-press-focus.ts`).
+    element.addEventListener('mousedown', focusPressedControl);
+
     return () => {
+      element.removeEventListener('mousedown', focusPressedControl);
       marker.remove();
     };
   }, [map, element, position.longitude, position.latitude]);

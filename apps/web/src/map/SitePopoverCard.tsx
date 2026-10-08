@@ -1,5 +1,9 @@
 import type { Site } from '@cumulo/shared';
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from 'react';
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactElement,
+} from 'react';
 import { useEffect, useId, useRef } from 'react';
 
 import type { ForecastViewState } from '../dashboard/forecast-view-state';
@@ -177,9 +181,10 @@ export interface SitePopoverCardProps {
  *
  * Escape is the cost that is left, and it is now the ordinary one. Escape closes
  * from anywhere *inside* the card, so a reader has to be in the card for it to
- * mean anything — which a pointer press on Close does for free, and a keyboard
- * reader does by tabbing to it. Nothing was added to reach them from outside:
- * a document-level key handler would claim a key the map itself is free to want.
+ * mean anything — which a pointer press on Close does (`marker-press-focus.ts`),
+ * and a keyboard reader does by tabbing to it. Nothing was added to reach them
+ * from outside: a document-level key handler would claim a key the map itself
+ * is free to want.
  *
  * ## The landing on the way out, which this card owes only to a reader inside it
  *
@@ -188,8 +193,8 @@ export interface SitePopoverCardProps {
  * the old panel did — it searched the site list for the matching row — and that
  * answer was wrong for every opener that is not a row. The capture happens
  * *inside* the effect, after React has flushed the commit's unmount cleanups, so
- * a creation captures the map's add-site control (where the dismissed dialog put
- * it) rather than the submit button that is no longer in the document.
+ * a creation captures wherever the dismissed dialog put the focus rather than
+ * the submit button that is no longer in the document.
  *
  * **It gives focus back only if it still has focus to give**, which is the whole
  * of the cleanup's guard below and is not a detail — an unconditional restore
@@ -199,10 +204,9 @@ export interface SitePopoverCardProps {
  * browser puts it, which is the same place a card with no landing at all would
  * have left it.
  *
- * Since a selection lands nobody in here, that guard mostly declines by its own
- * terms, and deliberately so. What the machinery still answers is the reader who
- * came *into* the card: pressing Close focuses it, and tabbing to it does too,
- * so the control they are standing on is about to unmount under them.
+ * What the machinery answers is the reader who came *into* the card: pressing
+ * Close focuses it (`marker-press-focus.ts`), and tabbing to it does too, so the
+ * control they are standing on is about to unmount under them.
  *
  * The document's focus is state no render owns and no re-render restores, so
  * this is exactly the external system an effect is for (docs/standards/react.md
@@ -226,6 +230,12 @@ export const SitePopoverCard = ({
 }: SitePopoverCardProps): ReactElement => {
   const titleId = useId();
   const cardRef = useRef<HTMLElement>(null);
+  /**
+   * Whether the reader dismissed by keyboard, which decides the hand-back's ring.
+   * Read at the act: by the cleanup, Close has left the document and focus is on
+   * `body` (`apps/web/e2e/pointer-focus.spec.ts`, `apps/web/e2e/keyboard-focus.spec.ts`).
+   */
+  const dismissedByKeyboard = useRef(false);
 
   useEffect(() => {
     if (selectionOrigin !== 'reader') {
@@ -278,7 +288,7 @@ export const SitePopoverCard = ({
         focused === null || focused === document.body || card?.contains(focused) === true;
 
       if (cardStillHoldsFocus) {
-        opener.focus();
+        opener.focus({ focusVisible: dismissedByKeyboard.current });
       }
     };
   }, [selectionOrigin]);
@@ -299,8 +309,16 @@ export const SitePopoverCard = ({
    */
   const closeOnEscape = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') {
+      dismissedByKeyboard.current = true;
       onClose();
     }
+  };
+
+  const closeOnPress = (event: ReactMouseEvent<HTMLButtonElement>): void => {
+    const keyboardActivated = event.detail === 0;
+
+    dismissedByKeyboard.current = keyboardActivated;
+    onClose();
   };
 
   return (
@@ -329,7 +347,12 @@ export const SitePopoverCard = ({
          * so it follows the button through both themes. `site-popover.css` says
          * why the drawing declarations are restated there rather than shared.
          */}
-        <button type="button" className="site-popover-close" aria-label="Close" onClick={onClose}>
+        <button
+          type="button"
+          className="site-popover-close"
+          aria-label="Close"
+          onClick={closeOnPress}
+        >
           <svg className="site-popover-close-icon" viewBox="0 0 20 20" aria-hidden="true">
             <path d="M5 5 15 15" />
             <path d="M15 5 5 15" />

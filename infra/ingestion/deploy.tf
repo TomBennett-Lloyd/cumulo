@@ -6,7 +6,7 @@
 # attaching it is what forced the trust-policy change in the same pull request
 # (infra/bootstrap/oidc.tf, infra/README.md convention 8): the role was
 # assumable from a PR context only while it granted nothing, and a PR-context
-# run is triggerable by any fork author. Only pushes to main may assume it now.
+# run is triggerable by any fork author.
 #
 # It lives in this stack rather than in bootstrap because of ADR 0001: a
 # resource exactly one service would notice belongs to that service's stack.

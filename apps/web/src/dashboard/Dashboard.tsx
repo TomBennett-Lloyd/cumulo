@@ -57,9 +57,9 @@ type CreationState =
 const demoFleetDataSource = new DemoFleetDataSource();
 
 /**
- * Identity for a draft site: where the visitor clicked.
+ * Identity for a draft site: where the visitor placed it.
  *
- * `AddSiteForm` reads the coordinates once, at mount, so a second map click has
+ * `AddSiteForm` reads the coordinates once, at mount, so a second placement has
  * to *remount* it — otherwise the previous location's generated name would still
  * be sitting in the name field. Keying on the position is how that happens
  * without an effect choreographing a reset (`react.md` rule 1).
@@ -103,8 +103,8 @@ export interface DashboardProps {
 
 /**
  * The fleet dashboard: the header bar, the map as a full-width canvas across the
- * top, the reading beneath it, and the flow that turns a click on the map into a
- * site with a forecast.
+ * top, the reading beneath it, and the flow that turns a placement on the map into
+ * a site with a forecast.
  *
  * The bar is here rather than in the shell because of one item on it. The
  * header's site search reads the fleet and selects into `selectedSiteId`, and
@@ -187,11 +187,11 @@ export const Dashboard = ({
   const [draft, setDraft] = useState<MapPosition | null>(null);
   const [creation, setCreation] = useState<CreationState>({ status: 'editing' });
   /**
-   * Whether the next click on the basemap drops a draft.
+   * Whether the next placement on the basemap drops a draft.
    *
    * Here rather than inside the map region because it is the *dashboard's*
-   * click handler that has to obey it: the map reports every basemap click it
-   * receives, and what a click means is this component's question.
+   * click handler that has to obey it: the map reports every placement it
+   * receives, and what one means is this component's question.
    */
   const [addSiteArmed, setAddSiteArmed] = useState(false);
   /**
@@ -213,8 +213,9 @@ export const Dashboard = ({
    */
   const createdSitesRef = useRef(createdSites);
   createdSitesRef.current = createdSites;
-  /** The map's box, searched for the add-site control a closing draft returns focus to. */
+  /** The map's box, searched for the element a closing draft returns focus to. */
   const mapRegionRef = useRef<HTMLDivElement>(null);
+  const draftBecameSiteRef = useRef(false);
 
   // The fleet listing is a request whose answer arrives after this render — the
   // external system an effect is for (`react.md` rule 1). Its cleanup flips a
@@ -296,23 +297,27 @@ export const Dashboard = ({
    * claim focus back and a dashboard that stood aside would leave it on `body` as
    * the dialog leaves the document.
    *
-   * A creation is the one close that *does* have something else to say, and it
-   * says it without a guard here. React flushes every unmount cleanup in a commit
-   * before any mount effect in the same commit, so this runs first and the new
-   * site's card takes no focus after it (#328) — which also makes the card's
-   * captured opener the add-site control rather than the submit button that just
-   * left the document. `apps/web/src/dashboard/Dashboard.focus.test.tsx`'s
-   * creation cases hold both halves honest.
+   * A cancel lands on the add-site control; a creation on the new site's marker
+   * (owner decision, #276), or on the control when that marker is not drawn —
+   * clustered, or not yet mounted. React flushes unmount cleanups before mount
+   * effects, so the new card captures what this focused as its opener (#328);
+   * `apps/web/src/dashboard/Dashboard.focus.test.tsx`'s creation cases hold it.
    *
-   * The target is the control the reader opened the draft with, matched inside
-   * the map's own box rather than across the document: it is the map's control,
-   * the map region is substitutable (see `MapRegion.tsx`).
+   * Both targets are matched inside the map's own box rather than across the
+   * document: the map region is substitutable (see `MapRegion.tsx`).
    */
   const returnFocusFromDraft = (): void => {
-    mapRegionRef.current?.querySelector<HTMLElement>('.map-control-add')?.focus();
+    const region = mapRegionRef.current;
+    const createdMarker = draftBecameSiteRef.current
+      ? region?.querySelector<HTMLElement>('.map-site-marker[aria-current="true"]')
+      : null;
+
+    draftBecameSiteRef.current = false;
+    (createdMarker ?? region?.querySelector<HTMLElement>('.map-control-add'))?.focus();
   };
 
   const closeDraft = (): void => {
+    draftBecameSiteRef.current = false;
     setDraft(null);
     setCreation({ status: 'editing' });
   };
@@ -335,8 +340,9 @@ export const Dashboard = ({
     setCreatedSites((current) => [...current, result.value]);
     // A creation is a reader-initiated selection like any other: they placed the
     // site, so its card owes them a hand-back if they go into it — and, like
-    // every other selection, moves their focus nowhere on the way in (#328).
+    // every other selection's card, takes no focus on the way in (#328).
     selectSiteForReader(result.value.id);
+    draftBecameSiteRef.current = true;
     setDraft(null);
     setCreation({ status: 'editing' });
   };
@@ -388,7 +394,7 @@ export const Dashboard = ({
 
                 setDraft(position);
                 setCreation({ status: 'editing' });
-                // Single-shot: the mode is spent on the click that used it, so a
+                // Single-shot: the mode is spent on the placement that used it, so a
                 // reader is never left armed without a draft on screen to show for
                 // it.
                 setAddSiteArmed(false);

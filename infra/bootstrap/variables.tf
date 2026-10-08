@@ -16,8 +16,8 @@ variable "aws_region" {
 variable "github_repository" {
   description = <<-EOT
     The single owner/repo whose GitHub Actions workflows may assume the deploy
-    role. This value is the security boundary of the trust policy in oidc.tf —
-    widening it widens who can assume the role.
+    role. The trust policy's `job_workflow_ref` values in
+    infra/bootstrap/oidc.tf are built from it.
   EOT
   type        = string
   default     = "TomBennett-Lloyd/cumulo"
@@ -35,9 +35,8 @@ variable "github_subject_prefix" {
     repository id rather than their current names
     (`repo:<owner>@<owner-id>/<repo>@<repo-id>`).
 
-    This, not `github_repository`, is the security boundary enforced by the
-    trust policy in oidc.tf. It must be read from GitHub rather than
-    hand-assembled, because the numeric ids are not derivable from the names:
+    It must be read from GitHub rather than hand-assembled, because the
+    numeric ids are not derivable from the names:
 
       gh api repos/OWNER/REPO/actions/oidc/customization/sub --jq .sub_claim_prefix
 

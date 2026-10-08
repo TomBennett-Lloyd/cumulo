@@ -22,6 +22,8 @@ import { MapControls } from './MapControls';
  * camera, a real drag, and marker geometry read back off a laid-out page. It has
  * an owner rather than a gap — `e2e/map-regressions.spec.ts` drags the map,
  * presses this button, and polls a marker back to the pixel it started on.
+ * Arming's move of focus onto the map canvas needs that canvas too, and is owned
+ * by `e2e/keyboard-focus.spec.ts` (keyboard) and `e2e/pointer-focus.spec.ts` (mouse).
  */
 
 // Vitest runs without global test hooks, so Testing Library's automatic cleanup never registers

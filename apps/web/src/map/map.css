@@ -177,9 +177,31 @@
  *
  * `:not(:active)` keeps maplibre's `grabbing` during a drag: a reader who is
  * panning is panning, armed or not, and the crosshair belongs to the click that
- * places a site rather than to the gesture that moves the map. */
+ * places a site rather than to the gesture that moves the map.
+ *
+ * The cursor is the pointer's channel and the reticle below is the keyboard's:
+ * Enter on the focused canvas places at the map centre, which the reticle marks
+ * as a circle for the reason `docs/design/map-treatment.md`'s Site markers gives. */
 .map-canvas-armed .maplibregl-canvas-container:not(:active) {
   cursor: crosshair;
+}
+
+.map-canvas-armed::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--space-6);
+  height: var(--space-6);
+  border-style: solid;
+  border-width: calc(var(--space-1) / 2);
+  border-color: var(--color-text);
+  border-radius: var(--radius-full);
+  outline-width: calc(var(--space-1) / 4);
+  outline-style: solid;
+  outline-color: var(--color-surface);
+  pointer-events: none;
 }
 
 /* The credits, drawn over the bottom edge of the map rather than in a strip

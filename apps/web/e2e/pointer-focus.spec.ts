@@ -2,6 +2,13 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 
 import { routeBasemap } from './hermetic-basemap';
+import {
+  CLUSTER_MARKER,
+  SITE_MARKER,
+  markerByName,
+  reachableCluster,
+  revealSiteMarker,
+} from './marker-reveal';
 import { RANGE_TRIGGER } from './range-picker';
 
 /*
@@ -42,13 +49,14 @@ import { RANGE_TRIGGER } from './range-picker';
  *
  * Most of them pass on the tree that preceded them. Issue 339 audited every focus
  * rule in the repo and found `:focus-visible` throughout, so there was no bare
- * `:focus` here to fix and those cases — both mouse cases, and the range picker's
- * touch twin — assert a property the app already had. They exist as a ratchet: a
- * future bare `:focus`, or a ring hand-rolled in JS and forced on regardless of
- * how focus arrived, fails here. Lint is the fast half of that catch —
- * `selector-pseudo-class-disallowed-list` in `stylelint.config.mjs`, added by the
- * same issue — and this is the half that still sees the regressions a linter
- * reads as innocent.
+ * `:focus` here to fix and those cases — the range picker's and the Raw data
+ * summary's mouse cases, and the range picker's touch twin — assert a property
+ * the app already had. They exist as a ratchet: a future bare `:focus`, or a ring
+ * hand-rolled in JS and forced on regardless of how focus arrived, fails here.
+ * Lint is the fast half of that catch — `selector-pseudo-class-disallowed-list`
+ * in `stylelint.config.mjs`, added by the same issue — and this is the half that
+ * still sees the regressions a linter reads as innocent. The marker, cluster and
+ * Close cases do not pass there: they are #446's regression tests.
  *
  * The chart's tap case is the other kind, and it is worth reading as such: it
  * asserts something that was measurably *false* before #440. A `hasTouch`
@@ -86,6 +94,154 @@ const RAW_DATA_SUMMARY = '.forecast-chart-summary';
  * gutters included, rather than the plot rect inside it.
  */
 const CHART_SVG = 'svg.forecast-chart';
+
+const SITE_CARD = '.site-popover';
+const CARD_CLOSE = '.site-popover-close';
+
+/** Zoom until a site stands alone, and name its marker: the clustering reorders the drawn set. */
+const revealedMarker = async (page: Page): Promise<string> => {
+  const name = await (await revealSiteMarker(page)).getAttribute('aria-label');
+
+  if (name === null) {
+    throw new Error('The revealed site marker carries no accessible name.');
+  }
+
+  return markerByName(name);
+};
+
+/** Workaround for #601 (a high marker's Close lands under the header): the lowest marker. */
+const lowestRevealedMarker = async (page: Page): Promise<string> => {
+  await revealSiteMarker(page);
+
+  const name = await page.locator(SITE_MARKER).evaluateAll(
+    (markers) =>
+      markers
+        .map((marker) => ({
+          name: marker.getAttribute('aria-label'),
+          y: marker.getBoundingClientRect().y,
+        }))
+        .reduce((lowest, marker) => (marker.y > lowest.y ? marker : lowest)).name,
+  );
+
+  if (name === null) {
+    throw new Error('The lowest site marker carries no accessible name.');
+  }
+
+  return markerByName(name);
+};
+
+/** maplibre's container: `overflow: hidden`, so a script focus can scroll it. */
+const MAP_CONTAINER = '.maplibregl-map';
+
+/** The credits band, which owns the map's bottom right (`apps/web/src/map/map.css`). */
+const ATTRIBUTION = '.map-attribution';
+
+interface ViewportPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A point on the visible part of a cluster the map's bottom edge clips, clear of
+ * the credits — or null while none is drawn there.
+ */
+const clippedClusterPoint = async (page: Page): Promise<ViewportPoint | null> =>
+  page.locator(CLUSTER_MARKER).evaluateAll(
+    (clusters, { mapSelector, bandSelector }) => {
+      const map = document.querySelector(mapSelector)?.getBoundingClientRect();
+      const band = document.querySelector(bandSelector)?.getBoundingClientRect();
+
+      if (map === undefined || band === undefined) {
+        return null;
+      }
+
+      for (const cluster of clusters) {
+        const box = cluster.getBoundingClientRect();
+        const point = { x: box.x + box.width / 2, y: (box.top + map.bottom) / 2 };
+
+        if (
+          box.top < map.bottom &&
+          box.bottom > map.bottom &&
+          box.right < band.left &&
+          cluster.contains(document.elementFromPoint(point.x, point.y))
+        ) {
+          return point;
+        }
+      }
+
+      return null;
+    },
+    { mapSelector: MAP_CONTAINER, bandSelector: ATTRIBUTION },
+  );
+
+/**
+ * Drag the map until a cluster straddles its bottom edge by a quarter of its
+ * height, and name a press point on it.
+ *
+ * One mouse move, not several: maplibre starts no inertia from fewer than two
+ * samples (`maplibre-gl/src/ui/handler_inertia.ts`), so the camera stops where
+ * the pointer does and no settle is needed.
+ */
+const panClusterOntoMapBottom = async (page: Page): Promise<ViewportPoint> => {
+  const drag = await page.locator(CLUSTER_MARKER).evaluateAll(
+    (clusters, { mapSelector, bandSelector }) => {
+      const map = document.querySelector(mapSelector)?.getBoundingClientRect();
+      const band = document.querySelector(bandSelector)?.getBoundingClientRect();
+
+      if (map === undefined || band === undefined) {
+        return null;
+      }
+
+      for (const cluster of clusters) {
+        const box = cluster.getBoundingClientRect();
+        const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        const dy = map.bottom - box.height / 4 - centre.y;
+
+        if (
+          box.right >= band.left ||
+          !cluster.contains(document.elementFromPoint(centre.x, centre.y))
+        ) {
+          continue;
+        }
+
+        // A bare-basemap start whose end stays on the map, so the drag is a pan.
+        for (let y = map.top + box.height; y + dy < map.bottom; y += box.height) {
+          for (let x = map.left + box.width; x < map.right; x += box.width) {
+            if (document.elementFromPoint(x, y)?.matches('.maplibregl-canvas') === true) {
+              return { from: { x, y }, dy };
+            }
+          }
+        }
+      }
+
+      return null;
+    },
+    { mapSelector: MAP_CONTAINER, bandSelector: ATTRIBUTION },
+  );
+
+  if (drag === null) {
+    throw new Error('No cluster clear of the credits could be dragged onto the map’s bottom edge.');
+  }
+
+  await page.mouse.move(drag.from.x, drag.from.y);
+  await page.mouse.down();
+  await page.mouse.move(drag.from.x, drag.from.y + drag.dy);
+  await page.mouse.up();
+
+  await expect
+    .poll(async () => clippedClusterPoint(page), {
+      message: 'No cluster came to rest across the map’s bottom edge.',
+    })
+    .not.toBeNull();
+
+  const point = await clippedClusterPoint(page);
+
+  if (point === null) {
+    throw new Error('The clipped cluster left the map’s bottom edge.');
+  }
+
+  return point;
+};
 
 /** What the browser decided to paint around the focused element. */
 interface FocusRing {
@@ -246,6 +402,135 @@ test('paints no ring on the chart’s Raw data disclosure when a pointer opens i
   ).toBe(false);
 });
 
+test('focuses a site marker a pointer presses, and paints no ring on it', async ({ page }) => {
+  const marker = await revealedMarker(page);
+  const ring = await ringAfterPointerClick(page, marker);
+
+  expect(
+    paintsARing(ring),
+    `The site marker painted ${ring.style} at ${String(ring.widthPx)}px after a pointer click.`,
+  ).toBe(false);
+  await expect(page.locator(SITE_CARD)).toBeVisible();
+});
+
+test('hands the focus back to the marker when a pointer presses the card’s Close', async ({
+  page,
+}) => {
+  const marker = await lowestRevealedMarker(page);
+
+  await page.locator(marker).click();
+  await expect(page.locator(SITE_CARD)).toBeVisible();
+  await page.locator(CARD_CLOSE).click();
+  await expect(page.locator(SITE_CARD)).toHaveCount(0);
+  await expect(page.locator(marker)).toBeFocused();
+
+  const ring = await focusRing(page, marker);
+
+  expect(
+    paintsARing(ring),
+    `The site marker painted ${ring.style} at ${String(ring.widthPx)}px after Close handed focus back.`,
+  ).toBe(false);
+});
+
+test('focuses a cluster the moment a pointer presses it, and paints no ring', async ({ page }) => {
+  // Measured with the button down: the click that follows reclusters the
+  // overlay and removes the pressed element.
+  await expect(page.locator(CLUSTER_MARKER).first()).toBeVisible();
+
+  const { index, x, y } = await reachableCluster(page);
+  const cluster = page.locator(CLUSTER_MARKER).nth(index);
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await expect(cluster).toBeFocused();
+
+  const ring = await focusRing(page, `${CLUSTER_MARKER} >> nth=${String(index)}`);
+
+  await page.mouse.up();
+  expect(
+    paintsARing(ring),
+    `The cluster painted ${ring.style} at ${String(ring.widthPx)}px under a pointer press.`,
+  ).toBe(false);
+});
+
+test('focuses a cluster the map’s edge clips without scrolling the map under the press', async ({
+  page,
+}) => {
+  await expect(page.locator(CLUSTER_MARKER).first()).toBeVisible();
+
+  const { x, y } = await panClusterOntoMapBottom(page);
+
+  // Read inside the press, from a window listener that runs after the marker's:
+  // maplibre reverts a scroll of its container on the next `scroll` event.
+  const before = await page.evaluate(
+    ({ pointX, pointY, selector }) => {
+      const offsets = (from: Element): string => {
+        const chain: string[] = [];
+
+        for (let node: Element | null = from; node !== null; node = node.parentElement) {
+          chain.push(
+            `${node.tagName}.${node.classList[0] ?? ''} ${String(node.scrollTop)},${String(node.scrollLeft)}`,
+          );
+        }
+
+        return `${chain.join(' < ')} < window ${String(window.scrollY)},${String(window.scrollX)}`;
+      };
+      const pressed = document.elementFromPoint(pointX, pointY)?.closest(selector);
+
+      window.addEventListener(
+        'mousedown',
+        (event) => {
+          const cluster = event.target instanceof Element ? event.target.closest(selector) : null;
+
+          if (cluster !== null) {
+            document.body.dataset.pressScroll = offsets(cluster);
+            document.body.dataset.pressFocused = String(cluster === document.activeElement);
+          }
+        },
+        { once: true },
+      );
+
+      return pressed === null || pressed === undefined ? null : offsets(pressed);
+    },
+    { pointX: x, pointY: y, selector: CLUSTER_MARKER },
+  );
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+
+  const during = await page.evaluate(() => ({
+    scroll: document.body.dataset.pressScroll,
+    focused: document.body.dataset.pressFocused,
+  }));
+
+  await page.mouse.up();
+  expect(during.focused, 'The press did not focus the clipped cluster.').toBe('true');
+  expect(during.scroll, 'A scroll offset above the pressed cluster moved under the press.').toBe(
+    before,
+  );
+});
+
+test('moves the focus onto the map when a pointer arms add-site, and paints no ring', async ({
+  page,
+}) => {
+  const control = page.locator('.map-control-add');
+  const canvas = '.maplibregl-canvas';
+
+  await control.click();
+  await expect(page.locator(canvas)).toBeFocused();
+
+  const ring = await focusRing(page, canvas);
+
+  expect(
+    paintsARing(ring),
+    `The map canvas painted ${ring.style} at ${String(ring.widthPx)}px after a pointer armed add-site.`,
+  ).toBe(false);
+
+  // Disarmed again, so the page is left as every other case expects to find it.
+  await control.click();
+  await expect(control).toHaveAttribute('aria-pressed', 'false');
+});
+
 /*
  * The touch arm. `hasTouch` is a browser-context option rather than a per-action
  * one, so it has to be scoped by a describe — and scoped rather than set
@@ -298,6 +583,35 @@ test.describe('under a finger', () => {
     expect(
       paintsARing(ring),
       `The range picker’s trigger painted ${ring.style} at ${String(ring.widthPx)}px after a tap.`,
+    ).toBe(false);
+  });
+
+  test('focuses a site marker a finger taps, and paints no ring on it', async ({ page }) => {
+    const marker = await revealedMarker(page);
+    const ring = await ringAfterTap(page, marker);
+
+    expect(
+      paintsARing(ring),
+      `The site marker painted ${ring.style} at ${String(ring.widthPx)}px after a tap.`,
+    ).toBe(false);
+  });
+
+  test('hands the focus back to the marker when a finger taps the card’s Close', async ({
+    page,
+  }) => {
+    const marker = await lowestRevealedMarker(page);
+
+    await page.locator(marker).tap();
+    await expect(page.locator(SITE_CARD)).toBeVisible();
+    await page.locator(CARD_CLOSE).tap();
+    await expect(page.locator(SITE_CARD)).toHaveCount(0);
+    await expect(page.locator(marker)).toBeFocused();
+
+    const ring = await focusRing(page, marker);
+
+    expect(
+      paintsARing(ring),
+      `The site marker painted ${ring.style} at ${String(ring.widthPx)}px after Close handed focus back.`,
     ).toBe(false);
   });
 });

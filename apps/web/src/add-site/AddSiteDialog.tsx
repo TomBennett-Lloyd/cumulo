@@ -5,13 +5,9 @@ import { AddSiteForm, type AddSiteFormProps } from './AddSiteForm';
 
 export interface AddSiteDialogProps extends AddSiteFormProps {
   /**
-   * Puts focus back where the reader came from, once this dialog has left the
-   * document.
-   *
-   * A callback rather than an element, because the control it lands on belongs
-   * to the map (`map/MapControls.tsx`) and this dialog has no business holding a
-   * handle to it. The dashboard owns both and is the one place that can say
-   * where focus goes.
+   * Places focus once this dialog has left the document. A callback rather
+   * than an element: where focus goes is the dashboard's to say
+   * (`returnFocusFromDraft`, `apps/web/src/dashboard/Dashboard.tsx`).
    */
   readonly onReturnFocus: () => void;
 }
@@ -41,12 +37,13 @@ export interface AddSiteDialogProps extends AddSiteFormProps {
  *
  * The cost of closing by unmount rather than by `close()` is the one thing the
  * platform then stops doing for us: a dialog that is *removed* never runs the
- * close steps, so the browser never restores focus. `onReturnFocus` is that
- * piece, supplied by hand — and it fires from the effect's cleanup rather than
- * from a click handler on purpose. On the Escape path the browser's own
- * restoration runs while the `cancel` event is still being dispatched, so a
- * focus call made there would be immediately overwritten; a cleanup runs after
- * React has committed the unmount, which is after the browser has finished.
+ * close steps, so the browser places focus nowhere. `onReturnFocus` places it
+ * instead (`returnFocusFromDraft` decides where) — and it fires from the
+ * effect's cleanup rather than from a click handler on purpose. On the Escape
+ * path the browser's own restoration runs while the `cancel` event is still
+ * being dispatched, so a focus call made there would be immediately
+ * overwritten; a cleanup runs after React has committed the unmount, which is
+ * after the browser has finished.
  *
  * `cancel` is the element telling us it has been dismissed. It is not
  * prevented — letting the browser run its own close steps is what keeps Escape
