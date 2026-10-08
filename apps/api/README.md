@@ -94,18 +94,18 @@ and read `Retry-After` when it is present rather than requiring it.
 
 ## Routes
 
-| Route                             | Semantics                                                                                                       |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `GET /v1/sites`                   | 200 `{ sites: FleetSite[] }` — the whole fleet, seed and user, active or not.                                   |
-| `POST /v1/sites`                  | 201 with the created site. `id`, `origin: 'user'`, `createdAt` and `active` are server-assigned.                |
-| `GET /v1/sites/{siteId}`          | 200 with the site; 404 if unknown; 400 if the id is not a uuid.                                                 |
-| `PUT /v1/sites/{siteId}`          | 200 with the updated site. Read-modify-write preserving `id`, `origin`, `createdAt`, `active`. Last write wins. |
-| `DELETE /v1/sites/{siteId}`       | 204 empty when a site was removed; 404 when there was nothing to remove.                                        |
-| `GET /v1/sites/{siteId}/forecast` | 200 `{ forecasts, attribution }` from now, `hours` ∈ 24/48/168 (default 48). Empty is 200.                      |
-| `GET /v1/sites/{siteId}/series`   | 200 `{ forecasts, actuals, attribution }` over required `from`/`to`; span > 336 h is 400.                       |
-| `GET /openapi.json`               | 200 with the OpenAPI 3.0 document, built at start-up from the zod schemas.                                      |
-| `GET /docs`                       | 200 `text/html` — Swagger UI, pointed at `/openapi.json` on the same origin.                                    |
-| `GET /docs/{asset}`               | 200 with an allowlisted Swagger UI asset; 404 for every other name.                                             |
+| Route                             | Semantics                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET /v1/sites`                   | 200 `{ sites: FleetSite[] }` — the whole fleet, seed and user.                                        |
+| `POST /v1/sites`                  | 201 with the created site. `id`, `origin: 'user'` and `createdAt` are server-assigned.                |
+| `GET /v1/sites/{siteId}`          | 200 with the site; 404 if unknown; 400 if the id is not a uuid.                                       |
+| `PUT /v1/sites/{siteId}`          | 200 with the updated site. Read-modify-write preserving `id`, `origin`, `createdAt`. Last write wins. |
+| `DELETE /v1/sites/{siteId}`       | 204 empty when a site was removed; 404 when there was nothing to remove.                              |
+| `GET /v1/sites/{siteId}/forecast` | 200 `{ forecasts, attribution }` from now, `hours` ∈ 24/48/168 (default 48). Empty is 200.            |
+| `GET /v1/sites/{siteId}/series`   | 200 `{ forecasts, actuals, attribution }` over required `from`/`to`; span > 336 h is 400.             |
+| `GET /openapi.json`               | 200 with the OpenAPI 3.0 document, built at start-up from the zod schemas.                            |
+| `GET /docs`                       | 200 `text/html` — Swagger UI, pointed at `/openapi.json` on the same origin.                          |
+| `GET /docs/{asset}`               | 200 with an allowlisted Swagger UI asset; 404 for every other name.                                   |
 
 `POST /v1/sites` is unauthenticated and **capped at 40 user-created sites** (`MAX_USER_SITES` in
 `@cumulo/shared`). The cap is not a refusal: a create against a full fleet still answers 201, having
@@ -291,8 +291,8 @@ Swagger UI loads its assets from `/docs/…` on the same origin and its spec fro
 a page that renders is already evidence that three routes work. Then exercise **Try it out** on:
 
 - `GET /v1/sites` — expect the same body as S3.
-- `POST /v1/sites` — expect `201` and a body whose `id`, `origin: "user"`, `createdAt` and `active`
-  the server assigned. The response is the only source of that id; nothing predicts it.
+- `POST /v1/sites` — expect `201` and a body whose `id`, `origin: "user"` and `createdAt` the server
+  assigned. The response is the only source of that id; nothing predicts it.
 
 Try-it-out passes the write routes' `Origin` check for free: the browser sets `Origin` to the page's
 own origin, which is this API's, because `/docs` is served from the same Lambda (ADR 0005). **From a

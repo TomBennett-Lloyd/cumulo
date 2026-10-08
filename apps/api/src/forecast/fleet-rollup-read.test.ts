@@ -57,7 +57,7 @@ describe('the roll-up answers', () => {
     expect(siteReads).toEqual([]);
   });
 
-  it('never sums a location the fleet no longer has active sites at', async () => {
+  it('never sums a location the fleet no longer has sites at', async () => {
     // The partials of a decommissioned location are written under keys nothing rewrites once
     // ingestion stops publishing for it, and they outlive its last site by the whole horizon. Summed
     // blind, that is a ghost site generating for about two days — and a difference from the fan-out
@@ -75,20 +75,6 @@ describe('the roll-up answers', () => {
     expect(points[0]?.contributingSiteCount).toBe(2);
     // An unexpected location is not a reason to fall back either: the fleet it is asked about is
     // complete, and the extra row is answered by ignoring it rather than by a fan-out.
-    expect(siteReads).toEqual([]);
-    expect(logged).toEqual([]);
-  });
-
-  it('expects nothing from a location whose every site is deactivated', async () => {
-    // `listFleetSites` returns the fleet active *and* inactive, while ingestion publishes only for
-    // locations holding an active site. Counting an all-inactive location as expected would pin the
-    // route on `incomplete` for ever, logging a line that means the opposite of what it says.
-    const { deps, siteReads, logged } = harness({
-      rows: [row(DUBLIN, [RANELAGH], partial())],
-    });
-
-    await read(deps, [RANELAGH, { ...BRISTOL_SITE, active: false }]);
-
     expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
@@ -139,7 +125,7 @@ describe('the roll-up answers', () => {
 
 /**
  * Membership and vintage (#602, ADR 0009's 2026-10-07 entry): a location that has written is
- * summed only if its slices were summed from the sites active there now, by one forecast run. Each
+ * summed only if its slices were summed from the sites there now, by one forecast run. Each
  * stale case below sums on the pre-#602 code — the location-set check alone passes every one.
  */
 describe('a stale slice', () => {

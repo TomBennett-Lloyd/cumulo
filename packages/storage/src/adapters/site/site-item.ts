@@ -67,7 +67,7 @@ export type FleetSiteItem = Omit<FleetSite, 'id'> & {
   readonly pk: typeof FLEET_PARTITION;
   readonly siteId: string;
   readonly locationId: string;
-  readonly gsiLocation?: string;
+  readonly gsiLocation: string;
   readonly gsiUserSites?: typeof USER_SITES_PARTITION;
   readonly gsiCreatedAt?: string;
 };
@@ -88,16 +88,12 @@ const KEY_ATTRIBUTES: ReadonlySet<string> = new Set([
 /**
  * Domain object → stored item.
  *
- * The sparseness rules, which are the reason this function exists rather than a
- * spread at each call site:
- *
- * - `gsiLocation` is written **only while `active === true`**, so deactivating a
- *   site removes it from the `by-location` index instead of leaving it there to
- *   be filtered out (F1).
- * - `gsiUserSites`/`gsiCreatedAt` are written **only for `origin === 'user'`**,
- *   regardless of `active` — an inactive user site is still a user site and
- *   still evictable (X2). The seed fleet is absent from `user-sites-by-age`
- *   entirely, which is how "never evict a seed site" becomes structural.
+ * The sparseness rule, which is the reason this function exists rather than a
+ * spread at each call site: `gsiUserSites`/`gsiCreatedAt` are written **only for
+ * `origin === 'user'`**, so the seed fleet is absent from `user-sites-by-age`
+ * entirely, which is how "never evict a seed site" becomes structural (X2).
+ * `gsiLocation` is written for every site: a site leaves `by-location` by being
+ * deleted, since there is no inactive site to leave it any other way (#606).
  *
  * Exported for its tests; it is not part of the package's public surface.
  */
@@ -110,7 +106,7 @@ export const toItem = (site: FleetSite): FleetSiteItem => {
     pk: FLEET_PARTITION,
     siteId: id,
     locationId: location,
-    ...(site.active ? { gsiLocation: location } : {}),
+    gsiLocation: location,
     ...(site.origin === 'user'
       ? { gsiUserSites: USER_SITES_PARTITION, gsiCreatedAt: `${site.createdAt}#${id}` }
       : {}),

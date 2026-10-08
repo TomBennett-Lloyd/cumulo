@@ -15,11 +15,9 @@ import { parseSiteIdParam } from './site-id-param';
  * field omitted from the body is unambiguously "set it to nothing" rather than
  * "leave it alone".
  *
- * The four fields the server owns — `id`, `origin`, `createdAt`, `active` — are
- * read back from the stored site and written through unchanged. That is why this
- * is a read-modify-write rather than a blind `putFleetSite`: the adapter writes
- * whole items, so a put built only from the request body would silently
- * re-origin a seed site as a user one and reset its eviction age.
+ * The three fields the server owns — `id`, `origin`, `createdAt` — are read back
+ * from the stored site and written through unchanged, which is why this is a
+ * read-modify-write rather than a blind `putFleetSite` (`update-site.test.ts`).
  *
  * **Last write wins.** There is no conditional expression on a version, so two
  * concurrent updates to one site resolve to whichever put lands second. For a
@@ -61,7 +59,6 @@ export const updateSite = async (
     id: existing.site.id,
     origin: existing.site.origin,
     createdAt: existing.site.createdAt,
-    active: existing.site.active,
   };
 
   await deps.sites.putFleetSite(updated);

@@ -327,7 +327,7 @@ describe('the roll-up inside one message', () => {
     });
   });
 
-  it('does not roll up a location whose sites were all deactivated', async () => {
+  it('does not roll up a location whose sites were all deleted', async () => {
     const recorder = emptyRecorder();
 
     await consumeMessage(deps({ recorder, sites: [] }), recordOf('m-1', [reading()]));

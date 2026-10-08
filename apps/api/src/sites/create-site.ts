@@ -17,7 +17,7 @@ import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
 /**
  * `POST /v1/sites` — add a site to the fleet.
  *
- * The three fields a caller does not get to choose are chosen here:
+ * The two fields a caller does not get to choose are chosen here:
  *
  * - **`id`** is server-assigned. `createSiteInputSchema` strips one a caller
  *   sent, so a client cannot predict, collide with, or overwrite an id it did
@@ -28,8 +28,6 @@ import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
  *   index attribute at all and are therefore *structurally* exempt from
  *   eviction (ADR 0002), not merely filtered out of it. Nothing arriving over
  *   HTTP may claim to be seed data.
- * - **`active: true`** — a site is added in order to be forecast; there is no
- *   route that creates a dormant one.
  *
  * **The cap, and why the route still answers 201 at it.** This write is
  * unauthenticated by design, so it needs a bound: `MAX_USER_SITES` user sites,
@@ -221,7 +219,6 @@ export const createSite = async (
     id: deps.newSiteId(),
     origin: 'user',
     createdAt: deps.now(),
-    active: true,
   };
 
   const outcome = await storeWithinCap(deps, site, request.deadline);

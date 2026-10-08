@@ -22,33 +22,21 @@ const expectedFleetSize = 60;
 const expectedFetchLocations = 12;
 const sitesPerCluster = 5;
 
-/** Fixed, because nothing here depends on when a site joined — only on whether it is active. */
+/** Fixed, because nothing here depends on when a site joined. */
 const seedCreatedAt = '2026-07-30T00:00:00Z';
-
-interface FleetSiteInput {
-  readonly site: Site;
-  readonly active: boolean;
-}
 
 /**
  * Promote a generated `Site` to the `FleetSite` the control plane holds. Parsed
  * rather than cast: a fixture that could not survive `fleetSiteSchema` is a fixture
  * describing a site the system cannot contain.
  */
-const fleetSiteOf = (input: FleetSiteInput): FleetSite =>
-  fleetSiteSchema.parse({
-    ...input.site,
-    origin: 'seed',
-    createdAt: seedCreatedAt,
-    active: input.active,
-  });
+const fleetSiteOf = (site: Site): FleetSite =>
+  fleetSiteSchema.parse({ ...site, origin: 'seed', createdAt: seedCreatedAt });
 
-const activeFleetSiteOf = (site: Site): FleetSite => fleetSiteOf({ site, active: true });
-
-const activeCanonicalFleet = canonicalSites.map(activeFleetSiteOf);
+const canonicalFleet = canonicalSites.map(fleetSiteOf);
 
 /** Dublin — the first cluster in the generator's iteration order. */
-const oneCluster = activeCanonicalFleet.slice(0, sitesPerCluster);
+const oneCluster = canonicalFleet.slice(0, sitesPerCluster);
 
 /**
  * A site placed where `locationId` canonicalizes rather than merely rounds: a
@@ -71,8 +59,8 @@ describe('activeFetchLocations', () => {
     // The de-duplication lever the fleet exists to provide: 12 Open-Meteo calls per
     // cycle instead of 60 (docs/design/fleet-simulation.md, "Weather locations and
     // the Open-Meteo budget"). #78 made the fleet honour it; this is the consumer side.
-    expect(activeCanonicalFleet).toHaveLength(expectedFleetSize);
-    expect(activeFetchLocations(activeCanonicalFleet)).toHaveLength(expectedFetchLocations);
+    expect(canonicalFleet).toHaveLength(expectedFleetSize);
+    expect(activeFetchLocations(canonicalFleet)).toHaveLength(expectedFetchLocations);
   });
 
   it('five co-located sites produce one fetch location', () => {
@@ -82,28 +70,12 @@ describe('activeFetchLocations', () => {
     ]);
   });
 
-  it('inactive sites are excluded from the fetch set', () => {
-    const dublinDeactivated = canonicalSites.map((site, index) =>
-      fleetSiteOf({ site, active: index >= sitesPerCluster }),
-    );
-
-    const locations = activeFetchLocations(dublinDeactivated);
-    expect(locations).toHaveLength(expectedFetchLocations - 1);
-    expect(locations.map((location) => location.locationId)).not.toContain('53.35,-6.26');
-
-    const allDeactivated = canonicalSites.map((site) => fleetSiteOf({ site, active: false }));
-    expect(activeFetchLocations(allDeactivated)).toEqual([]);
-  });
-
   it("every fetch location's coordinates round-trip through locationId to its own id", () => {
     // The property the whole module rests on: a request issued at these coordinates
     // is keyed by the bucket it was issued for, so readings land in the partition
     // that reads them back (ADR 0002 §3). The edge site makes the assertion bite on
     // the two cases where locationId canonicalizes instead of rounding.
-    const locations = activeFetchLocations([
-      ...activeCanonicalFleet,
-      activeFleetSiteOf(canonicalizedEdgeSite),
-    ]);
+    const locations = activeFetchLocations([...canonicalFleet, fleetSiteOf(canonicalizedEdgeSite)]);
 
     expect(locations).toHaveLength(expectedFetchLocations + 1);
     for (const location of locations) {
@@ -117,7 +89,7 @@ describe('activeFetchLocations', () => {
   });
 
   it('orders the fetch set by ascending location id', () => {
-    const ids = activeFetchLocations(activeCanonicalFleet).map((location) => location.locationId);
+    const ids = activeFetchLocations(canonicalFleet).map((location) => location.locationId);
     expect(ids).toEqual([...ids].sort());
     expect(ids.at(0)).toBe('51.45,-2.59');
     expect(ids.at(-1)).toBe('55.95,-3.19');

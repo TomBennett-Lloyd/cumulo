@@ -15,9 +15,8 @@ import { DEFAULT_FORECAST_HORIZON_HOURS, FORECAST_HORIZON_HOURS } from './get-si
 import { hoursAfter } from './series-window';
 
 /**
- * `GET /v1/fleet/forecast` — every **active** fleet site's forecast over one
- * forward horizon, in one request. `fleet-rollup-read.ts` owns that predicate
- * for both of this route's arms (#531).
+ * `GET /v1/fleet/forecast` — every fleet site's forecast over one forward
+ * horizon, in one request.
  *
  * **Summed here, not in the browser (#494, ADR 0009).** The body is one point
  * per hour — the fleet total, its band, and how many sites and how much

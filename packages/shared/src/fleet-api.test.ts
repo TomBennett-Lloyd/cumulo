@@ -19,7 +19,6 @@ const fleetSite = {
   capacityKw: 4.2,
   origin: 'seed',
   createdAt: '2026-07-30T06:00:00Z',
-  active: true,
 };
 
 const forecast = {

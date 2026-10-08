@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  activeFleet,
+  testFleet,
   bristolId,
   cycleDeps,
   dublin,
@@ -9,7 +9,6 @@ import {
   edinburghId,
   effectsFor,
   emptyRecord,
-  inactiveFleet,
   malformedDetail,
   manchesterId,
   publishedOutcome,
@@ -23,7 +22,7 @@ describe('runCycle', () => {
   it('a fully successful cycle resolves', async () => {
     const record = emptyRecord();
 
-    const report = await runCycle(cycleDeps({ sites: activeFleet, record }));
+    const report = await runCycle(cycleDeps({ sites: testFleet, record }));
 
     expect(report).toEqual({
       locations: [bristolId, dublinId, manchesterId, edinburghId].map(publishedOutcome),
@@ -53,20 +52,20 @@ describe('runCycle', () => {
     // trigger carrying a copy. Publishing first would announce readings the
     // forecast service could then fail to read back.
     const record = emptyRecord();
-    const oneSite = [siteAt({ index: 1, location: dublin, active: true })];
+    const oneSite = [siteAt({ index: 1, location: dublin })];
 
     await runCycle(cycleDeps({ sites: oneSite, record }));
 
     expect(record.calls).toEqual([`fetch:${dublinId}`, `store:${dublinId}`, `publish:${dublinId}`]);
   });
 
-  it('an empty active fleet resolves without calling fetch', async () => {
-    // API frugality at its limit (CLAUDE.md): no active site anywhere means no
+  it('an empty fleet resolves without calling fetch', async () => {
+    // API frugality at its limit (CLAUDE.md): no site anywhere means no
     // third-party call at all — and the cycle still says so, because a silent
     // zero-call run is indistinguishable from a run that never happened.
     const record = emptyRecord();
 
-    const report = await runCycle(cycleDeps({ sites: inactiveFleet, record }));
+    const report = await runCycle(cycleDeps({ sites: [], record }));
 
     expect(report).toEqual({
       locations: [],
@@ -78,7 +77,7 @@ describe('runCycle', () => {
     });
     expect(record.calls).toEqual([]);
     expect(record.entries).toEqual([
-      { event: cycleStartedEvent, fleetSites: 5, activeLocations: 0, attemptedLocations: 0 },
+      { event: cycleStartedEvent, fleetSites: 0, activeLocations: 0, attemptedLocations: 0 },
     ]);
   });
 
@@ -87,7 +86,7 @@ describe('runCycle', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         scripts: { [bristolId]: { fetch: 'rate-limited' } },
         record,
       }),
@@ -114,7 +113,7 @@ describe('runCycle', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         scripts: {
           [bristolId]: { fetch: 'rate-limited' },
           [dublinId]: { fetch: 'malformed' },
@@ -146,7 +145,7 @@ describe('runCycle', () => {
     const record = emptyRecord();
 
     const report = await runCycle(
-      cycleDeps({ sites: activeFleet, scripts: { [dublinId]: { store: 'partial' } }, record }),
+      cycleDeps({ sites: testFleet, scripts: { [dublinId]: { store: 'partial' } }, record }),
     );
 
     expect(report.locations).toEqual([
@@ -167,7 +166,7 @@ describe('runCycle', () => {
 
     const report = await runCycle(
       cycleDeps({
-        sites: activeFleet,
+        sites: testFleet,
         scripts: {
           [bristolId]: { fetch: 'throws' },
           [dublinId]: { store: 'throws' },
@@ -210,10 +209,10 @@ describe('runCycle', () => {
   it('a fleet listing that fails is not reported as an empty cycle', async () => {
     // Rule 1: this one is not a per-location outcome. A cycle that never learned
     // what to fetch must fail the invocation, not resolve with zero locations —
-    // which would look identical to a fleet with nothing active.
+    // which would look identical to an empty fleet.
     const record = emptyRecord();
     const deps: RunCycleDeps = {
-      ...cycleDeps({ sites: activeFleet, record }),
+      ...cycleDeps({ sites: testFleet, record }),
       sites: { listFleetSites: () => Promise.reject(new Error('cumulo-sites is unreachable')) },
     };
 

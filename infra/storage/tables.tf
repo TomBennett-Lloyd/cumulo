@@ -214,10 +214,9 @@ resource "aws_dynamodb_table" "sites" {
   }
 
   # F1: on a queue message for location L (ADR 0004's SQS transport), read the
-  # physics parameters of every active site at L. Sparse by construction — the
-  # adapter writes `gsiLocation` only while a site is active, so an inactive
-  # site is structurally absent from the index the forecast service reads,
-  # rather than filtered out by code that a later change could forget.
+  # physics parameters of every site at L. Not sparse: the adapter writes
+  # `gsiLocation` for every site, which leaves the index only by being deleted
+  # (#606, ADR 0002's 2026-10-07 amendment).
   #
   # INCLUDE rather than ALL: the projection is exactly the physics parameters
   # the forecast service needs, so the index stays small and a name change on

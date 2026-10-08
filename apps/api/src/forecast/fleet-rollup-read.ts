@@ -1,5 +1,4 @@
 import {
-  activeFleetSites,
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   fleetRollupMembers,
@@ -43,15 +42,14 @@ import { forecastsIn } from './series-split';
  * no gap to see, because the missing site does not read as missing, it reads as less generation.
  * That is the half-truth `fleet-series-read.ts` refuses for the fan-out, applied to the roll-up.
  * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
- * every site carries coordinates, so the expected set is the active sites' `locationId`s — the same
- * `locationId` ingestion keys its messages on, over the same `activeFleetSites` predicate
- * `activeFetchLocations` takes, so neither set can drift from the other on activity. A cycle that
- * deferred a location for budget is a different dimension and is what `incomplete` is for. The
- * check is **not** per hour, which is a decision rather than an omission: ADR 0009's
- * `## Amendments` entry for 2026-10-05 (#531) states it and what makes the residual honest rather
- * than silent. A location that has written is also checked for **membership and vintage** (#602,
- * the 2026-10-07 entry): its slices must carry the digest of the sites active there now, and one
- * `issuedAt` between them.
+ * every site carries coordinates, so the expected set is the listed sites' `locationId`s — the same
+ * `locationId` ingestion keys its messages on, over the same unfiltered listing
+ * `activeFetchLocations` takes. A cycle that deferred a location for budget is a different
+ * dimension and is what `incomplete` is for. The check is **not** per hour, which is a decision
+ * rather than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states it and
+ * what makes the residual honest rather than silent. A location that has written is also checked
+ * for **membership and vintage** (#602, the 2026-10-07 entry): its slices must carry the digest of
+ * the sites there now, and one `issuedAt` between them.
  *
  * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent}; #507 removes the
  * fallback and this module's second arm, and ADR 0009's 2026-10-07 entry says what `stale` leaves
@@ -68,7 +66,7 @@ export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';
 /**
  * Why the roll-up could not answer. `absent`: nothing written at all. `incomplete`: some of it.
  * `stale`: every location wrote, but at least one location's slices were summed from a different
- * site set than the one active there now, or from more than one forecast run.
+ * site set than the one there now, or from more than one forecast run.
  */
 type FallbackReason = 'absent' | 'incomplete' | 'stale';
 
@@ -97,12 +95,6 @@ export type FleetForecastAggregateRead =
  * Keyed by bucket because two sites in one bucket are one expected partial: `locationId` is what
  * the producer's messages are keyed by (ADR 0004). The digest is over the same sites the producer
  * lists for that bucket, so a slice summed before a delete, an add or a physics edit there misses.
- *
- * The sites are already the active ones — {@link readFleetForecastAggregate} narrows once, for both
- * arms — which is the half that makes this set the set the producer writes rather than merely a
- * similar one: ingestion publishes only for locations holding an active site, so a location whose
- * every site has been deactivated can never be written again, and counting it here would pin the
- * route on `incomplete` for ever while logging a line that means the opposite of what it says.
  */
 const expectedLocations = (
   sites: readonly FleetSite[],
@@ -150,8 +142,8 @@ const staleLocations = (
 /**
  * Whether a roll-up read can answer for this fleet, and if not, why.
  *
- * `expected` is never empty: {@link readFleetForecastAggregate} answers a fleet with no active
- * sites before reaching here, and a site always has a `locationId`.
+ * `expected` is never empty: {@link readFleetForecastAggregate} answers an empty fleet before
+ * reaching here, and a site always has a `locationId`.
  */
 const fallbackReason = (
   read: FleetRollupRangeResult,
@@ -202,7 +194,7 @@ const aggregateFromFanOut = async (
 };
 
 /**
- * Sum the partials of the locations this fleet actually has active sites at, and no others.
+ * Sum the partials of the locations this fleet actually has sites at, and no others.
  *
  * The filter is not defensive tidiness; without it a decommissioned location keeps generating. Its
  * partials are written under keys nothing rewrites once ingestion stops publishing for it, and they
@@ -227,14 +219,6 @@ const summed = (
  * Read the fleet's summed forecast over `from`…`to`: the roll-up if it can answer, the fan-out if
  * it cannot.
  *
- * **`activeFleetSites` is applied once, here, which is what makes both arms answer for one fleet**
- * (#531). The narrowed list is simultaneously the expected-partial set, the fan-out's site list and
- * the nameplate divisor `fleetForecastAggregate` divides by, so there is no arrangement of this
- * module in which one of the three counts a site the others do not. Applied here rather than at the
- * route boundary because this function is also called directly by `fleet-rollup-read.test.ts`: a
- * predicate living one layer up would leave the module able to be handed an inactive site and
- * expect a partial for it.
- *
  * The roll-up Query is page-bounded on the same deadline the fan-out uses, so a request that is
  * running out of time cannot spend it all here and then discover it has to fall back too. A
  * `StorageError` from either arm travels to the route boundary as it always did — no `catch` here
@@ -250,13 +234,11 @@ export const readFleetForecastAggregate = async (
   to: UtcIsoTimestamp,
   deadlineEvent: string,
 ): Promise<FleetForecastAggregateRead> => {
-  const active = activeFleetSites(sites);
-
-  // A fleet with no *active* sites is answered without touching the table at all. Not an
-  // optimisation: the fleet total of nothing is nothing, there is no partition state that could make
-  // it otherwise, and the route's "an empty fleet is a 200 with an empty array" promise should not
-  // be one billed read away from being a 500.
-  if (active.length === 0) {
+  // An empty fleet is answered without touching the table at all. Not an optimisation: the fleet
+  // total of nothing is nothing, there is no partition state that could make it otherwise, and
+  // the route's "an empty fleet is a 200 with an empty array" promise should not be one billed
+  // read away from being a 500.
+  if (sites.length === 0) {
     return { complete: true, points: [] };
   }
 
@@ -265,7 +247,7 @@ export const readFleetForecastAggregate = async (
   };
 
   const rollup = await deps.series.queryFleetRollup(FLEET_ROLLUP_FORECAST_KIND, from, to, bound);
-  const expected = expectedLocations(active);
+  const expected = expectedLocations(sites);
   const stale = staleLocations(rollup.rows, expected);
   const reason = fallbackReason(rollup, expected, stale);
 
@@ -282,5 +264,5 @@ export const readFleetForecastAggregate = async (
     hours: new Set(rollup.rows.map((row) => row.partial.validTime)).size,
   });
 
-  return aggregateFromFanOut(deps, deadline, active, from, to, deadlineEvent);
+  return aggregateFromFanOut(deps, deadline, sites, from, to, deadlineEvent);
 };

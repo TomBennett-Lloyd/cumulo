@@ -35,14 +35,12 @@ export const fleetSite = (overrides: FleetSiteOverrides = {}): FleetSite =>
     capacityKw: 4.2,
     origin: 'seed',
     createdAt: '2026-07-30T14:00:00Z',
-    active: true,
     ...overrides,
   });
 
 /**
- * A stored item exactly as the document client hands it back, written out
- * literally rather than produced by `toItem` — a fixture that agreed with the
- * code under test by construction would prove nothing about the wire shape.
+ * A stored item as the document client hands it back, written literally rather
+ * than produced by `toItem`, which it is the check on.
  */
 export const ranelaghItem = {
   pk: 'FLEET',
@@ -55,7 +53,6 @@ export const ranelaghItem = {
   capacityKw: 4.2,
   origin: 'seed',
   createdAt: '2026-07-30T14:00:00Z',
-  active: true,
   locationId: '53.32,-6.26',
   gsiLocation: '53.32,-6.26',
 };
@@ -71,8 +68,9 @@ export const rathminesItem = {
   capacityKw: 3.5,
   origin: 'user',
   createdAt: '2026-07-29T09:30:00Z',
-  active: false,
+  active: true,
   locationId: '53.32,-6.27',
+  gsiLocation: '53.32,-6.27',
   gsiUserSites: 'USER',
   gsiCreatedAt: `2026-07-29T09:30:00Z#${RATHMINES_ID}`,
 };
@@ -88,7 +86,6 @@ export const galwayItem = {
   capacityKw: 6,
   origin: 'seed',
   createdAt: '2026-07-28T08:00:00Z',
-  active: true,
   locationId: '53.26,-9.07',
   gsiLocation: '53.26,-9.07',
 };
