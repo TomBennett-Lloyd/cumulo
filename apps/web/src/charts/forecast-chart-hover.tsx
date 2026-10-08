@@ -48,9 +48,7 @@ import {
  *
  * Positioning is SVG attributes and one `transform` — never a `style` prop,
  * which is a lint error in UI code (`docs/standards/react.md` rule 5), and never
- * a CSS transition either: a transform that already tracks the pointer has
- * nothing to animate, so there is no motion for `prefers-reduced-motion` to
- * reduce. Colour lives entirely in `charts.css`.
+ * a CSS transition either. Colour lives entirely in `charts.css`.
  */
 
 /**
@@ -112,14 +110,11 @@ const bandRows = (
 
 /**
  * Every series the chart carries, at one timestamp, in the treatment's order —
- * a row per series rather than a row per value, which is what makes the panel
- * the table twin's row-analogue rather than a list that happens to be near it.
+ * a row per series rather than a row per value.
  *
  * **An hour with no value dashes its cell** (owner 2026-08-10, #330;
  * `docs/standards/design.md` rule 5): absence is a fact about that hour and
- * reads as `formatKw`'s em dash. The row set is then a fact about the chart
- * rather than about the sample, which is what holds the panel's *height* still
- * under a moving cursor (rule 6); see `TooltipPanel`.
+ * reads as `formatKw`'s em dash; see `TooltipPanel`.
  * `present` is still marked, because speech wants the opposite answer, and
  * `spokenTooltipRows` is the only filter.
  *
@@ -197,17 +192,15 @@ const spokenTooltipRows = (
  * **Name before value**, following the drawn panel's columns
  * (`docs/design/chart-treatment.md`).
  *
- * The `role="img"` chart collapses to its `aria-label`, so this string is what a
- * screen reader gets when the selection moves. Every word here names data, which
- * `chart-copy.ts` leaves to the component that owns it.
+ * Every word here names data, which `chart-copy.ts` leaves to the component that
+ * owns it.
  *
  * The en dashes inside a range value stay.
  *
  * **The frame carries the unit, and since #291 it has to** (the unit half of
  * `docs/tech-debt.md`'s #235, which this closes).
  *
- * **Once in the frame, not once per row.** The unit is a fact about the whole
- * sample — every row of one announcement is in one unit by construction.
+ * **Once in the frame, not once per row.**
  *
  * The clock half of #235 stays open — the readout names the hour and never
  * "UTC", where the axis title and the table twin both do.
@@ -228,10 +221,8 @@ export const readoutText = (
 /**
  * How tall the band key's wash is drawn — its *only* dimension that is a choice
  * here, since its width is `KEY_STROKE_LENGTH` and must stay so (below). Ink
- * rather than sizing, which is why it lives beside the element it draws instead
- * of in `tooltip-geometry.ts`: no arm of the panel's arithmetic reads it, and a
- * row is `TOOLTIP_ROW_HEIGHT` tall whatever key it carries. Roughly the legend
- * swatch's proportion of its own row, so the two read as the same mark.
+ * rather than sizing. Roughly the legend swatch's proportion of its own row, so
+ * the two read as the same mark.
  */
 const BAND_KEY_HEIGHT = 10;
 /**
@@ -252,9 +243,7 @@ const BAND_KEY_BOUND_INSET = 0.5;
  * wash and the hairlines have one owner (`charts.css`) and the key cannot drift
  * from the band it names.
  *
- * **It is drawn at the key footprint, not the legend's.** A legend swatch is
- * several times the width `KEY_STROKE_LENGTH` reserves here, so the key kind
- * changes the ink inside the gutter and nothing about the gutter (#421).
+ * **It is drawn at the key footprint, not the legend's.**
  */
 const rowKeyElement = (row: DrawnTooltipRow, y: number): ReactElement => {
   const keyLeft = TOOLTIP_PADDING;
@@ -305,9 +294,7 @@ const rowKeyElement = (row: DrawnTooltipRow, y: number): ReactElement => {
  *
  * Keyed by `seriesClassName` rather than by `name`, because a name is not
  * unique: an overlay's name is a *site* name, free text a visitor types, so a
- * site called "Median" would share a key with the forecast's own median row. The
- * class is one per series by construction, so it cannot collide without two rows
- * genuinely being the same series.
+ * site called "Median" would share a key with the forecast's own median row.
  *
  * The only observer is React's warning that duplicate-keyed children "may be
  * duplicated and/or omitted" in a future version. `forecast-chart-hover.test.tsx`
@@ -356,8 +343,7 @@ interface TooltipPanelProps {
    * The ceiling that measurement was taken under, passed as well as its result
    * because the columns are laid out against the ceiling rather than against
    * the panel: `tooltipColumns` needs it to know how much of the name column a
-   * capped panel can actually hold. A number and not the columns themselves —
-   * a fresh object per frame would defeat the memo this panel exists inside.
+   * capped panel can actually hold.
    */
   readonly plotWidth: number;
   /**
