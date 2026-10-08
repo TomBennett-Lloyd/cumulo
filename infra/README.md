@@ -327,7 +327,7 @@ Once per repository (#605). The trust policy in `infra/bootstrap/oidc.tf` matche
 terraform -chdir=infra/bootstrap plan -no-color
 ```
 
-Expect **`Plan: 0 to add, 1 to change, 0 to destroy.`** — `aws_iam_role.github_actions`, its `assume_role_policy` updated in place, one `sub` value per allowlisted workflow. Anything else: stop.
+Expect **`Plan: 0 to add, 1 to change, 0 to destroy.`** — `aws_iam_role.github_actions`, its `assume_role_policy` updated in place, one `sub` value per allowlisted workflow. If the [observer identity](#runbook-the-observer-identity) is not applied yet either, its two adds appear beside it: `Plan: 2 to add, 1 to change, 0 to destroy.` Anything else: stop.
 
 **S2. Switch the template, then read it back.**
 
@@ -499,7 +499,7 @@ One IAM user, `cumulo-observer-<env>`, and its inline policy, from `infra/bootst
 
 No `iam:*`, no write action of any kind. `.claude/scripts/incident-watch.test.sh` holds both `observer.tf`'s `observer_actions` and this table to the same list, and the resources to both regions' alarm patterns and the trip function's log group.
 
-What the report covers follows from those reads: every `cumulo-*` alarm in ALARM or raised within the hour in either region — the service alarms, the cost guard's composite trip and its us-east-1 billing alarm alike — the API's 5xx count, and the log lines behind them. A cost-guard alarm also prints the trip function's lines and names the api runbook's "Reset after a cost trip" section.
+What the report covers follows from those reads: every `cumulo-*` alarm in ALARM or raised within the hour in either region — the service alarms, the cost guard's composite trip and its us-east-1 billing alarm alike — the API's 5xx count, and the log lines behind them. A cost-guard alarm also prints the trip function's lines and names [Reset after a cost trip](#reset-after-a-cost-trip).
 
 **Terraform creates the user and the policy, never the access key.** A key in Terraform is a secret in state; created by hand, it exists only in the operator's `~/.aws/credentials`.
 
@@ -511,7 +511,7 @@ The bootstrap stack is already applied and initialised against S3, so this is an
 terraform -chdir=infra/bootstrap plan -no-color
 ```
 
-Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — `aws_iam_user.observer` and `aws_iam_user_policy.observer`. `observed_environment` defaults to `dev`; set it in `bootstrap.auto.tfvars` only if the service stacks use another `environment`.
+Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — `aws_iam_user.observer` and `aws_iam_user_policy.observer`. If the [OIDC subject-template switch](#runbook-switch-the-oidc-subject-template) has not been applied yet, its in-place role change appears too (`2 to add, 1 to change`), and O1's apply would make it: run that runbook's S2 first, since the role change applied ahead of the template switch fails every deploy. `observed_environment` defaults to `dev`; set it in `bootstrap.auto.tfvars` only if the service stacks use another `environment`.
 
 ### Phase B — apply, create the key, prove it
 
