@@ -419,7 +419,7 @@ A category going quiet across consecutive reviews is the evidence for graduating
 
 ## 2026-10-07 — issue #506 — actuals-rollup-completeness
 
-- **Category**: pending — filled at merge
+- **Category**: design-question-then-approval
 - **Feedback**: The owner is asked to ratify two amendment entries. The first is **ADR 0009's 2026-10-07 (#506) entry**, which records three things:
   - the `GEN` producer;
   - the completeness rule for an actuals look-back: no vintage check, membership checked only on the trailing-window hours, settled hours summed as written, and a location older than the window must hold the window's first hour;
@@ -434,4 +434,4 @@ A category going quiet across consecutive reviews is the evidence for graduating
   - `apps/api/src/forecast/fleet-actuals-rollup-read.ts` holds the read and its fallback.
   - The web seam now carries summed points.
   - `infra/storage/tables.tf` owns the moved figures. Its quoters are trued up in the same change.
-- **Verdict**: pending — filled at merge
+- **Verdict**: Approved, first-hour check kept — owner, in chat, 2026-10-08 ("nice yeah approve 624"). The owner asked for detail on the check's cost (up to a look-back of fallback after a site is moved to a new bucket) and the alternatives (keep; track at-this-location-since instead of createdAt; strike, which would serve a short post-deploy history as a whole one; a hybrid read). The owner chose to remove the concept of moving a site instead: PUT rejects changed coordinates, filed as #629, after which the check has no cost case. The ADR 0009 #506 amendment and the ADR 0002 entry are ratified as written; the Q1 (C) and Q2 gate decisions of 2026-10-07 stand. Filled on the branch by the merge owner before the label came off.
