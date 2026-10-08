@@ -53,15 +53,10 @@ locals {
   # The priced request is the maximum-width series read,
   # `GET /v1/sites/{siteId}/series` over the 336-hour span cap — ~1,000 items of
   # ~250 B, ≈ 30 eventually-consistent read units (ADR 0005, Consequences).
-  # **It is the heaviest request only once #506 lands**, serving
-  # `GET /v1/fleet/actuals` from the `#FLEET` roll-up instead of fanning out per
-  # site (≈ 300 RRU at the 100-site fleet today) — an owner decision, 2026-10-07.
-  # #506 is therefore a carrier of this figure. Even then two reads exceed it at
-  # the fleet's 52-location ceiling (`packages/shared/src/site.ts`): the
-  # roll-up's 168-hour actuals read, ≈ 320 RRU at infra/storage/tables.tf's
-  # item size (ADR 0010's 2026-10-08 amendment), and `GET /v1/fleet/forecast`,
-  # ≈ 78 RRU. Traffic concentrated on those is under-counted here and is caught
-  # by the billing leg, which ADR 0010's bound is computed on.
+  # It is not the heaviest request: the reads that exceed it, and what that
+  # does to the bound, are ADR 0010's Decision bullet and its 2026-10-08
+  # amendment (#630). Traffic concentrated on those is under-counted here and is
+  # caught by the billing leg, which ADR 0010's bound is computed on.
   # ---------------------------------------------------------------------------
   cost_guard_read_units = 30
 

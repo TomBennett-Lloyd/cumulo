@@ -57,11 +57,13 @@ The owner's decision (chat, 2026-10-07), in their words: "having the throttle at
 
 > $70 + 12 h × H + baseline ≲ $70 + $21 + $3 ≈ **$94**
 
+_(As it stood when written. See `## Amendments`, 2026-10-08.)_
+
 - 12 h is the upper end of the 8–12 h the owner's design assumed for billing data to report and the alarm to evaluate.
-- H ≈ $1.76/h is today's peak (Context). After #506 the peak request is the roll-up's ≈ 270-unit read, and H ≈ $1.61/h. _(As it stood when written: the read is ≈ 320 units and the post-#506 H ≈ $1.86/h, which tops today's peak. See `## Amendments`.)_
+- H ≈ $1.76/h is today's peak (Context). After #506 the peak request is the roll-up's ≈ 270-unit read, and H ≈ $1.61/h. _(≈ 270 and ≈ $1.61/h as they stood when written. See `## Amendments`, 2026-10-08.)_
 - The baseline is the platform's own month: alarms, scheduled writes and stored bytes, a few dollars at most (`infra/README.md`, Cost).
 
-The composite does not enter this arithmetic. It only ends an episode sooner: at most ≈ 24 h × $1.76 ≈ $42 on its own path before it trips, inside a month that has not yet reached $70. An attacker who never satisfies the 20-of-24 hold — a day on, a pause, a day on — still meets the billing trip. So does one concentrated on the routes the projection under-counts. At the issue's $80 the same arithmetic gives ≈ $104, which is why the threshold moved.
+The composite does not enter this arithmetic. It only ends an episode sooner: at most ≈ 24 h × $1.76 ≈ $42 on its own path before it trips, inside a month that has not yet reached $70 _(as it stood when written; see `## Amendments`, 2026-10-08)_. An attacker who never satisfies the 20-of-24 hold — a day on, a pause, a day on — still meets the billing trip. So does one concentrated on the routes the projection under-counts. At the issue's $80 the same arithmetic gives ≈ $104, which is why the threshold moved.
 
 **What the bound rests on**, stated so that changing one of them is a visible decision:
 
@@ -96,10 +98,19 @@ The trip function, its topic and its subscriptions cost nothing until a trip.
 
 ## Amendments
 
-- **2026-10-08 — the 168-hour roll-up actuals read ≈ 270 → ≈ 320 read units (#506, PR #624).** The ≈ 270 priced the `#FLEET` item at its pre-#602 size. `infra/storage/tables.tf`'s `series` section owns the item size, ~300 B since #602, and that gives `168 × 52 × 300 B` ≈ 2.6 MB, ≈ 320 eventually-consistent units. Trued up inline: the Decision bullet above and `infra/api/cost-guard.tf`'s comment. The Consequences line is annotated as-it-stood, because it is a premise of the bound and is not reworded. On this document's own formula, the moved figure gives H ≈ $1.86/h after #506, so `12 h × H` is ≈ $22 rather than the $21 the bound adds.
+- **2026-10-08 — the 168-hour roll-up actuals read ≈ 270 → ≈ 320 read units (#506, PR #624).**
+  - **Why it moved.** The ≈ 270 priced the `#FLEET` item at its pre-#602 size. `infra/storage/tables.tf`'s `series` section owns the item size, ~300 B since #602, and that gives `168 × 52 × 300 B` ≈ 2.6 MB, ≈ 320 eventually-consistent units.
+  - **Where it changed.** The Decision bullet, a carrier, is trued up inline. The Consequences H line, the bound, and the composite's "$70" sentence are premises, so they are annotated as-it-stood and not reworded.
+  - **The moved values,** on this document's own formula, with C = units × $0.1415 + $2.23 and the peak at d ≈ 1 s:
+    - **The roll-up read alone (≈ 320 units):** H ≈ $1.86/h, and the bound is $70 + $22 + $3 ≈ **$95**.
+    - **A roll-up read followed by the fan-out fallback (≈ 320 + ≈ 300 ≈ 620 units).** This happens while #507 has not yet removed the fallback, and a visitor can force it by adding a site at a new location. It gives H ≈ $3.39/h, and the bound is $70 + $41 + $3 ≈ **$114**, past the ~$100 ceiling. On that path the composite's 24 h × H ≈ $81 also passes $70.
 
-  **This move fires revisit trigger 2**, and two requests now exceed the "no request costlier than ≈ 300 read units" premise the bound rests on:
-  - the roll-up read itself, at ≈ 320 units at the 52-location ceiling;
-  - while #507 has not yet removed the fan-out fallback, an actuals request that reads the roll-up and then falls back. That costs ≈ 320 + ≈ 300 ≈ 620 units. A visitor can force it by adding a site at a new location, which leaves that location's slices missing until the next cycle.
+  **Revisit triggers 2 and 3 both fire.** For trigger 2, both reads above exceed the "≈ 300 read units" premise. For trigger 3, #506 lands with the 168-hour look-back still offered, as the owner decided on 2026-10-07 (#506 Q1). This entry records the values and redecides nothing. The response, whether to supersede, re-price, or bound the fallback, is the owner's, and it is tracked in [#630](https://github.com/TomBennett-Lloyd/cumulo/issues/630).
 
-  This entry records the values and redecides nothing. Under trigger 2, the response (supersede, re-price, or bound the fallback) is the owner's decision, tracked in [#630](https://github.com/TomBennett-Lloyd/cumulo/issues/630).
+  **Quoter sweep: a floor, not a census.** Run 2026-10-08 with `git grep -nE '≈ ?(270|300|320|620)|about 320|\$9[0-9]|1\.(61|76|86)|heaviest (request|read)' -- docs infra apps packages`. Every hit was read. Trued up or cited in the same change:
+  - the Decision bullet above;
+  - `infra/api/cost-guard.tf`'s priced-request comment, which now cites this entry;
+  - `infra/README.md`'s api cost note, whose "≈ $94" now cites this entry instead of restating it;
+  - ADR 0009's #506 entry, which computes the same ≈ 320.
+
+  Annotated as-it-stood: the Consequences H line, the bound, and the composite sentence. ADR 0010's Context figures (≈ 300, ≈ $1.76) are dated reasoning about the request that existed when it was written, and are owed nothing. `docs/review-feedback.md`'s entries are records.

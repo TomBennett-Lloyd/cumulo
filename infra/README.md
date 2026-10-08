@@ -1857,7 +1857,7 @@ The marginal cost is where this stack differs from every other one, and it is th
 | Lambda compute     | $0.0000166667/GB-s — free up to ~16M requests/month at 256 MB and 100 ms | $0.00           |
 | **Marginal total** |                                                                          | **$1.20**       |
 
-At the demo regime that is about **one cent a month**. Under abuse this table is not the answer: the routes also bill DynamoDB request units, which on the heaviest read dwarf every line above, and the month is held instead by the cost guard — [ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md) derives the bound, ≈ $94 at most, and `cost-guard.tf` owns the per-request worst case its burn-rate alarm prices traffic at.
+At the demo regime that is about **one cent a month**. Under abuse this table is not the answer: the routes also bill DynamoDB request units, which on the heaviest read dwarf every line above, and the month is held instead by the cost guard — [ADR 0010](../docs/adr/0010-cost-ceiling-by-measured-spend.md) derives the bound (and its 2026-10-08 amendment records what #506 moves in it, [#630](https://github.com/TomBennett-Lloyd/cumulo/issues/630)), and `cost-guard.tf` owns the per-request worst case its burn-rate alarm prices traffic at.
 
 Notes on what would change that:
 
