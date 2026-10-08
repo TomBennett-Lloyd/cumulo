@@ -511,7 +511,7 @@ The bootstrap stack is already applied and initialised against S3, so this is an
 terraform -chdir=infra/bootstrap plan -no-color
 ```
 
-Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — `aws_iam_user.observer` and `aws_iam_user_policy.observer`. If the [OIDC subject-template switch](#runbook-switch-the-oidc-subject-template) has not been applied yet, its in-place role change appears too (`2 to add, 1 to change`), and O1's apply would make it: run that runbook's S2 first, since the role change applied ahead of the template switch fails every deploy. `observed_environment` defaults to `dev`; set it in `bootstrap.auto.tfvars` only if the service stacks use another `environment`.
+Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — `aws_iam_user.observer` and `aws_iam_user_policy.observer`. If the [OIDC subject-template switch](#runbook-switch-the-oidc-subject-template) has not been applied yet, its in-place role change appears too (`2 to add, 1 to change`): run [that runbook](#runbook-switch-the-oidc-subject-template) in place of O1 — its S3 apply creates the observer as well — then continue at O2. `observed_environment` defaults to `dev`; set it in `bootstrap.auto.tfvars` only if the service stacks use another `environment`.
 
 ### Phase B — apply, create the key, prove it
 
@@ -558,7 +558,7 @@ An `AccessDenied` on `DescribeAlarms` or `DescribeAlarmHistory` in the second co
 
 ### Rotation and a suspected leak
 
-Under the operator's own login: `aws iam list-access-keys --user-name cumulo-observer-dev` names the current key; run O2 again to create and install a new one (IAM allows two per user), then `aws iam delete-access-key --user-name cumulo-observer-dev --access-key-id <old id>`. On a suspected leak, delete first and rotate after — the worst a leaked key can do is read this account's alarms, metrics and three log groups.
+Under the operator's own login: `aws iam list-access-keys --user-name cumulo-observer-dev` names the current key; run O2 again to create and install a new one (IAM allows two per user), then `aws iam delete-access-key --user-name cumulo-observer-dev --access-key-id <old id>`. On a suspected leak, delete first and rotate after — the worst a leaked key can do is read this account's alarms, metrics and the log groups in the table above.
 
 ### Teardown
 

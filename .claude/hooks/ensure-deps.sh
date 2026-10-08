@@ -33,15 +33,6 @@
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
 
-# A fresh session runs no observer (.claude/skills/incident-watch/SKILL.md, #604).
-# Ahead of every early exit below, and silent wherever the operator's
-# cumulo-observer profile is absent — forks and CI.
-if grep -qxF '[cumulo-observer]' "${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}" 2>/dev/null; then
-  cat <<'EOF'
-incident-watch: no hourly observer is running in this session; ask the owner whether to start `/loop 60m /incident-watch` here.
-EOF
-fi
-
 lib="$(dirname -- "${BASH_SOURCE[0]}")/hook-context.sh"
 # shellcheck source=./hook-context.sh
 if ! . "$lib"; then
@@ -73,6 +64,19 @@ cwd=$(hook_event_field "$event" cwd) || {
   echo "ensure-deps: could not read the hook event ($HOOK_NODE_CMD failed) — deps were not checked for this session." >&2
   exit 0
 }
+
+# A new or resumed process runs no observer (.claude/skills/incident-watch/SKILL.md,
+# #604); after `clear` or `compact` the session's loop is still scheduled. Silent
+# wherever the operator's cumulo-observer profile is absent — forks and CI.
+case "$(hook_event_field "$event" source)" in
+  startup | resume)
+    if grep -qxF '[cumulo-observer]' "${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}" 2>/dev/null; then
+      cat <<'EOF'
+incident-watch: no hourly observer is running in this session; ask the owner whether to start `/loop 60m /incident-watch` here.
+EOF
+    fi
+    ;;
+esac
 root=$(repo_root_for "${cwd:-$PWD}") || exit 0
 [ -f "$root/pnpm-lock.yaml" ] || exit 0
 [ -d "$root/node_modules" ] && exit 0
