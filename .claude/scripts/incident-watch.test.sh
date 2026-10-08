@@ -498,6 +498,10 @@ commented=$(mutant commented 's/^( *)effect( *)= "Deny"/\1# effect = "Deny"\n\1e
 expect_violation "$commented" 'the Deny statement lacks effect = "Deny"'
 end
 
+new_case "negative control: an alarm ARN narrower than alarm:* is caught"
+expect_violation "$(mutant narrow 's/:alarm:\*"/:alarm:cumulo-*"/')" "the alarm ARN pattern is not alarm:*"
+end
+
 new_case "negative control: dropping us-east-1 from the alarm reads is caught"
 expect_violation "$(mutant homeonly 's/\[var\.aws_region, "us-east-1"\]/[var.aws_region]/')" "us-east-1"
 end
@@ -535,14 +539,30 @@ must mkdir -p "$TMP_ROOT/home-with/.aws" "$TMP_ROOT/home-without/.aws" "$TMP_ROO
 printf '[default]\nregion = eu-west-1\n\n[cumulo-observer]\naws_access_key_id = x\n' >"$TMP_ROOT/home-with/.aws/credentials"
 printf '[default]\nregion = eu-west-1\n\n[cumulo-observer-old]\n' >"$TMP_ROOT/home-without/.aws/credentials"
 
-run_hook() { # run_hook <home>
-  capture env -u AWS_SHARED_CREDENTIALS_FILE HOME="$1" bash "$HOOK" <<<"{\"cwd\": \"$TMP_ROOT/not-a-repo\"}"
+run_hook() { # run_hook <home> [source]
+  capture env -u AWS_SHARED_CREDENTIALS_FILE HOME="$1" bash "$HOOK" \
+    <<<"{\"cwd\": \"$TMP_ROOT/not-a-repo\", \"source\": \"${2:-startup}\"}"
 }
 
 new_case "session start, observer profile present: one line asking whether to start the loop"
 run_hook "$TMP_ROOT/home-with"
 expect_rc 0
 expect_stdout "incident-watch: no hourly observer is running in this session; ask the owner whether to start ${BT}/loop 60m /incident-watch${BT} here."
+end
+
+new_case "a resumed session is prompted too"
+run_hook "$TMP_ROOT/home-with" resume
+expect_rc 0
+expect_stdout "incident-watch: no hourly observer is running in this session"
+end
+
+new_case "after compact or clear the loop is still scheduled: silent about the observer"
+run_hook "$TMP_ROOT/home-with" compact
+expect_rc 0
+expect_not_out "incident-watch"
+run_hook "$TMP_ROOT/home-with" clear
+expect_rc 0
+expect_not_out "incident-watch"
 end
 
 new_case "session start, observer profile absent (a fork, CI): silent about the observer"

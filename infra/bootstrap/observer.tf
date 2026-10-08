@@ -28,7 +28,9 @@ locals {
     "arn:aws:cloudwatch:${region}:${data.aws_caller_identity.current.account_id}:alarm:*"
   ])
 
-  # The three service Lambdas, and the cost guard's trip function.
+  # The three service Lambdas, and the cost guard's trip function. Restated by
+  # infra/README.md's observer table (asserted by incident-watch.test.sh, as is
+  # this list) and computed by the log_lines calls in incident-watch.sh.
   observed_log_group_arns = [
     for function in ["api", "ingestion", "forecast", "api-cost-trip"] :
     "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/cumulo-${function}-${var.observed_environment}:*"
