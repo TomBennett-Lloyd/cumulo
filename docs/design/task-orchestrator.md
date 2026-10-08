@@ -273,6 +273,8 @@ Branch commits (batch only; pasted: git log --oneline main..HEAD):
 Ledger: <issue comment URL (anchor issue, for a batch)> — every surviving chunk ticked
   verified: yes | naming exceptions
 Retro notes: <issue comment URL — the sole record of retro observations; not restated here>
+Sub-dispatches: <agent (model): reason>, one per dispatch | none — the model each dispatch
+  actually ran on, which #607's comparison reads
 Consultant dispatches: <n> (model, budget mode) | none
 Discovered issues filed: #<a> #<b> | none
 Open questions only the owner can answer: <list | NONE>
