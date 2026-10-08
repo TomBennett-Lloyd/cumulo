@@ -6,7 +6,7 @@ A **stack** is one directory under `infra/`, applied independently, with its own
 
 | Stack       | Directory          | Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, and the monthly cost-ceiling budget alarm.                                                                                                                                                                                                                                                                                                                                                                       |
+| `bootstrap` | `infra/bootstrap/` | Terraform's own remote state bucket, the GitHub Actions OIDC role, the monthly cost-ceiling budget alarm, and the read-only observer IAM user of [#604](https://github.com/TomBennett-Lloyd/cumulo/issues/604).                                                                                                                                                                                                                                                                     |
 | `alerting`  | `infra/alerting/`  | The platform alerts SNS topic every other stack's alarms notify, and its email subscription.                                                                                                                                                                                                                                                                                                                                                                                        |
 | `storage`   | `infra/storage/`   | The four DynamoDB tables of [ADR 0002](../docs/adr/0002-storage-split.md) plus the per-IP limiter table of [ADR 0006](../docs/adr/0006-demo-abuse-protection.md) — five in all — and the four throttle alarms on the two batch-written ones.                                                                                                                                                                                                                                        |
 | `ingestion` | `infra/ingestion/` | The hourly ingestion Lambda and its schedule, the weather-readings queue and DLQ of [ADR 0004](../docs/adr/0004-ingestion-transport.md), three alarms, and the CI deploy grant for its own function.                                                                                                                                                                                                                                                                                |
@@ -32,7 +32,7 @@ What that arrangement is protecting is worth stating where a reader meets the st
 
 Later stacks arrive as sibling directories with their service tickets, per [ADR 0001](../docs/adr/0001-service-boundaries.md): a resource used by exactly one service is owned by that service's stack; a resource more than one service would notice is platform-owned. `storage` is platform-owned by that test — ingestion, forecast, and the fleet API all read or write those tables. So is `alerting`, and more sharply: every stack that has an alarm would notice its absence, and a per-stack topic would multiply the one genuinely manual step in this repo — confirming an email subscription by hand — by the number of stacks, for no gain in routing to a single recipient.
 
-**The one rule that has no exceptions:** no long-lived AWS credentials, anywhere. GitHub Actions authenticates by OIDC and holds no keys. A human operator holds short-term credentials in their own shell, and those never enter this repo, a Terraform variable, or an Actions secret. The single section of this document where operator credentials are discussed at all is [Operator prerequisites](#operator-prerequisites).
+**The one rule, and its one exception:** no long-lived AWS credentials, anywhere but one place. GitHub Actions authenticates by OIDC and holds no keys. A human operator holds short-term credentials in their own shell, and those never enter this repo, a Terraform variable, or an Actions secret. The exception is the read-only observer identity of [#604](https://github.com/TomBennett-Lloyd/cumulo/issues/604): one access key, created by hand, held in the operator's local AWS CLI profile and nowhere else, never in CI. Operator credentials are discussed in exactly two sections: [Operator prerequisites](#operator-prerequisites) and [Runbook: the observer identity](#runbook-the-observer-identity).
 
 ---
 
@@ -153,7 +153,7 @@ aws sts get-caller-identity
 >
 > These are the same short-term credentials, exported into environment variables; they expire with the session. Never redirect that command into a file, a `.env`, or an Actions secret.
 
-**What never happens, in either runbook:** creating an IAM access key, writing credentials to a file in this repo, or adding an AWS secret to GitHub. `gh secret list` should never show an AWS entry — the OIDC role exists so that it does not have to.
+**What never happens, in either bootstrap runbook:** creating an IAM access key, writing credentials to a file in this repo, or adding an AWS secret to GitHub. The observer's one key is created by [its own runbook](#runbook-the-observer-identity), never by these. `gh secret list` should never show an AWS entry — the OIDC role exists so that it does not have to.
 
 ---
 
@@ -241,7 +241,7 @@ terraform init
 terraform plan -no-color | tee ~/cumulo-bootstrap-plan.txt
 ```
 
-Expect **`Plan: 8 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, and the AWS Budgets cost-ceiling budget. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
+Expect **`Plan: 10 to add, 0 to change, 0 to destroy.`** — one S3 bucket plus its four configuration resources, the IAM OIDC provider, the IAM role, the AWS Budgets cost-ceiling budget, and the observer user with its inline policy. Any other count means the configuration is not what this document describes; stop and find out why. The `/cumulo/notification-email` parameter is read, not created, so it adds nothing to that count.
 
 **A6. Stop here on the bootstrap PR.** Summarise the plan in the PR body (resource counts, bucket name shape, role name — not the account digits, per convention 7) and wait for the merge — see [Where the phases sit relative to PR review](#where-the-phases-sit-relative-to-pr-review). `oidc-smoke` does not run on the PR at all — it has not been a pre-merge check since #11 (convention 8) — so there is no red check to explain here; B7 runs it by hand once the variables exist.
 
@@ -268,10 +268,10 @@ aws s3api head-object --bucket "$BUCKET" --key bootstrap/terraform.tfstate
 terraform state list   # now read from S3
 ```
 
-Expect **11 lines**: the 8 managed resources from A5 plus the three data sources
+Expect **14 lines**: the 10 managed resources from A5 plus the four data sources
 (`data.aws_caller_identity.current`, `data.aws_iam_policy_document.github_actions_trust`,
-`data.aws_ssm_parameter.notification_email`), which `state list` prints alongside them.
-Only the 8 are created, billed, or destroyed.
+`data.aws_iam_policy_document.observer`, `data.aws_ssm_parameter.notification_email`), which `state list` prints alongside them.
+Only the 10 are created, billed, or destroyed.
 
 **B4. Remove the local state files.** They are gitignored, but a stale local state that still describes live resources is a trap for the next operator:
 
@@ -327,7 +327,7 @@ Once per repository (#605). The trust policy in `infra/bootstrap/oidc.tf` matche
 terraform -chdir=infra/bootstrap plan -no-color
 ```
 
-Expect **`Plan: 0 to add, 1 to change, 0 to destroy.`** — `aws_iam_role.github_actions`, its `assume_role_policy` updated in place, one `sub` value per allowlisted workflow. Anything else: stop.
+Expect **`Plan: 0 to add, 1 to change, 0 to destroy.`** — `aws_iam_role.github_actions`, its `assume_role_policy` updated in place, one `sub` value per allowlisted workflow. If the [observer identity](#runbook-the-observer-identity) is not applied yet either, its two adds appear beside it: `Plan: 2 to add, 1 to change, 0 to destroy.` Anything else: stop.
 
 **S2. Switch the template, then read it back.**
 
@@ -376,7 +376,7 @@ Teardown is a first-class requirement, not a paragraph of good intentions: the c
 terraform -chdir=infra/bootstrap plan -destroy -no-color
 ```
 
-Expect **`Plan: 0 to add, 0 to change, 8 to destroy.`** with the new resource among the enumerated destroys — for the cost-ceiling budget, `aws_budgets_budget.monthly_cost_ceiling`. A resource that Terraform plans to destroy is a resource Terraform owns, which is the whole claim. Full rehearsals are reserved for changes to the teardown procedure itself (the override dance, the backend, the ordering below), where the procedure is what is in doubt. Everything from T1 onward describes a real teardown, for when one is actually wanted.
+Expect **`Plan: 0 to add, 0 to change, 10 to destroy.`** with the new resources among the enumerated destroys — for the observer identity, `aws_iam_user.observer` and `aws_iam_user_policy.observer`. A resource that Terraform plans to destroy is a resource Terraform owns, which is the whole claim. Full rehearsals are reserved for changes to the teardown procedure itself (the override dance, the backend, the ordering below), where the procedure is what is in doubt. Everything from T1 onward describes a real teardown, for when one is actually wanted.
 
 The ordering matters more than anything else here. **The state that describes the bucket lives in the bucket.** Destroy the bucket while state is still remote and Terraform loses the record of what it was deleting mid-operation. So the state comes home first.
 
@@ -396,7 +396,7 @@ terraform init -migrate-state
 
 ```bash
 ls -l terraform.tfstate
-terraform state list   # expect the same 11 lines as B3 — 8 resources + 3 data sources
+terraform state list   # expect the same 14 lines as B3 — 10 resources + 4 data sources
 ```
 
 This step is load-bearing, not ceremony. T1's prompt accepts only the literal string `yes`; anything else — including `y` — is taken as "start with an empty state", and Terraform then reports a _successful_ init while `terraform.tfstate` never appears and the real state stays in S3. A `terraform destroy` from that position would have no idea what it owns. If `ls` finds no file, nothing has been lost yet: re-init back to S3 with `terraform init -reconfigure -backend-config=backend.hcl` and start T1 again.
@@ -481,6 +481,94 @@ Email subscribers are attached to the budget directly rather than through SNS. B
 The `alerting` stack does not overturn that reasoning; it is the case where the same reasoning runs out. A CloudWatch alarm action **must** be an ARN, so alarms cannot reach an inbox without a topic, and the three-day floor becomes an operator obligation — confirm the subscription promptly — rather than a design that can avoid it. The two stacks read the same `/cumulo/notification-email` parameter and arrive at the same inbox by the two different routes their resources require. Keeping the topic out of `bootstrap` is convention 1 again: the budget must outlive everything billable, whereas a topic with no alarms pointing at it is dead weight, so their lifecycles are genuinely different.
 
 **A quiet forecast alarm is not a broken one.** FORECASTED notifications need roughly five weeks of usage history before AWS will produce a forecast at all, so on a young account that threshold is simply silent. The three ACTUAL thresholds work from the first billing period and cover the gap.
+
+---
+
+## Runbook: the observer identity
+
+One IAM user, `cumulo-observer-<env>`, and its inline policy, from `infra/bootstrap/observer.tf` — the identity `.claude/skills/incident-watch/SKILL.md` reads CloudWatch as, so the orchestrating session can see an alarm without the owner's login, which expires ([#604](https://github.com/TomBennett-Lloyd/cumulo/issues/604)). It is the one long-lived credential in the project: local, read-only, operator-held, never in CI.
+
+**Every action it holds**, and nothing else — an explicit `Deny` with `NotAction` on these outranks any policy attached later:
+
+| Action                            | Resource                                                                                                   | Read for                                                                                                                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloudwatch:DescribeAlarms`       | `arn:aws:cloudwatch:<region>:<account-id>:alarm:*` and `arn:aws:cloudwatch:us-east-1:<account-id>:alarm:*` | which `cumulo-*` alarms are in ALARM, and why — including the cost guard's billing alarm, which billing metrics confine to us-east-1 ([#613](https://github.com/TomBennett-Lloyd/cumulo/pull/613)) |
+| `cloudwatch:DescribeAlarmHistory` | the same two alarm patterns                                                                                | the recent state transitions, in both regions                                                                                                                                                      |
+| `cloudwatch:GetMetricData`        | `*` (the action takes no resource ARN)                                                                     | the API's 5xx count over the last hour                                                                                                                                                             |
+| `logs:FilterLogEvents`            | `/aws/lambda/cumulo-{api,ingestion,forecast,api-cost-trip}-<env>` log groups, in this region               | the error lines behind a firing alarm, and the cost guard's trip function's lines when a cost alarm is raised                                                                                      |
+
+No `iam:*`, no write action of any kind. `.claude/scripts/incident-watch.test.sh` holds both `observer.tf`'s `observer_actions` and this table to the same list, and the resources to both regions' alarm patterns and the trip function's log group.
+
+What the report covers follows from those reads: every `cumulo-*` alarm in ALARM or raised within the hour in either region — the service alarms, the cost guard's composite trip and its us-east-1 billing alarm alike — the API's 5xx count, and the log lines behind them. A cost-guard alarm also prints the trip function's lines and names [Reset after a cost trip](#reset-after-a-cost-trip).
+
+**Terraform creates the user and the policy, never the access key.** A key in Terraform is a secret in state; created by hand, it exists only in the operator's `~/.aws/credentials`.
+
+### Phase A — plan
+
+The bootstrap stack is already applied and initialised against S3, so this is an ordinary plan from `infra/bootstrap/` under the operator's own login ([Operator prerequisites](#operator-prerequisites)):
+
+```bash
+terraform -chdir=infra/bootstrap plan -no-color
+```
+
+Expect **`Plan: 2 to add, 0 to change, 0 to destroy.`** — `aws_iam_user.observer` and `aws_iam_user_policy.observer`. If the [OIDC subject-template switch](#runbook-switch-the-oidc-subject-template) has not been applied yet, its in-place role change appears too (`2 to add, 1 to change`): run [that runbook](#runbook-switch-the-oidc-subject-template) in place of O1 — its S3 apply creates the observer as well — then continue at O2. `observed_environment` defaults to `dev`; set it in `bootstrap.auto.tfvars` only if the service stacks use another `environment`.
+
+### Phase B — apply, create the key, prove it
+
+**O1. Apply** (after the PR merges):
+
+```bash
+terraform -chdir=infra/bootstrap apply
+```
+
+**O2. Create the one access key, straight into the `cumulo-observer` profile.** Run under the operator's own login. The key pair is piped from `create-access-key` into `aws configure set`, so neither half is printed to the terminal, a log, or a chat:
+
+```bash
+aws iam create-access-key --user-name cumulo-observer-dev \
+  --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text |
+  {
+    read -r key_id key_secret && [ -n "$key_secret" ] &&
+      aws configure set aws_access_key_id "$key_id" --profile cumulo-observer &&
+      aws configure set aws_secret_access_key "$key_secret" --profile cumulo-observer
+    unset key_id key_secret
+  }
+aws configure set region eu-west-1 --profile cumulo-observer
+```
+
+If `create-access-key` fails — two keys already exist, say — nothing is written and the profile keeps its working key. The region must be the one the stacks are applied to. Never copy the key anywhere else — not into this repo, a `.env`, an Actions secret, an issue, a PR, or a chat; gitleaks in CI and the harness's key-prefix scan are the backstop, not the plan.
+
+**O3. Prove the identity, the reads, and a refused write:**
+
+```bash
+aws sts get-caller-identity --profile cumulo-observer --query Arn --output text
+# expect: arn:aws:iam::<account-id>:user/cumulo-observer-dev
+AWS_PROFILE=cumulo-observer bash .claude/scripts/incident-watch.sh
+# expect: a report ending VERDICT quiet (exit 0) or VERDICT act (exit 1) — never exit 2
+aws cloudwatch disable-alarm-actions --alarm-names cumulo-observer-write-probe --profile cumulo-observer
+# expect: AccessDenied — a write the policy does not hold (harmless if it ever succeeded: no such alarm)
+aws iam list-users --profile cumulo-observer
+# expect: AccessDenied — the explicit Deny covers reads outside the table too
+aws cloudwatch describe-alarms --region us-east-1 --alarm-name-prefix cumulo- --profile cumulo-observer
+# expect: the billing alarm listed once #613's api stack is applied, not AccessDenied
+aws logs filter-log-events --log-group-name /aws/lambda/cumulo-api-dev --limit 1 --profile cumulo-observer
+# expect: events (possibly none), not AccessDenied — the script reads logs only when something fires, so this proves the log-group grant
+```
+
+An `AccessDenied` on `DescribeAlarms` or `DescribeAlarmHistory` in the second command means AWS evaluated the prefix listing against `*` rather than the alarm ARNs; the fix is a PR widening the `ReadAlarms` statement's resource to `*` in `observer.tf`, which stays read-only.
+
+### Rotation and a suspected leak
+
+Under the operator's own login: `aws iam list-access-keys --user-name cumulo-observer-dev` names the current key; run O2 again to create and install a new one (IAM allows two per user), then `aws iam delete-access-key --user-name cumulo-observer-dev --access-key-id <old id>`. On a suspected leak, delete first and rotate after — the worst a leaked key can do is read this account's alarms, metrics and the log groups in the table above.
+
+### Teardown
+
+The user goes with the bootstrap stack ([Runbook: tear down](#runbook-tear-down-the-bootstrap-stack)); `force_destroy` on it deletes the hand-made key too, which IAM would otherwise refuse. To remove the observer alone:
+
+```bash
+terraform -chdir=infra/bootstrap destroy -target=aws_iam_user_policy.observer -target=aws_iam_user.observer
+```
+
+Then delete the `[cumulo-observer]` section from `~/.aws/credentials` and `[profile cumulo-observer]` from `~/.aws/config`.
 
 ---
 
@@ -1726,13 +1814,15 @@ Three conventions hold across every table below (the third has one recorded gap:
 
 | Resource group                                                                       | Billing basis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Estimate                     |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| **State bucket — storage** (`aws_s3_bucket.tfstate`)                                 | **Bills for existing**: S3 Standard at $0.023/GB-month. The census is **79 `resource` blocks across seven state files** (a few expanded by `for_each`), re-derived with `command grep -cE '^resource ' infra/*/*.tf` — the recipe is recorded because this figure moves with every infrastructure ticket and nothing makes it move on its own; at a few KB of JSON each that is **~0.2 MB** of current state. The lifecycle rule caps history at 90 days, so the ceiling is that times the apply rate — see the arithmetic below | **≈ $0.0005/mo** (a ceiling) |
+| **State bucket — storage** (`aws_s3_bucket.tfstate`)                                 | **Bills for existing**: S3 Standard at $0.023/GB-month. The census is **81 `resource` blocks across seven state files** (a few expanded by `for_each`), re-derived with `command grep -cE '^resource ' infra/*/*.tf` — the recipe is recorded because this figure moves with every infrastructure ticket and nothing makes it move on its own; at a few KB of JSON each that is **~0.2 MB** of current state. The lifecycle rule caps history at 90 days, so the ceiling is that times the apply rate — see the arithmetic below | **≈ $0.0005/mo** (a ceiling) |
 | **State bucket — requests** (state reads/writes plus native lockfile PUT/GET/DELETE) | ~$0.005/1,000 PUT, ~$0.0004/1,000 GET. **Activity, not standing**: an idle stack issues none, and only an `init`, `plan` or `apply` issues any                                                                                                                                                                                                                                                                                                                                                                                   | < $0.01/mo (hundreds of ops) |
 | **Bucket configuration** (versioning, SSE-S3, public access block, lifecycle rule)   | No charge for the configuration; versions bill as storage above                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | $0.00/mo                     |
 | **IAM** (`aws_iam_openid_connect_provider.github`, `aws_iam_role.github_actions`)    | IAM roles and OIDC providers are free                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | $0.00/mo                     |
+| **Observer identity** (`aws_iam_user.observer`, `aws_iam_user_policy.observer`)      | IAM users and their policies are free                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | $0.00/mo                     |
+| **Observer reads** (`.claude/scripts/incident-watch.sh`)                             | `GetMetricData` at $0.01 per 1,000 metrics, one metric per run; the describe and filter calls sit inside CloudWatch's free API allowance. **Activity, not standing**: nothing runs unless a session's wake-up does                                                                                                                                                                                                                                                                                                               | < $0.01/mo (hourly runs)     |
 | **Cost-ceiling budget** (`aws_budgets_budget.monthly_cost_ceiling`)                  | Notification-only budgets are free of charge; only _action-enabled_ budgets bill (first two free, then $0.10/day), and this budget has no actions                                                                                                                                                                                                                                                                                                                                                                                | $0.00/mo                     |
 | **Notification parameter** (`/cumulo/notification-email`, read via data source)      | SSM Parameter Store standard tier, encrypted with the default KMS key — no charge for the parameter and none for the key                                                                                                                                                                                                                                                                                                                                                                                                         | $0.00/mo                     |
-| **Standing total**                                                                   | The at-rest row plus the zeros — the request line is excluded because an idle stack issues no requests                                                                                                                                                                                                                                                                                                                                                                                                                           | **≈ $0.0005/mo**             |
+| **Standing total**                                                                   | The at-rest row plus the zeros — the request and observer-reads lines are excluded because an idle stack issues neither                                                                                                                                                                                                                                                                                                                                                                                                          | **≈ $0.0005/mo**             |
 
 **Standing cost is ~$0.0005/month, and it is arithmetic rather than a marker.** Seven state files at ~0.2 MB of current state, and 90 days of noncurrent versions on top: at a deliberately generous **100 applies per 90 days**, counting each as though it rewrote all seven states rather than the one it touched, the bucket holds about **20 MB** (the real census is ~0.17 MB of current state, so ~17 MB — the round figure is the generous end). That is 0.02 GB at $0.023/GB-month — **$0.00046**. It is labelled a **ceiling** rather than an estimate because the apply rate is the one term nobody has measured, which is this document's standing convention for an unmeasured term.
 
