@@ -528,6 +528,32 @@ fixture_has "$TMP_ROOT/README.md" 'logs:DeleteLogGroup'
 [ "$(readme_actions "$TMP_ROOT/README.md")" != "$ALLOWED" ] || bad "an extra README row went unnoticed"
 end
 
+# --- the session-start prompt ------------------------------------------------------------
+
+HOOK="$REPO/.claude/hooks/ensure-deps.sh"
+must mkdir -p "$TMP_ROOT/home-with/.aws" "$TMP_ROOT/home-without/.aws" "$TMP_ROOT/not-a-repo"
+printf '[default]\nregion = eu-west-1\n\n[cumulo-observer]\naws_access_key_id = x\n' >"$TMP_ROOT/home-with/.aws/credentials"
+printf '[default]\nregion = eu-west-1\n\n[cumulo-observer-old]\n' >"$TMP_ROOT/home-without/.aws/credentials"
+
+run_hook() { # run_hook <home>
+  capture env -u AWS_SHARED_CREDENTIALS_FILE HOME="$1" bash "$HOOK" <<<"{\"cwd\": \"$TMP_ROOT/not-a-repo\"}"
+}
+
+new_case "session start, observer profile present: one line asking whether to start the loop"
+run_hook "$TMP_ROOT/home-with"
+expect_rc 0
+expect_stdout "incident-watch: no hourly observer is running in this session; ask the owner whether to start ${BT}/loop 60m /incident-watch${BT} here."
+end
+
+new_case "session start, observer profile absent (a fork, CI): silent about the observer"
+run_hook "$TMP_ROOT/home-without"
+expect_rc 0
+expect_not_out "incident-watch"
+run_hook "$TMP_ROOT/not-a-repo"
+expect_rc 0
+expect_not_out "incident-watch"
+end
+
 # --- no key in the skill's files ------------------------------------------------------------
 
 # Split so this file holds no access-key prefix of its own.

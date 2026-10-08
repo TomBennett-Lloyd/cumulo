@@ -2,6 +2,7 @@
 #
 # SessionStart hook: make a freshly created worktree usable before the first tool
 # call, by installing node_modules when the worktree has a lockfile but no deps.
+# It also carries #604's one-line observer prompt, in its own block below.
 #
 # This is a FOURTH layer alongside the three documented in .githooks/pre-commit
 # (edit-time ESLint, staged-content pre-commit, CI). It is deliberately not one
@@ -31,6 +32,15 @@
 #
 set -u
 export PATH="/opt/homebrew/bin:$PATH"
+
+# A fresh session runs no observer (.claude/skills/incident-watch/SKILL.md, #604).
+# Ahead of every early exit below, and silent wherever the operator's
+# cumulo-observer profile is absent — forks and CI.
+if grep -qxF '[cumulo-observer]' "${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}" 2>/dev/null; then
+  cat <<'EOF'
+incident-watch: no hourly observer is running in this session; ask the owner whether to start `/loop 60m /incident-watch` here.
+EOF
+fi
 
 lib="$(dirname -- "${BASH_SOURCE[0]}")/hook-context.sh"
 # shellcheck source=./hook-context.sh
