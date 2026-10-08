@@ -372,7 +372,7 @@ A category going quiet across consecutive reviews is the evidence for graduating
 
 ## 2026-10-07 — issue #588 — cost-ceiling-by-measured-spend
 
-- **Category**: pending — filled at merge
+- **Category**: design-question-then-approval
 - **Feedback**: The owner is asked to ratify the design as built. This entry states the ask only and predicts no part of the answer. There are four parts.
   - (a) **ADR 0010** (`docs/adr/0010-cost-ceiling-by-measured-spend.md`). It supersedes ADR 0005 **in part**: the stage throttle's role as the cost guard. The throttle stays at 10/20 as a capacity cap. The ceiling is held instead by two trip paths into one function that zeroes the stage:
     - an anomaly alarm and a burn-rate alarm, each held for 20 of 24 hours, joined by a composite;
@@ -401,4 +401,4 @@ A category going quiet across consecutive reviews is the evidence for graduating
 
   Nothing is applied. The owner's apply (`Plan: 14 to add`, plus a function update if the rebuilt artefact differs) and the runbook's B9 drill are the live acceptance. At merge, whoever merges fills **Category** and **Verdict** on the branch before the label comes off.
 
-- **Verdict**: pending — filled at merge
+- **Verdict**: Approved after two design questions — owner, in chat, 2026-10-07/08. The owner asked why the 10 rps throttle stays now that measured-spend guards exist (answer: a capacity cap sized to the function, and the term that bounds the 12 h of spend before the billing metric catches up) and whether the billing alarm auto-resets with the calendar month (answer: the alarm clears itself; the trip does not, and only the runbook reset restores the throttle). Both answers were accepted without change. The owner asked for the billing-alerts prerequisite to be a CLI step rather than console-only; delivered in a0facbc, and the owner ran it on 2026-10-08 (readback ENABLED). Approval: "okay nice can we do 613 and 620". ADR 0010, the $70 billing threshold, the 20-of-24 composite hold and the manual reset are ratified as written. Filled on the branch by the merge owner before the label came off.
