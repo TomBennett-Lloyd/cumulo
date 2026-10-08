@@ -32,10 +32,7 @@ export interface PlotRect {
 /**
  * The chart's height, in SVG user units — and therefore in rendered pixels,
  * because the chart is drawn 1:1 with the width it is measured at (`chartPlot`
- * below, and `docs/design/chart-treatment.md`). It is a constant while the width
- * is not: a chart owes its reader a stable vertical scale as the window changes,
- * and a height that tracked the width would make every resize a rescaling of the
- * kW axis.
+ * below, and `docs/design/chart-treatment.md`).
  *
  * Owned here, and consumed by the component's view box and by the e2e case that
  * measures the 1:1 claim on a rendered page. Anything wanting the chart's height
@@ -98,15 +95,11 @@ const X_AXIS_BAND = 48;
  *
  * **The gutter is the worst case across both units and does not move with the
  * one on show** (#291). `1000` is the widest label either mode can print, so the
- * percent mode is strictly narrower here and this measurement still binds. A
- * gutter that changed width with the unit would shift the plot under a reader
- * who only pressed a toggle.
+ * percent mode is strictly narrower here and this measurement still binds.
  */
 const PLOT_LEFT_WIDE = 56;
 /**
- * The same gutter on a chart too narrow to spend the wide one on it. The
- * owner's 2026-08-11 round: on a phone the gutter "takes up too much of the
- * screen".
+ * The same gutter on a chart too narrow to spend the wide one on it.
  *
  * It is the floor the measurement above leaves, not a taste. The only thing a
  * thinner gutter can spend is the *gap* between the label and the plot — and
@@ -130,21 +123,14 @@ const PLOT_LEFT_NARROW = 50;
  * It sits in the gap between two clusters of measured widths, with tens of units
  * of room on each side: a phone and the narrow window
  * `apps/web/e2e/chart-surfaces.spec.ts` uses fall below it; a desktop column and
- * `DEFAULT_CHART_WIDTH` fall above. That is more margin than a scrollbar or
- * a platform's own padding can move either way, which is what keeps this from
- * being a cliff a real window can sit on.
+ * `DEFAULT_CHART_WIDTH` fall above.
  */
 const NARROW_GUTTER_MAX_CHART_WIDTH = 520;
 /**
  * Room to the right of the plot for half of the last time-axis label, which is
  * centred on `plot.right` rather than tucked inside it.
  *
- * Half a label and not a whole one, which is why this is narrower than the left
- * gutter — the kW labels hang entirely to the left of the plot, the time labels
- * straddle their sample.
- *
- * **Narrowed in #430, where the owner named the leftover as a gap "equivalent to
- * the width of the y axis".** What is here now is what the label actually needs,
+ * **Narrowed in #430.** What is here now is what the label actually needs,
  * measured rather than modelled: the widest thing either tier can centre on
  * `plot.right` is a day label of the `Wed NN` family, and half of one is very
  * nearly this whole margin.
@@ -153,8 +139,7 @@ const NARROW_GUTTER_MAX_CHART_WIDTH = 520;
  * image whose `system-ui` sets wider glyphs costs is the label reaching the
  * canvas edge, and that is what `apps/web/e2e/chart-surfaces.spec.ts`'s
  * containment poll exists to catch: it fails once a label escapes by more than
- * a quarter of its own height, so it tolerates several percent of glyph growth
- * rather than the first hundredth.
+ * a quarter of its own height.
  */
 const PLOT_RIGHT_MARGIN = 24;
 /**
@@ -176,8 +161,7 @@ const MINIMUM_AXIS_MAX_KW = 1;
  * `HH:mm` stops identifying a point and the label needs a weekday.
  *
  * A day exactly, not two (`chart-geometry.test.ts`'s "prefixes the weekday from
- * a full day of span, where a time can first repeat"). Below a day no time can
- * appear twice and the prefix would be noise on every tick.
+ * a full day of span, where a time can first repeat").
  */
 const WEEKDAY_PREFIX_MINIMUM_SPAN_HOURS = 24;
 const MS_PER_HOUR = 3_600_000;
@@ -197,16 +181,11 @@ const padded = (value: number): string => value.toString().padStart(2, '0');
 /**
  * The plot rect for a chart rendered `width` pixels wide.
  *
- * **One user unit is one rendered pixel** (#284 D15). Drawing at 1:1 makes the
- * margins above real distances rather than ratios — the left gutter is room for
- * a rotated title and a tick label in the units those are set in, not a
- * fraction of the width that means a different distance in every panel.
+ * **One user unit is one rendered pixel** (#284 D15).
  *
- * A function rather than a constant for the same reason: there is no one plot any
- * more, only the plot at the width the chart currently has. Callers that need a
- * plot without a measurement — tests, fixtures — ask for the one at
- * `DEFAULT_CHART_WIDTH` (`apps/web/src/charts/use-chart-width.ts`) rather than
- * keeping a rect of their own.
+ * Callers that need a plot without a measurement — tests, fixtures — ask for
+ * the one at `DEFAULT_CHART_WIDTH` (`apps/web/src/charts/use-chart-width.ts`)
+ * rather than keeping a rect of their own.
  *
  * **The left margin is width-dependent too since #430, and only that one is.**
  * `PLOT_LEFT_NARROW` and `NARROW_GUTTER_MAX_CHART_WIDTH` carry that argument.
@@ -223,7 +202,7 @@ export const chartPlot = (width: number): PlotRect => ({
  *
  * A structural minimum rather than `ForecastChartPoint`, and deliberately so —
  * that type lives in `chart-series.ts`, which imports this module, so naming it
- * from here would be a cycle. Every series point satisfies it by shape.
+ * from here would be a cycle.
  */
 export interface TimedSample {
   /** A UTC ISO-8601 instant — `packages/shared`'s `UtcIsoTimestamp` form. */
@@ -297,8 +276,7 @@ export const niceAxisMax = (maxValueKw: number): number => {
  * Capacity, which a percent chart's axis always reaches (#291).
  *
  * It is the number a reader of a percent-of-capacity chart compares against, so
- * it is the axis's floor rather than something the data has to earn. Without it
- * a fleet at half capacity would fill the plot exactly as one at capacity does.
+ * it is the axis's floor rather than something the data has to earn.
  */
 export const PERCENT_AXIS_FLOOR = 100;
 
@@ -309,8 +287,7 @@ export const PERCENT_AXIS_FLOOR = 100;
  * **A floor under the axis, never a clamp on the marks.** A site can exceed its
  * own capacity, and when it does the reader has to see it, so a peak above
  * capacity climbs the `niceAxisMax` ladder rather than being drawn on top of the
- * capacity gridline. `MINIMUM_AXIS_MAX_KW`'s degenerate-scale guard is subsumed
- * rather than repeated.
+ * capacity gridline.
  */
 export const percentAxisMax = (peakPercent: number): number =>
   Math.max(PERCENT_AXIS_FLOOR, niceAxisMax(peakPercent));
@@ -379,12 +356,9 @@ export interface SnapToXParams {
  * Distance and not arithmetic on the plot rect, which is what makes this work on
  * an axis whose samples are unevenly spread (#325, `chart-geometry.test.ts`'s
  * "snaps to the nearer sample across an uneven gap"). A pointer beyond either end
- * reads that end sample — readers aim
- * at a time, not at a hairline.
+ * reads that end sample.
  *
- * **A pointer exactly halfway between two samples snaps to the later one**, and
- * the direction is specified rather than incidental: a pixel that reported two
- * different hours on two passes would make the crosshair look broken. A `NaN`
+ * **A pointer exactly halfway between two samples snaps to the later one.** A `NaN`
  * distance never wins either comparison, so an unplaceable sample is skipped
  * rather than swallowing the readout.
  *
