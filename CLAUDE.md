@@ -23,6 +23,7 @@ Anthropic's current capability order is **Fable 5 > Opus > Sonnet > Haiku**. Fab
 Policy:
 
 - Implementation and review run on **Opus**.
+- Confirmation reviews, trim-batch lanes and `browser-smoke` run on **Sonnet** under a measured pilot (#607), where each lane type's graduation or reversion is recorded.
 - Planning and hard-problem consulting run on **Fable** (`model: 'fable'` in Agent calls).
 - An implementer returning `STATUS: STRUGGLING` triggers the `consultant` agent (Fable) for _guidance only_ — implementation stays with the original agent.
 - Before any Fable dispatch, read `~/.local/state/claude-budget/mode` — a machine-local budget ledger shared by every session and worktree on this machine, so it is one file read, not a computation. Contents are exactly `normal` or `conserve`; a missing file means `normal`. If `conserve`, downgrade to Opus and note the downgrade in the issue. To record fresh `/usage` numbers or refresh the mode, use the `budget-sync` skill.
