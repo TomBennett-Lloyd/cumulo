@@ -106,26 +106,46 @@ verdict=0
 printf 'incident-watch %s — env %s, %s\n' \
   "$(date -u +%Y-%m-%dT%H:%MZ)" "$env_name" "$expected_user"
 
-raw=$(observe cloudwatch describe-alarms --alarm-name-prefix cumulo- --state-value ALARM \
-  --alarm-types MetricAlarm CompositeAlarm) || exit 2
-firing=$(parse describe-alarms \
-  '((.MetricAlarms // error("no MetricAlarms")) + (.CompositeAlarms // []))[] | [.AlarmName, .StateUpdatedTimestamp, (.StateReason | redact)] | @tsv' \
-  <<<"$raw") || exit 2
+# Billing metrics exist only in us-east-1, so the cost guard's billing alarm
+# lives there (infra/api/cost-guard.tf, #613); every other alarm is in the
+# profile's region. Both are read, and reported together.
+BILLING_REGION=us-east-1
+
+firing_in() { # firing_in <region label> [--region R]  — name, since, reason, region as TSV
+  local label="$1" raw
+  shift
+  raw=$(observe cloudwatch describe-alarms "$@" --alarm-name-prefix cumulo- --state-value ALARM \
+    --alarm-types MetricAlarm CompositeAlarm) || exit 2
+  LABEL="$label" parse describe-alarms \
+    '((.MetricAlarms // error("no MetricAlarms")) + (.CompositeAlarms // []))[] | [.AlarmName, .StateUpdatedTimestamp, (.StateReason | redact), env.LABEL] | @tsv' \
+    <<<"$raw"
+}
+
+transitions_in() { # transitions_in [--region R]  — the cumulo- StateUpdate items as a JSON array
+  local raw
+  raw=$(observe cloudwatch describe-alarm-history "$@" --history-item-type StateUpdate \
+    --alarm-types MetricAlarm CompositeAlarm --max-records 100 --no-paginate) || exit 2
+  parse describe-alarm-history '[.AlarmHistoryItems[] | select(.AlarmName | startswith("cumulo-"))]' -c <<<"$raw"
+}
+
+home_firing=$(firing_in home) || exit 2
+billing_firing=$(firing_in "$BILLING_REGION" --region "$BILLING_REGION") || exit 2
+firing=$(printf '%s\n%s\n' "$home_firing" "$billing_firing" | sed '/^$/d')
 
 printf '\nIN ALARM\n'
 if [ -z "$firing" ]; then
   printf '  none\n'
 else
   verdict=1
-  while IFS=$'\t' read -r name since reason; do
-    printf '  %s since %s\n    %s\n' "$name" "$since" "$reason"
+  while IFS=$'\t' read -r name since reason region; do
+    printf '  %s since %s%s\n    %s\n' "$name" "$since" "$([ "$region" = home ] || printf ' (%s)' "$region")" "$reason"
   done <<<"$firing"
 fi
 
-raw=$(observe cloudwatch describe-alarm-history --history-item-type StateUpdate \
-  --alarm-types MetricAlarm CompositeAlarm --max-records 100 --no-paginate) || exit 2
-transitions=$(parse describe-alarm-history \
-  '[.AlarmHistoryItems[] | select(.AlarmName | startswith("cumulo-"))]' -c <<<"$raw") || exit 2
+home_transitions=$(transitions_in) || exit 2
+billing_transitions=$(transitions_in --region "$BILLING_REGION") || exit 2
+transitions=$(printf '%s\n%s\n' "$home_transitions" "$billing_transitions" |
+  parse describe-alarm-history 'add | unique_by([.AlarmName, .Timestamp, .HistorySummary]) | sort_by(.Timestamp | epoch) | reverse' -cs) || exit 2
 
 printf '\nLAST %s TRANSITIONS\n' "$history_count"
 HISTORY_COUNT="$history_count" parse describe-alarm-history \
@@ -164,7 +184,7 @@ log_lines() { # log_lines <service> <filter pattern>
   lines=$(parse filter-log-events \
     '.events[] | "  \(.timestamp / 1000 | floor | todate)  \(.message | gsub("\\s+"; " ") | redact | .[:300])"' \
     <<<"$events") || exit 2
-  printf '\nLOG %s, LAST HOUR, %s\n%s\n' "$group" "$2" "${lines:-  no matching lines}"
+  printf '\nLOG %s, LAST HOUR, %s\n%s\n' "$group" "${2:-every line}" "${lines:-  no matching lines}"
 }
 
 # Event names are owned by apiServerErrorEvent and apiRequestFailedEvent in
@@ -175,7 +195,7 @@ api_errors='?api_response_server_error ?"api.request.failed"'
 lambda_errors='?ERROR ?"Task timed out"'
 forecast_failures='{ ($.event = "forecast.message.outcome") && ($.status != "stored") && ($.status != "no-active-sites") }'
 
-alarmed="$firing
+alarmed="$(cut -f1 <<<"$firing")
 $raised"
 if [ "$count" -gt 0 ] || grep -q "^cumulo-api-${env_name}-" <<<"$alarmed"; then
   log_lines api "$api_errors"
@@ -188,6 +208,15 @@ fi
 if grep -q -e "^cumulo-forecast-${env_name}-" -e "^cumulo-weather-readings-dlq-${env_name}-" <<<"$alarmed"; then
   log_lines forecast "$lambda_errors"
   log_lines forecast "$forecast_failures"
+fi
+
+# The guard's alarms throttle the API stage to zero when they trip, and only an
+# operator resets it, so the report names where.
+cost_guard="^cumulo-api-${env_name}-(cost-|billing-)"
+if grep -qE "$cost_guard" <<<"$alarmed"; then
+  verdict=1
+  log_lines api-cost-trip ''
+  printf '\nCOST GUARD\n  a cost-guard alarm is raised; if the stage is tripped, reset per infra/README.md, api stack, "Reset after a cost trip"\n'
 fi
 
 printf '\nVERDICT %s\n' "$([ "$verdict" -eq 0 ] && echo quiet || echo act)"

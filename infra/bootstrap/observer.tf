@@ -20,9 +20,18 @@ locals {
     "logs:FilterLogEvents",
   ]
 
+  # Billing metrics exist only in us-east-1, so the cost guard's billing alarm
+  # is there (infra/api/cost-guard.tf, #613); every other alarm is in
+  # var.aws_region.
+  observed_alarm_arns = distinct([
+    for region in [var.aws_region, "us-east-1"] :
+    "arn:aws:cloudwatch:${region}:${data.aws_caller_identity.current.account_id}:alarm:*"
+  ])
+
+  # The three service Lambdas, and the cost guard's trip function.
   observed_log_group_arns = [
-    for service in ["api", "ingestion", "forecast"] :
-    "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/cumulo-${service}-${var.observed_environment}:*"
+    for function in ["api", "ingestion", "forecast", "api-cost-trip"] :
+    "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/cumulo-${function}-${var.observed_environment}:*"
   ]
 }
 
@@ -42,7 +51,7 @@ data "aws_iam_policy_document" "observer" {
       "cloudwatch:DescribeAlarms",
       "cloudwatch:DescribeAlarmHistory",
     ]
-    resources = ["arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:*"]
+    resources = local.observed_alarm_arns
   }
 
   statement {

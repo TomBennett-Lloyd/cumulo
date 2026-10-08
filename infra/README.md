@@ -490,14 +490,16 @@ One IAM user, `cumulo-observer-<env>`, and its inline policy, from `infra/bootst
 
 **Every action it holds**, and nothing else — an explicit `Deny` with `NotAction` on these outranks any policy attached later:
 
-| Action                            | Resource                                                                       | Read for                                      |
-| --------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------- |
-| `cloudwatch:DescribeAlarms`       | `arn:aws:cloudwatch:<region>:<account-id>:alarm:*`                             | which `cumulo-*` alarms are in ALARM, and why |
-| `cloudwatch:DescribeAlarmHistory` | `arn:aws:cloudwatch:<region>:<account-id>:alarm:*`                             | the recent state transitions                  |
-| `cloudwatch:GetMetricData`        | `*` (the action takes no resource ARN)                                         | the API's 5xx count over the last hour        |
-| `logs:FilterLogEvents`            | `/aws/lambda/cumulo-{api,ingestion,forecast}-<env>` log groups, in this region | the error lines behind a firing alarm         |
+| Action                            | Resource                                                                                                   | Read for                                                                                                                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloudwatch:DescribeAlarms`       | `arn:aws:cloudwatch:<region>:<account-id>:alarm:*` and `arn:aws:cloudwatch:us-east-1:<account-id>:alarm:*` | which `cumulo-*` alarms are in ALARM, and why — including the cost guard's billing alarm, which billing metrics confine to us-east-1 ([#613](https://github.com/TomBennett-Lloyd/cumulo/pull/613)) |
+| `cloudwatch:DescribeAlarmHistory` | the same two alarm patterns                                                                                | the recent state transitions, in both regions                                                                                                                                                      |
+| `cloudwatch:GetMetricData`        | `*` (the action takes no resource ARN)                                                                     | the API's 5xx count over the last hour                                                                                                                                                             |
+| `logs:FilterLogEvents`            | `/aws/lambda/cumulo-{api,ingestion,forecast,api-cost-trip}-<env>` log groups, in this region               | the error lines behind a firing alarm, and the cost guard's trip function's lines when a cost alarm is raised                                                                                      |
 
-No `iam:*`, no write action of any kind. `.claude/scripts/incident-watch.test.sh` holds both `observer.tf`'s `observer_actions` and this table to the same list.
+No `iam:*`, no write action of any kind. `.claude/scripts/incident-watch.test.sh` holds both `observer.tf`'s `observer_actions` and this table to the same list, and the resources to both regions' alarm patterns and the trip function's log group.
+
+What the report covers follows from those reads: every `cumulo-*` alarm in ALARM or raised within the hour in either region — the service alarms, the cost guard's composite trip and its us-east-1 billing alarm alike — the API's 5xx count, and the log lines behind them. A cost-guard alarm also prints the trip function's lines and names the api runbook's "Reset after a cost trip" section.
 
 **Terraform creates the user and the policy, never the access key.** A key in Terraform is a secret in state; created by hand, it exists only in the operator's `~/.aws/credentials`.
 
@@ -546,6 +548,8 @@ aws cloudwatch disable-alarm-actions --alarm-names cumulo-observer-write-probe -
 # expect: AccessDenied — a write the policy does not hold (harmless if it ever succeeded: no such alarm)
 aws iam list-users --profile cumulo-observer
 # expect: AccessDenied — the explicit Deny covers reads outside the table too
+aws cloudwatch describe-alarms --region us-east-1 --alarm-name-prefix cumulo- --profile cumulo-observer
+# expect: the billing alarm listed once #613's api stack is applied, not AccessDenied
 aws logs filter-log-events --log-group-name /aws/lambda/cumulo-api-dev --limit 1 --profile cumulo-observer
 # expect: events (possibly none), not AccessDenied — the script reads logs only when something fires, so this proves the log-group grant
 ```
