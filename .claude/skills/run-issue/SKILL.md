@@ -23,8 +23,9 @@ the section before you dispatch.
    sequenced, here, at dispatch. `conserve` budget mode: one lane.
 2. **Dispatch** `ticket-agent` with the issue number, the main-checkout path, the budget
    mode and the overlap note — nothing else; it reads the issue and the files.
-   A trim batch (`docs/standards/prose.md` § Trim batches) goes out with `model: 'sonnet'` in
-   the Agent call, #607's pilot; the `reviewer` it dispatches keeps its frontmatter model.
+   An issue that is a batch of a trim campaign under `docs/standards/prose.md` § Trim batches
+   (#545's batches) goes out with `model: 'sonnet'` in the Agent call, #607's pilot; the
+   `reviewer` it dispatches keeps its frontmatter model.
    **`run_in_background: true`**, which is the opposite of the rule in
    `.claude/agents/task-orchestrator.md` rule 4 and does not contradict it: that rule governs
    what an orchestrator spawns, and the reason it exists — a nested child's completion routing
