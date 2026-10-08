@@ -819,6 +819,126 @@ expect_not_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================
+# 10e. a ticket-agent lane squashes however many issues it closes
+# ==========================================================================================
+# PR #611 was one lane that also closed the issue it resolved: two Closes lines, six
+# commits, and the Closes count called it a batch and refused it on curated history.
+# The lane report header is the lane declaring itself, so it outranks the count.
+# Fenced (#611 used backticks; tildes here keep shellcheck quiet), so the header is read
+# wherever a line starts with it.
+begin "a lane report with two Closes lines merges --squash, not as a batch"
+fixture lane-two-closes
+V_BODY='Closes #21. Closes #22.\n\n~~~\n## Lane report — issue #21\nSTATUS: DONE\n~~~'
+V_COMMITS="#21: the first,#21: the second,#21: the third"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'ticket-agent lane for #21 -> squash'
+expect_not_stdout 'batch of 2 issues'
+expect_called "pr update-branch $PR"
+expect_called "pr merge $PR --squash"
+expect_not_called "pr merge $PR --rebase"
+expect_stdout 'closed by the merge: #21 #22'
+end
+
+# ==========================================================================================
+# 10e-ii. a lane report whose issue no Closes line names is refused at classify
+# ==========================================================================================
+# The lane closes its own issue (ticket-agent rule 7). Without this, a lane body with
+# no Closes line would skip 10d's refusal and merge with the issue left open.
+begin "a lane report with no Closes line for its issue is refused at classify"
+fixture lane-unclosed
+V_BODY='What and why.\n## Lane report — issue #21'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr 'the lane report names #21 but no Closes line does'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a lane report whose issue is missing from its Closes lines is refused at classify"
+fixture lane-other-closes
+V_BODY='Closes #22.\n## Lane report — issue #21'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'the lane report names #21 but no Closes line does'
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 10e-iii. a task-orchestrator batch merges --rebase by its TASK REPORT header
+# ==========================================================================================
+# task-orchestrator rule 7 puts the header line in the body. With it, a batch whose
+# other members dropped still rebases on one Closes line, where the count says squash.
+begin "a batch TASK REPORT header merges --rebase"
+fixture batch-header
+V_BODY='Closes #21\nCloses #22\n## TASK REPORT — batch: anchor #21, members #21 #22'
+V_COMMITS="#21: the first,#22: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'task-orchestrator batch, anchor #21 -> rebase'
+expect_not_called "pr update-branch $PR"
+expect_called "pr merge $PR --rebase"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a batch TASK REPORT header with one surviving member still merges --rebase"
+fixture batch-header-one
+V_BODY='Closes #21\n## TASK REPORT — batch: anchor #21, members #21'
+V_COMMITS="#21: the only member left"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'task-orchestrator batch, anchor #21 -> rebase'
+expect_not_stdout 'single issue #21 -> squash'
+expect_called "pr merge $PR --rebase"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a lane report beside a batch TASK REPORT header is refused at classify"
+fixture lane-and-batch
+V_BODY='Closes #21\nCloses #22\n## Lane report — issue #21\n## TASK REPORT — batch: anchor #21, members #21 #22'
+V_COMMITS="#21: the first,#22: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr '2 lane declarations'
+expect_not_called "pr merge $PR --rebase"
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 10f. two lane reports in one body are refused at classify
+# ==========================================================================================
+# A lane PR has one owner; a body naming two is a pasting slip, and squashing a
+# body that may be a batch is the irreversible direction.
+begin "a body with two lane reports is refused at classify"
+fixture lane-two-reports
+V_BODY='Closes #21. Closes #22.\n## Lane report — issue #21\n## Lane report — issue #22'
+V_COMMITS="#21: the first,#22: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr '2 lane declarations'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+expect_not_called "pr merge $PR --rebase"
+end
+
+# ==========================================================================================
 # 11. a failing check exits non-zero and names the check
 # ==========================================================================================
 begin "a failing check exits non-zero, naming it, and never merges"

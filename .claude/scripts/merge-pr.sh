@@ -251,6 +251,18 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       put("closes", m[1]);
     }
   }
+  // Each lane declares itself in the body, fenced or not, read from the body for
+  // the reason the Closes read above gives: a ticket-agent lane by its report
+  // header (.claude/agents/ticket-agent.md rule 8), a task-orchestrator batch by
+  // its TASK REPORT header line (.claude/agents/task-orchestrator.md rule 7).
+  const lanes = new Set();
+  const laneRe = /^## Lane report — issue #(\d+)/gm;
+  while ((m = laneRe.exec(pr.body || ""))) lanes.add(m[1]);
+  for (const n of lanes) put("lane", n);
+  const batches = new Set();
+  const batchRe = /^## TASK REPORT — .*?batch: anchor #(\d+)/gm;
+  while ((m = batchRe.exec(pr.body || ""))) batches.add(m[1]);
+  for (const n of batches) put("batch", n);
   process.stdout.write(out.join("\n") + "\n");
 });
 '
@@ -282,6 +294,8 @@ pr_merge_state=""
 pr_url=""
 pr_labels=()
 pr_closes=()
+pr_lanes=()
+pr_batches=()
 pr_commits=()
 check_names=()
 check_statuses=()
@@ -311,6 +325,8 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
   pr_url=""
   pr_labels=()
   pr_closes=()
+  pr_lanes=()
+  pr_batches=()
   pr_commits=()
   check_names=()
   check_statuses=()
@@ -328,6 +344,8 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
       url) pr_url="$a" ;;
       label) pr_labels+=("$a") ;;
       closes) pr_closes+=("$a") ;;
+      lane) pr_lanes+=("$a") ;;
+      batch) pr_batches+=("$a") ;;
       commit) pr_commits+=("$a") ;;
       check)
         check_names+=("$a")
@@ -366,26 +384,47 @@ already_merged=0
 # step below, which needs a second call to read the diff; it still lands before
 # update-branch, which is the property that matters.)
 
+# "Batch" is a run-issue lane property — `orchestration.routeRule`'s 2-6 members,
+# one agent, one in-flight row — and a Closes count only correlates with it: PRs
+# #611 and #626, each one ticket-agent lane that also closed a second issue,
+# carried two Closes lines and were refused as batches. So the lane's own
+# declaration is read first, and the Closes count decides only for a body with
+# none. Two declarations in one body say nothing this script can act on, so they
+# refuse.
 merge_method=""
-case "${#pr_closes[@]}" in
-  0) merge_reason="no Closes line in the PR body" ;;
-  1)
-    merge_method="--squash"
-    merge_reason="single issue #${pr_closes[0]} -> squash"
-    ;;
-  *)
-    merge_method="--rebase"
-    closes_list=$(printf ' #%s' "${pr_closes[@]}")
-    merge_reason="batch of ${#pr_closes[@]} issues (${closes_list# }) -> rebase"
-    ;;
-esac
+if [ $((${#pr_lanes[@]} + ${#pr_batches[@]})) -gt 1 ]; then
+  merge_reason="$((${#pr_lanes[@]} + ${#pr_batches[@]})) lane declarations (lane reports, batch TASK REPORT headers) in one PR body"
+elif [ "${#pr_batches[@]}" -eq 1 ]; then
+  merge_method="--rebase"
+  merge_reason="task-orchestrator batch, anchor #${pr_batches[0]} -> rebase"
+elif [ "${#pr_lanes[@]}" -eq 1 ]; then
+  # The lane closes its own issue (.claude/agents/ticket-agent.md rule 7); a report
+  # whose issue no Closes line names is refused rather than merged with it left open.
+  case " ${pr_closes[*]-} " in
+    *" ${pr_lanes[0]} "*)
+      merge_method="--squash"
+      merge_reason="ticket-agent lane for #${pr_lanes[0]} -> squash"
+      ;;
+    *) merge_reason="the lane report names #${pr_lanes[0]} but no Closes line does" ;;
+  esac
+else
+  case "${#pr_closes[@]}" in
+    0) merge_reason="no Closes line in the PR body" ;;
+    1)
+      merge_method="--squash"
+      merge_reason="single issue #${pr_closes[0]} -> squash"
+      ;;
+    *)
+      merge_method="--rebase"
+      closes_list=$(printf ' #%s' "${pr_closes[@]}")
+      merge_reason="batch of ${#pr_closes[@]} issues (${closes_list# }) -> rebase"
+      ;;
+  esac
+fi
 
-# An explicit --method overrides the inference, and exists because the inference
-# is a heuristic rather than a fact. "Batch" is a run-issue lane property —
-# `orchestration.routeRule`'s 2-6 members, one agent, one in-flight row — and a
-# Closes count only correlates with it: PR #414 carried four Closes lines and was
-# squash-merged. The inference stays the default because the issue asks for it;
-# an operator who knows the lane says so and is believed.
+# An explicit --method overrides the inference, which stays a heuristic for any
+# body without a declaration: PR #414 carried four Closes lines and was
+# squash-merged. An operator who knows the lane says so and is believed.
 if [ -n "$method_override" ]; then
   merge_method="--$method_override"
   merge_reason="$merge_reason, overridden to $method_override"
@@ -499,7 +538,7 @@ step 'classify' "PR #$pr_number is $pr_state on '$pr_head_ref'; $merge_reason; $
 # run — the cost this script exists to save.
 if [ "$already_merged" = "0" ]; then
   [ -n "$merge_method" ] || fail 'classify' \
-    "$merge_reason — cannot tell a single-issue squash from a batch rebase. Add the Closes line to the body, or pass --method squash|rebase"
+    "$merge_reason — cannot tell a single-issue squash from a batch rebase. Correct the Closes lines or the lane declarations in the body, or pass --method squash|rebase"
   if [ "$merge_method" = "--rebase" ]; then
     curated_reason=$(curated_history_ok) || fail 'classify' "$curated_reason"
   fi
