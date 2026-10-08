@@ -84,7 +84,9 @@ your issue's comments; the top-level never posts them for you.
    acting on it: release is the merge owner's call and a wrong one is theirs to retract.
 4. **Sub-agent dispatch is yours, and every dispatch is synchronous**: planner (fable — first
    read ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus, note the
-   downgrade in the plan comment), implementers (opus), reviewer (opus), consultant (fable,
+   downgrade in the plan comment), implementers (opus; a chunk under `docs/standards/prose.md`
+   § Trim batches goes out with `model: 'sonnet'` in the Agent call, #607), reviewer (opus)
+   for each full cycle, confirmation-reviewer for every confirmation pass, consultant (fable,
    same budget rule), browser-smoke (sonnet, sequenced against work in _your own_ worktree and
    free to run while other worktrees' lanes do — see its dispatch contract). Honour
    every dispatch contract in the agent files you spawn. **`run_in_background: false` on all
@@ -214,6 +216,8 @@ Branch commits (batch only; pasted: git log --oneline main..HEAD):
 Ledger: <issue comment URL (anchor issue, for a batch)> — every surviving chunk ticked
   verified: yes | naming exceptions
 Retro notes: <issue comment URL — the sole record of retro observations; not restated here>
+Sub-dispatches: <agent (model) ×<n>: reason>, one per agent and model | none — the model each
+  dispatch actually ran on, which #607's comparison reads
 Consultant dispatches: <n> (model, budget mode) | none
 Discovered issues filed: #<a> #<b> | none
 Open questions only the owner can answer: <list | NONE>
