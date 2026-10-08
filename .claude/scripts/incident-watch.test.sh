@@ -441,6 +441,8 @@ policy_violations() {
   printf '%s\n' "$code" | grep -qE ':alarm:\*"$' || printf 'the alarm ARN pattern is not alarm:*\n'
   statement_of "$1" ReadAlarms | grep -qE 'resources[[:space:]]*=[[:space:]]*local\.observed_alarm_arns$' ||
     printf 'ReadAlarms does not read local.observed_alarm_arns\n'
+  statement_of "$1" ReadLambdaLogs | grep -qE 'resources[[:space:]]*=[[:space:]]*local\.observed_log_group_arns$' ||
+    printf 'ReadLambdaLogs does not read local.observed_log_group_arns\n'
   functions=$(printf '%s\n' "$code" | grep -E '^[[:space:]]*for function in \[' | tr -s '[:space:]' ' ')
   [ "$functions" = ' for function in ["api", "ingestion", "forecast", "api-cost-trip"] : ' ] ||
     printf 'the log reads are not the three service Lambdas and the trip function: %s\n' "$functions"
@@ -508,6 +510,10 @@ end
 
 new_case "negative control: dropping the trip function's log group is caught"
 expect_violation "$(mutant notrip 's/, "api-cost-trip"\]/]/')" "the trip function"
+end
+
+new_case "negative control: ReadLambdaLogs on every log group is caught"
+expect_violation "$(mutant alllogs 's/resources = local\.observed_log_group_arns/resources = ["*"]/')" "ReadLambdaLogs does not read"
 end
 
 new_case "negative control: ReadAlarms back on a single-region ARN is caught"

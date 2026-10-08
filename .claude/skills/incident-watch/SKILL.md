@@ -27,7 +27,7 @@ The orchestrating session starts one recurring check when it begins a working st
 
 It is session-local by design: when no session is running, the alarm email to the owner is the fallback. Do not schedule it from a lane — the lane cannot open other lanes, and two watchers double the reads for nothing.
 
-On a machine holding the `cumulo-observer` profile, `.claude/hooks/ensure-deps.sh` prints one line when a session starts or is resumed (not after a compaction, when the loop is still scheduled) saying no observer is running. That is the prompt to ask the owner whether to start the loop in this session.
+On a machine holding the `cumulo-observer` profile, `.claude/hooks/ensure-deps.sh` prints one line when a session starts or is resumed (not after `/clear` or a compaction, when the loop is still scheduled) saying no observer is running. That is the prompt to ask the owner whether to start the loop in this session.
 
 ## Resuming
 
