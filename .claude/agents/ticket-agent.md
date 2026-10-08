@@ -35,7 +35,7 @@ Planning, implementation, tests and fix rounds run in your own context. No plann
 
 - **(a) `browser-smoke`** for any acceptance criterion measured in a browser; its dispatch contract in `.claude/agents/browser-smoke.md` governs.
 - **(b) `consultant`** on STRUGGLING (rule 5(a)).
-- **(c) `reviewer`** for the review pass (rule 6).
+- **(c) `reviewer`** for the first full review pass, and **`confirmation-reviewer`** for every confirmation pass on fix commits (rule 6).
 - **(d) `implementer`**, only when the ticket has two or more surfaces disjoint in verification — the test in `.claude/skills/plan-issue/SKILL.md` step 4, not mere `Files:` disjointness — and only when the plan comment declared the sub-dispatch before it went out. Owner decision 2026-09-10 (#468), verbatim: "Parallel `implementer` sub-dispatch inside a lane: allowed with declaration". You remain the only git-writer.
 
 ## 4. Gates and commits
@@ -67,7 +67,7 @@ The counts above — two fix attempts, two re-plans — are provisional, set fro
 
 Source diffs only: a diff holding none of the source extensions `.claude/workflow.json` → `merge.autoRule` lists owes no review.
 
-One synchronous `reviewer` dispatch scoped to `git diff main...HEAD`, naming the prose you wrote yourself — PR body, `docs/tech-debt.md` entries, issue bodies — per `.claude/skills/review-loop/SKILL.md` step 1. FIX-NOW findings are fixed inline, then one fresh `reviewer` dispatch scoped to the fix commits alone, in the confirmation-pass shape and under the termination rule that skill's Exit conditions state. Correctness findings iterate until none; claim-accuracy findings are fixed, never deferred; isolable findings become their own issue, named in the PR body. Cap: one full pass plus confirmation passes on fix commits — a pass returning new correctness findings on a third fix diff → STRUGGLING.
+One synchronous `reviewer` dispatch scoped to `git diff main...HEAD`, naming the prose you wrote yourself — PR body, `docs/tech-debt.md` entries, issue bodies — per `.claude/skills/review-loop/SKILL.md` step 1. FIX-NOW findings are fixed inline, then one fresh `confirmation-reviewer` dispatch scoped to the fix commits alone, in the confirmation-pass shape and under the termination rule that skill's Exit conditions state. Correctness findings iterate until none; claim-accuracy findings are fixed, never deferred; isolable findings become their own issue, named in the PR body. Cap: one full pass plus confirmation passes on fix commits — a pass returning new correctness findings on a third fix diff → STRUGGLING.
 
 This pass is what `.claude/workflow.json` → `merge.reviewedSourceRule` accepts from this lane. Your own read of your own diff is not a review and never satisfies it.
 
@@ -92,7 +92,7 @@ Plan comment: <url>                Footprint drift vs plan comment: <files | non
 Changed files: (pasted git diff --name-only main...HEAD)
 Review: none owed (no source) | APPROVE after <k> passes — FIX-NOW <found>/<fixed>, deferred: <issues | none>
 Classification: AUTO | HUMAN — source extensions <list | none>; humanAlways <paths | none>
-Sub-dispatches: <agent: reason> | none        Consultant: <model, budget mode> | none
+Sub-dispatches: <agent (model): reason>, one per dispatch | none   Consultant: <model, budget mode> | none
 Discovered: #<a> | none
 Retro: plan held | re-planned: <why>; escalations: <none | which>; wasted work: <none | what>;
        friction: <Phase — one observation | none>
@@ -100,4 +100,4 @@ Merge cautions: <e.g. tech-debt.md appended; overlaps #m on <file>> | none
 STATUS: DONE | PARTIAL — <detail> | BLOCKED — <detail> | STRUGGLING — <detail>
 ```
 
-STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING is the repo vocabulary, detail after the dash. Every field above is contractual — the top-level treats a missing one as PARTIAL.
+STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING is the repo vocabulary, detail after the dash. Every field above is contractual — the top-level treats a missing one as PARTIAL. `Sub-dispatches:` names the model each dispatch actually ran on, because #607's comparison reads it; an Agent call's `model` overrides the agent's frontmatter.
