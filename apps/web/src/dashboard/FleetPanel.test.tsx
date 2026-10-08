@@ -396,7 +396,7 @@ describe('FleetPanel when the fleet’s actuals fail on their own', () => {
      * The other half of the asymmetry, stated here beside it rather than left to be inferred from
      * the failure suite below. An actuals failure is a caption on numbers that arrived; a forecast
      * failure is the numbers themselves not arriving — and since #284 D3 the difference shows in
-     * the plot rather than in whether there is a plot. The figure stays put in every state, so
+     * the plot rather than in whether there is a plot. The figure stays put in every state (`fleet-panel-body.tsx` § One chart), so
      * what a failed fleet read takes away is every row of it.
      */
     const container = await renderSettled(new CountingFleetSource(FAILED_FLEET));
@@ -507,7 +507,7 @@ describe('FleetPanel as the page keeps it mounted', () => {
     /*
      * The trade #265 accepted, pinned as a fact rather than left as prose. The panel used to
      * defer its first fleet read until it was first revealed, because a `?site=` deep link could
-     * leave it hidden forever (#178). Nothing hides it now — it is on screen in every state of
+     * leave it hidden forever (#178). Nothing hides it now — `fleet-panel-body.tsx` § One chart puts it on screen in every state of
      * the page — so a deferral would only buy a spinner in front of a chart the reader is
      * already looking at.
      */
@@ -552,7 +552,7 @@ describe('FleetPanel as the page keeps it mounted', () => {
     // `role="alert"` actually announces (#161). It is the only arrangement left: the panel is
     // never hidden, so an alert can no longer mount inside a `display: none` subtree that
     // assistive technology never reads. Since #452 the tree it mounts into is the chart's own
-    // `<figure>`, which is on screen from the first frame in every state (#284 D3).
+    // `<figure>`, which is on screen from the first frame in every state (`fleet-panel-body.tsx` § One chart; #284 D3).
     expect((await screen.findByRole('alert')).textContent).toContain(
       CHART_DATA_UNAVAILABLE_MESSAGE,
     );

@@ -83,7 +83,7 @@ describe('Dashboard deep links', () => {
      * #178 deferred this read until the fleet panel was first revealed, so a
      * deep-linked reader who never looked at the fleet never paid for it. #265
      * spent that saving deliberately: the fleet's chart is on screen from first
-     * paint in every state of the page, and the selected site is drawn *over*
+     * paint in every state of the page (`fleet-panel-body.tsx` § One chart), and the selected site is drawn *over*
      * it, so there is no reader left who does not look at the fleet — only one
      * who would be shown a spinner where the chart already is. In live mode the
      * cost is one metered request to `GET /v1/fleet/forecast` (#296 — a

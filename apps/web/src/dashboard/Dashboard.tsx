@@ -393,7 +393,7 @@ export const Dashboard = ({
            *
            * There is no context region here any more: a site's detail is a card on
            * its own marker, so nothing swaps, nothing is hidden, and the fleet
-           * chart is on screen in every state of the page.
+           * chart stays on screen (`fleet-panel-body.tsx` § One chart).
            *
            * The fleet's sum changes on exactly one event — a site being added —
            * and `refreshToken` is that event, counted.
