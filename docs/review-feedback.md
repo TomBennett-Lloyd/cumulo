@@ -432,3 +432,11 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Why**: as first built, no. The observer read alarms in the stack's region only. The cost guard of #613 (ADR 0010) puts its billing alarm in us-east-1, the only region with billing metrics, so a billing trip, which throttles the API to zero, would never have reached the orchestrating session.
 - **How applied**: `infra/bootstrap/observer.tf` keeps the same two alarm actions and adds the us-east-1 alarm pattern, plus the trip function's log group to `logs:FilterLogEvents`. `.claude/scripts/incident-watch.sh` reads both listings in us-east-1 too and merges them into one report. When a cost-guard alarm is raised, it prints the trip function's lines, names the api runbook's "Reset after a cost trip" section, and acts. The harness pins the region reads, the resources (each with a negative control) and the runbook table. `SKILL.md` states that any `cumulo-*` alarm is reported by its name prefix alone, and a harness case shows a `p95-latency` alarm reported with no script change.
 - **Verdict**: pending — filled at merge
+
+## 2026-10-08 — PR #625 — observer-on-start-and-resume
+
+- **Category**: pending — filled at merge
+- **Feedback**: "if i start a new session it can ask if we want to do the hourly checks there too", and "we need to check in if we're resuming after running out of tokens too" (owner, in chat, relayed by the coordinator).
+- **Why**: the `/loop 60m /incident-watch` wake-up is session-local. A new session has no observer running, and a session resuming after a usage-limit cut has lost the loop it armed. Both are the window in which an alarm reaches nobody but the owner's inbox.
+- **How applied**: `.claude/hooks/ensure-deps.sh` prints one line at session start when the `cumulo-observer` profile is in the local credentials file. The block sits ahead of every early exit and is silent otherwise, so forks and CI never see it. Harness cases cover profile present, absent and no file. `SKILL.md` gains a resume rule that the session follows itself, because the hook cannot tell a resume from a start: run `/incident-watch` once, report, then re-arm the loop.
+- **Verdict**: pending — filled at merge
