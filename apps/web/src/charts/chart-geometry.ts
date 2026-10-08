@@ -95,7 +95,9 @@ const X_AXIS_BAND = 48;
  *
  * **The gutter is the worst case across both units and does not move with the
  * one on show** (#291). `1000` is the widest label either mode can print, so the
- * percent mode is strictly narrower here and this measurement still binds.
+ * percent mode is strictly narrower here and this measurement still binds. A
+ * gutter that changed width with the unit would shift the plot under a reader
+ * who only pressed a toggle.
  */
 const PLOT_LEFT_WIDE = 56;
 /**

@@ -173,9 +173,9 @@ export const tooltipColumns = (rows: readonly TooltipRow[], plotWidth: number): 
  * ageing a sentence; this docblock is the one place they are written in prose
  * (`docs/standards/architecture.md` rule 9).
  *
- * Capped, a name that long overflows its own panel instead — text spilling past one edge is a
- * legible defect confined to one row, where a panel over the whole plot hides
- * the data. Columns did not retire this arm: no arrangement of two columns fits
+ * Capped, a name that long overflows its own panel instead — text spilling past
+ * one edge is a legible defect confined to one row, where a panel over the whole
+ * plot hides the data. Columns did not retire this arm: no arrangement of two columns fits
  * the longest name `siteSchema` accepts into a panel narrower than they are, and
  * until the overflowing name is elided the cap is what bounds the damage. Which
  * half overflows is `tooltipColumns`' choice rather than this function's — the

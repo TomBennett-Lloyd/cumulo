@@ -128,9 +128,10 @@ export interface ChartScale {
    * once by `ForecastChart.tsx` and read by every consumer through `xAt` below.
    *
    * A list rather than the count it replaced (#325), because the axis is
-   * time-proportional and a count no longer determines a position. It doubles as the count — `xs.length` is the number of samples, and
-   * carrying both would be two spellings of one fact that a caller could set
-   * into disagreement (`docs/standards/architecture.md` rule 9).
+   * time-proportional and a count no longer determines a position. It doubles
+   * as the count — `xs.length` is the number of samples, and carrying both would
+   * be two spellings of one fact that a caller could set into disagreement
+   * (`docs/standards/architecture.md` rule 9).
    */
   readonly xs: readonly number[];
 }
