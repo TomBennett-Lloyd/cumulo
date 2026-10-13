@@ -35,9 +35,11 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  *
  * The claim that makes those sums exact is **disjointness**, and it is structural: a site's
  * `locationId` is a pure function of its own coordinates (`location.ts`), so a site belongs to
- * exactly one location and appears in exactly one partial. A producer that wrote two locations'
- * sites into one partial, or one site into two, would break this — and nothing in `apps/forecast`
- * can, because the message it consumes is refused unless it names exactly one location.
+ * exactly one location and appears in exactly one partial. Per-site de-duplication therefore never
+ * has cross-partial work to do, which is why {@link sumFleetRollupPartials} adds rather than
+ * re-deduplicating. A producer that wrote two locations' sites into one partial, or one site into
+ * two, would break this — and nothing in `apps/forecast` can, because the message it consumes is
+ * refused unless it names exactly one location.
  *
  * `minimumContributingSites` — the thinnest-hour count the partial-aggregate notice quotes — is
  * **not** additive, and deliberately does not live here: it is a `min` over hours of the
