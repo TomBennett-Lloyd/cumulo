@@ -52,9 +52,7 @@ import { useChartWidth } from './use-chart-width';
  * **The numbers carry the chart's display unit, and the `unit` prop names it**
  * (#291). Absent, they are kW, which is what every value in this product is
  * stored, served and schema'd in. Present, they are percentages of capacity,
- * already normalised by the caller at the panel seam — a ~4 kW site overlaid on
- * a ~330 kW fleet is a flat line on an absolute axis, and re-expressing both
- * against their own capacity is what makes the pair readable on one scale
+ * already normalised by the caller at the panel seam
  * (`docs/design/chart-treatment.md`, "One value axis"). The unit is presentation
  * and reaches this component's arithmetic exactly twice: the percent axis's
  * fixed maximum, and the chrome that says which unit is showing. Everything
@@ -90,12 +88,10 @@ import { useChartWidth } from './use-chart-width';
  *
  * **Loading is a mark on the canvas, not a sentence over it** (#448) — one more
  * path inside the plot, a stylised solar day that traces itself and restarts
- * (`chart-loading-curve.ts` for the shape, `charts.css` for the motion). A
- * notice *above* the chart changes the panel's height when it arrives and again
- * when it goes, so the page jumps twice per read; a mark inside the plot
- * occupies the box the chart already has. It is decoration to assistive
- * technology, and the state stays machine-readable through `aria-busy` on
- * `.fleet-panel-body` (`apps/web/src/dashboard/fleet-panel-body.tsx`, and
+ * (`chart-loading-curve.ts` for the shape, `charts.css` for the motion). It is
+ * decoration to assistive technology, and the state stays machine-readable
+ * through `aria-busy` on `.fleet-panel-body`
+ * (`apps/web/src/dashboard/fleet-panel-body.tsx`, and
  * `docs/standards/react.md`'s Pending bullet).
  *
  * **A total failure is an overlay too, in the same box** (#452): a warning
@@ -111,27 +107,21 @@ import { useChartWidth } from './use-chart-width';
  * that is deliberately *not* re-enforced here: this component would have to
  * invent a resolution for a combination no caller can produce, and a mode flag
  * over two independent by-presence props is the shape
- * `docs/standards/structure.md` rule 7 refuses. Two props rather than one
- * `state` union for the same reason they are two mechanisms: the wait is a
- * `<path>` among the marks, the failure is text-bearing HTML over the figure.
+ * `docs/standards/structure.md` rule 7 refuses.
  *
  * **The readout has one source of truth, and it is not this file.** Pointer and
  * keyboard both settle on an `activeIndex`, which
  * `forecast-chart-hover-boundary.tsx` holds and `forecast-chart-hover.tsx`
  * draws, so there is no separate keyboard rendering path to drift from the hover
- * one. The pointer carries one thing the keyboard cannot — a continuous position
- * the panel follows and the crosshair ignores — and it is a second field beside
- * the index rather than a second selection. It sits one level down rather than
- * here because moving the panel must not re-run this body.
+ * one.
  *
  * **The chart is drawn 1:1 with the width it is rendered at.** `useChartWidth`
  * measures the figure and the view box takes that width, so one SVG user unit is
  * one pixel and an axis label is the same size here as everywhere else on the
  * page. The height does not follow: `CHART_VIEW_BOX_HEIGHT` is an owned
- * constant, because a value axis that rescaled on every resize would be a
- * different chart at every window size. The unit is the one thing allowed to
- * rescale it, because switching unit is a reader asking for a different reading
- * rather than a window changing size.
+ * constant. The unit is the one thing allowed to rescale it, because switching
+ * unit is a reader asking for a different reading rather than a window changing
+ * size.
  *
  * **The table twin is a panel of its own, after the figure** — the owner's
  * 2026-08-11 ask. It is the same numbers in another form, offered *after* the
@@ -154,16 +144,12 @@ import { useChartWidth } from './use-chart-width';
  * `div.forecast-chart-error` is a **suffix** to that pair in the one state that
  * has it, and a suffix is what keeps the contract a contract: the two elements
  * stay in their order and stay the whole of the figure, and the failure appends
- * rather than displacing either. Last rather than first for the same reason it
- * is an `alert` at all — it announces by arriving, so putting it ahead of the
- * plot would reorder the figure for every reader to serve a state most never
- * reach.
+ * rather than displacing either.
  *
  * **Two names, because there are two things to name**: the disclosure is named
  * by its `<summary>` — what a reader meets while it is closed and what they
  * press — and the table by its `<caption>`, which states which window and which
- * units the numbers are in. Folding the caption into the summary would leave one
- * of the two nameless and the other saying two things at once.
+ * units the numbers are in.
  *
  * **The time of day is a layer, not a sentence.** Hours the whole fleet is dark
  * get a wash behind the series and each UTC midnight a hairline, so the diurnal
@@ -175,11 +161,7 @@ import { useChartWidth } from './use-chart-width';
  * This file is composition and nothing else — `forecast-chart-axes.tsx`,
  * `-marks.tsx`, `-context.tsx`, `-hover.tsx` and `-table.tsx` each draw a piece
  * of the treatment and are named after it, well inside
- * `docs/standards/structure.md` rule 4's ceiling. `-legend.tsx` sits in the same
- * folder without being one of this file's pieces: it draws a key for a chart
- * rather than a part of one. `-hover-boundary.tsx` is the one named after
- * something other than a piece of the drawing — it draws no mark, and the seam
- * it marks is where re-rendering stops.
+ * `docs/standards/structure.md` rule 4's ceiling.
  */
 
 export type {
@@ -247,30 +229,21 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   // (`charts.css`), so measuring the container is measuring the chart without
   // asking an element about a size this render is about to give it.
   const width = useChartWidth(figureRef);
-  // Joined once and read by every consumer below, so the mark, the table column
-  // and the readout can never disagree about what the overlay says at an hour.
-  //
   // Memoised for identity rather than for speed: two shallow compares below the
   // boundary watch this object — the reading `ForecastChartHoverBoundary`
   // memoises against it, and through that the memoised tooltip panel — and both
   // survive a re-render of this body only while the join keeps its identity.
-  // Rebuilt each time, they would redraw a panel that has nothing new to say.
   const overlay = useMemo<ChartOverlayColumn | undefined>(
     () => (props.overlay === undefined ? undefined : overlayColumn(points, props.overlay)),
     [props.overlay, points],
   );
   // An overlay running above the forecast would otherwise be drawn off the top
-  // of the plot. With no overlay this is `highestValueKw` unchanged, which is
-  // seeded at 0 and so cannot be lowered by the second argument.
+  // of the plot.
   const peakKw = Math.max(
     highestValueKw(points),
     overlay === undefined ? 0 : highestOverlayKw(overlay.values),
   );
   const plot = chartPlot(width);
-  // The x mapping, computed once here and read below through `xAt`: it is
-  // time-proportional and therefore a property of the series rather than of each
-  // mark's index, and a second consumer deriving it again is a second chance to
-  // derive it differently.
   // The one place the display unit reaches the arithmetic: a percent axis always
   // shows capacity, where a kW axis has no such landmark and is drawn to its own
   // series (`chart-geometry.ts`'s `percentAxisMax`).
@@ -292,22 +265,13 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
   return (
     <>
       <figure className="forecast-chart-figure" ref={figureRef}>
-        {/* The chrome, handed down rather than drawn here: the boundary owns the
-            `<svg>` these go inside, because it owns the hover state that moves
-            the panel over them. They are elements by the time they cross it, so
-            a pointer frame reconciles straight past them and never re-runs the
-            producers below.
-
-            Draw order is back to front, and the order is the argument: the night
+        {/* Draw order is back to front, and the order is the argument: the night
             wash is backmost, since it is what everything else is drawn
             *against*; the day boundaries sit immediately above the grid because
             they are the same kind of thing, chrome the reader consults, and
             belong under every data mark; actuals are drawn last of the data and
             win every overlap, so an added series never covers the measurement;
-            and the hover chrome with its pointer target sits above all of it.
-            The loading trace is among the marks rather than over them, which
-            costs nothing to argue — the only state that renders it is the state
-            with no series yet. */}
+            and the hover chrome with its pointer target sits above all of it. */}
         <ForecastChartHoverBoundary
           points={points}
           ariaLabel={props.ariaLabel}
@@ -322,9 +286,7 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
           {/* The wait, drawn (#448). `pathLength` is normalised to 1 so the dash
               pattern in `charts.css` is a fraction of the path rather than a
               length that would have to be re-derived at every column width, and
-              the path is decoration: `aria-hidden`, so the `role="img"` above
-              keeps its one name and no reader is told about a curve that means
-              nothing. */}
+              the path is decoration: `aria-hidden`. */}
           {props.loading === undefined ? null : (
             <path
               className="forecast-chart-loading-trace"
@@ -350,10 +312,9 @@ export const ForecastChart = (props: ForecastChartProps): ReactElement => {
         {/* The total failure, over everything above it and inside the same box
             (#452). After the boundary rather than among the marks because it is
             HTML and they are SVG, and over the plot rather than above it because
-            `charts.css` takes it out of flow — the whole of the no-jump claim:
-            an absolutely positioned child cannot alter the figure's height. It
-            is inside the figure so that a reader who has scrolled to the chart
-            finds the explanation where the chart is. */}
+            `charts.css` takes it out of flow. It is inside the figure so that a
+            reader who has scrolled to the chart finds the explanation where the
+            chart is. */}
         {props.error === undefined ? null : chartErrorOverlay(props.error)}
       </figure>
 

@@ -24,8 +24,6 @@ import { readSiteIdFromSearch, writeSiteIdToUrl } from './selection-url';
  * The sites this session *created* are deliberately not in here — they live in
  * their own state and are concatenated during render. The listing is a request
  * that succeeded or failed once; a created site is a fact that outlives it.
- * Folding the two together would mean either a `failed` arm carrying sites
- * anyway, or a re-listing quietly dropping a site added while it was in flight.
  */
 type FleetLoad =
   | { readonly status: 'loading' }
@@ -35,11 +33,9 @@ type FleetLoad =
 /**
  * Where the add-site flow has got to.
  *
- * A union rather than three loose fields (`typing.md` rule 4): a creation cannot
- * be in flight *and* refused, and `AddSiteForm` renders exactly one of these at
- * a time. `editing` covers both "nothing attempted yet" and "attempted, and the
- * visitor has moved on" — the form's own field-level messages are its business,
- * not the dashboard's.
+ * A union rather than three loose fields (`typing.md` rule 4). `editing` covers
+ * both "nothing attempted yet" and "attempted, and the visitor has moved on" —
+ * the form's own field-level messages are its business, not the dashboard's.
  */
 type CreationState =
   | { readonly status: 'editing' }
@@ -84,10 +80,6 @@ export interface DashboardProps {
   readonly theme: Theme;
   /**
    * Flipping the theme, passed straight through to the header's menu.
-   *
-   * The dashboard has no opinion about theming — it forwards the theme to the
-   * map, which paints its basemap in it, and this to the bar it now renders.
-   * Both arrive from `useTheme` in the shell above.
    */
   readonly onToggleTheme: () => void;
   /** Where the fleet lives. Defaults to the in-memory demo fleet. */
@@ -153,8 +145,7 @@ export const Dashboard = ({
    * Read once, in the lazy initialiser, because the address bar is the initial
    * value's *source* rather than something to keep re-reading: after mount the
    * flow runs the other way, and the sync effect below is what keeps the two
-   * level. An id that names no site is not filtered here — nothing is loaded
-   * yet — it is cleared by the guard in the listing effect.
+   * level.
    */
   const [selectedSiteId, setSelectedSiteId] = useState<Site['id'] | null>(() =>
     readSiteIdFromSearch(window.location.search),
@@ -165,10 +156,8 @@ export const Dashboard = ({
    *
    * It starts at `'deep-link'` because that is the only thing the initialiser
    * above can be answering: at mount the selection is whatever the address bar
-   * carried, and nobody has done anything yet. Every handler that moves the
-   * selection sets `'reader'` in the same commit, so the two values cannot
-   * disagree about a selection either of them can see. It is deliberately not
-   * cleared alongside a deselection.
+   * carried, and nobody has done anything yet. It is deliberately not cleared
+   * alongside a deselection.
    */
   const [selectionOrigin, setSelectionOrigin] = useState<SelectionOrigin>('deep-link');
   /**
@@ -190,8 +179,7 @@ export const Dashboard = ({
    * Whether the next placement on the basemap drops a draft.
    *
    * Here rather than inside the map region because it is the *dashboard's*
-   * click handler that has to obey it: the map reports every placement it
-   * receives, and what one means is this component's question.
+   * click handler that has to obey it.
    */
   const [addSiteArmed, setAddSiteArmed] = useState(false);
   /**
@@ -218,12 +206,10 @@ export const Dashboard = ({
   const draftBecameSiteRef = useRef(false);
 
   // The fleet listing is a request whose answer arrives after this render — the
-  // external system an effect is for (`react.md` rule 1). Its cleanup flips a
-  // flag rather than aborting: the answer to a superseded listing is discarded,
-  // not acted on. No `catch`, deliberately — a `FleetDataSource` returns its
-  // expected failures as values, so a rejection is a bug in the source and
-  // belongs at the boundary rather than converted into a fleet error here
-  // (`error-handling.md` rule 1).
+  // external system an effect is for (`react.md` rule 1). No `catch`,
+  // deliberately — a `FleetDataSource` returns its expected failures as values,
+  // so a rejection is a bug in the source and belongs at the boundary rather
+  // than converted into a fleet error here (`error-handling.md` rule 1).
   useEffect(() => {
     let cancelled = false;
 
@@ -243,8 +229,7 @@ export const Dashboard = ({
       // The stale-id guard, here rather than in an effect watching derived
       // state: this is the moment the question "does that site exist?" gets its
       // answer, so it is the moment a `?site=` naming nobody stops being a
-      // selection. Left standing, a dead deep link would have `useFirstForecast`
-      // polling a site that does not exist.
+      // selection.
       const known = [...result.value, ...createdSitesRef.current];
 
       setSelectedSiteId((current) =>
@@ -258,10 +243,7 @@ export const Dashboard = ({
   }, [dataSource, listAttempt]);
 
   // The address bar is an external system, and keeping it level with the
-  // selection is what an effect is for (`react.md` rule 1). It cannot be a line
-  // in the click handlers instead, because the selection also moves without a
-  // click: a creation selects the site it just made, and the guard above clears
-  // a selection nothing can show.
+  // selection is what an effect is for (`react.md` rule 1).
   useEffect(() => {
     writeSiteIdToUrl(selectedSiteId);
   }, [selectedSiteId]);
@@ -274,11 +256,7 @@ export const Dashboard = ({
 
   /*
    * The panel's forecast follows the selection rather than only the newly
-   * created site. One loop serves both, because they are the same question
-   * asked of different sites: an established site answers on the first poll and
-   * the loop stops (its brief wait is the `checking` arm), while a site created
-   * seconds ago answers `not-found` until its first forecast exists — which is
-   * the `generating` state the demo's headline minute is made of.
+   * created site.
    */
   const { state: forecast, retry: retryForecast } = useFirstForecast(dataSource, selectedSiteId);
 
@@ -287,10 +265,7 @@ export const Dashboard = ({
    * at all.
    *
    * Called from the dialog's own unmount cleanup rather than from a click
-   * handler, because on the Escape path the browser restores focus itself while
-   * the `cancel` event is still being dispatched — a focus call made in the
-   * handler would simply be overwritten (`add-site/AddSiteDialog.tsx` carries
-   * the ordering argument).
+   * handler (`add-site/AddSiteDialog.tsx` carries the ordering argument).
    *
    * Unconditional, because the dialog displaces nothing: the map and everything
    * under it are still where the reader left them, so nothing else has cause to
@@ -323,9 +298,7 @@ export const Dashboard = ({
   };
 
   const createSite = async (input: CreateSiteInput): Promise<void> => {
-    // Spent here, at the call — not when the form validated. A draft the form
-    // rejected never reached the fleet, and charging the allowance for it would
-    // make a typo cost the visitor a site.
+    // Spent here, at the call — not when the form validated.
     throttle.record();
 
     const result = await dataSource.createSite(input);
@@ -336,7 +309,7 @@ export const Dashboard = ({
     }
 
     // The returned site, server-assigned id and all. Appended locally rather
-    // than re-listed: one listing request avoided, and the site is already in hand.
+    // than re-listed.
     setCreatedSites((current) => [...current, result.value]);
     // A creation is a reader-initiated selection like any other: they placed the
     // site, so its card owes them a hand-back if they go into it — and, like
@@ -362,10 +335,6 @@ export const Dashboard = ({
   return (
     <>
       {/*
-       * The bar, and the reason it is here rather than in the shell: its search
-       * reads `sites` and selects through `selectSiteForReader`, which is the same
-       * selection a marker press makes (`apps/web/src/header/AppHeader.tsx`).
-       *
        * A sibling of `<main>` rather than a child of it: a `<header>` inside
        * `<main>` is a section header and carries no banner landmark.
        */}
@@ -385,18 +354,14 @@ export const Dashboard = ({
               selectedSiteId={selectedSiteId}
               onSelectSite={selectSiteForReader}
               onMapClick={(position) => {
-                // The gate the add-site control arms. Without it every click on the
-                // basemap opened a draft, so panning past a marker handed the reader
-                // a form they never asked for.
+                // The gate the add-site control arms.
                 if (!addSiteArmed) {
                   return;
                 }
 
                 setDraft(position);
                 setCreation({ status: 'editing' });
-                // Single-shot: the mode is spent on the placement that used it, so a
-                // reader is never left armed without a draft on screen to show for
-                // it.
+                // Single-shot: the mode is spent on the placement that used it.
                 setAddSiteArmed(false);
               }}
               addSiteArmed={addSiteArmed}
@@ -479,8 +444,7 @@ export const Dashboard = ({
            * The draft, in the top layer over all of the above.
            *
            * A sibling of the whole surface rather than a child of the reading,
-           * because a modal is painted over the whole page — nesting it inside the
-           * flow would only leave a reader of this file placing it there.
+           * because a modal is painted over the whole page.
            *
            * `key={draftKey(draft)}` is load-bearing:
            * `AddSiteForm` reads the coordinates once at mount, so a draft at a new

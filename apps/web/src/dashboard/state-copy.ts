@@ -10,10 +10,7 @@
  * One module rather than a string beside each component, for the same reason
  * `site-format.ts` is one module: two panels telling the same reader about the
  * same absence in two different voices is a defect, not a variation
- * (`structure.md` rule 7). Collecting them also makes the wording reviewable as
- * wording — the whole vocabulary of the column's empty and failed states reads
- * top to bottom here, which is not true when each phrase lives inside the JSX
- * that happens to render it.
+ * (`structure.md` rule 7).
  *
  * One adjective is deliberately gone from the empty-fleet line: it asserted a
  * distinction the data model does not make — there is no opposite kind of site to
@@ -26,10 +23,7 @@
  *
  * Scope: async-state and failure copy. Chart *chrome* wording — the words a
  * chart says about itself, the clock included — is owned by
- * `apps/web/src/charts/chart-copy.ts`. That sibling is deliberate rather than an
- * oversight: the two modules serve different surfaces and different consumers,
- * and one module holding both would be a module about "text", which is not a
- * subject anybody can review.
+ * `apps/web/src/charts/chart-copy.ts`.
  */
 
 /**
@@ -43,11 +37,6 @@
  * That older wording is not quoted here, for the reason given in the file header:
  * `apps/web/src/dashboard/state-copy-contract.test.ts` sweeps for it with
  * comments included.
- *
- * It had a sibling, `ADD_SITE_HINT`, saying the same thing beside the fleet
- * chart for a fleet that already had sites. That one is gone rather than
- * rewritten: a control the reader can see is what replaced it, and prose
- * explaining a visible button is the kind of copy that goes stale next.
  */
 export const EMPTY_FLEET_MESSAGE =
   'No sites yet — press “Add a site” on the map, then choose where it goes.';
@@ -82,8 +71,7 @@ export const loadingSiteSeriesLabel = (siteName: string): string =>
  *
  * The seconds are a parameter because the clock belongs to the polling hook that
  * runs it. This label is reached only once the fleet has confirmed no forecast
- * exists yet — the demo promises one about a minute after a site is added, and a
- * visitor watching that minute is owed the count rather than a bare spinner.
+ * exists yet.
  */
 export const generatingFirstForecastLabel = (elapsedSeconds: number): string =>
   `Generating first forecast… ${String(elapsedSeconds)}s`;
@@ -95,8 +83,7 @@ export const LOADING_MAP_LABEL = 'Loading map…';
  * A site creation is in flight, on the submit button that started it.
  *
  * The button's idle name — "Add site" — deliberately stays in the form: it names
- * a control, and control names are the form's own. Only the pending state is
- * this module's, because it is the same wait every other surface here describes.
+ * a control, and control names are the form's own.
  */
 export const ADDING_SITE_LABEL = 'Adding site…';
 
@@ -109,8 +96,7 @@ export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
  * owed the reader an empty answer, a nothing-measured notice and a per-site
  * failure. The site's card on the map draws no chart — one site's own hours are a
  * series on the fleet's (`apps/web/src/dashboard/site-overlay.ts`) — so there is
- * no window to be empty and no per-site series call to fail. Copy for a surface
- * that is gone is copy that gets reused by someone who assumes it came back.
+ * no window to be empty and no per-site series call to fail.
  */
 
 /**
@@ -125,8 +111,7 @@ export const NO_FLEET_FORECAST_MESSAGE = 'No fleet forecast available yet';
  * rewording it: a complete aggregate is what a reader already expects to be
  * looking at, so the sentence described the chart above it instead of reporting
  * anything that had happened — description rather than state, and therefore not
- * this module's subject at all (`design.md` rule 2). Completeness is stated in
- * one direction now, which is the direction that is news.
+ * this module's subject at all (`design.md` rule 2).
  */
 export const partialAggregateNotice = (contributing: number, total: number): string =>
   `Partial aggregate: some hours include only ${String(contributing)} of ${String(total)} sites.`;
@@ -138,8 +123,7 @@ export const partialAggregateNotice = (contributing: number, total: number): str
  * sibling: both label a chart that arrived and is incomplete, rather than
  * withdrawing it. What failed here is an *addition* to a sum that is intact, so
  * the honest thing is to say which part is missing and leave the rest standing
- * (`error-handling.md` rule 5). Reporting it as a failure would tell a reader
- * the fleet sum in front of them is suspect, which it is not.
+ * (`error-handling.md` rule 5).
  *
  * It names the site, because a reader looking at a chart with one line missing
  * needs to know *which* line — and this sentence is the only place the app says
@@ -161,15 +145,10 @@ export const siteOverlayFailureNotice = (siteName: string): string =>
  *
  * The third of this family, and it earns its place the same way the second did.
  * `/v1/fleet/forecast` (#296) and `/v1/fleet/actuals` (#264) are two metered
- * requests over two windows, so either can fail without the other — and the panel
- * used to answer a failed actuals read by withdrawing the whole chart under the
- * forecast read's own failure sentence. That blamed a party that had not failed
- * (`error-handling.md` rule 1's blame tiebreak) and threw away a complete fleet
- * sum that had already arrived (rule 5).
+ * requests over two windows, so either can fail without the other.
  *
  * A constant rather than a function, unlike its sibling above: there is one
- * fleet, so there is no name to interpolate. The source's own message is left
- * off for the sibling's reason — the recourse here is a button, not a diagnosis.
+ * fleet, so there is no name to interpolate.
  */
 export const FLEET_ACTUALS_FAILURE_NOTICE =
   'The fleet’s simulated actuals could not be loaded, so the chart shows the forecast only.';
@@ -178,8 +157,7 @@ export const FLEET_ACTUALS_FAILURE_NOTICE =
  * The first-forecast poll gave up before the pipeline answered.
  *
  * The deadline is a parameter rather than baked into the sentence: the number
- * belongs to the polling hook that enforces it, and a copy module that restated
- * it would be free to drift from the timer the reader actually waited out.
+ * belongs to the polling hook that enforces it.
  */
 export const firstForecastTimeoutMessage = (deadlineSeconds: number): string =>
   `No forecast arrived within ${String(deadlineSeconds)} seconds — the pipeline may still be working. Try again to keep waiting.`;
@@ -194,9 +172,6 @@ export const firstForecastTimeoutMessage = (deadlineSeconds: number): string =>
  * It consumes the tech-debt entry "The timeout copy asserts pipeline generation
  * from a run that never established existence" (#177, resolved in #104);
  * `ForecastFailureReason`'s `unanswered` arm is the fact this renders.
- *
- * The deadline is a parameter for the sibling's reason: the number belongs to the
- * polling hook that enforces it.
  */
 export const firstForecastUnansweredMessage = (deadlineSeconds: number): string =>
   `No answer from the fleet within ${String(deadlineSeconds)} seconds — whether a forecast exists yet is unknown. Try again to keep asking.`;
@@ -247,9 +222,7 @@ export const CHART_DATA_UNAVAILABLE_MESSAGE = 'Site data unavailable';
  * promise — an in-page retry would be a control that cannot work. The second
  * clause is the part worth keeping: everything below the map still works, and a
  * reader who is not told that will assume the page is broken. It says *below*
- * rather than *beside* because that is where those things now are (#265) — a
- * message that points a reader somewhere empty is worse than one that points
- * nowhere.
+ * rather than *beside* because that is where those things now are (#265).
  */
 export const MAP_LOAD_FAILURE_MESSAGE =
   'The map could not be loaded. Reload the page to try again — the fleet list and forecasts below it are unaffected.';

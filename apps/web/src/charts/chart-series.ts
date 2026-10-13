@@ -28,10 +28,7 @@ export interface ForecastChartBand {
  * **The `*Kw` fields carry the chart's selected display unit, not kW by
  * definition** (#291). A chart rendered with `ForecastChart`'s `unit` prop is
  * given percentages of capacity in these same fields, normalised by the caller
- * at the panel seam — storage, the API and `@cumulo/shared` stay in kW
- * throughout, so nothing upstream of the panel sees a percentage. The spellings
- * are unchanged deliberately: renaming them is a sweep across every chart
- * surface.
+ * at the panel seam.
  */
 export interface ForecastChartPoint {
   readonly validTimeIso: string;
@@ -42,8 +39,7 @@ export interface ForecastChartPoint {
    * typing: a chart whose x-domain is the union of forecast hours and actual
    * hours (`apps/web/src/dashboard/fleet-series.ts`) has hours behind the
    * horizon that were measured and never forecast. The median then breaks at
-   * those hours exactly as the actuals break past the horizon — a gap, never a
-   * bridge and never a zero, because both would draw a forecast nobody made.
+   * those hours exactly as the actuals break past the horizon.
    */
   readonly medianKw: number | null;
   /** Absent — the key omitted, never `undefined` — for a point-estimate forecast. */
@@ -60,9 +56,6 @@ export interface ForecastChartPoint {
    * points — the site overlay's own domain, a fixture in a test — has no fleet to ask the question
    * of and would be inventing an answer by supplying one. What each case draws is
    * `forecast-chart-context.tsx`'s.
-   *
-   * Under `exactOptionalPropertyTypes` the distinction is real rather than notional: the key is
-   * omitted, never set to `undefined`, exactly as `band` above is.
    */
   readonly night?: boolean;
 }
@@ -77,15 +70,11 @@ export interface ChartOverlayPoint {
    *
    * **Optional, and absence means forecast** — which is what every hour of
    * every overlay was before #530, so an overlay that never says otherwise is a
-   * projection throughout and reads as one. Under
-   * `exactOptionalPropertyTypes` the key is omitted rather than set to
-   * `undefined`, exactly as `ForecastChartPoint.band` above is.
+   * projection throughout and reads as one.
    *
    * It decides treatment and not value: the measured stretch is solid and ends
    * in a marker, the stretch past it is dashed
-   * (`apps/web/src/charts/forecast-chart-marks.tsx`). Because one value channel
-   * answers every hour, the tooltip, the table column and the spoken readout
-   * read one number per hour and know nothing of this flag.
+   * (`apps/web/src/charts/forecast-chart-marks.tsx`).
    *
    * **The producer owes a stronger invariant than "no hour is both": no sample
    * at or before the seam is a forecast at all.** `overlayStretches` selects the
@@ -139,11 +128,10 @@ export interface ChartScale {
    * once by `ForecastChart.tsx` and read by every consumer through `xAt` below.
    *
    * A list rather than the count it replaced (#325), because the axis is
-   * time-proportional and a count no longer determines a position: two series of
-   * five hours put their samples in different places if one of them is missing
-   * an hour. It doubles as the count — `xs.length` is the number of samples, and
-   * carrying both would be two spellings of one fact that a caller could set
-   * into disagreement (`docs/standards/architecture.md` rule 9).
+   * time-proportional and a count no longer determines a position. It doubles
+   * as the count — `xs.length` is the number of samples, and carrying both would
+   * be two spellings of one fact that a caller could set into disagreement
+   * (`docs/standards/architecture.md` rule 9).
    */
   readonly xs: readonly number[];
 }
@@ -160,8 +148,7 @@ const MISSING_VALUE = '—';
 
 /**
  * Where sample `index` sits horizontally — the one seam every mark, every tick
- * and the crosshair read their x through, so nothing on this canvas can place a
- * sample differently from anything else.
+ * and the crosshair read their x through.
  *
  * An index with no position falls back to the middle of the plot, which is
  * `sampleXs`' own answer for a sample it cannot place. It is unreachable while
@@ -199,12 +186,10 @@ export const overlayAt = (values: readonly (number | null)[], index: number): nu
  *
  * Narrower than `joinFleetSeries`' rule, and deliberately not cited as that one:
  * an overlay is resolved onto a domain somebody else decided and never widens
- * it, while #264 gave the fleet's join a *union* x-domain of its own. What
- * decides that domain is the caller's business.
+ * it, while #264 gave the fleet's join a *union* x-domain of its own.
  *
  * An hour the overlay does not cover — and an hour it covers with `null` — is
- * `null` here, so the mark breaks at it rather than being drawn at a value
- * nobody supplied.
+ * `null` here.
  *
  * **The seam comes out of the same pass**, as the last sample that is both
  * measured and drawn. A measured hour carrying `null` is not it: the line never
@@ -321,9 +306,7 @@ export const highestValueKw = (points: readonly ForecastChartPoint[]): number =>
 
 /**
  * The tallest overlay value, so a series that runs above the forecast still
- * lands inside the plot. Without it the axis would be scaled to the forecast
- * alone and the overlay would be drawn off the top — a mark outside the plot is
- * a value the reader cannot see, which is worse than a taller axis.
+ * lands inside the plot.
  */
 export const highestOverlayKw = (values: readonly (number | null)[]): number =>
   values.reduce<number>((highest, value) => Math.max(highest, value ?? 0), 0);
@@ -359,9 +342,7 @@ interface BandColumn {
  * band's edges and the stroked bounds coincide by construction rather than by
  * two builders agreeing.
  *
- * Coordinates are rounded by d3-path's own default rather than by anything here
- * — a precision this module has no basis to pick better than the library that
- * emits the string.
+ * Coordinates are rounded by d3-path's own default rather than by anything here.
  */
 const curvedLine = line<PlotVertex>()
   .x((vertex) => vertex.x)
