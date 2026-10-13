@@ -43,13 +43,9 @@ import type { ReactElement } from 'react';
  * not a nicety.
  *
  * The Open-Meteo credit's wording, link and styling belong to
- * `OpenMeteoAttribution`; this component composes it and, since #428, restyles
- * it in exactly one respect other than the compact-form rule the component
- * delegates to its surface: the ink, and only on the veil. That override lives
- * in `map.css` beside its reasoning — muted ink does not clear AA at the mix
- * this surface now ships on, and none of the four opaque surfaces the component
- * also serves has that problem. The wording, the size and the underline are
- * untouched, and nothing here hand-rolls the string.
+ * `OpenMeteoAttribution`; what this band may restyle is owned by
+ * `docs/design/map-treatment.md` § Attribution, and the override itself lives in
+ * `map.css` beside its reasoning; nothing here hand-rolls the string.
  */
 export const MapAttributionStrip = (): ReactElement => (
   <div className="map-attribution">

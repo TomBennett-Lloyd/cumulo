@@ -396,7 +396,8 @@ Placement:
   band alone — which also makes the hover and focus brightening a no-op here, since the resting
   ink is already what they brightened to. The four opaque surfaces the component also serves keep
   the muted treatment, because none of them has the composite that forced the change. The size,
-  the underline and the wording are untouched.
+  the underline and the wording are untouched. This bullet owns that exception; its carriers are
+  `.claude/ledgers/map-band-single-override.ledger` (`docs/standards/architecture.md` rule 9).
 
   The link is not accent-coloured, and that is a legibility rule rather than a stylistic preference:
   on the veil, `--color-accent` is below AA for small text in **both** modes. The per-mode numbers

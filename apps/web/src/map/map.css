@@ -316,9 +316,8 @@
   line-height: var(--leading-normal);
 }
 
-/* The weather credit's ink on the veil — the only thing this band overrides in a
- * component it otherwise composes untouched, other than the compact-form rule
- * the component delegates to its surface, which is further down this file.
+/* The weather credit's ink on the veil — the override
+ * `docs/design/map-treatment.md` § Attribution sanctions for this band.
  *
  * `packages/ui`'s `attribution.css` serves five surfaces and four of them are
  * opaque — the dashboard footer, the About dialog, the app error boundary and the
