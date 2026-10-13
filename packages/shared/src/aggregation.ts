@@ -133,7 +133,7 @@ const sumForecastGroup = (group: SiteHourGroup<Forecast>): FleetForecastPoint =>
  * Sum a fleet's forecasts into one point per hour, ascending by `validTime`.
  *
  * Duplicates for the same site and hour collapse to the latest `issuedAt`; the band is present
- * only when at least one contributing forecast carried one. An empty input yields no points.
+ * only when at least one contributing forecast carried one.
  */
 export const aggregateFleetForecast = (
   forecasts: readonly Forecast[],
@@ -168,8 +168,7 @@ const sumActualsGroup = (group: SiteHourGroup<GenerationReading>): FleetActualsP
 /**
  * Sum a fleet's generation readings into one point per hour, ascending by `validTime`.
  *
- * Duplicates for the same site and hour collapse to the last one given. An empty input yields no
- * points.
+ * Duplicates for the same site and hour collapse to the last one given.
  */
 export const aggregateFleetActuals = (
   readings: readonly GenerationReading[],
@@ -179,9 +178,7 @@ export const aggregateFleetActuals = (
 /**
  * The fleet's installed DC capacity: the sum of every site's `capacityKw`, `0` for an empty fleet.
  *
- * Here rather than in the view because it is fleet arithmetic (architecture.md rule 3), and because
- * an empty fleet's answer is a decision — `0 kW installed` is what a fleet with no sites has, not a
- * missing value the caller has to invent.
+ * Here rather than in the view because it is fleet arithmetic (architecture.md rule 3).
  *
  * Takes sites, not forecasts: capacity is a property of the hardware, so it is knowable for a site
  * whose first forecast has not arrived and it does not move with the hour.
@@ -211,8 +208,7 @@ const eitherDuplicateSupersedes = (): boolean => true;
  * rather than a single fleet number. A site with no matching entry in `sites` contributes `0`:
  * capacity that cannot be evidenced is not asserted.
  *
- * **Exact, not the `fleetCapacityKw(sites) × contributingSiteCount / sites.length` proxy.** That
- * proxy is mean capacity × count, so it is only right when every site is the same size.
+ * **Exact, not the `fleetCapacityKw(sites) × contributingSiteCount / sites.length` proxy.**
  *
  * Deduplicates per site-hour on the same rule as the aggregations above, so an hour's divisor and
  * its summed kW are always drawn from the same set of sites.
@@ -243,13 +239,10 @@ export const contributingCapacityKwByHour = (
  *
  * Here rather than in a view for the same reason as {@link fleetCapacityKw}: it is fleet arithmetic
  * over sites, and `architecture.md` rule 3 puts that in the pure core. `null` rather than a
- * fallback point is the honest answer for an empty fleet — a fleet with no sites is not *somewhere*,
- * and any coordinate invented here would be a location the caller could not distinguish from a real
- * one. Callers decide what an unlocated fleet means for them.
+ * fallback point is the honest answer for an empty fleet.
  *
  * **Unweighted, and that is a choice.** Every site counts once regardless of capacity, because the
- * question this answers is where the fleet *is*, not where its kilowatts are. A capacity-weighted
- * centroid would answer a different question, and no caller has asked it.
+ * question this answers is where the fleet *is*, not where its kilowatts are.
  *
  * **Plane arithmetic, not spherical.** The mean is taken per axis, which is the centroid of the
  * lat/lon rectangle rather than of the sphere. Two consequences: the answer drifts a little
