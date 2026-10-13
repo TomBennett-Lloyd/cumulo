@@ -26,12 +26,9 @@ import { parseSiteIdParam } from './site-id-param';
  * field omitted from the body is unambiguously "set it to nothing" rather than
  * "leave it alone".
  *
- * **A site's location is immutable** (#629). A body whose `latitude` or `longitude`
- * differs from the stored site's is refused with `validation_failed`, because a
- * move is a delete and an add: the fleet roll-ups treat a departed location and
- * an arrival as separate histories, and a site that kept its `createdAt` while
- * changing place would owe the new place history it cannot hold. The comparison
- * is exact on the stored numbers: a PUT that repeats them is an edit.
+ * **A site's location is immutable** (#629): a move is a delete and an add. The
+ * `latitude`/`longitude` comparison is exact on the stored numbers, so a PUT that
+ * repeats them is an edit and any difference is refused.
  *
  * The three fields the server owns — `id`, `origin`, `createdAt` — are read back
  * from the stored site and written through unchanged, which is why this is a
@@ -54,7 +51,7 @@ const movedCoordinates = (stored: FleetSite, requested: CreateSiteInput): ApiErr
     .filter((field) => stored[field] !== requested[field])
     .map((field) => ({
       path: field,
-      message: `a site's location cannot be changed; delete the site and add it again (stored ${String(stored[field])}, requested ${String(requested[field])})`,
+      message: `stored ${String(stored[field])}, requested ${String(requested[field])}`,
     }));
 
 export const updateSite = async (
