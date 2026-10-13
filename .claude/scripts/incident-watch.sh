@@ -64,8 +64,15 @@ trap 'rm -f "$stderr_file"' EXIT INT TERM
 # The report is quoted into public issues, so account ids leave it as a shape
 # (infra/README.md convention 7).
 ACCOUNT_ID='(^|[^0-9])[0-9]{12}([^0-9]|$)'
+# epoch reads what the CLI prints (…SS.ffffff±HH:MM in the machine's offset, #638) as
+# well as …SSZ; a +01:00 stamp is an hour earlier in UTC, so the offset is subtracted.
 JQ_DEFS='def redact: gsub("(?<![0-9])[0-9]{12}(?![0-9])"; "<account-id>");
-  def epoch: sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601;'
+  def epoch: sub("\\.[0-9]+"; "")
+    | if endswith("Z") then fromdateiso8601
+      else (capture("^(?<base>.*)(?<sign>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2})$") // error("no zone"))
+        | ((.base + "Z") | fromdateiso8601)
+          - (if .sign == "+" then 1 else -1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60)
+      end;'
 
 no_verdict() {
   printf 'incident-watch: %s — no verdict\n' "$1" |
