@@ -69,7 +69,7 @@ ACCOUNT_ID='(^|[^0-9])[0-9]{12}([^0-9]|$)'
 JQ_DEFS='def redact: gsub("(?<![0-9])[0-9]{12}(?![0-9])"; "<account-id>");
   def epoch: sub("\\.[0-9]+"; "")
     | if endswith("Z") then fromdateiso8601
-      else capture("^(?<base>.*)(?<sign>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2})$")
+      else (capture("^(?<base>.*)(?<sign>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2})$") // error("no zone"))
         | ((.base + "Z") | fromdateiso8601)
           - (if .sign == "+" then 1 else -1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60)
       end;'

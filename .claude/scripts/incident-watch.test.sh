@@ -226,9 +226,8 @@ expect_stdout "IN ALARM
 log_has "GROUP /aws/lambda/cumulo-forecast-dev"
 end
 
-# The CLI's default iso8601 rendering is …SS.ffffff±HH:MM in the machine's offset (#638); the
-# fixtures above use plain Z. stamp <seconds-ago> <offset-hours> prints that moment as the CLI
-# would on a machine at that offset, fraction included.
+# The CLI's default iso8601 rendering is …SS.ffffff±HH:MM in the machine's offset (#638).
+# stamp <seconds-ago> <offset-hours> prints that moment with a fraction, in that offset.
 stamp() {
   jq -rn --argjson ago "$1" --argjson off "$2" '
     def hh: tostring | if length < 2 then "0" + . else . end;
@@ -282,6 +281,14 @@ run_watch
 expect_rc 1
 expect_stdout "RAISED IN THE LAST HOUR
   cumulo-forecast-dev-errors"
+end
+
+new_case "a timestamp with no zone is no verdict, never a quiet report"
+fixture history "{\"AlarmHistoryItems\": [{\"Timestamp\": \"$(stamp 600 0 | sed 's/Z$//')\", \"AlarmName\": \"cumulo-forecast-dev-errors\", \"HistorySummary\": \"Alarm updated from OK to ALARM\"}]}"
+run_watch
+expect_rc 2
+expect_stderr "unreadable describe-alarm-history response"
+expect_not_stdout "VERDICT"
 end
 
 new_case "account ids are redacted from reasons and log lines; longer numbers are not"
