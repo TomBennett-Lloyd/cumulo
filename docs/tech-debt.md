@@ -292,3 +292,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/scripts/check-infra-mirrors.sh`; carriers such as the log filters in `.claude/scripts/incident-watch.sh`, and Terraform-to-Terraform restatements such as `observed_log_group_arns` in `infra/bootstrap/observer.tf`, which quotes four `function_name`s owned by the api (including `infra/api/cost-guard.tf`'s `cost_trip_function_name`), ingestion and forecast stacks — a rename surfaces only as an `AccessDenied`, which the script reports as no verdict
 - What: `check-infra-mirrors` pairs Terraform with TypeScript only, so a script quoting a log event name (`apiServerErrorEvent`, `messageOutcomeEvent`) or an alarm name drifts silently. #604 pins its own carriers with harness cases ("the log filters carry the event names their owners export"); the general fix is a gate mode, not one more harness per script
 - Source: #604 review pass 1 SYSTEMIC
+
+## 2026-10-13 — ADR 0009's #602 entry still describes an in-bucket coordinate edit as possible
+
+- Where: `docs/adr/0009-fleet-forecast-rollup.md`, the #602 entry's "What it does not catch" ("A coordinate edit that stays inside one bucket is not in the tuple either")
+- What: `PUT /v1/sites/{siteId}` now refuses every coordinate change (#629), so that case cannot arise. The sentence is still true of the tuple; it wants a past-tense note or a citation of #629 at ADR 0009's next amendment pass
+- Source: #629 review pass 1 SYSTEMIC
