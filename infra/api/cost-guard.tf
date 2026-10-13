@@ -41,6 +41,11 @@
 #     two Terraform figures move together or the burn projection and the budget
 #     disagree about what "over" means.
 #   * the 20-of-24 hold — ADR 0010; infra/README.md's runbook (reset section).
+#   * `cost_trip_function_name` and the alarms' `cost-`/`billing-` name
+#     prefixes — infra/bootstrap/observer.tf's `observed_log_group_arns`;
+#     .claude/scripts/incident-watch.sh's `cost_guard` pattern and its
+#     `log_lines api-cost-trip` read; infra/README.md's observer table. Found
+#     2026-10-13 by `git grep -nE 'api-cost-trip|\(cost-\|billing-\)'` (#604).
 # ---------------------------------------------------------------------------
 
 locals {

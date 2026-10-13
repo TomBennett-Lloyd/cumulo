@@ -9,7 +9,7 @@ This is a portfolio project. The repo's **process** — commit history, PR disci
 - **Open-Meteo attribution is mandatory** (CC BY 4.0): a visible attribution link to [Open-Meteo.com](https://open-meteo.com/) wherever weather-derived data is displayed in the UI — the full "Weather data by Open-Meteo.com" phrase at standard widths; at widths where the row as composed cannot hold its credits' full forms, the bare linked name is the sanctioned compact form (CC BY 4.0 §3(a)(2) permits medium-appropriate attribution; owner-amended 2026-08-09, composed-row reading owner-confirmed 2026-08-11) — plus a data-sources credit in the README. The link itself is non-negotiable in every state.
 - **API frugality by design**: Open-Meteo free tier (no key) — 10,000 calls/day, 5,000/hour, 600/minute. Only ever fetch weather for locations where active fleet sites exist.
 - **Cost ceiling**: free-tier-first AWS, hard ceiling ~$100/month. All infra in Terraform, designed for clean spin-up/tear-down.
-- **No long-lived AWS credentials**: GitHub Actions authenticates via OIDC only. Never commit secrets; `.env` is gitignored; gitleaks runs in CI.
+- **No long-lived AWS credentials**: GitHub Actions authenticates via OIDC only. One exception, for exactly one purpose: the read-only observer IAM user's access key (#604), held only in the operator's local AWS CLI profile for local incident observation, never in CI or the repo. Never commit secrets; `.env` is gitignored; gitleaks runs in CI.
 
 ## Commands
 
@@ -23,6 +23,7 @@ Anthropic's current capability order is **Fable 5 > Opus > Sonnet > Haiku**. Fab
 Policy:
 
 - Implementation and review run on **Opus**.
+- Confirmation reviews, trim-campaign lanes and `browser-smoke` run on **Sonnet** under a measured pilot (#607), where each lane type's graduation or reversion is recorded.
 - Planning and hard-problem consulting run on **Fable** (`model: 'fable'` in Agent calls).
 - An implementer returning `STATUS: STRUGGLING` triggers the `consultant` agent (Fable) for _guidance only_ — implementation stays with the original agent.
 - Before any Fable dispatch, read `~/.local/state/claude-budget/mode` — a machine-local budget ledger shared by every session and worktree on this machine, so it is one file read, not a computation. Contents are exactly `normal` or `conserve`; a missing file means `normal`. If `conserve`, downgrade to Opus and note the downgrade in the issue. To record fresh `/usage` numbers or refresh the mode, use the `budget-sync` skill.
