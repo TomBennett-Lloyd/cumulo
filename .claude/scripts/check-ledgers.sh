@@ -4,8 +4,8 @@
 # sweep returns (#535).
 #
 # What this exists for. `docs/standards/architecture.md` rule 9 asks each owned
-# value's carriers to be listed beside the owner as a floor with its sweep named,
-# and until this gate nothing re-ran a banked sweep: a carrier written in the
+# value's carriers to be listed in a ledger the owner points at, as a floor with
+# its sweep named, and until this gate nothing re-ran a banked sweep: a carrier written in the
 # sweep's own words joined the claim without joining the list, a listed carrier
 # paraphrased out of the sweep stayed listed, and a sweep banked mid-batch was
 # stale at merge. Membership was a string match and the claim was carried by

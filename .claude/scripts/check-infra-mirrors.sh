@@ -39,8 +39,9 @@
 # on, and a reader that guessed at free text would be approving agreements it
 # never established — so that half is declined here and carried instead by
 # `docs/standards/architecture.md` rule 9 (one owner per stated value, plus a
-# restatement ledger beside the owner). It also knows nothing about mirrors it
-# has not been told about. Adding a pair is one line in MIRRORS below; a pair
+# restatement ledger declared under `.claude/ledgers/` and re-run by
+# `check:ledgers`). It also knows nothing about mirrors it has not been told
+# about. Adding a pair is one line in MIRRORS below; a pair
 # nobody adds is not covered, which is why the list sits in the file a reader of
 # either mirrored file is pointed at.
 #
@@ -157,7 +158,8 @@ ROOT=$(cd "$ROOT" && pwd -P) || exit 2
 #   * A PROSE mirror — a value restated in a comment or a doc. Declined for the
 #     reason in this file's header: free text has no line shape an honest
 #     brittle reader can anchor on. Architecture rule 9 (one owner per stated
-#     value, restatement ledger beside the owner) is what carries it.
+#     value, restatement ledger declared under `.claude/ledgers/`, re-run by
+#     `check:ledgers`) is what carries it.
 MIRRORS=(
   "eq|infra/ingestion/lambda.tf|aws_lambda_function.ingestion|timeout|apps/ingestion/src/cycle-budget.ts|INGESTION_LAMBDA_TIMEOUT_MS|1000"
   "eq|infra/api/lambda.tf|aws_lambda_function.api|timeout|apps/api/src/request-budget.ts|API_LAMBDA_TIMEOUT_MS|1000"
