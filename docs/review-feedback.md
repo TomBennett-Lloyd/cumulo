@@ -470,8 +470,8 @@ A category going quiet across consecutive reviews is the evidence for graduating
 
 ## 2026-10-13 — issue #629 — location-immutable
 
-- **Category**: pending — filled at merge
+- **Category**: approved-no-changes
 - **Feedback**: The owner is asked to decide one thing, and this entry states the ask only — it predicts no part of the answer. The one-paragraph edit to ADR 0009's #506 entry: the first-hour check's "Its largest cost" paragraph, which described `PUT /v1/sites/{siteId}` moving a site to a bucket that owes a first hour it cannot hold, is replaced by a single sentence saying #629 removed that case. The rest of the PR is source (the 400 on changed coordinates, its tests, the OpenAPI description, the README row) that the review loop has already approved.
 - **Why**: `docs/adr/**` is a `humanAlways` path, so this cannot merge on green CI plus a review-loop APPROVE. The half worth the one-read is the wording: the review pass struck a first draft ("no cost case remains") as an overclaim, since the same check still sends other windows down the fan-out, and the shipped sentence claims only what #629 removed.
 - **How applied**: Replaced the paragraph in `docs/adr/0009-fleet-forecast-rollup.md`; logged the #602 entry's now-impossible in-bucket coordinate edit sentence in `docs/tech-debt.md` rather than amending it here. At merge, whoever merges fills **Category** and **Verdict** on the branch before the label comes off.
-- **Verdict**: pending — filled at merge
+- **Verdict**: Approved without changes — owner, in chat, 2026-10-13 ("approve 641"), for the design the owner chose on 2026-10-08 ("remove the concept of moving a site since we're kinda just treating it as adding/deleting anyway"): PUT rejects changed coordinates with a field-named `validation_failed`, the rest stays editable. The ADR 0009 #506 entry's cost paragraph is replaced by one sentence crediting #629, the reviewer having struck "no cost case remains" as an over-claim; the owner was told that this is a replacement rather than the one-clause citation first asked for, and approved. Filled on the branch by the merge owner before the label came off.
