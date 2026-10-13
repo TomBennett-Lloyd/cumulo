@@ -17,7 +17,6 @@ const fleetSite = {
   capacityKw: 4.2,
   origin: 'seed',
   createdAt: '2026-07-01T00:00:00Z',
-  active: true,
 };
 
 const jsonResponse = (body: unknown, init: ResponseInit): Response =>

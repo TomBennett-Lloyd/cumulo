@@ -5,11 +5,12 @@ import {
   type FleetRollupProvenance,
   type Forecast,
   type ForecastWeatherReading,
+  type SeriesKind,
   type SitePhysics,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
 
-import type { BatchWriteOutcome, SeriesRangeResult } from '@cumulo/storage';
+import type { BatchWriteOutcome, SeriesPoint, SeriesRangeResult } from '@cumulo/storage';
 
 import type { ConsumeMessageDeps } from './consume-message';
 import type { SqsRecord } from './sqs-event';
@@ -138,6 +139,7 @@ export interface Recorder {
   readonly simulatedFor: string[];
   /** What the fleet roll-up write was handed: which location, and how many hours (#494). */
   readonly rolledUp: {
+    readonly kind: SeriesKind;
     readonly locationId: string;
     readonly provenance: FleetRollupProvenance;
     readonly hourCount: number;
@@ -165,6 +167,8 @@ export interface DepsInput {
   readonly storeRejectsWith?: unknown;
   /** Rejected by the trailing-window read instead of answering with an empty window. */
   readonly trailingRejectsWith?: unknown;
+  /** What the trailing-window read answers with, per site; empty unless given (#506). */
+  readonly trailingPointsBySite?: Readonly<Record<string, readonly SeriesPoint[]>>;
   /** What the fleet roll-up write answers with; defaults to a complete drain (#494). */
   readonly rollupOutcome?: BatchWriteOutcome;
   /** Rejected by the fleet roll-up write instead of answering. */
@@ -196,7 +200,10 @@ export const deps = (input: DepsInput): ConsumeMessageDeps => ({
     querySeriesRange: (siteId): Promise<SeriesRangeResult> => {
       input.recorder.simulatedFor.push(siteId);
       return input.trailingRejectsWith === undefined
-        ? Promise.resolve({ points: [], complete: true })
+        ? Promise.resolve({
+            points: [...(input.trailingPointsBySite?.[siteId] ?? [])],
+            complete: true,
+          })
         : rejectedWith(input.trailingRejectsWith);
     },
     putGenerationReadings: (): Promise<BatchWriteOutcome> =>
@@ -206,7 +213,7 @@ export const deps = (input: DepsInput): ConsumeMessageDeps => ({
     // default rather than a specially wired case — the same arrangement the trailing window above
     // is in, and for the same reason.
     putFleetRollupPartials: (
-      _kind,
+      kind,
       locationId,
       provenance,
       partials,
@@ -214,7 +221,7 @@ export const deps = (input: DepsInput): ConsumeMessageDeps => ({
       if (input.rollupRejectsWith !== undefined) {
         return rejectedWith(input.rollupRejectsWith);
       }
-      input.recorder.rolledUp.push({ locationId, provenance, hourCount: partials.length });
+      input.recorder.rolledUp.push({ kind, locationId, provenance, hourCount: partials.length });
       return Promise.resolve(input.rollupOutcome ?? { status: 'complete' });
     },
   },

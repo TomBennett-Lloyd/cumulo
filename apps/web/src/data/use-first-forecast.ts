@@ -20,8 +20,8 @@ const MS_PER_SECOND = 1_000;
  * The other constraint is read capacity, and ADR 0002's review of this ticket
  * priced both sides of it. Each poll reads the watched site's own partition, one
  * Query, which is the cheap end of `series`. The reads to stay away from are the
- * fleet-level ones: `fleetForecasts` and `fleetActuals` each fan out over every
- * site's partition and cost tens of times as much a call, so a handful of tabs
+ * fleet-level ones: `fleetForecasts` and `fleetActuals` cost tens of times as
+ * much a call (`infra/storage/tables.tf` owns the figures), so a handful of tabs
  * re-polling one of those on this cadence saturates what this poll barely
  * touches. Re-listing is not the expensive part, and it is not this loop's
  * business either. These tables are on-demand, so what the expensive version

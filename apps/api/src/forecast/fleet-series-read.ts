@@ -9,10 +9,9 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * The fan-out over one window: one Query per site, issued in concurrent
  * batches, deadline-gated between them, whole-or-nothing.
  *
- * **Two callers, no longer symmetrical.** `GET /v1/fleet/actuals` reads this
- * way as its only path; `GET /v1/fleet/forecast` reads the pre-summed `#FLEET`
- * partition instead and reaches this module only through ADR 0009's fallback,
- * which #507 removes once a full cycle has been observed.
+ * **Two callers, both fallbacks.** Both fleet routes read the pre-summed
+ * `#FLEET` partition and reach this module only through ADR 0009's fallback,
+ * which #507 removes.
  *
  * **The batch is the unit, and the gate sits between batches.** A fleet of 61
  * sites read one site at a time is 61 warm round trips (~2.4 s, measured at
@@ -36,8 +35,8 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * states the invariant this rests on: what an admission buys is one
  * `STORAGE_COMMAND_WORST_MS` of wall clock.
  *
- * **Why this is shared rather than written twice.** `get-fleet-actuals.ts` and
- * `fleet-rollup-read.ts`'s fallback differ in the parts a reader would expect
+ * **Why this is shared rather than written twice.** `fleet-actuals-rollup-read.ts`'s
+ * and `fleet-rollup-read.ts`'s fallbacks differ in the parts a reader would expect
  * them to — which direction the window runs, which kind of point they keep,
  * which schema their body is parsed against — and are identical in this part:
  * the order the sites are read in, when the loop is allowed to start another
@@ -48,9 +47,8 @@ import { hasBudgetForStorageCommands } from '../request-budget';
  * portion is extracted and the dissimilar remainder stays in the handlers —
  * deliberately *not* one function with a direction flag and a "which kind of
  * point" flag, which is the shape rule 7 names as the tell that two intents
- * were forced together. **That test is what #507 has to re-apply**: with the
- * fallback gone this module has one caller, and a shared module with one
- * caller is a module to inline back into it.
+ * were forced together. With both fallbacks gone (#507) this module has no
+ * caller and goes with them.
  *
  * What comes back is therefore one array of raw {@link SeriesPoint}s per site,
  * unsplit: the split is the caller's half of the job (`series-split.ts`).

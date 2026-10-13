@@ -294,6 +294,7 @@ describe('the roll-up inside one message', () => {
 
     expect(recorder.rolledUp).toEqual([
       {
+        kind: FLEET_ROLLUP_FORECAST_KIND,
         locationId: '53.32,-6.26',
         // The message's one clock reading, the same `issuedAt` its forecast rows carry.
         provenance: {
@@ -321,13 +322,13 @@ describe('the roll-up inside one message', () => {
       siteCount: 1,
       forecastCount: 1,
     });
-    expect(recorder.entries.at(-1)).toMatchObject({
+    expect(recorder.entries.find((entry) => entry.event === fleetRollupWriteEvent)).toMatchObject({
       event: fleetRollupWriteEvent,
       status: 'failed',
     });
   });
 
-  it('does not roll up a location whose sites were all deactivated', async () => {
+  it('does not roll up a location whose sites were all deleted', async () => {
     const recorder = emptyRecorder();
 
     await consumeMessage(deps({ recorder, sites: [] }), recordOf('m-1', [reading()]));

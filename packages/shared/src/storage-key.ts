@@ -90,7 +90,7 @@ export const fleetRollupTimeBound = (kind: SeriesKind, validTime: UtcIsoTimestam
  * `cumulo-series` sort key for one **fleet roll-up partial** — one location's
  * additive contribution to one hour of the fleet aggregate:
  * `FC#<model>#T#<validTime>#L#<locationId>`, or `GEN#T#…#L#…` for the actuals
- * kind ADR 0009 defines but this ticket does not yet produce.
+ * kind (ADR 0009).
  *
  * **The segment order is the inverse of {@link seriesSortKey}'s, deliberately.**
  * There the partition is one site and a reader wants the two models and the

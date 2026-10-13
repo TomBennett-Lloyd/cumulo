@@ -1,4 +1,5 @@
 import {
+  type FleetActualsAggregatePoint,
   type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
@@ -162,7 +163,7 @@ const DEFAULT_RANGE: RangeHours = 24;
  */
 const combineFleetQueries = (
   forecasts: QueryState<readonly FleetForecastAggregatePoint[]>,
-  actuals: QueryState<readonly GenerationReading[]>,
+  actuals: QueryState<readonly FleetActualsAggregatePoint[]>,
 ): QueryState<FleetSeries> => {
   if (forecasts.status === 'failed') {
     return forecasts;
@@ -171,14 +172,14 @@ const combineFleetQueries = (
     return { status: 'loading' };
   }
   const actualsState: FleetActualsState =
-    actuals.status === 'failed' ? { kind: 'failed' } : { kind: 'readings', readings: actuals.data };
+    actuals.status === 'failed' ? { kind: 'failed' } : { kind: 'points', points: actuals.data };
 
   return { status: 'ready', data: { forecasts: forecasts.data, actuals: actualsState } };
 };
 
-/** No readings is what a failed actuals read leaves the chart: a forecast, and no second series. */
-const readingsOf = (actuals: FleetActualsState): readonly GenerationReading[] =>
-  actuals.kind === 'readings' ? actuals.readings : [];
+/** No points is what a failed actuals read leaves the chart: a forecast, and no second series. */
+const actualPointsOf = (actuals: FleetActualsState): readonly FleetActualsAggregatePoint[] =>
+  actuals.kind === 'points' ? actuals.points : [];
 
 /**
  * What the chart draws, for whichever state the two reads are in.
@@ -194,7 +195,7 @@ const chartAggregateOf = (
   unit: ChartUnit,
 ): FleetChartAggregate =>
   state.status === 'ready'
-    ? fleetChartAggregate(state.data.forecasts, readingsOf(state.data.actuals), sites, unit)
+    ? fleetChartAggregate(state.data.forecasts, actualPointsOf(state.data.actuals), sites, unit)
     : EMPTY_FLEET_AGGREGATE;
 
 /** The two halves of one site's window, which the overlay draws either side of its seam. */

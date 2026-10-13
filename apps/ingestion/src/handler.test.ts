@@ -53,7 +53,6 @@ const siteAt = (index: number, location: ForecastLocation): FleetSite =>
     capacityKw: 4,
     origin: 'seed',
     createdAt: '2026-07-30T00:00:00Z',
-    active: true,
   });
 
 type LogEntry = Record<string, unknown>;
@@ -205,7 +204,7 @@ describe('createHandler', () => {
     expect(record.published).toEqual([]);
   });
 
-  it('an empty active fleet is a successful invocation', async () => {
+  it('an empty fleet is a successful invocation', async () => {
     const record = emptyRecord();
     const handler = createHandler(handlerDeps({ locations: [], record }));
 

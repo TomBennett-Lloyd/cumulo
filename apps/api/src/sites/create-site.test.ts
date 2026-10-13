@@ -44,13 +44,12 @@ describe('POST /v1/sites', () => {
     expect(calls.written.map((site) => site.id)).toEqual(ids);
   });
 
-  it('sets the three fields the caller does not own', async () => {
+  it('sets the fields the caller does not own', async () => {
     const { deps, calls } = scriptedFleet();
 
     await createSite(deps, postSite);
 
     expect(calls.written[0]?.origin).toBe('user');
-    expect(calls.written[0]?.active).toBe(true);
     expect(calls.written[0]?.createdAt).toBe(CREATED_AT);
   });
 

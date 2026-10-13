@@ -1,5 +1,6 @@
 import type {
   CreateSiteInput,
+  FleetActualsAggregatePoint,
   FleetForecastAggregatePoint,
   Forecast,
   GenerationReading,
@@ -274,8 +275,9 @@ export interface FleetDataSource {
   ) => Promise<FleetSourceResult<readonly FleetForecastAggregatePoint[]>>;
 
   /**
-   * Every site's generation actuals over the window, unaggregated — simulated
-   * in live mode as {@link siteActuals} describes (#264).
+   * The fleet's generation actuals over the window, **already summed** — one
+   * point per hour, with its own `contributingCapacityKw` divisor (#506) —
+   * simulated in live mode as {@link siteActuals} describes (#264).
    *
    * Like {@link fleetForecasts} this is one request for the whole fleet — the
    * HTTP source reads `GET /v1/fleet/actuals`. That route reads *backwards* from
@@ -285,5 +287,5 @@ export interface FleetDataSource {
    */
   readonly fleetActuals: (
     range: RangeHours,
-  ) => Promise<FleetSourceResult<readonly GenerationReading[]>>;
+  ) => Promise<FleetSourceResult<readonly FleetActualsAggregatePoint[]>>;
 }

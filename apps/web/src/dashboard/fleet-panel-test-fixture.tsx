@@ -1,7 +1,9 @@
 import {
   FLEET_ROLLUP_FORECAST_KIND,
+  fleetActualsAggregate,
   fleetForecastAggregate,
   utcIsoTimestampSchema,
+  type FleetActualsAggregatePoint,
   type FleetForecastAggregatePoint,
   type Forecast,
   type GenerationReading,
@@ -108,7 +110,7 @@ const ACTUALS: readonly GenerationReading[] = [
 /** The canned answers to the calls the panel makes. */
 export interface StubFleet {
   readonly forecasts: FleetSourceResult<readonly FleetForecastAggregatePoint[]>;
-  readonly actuals: FleetSourceResult<readonly GenerationReading[]>;
+  readonly actuals: FleetSourceResult<readonly FleetActualsAggregatePoint[]>;
   /**
    * Non-null fails the *overlay* read only.
    *
@@ -137,9 +139,15 @@ const summed = (
 ): FleetSourceResult<readonly FleetForecastAggregatePoint[]> =>
   ready(fleetForecastAggregate(forecasts, SITES, FLEET_ROLLUP_FORECAST_KIND));
 
+/** The fleet's readings as the seam hands them over: summed, one point per hour (#506). */
+const summedActuals = (
+  readings: readonly GenerationReading[],
+): FleetSourceResult<readonly FleetActualsAggregatePoint[]> =>
+  ready(fleetActualsAggregate(readings, SITES));
+
 export const FULL_FLEET: StubFleet = {
   forecasts: summed(FORECASTS),
-  actuals: ready(ACTUALS),
+  actuals: summedActuals(ACTUALS),
   siteForecastError: null,
 };
 
@@ -170,7 +178,7 @@ export const PARTIAL_FLEET: StubFleet = {
 export const FORECASTLESS_FLEET: StubFleet = {
   ...FULL_FLEET,
   forecasts: summed([]),
-  actuals: ready([]),
+  actuals: summedActuals([]),
 };
 
 export const FAILED_FLEET: StubFleet = {
@@ -217,7 +225,7 @@ export const DISJOINT_WINDOW_FLEET: StubFleet = {
     forecastAt(SITE_A_ID, 13, 3, band(2, 4)),
     forecastAt(SITE_B_ID, 13, 5, band(4, 7)),
   ]),
-  actuals: ready([
+  actuals: summedActuals([
     readingAt(SITE_A_ID, 10, 1.5),
     readingAt(SITE_B_ID, 10, 3.5),
     readingAt(SITE_A_ID, 11, 2),
@@ -314,7 +322,7 @@ export class CountingFleetSource implements FleetDataSource {
     return Promise.resolve(this.canned.forecasts);
   };
 
-  readonly fleetActuals = (): Promise<FleetSourceResult<readonly GenerationReading[]>> => {
+  readonly fleetActuals = (): Promise<FleetSourceResult<readonly FleetActualsAggregatePoint[]>> => {
     this.actualsCalls += 1;
     return Promise.resolve(this.canned.actuals);
   };

@@ -4,12 +4,12 @@
  *
  * This is where CLAUDE.md's API-frugality constraint is enforced in code — "only
  * ever fetch weather for locations where active fleet sites exist" is exactly the
- * filter plus the bucketing below.
+ * bucketing below, since every stored site is an active one (#606).
  *
  * Pure: no I/O, no clock. The caller supplies the fleet and fetches the result.
  */
 
-import { activeFleetSites, locationId } from '@cumulo/shared';
+import { locationId } from '@cumulo/shared';
 import type { FleetSite } from '@cumulo/shared';
 
 /**
@@ -49,22 +49,20 @@ const fetchLocationOf = (id: string): FetchLocation => {
 };
 
 /**
- * The distinct location ids of the sites still worth fetching for.
+ * The distinct location ids of the fleet's sites.
  *
  * Neither half is reimplemented here. `locationId` is simultaneously the
  * `cumulo-weather` partition key and this de-duplication key, and a drift between
  * the two would either double the fetch volume or write readings into a partition
- * nothing reads back (ADR 0002 §3). `activeFleetSites` is the same predicate the
- * API's fleet reads narrow by (#531).
+ * nothing reads back (ADR 0002 §3).
  */
 const activeLocationIds = (sites: readonly FleetSite[]): Set<string> =>
-  new Set(activeFleetSites(sites).map((site) => locationId(site)));
+  new Set(sites.map((site) => locationId(site)));
 
 /**
  * The weather fetches one ingestion cycle should issue for `sites`.
  *
- * Inactive sites contribute nothing, co-located sites contribute one entry, and
- * the result is ordered by id.
+ * Co-located sites contribute one entry, and the result is ordered by id.
  */
 export const activeFetchLocations = (sites: readonly FleetSite[]): FetchLocation[] =>
   [...activeLocationIds(sites)].sort().map(fetchLocationOf);

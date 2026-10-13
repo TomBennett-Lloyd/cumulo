@@ -4,7 +4,7 @@ import type { SiteAdapter } from '@cumulo/storage';
 import { jsonResponse, type ApiResponse } from '../http/response';
 
 /**
- * `GET /v1/sites` — the whole fleet, seed and user, active and inactive.
+ * `GET /v1/sites` — the whole fleet, seed and user.
  *
  * Unpaginated on purpose: ADR 0002 holds the fleet in a single partition and
  * #29 caps how many user sites can exist, so "the whole fleet" is a bounded

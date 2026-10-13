@@ -42,13 +42,11 @@ export const unreachableDetail = '2 attempts failed; last: TypeError: fetch fail
 export interface TestSiteInput {
   readonly index: number;
   readonly location: ForecastLocation;
-  readonly active: boolean;
 }
 
 /**
- * Parsed rather than cast: a fixture that could not survive `fleetSiteSchema` is a
- * fixture describing a site the control plane cannot hold, and would prove nothing
- * about a cycle that reads real ones.
+ * Parsed rather than cast, so no fixture describes a site the control plane cannot
+ * hold.
  */
 export const siteAt = (input: TestSiteInput): FleetSite =>
   fleetSiteSchema.parse({
@@ -61,7 +59,6 @@ export const siteAt = (input: TestSiteInput): FleetSite =>
     capacityKw: 4,
     origin: 'seed',
     createdAt: '2026-07-30T00:00:00Z',
-    active: input.active,
   });
 
 /** Dublin carries two sites, so the fleet is five sites over four fetch locations. */
@@ -73,11 +70,9 @@ export const fleetLocations: readonly ForecastLocation[] = [
   edinburgh,
 ];
 
-export const fleetOf = (active: boolean): FleetSite[] =>
-  fleetLocations.map((location, index) => siteAt({ index, location, active }));
-
-export const activeFleet = fleetOf(true);
-export const inactiveFleet = fleetOf(false);
+export const testFleet: FleetSite[] = fleetLocations.map((location, index) =>
+  siteAt({ index, location }),
+);
 
 export const readingsFor = (location: ForecastLocation): ForecastWeatherReading[] =>
   Array.from({ length: readingsPerLocation }, (_, hour) =>

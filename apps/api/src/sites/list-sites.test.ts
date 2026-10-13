@@ -22,14 +22,6 @@ describe('GET /v1/sites', () => {
     });
   });
 
-  it('includes inactive sites — the fleet listing is the control plane, not the forecast set', async () => {
-    const dormant = fleetSite({ active: false });
-
-    const body = listSitesResponseSchema.parse(jsonBodyOf(await listSites(depsReturning(dormant))));
-
-    expect(body.sites).toEqual([dormant]);
-  });
-
   it('an empty fleet is 200 with an empty array, not a 404', async () => {
     const response = await listSites(depsReturning());
 

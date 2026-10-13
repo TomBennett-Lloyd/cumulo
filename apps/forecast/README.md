@@ -41,9 +41,9 @@ strings use — live in `@cumulo/shared`, because an app may not import another 
 - **A partial drain fails the record.** `BatchWriteItem` answers HTTP 200 while handing back the
   items it declined (ADR 0002 Consequence 4), so "the call succeeded" and "the data was written"
   are different facts, and only the second one counts as delivered.
-- **No active sites is a success.** A location whose sites were all deactivated between publish
-  and delivery has nothing to forecast. Redelivering that message would turn an ordinary fleet
-  edit into a DLQ entry.
+- **No active sites is a success.** A location whose sites were all deleted or evicted between
+  publish and delivery has nothing to forecast. Redelivering that message would turn an ordinary
+  fleet edit into a DLQ entry.
 - **Zero Open-Meteo calls.** The weather arrives on the queue. CLAUDE.md's frugality constraint
   is ingestion's to honour; this service adds no term to it.
 

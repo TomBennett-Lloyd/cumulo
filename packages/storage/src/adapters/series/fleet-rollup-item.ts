@@ -52,7 +52,7 @@ export interface FleetRollupItemKeys extends SeriesItemKeys, FleetRollupProvenan
    * Which location this partial speaks for.
    *
    * Duplicated out of the sort key deliberately. The key is a string this package composes, and a
-   * reader of a stored item — an operator in the console, a future actuals producer — should not
+   * reader of a stored item — an operator in the console, say — should not
    * have to parse one to learn what the row is about. It is also why `storage-key.ts` declines to
    * offer an inverse of `fleetRollupSortKey`: nothing has to rediscover the location from the key,
    * because the attribute is right there.

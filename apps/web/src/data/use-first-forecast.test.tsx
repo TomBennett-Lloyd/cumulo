@@ -187,10 +187,9 @@ describe('useFirstForecast', () => {
   });
 
   // ADR 0002's review of this ticket: this poll is one Query on the watched
-  // site's own partition, ~0.5 read units on `series`, while the fleet actuals
-  // route still covers every site's partition at ~25 and the fleet forecast
-  // route costs ~22, one Query of the pre-summed `#FLEET` partition since
-  // #494. A handful of tabs polling either every few
+  // site's own partition, ~0.5 read units on `series`, while the fleet routes
+  // cost ~22 (forecast) and ~11 (actuals), each one Query of the pre-summed
+  // `#FLEET` partition since #494 and #506. A handful of tabs polling either every few
   // seconds is the cost this loop exists not to incur — an order of magnitude
   // either way.
   it('reads only the watched site’s own partition, never a fleet-wide read', async () => {

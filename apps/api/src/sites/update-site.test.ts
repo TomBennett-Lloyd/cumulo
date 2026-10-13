@@ -36,10 +36,10 @@ describe('PUT /v1/sites/{siteId}', () => {
     expect(written).toEqual([body]);
   });
 
-  it('preserves the four fields the server owns', async () => {
+  it('preserves the three fields the server owns', async () => {
     // The adapter writes whole items, so a put built only from the request body
     // would re-origin a seed site as a user one and reset its eviction age.
-    const stored = fleetSite({ origin: 'seed', active: false, createdAt: '2026-01-02T03:04:05Z' });
+    const stored = fleetSite({ origin: 'seed', createdAt: '2026-01-02T03:04:05Z' });
     const written: FleetSite[] = [];
 
     await updateSite(
@@ -51,7 +51,6 @@ describe('PUT /v1/sites/{siteId}', () => {
     expect(written[0]?.id).toBe(stored.id);
     expect(written[0]?.origin).toBe('seed');
     expect(written[0]?.createdAt).toBe(stored.createdAt);
-    expect(written[0]?.active).toBe(false);
   });
 
   it('answers 404 without writing when the site does not exist', async () => {

@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { aggregateFleetForecast, contributingCapacityKwByHour } from './aggregation';
 import { canonicalFleetSeed, generateFleet } from './fleet';
 import {
+  fleetActualsAggregate,
+  fleetActualsRollupPartials,
+  sumFleetActualsRollupPartials,
+} from './fleet-actuals-rollup';
+import {
   FLEET_ROLLUP_FORECAST_KIND,
   fleetForecastAggregate,
   fleetForecastAggregatePointSchema,
@@ -12,6 +17,7 @@ import {
 } from './fleet-rollup';
 import { forecastSchema, type Forecast } from './forecast';
 import { locationId } from './location';
+import { simulatedActualFromForecast } from './simulated-actual';
 import { MAX_PLAUSIBLE_RESIDENTIAL_KW, type Site } from './site';
 
 /**
@@ -249,5 +255,39 @@ describe('the aggregate is a valid wire point', () => {
     for (const point of points) {
       expect(fleetForecastAggregatePointSchema.parse(point)).toEqual(point);
     }
+  });
+});
+
+/**
+ * The same proof for the actuals kind (#506): the readings are the canonical fleet's simulated
+ * actuals, partitioned by the producer's grouping, and the whole-fleet sum is the fallback's.
+ */
+describe('actuals partials sum to the whole-fleet actuals aggregate', () => {
+  const allReadings = allForecasts.map(simulatedActualFromForecast);
+
+  const perLocationActualsPartials = () =>
+    [...sitesByLocation().values()].flatMap((locationSites) => {
+      const siteIds = new Set(locationSites.map((site) => site.id));
+      return fleetActualsRollupPartials(
+        allReadings.filter((reading) => siteIds.has(reading.siteId)),
+        locationSites,
+      );
+    });
+
+  it('agrees on every field, discrete ones exactly and kilowatts to a microwatt', () => {
+    const grouped = sumFleetActualsRollupPartials(perLocationActualsPartials());
+    const whole = fleetActualsAggregate(allReadings, fleet);
+
+    expect(grouped.map((point) => point.validTime)).toEqual(whole.map((point) => point.validTime));
+    expect(grouped.map((point) => point.contributingSiteCount)).toEqual(
+      whole.map((point) => point.contributingSiteCount),
+    );
+    grouped.forEach((point, index) => {
+      expect(point.acPowerKw).toBeCloseTo(whole[index]?.acPowerKw ?? Number.NaN, MICROWATT_PLACES);
+      expect(point.contributingCapacityKw).toBeCloseTo(
+        whole[index]?.contributingCapacityKw ?? Number.NaN,
+        MICROWATT_PLACES,
+      );
+    });
   });
 });

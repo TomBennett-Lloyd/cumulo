@@ -3,14 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { canonicalFleetSeed, generateFleet } from './fleet';
 import { locationId } from './location';
 import {
-  activeFleetSites,
   createSiteInputSchema,
   fleetSiteSchema,
   MAX_USER_SITES,
   siteOriginSchema,
   sitePhysicsSchema,
   siteSchema,
-  type FleetSite,
   type Site,
 } from './site';
 
@@ -220,28 +218,7 @@ const validFleetSite = {
   ...validSite,
   origin: 'seed',
   createdAt: '2026-07-30T14:00:00Z',
-  active: true,
 };
-
-describe('activeFleetSites', () => {
-  const fleetSite = (id: string, active: boolean): FleetSite =>
-    fleetSiteSchema.parse({ ...validFleetSite, id, active });
-
-  const live = fleetSite('11111111-1111-4111-8111-111111111111', true);
-  const retired = fleetSite('22222222-2222-4222-8222-222222222222', false);
-
-  it('keeps the active sites, in order, and drops the rest', () => {
-    expect(activeFleetSites([retired, live])).toEqual([live]);
-  });
-
-  it('answers an all-inactive fleet with nothing, which is what a fleet read then answers for', () => {
-    expect(activeFleetSites([retired])).toEqual([]);
-  });
-
-  it('answers an empty fleet with nothing', () => {
-    expect(activeFleetSites([])).toEqual([]);
-  });
-});
 
 describe('MAX_USER_SITES', () => {
   /** Open-Meteo's free tier, as CLAUDE.md states it. */
@@ -306,8 +283,17 @@ describe('fleetSiteSchema', () => {
 
   // `origin` in particular: eviction (#29) exempts the seed fleet by this field,
   // so a site that reaches storage without one is not a site the fleet can hold.
-  it.each(['origin', 'createdAt', 'active'])('rejects a fleet site missing %s', (field) => {
+  it.each(['origin', 'createdAt'])('rejects a fleet site missing %s', (field) => {
     expect(fleetSiteSchema.safeParse(withoutField(validFleetSite, field)).success).toBe(false);
+  });
+
+  // Rows stored before #606 still carry `active: true`. Stripping it on read is what lets the
+  // field retire without a migration.
+  it('parses a stored row that still carries the retired active flag, and drops it', () => {
+    const result = fleetSiteSchema.safeParse({ ...validFleetSite, active: true });
+
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('active');
   });
 
   it('rejects a createdAt that is not the fixed-width UTC form', () => {
@@ -336,7 +322,6 @@ describe('fleetSiteSchema', () => {
 
     expect(result.success).toBe(true);
     expect(result.data && Object.keys(result.data).sort()).toEqual([
-      'active',
       'azimuthDegrees',
       'capacityKw',
       'createdAt',

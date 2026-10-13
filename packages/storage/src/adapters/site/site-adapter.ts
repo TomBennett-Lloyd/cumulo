@@ -38,12 +38,11 @@ import {
  *
  * The whole fleet lives in one partition (`pk = 'FLEET'`, sort key `siteId`) so
  * "list every site" (A2) and "enumerate active locations" (I1) are single
- * Queries rather than Scans. Two sparse GSIs hang off it, and *sparse* is the
- * load-bearing word: the index attributes are written only when the site
- * qualifies, so "inactive sites are invisible to the forecast service" and
- * "seed sites are never evicted" are properties of the data model rather than
- * of filters a later change could forget to apply. `site-item.ts` holds those
- * rules.
+ * Queries rather than Scans. Two GSIs hang off it: `by-location`, which holds
+ * every site, and `user-sites-by-age`, which is sparse — its attributes are
+ * written only for user sites, so "seed sites are never evicted" is a property
+ * of the data model rather than of a filter a later change could forget to
+ * apply. `site-item.ts` holds that rule.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
  * comment on `createStorageDocumentClient`.
@@ -407,7 +406,7 @@ export class SiteAdapter extends StorageAdapterBase {
     }
   }
 
-  /** Every site in the fleet, seed and user, active and inactive (A2, I1). */
+  /** Every site in the fleet, seed and user (A2, I1). */
   async listFleetSites(): Promise<FleetSite[]> {
     const { items } = await this.queryAllPages('listFleetSites', undefined, {
       TableName: this.tableName,
@@ -418,7 +417,7 @@ export class SiteAdapter extends StorageAdapterBase {
     return items.map(fromItem);
   }
 
-  /** The physics parameters of every **active** site at a location (F1). */
+  /** The physics parameters of every site at a location (F1). */
   async listActiveSitePhysicsAtLocation(locationId: string): Promise<SitePhysics[]> {
     const { items } = await this.queryAllPages('listActiveSitePhysicsAtLocation', undefined, {
       TableName: this.tableName,

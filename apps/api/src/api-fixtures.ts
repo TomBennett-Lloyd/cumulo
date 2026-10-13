@@ -23,8 +23,7 @@ import { API_LAMBDA_TIMEOUT_MS } from './request-budget';
  * Test support, in one module rather than a copy per test file, for the reason
  * `docs/standards/testing.md` rule 5 gives: these encode one thing each — what a
  * gateway event looks like, what a site looks like — and a change to any of them
- * has to reach every test at once. Nothing here is imported by `main.ts`, so
- * none of it reaches the deployed bundle.
+ * has to reach every test at once.
  */
 
 /** A stable uuid, so a test asserting on an id is not asserting on randomness. */
@@ -45,7 +44,6 @@ export const fleetSite = (overrides: FleetSiteOverrides = {}): FleetSite =>
     capacityKw: 4.2,
     origin: 'seed',
     createdAt: '2026-07-30T14:00:00Z',
-    active: true,
     ...overrides,
   });
 

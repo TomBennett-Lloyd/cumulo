@@ -5,11 +5,9 @@ import { HttpFleetDataSource } from './http-fleet-data-source';
  * Fixtures shared by `http-fleet-data-source.test.ts` — the recording transport
  * double, the wire-shaped payload builders, and the result assertions.
  *
- * Test support, in its own module for two reasons. The payload builders encode
- * one thing (what the Fleet API puts on the wire), so a change to that shape has
- * to reach every test at once; and the file that consumes them is at the
- * `max-lines` ceiling, where `structure.md` rule 4 says to cut rather than to
- * compress.
+ * Test support, in its own module because the payload builders encode one thing
+ * (what the Fleet API puts on the wire) and the consuming test file is at the
+ * `max-lines` ceiling (`structure.md` rule 4).
  */
 
 export const BASE_URL = 'https://api.example.test';
@@ -30,7 +28,6 @@ export const fleetSite = (id: string, name: string): unknown => ({
   capacityKw: 4.2,
   origin: 'seed',
   createdAt: '2026-07-01T00:00:00Z',
-  active: true,
 });
 
 export const forecastPoint = (siteId: string, acPowerKw: number): unknown => ({

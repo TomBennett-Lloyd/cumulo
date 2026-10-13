@@ -136,7 +136,7 @@ describe('listFleetSites', () => {
     expect(await adapter().listFleetSites()).toEqual([]);
   });
 
-  it('parses items of every origin and activity state', async () => {
+  it('parses items of every origin, including one stored before #606 with the retired active flag', async () => {
     ddbMock.on(QueryCommand).resolves({ Items: [ranelaghItem, rathminesItem] });
 
     const sites = await adapter().listFleetSites();
@@ -153,7 +153,6 @@ describe('listFleetSites', () => {
         capacityKw: 3.5,
         origin: 'user',
         createdAt: '2026-07-29T09:30:00Z',
-        active: false,
       }),
     ]);
   });

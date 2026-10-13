@@ -20,6 +20,15 @@ export {
   fleetForecastAggregate,
 } from './fleet-rollup';
 export {
+  TRAILING_ACTUALS_HOURS,
+  FLEET_ROLLUP_ACTUALS_KIND,
+  fleetActualsAggregatePointSchema,
+  type FleetActualsAggregatePoint,
+  fleetActualsRollupPartials,
+  sumFleetActualsRollupPartials,
+  fleetActualsAggregate,
+} from './fleet-actuals-rollup';
+export {
   fleetRollupMembers,
   fleetRollupMembersSchema,
   type FleetRollupMembers,
@@ -80,7 +89,6 @@ export {
   type SiteOrigin,
   fleetSiteSchema,
   type FleetSite,
-  activeFleetSites,
   sitePhysicsSchema,
   type SitePhysics,
   MAX_PLAUSIBLE_RESIDENTIAL_KW,

@@ -248,9 +248,6 @@ try {
   const sites = new SiteAdapter({ client, tableName: storageTableName('sites', ENVIRONMENT) });
   const series = new SeriesAdapter({ client, tableName: storageTableName('series', ENVIRONMENT) });
 
-  // The whole fleet, inactive sites included: a site switched off yesterday
-  // still lived through the hours in this window, and its stored forecasts are
-  // what the dashboard plots when someone opens it.
   const fleet = await sites.listFleetSites();
 
   console.log(

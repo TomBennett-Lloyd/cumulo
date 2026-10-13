@@ -46,6 +46,5 @@ export const buildSeedFleet = (): readonly FleetSite[] =>
       ...site,
       origin: 'seed',
       createdAt: SEED_CREATED_AT,
-      active: true,
     }),
   );
