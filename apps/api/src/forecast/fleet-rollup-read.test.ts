@@ -347,3 +347,50 @@ describe('the fallback', () => {
     expect(logged[0]).toMatchObject({ reason: 'absent' });
   });
 });
+
+describe('the runs behind the sum', () => {
+  const issuedAtsOf = (result: Awaited<ReturnType<typeof read>>) => {
+    if (!result.complete) {
+      throw new Error('expected a complete read');
+    }
+    return result.issuedAtsByGroup;
+  };
+
+  it('groups the roll-up by location, each with the run that wrote it', async () => {
+    const { deps } = harness({
+      rows: [
+        row(DUBLIN, [RANELAGH], partial(), ISSUED_AT),
+        row(BRISTOL, [BRISTOL_SITE], partial(), EARLIER_RUN),
+      ],
+    });
+
+    const groups = issuedAtsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
+
+    expect(groups).toEqual([[ISSUED_AT], [EARLIER_RUN]]);
+  });
+
+  it('groups the fallback by site, from the summed model’s rows alone', async () => {
+    const physics = forecast({ issuedAt: ISSUED_AT });
+    const { deps } = harness({
+      pointsBySite: {
+        [RANELAGH_ID]: [
+          { type: 'forecast', forecast: physics },
+          {
+            type: 'forecast',
+            forecast: { ...physics, model: 'ml' as const, issuedAt: EARLIER_RUN },
+          },
+        ],
+      },
+    });
+
+    const groups = issuedAtsOf(await read(deps, [RANELAGH, RATHMINES]));
+
+    expect(groups).toEqual([[ISSUED_AT], []]);
+  });
+
+  it('has no group for an empty fleet', async () => {
+    const { deps } = harness();
+
+    expect(issuedAtsOf(await read(deps, []))).toEqual([]);
+  });
+});
