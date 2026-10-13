@@ -221,56 +221,10 @@
   --color-accent: #1d63bd;
   --color-accent-contrast: #ffffff;
 
-  /* Restatement ledger (`architecture.md` rule 9) for `--color-accent` and
-     `--color-text-muted`. One file outside this package carries all four of
-     their values — this block's two and the dark block's two — and cannot
-     import its way out of holding them:
-
-     - `apps/web/public/favicon.svg` (added by #282) — the browser-tab mark,
-       painted with the two light hexes and, inside a `prefers-color-scheme`
-       media query, the two dark ones. A favicon is fetched as a standalone
-       document with no stylesheet context, so `var()` resolves to nothing
-       there; a literal is the only form that paints, which makes this the
-       carrying site rule 9 ledgers rather than forbids. Nothing mechanical
-       reaches it either — no gate in `pnpm verify` reads that file, stylelint
-       included, since stylelint here only ever reads CSS files — so
-       this entry and that file's own header comment are the whole control.
-       Change either value above without it and the tab keeps the old colour,
-       silently, for as long as nobody looks at a tab. #424 (the final logo)
-       redraws that file; #423 covers the docblocks elsewhere that still deny
-       this carrier exists.
-
-     Also a carrier, inside this file and owned by the paragraph holding it: the
-     accent-contrast argument in this file's own header states `#1d63bd` and
-     `#3987e5` with measured ratios against named surfaces. It computes with the
-     values, so it is a restatement to be re-measured rather than re-typed when
-     either moves — #273, the owner decision of 2026-08-09 on this very blue, is
-     applied here.
-
-     A floor, not a census, and keyed to the claim rather than to one literal:
-     established by `git grep -nE "#1d63bd|#58626d|#3987e5|#9aa5b1" -- :/` on
-     2026-10-07 — `git grep` rather than a recursive `grep` so that the sweep
-     covers tracked files and not build output, and `-- :/` so that it covers
-     the whole repository wherever it is run from. Without that operand, run
-     from beside this file, it reports only this file and silently drops the
-     carrier named above. Four families it returns need naming so the next
-     reader does not re-adjudicate them.
-
-     `--color-focus-ring`, `--color-chart-1` and `--color-map-marker` below are
-     separate declarations so they can diverge; today they follow the accent by
-     decision (#273).
-
-     `--color-chart-axis-label`, in both blocks, lands on the muted literals;
-     the light block's declaration dispositions both.
-
-     And `docs/design/exploration/design-directions.html` is a snapshot of the
-     candidates considered, not a live surface; it ages as a record, correctly.
-     So do `docs/design/design-principles.md`'s two quotations of `#1d63bd`
-     (P9's boundary, and item 4 of `## 5. Open questions — RESOLVED`), each a
-     dated decision record of #273.
-     Consumers that reference these tokens rather than copying them — the header
-     mark's own `apps/web/src/header/header.css` among them — are not carriers
-     at all. */
+  /* The ledger for `--color-accent` and `--color-text-muted` is
+     `.claude/ledgers/color-accent.ledger` (`architecture.md` rule 9): the
+     carrier list, the sweep and the classification live there, and
+     `check:ledgers` re-runs the sweep on every `pnpm verify`. */
 
   /* Elevation ink: the colour a panel floated over data casts beneath itself —
      a chart tooltip over its own marks, and anything else that has to read as

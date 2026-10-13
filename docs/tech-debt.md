@@ -11,6 +11,8 @@ Entry format:
 - Source: PR/issue #
 ```
 
+A dated `- Update` bullet appended to an entry follows the `- Update` sentence of `docs/standards/architecture.md` rule 9.
+
 **Restatement ledger for this file's own path** (`docs/standards/architecture.md` rule 9), which acquired one the first time a site carried it **executably**. A FLOOR, NOT A CENSUS, in both halves. The executable carriers known today are two, both added by #513: the `TECH_DEBT_PATH` constant in `.claude/scripts/merge-pr.sh`, whose union step matches this exact path to decide whether a merge conflict is the append collision it may resolve, and the `TD` constant in `.claude/scripts/merge-pr.test.sh`, which is what the cases for that step assert against. Both fail quiet-and-closed rather than quiet-and-open — a renamed log stops conflicting under the old name, `git merge-tree` reports the new one, and the conflicted-set test refuses naming it.
 
 The prose carriers are deliberately **not enumerated here**, because a list nobody has classified is worse than no list: it reads as a census and is one wrong entry away from sending a rename past the site it missed. The census is the sweep, and a rename runs it rather than trusting anything written down — `command grep -rln 'tech-debt\.md' --include='*.md' --include='*.sh' --include='*.json' --include='*.yml' --include='*.mjs' --include='*.ts' .`, which returned 34 tracked files on 2026-09-11 and cannot see a paraphrase ("the tech-debt log") at all. Most of those hits are past-tense narration of what a specific ticket did, which rule 9 permits and a rename leaves standing; separating those from the live carriers is a triage-sized job and is owned by [#533](https://github.com/TomBennett-Lloyd/cumulo/issues/533) — it was logged as an entry below until the 2026-10-05 pass captured it, which is why this paragraph names an issue rather than a neighbour.
@@ -278,3 +280,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: the deploy workflows under `.github/workflows/` that trigger in parallel on `packages/shared/**`: `deploy-api.yml`, `deploy-ingestion.yml`, `deploy-forecast.yml`, `deploy-pages.yml`, which is the live web publish until #144, and `deploy-web.yml`, which is its successor and skips until #144. `docs/standards/architecture.md` has no rule on schema contraction.
 - What: removing a required field from a stored or wire schema reaches the API, the web bundle, ingestion and forecast in one parallel push. Until every deployable has updated, an old one parses the new shape with the old schema and throws. Once the new code has written rows, a revert breaks the readers too. #606 recorded these hazards for `FleetSite.active` rather than building a transition. Candidate standards rule: contract a stored or wire field over two releases, so readers tolerate its absence before writers stop emitting it.
 - Source: #606 review pass 1 SYSTEMIC
+
+## 2026-10-07 — the observer policy is checked by reading its HCL, not by evaluating the rendered document
+
+- Where: `policy_violations` in `.claude/scripts/incident-watch.test.sh`, against `data.aws_iam_policy_document.observer` in `infra/bootstrap/observer.tf`
+- What: the harness greps the HCL for the widening shapes someone thought of (extra actions, `not_actions` in an Allow, a narrowed or commented-out Deny, `jsonencode`, a managed attachment), each with a negative control. A shape nobody listed passes. The sound check evaluates the rendered JSON, e.g. `terraform console` in CI's existing bootstrap validate job, or `aws accessanalyzer validate-policy`, which is a CI change across stacks
+- Source: #604 review pass 1 SYSTEMIC
+
+## 2026-10-07 — the mirror gate has no mode for a shell or skill carrier of an app-owned string
+
+- Where: `.claude/scripts/check-infra-mirrors.sh`; carriers such as the log filters in `.claude/scripts/incident-watch.sh`, and Terraform-to-Terraform restatements such as `observed_log_group_arns` in `infra/bootstrap/observer.tf`, which quotes four `function_name`s owned by the api (including `infra/api/cost-guard.tf`'s `cost_trip_function_name`), ingestion and forecast stacks — a rename surfaces only as an `AccessDenied`, which the script reports as no verdict
+- What: `check-infra-mirrors` pairs Terraform with TypeScript only, so a script quoting a log event name (`apiServerErrorEvent`, `messageOutcomeEvent`) or an alarm name drifts silently. #604 pins its own carriers with harness cases ("the log filters carry the event names their owners export"); the general fix is a gate mode, not one more harness per script
+- Source: #604 review pass 1 SYSTEMIC

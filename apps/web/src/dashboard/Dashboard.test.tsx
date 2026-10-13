@@ -159,8 +159,8 @@ describe('Dashboard', () => {
     // which nothing has resolved and every panel is still waiting.
     //
     // It counted regions until #284 D3 made the fleet chart structural — the
-    // panel renders one figure in every state now, first paint's included, so
-    // the chart's readout is on screen from the first frame. What that changed
+    // panel renders one figure (`fleet-panel-body.tsx` § One chart) in every state now, first
+    // paint's included, so the chart's readout is on screen from the first frame. What that changed
     // is the assertion and not the property: the readout mounts *empty* and is
     // filled only when a reader moves the chart's selection, which is what makes
     // its every announcement a change rather than text that was already there

@@ -1,0 +1,14 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for the claim that the map
+# band restyles OpenMeteoAttribution in exactly one respect beyond the compact-form
+# rule, owned by the OpenMeteoAttribution styling bullet of "## Attribution" in
+# docs/design/map-treatment.md.
+#
+# Membership is a citation: a carrier cites the owner as `docs/design/map-treatment.md`
+# § Attribution, and the sweep's first arm is that citation. The second arm is the
+# owner's own wording, the positive control.
+owner: docs/design/map-treatment.md
+claim: the band restyles OpenMeteoAttribution in exactly one respect beyond the compact-form rule — the ink, on the veil
+sweep: map-treatment\.md. § Attribution|exactly one respect
+scope: :!docs/tech-debt.md :!docs/friction-log.md :!docs/review-feedback.md
+carrier: apps/web/src/map/MapAttributionStrip.tsx
+carrier: apps/web/src/map/map.css

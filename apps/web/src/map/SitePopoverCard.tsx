@@ -152,11 +152,11 @@ export interface SitePopoverCardProps {
  *
  * What answers a selection instead is structure. This card is
  * `aria-labelledby` its own heading, so the surface names its site the moment it
- * exists; the fleet chart *draws that site's line* over the fleet's sum as soon
- * as its hours arrive; and the header's search says so in its own status region.
- * Not the chart's readout — that region mounts empty and fills only when a
- * reader moves the chart's own selection, so at the moment of arrival it names
- * nothing at all (docs/standards/react.md's live-region bullet).
+ * exists; the fleet chart (`apps/web/src/dashboard/fleet-panel-body.tsx` § One chart)
+ * *draws that site's line* over the fleet's sum as soon as its hours arrive; and the
+ * header's search says so in its own status region. Not the chart's readout — that
+ * region mounts empty and fills only when a reader moves the chart's own selection,
+ * so at arrival it names nothing at all (docs/standards/react.md's live-region bullet).
  *
  * {@link SitePopoverCardProps.selectionOrigin} therefore no longer decides
  * whether focus *moves* — nothing moves it. What it still decides is whether

@@ -27,7 +27,7 @@
 # this file owns. A floor rather than a census: what this sweep found, run
 # 2026-10-07 from the repo root —
 #
-#   git grep -nE 'cost-trip|cost guard|7\.31|19,0[0-9]{2}|billing trip|\$70|1\.30' -- ':!docs/tech-debt.md' ':!docs/review-feedback.md'
+#   git grep -nE 'cost-trip|cost guard|7\.31|19,0[0-9]{2}|billing trip|\$70|1\.30' -- ':/' ':/!docs/tech-debt.md' ':/!docs/review-feedback.md'
 #
 #   * `worst_case_usd_per_request` and its terms — ADR 0010's Decision.
 #   * `billing_trip_usd` — ADR 0010 (the bound); infra/README.md (runbook,
@@ -41,6 +41,11 @@
 #     two Terraform figures move together or the burn projection and the budget
 #     disagree about what "over" means.
 #   * the 20-of-24 hold — ADR 0010; infra/README.md's runbook (reset section).
+#   * `cost_trip_function_name` and the alarms' `cost-`/`billing-` name
+#     prefixes — infra/bootstrap/observer.tf's `observed_log_group_arns`;
+#     .claude/scripts/incident-watch.sh's `cost_guard` pattern and its
+#     `log_lines api-cost-trip` read; infra/README.md's observer table. Found
+#     2026-10-13 by `git grep -nE 'api-cost-trip|\(cost-\|billing-\)'` (#604).
 # ---------------------------------------------------------------------------
 
 locals {

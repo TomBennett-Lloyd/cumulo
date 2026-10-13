@@ -31,8 +31,8 @@ import {
  * chart names, what is and is not said about simulated actuals — and this one
  * owns its furniture. One slim controls row, one (i) carrying the chart's legend
  * as well as its description, a unit toggle on every arm, a picker on every arm
- * that has a window to choose, and one chart present in every state the section
- * can be in. What the toggle *does* is
+ * that has a window to choose, and one chart (`fleet-panel-body.tsx` § One chart) present in every
+ * state the section can be in. What the toggle *does* is
  * `apps/web/src/dashboard/FleetPanel.unit-toggle.test.tsx`'s.
  *
  * The furniture includes a visible heading, restored by the owner on 2026-08-11
@@ -140,8 +140,8 @@ const openFleetTip = (container: HTMLElement): HTMLElement => {
 /**
  * The furniture every state owes the reader, whatever that state has to say.
  *
- * #284 D3 asks for three things in every state and not only for the figure: the
- * section's name, the chart, and the chart's legend. The figure alone is the
+ * #284 D3 (`fleet-panel-body.tsx` § One chart) asks for three things in every state and not
+ * only for the figure: the section's name, the chart, and the chart's legend. The figure alone is the
  * weakest of the three to assert, because the states that used to return *in
  * place of* the chart took the name's siblings and the key down with it — and a
  * chart the reader cannot find a key for reads as a plot of anonymous lines.
