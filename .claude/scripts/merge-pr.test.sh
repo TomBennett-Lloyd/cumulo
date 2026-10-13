@@ -79,6 +79,7 @@ V_LABELS=""
 V_FILES=""
 V_CHECKS=""
 V_COMMITS=""
+V_COMMIT_BODY=""
 V_BODY=""
 V_BASE_REF=""
 
@@ -91,6 +92,7 @@ reset_view() {
   V_FILES="docs/notes.md"
   V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS"
   V_COMMITS="#12: the change"
+  V_COMMIT_BODY=""
   V_BODY="What and why. Closes #12"
 }
 
@@ -133,6 +135,22 @@ EOF
   printf ']'
 }
 
+# json_commits -> the commits array: one object per V_COMMITS subject, each carrying
+# V_COMMIT_BODY as its body (JSON escapes such as \n and \t are written literally).
+json_commits() {
+  local first=1 v
+  printf '['
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    [ "$first" = "1" ] || printf ','
+    printf '{"messageHeadline":"%s","messageBody":"%s"}' "$v" "$V_COMMIT_BODY"
+    first=0
+  done <<EOF
+$(printf '%s' "$V_COMMITS" | tr ',' '\n')
+EOF
+  printf ']'
+}
+
 pr_json() {
   printf '{"number":%s,"state":"%s","url":"https://example.test/pull/%s",' "$PR" "$V_STATE" "$PR"
   printf '"baseRefName":"%s",' "$V_BASE_REF"
@@ -146,7 +164,7 @@ pr_json() {
   printf ',"files":'
   json_objects path "$V_FILES"
   printf ',"commits":'
-  json_objects messageHeadline "$V_COMMITS"
+  json_commits
   printf ',"statusCheckRollup":'
   json_checks "$V_CHECKS"
   printf '}\n'
@@ -855,7 +873,7 @@ write_merged_view
 run_merge
 expect_rc 1
 expect_stderr 'classify — FAILED'
-expect_stderr 'the lane report names #21 but no Closes line does'
+expect_stderr 'the lane report names #21 but no Closes or Part of line does'
 expect_not_called "pr update-branch $PR"
 expect_not_called "pr merge $PR --squash"
 end
@@ -867,8 +885,100 @@ write_view default
 write_merged_view
 run_merge
 expect_rc 1
-expect_stderr 'the lane report names #21 but no Closes line does'
+expect_stderr 'the lane report names #21 but no Closes or Part of line does'
 expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 10e-ii-b. a lane on an issue that outlives the PR says "Part of", and squashes
+# ==========================================================================================
+# PRs #631 (a #545 trim batch) and #633 (the #607 pilot wiring) each carried a lane
+# report and "Part of #<n>", no Closes line, because the issue stays open. Both were
+# refused here and merged with --method squash by hand.
+begin "a lane report with Part of its issue and no Closes line merges --squash"
+fixture lane-part-of
+V_BODY='Part of #21.\n\n~~~\n## Lane report — issue #21 (batch 2)\nSTATUS: DONE\n~~~'
+V_COMMITS="#21: the first,#21: the second"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'ticket-agent lane for #21, Part of (left open) -> squash'
+expect_called "pr merge $PR --squash"
+expect_not_called "pr merge $PR --rebase"
+expect_not_called "issue view 21 --json number,state"
+expect_stdout "Part of (left open) -> squash — nothing to verify"
+end
+
+begin "a lane report with Part of another issue only is refused at classify"
+fixture lane-part-of-other
+V_BODY='Part of #22.\n## Lane report — issue #21'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'the lane report names #21 but no Closes or Part of line does'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 10e-ii-c. a commit body still carrying the editor template is refused at classify
+# ==========================================================================================
+# Rebases here pass core.commentChar=';', and cleanup=strip leaves no body line starting
+# with one. PR #633 merged a rebase's "; Conflicts:" block onto main (1161437) because
+# nothing between the branch and the squash read the bodies. A rebase without the swap
+# keeps the template under '#', matched by git's fixed phrases.
+begin "a commit body with a ';' template line is refused at classify, before update-branch"
+fixture template-body
+V_COMMITS="#12: the review-feedback entry"
+V_COMMIT_BODY='The entry.\n\n; Conflicts:\n;\tdocs/review-feedback.md\n; Please enter the commit message for your changes.'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr "editor template left in a commit body: '#12: the review-feedback entry' carries \"; Conflicts:\""
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a batch whose commit body carries a ';' template line is refused too"
+fixture template-body-batch
+V_BODY='Closes #21\nCloses #22\n## TASK REPORT — batch: anchor #21, members #21 #22'
+V_COMMITS="#21: the first,#22: the second"
+V_COMMIT_BODY='; interactive rebase in progress; onto 2b5a120'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'editor template left in a commit body'
+expect_not_called "pr merge $PR --rebase"
+end
+
+begin "a commit body with a '#' template line is refused at classify"
+fixture template-body-hash
+V_COMMIT_BODY='The entry.\n\n# Conflicts:\n#\tdocs/review-feedback.md\n#\n# interactive rebase in progress; onto 2b5a120'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr "editor template left in a commit body: '#12: the change' carries \"# Conflicts:\""
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+end
+
+# The control: a body line may start with '#' (a wrapped "#545" here is content, as
+# in #633's own commit) and may hold ';' anywhere but column 0.
+begin "a commit body with a leading '#' line and a mid-line ';' merges"
+fixture template-body-clean
+V_COMMIT_BODY='Wrapped prose that names\n#545 at the start of a line; a semicolon mid-line.'
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_not_stderr 'editor template'
+expect_called "pr merge $PR --squash"
 end
 
 # ==========================================================================================

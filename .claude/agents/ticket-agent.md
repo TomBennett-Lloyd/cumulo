@@ -67,13 +67,13 @@ The counts above — two fix attempts, two re-plans — are provisional, set fro
 
 Source diffs only: a diff holding none of the source extensions `.claude/workflow.json` → `merge.autoRule` lists owes no review.
 
-One synchronous `reviewer` dispatch scoped to `git diff main...HEAD`, naming the prose you wrote yourself — PR body, `docs/tech-debt.md` entries, issue bodies — per `.claude/skills/review-loop/SKILL.md` step 1. FIX-NOW findings are fixed inline, then one fresh `confirmation-reviewer` dispatch scoped to the fix commits alone and naming the findings they answer (a `DECLINED` range goes to `reviewer`, same scope), in the confirmation-pass shape and under the termination rule that skill's Exit conditions state. Correctness findings iterate until none; claim-accuracy findings are fixed, never deferred; isolable findings become their own issue, named in the PR body. Cap: one full pass plus confirmation passes on fix commits — a pass returning new correctness findings on a third fix diff → STRUGGLING.
+One synchronous `reviewer` dispatch scoped to `git diff main...HEAD`, naming the prose you wrote yourself — PR body, `docs/tech-debt.md` entries, issue bodies — per `.claude/skills/review-loop/SKILL.md` step 1. FIX-NOW findings are fixed inline, then one fresh `confirmation-reviewer` dispatch scoped to the fix commits alone and naming the findings they answer (a `DECLINED` range goes to `reviewer`, same scope), in the confirmation-pass shape and under the termination rule that skill's Exit conditions state. Correctness findings iterate until none; claim-accuracy findings are fixed, never deferred; isolable findings become their own issue, named in the PR body. SYSTEMIC findings, the confirmation pass's included, land where `/triage` reads: a `docs/tech-debt.md` entry (`.claude/skills/review-loop/SKILL.md` step 2) or a comment on the open issue that owns the root cause, and the report's `Review:` line names where each went. The lane report alone is not a record, because nothing reads a PR body after the merge: #626's confirmation pass returned two, one of them a pair of trigger-parser shapes in the OIDC gate, one a false green, and they were in that body and nowhere else. Cap: one full pass plus confirmation passes on fix commits — a pass returning new correctness findings on a third fix diff → STRUGGLING.
 
 This pass is what `.claude/workflow.json` → `merge.reviewedSourceRule` accepts from this lane. Your own read of your own diff is not a review and never satisfies it.
 
 ## 7. PR and CI
 
-`gh pr create --head <branch>`, `Closes #<n>`, body = what and why plus the `## Lane report` below. A closing keyword (close, fix or resolve, in any tense) immediately before any other `#<m>` closes that issue at merge, whatever words follow the number: #626's "Resolves #358's entry 2" closed #358 with entries still open. Partial progress is written `Part of #<m>`. Then `.claude/skills/review-loop/SKILL.md` step 4 governs: check mergeability before watching checks, and re-run a red lane once only for a signature an open issue already owns.
+`gh pr create --head <branch>`, `Closes #<n>` (or `Part of #<n>` when your issue outlives this PR, as a trim-campaign batch's does; `merge-pr.sh` reads either beside the lane report header and squashes), body = what and why plus the `## Lane report` below. A closing keyword (close, fix or resolve, in any tense) immediately before any other `#<m>` closes that issue at merge, whatever words follow the number: #626's "Resolves #358's entry 2" closed #358 with entries still open. Partial progress is written `Part of #<m>`. Then `.claude/skills/review-loop/SKILL.md` step 4 governs: check mergeability before watching checks, and re-run a red lane once only for a signature an open issue already owns.
 
 Classify per `.claude/workflow.json` → `merge.autoRule` and `merge.humanAlways`. HUMAN → the `docs/review-feedback.md` entry lands on the branch first, in the form that file's `## Entry format` declares, and only then the `awaiting-review` label — the order `.claude/skills/review-loop/SKILL.md` step 5 states, and for the reason it gives there.
 
@@ -81,7 +81,7 @@ Classify per `.claude/workflow.json` → `merge.autoRule` and `merge.humanAlways
 
 The `## Lane report` is posted where it outlives you: the PR body when a PR exists, an issue comment otherwise. Your chat return is a courtesy copy. No interim narration — nothing should reach the top-level between your dispatch and this report, which is the lane's cost advantage stated as a rule.
 
-A bounce round (`FIX — <finding>`, `REBASE — <context>`) ends in a refreshed report. A rebase runs `git -c core.commentChar=';' rebase`, then the subject-and-body check, the `docs/tech-debt.md` union rule and the marker sweep exactly as `.claude/skills/review-loop/SKILL.md` step 5 states them; then re-verify and force-push your own branch only.
+A bounce round (`FIX — <finding>`, `REBASE — <context>`) ends in a refreshed report. A rebase runs `git -c core.commentChar=';' rebase`, with `-c commit.cleanup=strip` on every `rebase --continue`, then the subject check, the `docs/tech-debt.md` union rule and the marker sweep exactly as `.claude/skills/review-loop/SKILL.md` step 5 states them; then re-verify and force-push your own branch only.
 
 ```
 ## Lane report — issue #<n>
@@ -90,7 +90,8 @@ PR: #<pr> <url>                    CI: green | red | pending — pasted checks t
 Verify: rc=<n>                     (pasted `verify root:` line)
 Plan comment: <url>                Footprint drift vs plan comment: <files | none>
 Changed files: (pasted git diff --name-only main...HEAD)
-Review: none owed (no source) | APPROVE after <k> passes — FIX-NOW <found>/<fixed>, deferred: <issues | none>
+Review: none owed (no source) | APPROVE after <k> passes — FIX-NOW <found>/<fixed>, deferred: <issues | none>,
+        SYSTEMIC: <tech-debt heading or issue-comment url, one per finding | none>
 Classification: AUTO | HUMAN — source extensions <list | none>; humanAlways <paths | none>
 Lane model: <the model this agent runs on>
 Sub-dispatches: <agent (model): reason>, one per dispatch | none   Consultant: <model, budget mode> | none
