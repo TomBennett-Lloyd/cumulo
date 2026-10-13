@@ -1,0 +1,28 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for the claim that the
+# fleet panel body is one arrangement its states differ inside, never a switch between
+# arrangements, owned by the "One chart, in every state" section of the module comment
+# in apps/web/src/dashboard/fleet-panel-body.tsx.
+#
+# Membership is a citation: a carrier cites the owner as `fleet-panel-body.tsx` § One
+# chart (the bare basename inside apps/web/src/dashboard/, the repo-relative path
+# elsewhere), and the sweep's first arm is that citation. The second arm is the owner's
+# own heading, which is the positive control. A site restating the claim without citing it is invisible here and
+# is a rule 9 finding for review.
+#
+# docs/standards/react.md's D3 bullets state the claim in the standard's own words and
+# are deliberately not cited from here: a change that falsified them is a proposal to
+# amend the standard, not an edit to make in passing (the old ledger's "listed, never
+# edited" rule, kept).
+owner: apps/web/src/dashboard/fleet-panel-body.tsx
+claim: one chart, in every state — the body is one arrangement the states differ inside, never a switch between arrangements
+sweep: fleet-panel-body\.tsx. § One chart|One chart, in every state
+scope: :!docs/tech-debt.md :!docs/friction-log.md :!docs/review-feedback.md
+carrier: apps/web/src/dashboard/FleetPanel.tsx
+carrier: apps/web/src/dashboard/FleetPanel.structure.test.tsx
+carrier: apps/web/src/dashboard/FleetPanel.test.tsx
+carrier: apps/web/src/dashboard/Dashboard.tsx
+carrier: apps/web/src/dashboard/Dashboard.test.tsx
+carrier: apps/web/src/dashboard/Dashboard.deep-link.test.tsx
+carrier: apps/web/src/dashboard/dashboard-test-fixture.tsx
+carrier: apps/web/src/map/SitePopoverCard.tsx
+carrier: docs/design/dashboard-composition.md

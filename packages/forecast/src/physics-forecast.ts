@@ -118,12 +118,8 @@ export interface PhysicsChainResult {
 /**
  * Half an hour in milliseconds: the offset from an hour-ending mean to its midpoint.
  *
- * Exported because the wiring decision at the top of this module — the sun belonging with
- * an hour-ending sample is the one at the middle of that hour — is not private to the
- * chain. Anything else evaluating solar geometry against a `validTime` owes the same
- * subtraction, and the alternative to exporting is a second copy of the number with no
- * link to the decision that fixes it (`docs/standards/architecture.md` rule 9). The web
- * app's night classifier (`apps/web/src/dashboard/fleet-night.ts`) is the second caller.
+ * Exported so every site evaluating solar geometry against a `validTime` subtracts the same
+ * offset; its carriers are `.claude/ledgers/hour-midpoint-offset.ledger` (`architecture.md` rule 9).
  */
 export const HOUR_MIDPOINT_OFFSET_MS = 30 * 60 * 1000;
 

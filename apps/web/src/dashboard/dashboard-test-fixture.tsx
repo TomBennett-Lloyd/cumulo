@@ -181,8 +181,8 @@ export const visit = (url: string): void => {
 };
 
 /**
- * The fleet's chart section, which is on screen in every state of the page since
- * #265 — and since #323 is a full-width band under the map rather than the first
+ * The fleet's chart section (`fleet-panel-body.tsx` § One chart), on screen since
+ * #265 — and since #323 a full-width band under the map rather than the first
  * card in the centred reading below it.
  */
 export const fleetChartSection = (root: HTMLElement): Element | null =>

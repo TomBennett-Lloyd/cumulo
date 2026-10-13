@@ -1,0 +1,17 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for the hour-midpoint
+# offset, owned by HOUR_MIDPOINT_OFFSET_MS in packages/forecast/src/physics-forecast.ts.
+#
+# The sweep's arms reach the symbol, the test-side literal (1_800_000 in its several
+# spellings) and the claim in words, because a site evaluating solar geometry against
+# a validTime owes the subtraction whatever it calls it. The word-boundary arm needs
+# PCRE: it keeps unrelated epoch literals out of the result.
+owner: packages/forecast/src/physics-forecast.ts
+claim: the sun paired with an hour-ending sample is the one at the middle of that hour — a 30-minute offset
+sweep: HOUR_MIDPOINT_OFFSET_MS|HALF_HOUR_MS|\b1[_,]?800[_,]?000\b|half an hour|hour.s midpoint|midpoint of the hour
+scope: :!docs/tech-debt.md :!docs/friction-log.md :!docs/review-feedback.md
+carrier: packages/forecast/src/index.ts
+carrier: packages/forecast/src/physics-forecast.test.ts
+carrier: apps/web/src/dashboard/fleet-night.ts
+carrier: apps/web/src/dashboard/fleet-night.test.ts
+carrier: apps/web/src/charts/forecast-chart-context.tsx
+carrier: tools/pvlib-fixtures/generate_fixtures.py

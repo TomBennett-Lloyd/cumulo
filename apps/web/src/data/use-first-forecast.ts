@@ -53,7 +53,7 @@ const MIN_RATE_LIMIT_BACKOFF_SECONDS = 5;
  *
  * Restatement ledger (docs/standards/architecture.md rule 9) — this constant is
  * the owner, and a **floor** rather than a count: as of 2026-09-08,
- * `git grep -lE '90_000|90000|ninety|90[- ]seconds?|FIRST_FORECAST_DEADLINE'`
+ * `git grep -lE '90_000|90000|ninety|90[- ]seconds?|FIRST_FORECAST_DEADLINE' -- ':/apps' ':/docs'`
  * over `apps` and `docs` returns these carriers, and one written after that date
  * belongs here. The pattern carries a spaced-and-hyphenated arm as well as the
  * literal, because the copy a reader is shown spells the value in words and a

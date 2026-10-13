@@ -48,7 +48,7 @@ import { UnitToggle } from './unit-toggle';
  * `.forecast-chart-figure` whether the fleet is loading, failed, empty,
  * forecastless or ready, and the states differ only in what is said above it and
  * what is drawn inside it (#284 D3, #448, #452).
- * `apps/web/src/dashboard/fleet-panel-body.tsx` holds that arrangement.
+ * `fleet-panel-body.tsx` § One chart owns that arrangement.
  *
  * The trade, stated because it was accepted rather than overlooked: **a `?site=`
  * deep link spends the fleet's forecast read**, one metered request to
