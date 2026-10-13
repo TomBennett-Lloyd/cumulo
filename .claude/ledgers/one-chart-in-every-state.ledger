@@ -6,8 +6,7 @@
 # Membership is a citation: a carrier cites the owner as `fleet-panel-body.tsx` § One
 # chart (the bare basename inside apps/web/src/dashboard/, the repo-relative path
 # elsewhere), and the sweep's first arm is that citation. The second arm is the owner's
-# own heading, which is the positive control and catches a carrier that paraphrases the
-# heading back in. A site restating the claim without citing it is invisible here and
+# own heading, which is the positive control. A site restating the claim without citing it is invisible here and
 # is a rule 9 finding for review.
 #
 # docs/standards/react.md's D3 bullets state the claim in the standard's own words and

@@ -140,8 +140,8 @@ const openFleetTip = (container: HTMLElement): HTMLElement => {
 /**
  * The furniture every state owes the reader, whatever that state has to say.
  *
- * #284 D3 (`fleet-panel-body.tsx` § One chart) asks for three things in every state and not only for the figure: the
- * section's name, the chart, and the chart's legend. The figure alone is the
+ * #284 D3 (`fleet-panel-body.tsx` § One chart) asks for three things in every state and not
+ * only for the figure: the section's name, the chart, and the chart's legend. The figure alone is the
  * weakest of the three to assert, because the states that used to return *in
  * place of* the chart took the name's siblings and the key down with it — and a
  * chart the reader cannot find a key for reads as a plot of anonymous lines.

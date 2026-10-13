@@ -37,7 +37,8 @@ breakpoint, because the stacked arrangement a narrow screen already got is now t
 ## A selection changes what is drawn, not what is on screen
 
 **Nothing under the map swaps.** The page is a plain flow, top to bottom: the map band, the
-fleet's chart, the page footer. All three are present in every state the page can be in (`apps/web/src/dashboard/fleet-panel-body.tsx` § One chart).
+fleet's chart, the page footer. All three are present in every state the page can be in
+(`apps/web/src/dashboard/fleet-panel-body.tsx` § One chart).
 
 The chart is a full-width band rather than the first item of the centred reading, which is what
 #323 changed. It sits directly against the map with no gap and on the same `--color-surface`, so

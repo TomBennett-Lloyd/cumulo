@@ -11,7 +11,7 @@ Entry format:
 - Source: PR/issue #
 ```
 
-A dated `- Update` bullet appended to an entry follows `docs/standards/architecture.md` rule 9's ledger form for any sweep it mentions.
+A dated `- Update` bullet appended to an entry follows the `- Update` sentence of `docs/standards/architecture.md` rule 9.
 
 **Restatement ledger for this file's own path** (`docs/standards/architecture.md` rule 9), which acquired one the first time a site carried it **executably**. A FLOOR, NOT A CENSUS, in both halves. The executable carriers known today are two, both added by #513: the `TECH_DEBT_PATH` constant in `.claude/scripts/merge-pr.sh`, whose union step matches this exact path to decide whether a merge conflict is the append collision it may resolve, and the `TD` constant in `.claude/scripts/merge-pr.test.sh`, which is what the cases for that step assert against. Both fail quiet-and-closed rather than quiet-and-open — a renamed log stops conflicting under the old name, `git merge-tree` reports the new one, and the conflicted-set test refuses naming it.
 

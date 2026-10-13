@@ -10,6 +10,15 @@
 # #1d63bd twice as a dated decision record of #273, and
 # docs/design/exploration/design-directions.html is a snapshot of the candidates
 # considered, not a live surface.
+#
+# Carriers inside the owner, which the runner exempts from membership and so are
+# recorded here only: the accent-contrast argument in tokens.css's own header states
+# #1d63bd and #3987e5 with measured ratios against named surfaces. It computes with
+# the values, so it is re-measured rather than re-typed when either moves (#273, the
+# owner decision of 2026-08-09 on this blue). Separate declarations that follow the
+# accent by decision (#273) so they can diverge: --color-focus-ring, --color-chart-1
+# and --color-map-marker. --color-chart-axis-label lands on the muted literals, in
+# both blocks; the light block's declaration dispositions both.
 owner: packages/ui/src/tokens/tokens.css
 claim: the accent and muted-ink hex values, light and dark
 sweep: #1d63bd|#58626d|#3987e5|#9aa5b1

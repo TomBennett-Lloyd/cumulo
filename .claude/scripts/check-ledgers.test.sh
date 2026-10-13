@@ -128,6 +128,7 @@ for bad_name in Bad_Name.ledger notes.txt; do
   run
   expect_rc 2
   expect_stderr "$bad_name"
+  expect_stderr "not a regular file named <id>.ledger"
 done
 case_ctx=""
 end
@@ -299,10 +300,11 @@ end
 begin "blockers outrank drift — a malformed second ledger beside a drifted first one exits 2"
 fixture c24
 must printf '%s\n' "A new carrier: $NEEDLE." >"$ROOT/docs/new-carrier.md"
-must printf '%s\n' 'carriers: src/carrier.ts' >"$ROOT/.claude/ledgers/zzz-second.ledger"
+must printf '%s\n' 'owner: docs/owner.md' 'claim: a second value' 'sweep: (' 'carrier: src/carrier.ts' >"$ROOT/.claude/ledgers/zzz-second.ledger"
+must printf '%s\n' '.claude/ledgers/zzz-second.ledger' >>"$ROOT/docs/owner.md"
 run
 expect_rc 2
-expect_stderr "BLOCKED zzz-second.ledger"
+expect_stderr "BLOCKED zzz-second"
 expect_not_stderr "ERROR"
 end
 

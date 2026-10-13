@@ -180,8 +180,8 @@ const REDUCED_MOTION = ['@media (prefers-reduced-motion: reduce)'];
  * through `declarationsFor` — or through `strokeWidthOf` or `dashPatternOf`, which
  * resolve through it — less `LOADING_TRACE`, whose override is deliberate and is
  * the positive control for the case that reads this list. What re-checks the list
- * against that rule is `command grep -nE
- * "declarationsFor\(|strokeWidthOf\(|dashPatternOf\(" apps/web/src/charts/chart-css-contract.test.ts`,
+ * against that rule is
+ * `command grep -nE "declarationsFor\(|strokeWidthOf\(|dashPatternOf\(" apps/web/src/charts/chart-css-contract.test.ts`
  * run 2026-10-05 — which is how `.forecast-chart-median` was found
  * read below and missing here on 2026-08-12, leaving the weight comparison it
  * appears in true of some readers and not others with nothing failing.

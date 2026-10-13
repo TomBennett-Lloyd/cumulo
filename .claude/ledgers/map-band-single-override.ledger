@@ -5,8 +5,7 @@
 #
 # Membership is a citation: a carrier cites the owner as `docs/design/map-treatment.md`
 # § Attribution, and the sweep's first arm is that citation. The second arm is the
-# owner's own wording, so a carrier that writes the count back in is a hit and not a
-# silent restatement.
+# owner's own wording, the positive control.
 owner: docs/design/map-treatment.md
 claim: the band restyles OpenMeteoAttribution in exactly one respect beyond the compact-form rule — the ink, on the veil
 sweep: map-treatment\.md. § Attribution|exactly one respect

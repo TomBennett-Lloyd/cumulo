@@ -27,7 +27,7 @@
 # this file owns. A floor rather than a census: what this sweep found, run
 # 2026-10-07 from the repo root —
 #
-#   git grep -nE 'cost-trip|cost guard|7\.31|19,0[0-9]{2}|billing trip|\$70|1\.30' -- ':/' ':!docs/tech-debt.md' ':!docs/review-feedback.md'
+#   git grep -nE 'cost-trip|cost guard|7\.31|19,0[0-9]{2}|billing trip|\$70|1\.30' -- ':/' ':/!docs/tech-debt.md' ':/!docs/review-feedback.md'
 #
 #   * `worst_case_usd_per_request` and its terms — ADR 0010's Decision.
 #   * `billing_trip_usd` — ADR 0010 (the bound); infra/README.md (runbook,

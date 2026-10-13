@@ -24,7 +24,7 @@
 #   claim: <one line of prose>         exactly once — what is owned, in words; the
 #                                      gate checks only non-emptiness.
 #   sweep: <PCRE>                      exactly once — run as the single argument of
-#                                      git -C <root> grep -n -I -P --untracked -e <sweep> -- <scope tokens>
+#                                      git -C <root> grep --no-color -n -I -P --untracked -e <sweep> -- <scope tokens>
 #   scope: <pathspec> [<pathspec>...]  at most once — space-separated git pathspecs
 #                                      (`:!docs/tech-debt.md`); absent means the whole tree.
 #   carrier: <repo-relative path>      one or more — a file the sweep returns that
@@ -69,7 +69,7 @@
 # Exit:  0 every ledger holds, 1 at least one has drifted, 2 the gate could not reach a
 #        verdict.
 #
-# No dependencies: bash (3.2, which macOS ships as /bin/bash), git and awk only.
+# Runs under bash 3.2, which macOS ships as /bin/bash.
 set -uo pipefail
 
 usage() {
@@ -246,7 +246,7 @@ if [ ${#blockers[@]} -eq 0 ]; then
     fi
     hits_out="$SCRATCH/$L_ID.hits"
     hits_err="$SCRATCH/$L_ID.err"
-    git -C "$ROOT" grep -n -I -P --untracked -e "$L_SWEEP" -- ${scope_args[@]+"${scope_args[@]}"} >"$hits_out" 2>"$hits_err"
+    git -C "$ROOT" grep --no-color -n -I -P --untracked -e "$L_SWEEP" -- ${scope_args[@]+"${scope_args[@]}"} >"$hits_out" 2>"$hits_err"
     sweep_rc=$?
     if [ "$sweep_rc" -gt 1 ] || [ -s "$hits_err" ]; then
       blockers+=("$L_ID: the sweep did not run cleanly (rc=$sweep_rc): $(head -n1 "$hits_err") — a broken check, not a clean tree")
