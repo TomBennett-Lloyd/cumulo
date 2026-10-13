@@ -58,10 +58,11 @@ resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
   # errored", with no averaging to hide behind: the function either completed a
   # full fleet cycle or it did not.
   #
-  # Two consecutive breaching hours, not one (#635). The handler throws when ANY
-  # location fails to publish, so a single transient upstream 503 on one of 14
-  # locations errors the whole invocation, and the zero-retry setting in
-  # schedule.tf already says the next hourly cycle is that failure's retry. An
+  # Two consecutive breaching hours, not one (#635). The handler throws
+  # CycleFailedError (apps/ingestion/src/handler.ts) when ANY location fails to
+  # publish, so a single transient upstream 503 on one location errors the whole
+  # invocation, and `maximum_retry_attempts = 0` (schedule.tf) already says the
+  # next hourly cycle is that failure's retry. An
   # alarm that pages on the first failed cycle pages for the case the design
   # absorbs; two cycles in a row is the case it does not. The price: a total
   # outage now pages after two hours, not one.
@@ -172,5 +173,5 @@ resource "aws_cloudwatch_metric_alarm" "async_events_dropped" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "Two consecutive hourly Cumulo ingestion cycles were discarded before they ran: EventBridge's asynchronous invocation sat in Lambda's queue past the 60-second maximum event age pinned in infra/ingestion/schedule.tf, with retries deliberately at zero. There is no error and no log line for those cycles because the function was never entered — those hours' weather is simply missing, and the next cycle re-fetches the same 48-hour horizon from fresher data, so the alarm clears once a cycle runs. Persistent firing does not self-heal: the known cause is the account's Lambda concurrency limit of 10, shared with the fleet API, being consumed at the cycle minute (measured, issue #29). Check the API's request-flood alarm for the same window before changing anything here; the fix is a concurrency quota increase, not a longer event age."
+  alarm_description = "Two consecutive hourly Cumulo ingestion invocations were dropped by Lambda's asynchronous path, which has retries deliberately at zero (maximum_retry_attempts in infra/ingestion/schedule.tf). A dropped event is either a cycle that errored (compare cumulo-ingestion-<env>-errors for the same window; that alarm's description covers the cause) or one that sat in Lambda's queue past the 60-second maximum event age and never started, which leaves no error and no log line because the function was never entered. In both cases the next cycle re-fetches the same 48-hour horizon from fresher data. For the never-started case, persistent firing does not self-heal: the known cause is the account's Lambda concurrency limit of 10, shared with the fleet API, being consumed at the cycle minute (measured, issue #29). Check the API's request-flood alarm for the same window before changing anything here; the fix is a concurrency quota increase, not a longer event age."
 }
