@@ -542,6 +542,7 @@ If `create-access-key` fails — two keys already exist, say — nothing is writ
 ```bash
 aws sts get-caller-identity --profile cumulo-observer --query Arn --output text
 # expect: arn:aws:iam::<account-id>:user/cumulo-observer-dev
+# an InvalidClientTokenId here, within a minute of O2, means the new key has not propagated yet: wait a moment and retry, it is not a policy fault
 AWS_PROFILE=cumulo-observer bash .claude/scripts/incident-watch.sh
 # expect: a report ending VERDICT quiet (exit 0) or VERDICT act (exit 1) — never exit 2
 aws cloudwatch disable-alarm-actions --alarm-names cumulo-observer-write-probe --profile cumulo-observer
