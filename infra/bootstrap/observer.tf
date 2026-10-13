@@ -28,9 +28,15 @@ locals {
     "arn:aws:cloudwatch:${region}:${data.aws_caller_identity.current.account_id}:alarm:*"
   ])
 
-  # The three service Lambdas, and the cost guard's trip function; this list is
-  # asserted by incident-watch.test.sh. Restated, unasserted, by infra/README.md's
-  # observer table, and computed by the log_lines calls in incident-watch.sh.
+  # The three service Lambdas, and the cost guard's trip function. Restatement
+  # ledger (docs/standards/architecture.md rule 9), a floor: what this sweep
+  # found, run 2026-10-13 from the repo root —
+  #
+  #   git grep -nE 'log_lines (api|ingestion|forecast)|cumulo-\{|\["api", "ingestion"|trip function|api-cost-trip'
+  #
+  #   * asserted by .claude/scripts/incident-watch.test.sh;
+  #   * restated, unasserted, by infra/README.md's observer table;
+  #   * computed by the log_lines calls in .claude/scripts/incident-watch.sh.
   observed_log_group_arns = [
     for function in ["api", "ingestion", "forecast", "api-cost-trip"] :
     "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/cumulo-${function}-${var.observed_environment}:*"

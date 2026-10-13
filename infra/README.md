@@ -362,7 +362,7 @@ gh api -X PUT repos/TomBennett-Lloyd/cumulo/actions/oidc/customization/sub -F us
 gh api repos/TomBennett-Lloyd/cumulo/actions/oidc/customization/sub   # "use_default":true, prefix unchanged
 ```
 
-Then re-apply the previous trust policy from the commit before #605's merge, in the checkout that holds this stack's gitignored `backend.hcl` and `bootstrap.auto.tfvars`: `git switch --detach <merge-commit>^`, `terraform -chdir=infra/bootstrap apply`, `git switch main`. Re-run S4's `oidc-smoke` to see it green, then revert #605 on `main` by PR so the code and the account agree again. Restoring only one side leaves the lockout in place.
+Then re-apply the previous trust policy from the commit before #605's merge, in the checkout that holds this stack's gitignored `backend.hcl` and `bootstrap.auto.tfvars`: `git switch --detach <merge-commit>^`, `terraform -chdir=infra/bootstrap apply -target=aws_iam_role.github_actions`, `git switch main`. Re-run S4's `oidc-smoke` to see it green, then revert #605 on `main` by PR so the code and the account agree again. Restoring only one side leaves the lockout in place.
 
 ---
 

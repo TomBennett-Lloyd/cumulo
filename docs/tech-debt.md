@@ -287,6 +287,6 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 
 ## 2026-10-07 — the mirror gate has no mode for a shell or skill carrier of an app-owned string
 
-- Where: `.claude/scripts/check-infra-mirrors.sh`; carriers such as the log filters in `.claude/scripts/incident-watch.sh`
+- Where: `.claude/scripts/check-infra-mirrors.sh`; carriers such as the log filters in `.claude/scripts/incident-watch.sh`, and Terraform-to-Terraform restatements such as `observed_log_group_arns` in `infra/bootstrap/observer.tf`, which quotes four `function_name`s owned by the api (including `infra/api/cost-guard.tf`'s `cost_trip_function_name`), ingestion and forecast stacks — a rename surfaces only as an `AccessDenied`, which the script reports as no verdict
 - What: `check-infra-mirrors` pairs Terraform with TypeScript only, so a script quoting a log event name (`apiServerErrorEvent`, `messageOutcomeEvent`) or an alarm name drifts silently. #604 pins its own carriers with harness cases ("the log filters carry the event names their owners export"); the general fix is a gate mode, not one more harness per script
 - Source: #604 review pass 1 SYSTEMIC

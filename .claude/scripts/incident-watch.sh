@@ -210,8 +210,6 @@ if grep -q -e "^cumulo-forecast-${env_name}-" -e "^cumulo-weather-readings-dlq-$
   log_lines forecast "$forecast_failures"
 fi
 
-# The guard's alarms throttle the API stage to zero when they trip, and only an
-# operator resets it, so the report names where.
 cost_guard="^cumulo-api-${env_name}-(cost-|billing-)"
 if grep -qE "$cost_guard" <<<"$alarmed"; then
   verdict=1
