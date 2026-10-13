@@ -72,10 +72,12 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 # same endpoint and flags .github/workflows/ci.yml's merge-ritual-gate step uses
 # to read the same list (its comment (c) is about why that job needs no checkout,
 # which is a different argument — what is borrowed here is the call, not the
-# reasoning). `commits` carries the same cap and is left on this list: it feeds
-# only the curated-history check, whose first test is a count comparison against
-# the Closes count, so a list truncated at 100 refuses rather than merges for any
-# PR closing fewer than 100 issues.
+# reasoning). `commits` carries the same cap and is left on this list. It feeds
+# the curated-history check, whose first test is a count comparison against the
+# Closes count, so a list truncated at 100 refuses rather than merges for any PR
+# closing fewer than 100 issues. It also feeds the commit-body check at classify,
+# which a truncated list narrows to the commits it holds: that residual is a PR
+# of more than 100 commits.
 PR_JSON_FIELDS='baseRefName,body,commits,headRefName,headRefOid,labels,mergeStateStatus,number,state,statusCheckRollup,url'
 
 # The numeric knobs are validated here rather than where they are used. Under
@@ -222,7 +224,15 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   put("mergeStateStatus", pr.mergeStateStatus);
   put("url", pr.url);
   for (const l of pr.labels || []) put("label", l && l.name);
-  for (const c of pr.commits || []) put("commit", c && c.messageHeadline);
+  for (const c of pr.commits || []) {
+    put("commit", c && c.messageHeadline);
+    // core.commentChar is ";" here (review-loop step 5), so with cleanup=strip no
+    // body line can begin with one. A line that does is the editor template a
+    // rebase --continue without -c commit.cleanup=strip kept: PR #633 merged
+    // "; Conflicts:" and "; Please enter the commit message" onto main in 1161437.
+    const left = String((c && c.messageBody) || "").split("\n").find((l) => l.startsWith(";"));
+    if (left !== undefined) put("template", c && c.messageHeadline, left);
+  }
   for (const c of pr.statusCheckRollup || []) {
     // Two shapes share this array. A CheckRun carries status + conclusion; a
     // StatusContext (the older commit-status API, which the rollup still mixes
@@ -251,6 +261,12 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       put("closes", m[1]);
     }
   }
+  // A lane on an issue that outlives the PR (a trim campaign batch, a pilot)
+  // writes "Part of #<n>" instead (.claude/agents/ticket-agent.md rule 7).
+  const partOf = new Set();
+  const partRe = /\bpart of #(\d+)\b/gi;
+  while ((m = partRe.exec(pr.body || ""))) partOf.add(m[1]);
+  for (const n of partOf) put("partof", n);
   // Each lane declares itself in the body, fenced or not, read from the body for
   // the reason the Closes read above gives: a ticket-agent lane by its report
   // header (.claude/agents/ticket-agent.md rule 8), a task-orchestrator batch by
@@ -297,6 +313,8 @@ pr_closes=()
 pr_lanes=()
 pr_batches=()
 pr_commits=()
+pr_templates=()
+pr_part_of=()
 check_names=()
 check_statuses=()
 check_conclusions=()
@@ -328,6 +346,8 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
   pr_lanes=()
   pr_batches=()
   pr_commits=()
+  pr_templates=()
+  pr_part_of=()
   check_names=()
   check_statuses=()
   check_conclusions=()
@@ -347,6 +367,8 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
       lane) pr_lanes+=("$a") ;;
       batch) pr_batches+=("$a") ;;
       commit) pr_commits+=("$a") ;;
+      template) pr_templates+=("'$a' carries \"$b\"") ;;
+      partof) pr_part_of+=("$a") ;;
       check)
         check_names+=("$a")
         check_statuses+=("$b")
@@ -398,14 +420,23 @@ elif [ "${#pr_batches[@]}" -eq 1 ]; then
   merge_method="--rebase"
   merge_reason="task-orchestrator batch, anchor #${pr_batches[0]} -> rebase"
 elif [ "${#pr_lanes[@]}" -eq 1 ]; then
-  # The lane closes its own issue (.claude/agents/ticket-agent.md rule 7); a report
-  # whose issue no Closes line names is refused rather than merged with it left open.
+  # The lane closes its own issue, or says it leaves it open with "Part of"
+  # (.claude/agents/ticket-agent.md rule 7). A report whose issue neither line names
+  # is refused rather than merged with the issue's fate unstated.
   case " ${pr_closes[*]-} " in
     *" ${pr_lanes[0]} "*)
       merge_method="--squash"
       merge_reason="ticket-agent lane for #${pr_lanes[0]} -> squash"
       ;;
-    *) merge_reason="the lane report names #${pr_lanes[0]} but no Closes line does" ;;
+    *)
+      case " ${pr_part_of[*]-} " in
+        *" ${pr_lanes[0]} "*)
+          merge_method="--squash"
+          merge_reason="ticket-agent lane for #${pr_lanes[0]}, Part of (left open) -> squash"
+          ;;
+        *) merge_reason="the lane report names #${pr_lanes[0]} but no Closes or Part of line does" ;;
+      esac
+      ;;
   esac
 else
   case "${#pr_closes[@]}" in
@@ -541,6 +572,11 @@ if [ "$already_merged" = "0" ]; then
     "$merge_reason — cannot tell a single-issue squash from a batch rebase. Correct the Closes lines or the lane declarations in the body, or pass --method squash|rebase"
   if [ "$merge_method" = "--rebase" ]; then
     curated_reason=$(curated_history_ok) || fail 'classify' "$curated_reason"
+  fi
+  # Either method writes these bodies onto main: --rebase as they are, --squash
+  # as the default squash message GitHub builds from them.
+  if [ "${#pr_templates[@]}" -gt 0 ]; then
+    fail 'classify' "editor template left in a commit body: $(printf '%s; ' "${pr_templates[@]}")reword with git -c core.commentChar=';' -c commit.cleanup=strip, force-push, then re-run"
   fi
 fi
 
