@@ -8,9 +8,7 @@ import { weatherSourceSchema } from './weather-source';
  * Which model produced a forecast.
  *
  * ADR 0002 makes this a discriminator rather than a separate schema per model:
- * one `forecastSchema` serves both variants, and the same value later appears in
- * series identifiers and error-metric keys, so physics and ML results stay
- * directly comparable instead of living in parallel shapes.
+ * one `forecastSchema` serves both variants.
  */
 export const forecastModelSchema = z.enum(['physics', 'ml']);
 
@@ -24,8 +22,7 @@ export type ForecastModel = z.infer<typeof forecastModelSchema>;
  * `.extend()` / `.pick()` (a top-level `.refine()` would erase those).
  *
  * Both quantiles carry the same `0`–{@link MAX_PLAUSIBLE_RESIDENTIAL_KW} bounds
- * as `acPowerKw`: same quantity, same unit, same site, so a runaway ML p90 is
- * exactly what the cap is for.
+ * as `acPowerKw`: same quantity, same unit, same site.
  */
 export const uncertaintyBandSchema = z
   .object({
@@ -39,8 +36,7 @@ export const uncertaintyBandSchema = z
 
 /**
  * Exported in its own right, not as `NonNullable<Forecast['uncertainty']>`: fleet aggregation
- * consumes and produces band-shaped values detached from any one `Forecast`, and the derived
- * idiom names a field rather than a concept and cannot parse anything at runtime.
+ * consumes and produces band-shaped values detached from any one `Forecast`.
  */
 export type UncertaintyBand = z.infer<typeof uncertaintyBandSchema>;
 

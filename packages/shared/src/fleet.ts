@@ -30,11 +30,6 @@ interface FleetLocation {
  * bucket-centred point by less than 0.005° cannot round into a neighbouring bucket. Co-location
  * therefore holds by construction rather than by luck, which is what makes the fleet's 12-fetch
  * weather budget a property of the data instead of a hope about it.
- *
- * Before #78 the centres carried their real 4 dp coordinates and the jitter box was wider than a
- * bucket, so the canonical fleet spread across 58 buckets rather than 12 — the de-duplication
- * lever the design claimed did not exist. The API-frugality constraint is a design input, so the
- * generator now enforces it.
  */
 const fleetLocations = [
   { name: 'Dublin', latitude: 53.35, longitude: -6.26 },
@@ -61,9 +56,6 @@ const sitesPerLocation = 5;
  * of that centre. 0.004° leaves margin for the 5 dp coordinate rounding below (up to 0.000005°)
  * and for float representation. Widening it past 0.005 would silently multiply the fleet's
  * Open-Meteo call volume; `fleet.test.ts` fails if it does.
- *
- * The two axes share one half-width for the same reason: the constraint is expressed in degrees
- * of the bucket grid, which is square, not in kilometres on the ground.
  */
 const jitterDegrees = 0.004;
 
