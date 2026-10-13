@@ -257,25 +257,27 @@ describe('the cycle cache on the metered reads', () => {
       expect(incrementRateWindow).toHaveBeenCalledTimes(1);
     });
 
-    it('dates the fallback by the per-site forecasts, late or on time', async () => {
-      await stubStorage(LAST_RUN);
+    it.each([
+      {
+        run: LAST_RUN,
+        outcome: 'briefly, under that run’s tag',
+        cacheControl: `public, max-age=${String(STALE_RETRY_SECONDS)}`,
+        etag: dataCycleAt(MID_CYCLE.getTime() / 1000 - 3600).etag,
+      },
+      {
+        run: THIS_RUN,
+        outcome: 'to the boundary',
+        cacheControl: `public, max-age=${String(dataCycleAt(MID_CYCLE.getTime() / 1000).secondsToNext)}`,
+        etag: dataCycleAt(MID_CYCLE.getTime() / 1000).etag,
+      },
+    ])('caches the fallback $outcome, dated by the per-site forecasts', async (expected) => {
+      await stubStorage(expected.run);
       const { handler } = await import('./main');
-      const lastCycle = dataCycleAt(MID_CYCLE.getTime() / 1000 - 3600);
 
-      const late = await handler(fleetForecastEvent({}));
+      const response = await handler(fleetForecastEvent({}));
 
-      expect(late.headers['cache-control']).toBe(`public, max-age=${String(STALE_RETRY_SECONDS)}`);
-      expect(late.headers.etag).toBe(lastCycle.etag);
-
-      vi.restoreAllMocks();
-      vi.resetModules();
-      await stubStorage(THIS_RUN);
-      const { handler: freshHandler } = await import('./main');
-      const cycle = dataCycleAt(MID_CYCLE.getTime() / 1000);
-
-      const onTime = await freshHandler(fleetForecastEvent({}));
-
-      expect(onTime.headers.etag).toBe(cycle.etag);
+      expect(response.headers['cache-control']).toBe(expected.cacheControl);
+      expect(response.headers.etag).toBe(expected.etag);
     });
 
     it('never dates a body by a slice with no stamp: the read falls back to the per-site forecasts', async () => {

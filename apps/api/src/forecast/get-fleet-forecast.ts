@@ -132,7 +132,7 @@ export const getFleetForecast = async (
     points: [...read.points],
     attribution: openMeteoAttribution,
   });
-  // Dated by its laggard (#614): one group per location's slices, or per site on the fallback.
+  // Dated by its laggard (#614); the groups are `FleetForecastAggregateRead`'s.
   return read.points.length === 0
     ? uncacheable(response)
     : datedByData(

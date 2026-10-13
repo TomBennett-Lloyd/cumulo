@@ -298,3 +298,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `docs/adr/0009-fleet-forecast-rollup.md`, the #602 entry's "What it does not catch" ("A coordinate edit that stays inside one bucket is not in the tuple either")
 - What: `PUT /v1/sites/{siteId}` now refuses every coordinate change (#629), so that case cannot arise. The sentence is still true of the tuple; it wants a past-tense note or a citation of #629 at ADR 0009's next amendment pass
 - Source: #629 review pass 1 SYSTEMIC
+
+## 2026-10-13 — the fleet-actuals route's dating comment restates the read type's docblock
+
+- Where: `apps/api/src/forecast/get-fleet-actuals.ts` (the comment above `datedByData`) against `FleetActualsAggregateRead` in `apps/api/src/forecast/fleet-actuals-rollup-read.ts`
+- What: the route comment repeats the grouping the read type's docblock owns (`docs/standards/prose.md` rule 3); #614 wrote the fleet-forecast route's comment as a citation instead. Trim this one to the same form
+- Source: #614 review pass 1 SYSTEMIC

@@ -228,8 +228,7 @@ const summed = (
 
 /**
  * Each expected location's run, as a group of its own for dating the response (#614). One value
- * suffices because {@link staleLocations} has already refused a location with two; a slice without
- * a stamp dates nothing.
+ * suffices because {@link staleLocations} has already refused a location with two.
  */
 const issuedAtsByLocation = (
   rows: readonly FleetRollupRow[],
