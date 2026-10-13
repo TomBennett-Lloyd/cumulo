@@ -1,7 +1,18 @@
-import { createSiteInputSchema, fleetSiteSchema, type FleetSite } from '@cumulo/shared';
+import {
+  createSiteInputSchema,
+  fleetSiteSchema,
+  type CreateSiteInput,
+  type FleetSite,
+} from '@cumulo/shared';
 import type { SiteAdapter } from '@cumulo/storage';
 
-import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
+import {
+  errorResponse,
+  jsonResponse,
+  zodIssueDetails,
+  type ApiErrorDetails,
+  type ApiResponse,
+} from '../http/response';
 import type { RouteRequest } from '../http/router';
 
 import { parseSiteIdParam } from './site-id-param';
@@ -14,6 +25,10 @@ import { parseSiteIdParam } from './site-id-param';
  * an update, so a client has one site representation rather than two, and a
  * field omitted from the body is unambiguously "set it to nothing" rather than
  * "leave it alone".
+ *
+ * **A site's location is immutable** (#629): a move is a delete and an add. The
+ * `latitude`/`longitude` comparison is exact on the stored numbers, so a PUT that
+ * repeats them is an edit and any difference is refused.
  *
  * The three fields the server owns — `id`, `origin`, `createdAt` — are read back
  * from the stored site and written through unchanged, which is why this is a
@@ -30,6 +45,14 @@ import { parseSiteIdParam } from './site-id-param';
 export interface UpdateSiteDeps {
   readonly sites: Pick<SiteAdapter, 'getFleetSite' | 'putFleetSite'>;
 }
+
+const movedCoordinates = (stored: FleetSite, requested: CreateSiteInput): ApiErrorDetails =>
+  (['latitude', 'longitude'] as const)
+    .filter((field) => stored[field] !== requested[field])
+    .map((field) => ({
+      path: field,
+      message: `stored ${String(stored[field])}, requested ${String(requested[field])}`,
+    }));
 
 export const updateSite = async (
   deps: UpdateSiteDeps,
@@ -52,6 +75,15 @@ export const updateSite = async (
   const existing = await deps.sites.getFleetSite(param.siteId);
   if (!existing.found) {
     return errorResponse('not_found', 'no site exists with that id');
+  }
+
+  const moved = movedCoordinates(existing.site, parsed.data);
+  if (moved.length > 0) {
+    return errorResponse(
+      'validation_failed',
+      "a site's location cannot be changed; delete the site and add it again at the new location",
+      moved,
+    );
   }
 
   const updated: FleetSite = {

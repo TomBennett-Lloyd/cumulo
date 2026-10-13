@@ -19,6 +19,11 @@ const depsAround = (result: GetFleetSiteResult, written: FleetSite[] = []): Upda
 const putRequest = (body: unknown, siteId: string = RANELAGH_ID) =>
   routeRequest({ method: 'PUT', params: { siteId }, body });
 
+const atStoredLocation = (site: FleetSite) => ({
+  latitude: site.latitude,
+  longitude: site.longitude,
+});
+
 describe('PUT /v1/sites/{siteId}', () => {
   it('answers 200 with the updated site', async () => {
     const stored = fleetSite();
@@ -26,7 +31,13 @@ describe('PUT /v1/sites/{siteId}', () => {
 
     const response = await updateSite(
       depsAround({ found: true, site: stored }, written),
-      putRequest(siteInput({ name: 'Ranelagh rooftop, rebuilt', capacityKw: 5.5 })),
+      putRequest(
+        siteInput({
+          ...atStoredLocation(stored),
+          name: 'Ranelagh rooftop, rebuilt',
+          capacityKw: 5.5,
+        }),
+      ),
     );
 
     expect(response.statusCode).toBe(200);
@@ -44,13 +55,45 @@ describe('PUT /v1/sites/{siteId}', () => {
 
     await updateSite(
       depsAround({ found: true, site: stored }, written),
-      putRequest(siteInput({ name: 'renamed' })),
+      putRequest(siteInput({ ...atStoredLocation(stored), name: 'renamed' })),
     );
 
-    expect(written[0]).toEqual({ ...stored, ...siteInput({ name: 'renamed' }) });
+    expect(written[0]).toEqual({
+      ...stored,
+      ...siteInput({ ...atStoredLocation(stored), name: 'renamed' }),
+    });
     expect(written[0]?.id).toBe(stored.id);
     expect(written[0]?.origin).toBe('seed');
     expect(written[0]?.createdAt).toBe(stored.createdAt);
+  });
+
+  it('answers 400 and writes nothing when the body moves the site', async () => {
+    const stored = fleetSite();
+    const written: FleetSite[] = [];
+
+    const response = await updateSite(
+      depsAround({ found: true, site: stored }, written),
+      putRequest(siteInput({ ...atStoredLocation(stored), longitude: stored.longitude + 0.5 })),
+    );
+
+    expect(response.statusCode).toBe(400);
+    const body = apiErrorSchema.parse(jsonBodyOf(response));
+    expect(body.code).toBe('validation_failed');
+    expect(body.message).toContain('delete the site and add it again');
+    expect(body.details?.map((detail) => detail.path)).toEqual(['longitude']);
+    expect(written).toEqual([]);
+  });
+
+  it('names both coordinates when both differ', async () => {
+    const response = await updateSite(
+      depsAround({ found: true, site: fleetSite() }),
+      putRequest(siteInput()),
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(
+      apiErrorSchema.parse(jsonBodyOf(response)).details?.map((detail) => detail.path),
+    ).toEqual(['latitude', 'longitude']);
   });
 
   it('answers 404 without writing when the site does not exist', async () => {
