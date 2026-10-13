@@ -16,8 +16,7 @@ import { utcIsoTimestampSchema, type UtcIsoTimestamp, type UtcWindow } from './t
  * `T#<from>` to the *bare* `T#<to>`, and real items at `to` carry a `#<kind>`
  * suffix that sorts strictly after that bare bound, so they fall outside the
  * range while items at `from` fall inside it. `storage-key.test.ts` pins that
- * property as plain string comparisons; it is load-bearing for the series
- * adapter and must not be treated as an incidental detail of the format.
+ * property as plain string comparisons.
  */
 
 /** Which flavour of series point a `cumulo-series` item holds. */
@@ -27,8 +26,7 @@ export type SeriesKind = { kind: 'forecast'; model: ForecastModel } | { kind: 'g
  * The forecast arm of {@link SeriesKind} — a kind that names a model.
  *
  * Extracted rather than redeclared, so a function taking "the forecast kind" takes the same object
- * `seriesSortKey` keys items by (`docs/standards/typing.md` rule 6). The narrowing is the point:
- * aggregation selects on `model`, and `{ kind: 'generation' }` has none to select on.
+ * `seriesSortKey` keys items by (`docs/standards/typing.md` rule 6).
  */
 export type ForecastSeriesKind = Extract<SeriesKind, { kind: 'forecast' }>;
 
@@ -93,22 +91,11 @@ export const fleetRollupTimeBound = (kind: SeriesKind, validTime: UtcIsoTimestam
  * kind (ADR 0009).
  *
  * **The segment order is the inverse of {@link seriesSortKey}'s, deliberately.**
- * There the partition is one site and a reader wants the two models and the
- * actual interleaved by time (A4), so time leads. Here the partition holds every
- * location and every kind, and the only read is "one kind, over one window", so
- * **kind leads and time follows it**: a Query for the forecast kind never reads
- * past a single actuals item, and `[from, to)` is expressible on the sort key.
- *
- * The location trails the hour because it is not a dimension any read selects
- * on — it is what makes a *partial* addressable. The sum at read is over
- * whatever locations are there (ADR 0009).
  *
  * `locationId` cannot contain `#` (`location.ts` builds it from two `toFixed(2)`
  * numbers), so the segments stay unambiguous. There is deliberately **no**
- * inverse of this function: unlike `parseSeriesSortKey`, nothing has to
- * rediscover the kind from a stored key — the Query's key condition already pins
- * it, and the item carries `validTime` and `locationId` as attributes its own
- * schema validates.
+ * inverse of this function (see `locationId` in
+ * `packages/storage/src/adapters/series/fleet-rollup-item.ts`).
  */
 export const fleetRollupSortKey = (
   kind: SeriesKind,
@@ -162,13 +149,8 @@ export const parseSeriesSortKey = (sortKey: string): { validTime: string; kind: 
  * `ARCHIVE#T#<validTime>`.
  *
  * `kind` is `weatherReadingSchema`'s axis (predicted vs historical archive);
- * ADR 0002 calls the same axis `source` in the sort key, because in the schema
- * `source` already means provenance. This function is where that rename
+ * ADR 0002 calls the same axis `source` in the sort key. This function is where that rename
  * happens, and it is the only place it should.
- *
- * Source leads the key so that an archive range Query never has to read past
- * forecast items for the same location, and so the day markers below sit in one
- * contiguous run.
  */
 export const weatherSortKey = (
   kind: 'forecast' | 'archive',
@@ -188,10 +170,7 @@ export const weatherSortKey = (
  * so a partial fetch can never leave a marker claiming coverage it does not
  * have.
  *
- * Throws on a day that is not zero-padded `YYYY-MM-DD`. Width is the whole
- * point: `2026-7-1` would sort between `2026-12-31` and `2026-02-01` and make
- * the marker run unqueryable, so a loose day string is a violated invariant
- * rather than something to normalize quietly.
+ * Throws on a day that is not zero-padded `YYYY-MM-DD`.
  */
 export const archiveDayMarkerSortKey = (day: string): string => {
   if (!DAY_PATTERN.test(day)) {
@@ -206,12 +185,9 @@ export const archiveDayMarkerSortKey = (day: string): string => {
  *
  * Period leads so that both models' metrics for one period come back from a
  * single `begins_with(sk, '<start>#<end>#')` Query — the side-by-side payload
- * #20's comparison endpoint returns. The baseline is part of the key because a
- * skill score carries its reference: two baselines over the same period are two
- * distinct results, not a collision.
+ * #20's comparison endpoint returns.
  *
- * The period is a `UtcWindow` (`timestamp.ts`) — named half-open bounds, so the
- * two same-shaped timestamps cannot be swapped at a call site.
+ * The period is a `UtcWindow` (`timestamp.ts`).
  */
 export const metricsSortKey = (period: UtcWindow, model: ForecastModel, baseline: string): string =>
   `${period.startInclusive}#${period.endExclusive}#${model}#${baseline}`;

@@ -22,8 +22,7 @@ import { z } from 'zod';
  *   request. The response carries a `retry-after` header naming the wait in
  *   seconds
  * - `internal` → **500** — the top-level error boundary caught something
- *   unexpected. The message is deliberately generic; the detail goes to the
- *   structured log, not to the caller
+ *   unexpected
  *
  * **429 has two producers, and only one of them speaks this schema.** API
  * Gateway's throttles — the stage limit and the per-route write limits — answer
@@ -63,14 +62,9 @@ const apiErrorDetailSchema = z.object({
  * {@link apiErrorCodeSchema} for the status ↔ code mapping and for the one
  * status — 429 — a caller can also receive in a body this schema did not shape.
  *
- * A single shape for every failing route is what lets a client write one error
- * path instead of one per endpoint, and what lets the OpenAPI document reference
- * a single `ApiError` component from every non-2xx response.
- *
- * `details` is present only for `validation_failed`, where naming the offending
- * fields is the difference between an actionable error and a shrug. It is
- * optional rather than an empty array on the other codes so that its presence
- * itself means "there is something field-specific to say".
+ * `details` is present only for `validation_failed`. It is optional rather than an
+ * empty array on the other codes so that its presence itself means "there is
+ * something field-specific to say".
  */
 export const apiErrorSchema = z.object({
   code: apiErrorCodeSchema,

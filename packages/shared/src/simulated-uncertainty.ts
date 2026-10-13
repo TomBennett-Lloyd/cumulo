@@ -23,9 +23,7 @@ import { MAX_PLAUSIBLE_RESIDENTIAL_KW } from './site';
  * - **Broken cloud is the volatile regime.** A half-covered sky swings a panel's irradiance far
  *   harder than a uniformly clear or uniformly overcast one.
  * - **Lead widens it.** A linear {@link SIMULATED_UNCERTAINTY_LEAD_WIDENING_PER_HOUR} per hour of
- *   lead, saturating at {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}. Linear-then-capped is the
- *   deliberately crude choice: nothing in this fleet's history could fit a growth curve yet, and
- *   an unbounded ramp would eventually claim a band wider than the estimate it brackets.
+ *   lead, saturating at {@link SIMULATED_UNCERTAINTY_HALF_WIDTH_MAX}.
  * - **Calibrated at the origin, conservative away from it.** At clear sky and zero lead the band
  *   is *exactly* the P10–P90 of the simulated-actuals draw — see
  *   {@link SIMULATED_UNCERTAINTY_BASE_HALF_WIDTH} — so the envelope and the actuals it will be
@@ -144,9 +142,7 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * fraction of the value itself.
  *
  * `median × (1 ± halfWidth) × 1000` lands on a whole number only up to floating-point
- * representation error, which enters at more than one step. Snapping first makes the outward
- * rounding a function of the value rather than of which side of the grid the last bit happened to
- * land on.
+ * representation error, which enters at more than one step.
  *
  * The tolerance is *relative* because the error it absorbs is: an ulp scales with the value
  * carrying it, so a relative tolerance holds one constant multiple of an ulp across the whole
@@ -158,14 +154,6 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * onto zero for every median whose scaled value falls below `t`, and `ceil(0)` then publishes a
  * `{0, 0}` band around a positive estimate, which `uncertaintyBandSchema` accepts without
  * complaint. That is precisely the quiet unbracketed band outward rounding exists to remove.
- *
- * The failure is scale-free in `t`, so there is no safe absolute tolerance — not a small one, not
- * any.
- *
- * Nothing floors a non-zero `acPowerKw` away from zero (`z.number().gte(0)`, and the physics
- * chain does not quantise), so there is no smallest estimate for such a bound to sit under, and
- * the invariant this module leads with is "at every magnitude". Relative is not the better of two
- * workable choices here; it is the only one.
  */
 const DECIMAL_GRID_TOLERANCE = 1e-9;
 
@@ -196,19 +184,14 @@ const ceilTo = (value: number, decimals: number): number =>
  *
  * `weatherReadingSchema` bounds `cloudCoverPct` to `0`–`100`, but this function's parameter is a
  * bare number and the parabola only means anything on the unit interval, so the cover is clamped
- * onto it. Unclamped, a stray reading fails quietly rather than loudly: a cover just above `100 %`
- * returns a *narrower* band, which the band's own parse accepts without complaint.
- * Clamping degrades a stray reading to the nearest settled sky instead, and for every *non-`NaN`*
+ * onto it. Clamping degrades a stray reading to the nearest settled sky, and for every *non-`NaN`*
  * cover it is what makes `halfWidth >= 0`, which the schema's `p10 <= p90` refinement rests on, a
  * property of this code rather than of its caller. The infinities are absorbed like any other
  * out-of-range cover — `Math.max(0, -Infinity)` is `0` and `Math.min(1, Infinity)` is `1`, both
  * settled skies — so `NaN` is the only cover the clamp cannot answer for.
  *
  * `NaN` is the one cover the clamp cannot absorb: `Math.max(0, NaN)` is `NaN`, which carries
- * through both quantiles and surfaces as a `ZodError` from the band's own parse. It is documented
- * rather than guarded, because both halves of the reason to guard are already absent —
- * `weatherReadingSchema` rejects a `NaN` reading well upstream of here, and a throw at the parse
- * is the loud failure this paragraph wants anyway, not the quiet one it is arguing against.
+ * through both quantiles and surfaces as a `ZodError` from the band's own parse.
  */
 const cloudVariability = (cloudCoverPct: number): number => {
   const cover = Math.min(1, Math.max(0, cloudCoverPct / PERCENT_FULL_SCALE));

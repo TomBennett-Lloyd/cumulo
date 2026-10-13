@@ -61,8 +61,8 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * already states for the client, applied to the producer. `docs/standards/architecture.md` rule 3
  * is why.
  *
- * Pure by construction: no I/O, no clock, no ambient state. The storage shape of a partial belongs
- * to `@cumulo/storage`; this module owns only the arithmetic and the vocabulary.
+ * The storage shape of a partial belongs to `@cumulo/storage`; this module owns only the
+ * arithmetic and the vocabulary.
  */
 
 /**
@@ -92,11 +92,6 @@ export const FLEET_ROLLUP_FORECAST_KIND = {
  * arithmetic, and keeping it out is what lets {@link fleetForecastAggregate} run the same code over
  * a whole fleet treated as one group. `@cumulo/storage` carries the location alongside the stored
  * item.
- *
- * **A schema rather than an interface**, and the type inferred from it — `forecastSchema`'s shape,
- * for `forecastSchema`'s reason. A partial makes a round trip through DynamoDB, so the thing that
- * comes back is `unknown` until a schema has looked at it (`docs/standards/typing.md` rule 3), and
- * the parse is also what restores the branded `validTime` a stored string has lost.
  *
  * The bounds are the weak ones a *sum* can honestly carry. Every term is a non-negative power or a
  * count, so the sum is too — but there is deliberately no upper bound, because the ceiling
@@ -163,9 +158,7 @@ export type FleetForecastAggregatePoint = z.infer<typeof fleetForecastAggregateP
  * summed, because {@link aggregateFleetForecast} does it.
  *
  * `sites` supplies the capacity behind each hour. A forecast whose `siteId` matches no entry there
- * contributes `0` capacity — `contributingCapacityKwByHour`'s rule, kept rather than papered over:
- * capacity that cannot be evidenced is not asserted, and a partial claiming otherwise would inflate
- * the divisor the `%` view reads.
+ * contributes `0` capacity — `contributingCapacityKwByHour`'s rule.
  *
  * `kind` selects the model, and it is a required parameter rather than this module's own constant so
  * that the producer, the API's fallback and the browser's demo source are held to passing the same
@@ -184,8 +177,7 @@ export const fleetRollupPartials = (
     acPowerKw: point.acPowerKw,
     // The degenerate band, spelled the same way `sumForecastGroup` spells it per site: a point
     // estimate is a band of zero width, so a site without one shifts the sum's centre without
-    // widening it. Applying it here — once per group, over an already-summed hour — is the same
-    // arithmetic as applying it per site, because both are sums of the same per-site terms.
+    // widening it.
     p10AcPowerKw: point.uncertainty?.p10AcPowerKw ?? point.acPowerKw,
     p90AcPowerKw: point.uncertainty?.p90AcPowerKw ?? point.acPowerKw,
     hasUncertainty: point.uncertainty !== undefined,
@@ -217,9 +209,7 @@ const emptyHourTotal = (): HourTotal => ({
  * Sum partials from any number of groups into the fleet aggregate, ascending by `validTime`.
  *
  * Partials for the same hour from different groups add; an hour no group reported is absent from
- * the result rather than present as a zero, which is the same rule the aggregation it descends from
- * applies — an unreported hour is a gap, and a gap drawn as zero is a fleet that generated nothing
- * rather than a fleet nobody asked about.
+ * the result rather than present as a zero.
  *
  * Input order is irrelevant and duplicates are *not* de-duplicated: this is addition, and the
  * caller's job is to hand in each group once. That is safe because the only producer of these is
@@ -272,14 +262,7 @@ export const sumFleetRollupPartials = (
  * the browser. Both must produce *the same* numbers the producer-written path produces, and the
  * cheapest way to guarantee that is for all three to be the same code.
  *
- * It is also the executable statement of this module's additivity claim: summing one group is the
- * degenerate case of summing many, so `fleetForecastAggregate(all, sites, kind)` and
- * `sumFleetRollupPartials(each location's partials)` must be equal — which is what
- * `fleet-rollup-additivity.test.ts` pins over the canonical fleet, to within the association bound
- * the section above states.
- *
- * `kind` is {@link fleetRollupPartials}'s, passed through: both callers here are summing a group the
- * producer would have summed, so a different model selection would be a different fleet.
+ * `kind` is {@link fleetRollupPartials}'s, passed through.
  */
 export const fleetForecastAggregate = (
   forecasts: readonly Forecast[],

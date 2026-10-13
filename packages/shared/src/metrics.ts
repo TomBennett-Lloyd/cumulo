@@ -63,9 +63,6 @@ const metricsPeriodSchema = z
  * distinguish from a bad forecast: the baseline made zero error (division by zero), or no
  * forecast/observation pairs aligned with the baseline at all. `null` says "no comparison
  * available"; it never means zero skill, which is a real and different result.
- *
- * The upper bound of 1 on `skillScore` is exact — a perfect forecast scores 1 — while the score is
- * unbounded below: a model twice as wrong as the baseline scores −1.
  */
 export const errorMetricsSchema = z.object({
   siteId: z.uuid(),
@@ -121,8 +118,7 @@ const indexByValidTime = (
  * Inner-join two series on `validTime`, ascending.
  *
  * This is the one place misalignment is handled, and it is handled by exclusion: an instant present
- * in only one series contributes no pair. Every metric below therefore receives pairs that are
- * matched by construction and can never see two series of unequal length.
+ * in only one series contributes no pair.
  *
  * Throws if either series repeats a `validTime`. Two power values for one instant is a violated
  * invariant of the caller's query, and silently picking one would change the metric it is about to
@@ -155,8 +151,7 @@ const requirePairs = (pairs: readonly AlignedPair[], metricName: string): void =
 /**
  * Mean absolute error in kW — the average miss, in the unit the product talks in.
  *
- * Throws on no pairs: the mean of an empty set is undefined, so asking for it is a caller bug, not
- * a zero.
+ * Throws on no pairs.
  */
 export const meanAbsoluteErrorKw = (pairs: readonly AlignedPair[]): number => {
   requirePairs(pairs, 'mean absolute error');
@@ -236,13 +231,10 @@ const shiftHours = (validTime: UtcIsoTimestamp, offsetHours: number): UtcIsoTime
  * The persistence baseline: what you would have predicted by assuming today repeats. The point at
  * `t + offsetHours` carries the observation made at `t`.
  *
- * 24 hours is the default because it is the only offset that preserves the diurnal cycle — a
- * shorter shift would compare noon against morning and beat itself on solar geometry alone, which
- * would flatter any model measured against it.
+ * 24 hours is the default because it is the only offset that preserves the diurnal cycle.
  *
  * Input order is preserved (the shift is monotonic, so a sorted input stays sorted), and the caller
- * aligns the result against observations to score it. An offset that is not a whole number of
- * seconds throws, because the shifted instant would not be representable as a `UtcIsoTimestamp`.
+ * aligns the result against observations to score it.
  */
 export const persistenceBaselineSeries = (
   observed: readonly TimedPowerPoint[],

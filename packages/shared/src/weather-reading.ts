@@ -91,17 +91,11 @@ export type WeatherReading = z.infer<typeof weatherReadingSchema>;
 
 /**
  * The two halves of the `kind` axis, each fixed to one literal — the shape a
- * module produces or consumes when it only ever deals in one of them: ingestion's
- * forecast adapter, the hindcast's archive adapter, and the storage adapter's two
- * write paths, which use different sort-key prefixes and different TTLs.
+ * module produces or consumes when it only ever deals in one of them.
  *
  * They live here, beside the schema they narrow, because they are the same domain
  * concept (`architecture.md` rule 2). Types are inferred rather than written
  * (`typing.md` rule 3).
- *
- * The narrowing is a compile-time obligation, not a runtime branch: handing a
- * forecast writer archive readings should be a type error rather than a `kind`
- * check nobody exercises.
  */
 export const forecastWeatherReadingSchema = weatherReadingSchema.extend({
   kind: z.literal('forecast'),
