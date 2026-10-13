@@ -226,11 +226,18 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   for (const l of pr.labels || []) put("label", l && l.name);
   for (const c of pr.commits || []) {
     put("commit", c && c.messageHeadline);
-    // core.commentChar is ";" here (review-loop step 5), so with cleanup=strip no
-    // body line can begin with one. A line that does is the editor template a
-    // rebase --continue without -c commit.cleanup=strip kept: PR #633 merged
+    // An editor template a rebase kept, in either comment char. Rebases here pass
+    // -c core.commentChar=";" (review-loop step 5), and with cleanup=strip no body
+    // line survives starting with ";", so any such line is template: PR #633 merged
     // "; Conflicts:" and "; Please enter the commit message" onto main in 1161437.
-    const left = String((c && c.messageBody) || "").split("\n").find((l) => l.startsWith(";"));
+    // The repo sets commit.cleanup=whitespace, so a rebase without that swap keeps
+    // the template under "#"; a body line may rightly start "#545", so that form is
+    // matched by the fixed phrases of the git template instead.
+    const hashTemplate =
+      /^# (Conflicts:|Please enter the commit message|interactive rebase in progress|Last commands? done|You are currently rebasing)/;
+    const left = String((c && c.messageBody) || "")
+      .split("\n")
+      .find((l) => l.startsWith(";") || hashTemplate.test(l));
     if (left !== undefined) put("template", c && c.messageHeadline, left);
   }
   for (const c of pr.statusCheckRollup || []) {
@@ -1278,13 +1285,17 @@ EOF
   # somebody else's merged content into a tree, and a secret scan is the one check that
   # is cheaper to run than to skip.
   #
-  # The '#<issue>:' prefix is the repo's subject form, and it is conditional because the
-  # Closes list can legitimately be empty here: a PR with no Closes line reaches the
-  # merge steps only under an explicit --method, and classify has already refused it
-  # otherwise. An empty array indexed under `set -u` aborts the run, which would turn a
-  # resolvable collision into a crash with a merge left in progress.
+  # The '#<issue>:' prefix is the repo's subject form: the first Closes issue, else the
+  # lane's own (a "Part of" lane has no Closes line). It stays conditional because a
+  # PR with neither reaches here under an explicit --method, and an empty array
+  # indexed under `set -u` aborts the run, which would turn a resolvable collision into
+  # a crash with a merge left in progress.
   subject="$TECH_DEBT_PATH — union with '$pr_base_ref' (both sides appended entries)"
-  [ "${#pr_closes[@]}" -gt 0 ] && subject="#${pr_closes[0]}: $subject"
+  if [ "${#pr_closes[@]}" -gt 0 ]; then
+    subject="#${pr_closes[0]}: $subject"
+  elif [ "${#pr_lanes[@]}" -gt 0 ]; then
+    subject="#${pr_lanes[0]}: $subject"
+  fi
   out=$(git -C "$wt" -c core.commentChar=';' -c commit.cleanup=strip commit -m "$subject" 2>&1)
   rc=$?
   if [ "$rc" -ne 0 ]; then

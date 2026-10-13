@@ -925,9 +925,10 @@ end
 # ==========================================================================================
 # 10e-ii-c. a commit body still carrying the editor template is refused at classify
 # ==========================================================================================
-# core.commentChar is ';' here, so cleanup=strip leaves no body line starting with one.
-# PR #633 merged a rebase's "; Conflicts:" block onto main (1161437) because nothing
-# between the branch and the squash read the bodies.
+# Rebases here pass core.commentChar=';', and cleanup=strip leaves no body line starting
+# with one. PR #633 merged a rebase's "; Conflicts:" block onto main (1161437) because
+# nothing between the branch and the squash read the bodies. A rebase without the swap
+# keeps the template under '#', matched by git's fixed phrases.
 begin "a commit body with a ';' template line is refused at classify, before update-branch"
 fixture template-body
 V_COMMITS="#12: the review-feedback entry"
@@ -953,6 +954,18 @@ run_merge
 expect_rc 1
 expect_stderr 'editor template left in a commit body'
 expect_not_called "pr merge $PR --rebase"
+end
+
+begin "a commit body with a '#' template line is refused at classify"
+fixture template-body-hash
+V_COMMIT_BODY='The entry.\n\n# Conflicts:\n#\tdocs/review-feedback.md\n#\n# interactive rebase in progress; onto 2b5a120'
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr "editor template left in a commit body: '#12: the change' carries \"# Conflicts:\""
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
 end
 
 # The control: a body line may start with '#' (a wrapped "#545" here is content, as
