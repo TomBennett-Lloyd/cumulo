@@ -57,9 +57,18 @@ resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
   # rather than of the cycle. Sum with threshold 1 means "the hourly cycle
   # errored", with no averaging to hide behind: the function either completed a
   # full fleet cycle or it did not.
+  #
+  # Two consecutive breaching hours, not one (#635). The handler throws when ANY
+  # location fails to publish, so a single transient upstream 503 on one of 14
+  # locations errors the whole invocation, and the zero-retry setting in
+  # schedule.tf already says the next hourly cycle is that failure's retry. An
+  # alarm that pages on the first failed cycle pages for the case the design
+  # absorbs; two cycles in a row is the case it does not. The price: a total
+  # outage now pages after two hours, not one.
   statistic           = "Sum"
   period              = 3600
-  evaluation_periods  = 1
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
@@ -67,7 +76,7 @@ resource "aws_cloudwatch_metric_alarm" "ingestion_errors" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "The hourly Cumulo ingestion cycle errored. Either the Lambda itself failed, or the handler threw CycleFailedError because at least one location did not publish — the log's ingestion.cycle.summary entry says which, and how many of how many. Check its skippedForDeadline count first: non-zero means the cycle ran out of its time budget and stopped starting locations, which is pathology in one of the three effects rather than a fleet problem (see CYCLE_DEADLINE_MS in apps/ingestion/src/cycle-budget.ts). The summary's deferred count does NOT contribute to this alarm — locations held back by MAX_LOCATIONS_PER_CYCLE are scheduled work that a later cycle picks up, not failures."
+  alarm_description = "The hourly Cumulo ingestion cycle errored in two consecutive hourly cycles; a single failed cycle does not fire this alarm, because the next hourly cycle is its retry. Either the Lambda itself failed, or the handler threw CycleFailedError because at least one location did not publish — the log's ingestion.cycle.summary entry says which, and how many of how many. Check its skippedForDeadline count first: non-zero means the cycle ran out of its time budget and stopped starting locations, which is pathology in one of the three effects rather than a fleet problem (see CYCLE_DEADLINE_MS in apps/ingestion/src/cycle-budget.ts). The summary's deferred count does NOT contribute to this alarm — locations held back by MAX_LOCATIONS_PER_CYCLE are scheduled work that a later cycle picks up, not failures."
 }
 
 resource "aws_cloudwatch_metric_alarm" "dlq_not_empty" {
@@ -143,6 +152,10 @@ resource "aws_cloudwatch_metric_alarm" "async_events_dropped" {
   # thrown away" with no averaging to hide behind. A shorter period would leave
   # 59 empty minutes for every minute of signal.
   #
+  # Two consecutive breaching hours before it fires, as `ingestion_errors` (#635):
+  # the next cycle re-fetches the same horizon, so one discarded cycle self-heals
+  # and only a repeat is worth an email.
+  #
   # The dimension is FunctionName alone. Lambda also publishes this metric with
   # a `FunctionName, Resource` pair, and alarming on that combination would
   # narrow the alarm to a specific version or alias — this function is invoked
@@ -150,7 +163,8 @@ resource "aws_cloudwatch_metric_alarm" "async_events_dropped" {
   # moves.
   statistic           = "Sum"
   period              = 3600
-  evaluation_periods  = 1
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
@@ -158,5 +172,5 @@ resource "aws_cloudwatch_metric_alarm" "async_events_dropped" {
   alarm_actions = [local.alerts_topic_arn]
   ok_actions    = [local.alerts_topic_arn]
 
-  alarm_description = "An hourly Cumulo ingestion cycle was discarded before it ran: EventBridge's asynchronous invocation sat in Lambda's queue past the 60-second maximum event age pinned in infra/ingestion/schedule.tf, with retries deliberately at zero. There is no error and no log line for this cycle because the function was never entered — that hour's weather is simply missing, and the next cycle re-fetches the same 48-hour horizon from fresher data, so a single firing self-heals. Repeated firing does not: the known cause is the account's Lambda concurrency limit of 10, shared with the fleet API, being consumed at the cycle minute (measured, issue #29). Check the API's request-flood alarm for the same window before changing anything here; the fix is a concurrency quota increase, not a longer event age."
+  alarm_description = "Two consecutive hourly Cumulo ingestion cycles were discarded before they ran: EventBridge's asynchronous invocation sat in Lambda's queue past the 60-second maximum event age pinned in infra/ingestion/schedule.tf, with retries deliberately at zero. There is no error and no log line for those cycles because the function was never entered — those hours' weather is simply missing, and the next cycle re-fetches the same 48-hour horizon from fresher data, so the alarm clears once a cycle runs. Persistent firing does not self-heal: the known cause is the account's Lambda concurrency limit of 10, shared with the fleet API, being consumed at the cycle minute (measured, issue #29). Check the API's request-flood alarm for the same window before changing anything here; the fix is a concurrency quota increase, not a longer event age."
 }
