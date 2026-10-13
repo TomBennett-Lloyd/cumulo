@@ -6,10 +6,10 @@ import {
 import type { SiteAdapter } from '@cumulo/storage';
 import { z } from 'zod';
 
-import { errorResponse, jsonResponse, zodIssueDetails, type ApiResponse } from '../http/response';
+import { errorResponse, jsonResponse, zodIssueDetails } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
-import { uncacheable } from './cycle-cache';
+import { datedByData, uncacheable, type MeteredResponse } from './cycle-cache';
 import { readFleetForecastAggregate, type FleetRollupReadDeps } from './fleet-rollup-read';
 import { DEFAULT_FORECAST_HORIZON_HOURS, FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { hoursAfter } from './series-window';
@@ -85,7 +85,7 @@ export interface GetFleetForecastDeps extends FleetRollupReadDeps {
 export const getFleetForecast = async (
   deps: GetFleetForecastDeps,
   request: RouteRequest,
-): Promise<ApiResponse> => {
+): Promise<MeteredResponse> => {
   // Validated before anything is listed: an unusable `hours` is a 400 whatever
   // the fleet looks like, and answering it here means a malformed request never
   // becomes a billed read.
@@ -132,5 +132,11 @@ export const getFleetForecast = async (
     points: [...read.points],
     attribution: openMeteoAttribution,
   });
-  return read.points.length === 0 ? uncacheable(response) : response;
+  // Dated by its laggard (#614); the groups are `FleetForecastAggregateRead`'s.
+  return read.points.length === 0
+    ? uncacheable(response)
+    : datedByData(
+        response,
+        read.issuedAtsByGroup.map((issuedAts) => ({ issuedAts, readingTimes: [] })),
+      );
 };

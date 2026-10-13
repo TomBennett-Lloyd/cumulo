@@ -82,10 +82,15 @@ export interface FleetRollupReadDeps extends FleetSeriesReadDeps {
 /**
  * The fleet's summed forecast, or the response that says why it is not coming.
  *
- * {@link FleetSeriesRead}'s shape and its reasoning.
+ * {@link FleetSeriesRead}'s shape and its reasoning. `issuedAtsByGroup` is what dates the response
+ * (#614): the runs behind the sum, one group per location's slices or per site on the fallback.
  */
 export type FleetForecastAggregateRead =
-  | { readonly complete: true; readonly points: readonly FleetForecastAggregatePoint[] }
+  | {
+      readonly complete: true;
+      readonly points: readonly FleetForecastAggregatePoint[];
+      readonly issuedAtsByGroup: readonly (readonly UtcIsoTimestamp[])[];
+    }
   | { readonly complete: false; readonly response: ApiResponse };
 
 /**
@@ -190,6 +195,12 @@ const aggregateFromFanOut = async (
   return {
     complete: true,
     points: fleetForecastAggregate(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND),
+    // Only the rolled-up model's rows, so a later ML row cannot date a sum it is not in.
+    issuedAtsByGroup: read.perSite.map((points) =>
+      forecastsIn(points)
+        .filter((forecast) => forecast.model === FLEET_ROLLUP_FORECAST_KIND.model)
+        .map((forecast) => forecast.issuedAt),
+    ),
   };
 };
 
@@ -216,6 +227,19 @@ const summed = (
   );
 
 /**
+ * Each expected location's run, as a group of its own for dating the response (#614). One value
+ * suffices because {@link staleLocations} has already refused a location with two.
+ */
+const issuedAtsByLocation = (
+  rows: readonly FleetRollupRow[],
+  expected: ReadonlyMap<string, FleetRollupMembers>,
+): readonly (readonly UtcIsoTimestamp[])[] =>
+  [...expected.keys()].map((location) => {
+    const issuedAt = rows.find((row) => row.locationId === location)?.provenance?.issuedAt;
+    return issuedAt === undefined ? [] : [issuedAt];
+  });
+
+/**
  * Read the fleet's summed forecast over `from`…`to`: the roll-up if it can answer, the fan-out if
  * it cannot.
  *
@@ -239,7 +263,7 @@ export const readFleetForecastAggregate = async (
   // the route's "an empty fleet is a 200 with an empty array" promise should not be one billed
   // read away from being a 500.
   if (sites.length === 0) {
-    return { complete: true, points: [] };
+    return { complete: true, points: [], issuedAtsByGroup: [] };
   }
 
   const bound: QueryPaginationBound = {
@@ -252,7 +276,11 @@ export const readFleetForecastAggregate = async (
   const reason = fallbackReason(rollup, expected, stale);
 
   if (reason === undefined) {
-    return { complete: true, points: summed(rollup.rows, expected) };
+    return {
+      complete: true,
+      points: summed(rollup.rows, expected),
+      issuedAtsByGroup: issuedAtsByLocation(rollup.rows, expected),
+    };
   }
 
   deps.log({
