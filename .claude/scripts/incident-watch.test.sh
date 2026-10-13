@@ -226,6 +226,64 @@ expect_stdout "IN ALARM
 log_has "GROUP /aws/lambda/cumulo-forecast-dev"
 end
 
+# The CLI's default iso8601 rendering is …SS.ffffff±HH:MM in the machine's offset (#638); the
+# fixtures above use plain Z. stamp <seconds-ago> <offset-hours> prints that moment as the CLI
+# would on a machine at that offset, fraction included.
+stamp() {
+  jq -rn --argjson ago "$1" --argjson off "$2" '
+    def hh: tostring | if length < 2 then "0" + . else . end;
+    (now - $ago | floor + $off * 3600 | todate | rtrimstr("Z")) + ".224000"
+    + (if $off == 0 then "Z" else (if $off < 0 then "-" else "+" end) + ($off | fabs | floor | hh) + ":00" end)'
+}
+
+new_case "transitions sort by instant: a fractional +01:00 stamp and a fractional Z stamp"
+# 13:30+01:00 is 12:30Z, an earlier instant than 12:45Z, though it sorts later as text.
+fixture history '{"AlarmHistoryItems": [
+  {"Timestamp": "2020-01-01T13:30:00.500000+01:00", "AlarmName": "cumulo-api-dev-5xx", "HistorySummary": "Alarm updated from OK to ALARM"},
+  {"Timestamp": "2020-01-01T12:45:00.250000Z", "AlarmName": "cumulo-api-dev-5xx", "HistorySummary": "Alarm updated from ALARM to OK"}]}'
+run_watch
+expect_stdout "LAST 10 TRANSITIONS
+  2020-01-01T12:45:00.250000Z  cumulo-api-dev-5xx  Alarm updated from ALARM to OK
+  2020-01-01T13:30:00.500000+01:00  cumulo-api-dev-5xx  Alarm updated from OK to ALARM"
+end
+
+new_case "transitions sort by instant: a -05:00 stamp is hours later than its clock reads"
+# 08:00-05:00 is 13:00Z, later than 12:45Z though it sorts earlier as text.
+fixture history '{"AlarmHistoryItems": [
+  {"Timestamp": "2020-01-01T12:45:00.250000Z", "AlarmName": "cumulo-api-dev-5xx", "HistorySummary": "Alarm updated from ALARM to OK"},
+  {"Timestamp": "2020-01-01T08:00:00.750000-05:00", "AlarmName": "cumulo-api-dev-5xx", "HistorySummary": "Alarm updated from OK to ALARM"}]}'
+run_watch
+expect_stdout "LAST 10 TRANSITIONS
+  2020-01-01T08:00:00.750000-05:00  cumulo-api-dev-5xx  Alarm updated from OK to ALARM
+  2020-01-01T12:45:00.250000Z  cumulo-api-dev-5xx  Alarm updated from ALARM to OK"
+end
+
+new_case "raised-in-the-hour window: a fractional Z stamp 10 minutes old is inside it"
+fixture history "{\"AlarmHistoryItems\": [{\"Timestamp\": \"$(stamp 600 0)\", \"AlarmName\": \"cumulo-forecast-dev-errors\", \"HistorySummary\": \"Alarm updated from OK to ALARM\"}]}"
+run_watch
+expect_rc 1
+expect_stdout "RAISED IN THE LAST HOUR
+  cumulo-forecast-dev-errors"
+end
+
+new_case "raised-in-the-hour window: a fractional +01:00 stamp 90 minutes old is outside it"
+# Read as if its clock were UTC it would be 30 minutes old and raise.
+fixture history "{\"AlarmHistoryItems\": [{\"Timestamp\": \"$(stamp 5400 1)\", \"AlarmName\": \"cumulo-forecast-dev-errors\", \"HistorySummary\": \"Alarm updated from OK to ALARM\"}]}"
+run_watch
+expect_rc 0
+expect_stdout "RAISED IN THE LAST HOUR
+  none"
+end
+
+new_case "raised-in-the-hour window: a fractional -05:00 stamp 30 minutes old is inside it"
+# Read as if its clock were UTC it would be five and a half hours old and be missed.
+fixture history "{\"AlarmHistoryItems\": [{\"Timestamp\": \"$(stamp 1800 -5)\", \"AlarmName\": \"cumulo-forecast-dev-errors\", \"HistorySummary\": \"Alarm updated from OK to ALARM\"}]}"
+run_watch
+expect_rc 1
+expect_stdout "RAISED IN THE LAST HOUR
+  cumulo-forecast-dev-errors"
+end
+
 new_case "account ids are redacted from reasons and log lines; longer numbers are not"
 fixture firing '{"MetricAlarms": [{"AlarmName": "cumulo-api-dev-5xx", "StateUpdatedTimestamp": "2020-01-01T12:55:00Z", "StateReason": "see arn:aws:sns:eu-west-1:123456789012:cumulo-alerts-dev"}], "CompositeAlarms": []}'
 fixture logs '{"events": [{"timestamp": 1791377700000, "message": "{\"detail\":\"arn:aws:dynamodb:eu-west-1:123456789012:table/x\",\"at\":1791377700000}"}]}'
