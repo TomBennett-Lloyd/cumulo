@@ -9,9 +9,7 @@ import { utcIsoTimestampSchema } from './timestamp';
  *
  * One number covers both quantities because output clips at nameplate (ADR
  * 0003): a site can never emit more AC power than the DC capacity it declared,
- * so the widest legitimate AC value is the widest legitimate capacity. That
- * makes the two bounds the same fact stated once, not two facts that happen to
- * agree — a lower ceiling here narrows every schema in step, which is the point.
+ * so the widest legitimate AC value is the widest legitimate capacity.
  *
  * The shared-schema tests deliberately pin `50`, `50.1` and `51` as *literals*
  * rather than deriving them from this constant (`site.test.ts`,

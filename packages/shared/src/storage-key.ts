@@ -151,10 +151,6 @@ export const parseSeriesSortKey = (sortKey: string): { validTime: string; kind: 
  * `kind` is `weatherReadingSchema`'s axis (predicted vs historical archive);
  * ADR 0002 calls the same axis `source` in the sort key. This function is where that rename
  * happens, and it is the only place it should.
- *
- * Source leads the key so that an archive range Query never has to read past
- * forecast items for the same location, and so the day markers below sit in one
- * contiguous run.
  */
 export const weatherSortKey = (
   kind: 'forecast' | 'archive',
@@ -189,9 +185,7 @@ export const archiveDayMarkerSortKey = (day: string): string => {
  *
  * Period leads so that both models' metrics for one period come back from a
  * single `begins_with(sk, '<start>#<end>#')` Query — the side-by-side payload
- * #20's comparison endpoint returns. The baseline is part of the key because a
- * skill score carries its reference: two baselines over the same period are two
- * distinct results, not a collision.
+ * #20's comparison endpoint returns.
  *
  * The period is a `UtcWindow` (`timestamp.ts`).
  */

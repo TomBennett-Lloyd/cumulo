@@ -59,8 +59,8 @@ import { compareUtcIsoTimestamps, utcIsoTimestampSchema, type UtcIsoTimestamp } 
  * already states for the client, applied to the producer. `docs/standards/architecture.md` rule 3
  * is why.
  *
- * Pure by construction: no I/O, no clock, no ambient state. The storage shape of a partial belongs
- * to `@cumulo/storage`; this module owns only the arithmetic and the vocabulary.
+ * The storage shape of a partial belongs to `@cumulo/storage`; this module owns only the
+ * arithmetic and the vocabulary.
  */
 
 /**

@@ -142,9 +142,7 @@ const CLOUD_VARIABILITY_NORMALISER = 4;
  * fraction of the value itself.
  *
  * `median × (1 ± halfWidth) × 1000` lands on a whole number only up to floating-point
- * representation error, which enters at more than one step. Snapping first makes the outward
- * rounding a function of the value rather than of which side of the grid the last bit happened to
- * land on.
+ * representation error, which enters at more than one step.
  *
  * The tolerance is *relative* because the error it absorbs is: an ulp scales with the value
  * carrying it, so a relative tolerance holds one constant multiple of an ulp across the whole
@@ -186,9 +184,7 @@ const ceilTo = (value: number, decimals: number): number =>
  *
  * `weatherReadingSchema` bounds `cloudCoverPct` to `0`–`100`, but this function's parameter is a
  * bare number and the parabola only means anything on the unit interval, so the cover is clamped
- * onto it. Unclamped, a stray reading fails quietly rather than loudly: a cover just above `100 %`
- * returns a *narrower* band, which the band's own parse accepts without complaint.
- * Clamping degrades a stray reading to the nearest settled sky instead, and for every *non-`NaN`*
+ * onto it. Clamping degrades a stray reading to the nearest settled sky, and for every *non-`NaN`*
  * cover it is what makes `halfWidth >= 0`, which the schema's `p10 <= p90` refinement rests on, a
  * property of this code rather than of its caller. The infinities are absorbed like any other
  * out-of-range cover — `Math.max(0, -Infinity)` is `0` and `Math.min(1, Infinity)` is `1`, both
