@@ -7,6 +7,8 @@ You are running the periodic triage pass over both logs. The logs are buffers �
 
 **Tech debt** (`docs/tech-debt.md`):
 
+First run `pnpm tidy:tech-debt` in the pass's worktree and commit what it changed as the pass's first commit; what it reports as needing a human is triage input.
+
 1. Cluster related entries — same module, same pattern, same underlying cause.
 2. For each cluster, identify the ROOT CAUSE, not the symptoms. Three entries about awkward error shapes in three files are one issue about the error model, not three issues.
 3. `gh issue create --label tech-debt,discovered` — body: affected files, the entries' content, the root-cause analysis, a proposed fix direction, and acceptance criteria for "debt cleared".
