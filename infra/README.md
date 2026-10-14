@@ -545,6 +545,7 @@ aws sts get-caller-identity --profile cumulo-observer --query Arn --output text
 # an InvalidClientTokenId here, within a minute of O2, means the new key has not propagated yet: wait a moment and retry, it is not a policy fault
 AWS_PROFILE=cumulo-observer bash .claude/scripts/incident-watch.sh
 # expect: a report ending VERDICT quiet (exit 0) or VERDICT act (exit 1) — never exit 2
+# a call that times out is the one exit 2 that is not a fault: "no verdict", naming the call, from a network or service stall rather than a key or policy problem, and the next hourly tick simply runs again
 aws cloudwatch disable-alarm-actions --alarm-names cumulo-observer-write-probe --profile cumulo-observer
 # expect: AccessDenied — a write the policy does not hold (harmless if it ever succeeded: no such alarm)
 aws iam list-users --profile cumulo-observer

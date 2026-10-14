@@ -63,6 +63,10 @@ esac
 case " $* " in
   *" --region us-east-1 "*) fixture="$fixture-billing" ;;
 esac
+if [ -f "$STUB_FIXTURES/$fixture.stderr" ]; then
+  cat "$STUB_FIXTURES/$fixture.stderr" >&2
+  exit 255
+fi
 if [ ! -f "$STUB_FIXTURES/$fixture.json" ]; then
   printf 'An error occurred (AccessDenied): User: arn:aws:iam::123456789012:user/cumulo-observer-dev is not authorized\n' >&2
   exit 254
@@ -390,6 +394,25 @@ expect_stderr "— no verdict"
 expect_stderr "arn:aws:iam::<account-id>:user"
 expect_not_stderr "123456789012"
 expect_not_stdout "VERDICT"
+end
+
+new_case "a call that times out reads as no verdict naming the call, not a hang or a quiet report"
+printf 'Read timeout on endpoint URL: "https://monitoring.eu-west-1.amazonaws.com/"\n' >"$FIX/firing.stderr"
+run_watch
+expect_rc 2
+expect_stderr "aws cloudwatch describe-alarms failed"
+expect_stderr "Read timeout on endpoint URL"
+expect_stderr "— no verdict"
+expect_not_stdout "VERDICT"
+end
+
+new_case "every aws call carries the connect and read timeouts, so no call can outlast them"
+fixture firing '{"MetricAlarms": [{"AlarmName": "cumulo-api-dev-5xx", "StateUpdatedTimestamp": "2020-01-01T12:55:00Z", "StateReason": "x"}], "CompositeAlarms": []}'
+run_watch
+expect_rc 1
+calls_made=$(grep -c '^CALL' "$LOG")
+[ "$calls_made" -ge 8 ] || bad "expected the whole report's calls to be recorded; log: $(calls)"
+[ "$(grep -c -- '^ARGS .*--cli-connect-timeout 10 --cli-read-timeout 30$' "$LOG")" -eq "$calls_made" ] || bad "a call lacked the timeouts; log: $(calls)"
 end
 
 new_case "a response jq cannot read is no verdict, not a quiet report"
