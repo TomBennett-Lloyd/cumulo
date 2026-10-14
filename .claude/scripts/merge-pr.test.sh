@@ -115,9 +115,12 @@ EOF
 
 # json_checks <comma-separated name:status:conclusion> -> the statusCheckRollup array.
 # An empty conclusion is spelled by leaving the third field empty ("web-e2e:IN_PROGRESS:"),
-# which is exactly how GitHub answers for a check that has not finished.
+# which is exactly how GitHub answers for a check that has not finished. A trailing
+# "@<ISO time>" sets startedAt ("checks:COMPLETED:SUCCESS@2026-10-13T16:45:34Z"); the
+# time has colons of its own, hence a different separator. Left off, the field is
+# omitted and the entries of a name tie, so the one listed last wins.
 json_checks() {
-  local first=1 spec name rest status conclusion
+  local first=1 spec name rest status conclusion started
   printf '['
   while IFS= read -r spec; do
     [ -n "$spec" ] || continue
@@ -125,9 +128,16 @@ json_checks() {
     rest=${spec#*:}
     status=${rest%%:*}
     conclusion=${rest#*:}
+    started=""
+    case "$conclusion" in
+      *@*)
+        started=",\"startedAt\":\"${conclusion#*@}\""
+        conclusion=${conclusion%%@*}
+        ;;
+    esac
     [ "$first" = "1" ] || printf ','
-    printf '{"__typename":"CheckRun","name":"%s","status":"%s","conclusion":"%s"}' \
-      "$name" "$status" "$conclusion"
+    printf '{"__typename":"CheckRun","name":"%s","status":"%s","conclusion":"%s"%s}' \
+      "$name" "$status" "$conclusion" "$started"
     first=0
   done <<EOF
 $(printf '%s' "$1" | tr ',' '\n')
@@ -1176,9 +1186,14 @@ expect_stderr "check 'merge-ritual-gate' concluded FAILURE"
 expect_not_called "pr merge $PR --squash"
 end
 
-begin "the latest run of a name decides: a cancelled earlier generation does not outvote a green one"
-fixture latest-run-decides
-V_CHECKS="checks:COMPLETED:CANCELLED,gitleaks:COMPLETED:SUCCESS,checks:COMPLETED:SUCCESS"
+# A name that appears twice is decided by its NEWEST run by startedAt, not by its
+# position: the real rollup is not ordered by time (PR 641 lists the 16:50 run first).
+T_OLD="2026-10-13T16:45:34Z"
+T_NEW="2026-10-13T16:50:16Z"
+
+begin "the newest run of a name decides: a cancelled older generation listed last does not outvote a green one"
+fixture newest-run-green
+V_CHECKS="checks:COMPLETED:SUCCESS@$T_NEW,gitleaks:COMPLETED:SUCCESS,checks:COMPLETED:CANCELLED@$T_OLD"
 write_view default
 write_merged_view
 run_merge
@@ -1186,14 +1201,40 @@ expect_rc 0
 expect_called "pr merge $PR --squash"
 end
 
-begin "the latest run of a name decides: a failed re-run outvotes an earlier green one"
-fixture latest-run-fails
-V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS,checks:COMPLETED:FAILURE"
+begin "the newest run of a name decides: a failure listed before an older green is named, not masked"
+fixture newest-run-fails
+V_CHECKS="gitleaks:COMPLETED:FAILURE@$T_NEW,gitleaks:COMPLETED:SUCCESS@$T_OLD,checks:COMPLETED:SUCCESS"
 write_view default
 write_merged_view
 run_merge
 expect_rc 1
-expect_stderr "check 'checks' concluded FAILURE"
+expect_stderr "check 'gitleaks' concluded FAILURE"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "the newest run of a name decides: a rerun in flight listed before an older green keeps the poll pending"
+fixture newest-run-running
+V_CHECKS="gitleaks:IN_PROGRESS:@$T_NEW,gitleaks:COMPLETED:SUCCESS@$T_OLD,checks:COMPLETED:SUCCESS"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr '1 check(s) still pending'
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a non-required check still running keeps the poll pending although every required check is green"
+fixture nonrequired-running
+V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS,merge-ritual-gate:IN_PROGRESS:"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr 'required check(s) not present: none; 1 check(s) still pending'
 expect_not_called "pr merge $PR --squash"
 end
 

@@ -238,6 +238,13 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       .find((l) => l.startsWith(";") || hashTemplate.test(l));
     if (left !== undefined) put("template", c && c.messageHeadline, left);
   }
+  // One entry per check name, the newest run: a head that has had two workflow
+  // generations lists both, and the rollup is NOT ordered by start time (PR 641
+  // lists a 16:50 gitleaks run before a 16:45 one). A run that has not finished
+  // counts as the newest, so a rerun in flight is never masked by an older green.
+  const newest = new Map();
+  const startedMs = (c, status) =>
+    status !== "COMPLETED" ? Infinity : Date.parse((c && (c.startedAt || c.createdAt)) || "") || 0;
   for (const c of pr.statusCheckRollup || []) {
     // Two shapes share this array. A CheckRun carries status + conclusion; a
     // StatusContext (the older commit-status API, which the rollup still mixes
@@ -251,8 +258,11 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       status = c.state === "PENDING" || c.state === "EXPECTED" ? "PENDING" : "COMPLETED";
       conclusion = c.state;
     }
-    put("check", name, status, conclusion);
+    const at = startedMs(c, status);
+    const held = newest.get(name);
+    if (!held || at >= held.at) newest.set(name, { at, status, conclusion });
   }
+  for (const [name, c] of newest) put("check", name, c.status, c.conclusion);
   // The closing keywords GitHub itself honours, and the reason this is read from
   // the body rather than from "closingIssuesReferences": the body is what the PR
   // author wrote and what a reviewer read, and the squash-vs-rebase decision has
@@ -1511,16 +1521,11 @@ fi
 # head is a no-op spelling the arm above does not know.
 
 # What the poll waits for is a SET, not a count: the base branch's required status
-# checks, read once per run from branch protection. A count of rollup entries
-# conflates how many check runs happened with which checks must pass — a head that
-# has had two workflow generations (a label event or a re-run re-triggers the
-# suite) lists twelve runs of six names, and the post-update head lists six, so a
-# floor taken from the former can never be met by the latter (#650, #653). A name
-# that appears more than once on a head is decided by its LAST entry, the order
-# `gh pr view --json statusCheckRollup` lists the newest run in; that holds for the
-# failed arm too, so a generation concurrency cancelled does not outvote the one
-# that ran. A failing check not in the set still blocks, and a non-required check
-# still running keeps the poll waiting, as before — its verdict is read, not raced.
+# checks, read once per run from branch protection (#653). A count of rollup entries
+# counts runs, not checks, and a head with two workflow generations lists both. pr_facts
+# has already reduced the rollup to one entry per name, the newest run. A failing
+# check outside the set still blocks, and a non-required check still running keeps the
+# poll waiting, as before (test 12d asserts both).
 required_checks=()
 
 read_required_checks() { # read_required_checks -> the base branch's required names in $required_checks, or fail
@@ -1541,14 +1546,10 @@ EOF
 }
 
 checks_verdict() { # -> ready:<n> | pending:<running>:<missing names> | failed:<name>:<conclusion>
-  local i j total pending req found missing
+  local i total pending req found missing
   total=${#check_names[@]}
   pending=0
   for ((i = 0; i < total; i++)); do
-    # Not the latest entry of its name: a later run supersedes it.
-    for ((j = i + 1; j < total; j++)); do
-      [ "${check_names[$j]}" = "${check_names[$i]}" ] && continue 2
-    done
     case "${check_conclusions[$i]}" in
       FAILURE | TIMED_OUT | CANCELLED | STARTUP_FAILURE | ACTION_REQUIRED | ERROR)
         printf 'failed:%s:%s\n' "${check_names[$i]}" "${check_conclusions[$i]}"
