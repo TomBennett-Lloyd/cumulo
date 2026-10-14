@@ -396,7 +396,7 @@ expect_not_stderr "123456789012"
 expect_not_stdout "VERDICT"
 end
 
-new_case "a call that times out reads as no verdict naming the call, not a hang or a quiet report"
+new_case "a call that times out reads as no verdict naming the call, not a quiet report"
 printf 'Read timeout on endpoint URL: "https://monitoring.eu-west-1.amazonaws.com/"\n' >"$FIX/firing.stderr"
 run_watch
 expect_rc 2
@@ -406,7 +406,7 @@ expect_stderr "— no verdict"
 expect_not_stdout "VERDICT"
 end
 
-new_case "every aws call carries the connect and read timeouts, so no call can outlast them"
+new_case "every aws call carries the connect and read timeouts"
 fixture firing '{"MetricAlarms": [{"AlarmName": "cumulo-api-dev-5xx", "StateUpdatedTimestamp": "2020-01-01T12:55:00Z", "StateReason": "x"}], "CompositeAlarms": []}'
 run_watch
 expect_rc 1

@@ -74,8 +74,7 @@ JQ_DEFS='def redact: gsub("(?<![0-9])[0-9]{12}(?![0-9])"; "<account-id>");
           - (if .sign == "+" then 1 else -1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60)
       end;'
 
-# A healthy call answers in seconds, so a longer wait is a stall, and a bounded
-# failure reaches no_verdict as exit 2 naming the call, the skill's contract.
+# A healthy call answers in seconds, so a longer wait is a stall (#646).
 readonly AWS_CONNECT_TIMEOUT_SECONDS=10
 readonly AWS_READ_TIMEOUT_SECONDS=30
 
