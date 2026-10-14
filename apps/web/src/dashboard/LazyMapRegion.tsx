@@ -93,9 +93,8 @@ interface MapRegionBoundaryState {
  * functions-by-default both bend here for the one API that requires it, and for
  * nothing else in this file. It is deliberately local and deliberately small:
  * the app-wide question — one labelled boundary for every async surface in
- * `apps/web`, decided once — is the standing tech-debt entry "No error boundary
- * above the dashboard's async work", and this contains one seam rather than
- * answering it.
+ * `apps/web`, decided once — is #161's "No error boundary above the
+ * dashboard's async work", and this contains one seam rather than answering it.
  *
  * `componentDidCatch` logs rather than swallows (`error-handling.md` rule 2c):
  * this is the boundary handler, so the error stops here, but it stops *visibly*
