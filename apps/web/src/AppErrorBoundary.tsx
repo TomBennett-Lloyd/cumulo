@@ -11,9 +11,8 @@ import { APP_FAILURE_ADVICE, APP_FAILURE_HEADING } from './dashboard/state-copy'
  * panel and the map hanging off a single tree. React answers an uncaught render
  * error by unmounting the root, so without a boundary above that tree any one
  * panel throwing takes the entire page and the Open-Meteo credit with it — and
- * the credit is a licence obligation, not chrome. This is the standing tech-debt
- * entry "No error boundary above the dashboard's async work", answered for the
- * app as a whole.
+ * the credit is a licence obligation, not chrome. This answers #161's "No error
+ * boundary above the dashboard's async work" for the app as a whole.
  *
  * What this boundary replaces grew in #265's search chunk, and it is worth
  * naming: the header is inside it now, because the bar's search needs the fleet

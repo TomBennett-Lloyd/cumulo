@@ -3,9 +3,7 @@
 # file, and commit what it changed. It is not part of `pnpm verify` because it mutates the file.
 #
 # An entry retires only when its Source line cites nothing still open AND a closed issue quotes
-# its heading. A Source line names the review that FOUND a finding, so "Source closed" alone
-# would move live, uncaptured debt out of the buffer /triage reads (the divergence is recorded on
-# #634's plan comment).
+# its heading (the divergence from the issue's spec is recorded on #634's plan comment).
 #
 # Usage: bash .claude/scripts/tidy-tech-debt.sh [REPO_ROOT]
 #        (or `pnpm tidy:tech-debt`)
@@ -51,13 +49,14 @@ human=()
 printf '== Rule 1: ledgers ==\n'
 ledger_rc=0
 bash "$SCRIPT_DIR/check-ledgers.sh" "$ROOT" || ledger_rc=$?
-if [ "$ledger_rc" -eq 2 ]; then
-  printf 'tidy-tech-debt: ledger blocker, nothing was changed\n' >&2
-  exit 2
-fi
-if [ "$ledger_rc" -ne 0 ]; then
-  human+=("rule 1: ledger drift (see the report above)")
-fi
+case "$ledger_rc" in
+  0) ;;
+  1) human+=("rule 1: ledger drift (see the report above)") ;;
+  *)
+    printf 'tidy-tech-debt: the ledger gate did not reach a verdict (rc=%s), nothing was changed\n' "$ledger_rc" >&2
+    exit 2
+    ;;
+esac
 
 # --- issue states ----------------------------------------------------------------------------
 
@@ -151,8 +150,8 @@ retired_entries=0
 today=$(date +%F)
 
 while IFS="$FS" read -r line nums; do
-  # shellcheck disable=SC2086
-  if all_closed $nums; then
+  read -r -a ids <<<"$nums"
+  if all_closed ${ids[@]+"${ids[@]}"}; then
     printf '%s %s\n' "$line" "$line" >>"$SCRATCH/delete.txt"
     deleted_rows=$((deleted_rows + 1))
     printf '  deleted redirect row (line %s): #%s closed\n' "$line" "${nums// /, #}"
@@ -168,11 +167,11 @@ while IFS="$FS" read -r first last heading source missing; do
     continue
   fi
   nums=$(printf '%s' "$source" | grep -oE '#[0-9]+' | tr -d '#' || true)
-  # shellcheck disable=SC2086
-  all_closed $nums || continue
-  closed_text=$(issue_text closed)
+  read -r -a ids <<<"${nums//$'\n'/ }"
+  all_closed ${ids[@]+"${ids[@]}"} || continue
+  closed_text=$(issue_text closed) || exit 2
   grep -qF -e "$title" "$closed_text" || continue
-  open_text=$(issue_text open)
+  open_text=$(issue_text open) || exit 2
   if grep -qF -e "$title" "$open_text"; then
     continue
   fi
@@ -210,10 +209,25 @@ if [ "$deleted_rows" -gt 0 ] || [ "$retired_entries" -gt 0 ]; then
       sed '$d' "$SCRATCH/out.md" >"$SCRATCH/trim.md"
       mv "$SCRATCH/trim.md" "$SCRATCH/out.md"
     done
-    if ! grep -qx '## Retired' "$SCRATCH/out.md"; then
+    if grep -qx '## Retired' "$SCRATCH/out.md"; then
+      awk -v add="$SCRATCH/retired.txt" '
+        function emit(  i) { for (i = 1; i <= n; i++) print lines[i]; done = 1 }
+        BEGIN { while ((getline l < add) > 0) lines[++n] = l }
+        $0 == "## Retired" { inret = 1; print; next }
+        inret && !done && $0 == "" { held++; next }
+        inret && !done {
+          if ($0 ~ /^## /) { emit(); for (i = 0; i < held; i++) print "" }
+          else for (i = 0; i < held; i++) print ""
+          held = 0
+        }
+        { print }
+        END { if (inret && !done) emit() }
+      ' "$SCRATCH/out.md" >"$SCRATCH/ret.md"
+      mv "$SCRATCH/ret.md" "$SCRATCH/out.md"
+    else
       printf '\n## Retired\n\n' >>"$SCRATCH/out.md"
+      cat "$SCRATCH/retired.txt" >>"$SCRATCH/out.md"
     fi
-    cat "$SCRATCH/retired.txt" >>"$SCRATCH/out.md"
   fi
   cat "$SCRATCH/out.md" >"$FILE"
   # Deleting the widest row narrows the table, and the format gate would fail on the stale padding.

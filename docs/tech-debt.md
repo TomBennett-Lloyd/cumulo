@@ -282,3 +282,21 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/api/src/forecast/get-fleet-actuals.ts` (the comment above `datedByData`) against `FleetActualsAggregateRead` in `apps/api/src/forecast/fleet-actuals-rollup-read.ts`
 - What: the route comment repeats the grouping the read type's docblock owns (`docs/standards/prose.md` rule 3); #614 wrote the fleet-forecast route's comment as a citation instead. Trim this one to the same form
 - Source: #614 review pass 1 SYSTEMIC
+
+## 2026-10-14 — `tidy-tech-debt.sh` deletes redirect rows without checking whether code still cites their titles
+
+- Where: `.claude/scripts/tidy-tech-debt.sh` (the redirect-row loop in rule 2)
+- What: the table exists for source comments that cite an entry by title, and the tidy deletes a row the moment its issue closes. The first real run removed the only row for a title `apps/web/src/AppErrorBoundary.tsx` still cited. Report a row whose title is still cited as needing a human instead of deleting it
+- Source: #634 review pass 1 SYSTEMIC
+
+## 2026-10-14 — the tidy's Retired block sits at the end of the file, which is where lanes append
+
+- Where: `.claude/scripts/tidy-tech-debt.sh` (the Retired insertion in the write step); `.claude/scripts/merge-pr.sh` (the append-collision union step)
+- What: the spec puts `## Retired` last, and `merge-pr.sh`'s union step refuses edits from the final heading down, so a tidy that adds lines there while a lane appends an entry yields a hand-resolved conflict. The block is also a small archive in a file whose header says it is a buffer. Move it out of the append zone, for example right after the redirects table
+- Source: #634 review pass 1 SYSTEMIC
+
+## 2026-10-14 — the tidy's closed-issue quote test ignores why the issue closed
+
+- Where: `.claude/scripts/tidy-tech-debt.sh` (`issue_text` and the closed-quote test)
+- What: a capture issue closed as a duplicate of an open issue that paraphrases the entry would retire live debt, so the "cannot retire live debt" claim holds only for quotes. A `stateReason` filter closes it; whether NOT_PLANNED should retire is the owner's call. The open list's `--limit 1000` would also fail open if it ever truncated (174 open today)
+- Source: #634 review pass 1 SYSTEMIC

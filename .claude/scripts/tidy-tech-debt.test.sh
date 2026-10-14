@@ -28,7 +28,10 @@ case "$1 $2" in
   "issue list")
     case " $* " in
       *" --state closed "*) cat "$STUB_FIXTURES/closed.txt" ;;
-      *" --state open "*) cat "$STUB_FIXTURES/open.txt" ;;
+      *" --state open "*)
+        [ ! -f "$STUB_FIXTURES/fail-open" ] || { printf 'rate limited\n' >&2; exit 1; }
+        cat "$STUB_FIXTURES/open.txt"
+        ;;
     esac
     ;;
   *) exit 99 ;;
@@ -48,8 +51,8 @@ row() { # row <issue> — one redirect-table row
 
 entry() { # entry <date> <title> <source> [omit-key]
   printf '## %s — %s\n\n' "$1" "$2"
-  [ "${4-}" = "Where" ] || printf -- '- Where: a/b.ts\n'
-  [ "${4-}" = "What" ] || printf -- '- What: a thing\n'
+  [ "${4-}" = "Where" ] || printf -- '- Where: where of %s\n' "$2"
+  [ "${4-}" = "What" ] || printf -- '- What: what of %s\n' "$2"
   [ "${4-}" = "Source" ] || printf -- '- Source: %s\n' "$3"
   printf '\n'
 }
@@ -115,7 +118,7 @@ end
 
 # --- entries ---------------------------------------------------------------------------------
 
-begin "a closed entry that a closed issue quotes moves intact to Retired in the stated form"
+begin "a closed entry that a closed issue quotes leaves the body and is summarised in Retired in the stated form"
 new_case retire 0
 {
   head_of
@@ -134,6 +137,8 @@ grep -q '^## 2026-09-02 — A live finding$' "$ROOT/docs/tech-debt.md" || bad "a
 grep -qE '^## Retired$' "$ROOT/docs/tech-debt.md" || bad "no Retired heading"
 grep -qE '^- [0-9]{4}-[0-9]{2}-[0-9]{2} · 2026-09-01 — The parser trusts its input · #31$' "$ROOT/docs/tech-debt.md" ||
   bad "Retired line not in the stated form: $(tail -n3 "$ROOT/docs/tech-debt.md")"
+if grep -q 'of The parser trusts its input' "$ROOT/docs/tech-debt.md"; then bad "part of the retired entry's body was left behind"; fi
+grep -q 'what of A live finding' "$ROOT/docs/tech-debt.md" || bad "the neighbouring entry lost part of its body"
 end
 
 begin "an entry an open issue still quotes, or whose Source is still open, stays in place"
@@ -170,6 +175,55 @@ expect_rc 0
 [ "$(grep -c '^## Retired$' "$ROOT/docs/tech-debt.md")" = "1" ] || bad "Retired heading duplicated"
 grep -q 'First casualty · #50$' "$ROOT/docs/tech-debt.md" || bad "earlier Retired line lost"
 grep -q 'Second casualty · #51$' "$ROOT/docs/tech-debt.md" || bad "new Retired line missing"
+end
+
+begin "Retired lines land at the end of the Retired block, not at the end of a file with entries after it"
+new_case retiredmid 0
+{
+  head_of
+  printf '\n'
+  entry 2026-09-01 'Second casualty' '#55 review'
+  printf '## Retired\n\n- 2026-10-01 · 2026-08-01 — First casualty · #50\n\n'
+  entry 2026-10-20 'Newest appended entry' '#56 review'
+} >"$ROOT/docs/tech-debt.md"
+state 55 CLOSED
+state 56 OPEN
+printf 'Second casualty\n' >"$FIX/closed.txt"
+run
+expect_rc 0
+awk '/^## Retired$/ { r = 1; next } /^## / { r = 0 } r && /Second casualty/ { found = 1 } END { exit !found }' "$ROOT/docs/tech-debt.md" ||
+  bad "the new line is not inside the Retired block: $(tail -n8 "$ROOT/docs/tech-debt.md")"
+[ "$(tail -n1 "$ROOT/docs/tech-debt.md")" = "- Source: #56 review" ] || bad "the last entry's body was extended"
+end
+
+begin "an entry whose Source cites no number never retires"
+new_case nonum 0
+{
+  head_of
+  printf '\n'
+  entry 2026-09-01 'No numbers here' 'a review, no ticket'
+} >"$ROOT/docs/tech-debt.md"
+printf 'No numbers here\n' >"$FIX/closed.txt"
+cp "$ROOT/docs/tech-debt.md" "$ROOT/before.md"
+run
+expect_rc 0
+cmp -s "$ROOT/before.md" "$ROOT/docs/tech-debt.md" || bad "an entry with no cited number was retired"
+end
+
+begin "the open-issue list failing is a blocker: exit 2, and nothing retires"
+new_case openfail 0
+{
+  head_of
+  printf '\n'
+  entry 2026-09-01 'Quoted by a closed issue' '#57 review'
+} >"$ROOT/docs/tech-debt.md"
+state 57 CLOSED
+printf 'Quoted by a closed issue\n' >"$FIX/closed.txt"
+: >"$FIX/fail-open"
+cp "$ROOT/docs/tech-debt.md" "$ROOT/before.md"
+run
+expect_rc 2
+cmp -s "$ROOT/before.md" "$ROOT/docs/tech-debt.md" || bad "file changed when the open list failed"
 end
 
 # --- reported, never edited --------------------------------------------------------------------
@@ -220,6 +274,20 @@ expect_stdout "MALFORMED"
 expect_stdout "No what line"
 expect_stdout "lacks: What"
 cmp -s "$ROOT/before.md" "$ROOT/docs/tech-debt.md" || bad "malformed entry was rewritten"
+end
+
+begin "a ledger gate that is not the exit contract's 0 or 1 is a blocker, not drift"
+new_case gate127 127
+{
+  head_of
+  row 72
+} >"$ROOT/docs/tech-debt.md"
+state 72 CLOSED
+cp "$ROOT/docs/tech-debt.md" "$ROOT/before.md"
+run
+expect_rc 2
+expect_not_stdout "ledger drift"
+cmp -s "$ROOT/before.md" "$ROOT/docs/tech-debt.md" || bad "file changed on a broken gate"
 end
 
 begin "gh failing is a blocker: exit 2 and no edit"
