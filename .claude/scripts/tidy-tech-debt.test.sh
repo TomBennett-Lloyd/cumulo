@@ -35,6 +35,11 @@ case "$1 $2" in
 esac
 STUB
 must chmod +x "$TMP_ROOT/bin/gh"
+cat >"$TMP_ROOT/bin/pnpm" <<'STUB'
+#!/usr/bin/env bash
+printf 'pnpm %s\n' "$*" >>"$STUB_LOG"
+STUB
+must chmod +x "$TMP_ROOT/bin/pnpm"
 export PATH="$TMP_ROOT/bin:$PATH"
 
 row() { # row <issue> — one redirect-table row
@@ -90,6 +95,7 @@ run
 expect_rc 0
 expect_stdout "deleted redirect row"
 if grep -q 'issues/11)' "$ROOT/docs/tech-debt.md"; then bad "closed row survived"; fi
+grep -qx 'pnpm exec prettier --write docs/tech-debt.md' "$STUB_LOG" || bad "the changed file was not reformatted"
 grep -q 'issues/12)' "$ROOT/docs/tech-debt.md" || bad "open row was deleted"
 end
 
@@ -244,6 +250,7 @@ run
 expect_rc 0
 expect_stdout "nothing needs a human"
 cmp -s "$ROOT/before.md" "$ROOT/docs/tech-debt.md" || bad "clean file changed"
+if grep -q '^pnpm' "$STUB_LOG"; then bad "prettier ran on an unchanged file"; fi
 end
 
 finish

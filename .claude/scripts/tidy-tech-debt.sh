@@ -216,6 +216,10 @@ if [ "$deleted_rows" -gt 0 ] || [ "$retired_entries" -gt 0 ]; then
     cat "$SCRATCH/retired.txt" >>"$SCRATCH/out.md"
   fi
   cat "$SCRATCH/out.md" >"$FILE"
+  # Deleting the widest row narrows the table, and the format gate would fail on the stale padding.
+  if ! (cd "$ROOT" && pnpm exec prettier --write docs/tech-debt.md >/dev/null 2>"$SCRATCH/fmt.err"); then
+    human+=("rule 2: the file changed but prettier could not reformat it ($(head -n1 "$SCRATCH/fmt.err")); run pnpm format")
+  fi
 fi
 
 # --- rule 4: report --------------------------------------------------------------------------
