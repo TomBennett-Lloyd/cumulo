@@ -8,7 +8,7 @@
 
 2. **The pure core gets dense, cheap tests.** Physics, aggregation, and error metrics (see `architecture.md` rule 3) are pure — test them exhaustively with plain inputs/outputs, including domain edge cases: polar-ish latitudes, midnight sun hours, zero-capacity sites, empty fleets, single-site fleets, clock boundaries (DST, UTC offsets).
 
-3. **Adapters get thin integration tests; don't unit-test mocks.** A test that mocks the AWS SDK and asserts the mock was called proves nothing. Test adapters against contracts (recorded/fixture responses — e.g. real Open-Meteo response shapes as fixtures) and keep the logic they wrap in the pure core.
+3. **Adapters get thin integration tests; don't unit-test mocks.** A test that mocks the AWS SDK and asserts the mock was called proves nothing. Test adapters against contracts (recorded/fixture responses — e.g. real Open-Meteo response shapes as fixtures) and keep the logic they wrap in the pure core. A stub standing in for a CLI answers with a captured real response, and the fixture names where and when it was captured.
 
 4. **Every bug fix lands with a regression test** that fails on the pre-fix code. No exceptions — this is the cheapest ratchet we have.
 
