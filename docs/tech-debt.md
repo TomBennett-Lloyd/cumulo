@@ -304,3 +304,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/api/src/forecast/get-fleet-actuals.ts` (the comment above `datedByData`) against `FleetActualsAggregateRead` in `apps/api/src/forecast/fleet-actuals-rollup-read.ts`
 - What: the route comment repeats the grouping the read type's docblock owns (`docs/standards/prose.md` rule 3); #614 wrote the fleet-forecast route's comment as a citation instead. Trim this one to the same form
 - Source: #614 review pass 1 SYSTEMIC
+
+## 2026-10-14 — existing CLI stubs predate the captured-response sentence in testing rule 3
+
+- Where: `.claude/scripts/incident-watch.test.sh` (hand-typed JSON with plain `Z` timestamps, no stated source), `.claude/scripts/install-shellcheck.test.sh` (the `curl` and `uname` stubs); `docs/standards/testing.md` rule 3
+- What: the sentence #648 added makes these stubs non-compliant, and fixtures that must be built relative to the current time (#638's cases use `jq now`) cannot be captured responses at all. Either bring the stubs into line or say in the rule when a constructed fixture is allowed
+- Source: #648 review pass 1 SYSTEMIC
+
+## 2026-10-14 — testing rules 5 and 6 describe only vitest and TypeScript
+
+- Where: `docs/standards/testing.md` rules 5-6; the `.claude/scripts/*.test.sh` harnesses and their runner
+- What: the standards index now routes shell-harness authors to `testing.md`, but "typed (no `any` in fixtures)", builders/factories and the `*.test.ts` naming split leave the 22 shell harnesses outside every rule. Predates #648, which only made the gap reachable
+- Source: #648 review pass 1 SYSTEMIC
