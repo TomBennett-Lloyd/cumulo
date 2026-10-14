@@ -74,6 +74,10 @@ JQ_DEFS='def redact: gsub("(?<![0-9])[0-9]{12}(?![0-9])"; "<account-id>");
           - (if .sign == "+" then 1 else -1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60)
       end;'
 
+# A healthy call answers in seconds, so a longer wait is a stall (#646).
+readonly AWS_CONNECT_TIMEOUT_SECONDS=10
+readonly AWS_READ_TIMEOUT_SECONDS=30
+
 no_verdict() {
   printf 'incident-watch: %s — no verdict\n' "$1" |
     sed -E "s/$ACCOUNT_ID/\\1<account-id>\\2/g; s/$ACCOUNT_ID/\\1<account-id>\\2/g" >&2
@@ -84,7 +88,8 @@ no_verdict() {
 # inside $(...), so each ends `|| exit 2` to carry that exit out.
 observe() {
   local result
-  if ! result=$(aws --profile "$profile" --output json "$@" 2>"$stderr_file"); then
+  if ! result=$(aws --profile "$profile" --output json "$@" \
+    --cli-connect-timeout "$AWS_CONNECT_TIMEOUT_SECONDS" --cli-read-timeout "$AWS_READ_TIMEOUT_SECONDS" 2>"$stderr_file"); then
     no_verdict "aws $1 $2 failed: $(cat "$stderr_file")"
   fi
   printf '%s' "$result"
