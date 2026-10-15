@@ -13,6 +13,19 @@ one `ticket-agent` (`.claude/agents/ticket-agent.md`), and a **multi-ticket same
 batch** goes to one `task-orchestrator`. Neither lane's procedure is the other's, so pick
 the section before you dispatch.
 
+Two rules hold for every dispatch you write, in either lane or outside both (a `/retro` or
+`/triage` lane, a plan validation). **Name the model**: an agent type with no `model:` in its
+frontmatter, `general-purpose` among them, inherits yours, so the Agent call carries `model:`
+chosen per `CLAUDE.md` § Model tiers. The retro lanes behind #650, #660 and #668 and #615's
+plan validation went out without one and ran on Fable, which surfaced only when #668's lane
+applied `ticket-agent.md` rule 4's trailer rule (#607's 2026-10-15 correction). **State what
+is on disk as a check, never as a fact**: whether a PR, a value, a count, a log cluster or a
+prose rule is there goes to the lane either quoted from where you read it (the file and
+symbol, or the command and its output) or as something to check ("check for an open PR").
+On 2026-10-15 three dispatches asserted one wrongly ("no PR yet" in #667's RESUME, a
+tech-debt cluster #683 found absent, a prose rule #684's planner found already deleted), and
+each was caught only because the lane checked (#681).
+
 ## Ticket-agent lane
 
 1. **Admission**: the same in-flight table as below (issue, agent handle, branch, and the
