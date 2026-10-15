@@ -20,7 +20,7 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *
  * 1. **A partially served batch**: `UnprocessedItems`/`UnprocessedKeys`
  *    returned on HTTP 200. Owner: the **drain layer**, `drainBatches` under
- *    `defaultBatchPolicy` (`./batch`) — 3 sends over a 200 ms full-jitter base.
+ *    `defaultBatchPolicy` (`./batch`).
  *
  * 2. **A whole-request throttle**: `ProvisionedThroughputExceededException`
  *    *thrown* rather than reported. That covers `GetItem`, `PutItem` and
@@ -133,8 +133,6 @@ export const STORAGE_CONNECTION_TIMEOUT_MS = 1_000;
  * and its classification of which errors are retryable at all — while replacing
  * the delay computation wholesale, including the environment-dependent
  * throttling base we are pinning away from.
- *
- * `random` is injectable for tests only; production takes `Math.random`.
  */
 export const createStorageRetryStrategy = (random?: () => number): ConfiguredRetryStrategy =>
   new ConfiguredRetryStrategy(STORAGE_MAX_ATTEMPTS, (retryAttempt: number) =>
@@ -159,10 +157,6 @@ export interface StorageClientOptions {
  * 1. `removeUndefinedValues: true`. Under `exactOptionalPropertyTypes` an
  *    optional domain field can legitimately arrive as an explicitly-`undefined`
  *    property — `{ ...forecast }` where `forecast.uncertainty` was never set.
- *    Verified against the installed SDK: a *top-level* item attribute set to
- *    `undefined` is dropped by lib-dynamodb's own key walk regardless of this
- *    option, but an `undefined` nested inside a map or list attribute makes the
- *    default marshaller **throw**.
  *    So: absent and explicitly-`undefined` both mean "no attribute", at every
  *    depth, decided once.
  *
@@ -170,14 +164,9 @@ export interface StorageClientOptions {
  *    {@link STORAGE_CONNECTION_TIMEOUT_MS}, set here so that every adapter in
  *    the package inherits them and no call site can forget one (#115).
  *
- *    A caller that supplies its own `baseClient` supplies its own deadlines
- *    too, exactly as it supplies its own retry configuration.
- *
  * 3. `ConsistentRead` is set nowhere in this package. ADR 0002 sized the
  *    `series` table's provisioned read capacity (`infra/storage/tables.tf`)
- *    against Query's default eventually-consistent reads; a single
- *    `ConsistentRead: true` doubles the cost of that read and
- *    can push the table into throttling. Any future need for one has to be
+ *    against Query's default eventually-consistent reads. Any future need for one has to be
  *    justified at its own call site — and the adapter tests assert that no
  *    command input carries the flag.
  */
@@ -193,10 +182,6 @@ export const createStorageDocumentClient = (
       requestHandler: new NodeHttpHandler({
         requestTimeout: STORAGE_REQUEST_TIMEOUT_MS,
         connectionTimeout: STORAGE_CONNECTION_TIMEOUT_MS,
-        // Without this, `requestTimeout` is advisory: `setRequestTimeout`
-        // only emits a `console.warn` when the deadline passes and leaves the
-        // socket hanging.
-        //
         // What this buys, stated precisely: `requestTimeout` bounds the time to
         // the **first response** — its timer is armed when the request is
         // issued and cleared when the `response` event fires, which is when

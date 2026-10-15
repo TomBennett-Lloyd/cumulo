@@ -7,8 +7,7 @@
  * caller needs to *use the adapters*: build the client, name a table, construct
  * an adapter, pass it domain values, and interpret what it hands back —
  * including its two failure vocabularies, `StorageError` and the partial-write
- * outcome. Nothing else, on the principle that a surface is a promise and every
- * name on it is one more thing that cannot change freely.
+ * outcome.
  *
  * So these categories are deliberately *absent*:
  *
@@ -28,34 +27,20 @@
  *
  *   The four timing numbers earn their place twice over since #115: they are
  *   the terms `@cumulo/ingestion` multiplies out to bound one location's
- *   storage cost. A consumer computing a time budget from remembered values
- *   instead of these is writing down a model of this package rather than
- *   reading this package, which is the mistake #115 was filed about.
+ *   storage cost.
  *
  *   `fullJitterDelayMs` and `BackoffSpec` moved *onto* the surface for that
  *   same reason in #155. The site adapter now reports a conflict-cancelled
  *   transaction as a domain outcome and deliberately does not retry it (ADR
  *   0002's layer-ownership rule; see `transactUnless`), which makes the API
- *   route handlers the retry owner. An owner outside this package still has to
- *   back off, and the alternative to exporting the curve is each handler
- *   restating `uniform(0, min(base * 2^n, max))` from memory — the #115
- *   mistake again, one layer up. So the *arithmetic* is shared while the
- *   *numbers* stay the retry owner's own: the handlers pass their own
- *   `BackoffSpec` rather than inheriting this package's, because their budget
- *   is a request's, not a background drain's.
+ *   route handlers the retry owner.
  *
  *   `./command-worst-case` is on the surface for the end of that same
  *   progression (#165): a consumer sizing a budget needs not only our numbers
- *   but the figure they multiply out to, and three consumers deriving it
- *   themselves produced three answers. `backoffCeilingMs` joins
- *   `fullJitterDelayMs` as shared arithmetic for a retry owner outside this
- *   package; `STORAGE_COMMAND_WORST_MS` and `STORAGE_BATCH_PAGE_WORST_MS` are
- *   this package's own worst cases, stated here rather than modelled there.
+ *   but the figure they multiply out to.
  *
  *   `QueryPaginationBound` and `SeriesRangeResult` are the other half of that
- *   same #165 exchange, pointing inward: having told a consumer what a page
- *   costs, this package has to let it say "no more pages" and has to answer
- *   honestly when that stops a read short. Both types are contract, not
+ *   same #165 exchange, pointing inward. Both types are contract, not
  *   machinery — one is what a caller constructs, the other is what it must
  *   read — which is why they earn a line here while `queryAllPages` itself
  *   stays `protected`.
@@ -72,10 +57,8 @@
  *   since #136, `SitePhysics`. These come from `@cumulo/shared` and a caller
  *   imports them from there (#91). Re-exporting them here would give one
  *   definition three import paths and imply this package owns a concept it only
- *   consumes — the opposite of `architecture.md` rule 2. `SitePhysics` had to
- *   move for a second reason: the forecast service takes it as an input, and it
- *   would otherwise have reached that service through a package it does not
- *   otherwise need. Which is why `WeatherLocation`, just below, *is* exported:
+ *   consumes — the opposite of `architecture.md` rule 2.
+ *   Which is why `WeatherLocation`, just below, *is* exported:
  *   it is a `Pick` of the shared reading describing what this package keys on,
  *   and it exists nowhere else.
  *

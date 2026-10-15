@@ -313,3 +313,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `docs/standards/testing.md` rules 5-6; the `.claude/scripts/*.test.sh` harnesses and their runner
 - What: the standards index now routes shell-harness authors to `testing.md`, but "typed (no `any` in fixtures)", builders/factories and the `*.test.ts` naming split leave the 22 shell harnesses outside every rule. Predates #648, which only made the gap reachable
 - Source: #648 review pass 1 SYSTEMIC
+
+## 2026-10-15 — prose.md says "an ADR by filename"; source cites the bare `ADR NNNN` form
+
+- Where: `docs/standards/prose.md` rules 4 and 6; `packages/storage/src/adapters/abuse/abuse-adapter.ts` (the `ADR 0006` citation added by #545 batch "storage 2")
+- What: the standard asks for an ADR cited by filename, while source under `apps` and `packages` uses the bare `ADR NNNN` form 255 times against 3 by `docs/adr/NNNN-` path (reviewer's count). Either the rule or the practice should move, repo-wide; a trim batch is not the place to force it
+- Source: #545 batch "storage 2" review pass 1 SYSTEMIC
