@@ -19,22 +19,24 @@
 #     `retention_in_days = 30` in lambda.tf: storage is a rolling month, not an
 #     archive — and a group Lambda auto-creates instead would never expire (see
 #     the comment on the function's `depends_on`). Size, counted rather than
-#     assumed: **twelve billed lines per invocation** —
+#     assumed: **thirteen billed lines per invocation** —
 #     `forecast.message.outcome` and `forecast.batch.summary` from handler.ts,
 #     one of each because `batch_size = 1` (event-source.tf) makes a batch a
 #     single record; one `forecast.actuals.outcome` from simulate-actuals.ts
 #     per site of the one location that record speaks for, which is five in the
 #     canonical fleet (#264); one `forecast.fleet-rollup.outcome` from
 #     fleet-rollup-write.ts for that location itself (#494), and one
-#     `forecast.fleet-actuals-rollup.outcome` beside it (#506); plus Lambda's
-#     own START, END and REPORT. At ~8,760 invocations/month that is ~105,100
-#     lines, so **12 × 8,760 × 1 KB ≈ 105 MB/month** retained — ~$0.0032/month at
+#     `forecast.fleet-actuals-rollup.outcome` beside it (#506); one
+#     `forecast.fleet-actuals-compaction.outcome` from
+#     fleet-actuals-compaction.ts (#615); plus Lambda's own START, END and
+#     REPORT. At ~8,760 invocations/month that is ~113,900 lines, so
+#     **13 × 8,760 × 1 KB ≈ 114 MB/month** retained — ~$0.0032/month at
 #     ~$0.03/GB-month, and $0.00 as
 #     billed because it sits inside the account's always-free 5 GB of stored
-#     logs. That ~105 MB is a **bound, not a measurement**, and generously so:
+#     logs. That ~114 MB is a **bound, not a measurement**, and generously so:
 #     ADR 0005's own ~6.5 GB/month at 25.92 M requests works out at ~250 bytes
 #     per *invocation*, and this prices 1 KB per *line* and then charges all
-#     twelve of them. The honest claim is a ceiling, not a meter reading. What
+#     thirteen of them. The honest claim is a ceiling, not a meter reading. What
 #     moves the total is the location count rather than the site count — infra/
 #     README.md's forecast cost notes own that arithmetic.
 #   * CloudWatch alarms — one of the always-free ten. An alarm is priced at
@@ -60,9 +62,9 @@
 #     row under infra/README.md's cost convention 3 — the line lives in the
 #     **storage** stack's cost table, because storage owns the resource, and
 #     this stack says so here: **$0.00/month here, driving ≈ $1.80/month under
-#     storage** at the canonical fleet (~3,492 items/hour — ~2,880 forecast
-#     items plus #494's 576 fleet roll-up partials and #506's 36 actuals
-#     slices). It is $0 whenever
+#     storage** at the canonical fleet (~3,504 items/hour — ~2,880 forecast
+#     items plus #494's 576 fleet roll-up partials, #506's 36 actuals slices
+#     and #615's 12 fleet totals). It is $0 whenever
 #     ingestion's schedule is off, because there are then no messages to drain.
 #   * IAM — the execution role, its inline policy, and the deploy grant are all
 #     free. So is the event source mapping resource itself.

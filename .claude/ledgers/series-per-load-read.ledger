@@ -1,0 +1,24 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for the dashboard's per-load
+# read arithmetic on `cumulo-series`, owned by the series section of infra/storage/tables.tf
+# and migrated here from that file's prose header ledger by #615, the first time the figure
+# moved since the gate existed.
+#
+# The sweep's arms reach the claim in words (the first three) and the figures themselves in
+# their current spellings. A figure that moves again adds its new spelling here, in the same
+# commit as the move. Dashboard.tsx, fleet-data-source.ts and use-first-forecast.ts carry a
+# ratio and no figure, so no sweep can return them; they stay named in the owner's header.
+#
+# ADR carriers are quoters, not owners, and are owed the ADR treatment (an as-it-stood
+# annotation plus a dated Amendments entry) rather than an inline true-up (docs/adr/README.md
+# § Amendments): ADR 0002's 2026-08-10 (#264), 2026-09-11 (#494) and 2026-10-07 (#602) entries
+# and ADR 0009's `## Consequences` and its #506 and #615 entries.
+owner: infra/storage/tables.tf
+claim: a dashboard load reads about 25 units on cumulo-series (two #FLEET Queries for actuals since #615) and about 27 with the sites read
+sweep: read units? (a|per) load|per-dashboard-load|per-load read|≈ 27 a load|~25 read units|~3 for its actuals|~3 \(actuals\)|~22 for|~22 \(forecast\)|~11 for|~11 \(actuals\)
+scope: :!docs/review-feedback.md :!docs/friction-log.md :!docs/tech-debt.md
+carrier: infra/README.md
+carrier: apps/web/src/data/use-first-forecast.test.tsx
+carrier: docs/adr/0002-storage-split.md
+carrier: docs/adr/0009-fleet-forecast-rollup.md
+excluded: docs/adr/0006-demo-abuse-protection.md
+excluded: docs/adr/README.md
