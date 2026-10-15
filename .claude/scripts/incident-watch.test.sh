@@ -462,6 +462,12 @@ expect_stderr "INCIDENT_WATCH_TICK_SECONDS takes a whole number"
 [ "$(grep -c '^CALL' "$LOG")" = "0" ] || bad "expected no aws call; log: $(calls)"
 end
 
+new_case "a budget written with a leading zero is read as decimal"
+run_watch INCIDENT_WATCH_TICK_SECONDS=08
+expect_rc 0
+expect_stdout "VERDICT quiet"
+end
+
 new_case "a response jq cannot read is no verdict, not a quiet report"
 fixture firing 'warning: something
 {"MetricAlarms": [{"AlarmName": "cumulo-forecast-dev-errors"}]}'

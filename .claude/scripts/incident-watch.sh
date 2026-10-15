@@ -91,7 +91,7 @@ case "$tick_seconds" in
     ;;
 esac
 started=$(date +%s) || exit 2
-tick_deadline=$((started + tick_seconds))
+tick_deadline=$((started + 10#$tick_seconds)) # 10#: 08 is not octal
 
 no_verdict() {
   printf 'incident-watch: %s — no verdict\n' "$1" |
