@@ -378,7 +378,7 @@ emit_streams() {
 # LINE — and a line count over that file then reports a git failure as a hit,
 # which is a broken check reported as a clean one. The count the report reads is
 # produced by the check, or the check is refused — which is what the
-# `cmd_errored` test after each pre-check's own run is for. The two built-in
+# `cmd_errored` test after each pre-check's own run is for. The built-in
 # positive controls are the exception: their guard is the `*_control -eq 0`
 # refusal beside them, because a control that returns nothing is a broken check
 # rather than a failed one.
@@ -583,8 +583,8 @@ function flush(   k, net) {
 END { flush() }
 AWK
 
-# The control diff holds one run that is both uncovered and unbalanced: four
-# words deleted with the bracket that closed the line above.
+# The control diff holds one run that is both uncovered and unbalanced: words
+# deleted with the bracket that closed the line above.
 RUNS_FIXTURE="$work/runs-control.diff"
 cat >"$RUNS_FIXTURE" <<'FIXTURE'
 diff --git a/runs-control.ts b/runs-control.ts
@@ -704,7 +704,36 @@ TARGETS="$work/targets.tsv"
 awk -F "$TAB" '
   $4 > 0 && !($1 in f) { f[$1] = 1; print $1 "\t" }
   $4 > 0 && $11 ~ /[A-Z0-9_$]/ && !(($1 SUBSEP $11) in g) { g[$1 SUBSEP $11] = 1; print $1 "\t" $11 }
-' "$RUNS" >"$TARGETS"
+' "$RUNS" >"$TARGETS" 2>"$CMD_ERR"
+targets_rc=$?
+if [ "$targets_rc" -ne 0 ] || [ -s "$CMD_ERR" ]; then
+  fatal "the sweep targets could not be built (awk exit $targets_rc)" "$(command head -n 1 "$CMD_ERR")"
+fi
+
+# The same two greps over a directory holding one comment citation, one
+# markdown citation and one code line of a fixed name: a sweep that comes back
+# empty over the real tree is only a finding if these come back (evidence.md
+# form 5).
+TARGET_CONTROL_DIR="$work/target-control"
+mkdir -p "$TARGET_CONTROL_DIR"
+printf '%s\n' '// cited by ControlName here' >"$TARGET_CONTROL_DIR/control.ts"
+printf '%s\n' 'ControlName in prose' >"$TARGET_CONTROL_DIR/control.md"
+printf '%s\n' 'const ControlName = 1;' >"$TARGET_CONTROL_DIR/control-code.ts"
+control_re="$NAME_START$(ere_escape ControlName)$NAME_END"
+printf '```\n'
+printf '# positive control — the comment-line and markdown greps over a directory holding one of each, and a code line\n'
+run_shown git -C "$TARGET_CONTROL_DIR" grep --no-index -n -E -e "$control_re" --and -e "$COMMENT_LINE_ERE" -- ':!absent.ts' ':!*.md'
+target_control_code=$(line_count "$CMD_OUT")
+target_control_broke=0
+if cmd_errored; then target_control_broke=1; fi
+run_shown git -C "$TARGET_CONTROL_DIR" grep --no-index -n -E -e "$control_re" -- '*.md' ':!absent.ts'
+target_control_md=$(line_count "$CMD_OUT")
+if cmd_errored; then target_control_broke=1; fi
+printf '```\n\n'
+if [ "$target_control_broke" -eq 1 ] || [ "$target_control_code" -ne 1 ] || [ "$target_control_md" -ne 1 ]; then
+  fatal "the file-and-declaration sweep's own positive control did not return exactly its comment line and its markdown line" \
+    "This is a broken sweep, not a clean tree — no verdict (evidence.md form 5)."
+fi
 
 if [ ! -s "$TARGETS" ]; then
   printf '(the diff removes no comment words outside markdown)\n\n'

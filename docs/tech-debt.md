@@ -124,3 +124,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Triage note (2026-08-11): condition still unmet — the ingestion write path has not been opened since. Left.
 - Triage note (2026-10-05): condition still unmet; the ingestion write path has not been opened since. Left. (#494's roll-up work is the nearest traffic and it is on the forecast write path, not this one.)
 - Triage note (2026-10-15): condition still unmet, but traffic is closer. #611 (#602) edited `putFleetRollupPartials` in `series-adapter.ts`, which writes through `putSeriesItems` and so through `drainWriteRequests`. That is the forecast-side roll-up write the note above calls the nearest traffic, not the ingestion write path, and it left the seam as it was. Left. The next lane to edit `putSeriesItems` itself should take the decision.
+
+## 2026-10-15 — `sweep-report.sh`'s bracket check can fail a correct trim, and the report offers no way past it
+
+- Where: the bracket-balance check and `BALANCE_AWK` in `.claude/scripts/sweep-report.sh`
+- What: it compares per-run counts of brackets, backticks and `**` before and after a cut, so deleting a whole comment that holds one unpaired mark fails it: a glob such as `infra/**` in a deleted line leaves a `**` unpaired, and a `1)` list marker leaves a `)` unpaired. Reproduced with hand-made diffs through the script's own awk programs; both exit 1. Comment lines carrying a glob `**` exist in the tree today, for example in `.github/workflows/ci.yml`, `infra/api/warmer.tf` and `apps/web/vite.config.ts`, and under the review-loop skill a non-zero exit is a FIX-NOW with no waiver form. The plan's Risks named the `1)` marker and zero false positives across four merged trees, not globs. Suspected root cause: the check counts marks per run rather than per removed span, with no ledger column to say a mark was unpaired before the cut. A fix is a design choice (count only marks the cut itself unpairs, or let a row waive a run), so it is logged rather than patched here.
+- Source: #671 review cycle 1 (PR for `671-sweep-prechecks`)
+
+## 2026-10-15 — "comment line" is defined three ways inside `sweep-report.sh`, and none sees a trailing or JSX comment
+
+- Where: the deleted-run model's `is_comment`, `COMMENT_LINE_ERE` and pre-check (e)'s `is_comment`, all in `.claude/scripts/sweep-report.sh`
+- What: the three definitions disagree (pre-check (e)'s also takes `--` and any `#`), and all three recognise only a comment that begins the line. A JSX `{/* ... */}` comment, a trailing `// ...` after code and a `/* */` continuation line without a leading `*` are invisible to them, so the coverage check's "every deleted comment run has a row" says nothing about those deletions, and the basename and declaration sweep does not read citations written that way. `docs/standards/structure.md` rule 7 applies: when one definition changes the others are wrong until they change too. Sharing one definition between the awk programs and the git-grep ERE is cross-cutting work in the same script as #534's seam plan and #671's remainder.
+- Source: #671 review cycle 1 (PR for `671-sweep-prechecks`)

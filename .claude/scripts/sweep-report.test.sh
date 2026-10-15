@@ -385,7 +385,7 @@ end
 
 begin "the subject's own positive controls are in the report, not merely promised"
 # evidence.md member 7: an emptiness claim with no control says nothing. Both
-# built-in controls must have produced visible output.
+# controls must have produced visible output.
 run_report
 expect_stdout "+ // a three-second debounce"
 expect_stdout "reflow-control.ts:"
@@ -575,6 +575,45 @@ run_report
 expect_rc 0
 expect_stdout "ok — every deleted comment run across"
 expect_not_stdout "src/fleet-series.ts:9"
+end
+
+begin "a row below the run, in another file, or not a deletion does not cover it"
+# Each row alone would cover the run if its guard were widened: line 7 is the
+# line after the run's 4-6, src/fixture.ts at line 5 is in range in the wrong
+# file, and a verified-true row at line 5 deletes nothing.
+ledger_new coverage-edges
+row src/fleet-series.ts 7 "the summing is elsewhere" "shown-by-code" deleted "subject=The summing is not here"
+row src/fixture.ts 5 "a claim" "shown-by-code" deleted "subject=$SUBJECT_ALPHA"
+row src/fleet-series.ts 5 "pure" "read the file" verified-true
+run_report
+expect_rc 1
+expect_stdout "src/fleet-series.ts:4-6 removes"
+expect_stdout "1 deleted comment run(s) have no ledger row"
+end
+
+begin "a trimmed # comment needs a row and a trimmed markdown heading does not"
+fixture coverage-hash
+commit_base src/deploy.sh '#!/bin/sh' '# Not just infra changes, by design.' 'run_it'
+commit_base docs/notes.md '# Notes' '# A removed heading with words' 'tail'
+trim_to src/deploy.sh '#!/bin/sh' 'run_it'
+trim_to docs/notes.md '# Notes' 'tail'
+ledger_new coverage-hash
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 1
+expect_stdout "src/deploy.sh:2-2 removes"
+expect_not_stdout "docs/notes.md:2-2 removes"
+end
+
+begin "a file whose comments were only reflowed is not swept by basename or declaration"
+fixture reflow-only
+commit_base src/reflow-only.ts '// a short note that' '// continues here.' 'export const ReflowOnly = 1;'
+trim_to src/reflow-only.ts '// a short note that continues here.' 'export const ReflowOnly = 1;'
+ledger_new reflow-only
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 0
+expect_not_stdout "(\`src/reflow-only.ts\`)"
 end
 
 CONSUME_MESSAGE_BASE=(
