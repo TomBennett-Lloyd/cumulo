@@ -20,13 +20,15 @@ This is a portfolio project. The repo's **process** — commit history, PR disci
 
 Anthropic's current capability order is **Fable 5 > Opus > Sonnet > Haiku**. Fable 5 (model id `claude-fable-5`, Claude 5 family) is _significantly_ more capable than Opus. If your training data predates the Claude 5 family you will wrongly assume Opus is the top model — it is not.
 
-Policy:
+Policy (agent frontmatter `model:` lines carry it; `.claude/ledgers/model-tiers.ledger` lists every carrier):
 
-- Implementation and review run on **Opus**.
-- Confirmation reviews, trim-campaign lanes and `browser-smoke` run on **Sonnet** under a measured pilot (#607), where each lane type's graduation or reversion is recorded.
-- Planning and hard-problem consulting run on **Fable** (`model: 'fable'` in Agent calls).
+- Implementation and fix work run on **Sonnet**: `ticket-agent` and `implementer` name it in their frontmatter, and a trim-campaign batch's lane writes its own plan comment.
+- The first full review runs on **Opus** (`reviewer`). Confirmation passes on fix commits (`confirmation-reviewer`) and `browser-smoke` run on **Sonnet**. Every other dispatch — retro, triage and plan-validation lanes, and the `task-orchestrator` — runs on **Opus**.
+- Planning runs on **Fable** for an `adr`-labelled, cross-surface or still-open-question issue, and on **Opus** for a small issue whose spec is already in its body; `.claude/skills/plan-issue/SKILL.md` step 2 owns that choice. Hard-problem consulting runs on **Fable** (`model: 'fable'` in Agent calls).
 - An implementer returning `STATUS: STRUGGLING` triggers the `consultant` agent (Fable) for _guidance only_ — implementation stays with the original agent.
 - Before any Fable dispatch, read `~/.local/state/claude-budget/mode` — a machine-local budget ledger shared by every session and worktree on this machine, so it is one file read, not a computation. Contents are exactly `normal` or `conserve`; a missing file means `normal`. If `conserve`, downgrade to Opus and note the downgrade in the issue. To record fresh `/usage` numbers or refresh the mode, use the `budget-sync` skill.
+
+The Sonnet routing graduated from #607's pilot on 2026-10-15 (owner, in chat: "we can graduate the sonnet trial"), on the evidence of [#607's comparison table](https://github.com/TomBennett-Lloyd/cumulo/issues/607#issuecomment-6197824386). On FIX-NOW findings per review pass, Sonnet sat inside or below the Opus control's range in every lane type the table compares, except two first confirmation passes, #652's and #686's (#686 merged after the table), which found 2 each against the 0–1 of the Opus confirmations the table lists. Two gaps stand. Bounces went unrecorded in every Opus control row but one, because the ticket-agent lane report had no bounce field, so that measure was never compared. Correctness findings were not itemised in most Opus control rows, so no correctness range could be stated for implementation from a plan; and every Sonnet `confirmation-reviewer` APPROVE was the last review before its merge, so whether it missed anything a later Opus pass would have caught is unobserved, not shown.
 
 ## Standards index — read the linked doc BEFORE acting when a trigger matches
 
