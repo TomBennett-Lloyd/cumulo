@@ -24,15 +24,12 @@ import { TOOLTIP_CHAR_WIDTH } from './tooltip-geometry';
  * tier prints a bare two-digit UTC hour — `06`, `12`, `18`, no minutes, since
  * the data is hourly and `:00` is the same four characters of noise on every
  * tick — and the days tier under it prints `Wed 6`, weekday plus day-of-month
- * because a week-long window carries each weekday twice. Between them they say
- * everything `tickLabelFor`'s long form says, in a third of the width, which is
- * what makes the invariant satisfiable at a narrow chart at all.
+ * because a week-long window carries each weekday twice.
  *
  * **A label's position is not this file's to decide.** Every x here comes from
  * the scale's own sample positions (`chart-series.ts`'s `xAt`), which since #325
- * are proportional to time rather than to array position — so a tick sits over
- * the sample it names on an axis with a missing hour in it exactly as it does on
- * a complete one. What this file decides is *which* instants get a label and
+ * are proportional to time rather than to array position.
+ * What this file decides is *which* instants get a label and
  * whether the ones it kept can coexist.
  *
  * Pure: no React, no DOM, no clock. The tiers are a function of the samples and
@@ -64,10 +61,6 @@ export interface XAxisTiers {
  * `tooltip-geometry.ts` carries the arithmetic. A second literal here would be
  * a restatement with no owner, and the two would drift the first time either was
  * retuned (`docs/standards/architecture.md` rule 9).
- *
- * The same caveat applies as there: a mean is not a bound, so a tier of wide
- * glyphs is modelled a little narrow. That is why `MIN_LABEL_GAP` is a real gap
- * rather than zero.
  */
 export const AXIS_CHAR_WIDTH = TOOLTIP_CHAR_WIDTH;
 
@@ -86,9 +79,7 @@ export const MIN_LABEL_GAP = 8;
  * satisfy the invariant wins.
  *
  * Every member divides 24, so the labelled hours are the same set of wall-clock
- * times on every day of the window — a step of 5 would print `05, 10, 15, 20`
- * then `01, 06, 11` after midnight, and an axis whose ticks move is harder to
- * read than one with fewer of them.
+ * times on every day of the window.
  */
 const HOUR_STEPS: readonly number[] = [1, 2, 3, 6, 12, 24];
 
@@ -140,24 +131,13 @@ const thinnedToFit = (labels: readonly TierLabel[]): readonly TierLabel[] => {
  * space that has already been bought. The left gutter is spent on the kW labels
  * and the rotated axis title instead, which sit on other rows, so the only thing
  * a first label can actually run out of on that side is the canvas.
- *
- * At the margins the chart is drawn with, this floor does not bite: the widest
- * label a tier produces is `Wed 30`, whose modelled half is comfortably inside
- * the left gutter at either of the two widths `chartPlot` gives it. It is a
- * floor rather than an assertion because those margins are somebody else's to
- * change — #430 moved both of them, and this arm went on not biting — and
- * because a label clipped at the canvas edge is the #19 defect this chart keeps
- * being asked not to reproduce.
  */
 const labelXOnCanvas = (x: number, text: string): number => Math.max(labelWidth(text) / 2, x);
 
 /**
  * One label, at the position its own sample was already placed at.
  *
- * The x is passed in rather than derived here, and since #325 that is the whole
- * of what keeps this tier honest: the axis is time-proportional, so a sample's
- * position is a fact about *when* it is and not about where it sits in the
- * array. Two params rather than a named object, because a string and a number
+ * Two params rather than a named object, because a string and a number
  * cannot be swapped for each other at a call site.
  */
 const tierLabel = (text: string, x: number): TierLabel => ({
@@ -183,9 +163,7 @@ const utcDayNumber = (validTimeIso: string): number =>
  *
  * Samples off the hour are skipped rather than rounded: this axis's labels are
  * hours, and a series sampled at half past would otherwise print two ticks an
- * hour apart both reading `06`. The product's series are hourly on the hour
- * (`packages/shared`'s `UtcIsoTimestamp` instants come from whole-hour
- * arithmetic), so the arm exists to stay honest rather than to run.
+ * hour apart both reading `06`.
  */
 const timeLabelsAtStep = (
   points: readonly ForecastChartPoint[],
@@ -211,8 +189,7 @@ const timesTier = (
 /**
  * The first sample of each UTC day the window touches.
  *
- * One rule covering the two cases the axis actually has, rather than a midnight
- * rule with an exception bolted on. A window that crosses midnight labels each
+ * A window that crosses midnight labels each
  * crossing — the first sample of the new day *is* that midnight for hourly data
  * — and it also labels the sample it opens on, which is the day the reader is
  * looking at for everything left of the first crossing. A window inside one day

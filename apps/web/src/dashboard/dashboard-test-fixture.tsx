@@ -16,9 +16,7 @@ import type { MapRegionProps } from './MapRegion';
  * `Dashboard.deep-link.test.tsx`, managed focus in `Dashboard.focus.test.tsx`
  * (`structure.md` rule 4) — but they mount the same dashboard through the same
  * seams. Those seams live here rather than in copies that would have to change
- * together to keep meaning the same thing (`structure.md` rule 7). Helpers only
- * one suite needs stay in that suite; a helper a second suite reaches for moves
- * in here, which is how the shared helpers here arrived.
+ * together to keep meaning the same thing (`structure.md` rule 7).
  *
  * Nothing here is a mock of maplibre. jsdom implements no WebGL, so the real
  * `MapRegion` cannot mount — which is why `Dashboard` takes the map region as a
@@ -27,17 +25,13 @@ import type { MapRegionProps } from './MapRegion';
  * map calls: selecting a site, clicking the basemap, and arming add-site mode.
  * Every assertion in the suites is about what the *dashboard* then does; that
  * the real map fires those callbacks at all is browser behaviour
- * (`testing.md` rule 10), and is checked in `e2e/map-regressions.spec.ts` — an
- * *armed* basemap click opening the draft dialog, an unarmed one opening
- * nothing, and a marker press opening the site's card.
+ * (`testing.md` rule 10), and is checked in `e2e/map-regressions.spec.ts`.
  *
  * The selected site's card is the *real* `SitePopoverCard`, not a stand-in for
  * it. What jsdom cannot host is the maplibre marker the app portals that card
  * into, and `SitePopover.tsx` is exactly and only that anchoring — so the seam
  * falls between the two, and the half with the decisions in it (the facts, the
  * forecast arms, Escape, and where focus goes) is the half these suites drive.
- * A stand-in card here would have left the dashboard's focus assertions
- * asserting the stand-in's own focus behaviour.
  */
 
 /** Where the stand-in's simulated click lands: the Irish Sea, inside the fleet's framing. */
@@ -48,8 +42,7 @@ export const CLICK_POSITION = { latitude: 53.5, longitude: -5.5 };
  *
  * Restated rather than derived, because it is the *form's* naming rule being
  * relied on: a test that computed the name the same way the form does would
- * still pass if both were wrong together. It belongs beside the position it
- * describes — the two are one fact about where the stand-in's click lands.
+ * still pass if both were wrong together.
  */
 export const CREATED_SITE_NAME = 'Site at 53.5000, -5.5000';
 
@@ -71,8 +64,7 @@ export const StubMapRegion = ({
      * Named and classed exactly as `MapControls` names and classes it. The name
      * is how the suites press it; the class is how the *dashboard* finds it,
      * since a closing draft returns focus by querying `.map-control-add` (or,
-     * after a creation, the selected `.map-site-marker`) inside the map's box. A
-     * stand-in that dropped either would let the real classes drift unnoticed.
+     * after a creation, the selected `.map-site-marker`) inside the map's box.
      */}
     <button
       type="button"
@@ -84,9 +76,7 @@ export const StubMapRegion = ({
     </button>
 
     {/*
-     * Fires the click unconditionally, exactly as the real map does. Whether an
-     * unarmed click means anything is the dashboard's decision, and a stand-in
-     * that filtered would be asserting its own copy of the gate under test.
+     * Fires the click unconditionally, exactly as the real map does.
      */}
     <button
       type="button"
@@ -117,11 +107,6 @@ export const StubMapRegion = ({
      * focus when it opened, so moving from one site to another has to remount
      * it, and a stand-in that dropped the key would let the dashboard's focus
      * suites pass over a card still holding the previous site's opener.
-     *
-     * `selectionOrigin` is forwarded for the same reason: it is what decides
-     * whether the card captures an opener at all, so a stub that swallowed it
-     * would leave `Dashboard.focus.test.tsx`'s deep-link cases asserting the
-     * stub's own default rather than the dashboard's answer.
      */}
     {selectedSite !== null && (
       <SitePopoverCard
@@ -136,22 +121,12 @@ export const StubMapRegion = ({
   </div>
 );
 
-/*
- * There is no `scrollIntoView` stand-in here any more, and nothing needs one.
- * jsdom implements no layout and so has no `scrollIntoView` at all — the method
- * is simply absent from its elements — which is why the dashboard's old
- * context-scroll effect needed one to keep from throwing. That effect went with
- * the context region (#265): a selection is answered on the map now, so the page
- * has nothing to scroll to and the dashboard asks nobody to move.
- */
-
 /**
  * Mounts the dashboard the way the shell does, minus WebGL.
  *
  * `onToggleTheme` is a no-op rather than a spy: the dashboard forwards it to the
  * header's menu and never calls it, so what a press *means* is the shell's wiring
- * (`App.test.tsx`) and the menu's own (`header/HeaderMenu.test.tsx`). A spy here
- * would only be a spy nobody asserts.
+ * (`App.test.tsx`) and the menu's own (`header/HeaderMenu.test.tsx`).
  */
 export const renderDashboard = (dataSource: FleetDataSource): HTMLElement => {
   const { container } = render(
@@ -181,9 +156,7 @@ export const visit = (url: string): void => {
 };
 
 /**
- * The fleet's chart section (`fleet-panel-body.tsx` § One chart), on screen since
- * #265 — and since #323 a full-width band under the map rather than the first
- * card in the centred reading below it.
+ * The fleet's chart section (`fleet-panel-body.tsx` § One chart).
  */
 export const fleetChartSection = (root: HTMLElement): Element | null =>
   root.querySelector('.fleet-chart-section');
@@ -194,10 +167,6 @@ export const sitePopover = (root: HTMLElement): Element | null =>
 
 /**
  * The fleet chart's table twin, which is where the overlay is readable as text.
- *
- * The chart carries the selected site as a second series, and the SVG says so in
- * coordinates nobody can assert on without re-deriving the geometry. The table
- * says it in a column headed with the site's name.
  */
 export const fleetChartTable = (): HTMLElement =>
   screen.getByRole('table', { name: /^Table view — fleet forecast/u });
@@ -205,20 +174,9 @@ export const fleetChartTable = (): HTMLElement =>
 /**
  * One marker per site the dashboard handed the map, in site order.
  *
- * This is what the suites count a fleet by, and since 2026-08-12 it is the only
- * thing they could: the page's site table is gone, and the map is where every
- * site now has an element of its own. {@link StubMapRegion} renders one button
- * per site in the `sites` prop — the same array the table was rendering — so a
- * count here is a count of what the dashboard believes the fleet to be.
- *
  * Matched on the `Marker: ` prefix rather than by a container, because the
  * stand-in's other two buttons (add-site and the basemap) are its siblings and a
  * bare `getAllByRole('button')` would count them too.
- *
- * A `query` rather than a `get`, so that an empty fleet answers `[]` instead of
- * throwing: "the listing failed and nothing is on the map" is one of the states
- * the suites assert, and a helper that threw there would force that one case to
- * spell the selector out again.
  */
 export const mapMarkers = (): readonly HTMLElement[] =>
   screen.queryAllByRole('button', { name: /^Marker: /u });
@@ -243,9 +201,7 @@ export const clickBasemap = (): void => {
  * map: arm add-site mode, then click.
  *
  * Two presses rather than one because that is now the gesture — a bare click is
- * ignored (#265). Kept as one helper so the suites that are about what happens
- * *after* a draft opens say "click the map" once, rather than restating the
- * arming rule in a dozen places that would all have to change together.
+ * ignored (#265).
  */
 export const clickMap = (): void => {
   armAddSite();
