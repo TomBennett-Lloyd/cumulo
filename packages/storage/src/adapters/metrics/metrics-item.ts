@@ -39,10 +39,7 @@ const KEY_ATTRIBUTES: ReadonlySet<string> = new Set(['sk']);
  *
  * The trailing `#` is the whole point. `metricsSortKey` writes
  * `<start>#<end>#<model>#<baseline>`, so a prefix stopping at `<end>` would also
- * match a period whose end merely *starts* with these characters — and since
- * timestamps are fixed-width that can only happen for a longer end bound, but
- * relying on width for a correctness property that a delimiter gives for free is
- * the kind of implicit coupling this codebase pays for later. The separator is
+ * match a period whose end merely *starts* with these characters. The separator is
  * therefore part of the prefix, and `metrics-item.test.ts` pins that every real
  * sort key for a period begins with it while a neighbouring period's does not.
  */
@@ -54,12 +51,7 @@ export const metricsPeriodPrefix = (period: UtcWindow): string =>
  *
  * `siteId` is deliberately neither stripped nor renamed: it is a domain field of
  * `errorMetricsSchema` that also serves as the partition key, exactly as on the
- * series table, so there is no key attribute to invent. Only `sk` is added, and
- * `fromItem` removes exactly it again. `period` goes down as a plain map
- * attribute — it is domain data that the sort key happens to be derived from,
- * not a key itself.
- *
- * Exported for its tests; it is not part of the package's public surface.
+ * series table, so there is no key attribute to invent.
  */
 export const toItem = (metrics: ErrorMetrics): ErrorMetricsItem => ({
   ...metrics,
@@ -87,8 +79,6 @@ const domainAttributes = (item: Record<string, unknown>): Record<string, unknown
  * `StorageError`: that type means "the call to AWS failed", and labelling schema
  * drift as an infrastructure failure would send the reader looking in the wrong
  * place.
- *
- * Exported for its tests; it is not part of the package's public surface.
  */
 export const fromItem = (item: Record<string, unknown>): ErrorMetrics =>
   errorMetricsSchema.parse(domainAttributes(item));

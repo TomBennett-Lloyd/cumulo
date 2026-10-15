@@ -12,13 +12,7 @@ import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
  * not `ProvisionedThroughputExceededException`. That is not a slip: the
  * suffixed names are error types raised against a *whole request*, while these
  * are per-item reason codes on a request that reached the service and was
- * cancelled. AWS's `TransactWriteItems` API reference lists the full set
- * unsuffixed — `None`, `ConditionalCheckFailed`,
- * `ItemCollectionSizeLimitExceeded`, `TransactionConflict`,
- * `ProvisionedThroughputExceeded`, `ThrottlingError`, `ValidationError`.
- *
- * Nothing here is on the package's public surface (`index.ts` exports none of
- * it).
+ * cancelled.
  */
 
 /**
@@ -81,9 +75,6 @@ const capacityCode = (code: string | undefined): boolean =>
  *   else in the vocabulary — `ValidationError`,
  *   `ItemCollectionSizeLimitExceeded` — is a request that will fail identically
  *   however often it is sent.
- *
- * The predicate only *classifies*. Whether a capacity cancellation is retried,
- * and how hard, is each adapter's decision (`STORAGE_MAX_ATTEMPTS` shape 3).
  */
 export const capacityCancelled = (cause: unknown): boolean => {
   if (!(cause instanceof TransactionCanceledException)) {
