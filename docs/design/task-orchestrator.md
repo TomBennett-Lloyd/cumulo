@@ -131,7 +131,7 @@ Protocol:
 
 1. Top-level dispatches `task-orchestrator` (background) with: issue number, main-checkout path,
    worktree naming, and nothing else — the agent reads the skills and the issue itself.
-2. The agent runs `plan-issue` steps 1–5 (pull main checkout, planner on Fable-or-Opus-per-budget,
+2. The agent runs `plan-issue` steps 1–5 (pull main checkout, planner on the model `plan-issue` step 2 picks,
    validate, post plan, label `planned`), then **ends its run** with the `PLAN CHECKPOINT` report
    (§4.1). It never proceeds to execution in the same run, gated or not.
 3. Top-level, on the checkpoint:
