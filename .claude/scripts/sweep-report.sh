@@ -19,7 +19,8 @@
 #
 # So: one ledger in, and every rendering out of ONE computation — the PR title
 # fragment, the totals table, the five pre-check blocks of `prose.md` rule 3
-# with the exact command above each output, and a `docs/tech-debt.md` entry
+# with the exact command above each output, a coverage check and a bracket
+# check over the deleted comment runs (#671), and a `docs/tech-debt.md` entry
 # skeleton per out-of-scope row with its quotes already resolved. The exit code
 # is the point as much as the text: a failing check or an unresolved quote
 # exits non-zero, so a lane cannot paste a passing report over a failing tree.
@@ -33,7 +34,8 @@
 #
 # Exit:  0 every check passed
 #        1 a check FAILED — an unresolved quote, a sweep whose positive control
-#          did not come back, a spelled-out figure, a reflow hit
+#          did not come back, a spelled-out figure, a reflow hit, a deleted run
+#          no row covers, a cut that leaves a bracket unpaired
 #        2 no verdict reached — bad arguments, an unreadable or malformed
 #          ledger, an unknown base, or one of this script's OWN positive
 #          controls failing, which means the check is broken rather than the
@@ -49,8 +51,9 @@
 # restored, where `restored (cycle <n>)` (`prose.md` § Trim batches rule 1's
 # spelling) counts as restored; anything else is rejected by name and ledger
 # line number.
-# `line` may be empty (a claim pinned to a section rather than a line); every
-# other required field must be non-empty.
+# `line` may be empty (a claim pinned to a section rather than a line), and is
+# otherwise the claim's line at the base, which is how the coverage check reads
+# it; every other required field must be non-empty.
 #
 # The optional trailing fields are the pre-checks' INPUTS, one `key=value` per
 # tab-separated field. They are fields rather than markers inside the prose
@@ -192,6 +195,7 @@ QUOTES="$work/quotes.tsv"
 RESOLVED="$work/resolved.tsv"
 FAILURES="$work/failures"
 PARSE_ERRORS="$work/parse-errors"
+ROW_LINES="$work/row-lines.tsv"
 CMD_OUT="$work/cmd.out"
 CMD_ERR="$work/cmd.err"
 CMD_RC=0
@@ -204,6 +208,7 @@ CMD_RC=0
 : >"$RESOLVED"
 : >"$FAILURES"
 : >"$PARSE_ERRORS"
+: >"$ROW_LINES"
 
 # A literal tab, for the parameter expansions that split the records below.
 # `IFS=$'\t' read` cannot do that job: tab is IFS whitespace, so bash collapses
@@ -227,7 +232,8 @@ awk -v HEADER="$LEDGER_HEADER" \
   -v SUBJECTS="$SUBJECTS" \
   -v SWEEPS="$SWEEPS" \
   -v SCOPE="$SCOPE" \
-  -v QUOTES="$QUOTES" '
+  -v QUOTES="$QUOTES" \
+  -v ROW_LINES="$ROW_LINES" '
 BEGIN {
   FS = "\t"; OFS = "\t"
   split("verified-true trued deleted out-of-scope restored", d, " ")
@@ -293,6 +299,7 @@ NR == 1 {
     err("control= without sweep=")
   if (nsweep == 1 && ncontrol == 1) print control, sweep > (SWEEPS)
   if (disp == "out-of-scope") print FNR, path, line, claim > (SCOPE)
+  if ((disp == "trued" || disp == "deleted") && line ~ /^[0-9]+$/) print path, line > (ROW_LINES)
 
   print path, disp > (ROWS)
   rows++
@@ -477,6 +484,129 @@ diff_files=${diff_scale%% *}
 # name the state a check is asserted in). Saying which state was read is the
 # honest half; making the two agree is `docs/tech-debt.md`'s.
 printf '%s\n\n' "Diff at this base (tracked working tree vs \`$base_sha\`): $diff_scale"
+
+# --- the deleted-run model (#671) ------------------------------------------------------------
+#
+# One parse of the diff, which pre-check (a)'s file and identifier arms, the
+# coverage check and the bracket check all read. A run is one change group's
+# removed comment lines (the pre-image) and added ones (the post-image); one
+# TSV row per run that removes at least one comment line:
+#
+#   path, first and last base line, words removed net of words re-added,
+#   open-minus-close brackets before and after, backticks before and after,
+#   `**` before and after, the declaration name under the block, the first
+#   removed line
+#
+# Markdown is skipped, as in pre-check (e). The declaration is read from the
+# working tree, the first non-comment line at or below the run.
+
+RUNS_AWK="$work/runs.awk"
+cat >"$RUNS_AWK" <<'AWK'
+BEGIN { OFS = "\t"; open = 0; skip = 1; in_hunk = 0 }
+function is_comment(s,   t) {
+  t = s
+  sub(/^[ \t]+/, "", t)
+  return (t ~ /^(\/\/|\/\*|\*)/) || (t ~ /^#([ \t]|$)/)
+}
+function body_of(s,   t) {
+  t = s
+  sub(/^[ \t]+/, "", t)
+  sub(/^(\/\/+|\/\*+|\*+|#+)[ \t]*/, "", t)
+  sub(/[ \t]*\*\/[ \t]*$/, "", t)
+  sub(/[ \t]+$/, "", t)
+  gsub(/\t/, " ", t)
+  return t
+}
+function tally(s, re,   t) { t = s; return gsub(re, "", t) }
+function bag_words(s, sign,   t, n, w, i) {
+  t = tolower(s)
+  gsub(/[^a-z0-9_]+/, " ", t)
+  n = split(t, w, " ")
+  for (i = 1; i <= n; i++) bag[w[i]] += sign
+}
+function declared_below(p, from,   line, n, name) {
+  n = 0; name = ""
+  while ((getline line < p) > 0) {
+    if (++n < from || is_comment(line)) continue
+    if (match(line, /^(export[ \t]+)?(default[ \t]+)?(declare[ \t]+)?(abstract[ \t]+)?(async[ \t]+)?(const|let|var|function\*?|class|interface|type|enum)[ \t]+[A-Za-z_$][A-Za-z0-9_$]*/)) {
+      name = substr(line, RSTART, RLENGTH)
+      sub(/.*[ \t*]/, "", name)
+    }
+    break
+  }
+  close(p)
+  return name
+}
+function take(text, sign,   b) {
+  if (!is_comment(text)) return
+  b = body_of(text)
+  if (sign > 0) {
+    npre++
+    if (gstart == 0) gstart = oldn
+    gend = oldn
+    pre = pre " " b
+    if (first == "" && b != "") first = b
+  } else {
+    post = post " " b
+  }
+  bag_words(b, sign)
+}
+function flush(   k, net) {
+  if (open && npre > 0 && !skip) {
+    net = 0
+    for (k in bag) if (bag[k] > 0) net += bag[k]
+    print file, gstart, gend, net,
+      tally(pre, "[([{]") - tally(pre, "[])}]"), tally(post, "[([{]") - tally(post, "[])}]"),
+      tally(pre, "`"), tally(post, "`"), tally(pre, "\\*\\*"), tally(post, "\\*\\*"),
+      declared_below(file, gnew), first
+  }
+  open = 0; npre = 0; gstart = 0; pre = ""; post = ""; first = ""
+  split("", bag)
+}
+/^diff / { flush(); in_hunk = 0; skip = 1; next }
+/^\+\+\+ / && !in_hunk {
+  file = substr($0, 7)
+  skip = ($0 == "+++ /dev/null") || (file ~ /\.md$/)
+  next
+}
+/^@@/ {
+  flush(); in_hunk = 1
+  split($0, h, " ")
+  split(h[2], o, ","); oldn = substr(o[1], 2) - 1
+  split(h[3], q, ","); newn = substr(q[1], 2) - 1
+  next
+}
+!in_hunk { next }
+/^-/ { oldn++; if (!open) { open = 1; gnew = newn + 1 } take(substr($0, 2), 1); next }
+/^\+/ { newn++; if (!open) { open = 1; gnew = newn } take(substr($0, 2), -1); next }
+/^ / { flush(); oldn++; newn++ }
+END { flush() }
+AWK
+
+# The control diff holds one run that is both uncovered and unbalanced: four
+# words deleted with the bracket that closed the line above.
+RUNS_FIXTURE="$work/runs-control.diff"
+cat >"$RUNS_FIXTURE" <<'FIXTURE'
+diff --git a/runs-control.ts b/runs-control.ts
+--- a/runs-control.ts
++++ b/runs-control.ts
+@@ -1,2 +1,2 @@
+ // a bracket opened here (and
+-// closed here) before a deleted claim.
++// closed here
+FIXTURE
+
+build_runs() { # build_runs <diff> <runs.tsv> — the model, or no verdict
+  awk -f "$RUNS_AWK" "$1" >"$2" 2>"$CMD_ERR"
+  local rc=$?
+  if [ "$rc" -ne 0 ] || [ -s "$CMD_ERR" ]; then
+    fatal "the deleted-run model could not be built (awk exit $rc)" "$(command head -n 1 "$CMD_ERR")"
+  fi
+}
+RUNS="$work/runs.tsv"
+RUNS_CONTROL="$work/runs-control.tsv"
+build_runs "$DIFF_FILE" "$RUNS"
+build_runs "$RUNS_FIXTURE" "$RUNS_CONTROL"
 
 # Title fragment and totals table come out of ONE awk END block over ONE row
 # file. That is the whole answer to #520: the title line and the table's total
@@ -805,6 +935,103 @@ elif [ "$reflow_hits" -gt 0 ]; then
   check_fail "the diff adds $reflow_hits ragged comment continuation(s) — prose.md rule 3(e)"
 else
   check_pass "no ragged comment continuation across $diff_scale; the control found its offender"
+fi
+
+# --- coverage and bracket balance over the deleted-run model (#671) ----------------------------
+#
+# Each program runs over the model and then over the model of RUNS_FIXTURE, the
+# same evidence.md form 5 pairing as pre-check (e).
+
+COVERAGE_AWK="$work/coverage.awk"
+cat >"$COVERAGE_AWK" <<'AWK'
+BEGIN { FS = "\t"; hits = 0 }
+FILENAME == ARGV[1] { n++; row_path[n] = $1; row_line[n] = $2 + 0; next }
+$4 > 0 {
+  for (i = 1; i <= n; i++) if (row_path[i] == $1 && row_line[i] >= $2 && row_line[i] <= $3) next
+  hits++
+  printf("%s:%d-%d removes %d word(s) and no deleted or trued row's line is in that range: \"%s\"\n", $1, $2, $3, $4, $12)
+}
+END { exit (hits > 0) ? 1 : 0 }
+AWK
+
+BALANCE_AWK="$work/balance.awk"
+cat >"$BALANCE_AWK" <<'AWK'
+BEGIN { FS = "\t"; hits = 0 }
+$5 != $6 { hits++; printf("%s:%d-%d: open minus close brackets is %d before the cut and %d after: \"%s\"\n", $1, $2, $3, $5, $6, $12) }
+$7 % 2 != $8 % 2 { hits++; printf("%s:%d-%d: the cut leaves a backtick unpaired: \"%s\"\n", $1, $2, $3, $12) }
+$9 % 2 != $10 % 2 { hits++; printf("%s:%d-%d: the cut leaves a ** unpaired: \"%s\"\n", $1, $2, $3, $12) }
+END { exit (hits > 0) ? 1 : 0 }
+AWK
+
+cat <<'EOF'
+### Coverage — every deleted comment run has a ledger row (`prose.md` rule 2)
+
+A run removes words when the words it re-adds do not account for them, so a reflow or a
+punctuation repair needs no row. A `deleted` or `trued` row covers a run when its `line` is in the
+run's base line range. Markdown is out of scope, as in (e).
+
+EOF
+checks_run=$((checks_run + 1))
+printf '```\n'
+run_shown awk -f "$COVERAGE_AWK" "$ROW_LINES" "$RUNS"
+coverage_hits=$(line_count "$CMD_OUT")
+coverage_broke=0
+if cmd_errored; then
+  coverage_broke=1
+  coverage_detail=$(cmd_error_detail)
+fi
+printf '\n'
+printf '# positive control — the same program over a control run no row covers\n'
+run_shown awk -f "$COVERAGE_AWK" /dev/null "$RUNS_CONTROL"
+coverage_control=$(line_count "$CMD_OUT")
+printf '```\n\n'
+if [ "$coverage_control" -eq 0 ]; then
+  fatal "the coverage check's own positive control returned nothing" \
+    "This is a broken check, not a covered ledger — no verdict (evidence.md form 5)."
+fi
+if [ "$coverage_broke" -eq 1 ]; then
+  check_fail "the coverage check could not run — awk said: $coverage_detail"
+elif [ "$diff_files" -eq 0 ]; then
+  check_fail "the coverage check had nothing to run over — the diff at $base_sha is empty"
+elif [ "$coverage_hits" -gt 0 ]; then
+  check_fail "$coverage_hits deleted comment run(s) have no ledger row — prose.md rule 2"
+else
+  check_pass "every deleted comment run across $diff_scale has a row; the control found its run"
+fi
+
+cat <<'EOF'
+### Bracket balance — no cut leaves a bracket, backtick or `**` unpaired (#671)
+
+Per run, open minus close brackets (`(`, `[` and `{` together), the backtick count's parity and
+the `**` count's parity are compared before and after the cut; deleting whole spans keeps all three.
+
+EOF
+checks_run=$((checks_run + 1))
+printf '```\n'
+run_shown awk -f "$BALANCE_AWK" "$RUNS"
+balance_hits=$(line_count "$CMD_OUT")
+balance_broke=0
+if cmd_errored; then
+  balance_broke=1
+  balance_detail=$(cmd_error_detail)
+fi
+printf '\n'
+printf '# positive control — the same program over a control run that drops a bracket\n'
+run_shown awk -f "$BALANCE_AWK" "$RUNS_CONTROL"
+balance_control=$(line_count "$CMD_OUT")
+printf '```\n\n'
+if [ "$balance_control" -eq 0 ]; then
+  fatal "the bracket check's own positive control returned nothing" \
+    "This is a broken check, not a clean cut — no verdict (evidence.md form 5)."
+fi
+if [ "$balance_broke" -eq 1 ]; then
+  check_fail "the bracket check could not run — awk said: $balance_detail"
+elif [ "$diff_files" -eq 0 ]; then
+  check_fail "the bracket check had nothing to run over — the diff at $base_sha is empty"
+elif [ "$balance_hits" -gt 0 ]; then
+  check_fail "$balance_hits cut(s) leave a bracket, backtick or ** unpaired"
+else
+  check_pass "no cut across $diff_scale leaves a bracket unpaired; the control found its cut"
 fi
 
 # --- tech-debt entry skeletons --------------------------------------------------------------

@@ -21,12 +21,12 @@
 #     drift apart in step.
 #   - A failing tree cannot produce a passing report. Every failure mode —
 #     unresolved quote, sweep whose carrier did not come back, subject absent at
-#     base, spelled-out figure, ragged comment continuation — has its own case
-#     asserting a non-zero exit, because the exit code is what makes the report
-#     unpasteable over a red tree.
+#     base, spelled-out figure, ragged comment continuation, deleted run with no
+#     row, unpaired bracket — has its own case asserting a non-zero exit,
+#     because the exit code is what makes the report unpasteable over a red tree.
 #   - The subject's OWN positive controls ran. An emptiness claim with no
 #     control is indistinguishable from a broken pattern
-#     (docs/standards/evidence.md member 7), so two cases assert the control
+#     (docs/standards/evidence.md member 7), so one case asserts every control's
 #     output is present in the report and not merely promised by its prose.
 #
 # Usage: bash .claude/scripts/sweep-report.test.sh  (or `pnpm test:scripts`)
@@ -116,6 +116,22 @@ row() { # row <field>... — one ledger row, fields joined with tabs
 
 run_report() { # the production invocation against $ROOT, on the case's ledger
   capture -C "$ROOT" bash "$SUBJECT" "$LEDGER" "$BASE"
+}
+
+commit_base() { # commit_base <path> <line>... — commit <path> as these lines; BASE moves to it
+  local path="$1"
+  shift
+  must mkdir -p "$(dirname "$ROOT/$path")"
+  must printf '%s\n' "$@" >"$ROOT/$path"
+  must gitc "$ROOT" add -A
+  must gitc "$ROOT" commit --quiet -m "base: $path"
+  BASE=$(gitc "$ROOT" rev-parse HEAD) || exit 2
+}
+
+trim_to() { # trim_to <path> <line>... — the uncommitted trim of <path>
+  local path="$1"
+  shift
+  must printf '%s\n' "$@" >"$ROOT/$path"
 }
 
 # --- the two renderings, read back out of the report ----------------------------------------
@@ -373,6 +389,8 @@ begin "the subject's own positive controls are in the report, not merely promise
 run_report
 expect_stdout "+ // a three-second debounce"
 expect_stdout "reflow-control.ts:"
+expect_stdout "runs-control.ts:2-2 removes 4 word(s)"
+expect_stdout "runs-control.ts:2-2: open minus close brackets is -1 before the cut and 0 after"
 end
 
 begin "a tech-debt skeleton is emitted per out-of-scope row, quotes resolved"
@@ -509,6 +527,130 @@ expect_rc 0
 expect_stdout "no ragged comment continuation"
 end
 
+# --- cases: the deleted-run model (#671) --------------------------------------------------------
+#
+# Each positive case is a reduction of a miss a #545 batch shipped to review,
+# with the batch's own lines.
+
+FLEET_SERIES_BASE=(
+  '/*'
+  " * The fleet aggregate, as the chart's point shape — and how complete it is."
+  ' *'
+  ' * Everything here is pure and takes what it reads'
+  ' * (docs/standards/structure.md rule 1), so it is unit-testable without a DOM.'
+  ' *'
+  ' * The summing is not here.'
+  ' */'
+  '// Both series arrive already summed,'
+  '// one point per hour.'
+)
+FLEET_SERIES_TRIM=(
+  '/*'
+  " * The fleet aggregate, as the chart's point shape — and how complete it is."
+  ' *'
+  ' * The summing is not here.'
+  ' */'
+  '// Both series arrive already summed, one point per hour.'
+)
+
+begin "a deleted run whose row names the line above it fails coverage"
+# PR #666 (apps/web/src/dashboard/fleet-series.ts): the row named line 15, the
+# ` *` above the run at 16-18, and seven rows were one line off that way.
+fixture coverage-off-by-one
+commit_base src/fleet-series.ts "${FLEET_SERIES_BASE[@]}"
+trim_to src/fleet-series.ts "${FLEET_SERIES_TRIM[@]}"
+fixture_lacks "$ROOT/src/fleet-series.ts" "Everything here is pure"
+ledger_new coverage-off-by-one
+row src/fleet-series.ts 3 "pure, so unit-testable without a DOM" "shown-by-code" deleted "subject=Everything here is pure"
+run_report
+expect_rc 1
+expect_stdout "src/fleet-series.ts:4-6 removes"
+expect_stdout "1 deleted comment run(s) have no ledger row"
+end
+
+begin "a row inside the run covers it, and a reflow needs no row"
+ledger_new coverage-inside
+row src/fleet-series.ts 4 "pure, so unit-testable without a DOM" "shown-by-code" deleted "subject=Everything here is pure"
+run_report
+expect_rc 0
+expect_stdout "ok — every deleted comment run across"
+expect_not_stdout "src/fleet-series.ts:9"
+end
+
+CONSUME_MESSAGE_BASE=(
+  '    // throw crossing it would take the batch down with the record (rule 2a and'
+  "    // rule 1's process-boundary corollary). The record still fails, so the"
+  "    // queue's redrive and the alarmed DLQ report it — with \`detail\` naming the"
+  '    // operation, which is how an operator tells a physics bug from a table.'
+  "    return failedOutcome(messageId, 'locationForecasts', error);"
+)
+
+begin "a cut that drops a closing bracket fails the bracket check"
+# PR #669 (apps/forecast/src/consume-message.ts): "(rule 2a and" lost its ")".
+fixture bracket-dropped
+commit_base src/consume-message.ts "${CONSUME_MESSAGE_BASE[@]}"
+trim_to src/consume-message.ts \
+  '    // throw crossing it would take the batch down with the record (rule 2a and' \
+  "    // rule 1's process-boundary corollary." \
+  "    return failedOutcome(messageId, 'locationForecasts', error);"
+ledger_new bracket-dropped
+row src/consume-message.ts 2 "the record still fails" "cited-at" deleted "subject=The record still fails"
+run_report
+expect_rc 1
+expect_stdout "src/consume-message.ts:2-4: open minus close brackets is -1 before the cut and 0 after"
+expect_stdout "1 cut(s) leave a bracket, backtick or ** unpaired"
+end
+
+begin "the repaired cut, and a deleted half-open interval, keep their brackets"
+# The interval is PR #667's (apps/api/src/sites/conflict-retry.ts): `[0, 400)`
+# opens with one kind and closes with another, so brackets count together.
+fixture bracket-kept
+commit_base src/consume-message.ts "${CONSUME_MESSAGE_BASE[@]}"
+commit_base src/conflict-retry.ts \
+  '/**' \
+  ' * The ceiling the doubling stops at.' \
+  ' *' \
+  ' * 400 ms is also wide enough to be a *spread*: full jitter over' \
+  ' * [0, 400) separates 10 contenders by ~40 ms on average, comfortably more than' \
+  ' * the transaction round trip they are queueing behind.' \
+  ' */'
+trim_to src/conflict-retry.ts \
+  '/**' \
+  ' * The ceiling the doubling stops at.' \
+  ' */'
+trim_to src/consume-message.ts \
+  '    // throw crossing it would take the batch down with the record (rule 2a and' \
+  "    // rule 1's process-boundary corollary)." \
+  "    return failedOutcome(messageId, 'locationForecasts', error);"
+ledger_new bracket-kept
+row src/consume-message.ts 2 "the record still fails" "cited-at" deleted "subject=The record still fails"
+row src/conflict-retry.ts 4 "400 ms is wide enough to be a spread" "illustrative" deleted "subject=wide enough to be a *spread*"
+run_report
+expect_rc 0
+expect_stdout "ok — no cut across"
+end
+
+begin "a cut through a code span or a bold span fails the bracket check"
+fixture unpaired-marks
+commit_base src/fleet-series-read.ts \
+  '// **Why one admission prices one command.** The gate asks before a batch.' \
+  'export const first = 1;' \
+  "// The detail is \`failedOutcome\`, which names the operation." \
+  'export const second = 2;'
+trim_to src/fleet-series-read.ts \
+  '// **Why one admission prices one command.' \
+  'export const first = 1;' \
+  "// The detail is \`failedOutcome." \
+  'export const second = 2;'
+ledger_new unpaired-marks
+row src/fleet-series-read.ts 1 "the gate asks before a batch" "shown-by-code" deleted "subject=The gate asks before a batch"
+row src/fleet-series-read.ts 3 "names the operation" "shown-by-code" deleted "subject=which names the operation"
+run_report
+expect_rc 1
+expect_stdout "src/fleet-series-read.ts:1-1: the cut leaves a ** unpaired"
+expect_stdout "src/fleet-series-read.ts:3-3: the cut leaves a backtick unpaired"
+end
+
 # --- cases: a broken tool is not a clean tree ---------------------------------------------------
 
 begin "a git failure is reported as a failure, not counted as a hit"
@@ -548,7 +690,7 @@ end
 
 # --- case: an empty diff is not a clean batch ----------------------------------------------------
 
-begin "a diff that is empty at the base fails checks (c) and (e) rather than passing them"
+begin "a diff that is empty at the base fails every check over the diff rather than passing it"
 # Their silence would otherwise be about the base, not about the batch — a
 # report generated against the wrong sha reads exactly like a clean one.
 fixture empty-diff
@@ -560,6 +702,8 @@ expect_rc 1
 expect_stdout "Diff at this base (tracked working tree vs \`$BASE\`): 0 file(s), +0 / -0 line(s)"
 expect_stdout "pre-check (c) had nothing to run over"
 expect_stdout "pre-check (e) had nothing to run over"
+expect_stdout "the coverage check had nothing to run over"
+expect_stdout "the bracket check had nothing to run over"
 end
 
 begin "the diff's scale is in the header, so an emptiness claim has its scale beside it"
