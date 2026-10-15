@@ -384,12 +384,14 @@ expect_stdout "src/fixture.ts:1:export const $SUBJECT_ALPHA"
 end
 
 begin "the subject's own positive controls are in the report, not merely promised"
-# evidence.md member 7: an emptiness claim with no control says nothing. Both
-# controls must have produced visible output.
+# evidence.md member 7: an emptiness claim with no control says nothing. Each
+# control must have produced visible output.
 run_report
 expect_stdout "+ // a three-second debounce"
 expect_stdout "reflow-control.ts:"
 expect_stdout "runs-control.ts:2-2 removes 4 word(s)"
+expect_stdout "# positive control — the comment-line and markdown greps over a directory"
+expect_stdout "control.md:1:ControlName in prose"
 expect_stdout "runs-control.ts:2-2: open minus close brackets is -1 before the cut and 0 after"
 end
 
@@ -776,6 +778,43 @@ row src/summing.ts 2 "ghosts are filtered at read" "shown-by-code" deleted "subj
 run_report
 expect_rc 0
 expect_not_stdout "src/fleet-panel.ts:1:"
+end
+
+# write_shim <dir> <command> <real> <trigger> — <dir>/<command> refuses (exit 2,
+# a word on stderr) when any argument contains <trigger>, else runs <real>.
+write_shim() {
+  local dir="$1" name="$2" real="$3" trigger="$4"
+  cat >"$dir/$name" <<SHIM
+#!/bin/bash
+for a in "\$@"; do case "\$a" in *$trigger*) echo "shim: $name refused" >&2; exit 2;; esac; done
+exec $real "\$@"
+SHIM
+  chmod +x "$dir/$name"
+}
+
+begin "a failed targets awk refuses a verdict instead of reporting no targets"
+# Neither refusal is reachable from a tree, so a shim first on PATH fails the
+# one command each guards: the inline targets program (the only awk given its
+# source as an argument) and the control's `git grep --no-index`.
+fixture refusal-shims
+commit_base src/shim.ts '// a note with words' 'export const ShimName = 1;'
+trim_to src/shim.ts 'export const ShimName = 1;'
+ledger_new refusal-shims
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+AWK_SHIM_DIR="$TMP_ROOT/awk-shim-bin"
+GIT_SHIM_DIR="$TMP_ROOT/git-shim-bin"
+must mkdir -p "$AWK_SHIM_DIR" "$GIT_SHIM_DIR"
+write_shim "$AWK_SHIM_DIR" awk "$(command -v awk)" SUBSEP || exit 2
+write_shim "$GIT_SHIM_DIR" git "$(command -v git)" --no-index || exit 2
+capture -C "$ROOT" env "PATH=$AWK_SHIM_DIR:$PATH" bash "$SUBJECT" "$LEDGER" "$BASE"
+expect_rc 2
+expect_stderr "the sweep targets could not be built"
+end
+
+begin "a file-and-declaration sweep whose control cannot run refuses a verdict"
+capture -C "$ROOT" env "PATH=$GIT_SHIM_DIR:$PATH" bash "$SUBJECT" "$LEDGER" "$BASE"
+expect_rc 2
+expect_stderr "the file-and-declaration sweep's own positive control"
 end
 
 # --- cases: a broken tool is not a clean tree ---------------------------------------------------

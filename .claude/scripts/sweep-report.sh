@@ -378,9 +378,10 @@ emit_streams() {
 # LINE — and a line count over that file then reports a git failure as a hit,
 # which is a broken check reported as a clean one. The count the report reads is
 # produced by the check, or the check is refused — which is what the
-# `cmd_errored` test after each pre-check's own run is for. The built-in
-# positive controls are the exception: their guard is the `*_control -eq 0`
-# refusal beside them, because a control that returns nothing is a broken check
+# `cmd_errored` test after each pre-check's own run is for. Each built-in
+# positive control is the exception: its guard is the refusal beside it (a
+# `*_control -eq 0` test, or the exact-count test of the file-and-declaration
+# control), because a control that returns the wrong thing is a broken check
 # rather than a failed one.
 run_shown() {
   render_cmd "$@"
@@ -724,13 +725,10 @@ printf '```\n'
 printf '# positive control — the comment-line and markdown greps over a directory holding one of each, and a code line\n'
 run_shown git -C "$TARGET_CONTROL_DIR" grep --no-index -n -E -e "$control_re" --and -e "$COMMENT_LINE_ERE" -- ':!absent.ts' ':!*.md'
 target_control_code=$(line_count "$CMD_OUT")
-target_control_broke=0
-if cmd_errored; then target_control_broke=1; fi
 run_shown git -C "$TARGET_CONTROL_DIR" grep --no-index -n -E -e "$control_re" -- '*.md' ':!absent.ts'
 target_control_md=$(line_count "$CMD_OUT")
-if cmd_errored; then target_control_broke=1; fi
 printf '```\n\n'
-if [ "$target_control_broke" -eq 1 ] || [ "$target_control_code" -ne 1 ] || [ "$target_control_md" -ne 1 ]; then
+if [ "$target_control_code" -ne 1 ] || [ "$target_control_md" -ne 1 ]; then
   fatal "the file-and-declaration sweep's own positive control did not return exactly its comment line and its markdown line" \
     "This is a broken sweep, not a clean tree — no verdict (evidence.md form 5)."
 fi
