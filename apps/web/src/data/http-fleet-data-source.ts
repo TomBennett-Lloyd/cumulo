@@ -52,9 +52,7 @@ const GET_INIT: RequestInit = { method: 'GET' };
  * second, which `toISOString()` alone is not (it always emits milliseconds).
  *
  * The same three lines exist in `demo-fleet-data-source.ts`, and the
- * duplication is incidental (`docs/standards/structure.md` rule 7): that one
- * formats instants it invented for a fixture, this one formats query parameters
- * a server will validate. Neither becomes wrong because the other changed.
+ * duplication is incidental (`docs/standards/structure.md` rule 7).
  *
  * Parsed rather than asserted, so a clock that produced something unformattable
  * fails here — a bug — instead of becoming a 400 the user sees.
@@ -89,14 +87,7 @@ export interface HttpFleetDataSourceOptions {
  * The `FleetDataSource` that talks to the deployed Fleet API.
  *
  * A class rather than a factory over captured variables
- * (`docs/standards/structure.md` rule 2): the members share the base URL, the
- * transport, the clock and — the one that matters — the in-flight series map,
- * and `this.` is what makes that sharing visible to a reader holding only one
- * method.
- *
- * Members are arrow properties because `FleetDataSource` declares them as
- * properties: views hand `source.listSites` straight to a hook, and a detached
- * prototype method would arrive there with no `this` and no base URL.
+ * (`docs/standards/structure.md` rule 2).
  */
 export class HttpFleetDataSource implements FleetDataSource {
   private readonly baseUrl: string;
@@ -222,11 +213,6 @@ export class HttpFleetDataSource implements FleetDataSource {
    * explicit window — which is #289's, on the way to #148. It is not something
    * a different request shape here could reach.
    *
-   * What the false one no longer means is "no window control": a picker here
-   * moves the actuals' window and leaves the forecast half roughly where it was,
-   * and #284 D5 keeps the control and pays for that asymmetry in the copy — the
-   * chart's own name declines to claim the forecast half moved with them.
-   *
    * `fleetActuals` is true because the fleet's readings now both exist and
    * arrive in one request (#264; {@link fleetActuals} below carries how).
    */
@@ -289,20 +275,12 @@ export class HttpFleetDataSource implements FleetDataSource {
    * The whole fleet's forecasts, in one request — never a fan-out.
    *
    * `GET /v1/fleet/forecast` answers from the pre-summed `#FLEET` partition server-side (#494) and
-   * answers with one payload (#296). What did not change when the fan-out this
-   * replaced went away is the *direction*: `range` is still spent as a
-   * **forward horizon** rather than as the look-back {@link RangeHours}
-   * describes, because the route's window opens at the clock and runs ahead. So
-   * the fleet aggregate still shows no history, and it is still capped by how
-   * far the deployed pipeline has written; {@link capabilities} above carries
-   * what closing that takes.
+   * answers with one payload (#296).
    *
    * That route *is* metered by the API's per-IP limiter, and deliberately so:
    * the caller picks nothing about this request's cost and the fleet picks all
    * of it, which is the pairing with `/v1/fleet/actuals` that the route table in
-   * `apps/api/src/main.ts` states. One metered request per range selection is
-   * the whole point — the fan-out spent one unmetered request per site plus a
-   * listing, and grew with the fleet.
+   * `apps/api/src/main.ts` states.
    *
    * **All-or-nothing, and that is a deliberate change of semantics.** The
    * fan-out returned the union of whichever sites answered; one request either

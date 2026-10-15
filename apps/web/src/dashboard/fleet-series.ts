@@ -13,9 +13,6 @@ import { fleetNightClassifier } from './fleet-night';
 /*
  * The fleet aggregate, as the chart's point shape — and how complete it is.
  *
- * Everything here is pure and takes what it reads
- * (docs/standards/structure.md rule 1), so it is unit-testable without a DOM.
- *
  * The summing is not here. Both series arrive already summed — one point per
  * hour from `FleetDataSource.fleetForecasts` and `fleetActuals`, computed by the
  * forecast producer in live mode and by `@cumulo/shared` in the demo (#494, #506).
@@ -36,11 +33,6 @@ import { fleetNightClassifier } from './fleet-night';
  * in the `medianKw` / `p10Kw` / `p90Kw` / `actualKw` fields of
  * `ForecastChartPoint`, whose own docblock states that contract: those fields
  * carry the chart's *selected* display unit, not kW by definition.
- *
- * `fleetChartAggregate` at the bottom is the whole pipeline under one name,
- * which is what makes it memoizable by the panel: a join and a rescale,
- * in a component whose sibling poll re-renders it once a second during
- * add-a-site (#293).
  */
 
 /**
@@ -59,11 +51,9 @@ export const minimumContributingSites = (points: readonly FleetForecastAggregate
  * Every hour either series knows about, in time order, as the chart's point shape.
  *
  * **The x-domain is the union, and that is the whole point of this function.** The live fleet reads
- * its forecasts as a forward horizon (`/v1/sites/{id}/forecast`, future hours only) and its actuals
+ * its forecasts as a forward horizon and its actuals
  * as a look-back (`/v1/fleet/actuals`, `[now−h, now)`), so the two windows are disjoint for every
- * value of the clock. Keying on the forecast alone dropped every simulated actual against the
- * deployed source — invisible against the demo one, whose windows overlap — under a legend and an
- * accessible name that both promised otherwise (#264).
+ * value of the clock.
  *
  * What a row missing half its series does *not* do is invent the missing half. A past hour carries
  * `medianKw: null` and no band; a future hour carries `actualKw: null`. Both read as gaps, on the
@@ -73,11 +63,6 @@ export const minimumContributingSites = (points: readonly FleetForecastAggregate
  * Ordered by instant rather than by string: both inputs arrive sorted from `@cumulo/shared`'s
  * aggregation, but a merge of two sorted sequences still has to compare across them, and comparing
  * the parsed instants keeps the ordering rule out of the timestamp's spelling.
- *
- * Each hour is parsed **once**, before the sort, rather than twice per comparison: O(n) parses
- * instead of O(n log n). These keys are same-format UTC ISO strings, so no input distinguishes this
- * comparator from a string one and no test can — the parse stays anyway, so the stated rule "by
- * instant" is true of the code rather than true by luck of the spelling.
  */
 export const joinFleetSeries = (
   points: readonly FleetForecastAggregatePoint[],
@@ -119,8 +104,7 @@ export const joinFleetSeries = (
  *
  * The two travel together because they come out of the same aggregation pass: the completeness line
  * quotes the thinnest hour of the *forecast* aggregate, which is the array the points were joined
- * from. Returned as a pair so the fleet is summed once per answer rather than once per reader
- * (#293), which is why this is a value and not two exported functions called in turn.
+ * from.
  *
  * Not to be confused with `FleetSeries` in `fleet-panel-body.tsx`: that one is the two *source*
  * reads, this one is what the chart draws from them.
@@ -211,13 +195,7 @@ const inPercentOfCapacity = (
  * The joined series in percent of the capacity actually behind each hour.
  *
  * **Each divisor travels on its own aggregate**, as `contributingCapacityKw` (#494, #506): the exact
- * per-hour sum over the sites that reported, summed once where the fleet is summed. The two stay
- * apart because the sites that forecast an hour and the sites that reported it need not be the
- * same, and one divisor over both series would put a percentage over capacity never behind it.
- *
- * The maps are keyed by `UtcIsoTimestamp` and read here by the joined point's `validTimeIso`, which
- * is the same string with the brand dropped at the chart's boundary — read through
- * `ReadonlyMap<string, number>`, so the widening is a declaration rather than an assertion.
+ * per-hour sum over the sites that reported, summed once where the fleet is summed.
  */
 const percentOfCapacitySeries = (
   points: readonly ForecastChartPoint[],
@@ -244,21 +222,9 @@ const percentOfCapacitySeries = (
  * The fleet's two reads, summed and joined into what the chart draws — the pipeline under one name.
  *
  * One function rather than three calls at the use site, because the three are one intent and
- * because a caller memoizing them is memoizing this and nothing else. The forecast aggregate is
- * read three times — joined, divided by, and counted — which is why the completeness count travels
- * with the points rather than being asked for separately: split across two calls, memoizing the
- * points would have left the count walking the whole fleet again on every render.
+ * because a caller memoizing them is memoizing this and nothing else.
  *
  * `sites` is here rather than in `joinFleetSeries` because night is not a property of the join.
- * The join's business is the union x-domain and what each series has to say at each hour; where
- * the fleet *is* is a fact about the fleet, and it arrives from the panel alongside the two reads.
- * Keeping it out of the join is also what leaves that function's own tests untouched by this layer.
- *
- * The classifier is built once per aggregate and applied per hour, which is the whole reason
- * `fleetNightClassifier` returns a function: whether there is a fleet to answer about at all is a
- * fact about the fleet, not about the hour. This runs inside the panel's memo, so the sites are
- * walked once per hour of one answer rather than of every render — and that walk short-circuits at
- * the first daylit site, so the daylight hours cost one solar position each.
  *
  * `unit` is applied last of all and changes nothing about how the fleet is summed: both arms
  * aggregate and join in kW, and `'percent'` then rescales the joined points. Two consequences worth
