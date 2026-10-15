@@ -59,6 +59,20 @@ export default tseslint.config(
       'func-style': ['error', 'expression'],
       '@typescript-eslint/no-use-before-define': 'error',
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+
+      /*
+       * Exhaustive switches (#679). A `switch` over a union names every member
+       * and has no `default`: each member is a decision, and a catch-all hands a
+       * member added later a policy nobody chose for it. The two options close
+       * both routes to one — a `default` never stands in for a missing case, and
+       * a `default` beside full coverage is itself reported. A switch over a
+       * non-literal type (`number`, `string`) is outside the check, so its
+       * `default` stays legal.
+       */
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { allowDefaultCaseForExhaustiveSwitch: false, considerDefaultExhaustiveForUnions: false },
+      ],
     },
   },
   {
