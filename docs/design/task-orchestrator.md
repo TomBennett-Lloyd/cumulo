@@ -60,7 +60,7 @@ design safe:
    `PROCEED`. This is simultaneously the overlap-scheduling gate and the plan-approval gate — the
    agent structurally cannot bypass either, because proceeding requires a message it cannot send
    to itself.
-2. **A merge-readiness return contract.** The task report (template in §4) carries captured
+2. **A merge-readiness return contract.** The task report (template in `.claude/agents/task-orchestrator.md`) carries captured
    evidence — HEAD sha, verify exit code, review verdict + cycle count + demotions, workflow.json
    classification with extension evidence, full changed-file list — sufficient for the top-level to
    decide mergeability without re-reading the diff. The top-level session keeps exclusive ownership
@@ -247,13 +247,13 @@ duplicated. Incremental rather than posted-at-release, deliberately: a release-t
 survives only if the agent survives to release, which is exactly the dependency being forbidden;
 an appended comment has already banked every earlier round when the agent dies mid-lifecycle,
 and a `RESUME` replacement continues the same comment. On `RELEASE`, the agent finalizes that
-comment into the full RETRO HANDOVER template above.
+comment into the full RETRO HANDOVER template.
 
 **The comment is the single source of truth — exclusively** (owner, 2026-08-10). The RETRO
 NOTES/HANDOVER issue comment is the sole authoritative record of a ticket's retro observations.
 The agent's in-chat reply to `RELEASE` is a courtesy copy carrying the comment URL and is never
 consumed as the record; `/retro` and `/triage` read only the durable comment; the TASK REPORT
-references the comment (§4.2's `Retro notes:` line) and never restates its content, so there is
+references the comment (`.claude/agents/task-orchestrator.md` § TASK REPORT template's `Retro notes:` line) and never restates its content, so there is
 no second place observations can accumulate. If reply and comment ever diverge, the comment
 wins — and the divergence is itself a contract breach to flag in the retro.
 
@@ -386,7 +386,7 @@ head's checks and merges. Same settle-then-watch discipline, different first mov
 no-duplicate-ledgers rule; member issues carry a link to it, never a copy. The PR body carries
 one `Closes #n` line per surviving member, so exactly the shipped members auto-close on merge;
 dropped members stay open with their status comment. The RETRO HANDOVER is one report for the
-batch with a per-member plan-accuracy line (§4.3) — a batch is one lifecycle, so one handover.
+batch with a per-member plan-accuracy line (`.claude/agents/task-orchestrator.md` § RETRO HANDOVER template) — a batch is one lifecycle, so one handover.
 
 **In-flight table: a batch is one row** — anchor + member list, footprint = the union. This
 simplifies the table by construction: N mutually-conflicting tickets that would have been one
@@ -723,10 +723,10 @@ are inlined as normative text where they apply:
    courtesy copies; /retro and /triage read only the comment; on divergence the comment wins).
    → §3 steps 5–6, §4.3.
 4. **Owner Q&A durability** (2026-08-09): Q&A pairs are posted to the ticket's issue, by the
-   agent. → §3 step 5, §9.1.
+   agent. → §3 step 5, `.claude/agents/task-orchestrator.md`.
 5. **Batch merge/revert unit** (2026-08-10): batch PRs merge unsquashed (`--rebase`) under the
    curated-history precondition — exactly one commit per surviving member, maintained
    continuously via fixup/autosquash, verified mechanically by the merge owner from the TASK
    REPORT's branch commit list; dropped members vanish via curation; the revert unit is the
-   member commit; single-issue PRs stay `--squash`. → §5a (curation + merge mechanics), §4.2,
-   `.claude/agents/task-orchestrator.md` rule 7, §9.2 step 4, §10.
+   member commit; single-issue PRs stay `--squash`. → §5a (curation + merge mechanics),
+   `.claude/agents/task-orchestrator.md` § TASK REPORT template and rule 7, §9.2 step 4, §10.
