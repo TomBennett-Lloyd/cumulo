@@ -37,10 +37,7 @@ import type {
  *   out its own deadline and report — deliberately pinned behaviour, not an
  *   invitation to hot-retry.
  * - `server-fault` — server → client: the fleet *answered*, and the answer is
- *   that it is broken (a 5xx). Recourse is a backoff retry, the same shape
- *   `network` has, but the two stay separate arms because the question that
- *   decides blame is "who does the operator need to call?" — the fleet's
- *   operator here, the visitor's own connection there.
+ *   that it is broken (a 5xx). Recourse is a backoff retry.
  * - `forbidden` — the API refused this client on policy, not on content. The one
  *   failure a retry cannot fix: what is wrong is *who is asking*, so the recourse
  *   is a deployment change (`CUMULO_WEB_ORIGINS`).
@@ -76,16 +73,13 @@ export type FleetDataError =
  * forget to catch (`error-handling.md` rule 1). A rejected promise from any
  * implementation of `FleetDataSource` is therefore a bug in that
  * implementation, not a failure mode callers are expected to handle.
- *
- * This is the app's *only* fleet result type; a second one whose failure arm was
- * a bare `string` was retired at #105.
  */
 export type FleetSourceResult<T> =
   | { readonly kind: 'ok'; readonly value: T }
   | { readonly kind: 'error'; readonly error: FleetDataError };
 
 /**
- * The look-back windows the chart views offer, as whole hours: 24 h, 48 h, 7 d.
+ * The look-back windows the chart views offer, as whole hours.
  *
  * A closed union rather than `number`: a source must be able to serve every
  * value, and adding a window should fail to compile everywhere it is switched
@@ -119,12 +113,6 @@ export interface FleetSourceCapabilities {
   /**
    * Fleet-level *forecasts* honour {@link RangeHours} as a look-back. False ⇒
    * forward horizon only.
-   *
-   * It decides what the panel may *say* about a look-back, and no longer decides
-   * on its own whether a window can be chosen (#284 D5). The naming obligation
-   * that leaves is discharged by
-   * `apps/web/src/dashboard/fleet-panel-copy.ts`, and
-   * `apps/web/src/dashboard/FleetPanel.tsx` owns the control's gate.
    */
   readonly fleetLookback: boolean;
   /** Fleet-level actuals can ever be non-empty. */
@@ -137,9 +125,7 @@ export interface FleetSourceCapabilities {
  *
  * Every view talks to this interface and nothing else, so the same components run
  * against deterministic fixtures and against the Fleet API (#14) with no change
- * above this line. Two implementations exist by design: `DemoFleetDataSource`
- * (deterministic, in-memory, what local development and the whole test suite run
- * against) and `apps/web/src/data/http-fleet-data-source.ts`.
+ * above this line.
  *
  * ## Members are function-typed properties, not method signatures
  *
@@ -174,8 +160,7 @@ export interface FleetSourceCapabilities {
  *   grow) → `invalid-request`, by the same direction the listed 400 takes.
  * - **Any remaining non-ok status** (a 3xx a `fetch` surfaced rather than
  *   followed) → `invalid-response`.
- * - **A `fetch` that rejects** → `network`. That arm is now reachable only
- *   this way, which is what makes its doc ("never produced an answer") true.
+ * - **A `fetch` that rejects** → `network`.
  *
  * A 200 carrying an empty series is **not** an error: the API answers a
  * forecast-less site with an object rather than a bare array, so it can carry the
@@ -194,9 +179,6 @@ export interface FleetDataSource {
   /**
    * What this source can answer at the fleet level — see
    * {@link FleetSourceCapabilities}.
-   *
-   * A required member rather than an optional one so that a source added later
-   * cannot omit it and inherit whichever default happened to flatter it.
    */
   readonly capabilities: FleetSourceCapabilities;
 
@@ -262,9 +244,6 @@ export interface FleetDataSource {
    * with `@cumulo/shared`'s `fleetForecastAggregate`. One definition of the fleet
    * total (`architecture.md` rule 3), two ways of arriving at the shape.
    *
-   * `contributingCapacityKw` travels with each point for that reason too: the
-   * `%`-of-capacity view needs a per-hour divisor.
-   *
    * It spends `range` as a **forward horizon**, not as the look-back
    * {@link RangeHours} otherwise describes. An implementation is free to serve the
    * look-back if it can — the demo source does — but no implementation is
@@ -280,10 +259,7 @@ export interface FleetDataSource {
    * simulated in live mode as {@link siteActuals} describes (#264).
    *
    * Like {@link fleetForecasts} this is one request for the whole fleet — the
-   * HTTP source reads `GET /v1/fleet/actuals`. That route reads *backwards* from
-   * now, so this member honours `range` as
-   * the look-back {@link RangeHours} describes even where `fleetLookback` is
-   * false.
+   * HTTP source reads `GET /v1/fleet/actuals`.
    */
   readonly fleetActuals: (
     range: RangeHours,

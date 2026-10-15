@@ -5,12 +5,7 @@ import type { ChartScale } from './chart-series';
 /**
  * Everything between an input event and a selection: which sample a pointer is
  * over, what a keystroke does to the readout, and how often the panel is allowed
- * to move. No JSX, and no opinion about who calls it: since #331 the component
- * holding `useChartHover` is `forecast-chart-hover-boundary.tsx`, which is the
- * point re-rendering stops, and `forecast-chart-hover.tsx` draws whatever the
- * selection settles on. This is a file of its own because sizing a panel and
- * rate-limiting a pointer are separate jobs that happened to start in one place
- * (`structure.md` rule 4).
+ * to move. No JSX, and no opinion about who calls it.
  */
 
 export interface PointerSampleParams {
@@ -65,12 +60,7 @@ export interface PointerSample {
  * outside it.** The target is the whole figure — the plot and both axis gutters
  * (`forecast-chart-hover-boundary.tsx`) — so a thumb aimed at the start of the
  * day genuinely lands at an x the plot does not contain, and the reading has to
- * be the nearest x the plot does. Clamping before the snap rather than after it
- * is what makes both halves say so: `snapToNearestX` already answers the end
- * sample for an x beyond either end, so the *index* would be right either way,
- * and it is the continuous position the clamp is really for. Unclamped, the
- * panel follows the pointer into the gutter and is anchored off the plot's left
- * edge — a readout half over the y axis, naming a sample it is not beside.
+ * be the nearest x the plot does.
  */
 export const pointerSample = ({
   clientX,
@@ -118,10 +108,6 @@ const moved = (activeIndex: number): HoverKeyAction => ({ kind: 'moved', activeI
  * Keyboard parity with the pointer: arrows step, Home/End jump, Escape
  * dismisses. Both ends produce the same `activeIndex`, which is why focus
  * shows exactly what hover shows.
- *
- * Entering the series from nothing (after Escape, or focus on an empty
- * readout) lands on the first sample rather than stepping off it, so the first
- * ArrowRight never skips index 0.
  */
 export const hoverKeyAction = ({
   key,
@@ -220,11 +206,6 @@ const NOTHING_HOVERED: HoverSelection = { activeIndex: null, pointerX: null };
  * frame left it, short of where the reader actually parked the cursor. So the
  * window closes by flushing whatever it captured and, if it captured anything,
  * opening the next one.
- *
- * Keyboard selections bypass the window entirely. They are discrete acts, one
- * per keystroke, and there is nothing to rate-limit; more to the point, a
- * pointer frame flushing after an arrow key would drag the panel back to a
- * cursor the reader has stopped using.
  */
 export const useChartHover = (): ChartHover => {
   const [selection, setSelection] = useState<HoverSelection>(NOTHING_HOVERED);
@@ -237,10 +218,7 @@ export const useChartHover = (): ChartHover => {
   //
   // The handle is cleared *and* forgotten. Cancelling alone leaves `frameRef`
   // holding a dead timer id, which every writer here reads as "a frame is
-  // open" — harmless today, because nothing calls back into a hook whose
-  // component has gone, and a freeze-forever the moment anything does (every
-  // later move held, no timer left alive to flush it). Two lines that agree
-  // beat one line that relies on the caller never arriving.
+  // open".
   useEffect(
     () => () => {
       clearTimeout(frameRef.current ?? undefined);
@@ -274,8 +252,6 @@ export const useChartHover = (): ChartHover => {
       setSelection(NOTHING_HOVERED);
       return;
     }
-    // A `PointerSample` is a `HoverSelection` that happens to know it is not
-    // empty, so there is nothing to convert between the two.
     if (frameRef.current !== null) {
       heldRef.current = sample;
       return;

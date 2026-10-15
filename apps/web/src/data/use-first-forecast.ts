@@ -76,10 +76,6 @@ const FIRST_FORECAST_DEADLINE_MS = 90_000;
 
 /**
  * The deadline as the diagnostic messages spell it.
- *
- * Derived once rather than in each sentence: both deadline messages are about
- * the same timer, so a second derivation would be a place for them to disagree
- * about the number the visitor actually waited out.
  */
 const DEADLINE_SECONDS_TEXT = String(FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND);
 
@@ -87,9 +83,7 @@ const DEADLINE_SECONDS_TEXT = String(FIRST_FORECAST_DEADLINE_MS / MS_PER_SECOND)
  * The state every watch starts in, and stays in until the fleet answers.
  *
  * A module constant rather than a fresh object per run, so re-entering it is a
- * no-op for React: every effect run begins by resetting to it, and every
- * fault-poll before absence is confirmed re-enters it, so a fleet that is
- * failing repeatedly re-renders the card zero times.
+ * no-op for React.
  */
 const WATCH_START_STATE: ForecastViewState = { status: 'checking' };
 
@@ -123,10 +117,7 @@ const rateLimitBackoffMs = (retryAfterSeconds: number | undefined): number =>
  *
  * An `ok` carrying no forecasts is treated as "not yet" rather than as success.
  * `ready` retires the card's visible wait *and* releases `FleetPanel`'s overlay
- * request (`selectionReady`), so an empty series would put a named-but-empty
- * line in the fleet chart's legend and table — the reader told the answer
- * arrived and shown a gap where it should be. "Still waiting" and "this site
- * produces nothing" are different sentences, and only one of them is true here.
+ * request (`selectionReady`).
  */
 const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecision => {
   if (result.kind === 'ok') {
@@ -156,23 +147,11 @@ const decidePoll = (result: FleetSourceResult<readonly Forecast[]>): PollDecisio
       // be working again. `invalid-request` is grouped with them rather than
       // halted deliberately — halting is reserved for the one arm whose recourse
       // is unambiguous, and a fault the loop cannot classify that confidently is
-      // better given the full wait than cut short. So all four keep the cadence
-      // and let the deadline decide when to stop, and the message is remembered,
-      // so a deadline reached this way is reported as an error, not as a wait.
+      // better given the full wait than cut short.
       return { kind: 'keep-waiting', delayMs: POLL_INTERVAL_MS, fault: error.message };
     case 'forbidden':
-      // The arm's own contract: what is wrong is *who is asking*, and its
-      // recourse is a deployment change (`CUMULO_WEB_ORIGINS`). Nothing the
-      // loop can do changes the answer, so waiting out the deadline before
-      // saying so buys the visitor nothing — and a view that then rendered it
-      // as "try again" would be telling them to do the one thing that cannot
-      // work.
       return { kind: 'halt', message: error.message };
   }
-  // Every code is enumerated and there is no catch-all arm, so the declared
-  // return type makes an eighth `FleetDataError` code a compile error here —
-  // rather than letting it fall silently into "keep waiting", which is how
-  // `invalid-request` and `forbidden` inherited a policy nobody chose for them.
 };
 
 const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState => ({
@@ -194,12 +173,6 @@ const generatingSince = (startedAtMs: number, nowMs: number): ForecastViewState 
  *   in `checking` and `unanswered` is the only honest reason. Claiming a
  *   timeout here would assert the pipeline is behind on a site whose forecast
  *   may well already exist (#177's review; the tech-debt entry this consumes).
- *
- * `absenceConfirmed` is a parameter rather than something read from the
- * enclosing run, so this stays legible on its own (docs/standards/structure.md
- * rule 1). Both messages carry the site the wait was about
- * (docs/standards/error-handling.md rule 4) so a screenshot of a failed card is
- * diagnosable on its own.
  */
 const deadlineState = (
   siteId: Site['id'],
@@ -257,9 +230,7 @@ export const useFirstForecast = (
   const [state, setState] = useState<ForecastViewState>(WATCH_START_STATE);
   /**
    * A run token, not a value the run reads: bumping it is how `retry` asks
-   * React to tear down the current run and start a fresh one. It belongs in the
-   * dependency array because it genuinely is part of the effect's identity —
-   * "which attempt is this" — and the array stays honest as a result.
+   * React to tear down the current run and start a fresh one.
    */
   const [attempt, setAttempt] = useState(0);
 
@@ -282,12 +253,7 @@ export const useFirstForecast = (
      * the only evidence a client has that a first forecast is genuinely being
      * generated. A `keep-waiting` *with* a fault is the fleet failing to answer
      * and says nothing about existence, so it must not promote the watch out of
-     * `checking` (#177). Latched rather than recomputed per poll: once absence is
-     * confirmed, a later network blip does not un-confirm it.
-     *
-     * The deadline asks the same question at the end: reached without this ever
-     * being set means no poll established anything, which is `unanswered`
-     * rather than a pipeline timeout.
+     * `checking` (#177).
      */
     let absenceConfirmed = false;
 
@@ -317,7 +283,6 @@ export const useFirstForecast = (
 
       // The answer to a superseded poll — unmounted, site changed, retried, or
       // the deadline passed while this request was in flight — is discarded.
-      // It describes a run that no longer owns this state.
       if (stopped) {
         return;
       }
@@ -330,9 +295,7 @@ export const useFirstForecast = (
       }
 
       // A halt ends the run exactly like an arrival does — the answer is final,
-      // so the deadline has nothing left to decide and the card is told now. It
-      // reports in its own arm rather than as a failure, so the card can drop
-      // the retry no retry can change.
+      // so the deadline has nothing left to decide and the card is told now.
       if (decision.kind === 'halt') {
         stopWatching();
         setState({ status: 'halted', message: decision.message });

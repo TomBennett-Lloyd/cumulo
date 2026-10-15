@@ -25,17 +25,6 @@ import { FleetPanel, type FleetListingStatus } from './FleetPanel';
 
 /**
  * The shared way of feeding and mounting a `FleetPanel` in jsdom.
- *
- * Extracted when `FleetPanel.test.tsx` reached the 300-line ceiling
- * (`structure.md` rule 4) with the hide/reveal cases still to write. The fixtures
- * moved rather than the tests because they are the part with no opinions in it:
- * a canned two-site fleet, the four answers a source can give about it, and the
- * two lines every test writes to get a panel on screen. The suites keep their
- * own subjects. This mirrors `dashboard-test-fixture.tsx`, which the dashboard's
- * two suites share for the same reason.
- *
- * Helpers only one suite needs stay in that suite — the table-row reader and the
- * demo fleet's listing are in `FleetPanel.test.tsx`, not here.
  */
 
 const SITE_A_ID = '11111111-1111-4111-8111-111111111111';
@@ -115,10 +104,7 @@ export interface StubFleet {
    * Non-null fails the *overlay* read only.
    *
    * One message for both arms, because the panel asks for them as one read and renders one notice
-   * for the pair ({@link siteForecasts} and {@link siteActuals} below). A message rather than a
-   * whole result, because the site's own hours are always filtered from {@link FORECASTS} and
-   * {@link ACTUALS} when they succeed — what varies is only whether the read failed, and a second
-   * copy of the success value would be a second thing to keep in step.
+   * for the pair ({@link siteForecasts} and {@link siteActuals} below).
    */
   readonly siteForecastError: string | null;
 }
@@ -130,9 +116,7 @@ const ready = <T,>(value: T): FleetSourceResult<T> => ({ kind: 'ok', value });
  *
  * Built from the per-site rows above through `fleetForecastAggregate` — the same `@cumulo/shared`
  * function the producer writes its partials with and the demo source computes with — rather than
- * hand-written as aggregate points. The fixtures below still say what they mean in per-site terms
- * ("07:00 loses site B"), and the divisor and contributing count each hour carries are the ones a
- * real fleet of these sites would have, not numbers a fixture chose.
+ * hand-written as aggregate points.
  */
 const summed = (
   forecasts: readonly Forecast[],
@@ -172,8 +156,7 @@ export const PARTIAL_FLEET: StubFleet = {
  *
  * The actuals are emptied as well as the forecasts, and that is the whole point of this fixture
  * since #290: "no forecast" and "nothing to show" stopped being the same question when the chart's
- * x-domain became the union of both series. {@link ACTUALS_ONLY_FLEET} is the other half of that
- * split, and the two are only distinguishable because this one is empty on both sides.
+ * x-domain became the union of both series.
  */
 export const FORECASTLESS_FLEET: StubFleet = {
   ...FULL_FLEET,
@@ -191,11 +174,6 @@ export const FAILED_FLEET: StubFleet = {
 
 /**
  * The forecast read answers; the actuals request beside it does not.
- *
- * The half of the panel's failure surface that had no fixture until #264's review, which is a
- * large part of why the panel answered it by withdrawing the whole chart under the forecast's
- * name. The two reads are two requests over two windows, so this is an ordinary state and not a
- * contrived one.
  */
 export const ACTUALS_FAILED_FLEET: StubFleet = {
   ...FULL_FLEET,
@@ -209,8 +187,7 @@ export const ACTUALS_FAILED_FLEET: StubFleet = {
  * Forecasts strictly after the actuals, sharing no hour with them — the shape the deployed source
  * produces and the demo source never has.
  *
- * Live, `fleetForecasts` fans out over `/v1/sites/{id}/forecast`, which serves hours *ahead* of the
- * clock, while `fleetActuals` reads `[now−24h, now)`. The two windows are disjoint for every value
+ * The two windows are disjoint for every value
  * of the clock, so a fixture whose forecasts and actuals share hours — {@link FULL_FLEET}, and
  * every fixture here before this one — cannot tell a chart that keeps the actuals from one that
  * silently drops every last one of them (#264).
@@ -238,9 +215,8 @@ export const DISJOINT_WINDOW_FLEET: StubFleet = {
  * The forecast read summed to nothing; the actuals arrived — #290's second finding.
  *
  * A real state rather than a contrived one: the two reads are two requests over two windows, and a
- * forecast pipeline that has not produced yet leaves the measured hours untouched. The panel used
- * to answer it by returning "no fleet forecast" in place of the chart, throwing away hours it had
- * been handed. {@link DISJOINT_WINDOW_FLEET}'s actuals are borrowed because they span *two* hours,
+ * forecast pipeline that has not produced yet leaves the measured hours untouched.
+ * {@link DISJOINT_WINDOW_FLEET}'s actuals are borrowed because they span *two* hours,
  * so the measured series is a run a chart can stroke rather than a lone marker.
  */
 export const ACTUALS_ONLY_FLEET: StubFleet = {
@@ -259,10 +235,6 @@ export const HORIZON_ONLY_CAPABILITIES: FleetSourceCapabilities = {
 /**
  * The combination #264 made real and the deployed source is in: simulated actuals over a forecast
  * read that still reaches forward only.
- *
- * Here rather than in one suite because both of them need it now — the window copy is
- * `FleetPanel.test.tsx`'s subject and the panel's furniture is `FleetPanel.structure.test.tsx`'s,
- * and a second copy of the flags would be a second thing to keep in step with the live source.
  */
 export const SIMULATED_ACTUALS_CAPABILITIES: FleetSourceCapabilities = {
   fleetLookback: false,
@@ -272,16 +244,8 @@ export const SIMULATED_ACTUALS_CAPABILITIES: FleetSourceCapabilities = {
 /**
  * A `FleetDataSource` over canned results that counts what it was asked.
  *
- * A class rather than a `createStubSource(canned)` closure factory (`structure.md` rule 2): the
- * members genuinely share the canned data and the call log, and `this.` is what makes that sharing
- * visible. The members are arrow properties because the interface's are.
- *
  * The counting is the point of several tests, and what it counts is what this panel is frugal
- * about. "Does a new `refreshToken` re-sum the fleet", "does an empty fleet ask anything at all",
- * "does moving the selection ask about the new site rather than relabel the old one's answer" and
- * "does the overlay's retry spend a per-site request without re-spending the fleet read" are all
- * questions about calls rather than about pixels, and only a stub that remembers can answer them.
- * (It also counted reveals until #265, when the panel stopped being hideable.)
+ * about.
  */
 export class CountingFleetSource implements FleetDataSource {
   readonly forecastRanges: RangeHours[] = [];
@@ -290,9 +254,7 @@ export class CountingFleetSource implements FleetDataSource {
    * Every per-site forecast request, as `<siteId>@<range>`.
    *
    * Recorded rather than merely counted because the overlay's whole contract is *which* site was
-   * asked about over *which* window: an overlay drawn from the previous selection's answer, or
-   * from a window the chart is not showing, would be a chart quietly lying about one of its two
-   * series.
+   * asked about over *which* window.
    */
   readonly siteForecastRequests: string[] = [];
 
@@ -335,11 +297,6 @@ export class CountingFleetSource implements FleetDataSource {
 
   /**
    * One site's own hours — the overlay's source, served out of the same canned fleet.
-   *
-   * Filtered from {@link FORECASTS} rather than answered from a second set of numbers, because
-   * that is what makes the overlay assertions mean something: the site's line really is a
-   * component of the sum drawn under it, so a table row showing the site above the fleet's own
-   * median would be a defect these tests can see.
    */
   readonly siteForecasts = (
     siteId: string,
@@ -358,11 +315,6 @@ export class CountingFleetSource implements FleetDataSource {
    * the same reason {@link siteForecasts} is: the two are one metered call in the deployed source,
    * so the pair of counts is what would catch a panel that had started asking twice as often as
    * it draws.
-   *
-   * Filtered from {@link ACTUALS}, so the site's solid stretch really is a component of the
-   * fleet's own actuals drawn under it. It fails with `siteForecastError` too: the panel asks for
-   * both as one read and renders one notice for the pair, so a fixture that could fail only half
-   * of it would be describing a state the panel cannot reach.
    */
   readonly siteActuals = (
     siteId: string,
@@ -387,10 +339,6 @@ export class CountingFleetSource implements FleetDataSource {
 
 /**
  * What the dashboard tells the panel about the selection, as one value.
- *
- * The two props travel together in every case that matters — a site with no answer about it yet
- * draws no overlay, and an answer with no site is nothing — so the fixture passes them as a pair
- * rather than letting a test set one and forget the other.
  */
 export interface FleetPanelSelection {
   readonly selectedSite: Site | null;
@@ -430,10 +378,6 @@ export const SITE_A_PENDING: FleetPanelSelection = {
  *
  * `th, td` rather than the `cell` role, because the time column is a `rowheader` and a row read as
  * four values would drop the hour each of them belongs to.
- *
- * Here rather than in one suite because both of them read the chart's table twin: it is where the
- * plotted numbers are readable as text, so it is where the fleet's sum and the selected site's
- * line are both pinned.
  */
 export const rowCells = (row: HTMLElement): readonly string[] =>
   Array.from(row.querySelectorAll('th, td'), (cell) => cell.textContent);
@@ -442,11 +386,9 @@ export const rowCells = (row: HTMLElement): readonly string[] =>
  * Waits for both fleet reads to have answered, whatever they answered.
  *
  * The signal is the body's `aria-busy`, which is the panel's own statement that
- * a read is out (`fleet-panel-body.tsx`). This waited on the pending *label*
- * until #448, when the loading state stopped saying anything at all — the owner
- * asked for the wait to be shown rather than spelled — so the text it used to
- * watch for no longer exists to disappear. The attribute is the better sync
- * point besides: it is the same fact stated where a machine reads it, so a
+ * a read is out (`fleet-panel-body.tsx`).
+ * The attribute is the better sync
+ * point: it is the same fact stated where a machine reads it, so a
  * rewording of any copy cannot desynchronise every suite that shares this
  * fixture.
  *
@@ -466,20 +408,9 @@ export const settle = async (): Promise<void> => {
  * once and then `rerender` it with one prop moved — and a prop added to {@link FleetPanel} would
  * otherwise leave a dozen copies wrong at once (`structure.md` rule 7). The fleet is a parameter
  * of {@link renderSettled}, which is what the tests that vary it use.
- *
- * The selection is the one thing this varies, because it is the one thing the page varies about
- * this panel now: it is never hidden and never unmounted (#265), so `hidden` stopped being a
- * parameter at the same time it stopped being a prop.
  */
 /**
  * What the dashboard tells the panel about its *listing*, as one value (#452).
- *
- * The two travel together for {@link FleetPanelSelection}'s reason: a status
- * without the recourse that clears it is half a state, and the failed arm is the
- * only one either of them is interesting in. Both default to the settled case,
- * so every case written before the listing was a prop keeps meaning what it
- * meant — a fleet whose listing arrived, which is what those cases were always
- * about.
  */
 export interface FleetPanelListing {
   readonly listing: FleetListingStatus;
