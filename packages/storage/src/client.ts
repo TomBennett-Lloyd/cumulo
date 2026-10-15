@@ -33,6 +33,9 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  *    propagates straight through it. Owner: the **SDK layer** — this constant,
  *    2 attempts.
  *
+ *    Why the budget stays 2 rather than growing to cover this shape: #166
+ *    re-derived it rather than inheriting #122's number.
+ *
  *    The cost is real and is stated rather than argued away: on the one
  *    genuinely user-visible throttle path ADR 0002 names, the synchronous
  *    per-site fan-out behind a dashboard load, a read the table keeps
@@ -75,7 +78,12 @@ import { MAX_BACKOFF_DELAY_MS, fullJitterDelayMs } from './batch';
  * path (shape 4), neither of which the SDK layer can see.
  *
  * ADR 0002 Consequence 5's requirement is unchanged and is why the number lives
- * here at all: pinned explicitly, never inherited.
+ * here at all: pinned explicitly, never inherited. The SDK's *default* is 3
+ * attempts with a 500 ms throttling base; its 2026 behaviour (4 attempts,
+ * 1000 ms throttling base) only switches on when the `AWS_NEW_RETRIES_2026`
+ * environment variable is set, and it was verified against the installed SDK
+ * (`@smithy/core` 3.31.x, `Retry.v2026`) that there is no client-config route
+ * to that flag.
  */
 export const STORAGE_MAX_ATTEMPTS = 2;
 

@@ -213,7 +213,7 @@ packages/storage/src/adapters/weather/weather-fixtures.ts	2000
 packages/storage/src/adapters/weather/weather-item.ts	5301
 packages/storage/src/aws-test-guard.setup.ts	7800
 packages/storage/src/batch.ts	5388
-packages/storage/src/client.ts	7704
+packages/storage/src/client.ts	7801
 packages/storage/src/command-worst-case.ts	6250
 packages/storage/src/errors.ts	5400
 packages/storage/src/index.ts	5491
