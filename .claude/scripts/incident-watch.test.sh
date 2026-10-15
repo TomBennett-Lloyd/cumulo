@@ -515,6 +515,13 @@ dlq=$(owned_string "$REPO/infra/ingestion/alarms.tf" '^ *alarm_name *= *"(cumulo
 grep -qF "\"^${dlq}\${env_name}-\"" "$WATCH" || bad "incident-watch.sh does not match the DLQ alarm prefix"
 end
 
+new_case "the skill's exit-2 rule quotes the refusal and the budget lines this script prints"
+for line in "refusing to run as anything but the observer" "the tick budget ran out"; do
+  grep -qF "$line" "$WATCH" || bad "incident-watch.sh no longer prints '$line'"
+  grep -qF "$line" "$REPO/.claude/skills/incident-watch/SKILL.md" || bad "SKILL.md's Exit 2 rule does not quote '$line'"
+done
+end
+
 # --- the policy ----------------------------------------------------------------------------
 
 ALLOWED="cloudwatch:DescribeAlarmHistory

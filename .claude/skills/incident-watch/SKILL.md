@@ -43,7 +43,9 @@ Exit 1 (`VERDICT act`): for each alarm under `IN ALARM` or `RAISED IN THE LAST H
 2. **An open lane caused it** — the transition follows that lane's merge. Bounce it: `FIX — <alarm> since <time>: <log line>` via SendMessage.
 3. **Nothing covers it** — open an issue labelled `discovered` quoting the alarm name, the since time, the reason text and the log lines, then run it through `/run-issue` as a hotfix lane.
 
-Exit 2 (no verdict): the stderr line names the failed call. `AccessDenied` or an expired/missing profile is the owner's to fix — tell them once, quoting the line, and stop the loop until they do. Never retry as another identity.
+Exit 2 (no verdict): the stderr line names the failed call. `AccessDenied`, an expired/missing profile, or `refusing to run as anything but the observer` is the owner's to fix — tell them once, quoting the line, and stop the loop until they do. Never retry as another identity.
+
+Any other exit 2 — a timeout, a reset connection, `the tick budget ran out`, an unreadable response — is not a key fault: report the line once and leave the loop running, so the next tick retries. If that tick is no verdict too, tell the owner, quoting both lines.
 
 ## Never
 
