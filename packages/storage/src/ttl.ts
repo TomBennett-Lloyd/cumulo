@@ -6,16 +6,11 @@ import type { UtcIsoTimestamp } from '@cumulo/shared';
  * block, and every row in this repo that goes away on its own.
  *
  * DynamoDB requires TTL to be a Number attribute holding a Unix epoch time in
- * **seconds** — milliseconds are silently never expired, which is the kind of
- * quiet wrongness that only shows up as a storage bill months later.
+ * **seconds** — milliseconds are silently never expired.
  */
 
 /**
- * How long a series point (forecast or generation reading) is kept.
- *
- * 90 days is the accuracy-tracking window: long enough for the error metrics
- * this project exists to show, short enough that the `series` table stays
- * inside the always-free 25 GB (ADR 0002).
+ * How long a series point (forecast or generation reading) is kept (ADR 0002).
  */
 export const SERIES_RETENTION_DAYS = 90;
 
@@ -26,10 +21,10 @@ export const SERIES_RETENTION_DAYS = 90;
  * `aws_dynamodb_table.series`, `.weather` and `.abuse` in
  * `infra/storage/tables.tf` own the deployed name, and DynamoDB expires rows by
  * *that* name — an item written under any other one is simply never reaped, at
- * no error and no cost signal until the table stops being small. The pair is
+ * no error. The pair is
  * declared to `.claude/scripts/check-infra-mirrors.sh` (rule 8), so the three
  * tables and this constant are held equal by `pnpm check:infra-mirrors` in the
- * `verify` composite rather than by the comments that cite each other.
+ * `verify` composite.
  *
  * Every production writer of an expiring item names the attribute through this
  * constant, so the name has one owner on the code side too: the series, weather

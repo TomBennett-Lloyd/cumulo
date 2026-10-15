@@ -9,10 +9,8 @@ import { blockKey, rateWindowKey, toBlockItem, toBlockedUntil, toRequestCount } 
  * The `cumulo-abuse` adapter — the state behind the per-IP request limiter on
  * the public write path (#29).
  *
- * It is the one table in this repo that exists because the API is anonymous:
- * an HTTP API has no usage plans and no API keys (a REST-API feature), and WAF
- * cannot attach to one at all, so per-address limiting is application state.
- * On-demand billing, and TTL on every row, is what keeps that decision free —
+ * It is the one table in this repo that exists because the API is anonymous
+ * (ADR 0006). On-demand billing, and TTL on every row, is what keeps that decision free —
  * see `infra/storage/tables.tf`.
  *
  * This adapter deliberately holds **no policy**. How many requests a window
@@ -22,10 +20,7 @@ import { blockKey, rateWindowKey, toBlockItem, toBlockedUntil, toRequestCount } 
  * is only the storage: increment a counter, read a block, write a block.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
- * comment on `createStorageDocumentClient`. It matters least on this table: a
- * limiter that occasionally reads a block a moment late admits one more
- * request, which is well inside the tolerance a fixed-window limiter already
- * has.
+ * comment on `createStorageDocumentClient`.
  */
 
 /** Epoch seconds, because DynamoDB TTL is defined in seconds and nothing else. */
@@ -34,11 +29,6 @@ const nowEpochSeconds = (): number => Math.floor(Date.now() / 1000);
 export interface AbuseAdapterDeps extends StorageAdapterDeps {
   /**
    * Injectable for tests; production leaves it unset and gets the real clock.
-   *
-   * A clock is a dependency rather than a `Date.now()` call in the middle of
-   * `getBlock` because the *decision* it feeds — has this block expired? — is
-   * the interesting behaviour, and a test should be able to stand either side
-   * of the instant without waiting for it.
    */
   readonly nowEpochSeconds?: () => number;
 }
@@ -75,9 +65,7 @@ export class AbuseAdapter extends StorageAdapterBase {
    *
    * `ADD` is an atomic counter, so concurrent requests from one address cannot
    * lose an increment between a read and a write — which is the only reason
-   * this is a limiter rather than an estimate. The post-increment value comes
-   * back on the same round trip (`UPDATED_NEW`), so deciding "over the limit"
-   * costs one call rather than a write plus a read.
+   * this is a limiter rather than an estimate.
    *
    * The TTL attribute is written with `if_not_exists`, so the first request in a
    * window sets the row's lifetime and later ones never push it out: a busy
@@ -101,12 +89,7 @@ export class AbuseAdapter extends StorageAdapterBase {
           TableName: this.tableName,
           Key: { pk },
           // The TTL attribute is named through {@link TTL_ATTRIBUTE_NAME}
-          // rather than spelled into the expression: this is the only writer of
-          // a rate-window row's TTL, and it writes it in an expression string
-          // where a stale name is not a type error. Renaming the constant would
-          // otherwise leave these rows written under a name DynamoDB no longer
-          // reaps — the silent failure `ttl.ts` describes, in the one table
-          // whose whole point is that its rows go away.
+          // rather than spelled into the expression (`packages/storage/src/ttl.ts`).
           UpdateExpression: `ADD requestCount :one SET ${TTL_ATTRIBUTE_NAME} = if_not_exists(${TTL_ATTRIBUTE_NAME}, :exp)`,
           ExpressionAttributeValues: { ':one': 1, ':exp': expiresAtEpochSeconds },
           ReturnValues: 'UPDATED_NEW',
@@ -124,9 +107,7 @@ export class AbuseAdapter extends StorageAdapterBase {
    * is reported as **not blocked**. That is the whole reason this method owns a
    * clock: DynamoDB's TTL deletion is best-effort and typically lands within
    * days, not seconds, so "the row is still there" is not the same fact as "the
-   * block is still in force". Trusting presence alone would turn a one-hour
-   * block into an indefinite one, which on an anonymous demo means a visitor
-   * behind a shared NAT locked out for as long as DynamoDB felt like it.
+   * block is still in force".
    */
   async getBlock(ip: string): Promise<BlockStatus> {
     const pk = blockKey(ip);
@@ -150,7 +131,7 @@ export class AbuseAdapter extends StorageAdapterBase {
    *
    * A plain overwrite: re-blocking an already-blocked address extends the block
    * to the new instant, which is what a client still hammering the limiter has
-   * earned. There is nothing to read first and therefore no race to lose.
+   * earned.
    */
   async putBlock(ip: string, blockedUntilEpochSeconds: number): Promise<void> {
     requireEpochSeconds('putBlock', 'blockedUntilEpochSeconds', blockedUntilEpochSeconds);

@@ -19,7 +19,7 @@
 export const MAX_BACKOFF_DELAY_MS = 20_000;
 
 /**
- * DynamoDB's hard per-request limit for `BatchWriteItem`: 25 items.
+ * DynamoDB's hard per-request limit for `BatchWriteItem`.
  *
  * One copy rather than one per adapter (`docs/standards/structure.md` rule 7).
  *
@@ -45,8 +45,7 @@ export interface BackoffSpec {
  *
  * Full rather than equal jitter because every site in the fleet retries against
  * the same handful of tables — correlated backoff is what turns a throttle into
- * a thundering herd, whether the ceiling it piles into is a provisioned one
- * (`series`) or on-demand's per-partition limit.
+ * a thundering herd.
  *
  * `retryAttempt` is 1-based: 1 is the first retry (the initial try is not a
  * retry), so the first retry's cap is exactly `baseDelayMs`.
@@ -65,9 +64,7 @@ export const fullJitterDelayMs = (retryAttempt: number, spec: BackoffSpec): numb
 /**
  * How hard to push a batch before accepting a partial result.
  *
- * `maxAttempts` counts the initial send, so `3` means one send plus two
- * retries. `sleep` is injected only by tests; production leaves it unset and
- * gets the real timer.
+ * `maxAttempts` counts the initial send.
  */
 export interface BatchPolicy {
   readonly maxAttempts: number;
@@ -77,7 +74,7 @@ export interface BatchPolicy {
 
 /**
  * The failure policy for batch operations, stated once and reused (error-handling
- * rule 3): three attempts, 200 ms full-jitter base. Deliberately short — an
+ * rule 3). Deliberately short — an
  * unresolved batch is reported to the caller as `partial`, not hidden behind a
  * long retry loop.
  */
@@ -100,8 +97,7 @@ export type DrainOutcome<TReq> =
  *
  * Adapters narrow the outcome this way because the unprocessed entries are
  * SDK-shaped write requests — transport, not domain — so handing them out would
- * leak the wire format through the package surface. The count is what a caller
- * can act on: log it, alarm on it, or re-derive the items from its own input.
+ * leak the wire format through the package surface.
  */
 export type BatchWriteOutcome =
   | { readonly status: 'complete' }
@@ -129,9 +125,6 @@ export const realSleep = (ms: number): Promise<void> =>
  * `docs/standards/error-handling.md` rule 2 forbids, so a policy this broken is
  * a violated invariant and throws (rule 1) rather than being quietly clamped to
  * something sane.
- *
- * `operation` names the caller so the message points at the loop that
- * refused, not at this helper.
  */
 export const requireUsablePolicy = (operation: string, policy: BatchPolicy): void => {
   if (!Number.isInteger(policy.maxAttempts) || policy.maxAttempts < 1) {
@@ -160,9 +153,8 @@ const chunk = <TReq>(requests: readonly TReq[], batchSize: number): TReq[][] => 
  * policy's attempts run out.
  *
  * `send` returns the *unprocessed* subset of the batch it was given (empty
- * array = fully accepted). It is injected rather than being an SDK call so the
- * retry arithmetic is pure and testable without mocking AWS, and so adapters
- * keep ownership of command construction and error wrapping — a rejection from
+ * array = fully accepted). It is injected rather than being an SDK call so
+ * adapters keep ownership of command construction and error wrapping — a rejection from
  * `send` propagates untouched (the adapter converts it to a `StorageError`).
  *
  * Batches are independent: a batch that never drains does not stop later

@@ -23,12 +23,10 @@ export interface StorageAdapterDeps {
  * The dependencies of an adapter that writes in batches.
  *
  * `batchPolicy` means the same thing to the series and the weather adapter —
- * how hard to push this table before reporting failure — and both fall back to
- * `defaultBatchPolicy` when it is absent, so it is one type rather than two. It
+ * how hard to push this table before reporting failure. It
  * governs two pushes, not one: draining an unprocessed batch before reporting
  * `partial`, and (on the weather adapter) re-issuing a `putArchiveDay`
- * transaction that DynamoDB cancelled for capacity. Tests inject a policy that
- * costs no wall-clock time; production leaves it unset.
+ * transaction that DynamoDB cancelled for capacity.
  */
 export interface BatchingAdapterDeps extends StorageAdapterDeps {
   readonly batchPolicy?: BatchPolicy;
@@ -45,7 +43,6 @@ export interface BatchingAdapterDeps extends StorageAdapterDeps {
  * page always finishes it (`docs/standards/typing.md` rule 6).
  */
 export interface QueryPaginationBound {
-  /** May another Query page be started? Checked between pages, never mid-page. */
   readonly hasBudgetForNextPage: () => boolean;
 }
 
@@ -56,12 +53,10 @@ export interface QueryPaginationBound {
  * `complete` exists because a bounded drain has two indistinguishable-looking
  * endings — the table ran out of matching items, or the caller ran out of
  * budget with `LastEvaluatedKey` still set — and only the second one means the
- * items are a prefix. Returning the flag beside the items is what stops the
- * second ending from being read as the first.
+ * items are a prefix.
  */
 export interface QueryPagesResult {
   readonly items: Record<string, unknown>[];
-  /** False when the bound stopped pagination with LastEvaluatedKey still set. */
   readonly complete: boolean;
 }
 
@@ -74,8 +69,7 @@ export interface QueryPagesResult {
  *
  * The hierarchy is one level deep and stays that way: this base extends
  * nothing, and an adapter extending anything other than this base is a review
- * blocker. Nothing here is abstract either — this class offers mechanism the
- * adapters call, never a hook they are expected to fill in.
+ * blocker.
  */
 export class StorageAdapterBase {
   protected readonly client: DynamoDBDocumentClient;
@@ -93,8 +87,7 @@ export class StorageAdapterBase {
    *
    * Only the sends belong inside `call`. Schema parsing happens on the way out,
    * at the call site, so a drifted item keeps its own `ZodError` instead of
-   * being disguised as an AWS failure — every caller in this package is
-   * deliberate about that boundary, and the adapter tests pin it.
+   * being disguised as an AWS failure.
    */
   protected async sending<TResult>(
     operation: string,
@@ -117,8 +110,7 @@ export class StorageAdapterBase {
    *
    * DynamoDB pages at 1 MB regardless of how few items that is in domain terms,
    * so a caller that ignored `LastEvaluatedKey` would silently return a prefix
-   * of the answer — a fleet list quietly missing sites, an archive day quietly
-   * missing its afternoon.
+   * of the answer.
    *
    * So the truncation is not a silence to notice — it is a value,
    * {@link QueryPagesResult.complete}, and a caller that passes a bound is

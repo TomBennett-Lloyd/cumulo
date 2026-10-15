@@ -11,9 +11,7 @@
  * any command is built: a violated invariant, propagated as one
  * (`docs/standards/error-handling.md` rules 1 and 2).
  *
- * Package-internal — deliberately absent from `index.ts`. These are checks this
- * package runs on its own callers, not a validation surface for anyone else to
- * call.
+ * Package-internal — deliberately absent from `index.ts`.
  */
 
 /**
@@ -34,10 +32,6 @@
  * - the read path is allowed to disagree, and does: `listFetchedArchiveDays`
  *   de-duplicates its day list, because "have these days been fetched?" is a set
  *   question. A write is not a set question — it is a claim about each item.
- *
- * `operation` names the public method so the message points at the call the
- * caller made, and the first colliding key is named because that is the one a
- * reader can go and look for.
  */
 export const requireUniqueKeys = (operation: string, keys: readonly string[]): void => {
   const seen = new Set<string>();
