@@ -388,7 +388,7 @@ export const rowCells = (row: HTMLElement): readonly string[] =>
  * The signal is the body's `aria-busy`, which is the panel's own statement that
  * a read is out (`fleet-panel-body.tsx`).
  * The attribute is the better sync
- * point besides: it is the same fact stated where a machine reads it, so a
+ * point: it is the same fact stated where a machine reads it, so a
  * rewording of any copy cannot desynchronise every suite that shares this
  * fixture.
  *

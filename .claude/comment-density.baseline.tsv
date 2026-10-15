@@ -87,7 +87,7 @@ apps/web/src/charts/forecast-chart-test-fixture.tsx	4110
 apps/web/src/charts/tooltip-geometry.ts	7523
 apps/web/src/charts/use-chart-width.ts	7666
 apps/web/src/dashboard/Dashboard.tsx	5504
-apps/web/src/dashboard/FleetPanel.tsx	6016
+apps/web/src/dashboard/FleetPanel.tsx	6008
 apps/web/src/dashboard/LazyMapRegion.tsx	6899
 apps/web/src/dashboard/MapRegion.tsx	5942
 apps/web/src/dashboard/chart-unit.ts	7372

@@ -192,7 +192,6 @@ interface SiteOverlayHours {
  * The selected site's own hours — forecast and measured — or an empty answer
  * when nothing is selected.
  *
- *
  * **Two reads, one metered call** (#530). `HttpFleetDataSource` answers both out
  * of the same `GET /v1/sites/{id}/series` payload and shares the in-flight
  * request between them (`apps/web/src/data/http-fleet-data-source.ts`'s

@@ -319,3 +319,21 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `docs/standards/prose.md` rules 4 and 6; `packages/storage/src/adapters/abuse/abuse-adapter.ts` (the `ADR 0006` citation added by #545 batch "storage 2")
 - What: the standard asks for an ADR cited by filename, while source under `apps` and `packages` uses the bare `ADR NNNN` form 255 times against 3 by `docs/adr/NNNN-` path (reviewer's count). Either the rule or the practice should move, repo-wide; a trim batch is not the place to force it
 - Source: #545 batch "storage 2" review pass 1 SYSTEMIC
+
+## 2026-10-15 — the `panel` docblock in the web panel test fixture is separated from `panel`
+
+- Where: `apps/web/src/dashboard/fleet-panel-test-fixture.tsx` (the docblock that opens "The panel as the page mounts it" sits above `FleetPanelListing`, and `LISTED_FLEET` stands between it and `export const panel`)
+- What: two docblocks stack, so the first documents nothing adjacent. The separation predates #545 and a delete-only trim cannot move a comment; the fix is a relocation of the docblock beside `panel`
+- Source: #545 batch "web 3" review pass 1 SYSTEMIC
+
+## 2026-10-15 — `sweep-report.sh` does not check that every deleted comment run has a ledger row
+
+- Where: `.claude/scripts/sweep-report.sh`; `docs/standards/prose.md` § Trim batches rule 2
+- What: the script validates rows, not coverage, so an undispositioned deletion is found by the reviewer rather than by the tool. In #545 batch "web 3" seven rows pointed at the kept line before their deleted run, each one line off, and nothing flagged it. A coverage pre-check (every run of lines removed by `git diff <base>` falls inside, or starts at, a ledger row's line) would make the undispositioned-deletion check of rule 4 mechanical
+- Source: #545 batch "web 3" review pass 1 SYSTEMIC
+
+## 2026-10-15 — `decidePoll`'s no-catch-all rule is held only by a TypeScript return-type error
+
+- Where: `apps/web/src/data/use-first-forecast.ts` (`decidePoll`'s `switch (error.code)`); `eslint.config.mjs`
+- What: #545 batch "web 3" deleted the comment saying the switch must stay exhaustive with no catch-all arm, citing TS2366 as the enforcement. That error fires only while no `default` arm exists, and no switch-exhaustiveness lint rule is enabled, so adding a `default` would silently reintroduce the policy the comment guarded against. Enabling one turns the deleted prose into a lint error (`CLAUDE.md` asks for lint rules over prose)
+- Source: #545 batch "web 3" review pass 1 SYSTEMIC
