@@ -115,9 +115,12 @@ EOF
 
 # json_checks <comma-separated name:status:conclusion> -> the statusCheckRollup array.
 # An empty conclusion is spelled by leaving the third field empty ("web-e2e:IN_PROGRESS:"),
-# which is exactly how GitHub answers for a check that has not finished.
+# which is exactly how GitHub answers for a check that has not finished. A trailing
+# "@<ISO time>" sets startedAt ("checks:COMPLETED:SUCCESS@2026-10-13T16:45:34Z"); the
+# time has colons of its own, hence a different separator. Left off, the field is
+# omitted and the entries of a name tie, so the one listed last wins.
 json_checks() {
-  local first=1 spec name rest status conclusion
+  local first=1 spec name rest status conclusion started
   printf '['
   while IFS= read -r spec; do
     [ -n "$spec" ] || continue
@@ -125,9 +128,16 @@ json_checks() {
     rest=${spec#*:}
     status=${rest%%:*}
     conclusion=${rest#*:}
+    started=""
+    case "$conclusion" in
+      *@*)
+        started=",\"startedAt\":\"${conclusion#*@}\""
+        conclusion=${conclusion%%@*}
+        ;;
+    esac
     [ "$first" = "1" ] || printf ','
-    printf '{"__typename":"CheckRun","name":"%s","status":"%s","conclusion":"%s"}' \
-      "$name" "$status" "$conclusion"
+    printf '{"__typename":"CheckRun","name":"%s","status":"%s","conclusion":"%s"%s}' \
+      "$name" "$status" "$conclusion" "$started"
     first=0
   done <<EOF
 $(printf '%s' "$1" | tr ',' '\n')
@@ -200,6 +210,19 @@ gh_stub() { # gh_stub <path> <state dir>
 state="$2"
 printf '%s\n' "\$*" >>"\$state/calls.log"
 case "\$1 \$2" in
+  "api "*"/protection/required_status_checks")
+    # The base branch's required-check set, one name per line as \`--jq '.contexts[]'\`
+    # prints it. A case replaces \$state/protection, or writes protection.rc to make the
+    # endpoint fail the way an unreachable or unauthorised call does.
+    rc=0
+    [ -f "\$state/protection.rc" ] && read -r rc <"\$state/protection.rc"
+    if [ "\$rc" -ne 0 ]; then
+      printf 'gh: Resource not accessible by integration (HTTP 403)\\n' >&2
+      exit "\$rc"
+    fi
+    [ -f "\$state/protection" ] && cat "\$state/protection"
+    exit 0
+    ;;
   "api "*)
     [ -f "\$state/files" ] && cat "\$state/files"
     rc=0
@@ -324,6 +347,9 @@ fixture() { # fixture <name> [humanAlways JSON array]
   reap_stub "$ROOT/reap" "$STATE"
   prettier_stub "$ROOT/prettier" "$STATE"
   : >"$STATE/calls.log"
+  # The required set the default two-check rollup satisfies; a case that needs another
+  # set rewrites this file (the #653 cases do).
+  must printf 'checks\ngitleaks\n' >"$STATE/protection"
   # The no-op is the default answer, so that a case saying "updated" has to move
   # headRefOid on the reads that follow — an update that reports a write and
   # leaves the head where it was is a state GitHub does not produce, and the
@@ -555,7 +581,7 @@ expect_stdout 'AUTO'
 expect_stdout 'not owed (no humanAlways path in the diff)'
 expect_stdout 'updated onto the base (attempt 1)'
 expect_stdout 'the update moved the head aaa111 -> bbb222'
-expect_stdout '2 check(s) complete'
+expect_stdout '2 required check(s) complete'
 expect_stdout 'merged squash (rc=0), state MERGED'
 expect_stdout 'closed by the merge: #12'
 expect_stdout "none holds '$HEAD_REF'"
@@ -683,7 +709,7 @@ run_merge
 expect_rc 0
 expect_called "pr update-branch $PR"
 expect_stdout 'updated onto the base (attempt 1)'
-expect_stdout '2 check(s) complete on bbb222'
+expect_stdout '2 required check(s) complete on bbb222'
 expect_called "pr merge $PR --squash"
 update_at=$(call_line "pr update-branch $PR")
 merge_at=$(call_line "pr merge $PR")
@@ -1067,8 +1093,8 @@ end
 # 12. an empty rollup is not green — "no check is pending" is trivially true of nothing
 # ==========================================================================================
 # The hole a settle-sleep papers over: immediately after update-branch the new head
-# has no checks registered yet. The pre-update count is the floor the new head must
-# reach, so an empty rollup polls on and, with no budget left, times out saying so.
+# has no checks registered yet. The required set is what the new head must show, so
+# an empty rollup polls on and, with no budget left, times out naming what is absent.
 begin "a rollup that has not registered yet is never read as green"
 fixture unregistered
 must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
@@ -1084,7 +1110,156 @@ POLL_TIMEOUT=30
 expect_rc 1
 expect_stderr 'checks — FAILED'
 expect_stderr 'timed out'
-expect_stderr '0 of an expected 2 check(s) present'
+expect_stderr 'required check(s) not present: checks, gitleaks; 0 check(s) still pending'
+expect_not_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 12d. the checks poll waits for the required-check SET, not a count of runs (#653)
+# ==========================================================================================
+# #650's shape: a head that had two workflow generations listed twelve runs of six
+# names, and the post-update head lists six, so a floor taken from the count of the
+# former could never be met and the poll waited out its whole budget on a CLEAN PR.
+REQUIRED_FIVE='checks\ngitleaks\nterraform\nweb-build\nweb-e2e\n'
+FIVE_GREEN="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS,terraform:COMPLETED:SUCCESS,web-build:COMPLETED:SUCCESS,web-e2e:COMPLETED:SUCCESS"
+
+begin "a doubled pre-update rollup does not raise the bar for the post-update head"
+fixture doubled-generations
+must printf '%b' "$REQUIRED_FIVE" >"$STATE/protection"
+must printf '%s\n' "$UPDATE_WROTE" >"$STATE/update-branch.out"
+V_MSST="BEHIND"
+# Twelve runs, six names (merge-ritual-gate is in the rollup and not in the set).
+V_CHECKS="$FIVE_GREEN,merge-ritual-gate:COMPLETED:SUCCESS,$FIVE_GREEN,merge-ritual-gate:COMPLETED:SUCCESS"
+write_view default
+write_view 1
+V_OID="bbb222"
+V_MSST="CLEAN"
+V_CHECKS="$FIVE_GREEN,merge-ritual-gate:COMPLETED:SUCCESS"
+write_view 2
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_called "api repos/{owner}/{repo}/branches/main/protection/required_status_checks --jq .contexts[]"
+expect_stdout '5 required check(s) complete on bbb222'
+expect_called "pr merge $PR --squash"
+end
+
+begin "a required check absent from the new head is waited for, and named when the budget ends"
+fixture required-absent
+must printf '%b' "$REQUIRED_FIVE" >"$STATE/protection"
+V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS,terraform:COMPLETED:SUCCESS,web-build:COMPLETED:SUCCESS"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr 'checks — FAILED'
+expect_stderr 'timed out'
+expect_stderr 'required check(s) not present: web-e2e; 0 check(s) still pending'
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a required check still running keeps the poll pending"
+fixture required-running
+V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:IN_PROGRESS:"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr 'required check(s) not present: none; 1 check(s) still pending'
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a failing check outside the required set still blocks the merge"
+fixture nonrequired-failing
+V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS,merge-ritual-gate:COMPLETED:FAILURE"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'checks — FAILED'
+expect_stderr "check 'merge-ritual-gate' concluded FAILURE"
+expect_not_called "pr merge $PR --squash"
+end
+
+# A name that appears twice is decided by its NEWEST run by startedAt, not by its
+# position: the real rollup is not ordered by time (PR 641 lists the 16:50 run first).
+T_OLD="2026-10-13T16:45:34Z"
+T_NEW="2026-10-13T16:50:16Z"
+
+begin "the newest run of a name decides: a cancelled older generation listed last does not outvote a green one"
+fixture newest-run-green
+V_CHECKS="checks:COMPLETED:SUCCESS@$T_NEW,gitleaks:COMPLETED:SUCCESS,checks:COMPLETED:CANCELLED@$T_OLD"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_called "pr merge $PR --squash"
+end
+
+begin "the newest run of a name decides: a failure listed before an older green is named, not masked"
+fixture newest-run-fails
+V_CHECKS="gitleaks:COMPLETED:FAILURE@$T_NEW,gitleaks:COMPLETED:SUCCESS@$T_OLD,checks:COMPLETED:SUCCESS"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr "check 'gitleaks' concluded FAILURE"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "the newest run of a name decides: a rerun in flight listed before an older green keeps the poll pending"
+fixture newest-run-running
+V_CHECKS="gitleaks:IN_PROGRESS:@$T_NEW,gitleaks:COMPLETED:SUCCESS@$T_OLD,checks:COMPLETED:SUCCESS"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr '1 check(s) still pending'
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a non-required check still running keeps the poll pending although every required check is green"
+fixture nonrequired-running
+V_CHECKS="checks:COMPLETED:SUCCESS,gitleaks:COMPLETED:SUCCESS,merge-ritual-gate:IN_PROGRESS:"
+write_view default
+write_merged_view
+POLL_TIMEOUT=0
+run_merge
+POLL_TIMEOUT=30
+expect_rc 1
+expect_stderr 'required check(s) not present: none; 1 check(s) still pending'
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "an unreadable protection endpoint fails at the checks step and never merges"
+fixture protection-unreadable
+must printf '1\n' >"$STATE/protection.rc"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'checks — FAILED'
+expect_stderr 'could not read required checks for main (gh api exited 1)'
+expect_stderr 'HTTP 403'
+expect_not_called "pr merge $PR --squash"
+[ ! -f "$STATE/merged" ] || bad "a merge was recorded although the required set could not be read"
+end
+
+begin "an empty required set is an unknown set, never a vacuous pass"
+fixture protection-empty
+: >"$STATE/protection"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'could not read required checks for main: branch protection lists none'
 expect_not_called "pr merge $PR --squash"
 end
 
@@ -1092,9 +1267,9 @@ end
 # 12b. the post-update rollup that is still the OLD head's is waited out, in one run
 # ==========================================================================================
 # PR #501's sequence exactly: update-branch wrote, and the next read answered the
-# old head's sha, the old head's rollup — complete, none pending, so the baseline
-# floor was satisfied by it — and BLOCKED. The floor cannot separate that answer
-# from a fresh one; the sha can. The property is that ONE invocation waits and then
+# old head's sha, the old head's rollup — complete, none pending, so the required
+# set was satisfied by it — and BLOCKED. The set cannot separate that answer from
+# a fresh one; the sha can. The property is that ONE invocation waits and then
 # merges, because the manual repair for this was a second run 90 s later.
 begin "a post-update rollup still belonging to the old head is waited out, then merged"
 fixture stale-rollup
@@ -1112,7 +1287,7 @@ run_merge
 expect_rc 0
 expect_stdout 'updated onto the base (attempt 1)'
 expect_stdout 'the update moved the head aaa111 -> bbb222'
-expect_stdout '2 check(s) complete on bbb222'
+expect_stdout '2 required check(s) complete on bbb222'
 expect_not_stdout 'complete on aaa111'
 expect_not_stderr "mergeStateStatus is 'BLOCKED'"
 expect_called "pr merge $PR --squash"
@@ -1428,8 +1603,8 @@ end
 # ==========================================================================================
 # gh prints "PR branch already up-to-date" and exits 0. A step that reported every
 # rc=0 as "updated onto the base" would claim a write that never happened — and the
-# checks baseline it implies is the difference between waiting for a new head's
-# workflows and merging on the old head's results.
+# wait it implies is the difference between waiting for a new head's workflows
+# and merging on the old head's results.
 begin "an rc=0 'already up-to-date' answer is reported as a no-op, not as an update"
 fixture noop-success
 write_view default
@@ -1876,7 +2051,7 @@ run_merge
 expect_rc 0
 expect_stdout "$TD unioned and pushed"
 expect_stdout 'updated onto the base (attempt 1)'
-expect_stdout '2 check(s) complete on ddd444'
+expect_stdout '2 required check(s) complete on ddd444'
 expect_not_stderr "mergeStateStatus is 'BLOCKED'"
 expect_called "pr merge $PR --squash"
 end
@@ -1916,7 +2091,7 @@ write_merged_view
 run_merge
 expect_rc 0
 expect_stdout "$TD unioned and pushed"
-expect_stdout '2 check(s) complete on eee555'
+expect_stdout '2 required check(s) complete on eee555'
 expect_not_stdout "complete on $pre_union_head"
 expect_not_stderr "mergeStateStatus is 'BLOCKED'"
 expect_called "pr merge $PR --squash"
@@ -1949,7 +2124,7 @@ run_merge
 union_sha=$(git -C "$ROOT/wt" rev-parse HEAD)
 expect_rc 0
 expect_stdout "$TD unioned and pushed"
-expect_stdout "2 check(s) complete on $union_sha"
+expect_stdout "2 required check(s) complete on $union_sha"
 expect_called "pr merge $PR --squash"
 end
 
@@ -2135,10 +2310,10 @@ end
 begin "a non-numeric env knob is a usage error"
 fixture knob
 write_view default
-capture -C "$REPO" env MERGE_PR_GH_CMD="$ROOT/gh" MERGE_PR_EXPECTED_CHECKS=lots \
+capture -C "$REPO" env MERGE_PR_GH_CMD="$ROOT/gh" MERGE_PR_CONFIRM_RETRIES=lots \
   bash "$SUBJECT" "$PR" "$REPO"
 expect_rc 2
-expect_stderr 'MERGE_PR_EXPECTED_CHECKS must be a non-negative integer'
+expect_stderr 'MERGE_PR_CONFIRM_RETRIES must be a non-negative integer'
 end
 
 finish
