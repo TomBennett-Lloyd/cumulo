@@ -301,3 +301,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/scripts/tidy-tech-debt.sh` (`issue_text` and the closed-quote test)
 - What: a capture issue closed as a duplicate of an open issue that paraphrases the entry would retire live debt, so the "cannot retire live debt" claim holds only for quotes. A `stateReason` filter closes it; whether NOT_PLANNED should retire is the owner's call. The open list's `--limit 1000` would also fail open if it ever truncated (174 open today)
 - Source: #634 review pass 1 SYSTEMIC
+
+## 2026-10-14 — existing CLI stubs predate the captured-response sentence in testing rule 3
+
+- Where: `.claude/scripts/incident-watch.test.sh` (hand-typed JSON with plain `Z` timestamps, no stated source), `.claude/scripts/install-shellcheck.test.sh` (the `curl` and `uname` stubs); `docs/standards/testing.md` rule 3
+- What: the sentence #648 added makes these stubs non-compliant, and fixtures that must be built relative to the current time (#638's cases use `jq now`) cannot be captured responses at all. Either bring the stubs into line or say in the rule when a constructed fixture is allowed
+- Source: #648 review pass 1 SYSTEMIC
+
+## 2026-10-14 — testing rules 5 and 6 describe only vitest and TypeScript
+
+- Where: `docs/standards/testing.md` rules 5-6; the `.claude/scripts/*.test.sh` harnesses and their runner
+- What: the standards index now routes shell-harness authors to `testing.md`, but "typed (no `any` in fixtures)", builders/factories and the `*.test.ts` naming split leave the 22 shell harnesses outside every rule. Predates #648, which only made the gap reachable
+- Source: #648 review pass 1 SYSTEMIC

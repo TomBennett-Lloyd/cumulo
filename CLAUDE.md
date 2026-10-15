@@ -36,9 +36,9 @@ Policy:
 - Changing behaviour that a comment beside it argues for or defends — which makes that comment part of the change surface? → `docs/standards/architecture.md`
 - Writing or editing a code comment, docblock, or standing doc — including any figure in prose, any mention of other code, or a restated architectural argument? → `docs/standards/prose.md`
 - Creating or splitting a file, extracting/naming a helper, choosing function vs class, or copy-pasting code? → `docs/standards/structure.md`
-- Writing a `catch`, or deciding what happens when something fails? → `docs/standards/error-handling.md`
+- Writing a `catch`, or making a call that can fail — network, AWS, a subprocess, a CLI — in any language? → `docs/standards/error-handling.md`
 - Writing or changing a security policy whose directives have fallback semantics — a CSP, a CORS policy, any response header where an omitted directive inherits from another? → `docs/standards/security.md`
-- Writing or modifying tests, or deciding what to test? → `docs/standards/testing.md`
+- Writing or changing a test or test harness, in any language, including a shell stub? → `docs/standards/testing.md`
 - Adding, moving, or restyling anything a user sees — a component, layout, spacing, visible text or a label, a chart mark, a breakpoint or media query, focus or hover behaviour? → `docs/standards/design.md`
 
 These docs are self-contained — one hop only, no chained references. If a rule in them could become a lint rule, promote it and delete the prose (see the `retro` skill).
