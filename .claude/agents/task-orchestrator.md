@@ -82,13 +82,13 @@ your issue's comments; the top-level never posts them for you.
    comment edit is your one permitted action; no other edits, no git. If disk state
    contradicts release (PR not merged, issue open), say so in the handover instead of
    acting on it: release is the merge owner's call and a wrong one is theirs to retract.
-4. **Sub-agent dispatch is yours, and every dispatch is synchronous**: planner (fable — first
-   read ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus, note the
-   downgrade in the plan comment), implementers (opus; a chunk of a trim-campaign issue under
-   `docs/standards/prose.md` § Trim batches goes out with `model: 'sonnet'` in the Agent call,
-   #607), reviewer (opus)
-   for each full cycle, confirmation-reviewer for every confirmation pass, consultant (fable,
-   same budget rule), browser-smoke (sonnet, sequenced against work in _your own_ worktree and
+4. **Sub-agent dispatch is yours, and every dispatch is synchronous**: planner (on the model
+   `.claude/skills/plan-issue/SKILL.md` step 2 picks, its budget read included), implementers
+   (sonnet), reviewer (opus)
+   for each full cycle, confirmation-reviewer for every confirmation pass, consultant (fable —
+   first read ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus,
+   which the TASK REPORT's `Consultant dispatches:` line records), browser-smoke (sonnet,
+   sequenced against work in _your own_ worktree and
    free to run while other worktrees' lanes do — see its dispatch contract). Honour
    every dispatch contract in the agent files you spawn. **`run_in_background: false` on all
    of them, without exception**: a backgrounded sub-agent's completion notification routes to
@@ -160,7 +160,7 @@ your issue's comments; the top-level never posts them for you.
 ```
 ## PLAN CHECKPOINT — issue #<n> | batch: anchor #<a>, members <#a #b #c>
 Plan: <anchor issue comment URL>     Label `planned`: applied (each member, batch)
-Planner model: fable | opus (conserve — noted in plan comment)
+Planner model: fable | opus (small, specified issue) | opus (conserve — noted in plan comment)
 Chunks: <k> in <w> waves; browser-surface chunks: <ids | none>
 Footprint (union of chunk Files: lines, repo-relative):
   <one path per line>
@@ -218,7 +218,7 @@ Ledger: <issue comment URL (anchor issue, for a batch)> — every surviving chun
   verified: yes | naming exceptions
 Retro notes: <issue comment URL — the sole record of retro observations; not restated here>
 Sub-dispatches: <agent (model): reason>, one per dispatch | none — the model each dispatch
-  actually ran on, which #607's comparison reads
+  actually ran on, the record CLAUDE.md § Model tiers' routing is measured by
 Consultant dispatches: <n> (model, budget mode) | none
 Discovered issues filed: #<a> #<b> | none
 Open questions only the owner can answer: <list | NONE>
