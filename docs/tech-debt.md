@@ -146,5 +146,11 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 ## 2026-10-15 — a `conserve` downgrade is recorded in four different places
 
 - Where: `CLAUDE.md` § Model tiers ("note the downgrade in the issue"); `.claude/skills/plan-issue/SKILL.md` step 2 (the plan comment); `.claude/agents/ticket-agent.md` rule 5(a) ("noted in the report"); `.claude/agents/task-orchestrator.md` rule 4's consultant clause (the TASK REPORT's `Consultant dispatches:` line)
-- What: each site names a different record for the same event. Before #607's graduation the consultant clause inherited the planner's "plan comment"; it now points at the TASK REPORT, a message of which only the header line reaches the PR body. The fix is for `CLAUDE.md` to name one site and the others to cite it, but `CLAUDE.md` is `humanAlways` and the change is cross-cutting.
+- What: each site names a different record for the same event. Before #607's graduation the consultant clause inherited the planner's "plan comment"; it now points at the TASK REPORT. The fix is for `CLAUDE.md` to name one site and the others to cite it, but `CLAUDE.md` is `humanAlways` and the change is cross-cutting.
 - Source: #607 review cycle 1 (PR for `607-graduate-sonnet`)
+
+## 2026-10-15 — `ticket-agent.md` rule 8 calls "no interim narration" the lane's cost advantage, and the sentence that defined that advantage is gone
+
+- Where: `.claude/agents/ticket-agent.md` rule 8, "which is the lane's cost advantage stated as a rule"
+- What: #607's review round deleted rule 3's "the lane's cost advantage is that the ticket's whole reasoning happens once, in one context", because plan-first routing contradicts it, so the rule 8 clause has no antecedent. The rule stands on its own and drives no wrong behaviour; trimming the clause tidies it.
+- Source: #607 review cycle 1 confirmation pass (PR for `607-graduate-sonnet`)
