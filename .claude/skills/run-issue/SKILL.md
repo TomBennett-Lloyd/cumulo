@@ -68,6 +68,12 @@ each was caught only because the lane checked (#681).
    a `humanAlways` PR whose entry still carries the `pending — filled at merge` placeholder
    is refused outright — so the fill above stays a bounce to the agent, and every judgement
    this prose owns stays yours.
+   **A `STATUS: PARTIAL` report merges nothing until you judge whether its done part is useful
+   on its own** (`.claude/agents/ticket-agent.md` rule 5). Useful: file the cut part as its own
+   issue carrying the original's labels, the acceptance criteria that were cut and a priority
+   relative to the original's follow-ups ("do before #<k>", or a milestone), link it from the
+   original, and send the lane `DESCOPE — #<m>`; its DONE re-report then takes this step from
+   the top. Not useful: the lane finishes, is resumed (step 5), or the issue is re-planned.
 4. **Rebase hand-off** — your second touchpoint, and only when `main` moved. After every
    merge, `gh pr view --json mergeStateStatus` on each open lane PR. `BEHIND` → run
    `gh pr update-branch` yourself; it is mechanical. `DIRTY` → `REBASE — <what merged since
