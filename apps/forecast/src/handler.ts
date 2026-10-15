@@ -62,9 +62,6 @@ const failsTheRecord = (outcome: MessageOutcome): boolean =>
  * `cumulo-series`' provisioned write capacity, so concurrency inside an invocation
  * would fight the very throttling the mapping's `maximum_concurrency = 2` exists to
  * avoid.
- *
- * Every outcome is logged before the summary, and the summary is emitted even for
- * an empty batch.
  */
 export const createHandler =
   (deps: ConsumeMessageDeps): ForecastHandler =>

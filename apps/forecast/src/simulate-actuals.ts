@@ -20,7 +20,7 @@ import type {
  *
  * The fleet is synthetic and has no metering feed, so an "actual" is manufactured from the physics
  * forecast that was stored for the same hour — `simulatedActualFromForecast` in `@cumulo/shared`
- * owns that derivation and the ±15 % draw it applies (#264). This module owns only *which* hours
+ * owns that derivation (#264). This module owns only *which* hours
  * get one, and the effects: one read of the trailing window per site, one batch write per site
  * that needs it.
  *
@@ -44,8 +44,7 @@ const MILLISECONDS_PER_HOUR = 3_600_000;
 /**
  * The instant `hours` before `instant`, in the one timestamp form ADR 0002's range queries accept.
  *
- * `Date` is the arithmetic, never the clock: the input instant is supplied by the caller. The
- * result is parsed rather than asserted, so the fixed-width normalization and the brand cannot
+ * The result is parsed rather than asserted, so the fixed-width normalization and the brand cannot
  * disagree — `toISOString` always emits milliseconds and this domain's timestamps never carry
  * them (`timestamp.ts` explains why the width is load-bearing).
  *
@@ -104,10 +103,7 @@ export const planSimulatedActuals = (
   );
 };
 
-/**
- * The log event every per-site outcome is written under, exported so a test asserts on the name
- * the operator greps for rather than on a copy of it.
- */
+/** The log event every per-site outcome is written under. */
 export const simulatedActualsOutcomeEvent = 'forecast.actuals.outcome';
 
 /**
@@ -137,8 +133,7 @@ type SiteActualsOperation = 'querySeriesRange' | 'planSimulatedActuals' | 'putGe
  *
  * `series` is narrowed to the two methods this producer uses, so the read it adds to a service
  * that previously only wrote series (`infra/forecast/iam.tf` carries the matching grant) is a
- * compile-time fact and not merely an IAM one. The adapter is passed whole rather than as
- * `adapter.querySeriesRange` (`docs/standards/structure.md` rule 3).
+ * compile-time fact and not merely an IAM one.
  */
 export interface SimulateActualsDeps {
   readonly series: Pick<SeriesAdapter, 'querySeriesRange' | 'putGenerationReadings'>;
@@ -244,9 +239,6 @@ const simulateSiteActuals = async (
  * the reason `runLocation` in `apps/ingestion/src/cycle.ts` is written the same way: these sites
  * share one table's capacity, and one site's rejection must not abandon its siblings — a fan-out
  * that failed fast would leave the remaining sites' hours to a later run for no benefit.
- *
- * Each outcome is logged as it is decided, so a run killed mid-way has still said what it did for
- * the sites it reached.
  */
 export const simulateTrailingActuals = async (
   deps: SimulateActualsDeps,

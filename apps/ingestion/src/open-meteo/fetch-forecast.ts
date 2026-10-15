@@ -10,8 +10,6 @@ import { buildForecastUrl, type ForecastLocation } from './url';
  * normalization stay in `url.ts` / `response.ts`, so what is left here is purely
  * the failure policy — timeout, retry, and how each provider answer maps onto an
  * outcome the caller must handle.
- *
- * Standalone functions over an explicit policy, rather than a client object.
  */
 
 /**
@@ -38,12 +36,7 @@ export interface ForecastFetchDeps {
   readonly random?: () => number;
 }
 
-/**
- * The same policy with nothing left to default, which is what every step below
- * takes. Resolving once at the entry point keeps the defaults in one place and
- * leaves the steps under it free of `??`, so a retry cannot run under a policy that
- * differs from the attempt before it.
- */
+/** The same policy with nothing left to default, which is what every step below takes. */
 export interface ForecastFetchPolicy {
   readonly fetchFn: typeof fetch;
   readonly timeoutMs: number;
@@ -53,8 +46,7 @@ export interface ForecastFetchPolicy {
 
 /**
  * One attempt's whole input: the resolved policy, the location the readings will be
- * keyed by, and the URL to request. The URL is built once per call rather than once
- * per attempt — a retry has to repeat the same request, not a freshly derived one.
+ * keyed by, and the URL to request.
  */
 export interface ForecastAttempt {
   readonly policy: ForecastFetchPolicy;
@@ -62,10 +54,6 @@ export interface ForecastAttempt {
   readonly url: string;
 }
 
-/**
- * The adapter as its consumer holds it: one location in, one outcome out, with the
- * policy already applied by the composition root.
- */
 export type FetchForecastForLocation = (
   location: ForecastLocation,
 ) => Promise<FetchForecastOutcome>;
@@ -92,13 +80,10 @@ export const FETCH_MAX_ATTEMPTS = 2;
 /** Longest provider text carried in a `detail`; an HTML error page must not flood the logs. */
 const maxDetailLength = 200;
 
-/** Open-Meteo answers a rejected request with `{"error":true,"reason":…}`. */
 const openMeteoErrorSchema = z.object({ error: z.literal(true), reason: z.string() });
 
 /**
- * A transient attempt result. Kept out of {@link FetchForecastOutcome} because
- * "worth one more try" is an internal state of this module, never something the
- * caller sees.
+ * A transient attempt result.
  */
 type AttemptOutcome = FetchForecastOutcome | { outcome: 'transient'; detail: string };
 
@@ -213,7 +198,7 @@ export const fetchForecast = async (
 
   // Full jitter (AWS "Exponential Backoff and Jitter"): a uniform draw, not a
   // fixed delay, so a fleet whose sites all fail in the same cycle does not
-  // re-converge on one instant. No exponent — there is only ever one retry.
+  // re-converge on one instant.
   await policy.sleep(policy.random() * retryBaseDelayMs);
 
   const second = await attemptFetch(attempt);

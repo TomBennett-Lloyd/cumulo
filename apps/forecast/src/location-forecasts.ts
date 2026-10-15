@@ -11,8 +11,7 @@ import {
  * One location's weather horizon, fanned out across the sites at that location.
  *
  * This is the whole of the service's domain logic and it is pure: no clock, no
- * I/O, no environment (`docs/standards/architecture.md` rule 3). The vintage
- * arrives as a parameter precisely so that it is.
+ * I/O, no environment (`docs/standards/architecture.md` rule 3).
  *
  * Site-major rather than reading-major, and the order is not arbitrary: it is the
  * order the rows are written in, and `cumulo-series` partitions by site (ADR
@@ -51,8 +50,7 @@ export interface LocationForecastsInput {
  * The fan-out's whole answer: every row, or the first hour that has none.
  *
  * Two arms rather than a partial row list, because this service's policy is
- * all-or-nothing per message and has to stay that way. `consume-message.ts` fails
- * the record on the `implausible-hour` arm, which redelivers the whole message.
+ * all-or-nothing per message and has to stay that way.
  * Writing the plausible rows and reporting the rest would make the two halves of a
  * message diverge in vintage on redelivery.
  */
@@ -69,14 +67,11 @@ export type LocationForecastsOutcome =
  * Every site × every hour, as `Forecast` rows ready to write.
  *
  * `sites.length × readings.length` rows, always — including the hours a site
- * generates nothing. A night hour produces a row with `acPowerKw: 0`.
+ * generates nothing.
  *
  * The one exception is the site-hour `@cumulo/forecast` reports `implausible` for:
  * a schema-valid weather hour whose physics lands outside `forecastSchema`'s
- * bounds. The fan-out stops at the first one and hands it back, because this
- * service's answer to "who does the operator need to call?" is the queue —
- * `consume-message.ts` fails the record, the redrive retries it, and the DLQ
- * alarm is the signal (#136).
+ * bounds. The fan-out stops at the first one and hands it back (#136).
  */
 export const locationForecasts = (input: LocationForecastsInput): LocationForecastsOutcome => {
   const forecasts: Forecast[] = [];
