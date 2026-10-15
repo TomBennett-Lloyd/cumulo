@@ -42,7 +42,7 @@ Planning, implementation, tests and fix rounds run in your own context. No plann
 
 Targeted tests while iterating (`pnpm --filter <pkg> exec vitest run <patterns>`). The whole `pnpm verify` before every commit — never a subset there — captured as `pnpm verify > <scratch>; rc=$?` (`docs/standards/evidence.md` form 1), and read its `verify root:` line to confirm it names this worktree before you bank the exit code. Commit only green trees.
 
-The branch squash-merges, so commit count is free; every commit subject begins `#<n>:`. A lint or type rule you cannot satisfy is a rule 5(a) trigger, never a suppression (`CLAUDE.md` Commands).
+The branch squash-merges, so commit count is free; every commit subject begins `#<n>:`. The `Co-Authored-By` trailer names the model this lane runs on — the same value as the report's `Lane model:` line — never the model the dispatch text relays: the dispatcher's attribution line is the dispatcher's, and #636, #640 and #641 (Sonnet lanes) landed on `main` crediting Fable, while #643 had to call its accurate trailer a deviation. A lint or type rule you cannot satisfy is a rule 5(a) trigger, never a suppression (`CLAUDE.md` Commands).
 
 **A docblock takes one form, and prose findings are fixed by subtraction.** What the symbol is for; the one non-obvious constraint the code cannot express; a citation for the why (an ADR by filename, a standard's rule by number, an issue, or the test that asserts it). A FIX-NOW on a comment is answered by **delete**, **cite** or **move-to-test**, never by writing more (`docs/standards/prose.md` rule 6).
 
@@ -79,7 +79,7 @@ Classify per `.claude/workflow.json` → `merge.autoRule` and `merge.humanAlways
 
 ## 8. One durable report, then quiet
 
-The `## Lane report` is posted where it outlives you: the PR body when a PR exists, an issue comment otherwise. Your chat return is a courtesy copy. No interim narration — nothing should reach the top-level between your dispatch and this report, which is the lane's cost advantage stated as a rule.
+The `## Lane report` is posted where it outlives you: the PR body when a PR exists, an issue comment otherwise. Your chat return is the `## Lane report` block and the PR URL, verbatim and nothing else: not the PR body's what-and-why, not generated reporting prose, not the pre-check output. The top-level reads the block (`.claude/skills/run-issue/SKILL.md` step 3) and the PR body is the record, so every line above the block in a reply is context the top-level pays for twice; in the week of 2026-10-13 those replies were what filled it fastest. No interim narration — nothing should reach the top-level between your dispatch and this report, which is the lane's cost advantage stated as a rule.
 
 A bounce round (`FIX — <finding>`, `REBASE — <context>`) ends in a refreshed report. A rebase runs `git -c core.commentChar=';' rebase`, with `-c commit.cleanup=strip` on every `rebase --continue`, then the subject check, the `docs/tech-debt.md` union rule and the marker sweep exactly as `.claude/skills/review-loop/SKILL.md` step 5 states them; then re-verify and force-push your own branch only.
 

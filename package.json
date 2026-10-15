@@ -25,6 +25,7 @@
     "check:node-types": "bash .claude/scripts/check-node-types.sh",
     "check:oidc-workflows": "bash .claude/scripts/check-oidc-workflows.sh",
     "check:supply-chain-policy": "bash .claude/scripts/check-supply-chain-policy.sh",
+    "tidy:tech-debt": "bash .claude/scripts/tidy-tech-debt.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm verify:root && bash .claude/scripts/verify-tier.sh",
