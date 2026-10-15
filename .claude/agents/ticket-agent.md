@@ -40,7 +40,7 @@ Planning, implementation, tests and fix rounds run in your own context. No plann
 
 ## 4. Gates and commits
 
-Targeted tests while iterating (`pnpm --filter <pkg> exec vitest run <patterns>`). The whole `pnpm verify` before every commit — never a subset there — captured as `pnpm verify > <scratch>; rc=$?` (`docs/standards/evidence.md` form 1), and read its `verify root:` line to confirm it names this worktree before you bank the exit code. Commit only green trees.
+Targeted tests while iterating (`pnpm --filter <pkg> exec vitest run <patterns>`). The whole `pnpm verify` before every commit — never a subset there — captured as `pnpm verify > <scratch>; rc=$?` (`docs/standards/evidence.md` form 1), and read its `verify root:` line to confirm it names this worktree before you bank the exit code. The full tier outruns the Bash tool's default timeout, so give that call the tool's maximum `timeout`, or run it `run_in_background` and poll for the file: a run the tool killed has no `rc` to bank (#651 and #657 each paid a killed run before backgrounding it). Commit only green trees.
 
 The branch squash-merges, so commit count is free; every commit subject begins `#<n>:`. The `Co-Authored-By` trailer names the model this lane runs on — the same value as the report's `Lane model:` line — never the model the dispatch text relays: the dispatcher's attribution line is the dispatcher's, and #636, #640 and #641 (Sonnet lanes) landed on `main` crediting Fable, while #643 had to call its accurate trailer a deviation. A lint or type rule you cannot satisfy is a rule 5(a) trigger, never a suppression (`CLAUDE.md` Commands).
 
