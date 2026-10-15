@@ -22,8 +22,9 @@ import { utcHoursBefore } from './simulate-actuals';
  * (#615) entry), written after a location's own slices.
  *
  * The slice window `[issuedAt - TRAILING_ACTUALS_HOURS, issuedAt)` and the compaction window
- * (everything before `issuedAt - TRAILING_ACTUALS_HOURS`) are disjoint for one `issuedAt`, so a
- * settled hour has no writer and every invocation computes the identical total: an idempotent Put.
+ * (everything before `issuedAt - TRAILING_ACTUALS_HOURS`) are disjoint within one invocation, so a
+ * later invocation does not rewrite what a total sums: an idempotent Put (the exception is ADR
+ * 0009's residual 1).
  * Failures become a logged outcome, never a rejection, for `fleet-rollup-write.ts`'s reason.
  */
 

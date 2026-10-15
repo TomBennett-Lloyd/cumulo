@@ -9,7 +9,7 @@
 # ---------------------------------------------------------------------------
 # IDLE COST: $0.00/month as billed — which is an allowance, not the absence of
 # a price. Two lines here bill for merely existing: the log group's stored
-# bytes (~$0.0032/month at current volume) and the alarm ($0.10/alarm-month at
+# bytes (~$0.0034/month at current volume) and the alarm ($0.10/alarm-month at
 # list). Both are absorbed by always-free pools rather than being free.
 # ---------------------------------------------------------------------------
 #   * CloudWatch Logs — the at-rest line, and the reason the older phrasing here
@@ -28,9 +28,9 @@
 #     fleet-rollup-write.ts for that location itself (#494), and one
 #     `forecast.fleet-actuals-rollup.outcome` beside it (#506); one
 #     `forecast.fleet-actuals-compaction.outcome` from
-#     fleet-actuals-compaction.ts (#615); plus Lambda's own START, END and
+#     apps/forecast/src/fleet-actuals-compaction.ts (#615); plus Lambda's own START, END and
 #     REPORT. At ~8,760 invocations/month that is ~113,900 lines, so
-#     **13 × 8,760 × 1 KB ≈ 114 MB/month** retained — ~$0.0032/month at
+#     **13 × 8,760 × 1 KB ≈ 114 MB/month** retained — ~$0.0034/month at
 #     ~$0.03/GB-month, and $0.00 as
 #     billed because it sits inside the account's always-free 5 GB of stored
 #     logs. That ~114 MB is a **bound, not a measurement**, and generously so:

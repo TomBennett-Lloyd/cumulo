@@ -17,9 +17,9 @@ import { utcIsoTimestampSchema } from './timestamp';
 export const FLEET_ROLLUP_ACTUALS_KIND = { kind: 'generation' } as const satisfies SeriesKind;
 
 /**
- * How far back each forecast run re-simulates actuals and rewrites their slices — three hours, so
- * a missed cycle is repaired by the next. The API checks membership on these hours only (ADR 0009's
- * #506 amendment) and the producer compacts the hours before them (`fleet-actuals-compaction.ts`).
+ * How far back each forecast run rewrites its actuals slices — three hours, so a missed cycle is
+ * repaired by the next. The API checks membership on these hours only (ADR 0009's #506 amendment)
+ * and the producer compacts the hours before them (`apps/forecast/src/fleet-actuals-compaction.ts`).
  */
 export const TRAILING_ACTUALS_HOURS = 3;
 

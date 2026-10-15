@@ -87,7 +87,7 @@ const now = (): UtcIsoTimestamp =>
  * the methods a message may use, so this service's least-privilege posture (ADR
  * 0002: reads `sites`, writes `series`, and since #264 reads back the trailing
  * window of `series` to simulate the actuals for the hours that have settled, and
- * since #615 the `#FLEET` slices it compacts) is a compile-time fact as well as an IAM policy.
+ * since #615 the `#FLEET` partition it compacts) is a compile-time fact as well as an IAM policy.
  *
  * The adapters are passed as whole objects, never as `adapter.putForecasts`: they
  * hold their client and table name on `this` (#77), so a detached method would

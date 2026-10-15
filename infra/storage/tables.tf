@@ -102,12 +102,10 @@
 # The `series` section below also owns the per-dashboard-load read arithmetic,
 # and `.claude/ledgers/series-per-load-read.ledger` is its restatement ledger
 # (migrated from this paragraph's prose list by #615, architecture rule 9; its
-# sweep is re-run by `pnpm verify`). The ratio carriers no sweep can return
-# stay here: the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx,
-# the `listSites` docblock in apps/web/src/data/fleet-data-source.ts and the
-# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts carry
-# the ratio between a per-site read and a fleet fan-out and none of the unit
-# figures themselves.
+# sweep is re-run by `pnpm verify`). Three citations no sweep can return stay
+# here: the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx, the
+# `listSites` docblock in apps/web/src/data/fleet-data-source.ts and the
+# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts.
 #
 # The capacity-posture ADR members above are a floor rather than a census: one
 # more carrier does not falsify them. Their sweep, run 2026-08-11 with
@@ -310,7 +308,8 @@ resource "aws_dynamodb_table" "sites" {
 #    4 KB: ~22 for the fleet's forecasts, ~576 items ≈ 173 KB over a 48-hour
 #    horizon (#494), and ~3 for its actuals since #615, ~20 settled-hour totals
 #    plus ~4 hours of slices, ≈ 68 items over the default 24-hour look-back
-#    (a total priced at a slice's size, which `fleet-actuals-total-item.test.ts`
+#    (a total priced at a slice's size, which
+#    `packages/storage/src/adapters/series/fleet-actuals-total-item.test.ts`
 #    shows is the larger; the 168-hour look-back is ≈ 14 at the 52-location
 #    cap: 168 totals plus ≈ 4 h × 52 slices, ≈ 380 items). (The load's
 #    remaining ~2 units are one Query over the `FLEET` partition on `sites`,

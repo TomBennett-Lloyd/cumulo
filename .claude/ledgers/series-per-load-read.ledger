@@ -5,8 +5,9 @@
 #
 # The sweep's arms reach the claim in words (the first three) and the figures themselves in
 # their current spellings. A figure that moves again adds its new spelling here, in the same
-# commit as the move. Dashboard.tsx, fleet-data-source.ts and use-first-forecast.ts carry a
-# ratio and no figure, so no sweep can return them; they stay named in the owner's header.
+# commit as the move. Three citations no sweep can return stay named in the owner's header:
+# apps/web/src/dashboard/Dashboard.tsx, apps/web/src/data/fleet-data-source.ts and
+# apps/web/src/data/use-first-forecast.ts.
 #
 # ADR carriers are quoters, not owners, and are owed the ADR treatment (an as-it-stood
 # annotation plus a dated Amendments entry) rather than an inline true-up (docs/adr/README.md

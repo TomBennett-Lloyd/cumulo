@@ -105,10 +105,10 @@ data "aws_iam_policy_document" "forecast" {
   # cycle's forecasts it queries the trailing window of each site's series
   # (`querySeriesRange` in @cumulo/storage's series adapter) and derives the
   # readings from what it finds. Since #615 the fleet-actuals compaction
-  # (`apps/forecast/src/fleet-actuals-compaction.ts`) reads the `#FLEET` slices
-  # through the same statement.
+  # (`apps/forecast/src/fleet-actuals-compaction.ts`) reads the `#FLEET`
+  # partition through the same statement.
   #
-  # `Query` alone. No `GetItem`, because the access is a range over one site's
+  # `Query` alone. No `GetItem`, because the access is a range over one
   # partition rather than a point read — the same reason there is no `GetItem`
   # anywhere else in this file. No index ARN either: the series table has no
   # GSI (infra/storage/tables.tf), so the table ARN is the whole of its read

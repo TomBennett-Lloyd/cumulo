@@ -147,7 +147,7 @@ export const readFleetActualsAggregate = async (
   const totals = await deps.series.queryFleetActualsTotals(from, to, bound);
   const start = tailStart(totals.rows, from, to);
   // The slices Query is admitted through the gate: the totals Query's first page is the route's
-  // ungated one, so the prefix stays where `request-budget.ts` counts it.
+  // ungated one, so the prefix stays where `apps/api/src/request-budget.ts` counts it.
   if (start !== undefined && !hasBudgetForStorageCommands(deadline.remainingMs(), 1)) {
     return {
       complete: false,

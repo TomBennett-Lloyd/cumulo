@@ -22,7 +22,7 @@ import { BRISTOL_SITE, DUBLIN, RANELAGH, row } from './fleet-rollup-fixtures';
 /**
  * The actuals read's two-Query shape (ADR 0009's #615 entry): totals over the window, then the
  * slices from the hour after the last total. Windows are asserted literally, for the reason
- * `fleet-rollup-adapter.test.ts` gives.
+ * `packages/storage/src/adapters/series/fleet-rollup-adapter.test.ts` gives.
  */
 
 const hourly = (from: number, to: number, kw: number) =>
