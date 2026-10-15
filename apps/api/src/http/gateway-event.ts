@@ -11,10 +11,7 @@ import { describeZodIssues } from './response';
  *
  * There is no `@types/aws-lambda` dependency here on purpose. An invocation
  * payload is external data, and `docs/standards/typing.md` rule 3 makes external
- * data `unknown` until a schema parses it — a hand-installed `.d.ts` would let
- * the compiler believe a shape nothing checked, which is exactly the class of
- * bug a malformed event causes at 3am. Parsing also documents the *slice* this
- * service depends on: eight fields out of a payload with about forty.
+ * data `unknown` until a schema parses it.
  */
 
 /**
@@ -24,8 +21,7 @@ import { describeZodIssues } from './response';
  * tolerance at the boundary: the gateway omits `queryStringParameters` and
  * `body` when there are none, but a null from any producer on this seam (a
  * console test invoke, a future Function URL) would otherwise fail every
- * request that simply had no query string. Being strict about a field's *type*
- * and liberal about its absence is the useful combination.
+ * request that simply had no query string.
  *
  * `sourceIp` and `domainName` are **required**, unlike the absent-able fields
  * above. Both feed the abuse protections on the write path (#29) — the per-IP
@@ -38,9 +34,7 @@ import { describeZodIssues } from './response';
  * `headers` is parsed as part of the v2 shape, and two headers reach
  * {@link ApiRequest}: `origin` and `if-none-match`. Payload v2 lowercases header
  * names — an assumption the fixture encodes and issue #29's live evidence step
- * confirms against the deployed API. The rest stay unsurfaced, because a field
- * on the request type that nothing consumes is an invitation to start branching
- * on transport detail.
+ * confirms against the deployed API.
  */
 const gatewayEventSchema = z.object({
   rawPath: z.string(),
@@ -58,13 +52,9 @@ const gatewayEventSchema = z.object({
  * One request, in this service's own vocabulary.
  *
  * `rawBody` is the undecoded *text*: whether it is JSON is the router's
- * question, and whether that JSON is a valid site is the handler's. Splitting
- * those three is what lets "not JSON at all" be one 400 in one place rather
- * than a `try`/`catch` in every handler that accepts a body.
+ * question, and whether that JSON is a valid site is the handler's.
  *
- * The last three fields are the abuse protections' inputs, and they are stated
- * here — in the service's own vocabulary — rather than left for each caller to
- * dig out of the payload. `ownOrigin` in particular is a *derived* fact: the
+ * `ownOrigin` is a *derived* fact: the
  * origin this very request arrived at, which is what makes the origin check on
  * writes work with no hard-coded hostname anywhere. The API's own domain is
  * server-assigned at create time (`infra/api`), so any constant would be a
@@ -103,9 +93,7 @@ const decodeBody = (body: string, isBase64Encoded: boolean): string =>
  * A throw rather than a 400 (`docs/standards/error-handling.md` rule 1): an
  * event that is not a payload-v2 event means this function is wired to
  * something other than the HTTP API its Terraform configures, which is a broken
- * deployment rather than a caller's mistake. The boundary in `main.ts` catches
- * it, logs the offending fields, and answers 500 — the honest status for
- * "nothing about this request was ever understood".
+ * deployment rather than a caller's mistake.
  */
 export const parseGatewayEvent = (event: unknown): ApiRequest => {
   const parsed = gatewayEventSchema.safeParse(event);

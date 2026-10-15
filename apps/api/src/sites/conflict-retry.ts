@@ -6,12 +6,6 @@ import { fullJitterDelayMs } from '@cumulo/storage';
  * (`FLEET`, `#META#counters`), in practice, which every capped create and every
  * counted delete writes.
  *
- * One module rather than a constant in each route, because the two write routes
- * that touch that counter are contending with *each other*: a create backing off
- * on one curve while a delete backs off on another is two halves of one policy,
- * and the pair only makes sense stated once (`docs/standards/error-handling.md`
- * rule 3).
- *
  * The adapter never retries these itself: ADR 0002 assigns the retry to a
  * deliberate owner, and the SDK gives neither `TransactionCanceledException` nor
  * `TransactionConflictException` a retry of its own. The owner is the route
@@ -70,23 +64,18 @@ export const MAX_CONFLICT_RETRIES = CONCURRENT_COUNTER_WRITERS - 1;
  *
  * A conflict is not a throttle. The loser does not need capacity to free up, it
  * needs to arrive after the winner commits — so the first sleep is sized to a
- * commit, not to a recovery. Backing off in seconds here would turn a
- * millisecond-scale race into a user-visible pause for no gain.
+ * commit, not to a recovery.
  */
 export const CONFLICT_RETRY_BASE_DELAY_MS = 50;
 
 /**
  * The ceiling the doubling stops at: **400 ms**.
  *
- * Reached at the fourth retry and held for the rest. It stops there because the
+ * It stops there because the
  * sleeps are spent inside a function timeout that a request must answer within:
  * a curve that kept doubling would spend more of that budget waiting than the
  * remaining attempts could ever use, and a request killed at the timeout does
  * not reach the error boundary at all.
- *
- * 400 ms is also wide enough to be a *spread*: full jitter over
- * [0, 400) separates 10 contenders by ~40 ms on average, comfortably more than
- * the transaction round trip they are queueing behind.
  */
 export const CONFLICT_RETRY_MAX_DELAY_MS = 400;
 
@@ -96,8 +85,6 @@ export const CONFLICT_RETRY_MAX_DELAY_MS = 400;
  *
  * The curve itself is `@cumulo/storage`'s `fullJitterDelayMs` — this module
  * supplies the two numbers that are a decision of this API's, and nothing else.
- * `random` is a parameter rather than a default so the delay is a pure function
- * of its inputs and the route's test can assert the sequence it actually slept.
  */
 export const conflictRetryDelayMs = (retryAttempt: number, random: () => number): number =>
   fullJitterDelayMs(retryAttempt, {

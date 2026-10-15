@@ -28,12 +28,6 @@ import { parseSiteIdParam } from './site-id-param';
  * moment the row goes the points are unreachable — and nothing writes more of
  * them, because ingestion and forecasting only serve fleet-listed sites. What
  * is left is invisible, costs no reads.
- *
- * **Only the counted delete retries.** The user branch writes the fleet counter
- * inside its transaction and so contends with every concurrent capped create
- * (#155); the seed branch is a plain `DeleteItem` on one row, with no counter
- * and no transaction to cancel, so there is no conflict for it to sleep through
- * and it takes the adapter's answer as final.
  */
 
 /** Emitted when the conflict retries below ran out with the site still there. */
@@ -52,13 +46,10 @@ export interface DeleteSiteDeps {
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
   /**
-   * The backoff between contended delete attempts. Injected rather than a
-   * `setTimeout` in the loop, so this route's tests observe the delays it slept
-   * instead of waiting them out (`main.ts` supplies the real timer). Same field
-   * names as `CreateSiteDeps`: the two routes retry one shared policy.
+   * The backoff between contended delete attempts.
    */
   readonly sleep: (ms: number) => Promise<void>;
-  /** The jitter source, injected for the same reason. Production is `Math.random`. */
+  /** The jitter source. Production is `Math.random`. */
   readonly random: () => number;
 }
 
@@ -74,10 +65,7 @@ const lostTheRace = (outcome: DeleteUserSiteResult): boolean =>
  * `conflict_exhausted` exists only on the user branch, and it is deliberately
  * not folded into `already_gone`: the site is still there, and saying otherwise
  * would be the 404 that tells a caller its delete succeeded when nothing was
- * deleted. `out_of_time` is kept out of `already_gone` for exactly the same
- * reason, and it is not folded into `conflict_exhausted` either — one says the
- * route lost every race it entered, the other says it ran out of time to enter
- * another.
+ * deleted.
  */
 type SiteDeleteOutcome = 'deleted' | 'already_gone' | 'conflict_exhausted' | 'out_of_time';
 
@@ -154,18 +142,14 @@ export const deleteSite = async (
   if (outcome === 'out_of_time') {
     // A 500, and emphatically not the 404 `already_gone` gets: the site is
     // still there. The delete was never issued, so the caller's own retry is
-    // the right next move — and it arrives as a fresh invocation with a fresh
-    // budget, which is the one thing this request could not give it.
+    // the right next move.
     deps.log({ event: deleteSiteDeadlineEvent, siteId: param.siteId });
     return errorResponse('internal', 'the site could not be deleted');
   }
 
   if (outcome === 'conflict_exhausted') {
     // A 500 rather than a 503, matching the create path: nothing here tells the
-    // caller when to come back, and the honest reading is that this request lost
-    // more races than the number of things that can be racing explains. The log
-    // line is the only place that says so — the caller gets a generic message,
-    // and the site is still in the fleet for it to try again on.
+    // caller when to come back.
     deps.log({
       event: deleteSiteConflictExhaustedEvent,
       siteId: param.siteId,
@@ -176,17 +160,12 @@ export const deleteSite = async (
 
   if (outcome === 'already_gone') {
     // The read said the site was there and the delete's condition said it was
-    // not, so a concurrent delete won between the two. That request answered
-    // 204 and this one is a delete of nothing — the same 404 a mistyped id
-    // gets, and emphatically not a decrement, which the transaction has
-    // already declined to make.
+    // not, so a concurrent delete won between the two.
     return noSuchSite();
   }
 
   // No body and no content-type: this is the one *resource* response on this
   // API that has nothing to say, and an empty JSON object would be a lie about
-  // that. The router's CORS preflight answer is the other 204 the service
-  // produces (`http/router.ts`), and it belongs to the CORS mechanism rather
-  // than to any resource — same shape, different reason.
+  // that.
   return { statusCode: 204, headers: {} };
 };

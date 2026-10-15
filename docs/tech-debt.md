@@ -337,3 +337,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/web/src/data/use-first-forecast.ts` (`decidePoll`'s `switch (error.code)`); `eslint.config.mjs`
 - What: #545 batch "web 3" deleted the comment saying the switch must stay exhaustive with no catch-all arm, relying on the declared return type as the enforcement. That compile error fires only while no `default` arm exists, and no switch-exhaustiveness lint rule is enabled, so adding a `default` would silently reintroduce the policy the comment guarded against. Enabling one turns the deleted prose into a lint error (`CLAUDE.md` asks for lint rules over prose)
 - Source: #545 batch "web 3" review pass 1 SYSTEMIC
+
+## 2026-10-15 — pre-check (a) greps the ledger row's free-text `subject=`, so a row whose subject is a sentence fragment never searches for the docblock's identifier
+
+- Where: `.claude/scripts/sweep-report.sh` carries "subject=<identifier>" · `docs/standards/prose.md` § Trim batches rule 3(a)
+- What: rule 3(a) asks for `git grep -n <identifier>` per trimmed docblock, but nothing makes the `subject=` field hold an identifier, and #545 batch "api 2" wrote sentence fragments throughout. Two sole-carrier deletions passed pre-check (a) green for that reason: a `reason` sentence whose only citation names `fleetRollupFallbackEvent`, and a union docblock whose reasoning is cited as `FleetSeriesRead`'s. The reverse of the 2026-10-06 entry on path and path:line citations; a check that also greps the identifier each trimmed comment block is attached to would catch both
+- Source: #545 batch "api 2" review pass 1 SYSTEMIC

@@ -5,9 +5,6 @@ import type { ZodError, ZodType, output } from 'zod';
  * The response half of this service's HTTP boundary: the shape API Gateway
  * expects back from a payload-v2 Lambda integration, and the two ways this API
  * ever produces one — a validated success body, or an `apiErrorSchema` failure.
- *
- * Nothing below reaches for a framework's `res.json()`, because there is no
- * framework: a response is a value, built and returned like any other.
  */
 
 /**
@@ -27,18 +24,14 @@ export interface ApiResponse {
 }
 
 /**
- * The field-level reasons an {@link ApiError} body carries, named once here so
- * handlers and the zod mapping below agree on one type rather than three
- * spellings of `NonNullable<ApiError['details']>`.
+ * The field-level reasons an {@link ApiError} body carries.
  */
 export type ApiErrorDetails = NonNullable<ApiError['details']>;
 
 /**
  * The status ↔ code mapping the Fleet API's error contract fixes, as data.
  *
- * It lives here, once, so no call site can pair a 404 with `validation_failed`:
- * {@link errorResponse} takes the code and derives the status from it. The
- * mapping is stated in `apiErrorCodeSchema`'s doc comment in `@cumulo/shared`
+ * The mapping is stated in `apiErrorCodeSchema`'s doc comment in `@cumulo/shared`
  * and this is its executable half.
  *
  * `Readonly` is load-bearing rather than tidy: the map is read at **two
@@ -90,12 +83,6 @@ export const describeZodIssues = (error: ZodError): string =>
 
 /**
  * A success response, **validated against its own schema before serialising**.
- *
- * The parse is the point. A response schema that is only used to generate the
- * OpenAPI document is a promise nothing keeps; parsing through it here makes the
- * document and the bytes on the wire the same fact, and turns a handler that
- * quietly returns the wrong shape into a 500 (via the boundary in `main.ts`)
- * rather than into a client that silently mis-renders.
  */
 export const jsonResponse = <TSchema extends ZodType>(
   statusCode: number,
@@ -110,9 +97,6 @@ export const jsonResponse = <TSchema extends ZodType>(
 /**
  * The one failure response every route returns, in the one shape every route
  * returns it (`apiErrorSchema`).
- *
- * The body is parsed through `apiErrorSchema` on the way out for the same
- * reason successes are.
  *
  * `details` is omitted rather than passed as `undefined` — `exactOptionalPropertyTypes`
  * is on, and the schema's optionality is meant to carry "there is something
@@ -136,15 +120,10 @@ export const errorResponse = (
  *
  * `retry-after` turns "you are being limited" into "come back at this time",
  * which is the difference between a client that backs off and one that
- * hot-retries into the block already in force. Seconds rather than an HTTP-date
- * because the limiter's window is a *duration*, and a duration cannot be
- * misread by a caller whose clock disagrees with ours.
+ * hot-retries into the block already in force.
  */
 export const rateLimitedResponse = (retryAfterSeconds: number): ApiResponse => {
-  // A violated invariant, not a domain outcome (error-handling rule 1): a
-  // fractional or non-positive `retry-after` is not a header value a client can
-  // act on, and one that fails to parse is read as "retry now" — straight back
-  // into the limiter that just refused.
+  // A violated invariant, not a domain outcome (error-handling rule 1).
   if (!Number.isInteger(retryAfterSeconds) || retryAfterSeconds < 1) {
     throw new Error(
       `rateLimitedResponse: retryAfterSeconds must be a positive integer, got ${String(retryAfterSeconds)}`,

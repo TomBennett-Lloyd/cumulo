@@ -3,7 +3,7 @@
 # points of non-blank lines (5000 = 50.00%). A ratio may fall, never
 # rise. Regenerate with:
 #     bash .claude/scripts/check-comment-density.sh --ratchet
-apps/api/src/abuse/ip-limiter.ts	6124
+apps/api/src/abuse/ip-limiter.ts	5762
 apps/api/src/abuse/origin-check.ts	7674
 apps/api/src/api-fixtures.ts	3429
 apps/api/src/cost-trip/main.ts	3000
@@ -11,8 +11,8 @@ apps/api/src/cost-trip/trip.ts	3200
 apps/api/src/forecast/cycle-cache.ts	4140
 apps/api/src/forecast/fleet-actuals-rollup-read.ts	1780
 apps/api/src/forecast/fleet-rollup-fixtures.ts	701
-apps/api/src/forecast/fleet-rollup-read.ts	4400
-apps/api/src/forecast/fleet-series-read.ts	6648
+apps/api/src/forecast/fleet-rollup-read.ts	4210
+apps/api/src/forecast/fleet-series-read.ts	5782
 apps/api/src/forecast/get-fleet-actuals.ts	5196
 apps/api/src/forecast/get-fleet-forecast.ts	5461
 apps/api/src/forecast/get-site-forecast.ts	5000
@@ -20,11 +20,11 @@ apps/api/src/forecast/get-site-series.ts	4533
 apps/api/src/forecast/known-site.ts	5238
 apps/api/src/forecast/series-split.ts	7692
 apps/api/src/forecast/series-window.ts	8000
-apps/api/src/http/gateway-event.ts	6269
+apps/api/src/http/gateway-event.ts	5877
 apps/api/src/http/request-deadline.ts	7600
-apps/api/src/http/response.ts	6026
-apps/api/src/http/router.ts	4798
-apps/api/src/main.ts	4500
+apps/api/src/http/response.ts	5384
+apps/api/src/http/router.ts	4189
+apps/api/src/main.ts	4122
 apps/api/src/openapi/components.ts	2544
 apps/api/src/openapi/docs-assets.ts	7068
 apps/api/src/openapi/docs-page.ts	4696
@@ -34,10 +34,10 @@ apps/api/src/openapi/paths-docs.ts	2168
 apps/api/src/openapi/paths.ts	1076
 apps/api/src/openapi/responses.ts	4328
 apps/api/src/request-budget.ts	9259
-apps/api/src/sites/conflict-retry.ts	8910
+apps/api/src/sites/conflict-retry.ts	8750
 apps/api/src/sites/create-site-fixtures.ts	3414
-apps/api/src/sites/create-site.ts	5022
-apps/api/src/sites/delete-site.ts	5176
+apps/api/src/sites/create-site.ts	4567
+apps/api/src/sites/delete-site.ts	4496
 apps/api/src/sites/get-site.ts	2962
 apps/api/src/sites/list-sites.ts	4736
 apps/api/src/sites/site-id-param.ts	4250

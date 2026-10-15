@@ -33,10 +33,6 @@ import { forecastsIn } from './series-split';
  * same answer is one Query of about twelve small items per hour, summed in process by the same
  * `@cumulo/shared` functions the browser used to call.
  *
- * **The fallback is a second path, not a second owner of the numbers.** Both arms end in
- * `@cumulo/shared` — `sumFleetRollupPartials` over stored partials, `fleetForecastAggregate` over
- * raw rows — and `fleet-rollup-additivity.test.ts` is the proof those two agree.
- *
  * **Incomplete counts as absent, deliberately.** A partition holding eleven of twelve locations
  * sums to a fleet total that looks exactly like a plausible number from a quieter fleet — there is
  * no gap to see, because the missing site does not read as missing, it reads as less generation.
@@ -73,8 +69,7 @@ export type FallbackReason = 'absent' | 'incomplete' | 'stale';
 export interface FleetRollupReadDeps extends FleetSeriesReadDeps {
   /**
    * Reads only, and now two methods: the roll-up partition, plus the per-site fan-out the fallback
-   * still needs (`typing.md` rule 6, ADR 0002 least privilege). The second disappears with the
-   * fallback.
+   * still needs (`typing.md` rule 6, ADR 0002 least privilege).
    */
   readonly series: Pick<SeriesAdapter, 'querySeriesRange' | 'queryFleetRollup'>;
 }
@@ -213,10 +208,6 @@ const aggregateFromFanOut = async (
  * carry a ghost's kilowatts, its site count and its nameplate capacity. The fan-out arm cannot do
  * that, because it iterates the site list. A ghost *site* at a surviving location is
  * {@link staleLocations}' job, which has already refused the read by the time this runs.
- *
- * TTL reaps those items, which is far too slow to be the answer here, and a producer that deleted
- * them would need an end-of-run event this design does not have (ADR 0009). Filtering at read costs
- * one `Set` lookup per row and needs neither.
  */
 const summed = (
   rows: readonly FleetRollupRow[],
