@@ -683,6 +683,62 @@ else
   done <"$SUBJECTS"
 fi
 
+# A trimmed file is cited by path, and a trimmed block by the name it documents,
+# and neither need share a word with the row's subject (#572, #667, #669).
+cat <<'EOF'
+#### By trimmed file and by the declaration a trimmed block documents
+
+Every file the diff removes comment words from is swept by its basename, and every such block by
+the declaration under it, over prose lines only: comment lines, and every line of a markdown file.
+A plain lowercase name is left to the row's subject. **Every hit below is to be read.**
+
+EOF
+
+ere_escape() { # ere_escape <literal> -> an ERE matching only that literal
+  printf '%s' "$1" | sed 's/[][\.*^()+?{}|$]/\\&/g'
+}
+NAME_START='(^|[^A-Za-z0-9_$])'
+NAME_END='([^A-Za-z0-9_$]|$)'
+COMMENT_LINE_ERE='^[[:space:]]*(//|/\*|\*|#([[:space:]]|$))'
+TARGETS="$work/targets.tsv"
+awk -F "$TAB" '
+  $4 > 0 && !($1 in f) { f[$1] = 1; print $1 "\t" }
+  $4 > 0 && $11 ~ /[A-Z0-9_$]/ && !(($1 SUBSEP $11) in g) { g[$1 SUBSEP $11] = 1; print $1 "\t" $11 }
+' "$RUNS" >"$TARGETS"
+
+if [ ! -s "$TARGETS" ]; then
+  printf '(the diff removes no comment words outside markdown)\n\n'
+else
+  while IFS= read -r rec; do
+    target_path=${rec%%"$TAB"*}
+    target_name=${rec#*"$TAB"}
+    [ -n "$target_name" ] || target_name=${target_path##*/}
+    target_re="$NAME_START$(ere_escape "$target_name")$NAME_END"
+    checks_run=$((checks_run + 1))
+    target_broke=0
+    printf '```\n'
+    run_shown git grep -n -E -e "$target_re" --and -e "$COMMENT_LINE_ERE" -- ":!$target_path" ':!*.md'
+    target_hits=$(line_count "$CMD_OUT")
+    if cmd_errored; then
+      target_broke=1
+      target_detail=$(cmd_error_detail)
+    fi
+    printf '\n'
+    run_shown git grep -n -E -e "$target_re" -- '*.md' ":!$target_path"
+    target_hits=$((target_hits + $(line_count "$CMD_OUT")))
+    if cmd_errored; then
+      target_broke=1
+      target_detail=$(cmd_error_detail)
+    fi
+    printf '```\n\n'
+    if [ "$target_broke" -eq 1 ]; then
+      check_fail "pre-check (a) could not sweep for \`$target_name\` — git said: $target_detail"
+    else
+      check_pass "\`$target_name\` (\`$target_path\`): $target_hits prose line(s) to read"
+    fi
+  done <"$TARGETS"
+fi
+
 # --- pre-check (b): ledger sweeps -------------------------------------------------------------
 
 cat <<'EOF'

@@ -651,6 +651,94 @@ expect_stdout "src/fleet-series-read.ts:1-1: the cut leaves a ** unpaired"
 expect_stdout "src/fleet-series-read.ts:3-3: the cut leaves a backtick unpaired"
 end
 
+begin "a block trimmed behind a fragment subject is swept by the declaration under it"
+# PR #667 (apps/api/src/forecast/fleet-rollup-read.ts): the row's subject was a
+# sentence fragment, and the deleted sentence's only citation names the
+# constant the docblock documents.
+fixture by-declaration
+commit_base src/fleet-actuals-rollup-read.ts \
+  "/** The one event a fallback emits — this route's own, for \`fleetRollupFallbackEvent\`'s reason. */" \
+  "export const fleetActualsRollupFallbackEvent = 'api.fleet-actuals.rollup-fallback';"
+commit_base src/fleet-rollup-read.test.ts \
+  "import { fleetRollupFallbackEvent } from './fleet-rollup-read';"
+commit_base src/fleet-rollup-read.ts \
+  '/**' \
+  ' * The one event a fallback emits.' \
+  ' *' \
+  " * One event with a \`reason\` rather than one event per reason, so an operator counts a single line." \
+  ' */' \
+  "export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';"
+trim_to src/fleet-rollup-read.ts \
+  '/**' \
+  ' * The one event a fallback emits.' \
+  ' */' \
+  "export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';"
+ledger_new by-declaration
+row src/fleet-rollup-read.ts 4 "one event with a reason" "shown-by-code" deleted "subject=rather than one event per reason"
+run_report
+expect_rc 0
+expect_stdout "src/fleet-actuals-rollup-read.ts:1:/** The one event a fallback emits — this route's own, for \`fleetRollupFallbackEvent\`'s reason. */"
+expect_not_stdout "src/fleet-rollup-read.test.ts:1:"
+end
+
+begin "a trimmed file is swept by its basename, in every citation form"
+# PR #669 (apps/ingestion/src/publisher/sqs.ts): the deleted reason's only
+# pointer was "(see \`publisher/sqs.ts\`)"; PR #572's was a path:line.
+fixture by-path
+commit_base src/cycle-budget.ts \
+  '/**' \
+  " * The AWS SDK's own throttling backoff base, for clients that do not replace" \
+  ' * the delay curve — which the SQS publisher deliberately does' \
+  " * not (see \`publisher/sqs.ts\`)." \
+  ' */' \
+  'export const SDK_BASE_DELAY_MS = 100;'
+commit_base src/site-overlay.ts '// Clamped to the bounds at src/publisher/sqs.ts:2.'
+commit_base docs/publisher.md "\`publisher/sqs.ts\` owns the delay curve."
+commit_base data/baseline.tsv "$(printf 'src/publisher/sqs.ts\t5000')"
+commit_base src/publisher/sqs.ts \
+  '/**' \
+  ' * Unlike storage, the *delay curve* is left to the standard strategy; against a service' \
+  ' * with no provisioned capacity, throttling is not a failure mode this queue has, so there' \
+  ' * is nothing here for a pinned curve to protect.' \
+  ' */' \
+  'export const INGESTION_SEND_MAX_ATTEMPTS = 3;'
+trim_to src/publisher/sqs.ts \
+  '/**' \
+  ' * Unlike storage, the *delay curve* is left to the standard strategy.' \
+  ' */' \
+  'export const INGESTION_SEND_MAX_ATTEMPTS = 3;'
+ledger_new by-path
+row src/publisher/sqs.ts 2 "throttling is not this queue's failure mode" "cited-at" deleted "subject=throttling is not a failure mode this queue has"
+run_report
+expect_rc 0
+expect_stdout "src/cycle-budget.ts:4: * not (see \`publisher/sqs.ts\`)."
+expect_stdout "src/site-overlay.ts:1:// Clamped to the bounds at src/publisher/sqs.ts:2."
+expect_stdout "docs/publisher.md:1:\`publisher/sqs.ts\` owns the delay curve."
+expect_not_stdout "data/baseline.tsv:1:"
+end
+
+begin "a plain lowercase declaration name is left to the row's subject"
+# The guard against #666's first report: a ubiquitous name returns every
+# comment in the tree that uses the word.
+fixture plain-name
+commit_base src/fleet-panel.ts '// summed is the word the panel uses for a fleet total.'
+commit_base src/summing.ts \
+  '/**' \
+  ' * Sums the rows. A ghost location is filtered out here, at read.' \
+  ' */' \
+  'export const summed = 1;'
+trim_to src/summing.ts \
+  '/**' \
+  ' * Sums the rows.' \
+  ' */' \
+  'export const summed = 1;'
+ledger_new plain-name
+row src/summing.ts 2 "ghosts are filtered at read" "shown-by-code" deleted "subject=filtered out here, at read"
+run_report
+expect_rc 0
+expect_not_stdout "src/fleet-panel.ts:1:"
+end
+
 # --- cases: a broken tool is not a clean tree ---------------------------------------------------
 
 begin "a git failure is reported as a failure, not counted as a hit"
