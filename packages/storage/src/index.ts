@@ -112,6 +112,7 @@ export {
 } from './adapters/abuse/abuse-adapter';
 export {
   SeriesAdapter,
+  type FleetActualsTotalsRangeResult,
   type FleetRollupRangeResult,
   type SeriesRangeResult,
 } from './adapters/series/series-adapter';
