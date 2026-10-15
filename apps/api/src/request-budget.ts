@@ -43,13 +43,13 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page.
  * - `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast` — **4** on the
  *   roll-up path (limiter 2, `listFleetSites`, then the first page of the
- *   single `#FLEET` Query); **5**
- *   on ADR 0009's fallback, where that Query's first page is followed by the
- *   fan-out's first batch, because the roll-up read is consulted first and only
- *   *then* found wanting, so both first-reads are ungated in the same request
- *   (the deadline gate sits *between* batches, so the first is ungated exactly
- *   as a first page is). The fallbacks come out at #507 and the prefix returns
- *   to 4.
+ *   first `#FLEET` Query — the actuals route's totals Query since #615, whose
+ *   slices Query is gated before it is issued); **5** on ADR 0009's fallback,
+ *   where that Query's first page is followed by the fan-out's first batch,
+ *   because the roll-up read is consulted first and only *then* found wanting,
+ *   so both first-reads are ungated in the same request (the deadline gate
+ *   sits *between* batches, so the first is ungated exactly as a first page
+ *   is). The fallbacks come out at #507 and the prefix returns to 4.
  * - `POST /v1/sites` — **2**: the limiter's. Everything after is admitted per
  *   command. The committed write is the last thing the route does: nothing
  *   follows it, so the 201 and the server-assigned id it carries cannot be lost

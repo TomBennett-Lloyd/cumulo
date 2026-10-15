@@ -73,7 +73,7 @@ export type FleetSeriesRead =
  * different with the two, while an operator reads the difference off the fields
  * in `detail`.
  */
-const readDeadlineReached = (
+export const readDeadlineReached = (
   log: FleetSeriesReadDeps['log'],
   deadlineEvent: string,
   detail: Record<string, unknown>,

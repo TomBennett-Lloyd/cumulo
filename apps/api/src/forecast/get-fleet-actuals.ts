@@ -10,15 +10,17 @@ import { errorResponse, jsonResponse, zodIssueDetails } from '../http/response';
 import type { RouteRequest } from '../http/router';
 
 import { datedByData, uncacheable, type MeteredResponse } from './cycle-cache';
-import { readFleetActualsAggregate } from './fleet-actuals-rollup-read';
-import type { FleetRollupReadDeps } from './fleet-rollup-read';
+import {
+  readFleetActualsAggregate,
+  type FleetActualsRollupReadDeps,
+} from './fleet-actuals-rollup-read';
 import { FORECAST_HORIZON_HOURS } from './get-site-forecast';
 import { hoursBefore } from './series-window';
 
 /**
  * `GET /v1/fleet/actuals` — every fleet site's actuals over one look-back
  * window, in one request, **already summed** — one point per hour, read from
- * the `#FLEET` partition's `GEN` slices by `fleet-actuals-rollup-read.ts`,
+ * the `#FLEET` partition's `GEN` totals and slices by `fleet-actuals-rollup-read.ts`,
  * which owns the fan-out fallback (#506).
  *
  * **Why the fleet gets its own route.** The web app plots the fleet's actual
@@ -77,7 +79,7 @@ const fleetLookbackHoursSchema = z
  */
 export const fleetActualsReadDeadlineEvent = 'api.fleet-actuals.read-deadline-reached';
 
-export interface GetFleetActualsDeps extends FleetRollupReadDeps {
+export interface GetFleetActualsDeps extends FleetActualsRollupReadDeps {
   /** Only the listing: this route never writes a site (`typing.md` rule 6, ADR 0002 least privilege). */
   readonly sites: Pick<SiteAdapter, 'listFleetSites'>;
   /** Injected, so the window a test asserts on is a window the test chose. */
@@ -110,9 +112,9 @@ export const getFleetActuals = async (
   const to = deps.now();
   const from = hoursBefore(to, hours.data);
 
-  // One Query of the `GEN` slices, or the deadline-gated fan-out when they cannot answer — and
-  // the log says which (ADR 0009). The deadline event is passed so this route keeps owning the
-  // name an operator greps for when *it* runs out of time.
+  // The `GEN` totals, then the slices they leave, or the deadline-gated fan-out when they cannot
+  // answer — and the log says which (ADR 0009). The deadline event is passed so this route keeps
+  // owning the name an operator greps for when *it* runs out of time.
   const read = await readFleetActualsAggregate(
     deps,
     request.deadline,

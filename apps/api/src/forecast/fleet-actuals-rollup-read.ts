@@ -10,13 +10,13 @@ import {
   type FleetSite,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { FleetRollupRow, QueryPaginationBound } from '@cumulo/storage';
+import type { FleetRollupRow, QueryPaginationBound, SeriesAdapter } from '@cumulo/storage';
 
 import type { RequestDeadline } from '../http/request-deadline';
 import type { ApiResponse } from '../http/response';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
-import { readFleetSeries } from './fleet-series-read';
+import { readDeadlineReached, readFleetSeries } from './fleet-series-read';
 import {
   expectedLocations,
   fallbackReason,
@@ -27,15 +27,23 @@ import { actualsIn } from './series-split';
 import { hoursAfter, hoursBefore } from './series-window';
 
 /**
- * `GET /v1/fleet/actuals`'s read: one Query of the `#FLEET` partition's `GEN` slices, falling back
- * to the per-site fan-out — `fleet-rollup-read.ts`'s shape, with the completeness rule ADR 0009's
- * #506 amendment states for actuals.
+ * `GET /v1/fleet/actuals`'s read: the `#FLEET` partition's `GEN` totals over the window, then the
+ * slices from the hour after the last total, falling back to the per-site fan-out —
+ * `fleet-rollup-read.ts`'s shape, with the completeness rule ADR 0009's #506 amendment states for
+ * actuals and its #615 entry extends.
  *
  * A look-back is written by many cycles, so there is no vintage check, and membership is checked
- * only on the hours the producer still rewrites; older hours are summed as written. One check the
- * forecast read does not need: a location older than the window must hold its first hour, or a
+ * only on the hours the producer still rewrites; older hours are summed as written, and a settled
+ * hour's total satisfies the first-hour check a location older than the window must meet, or a
  * history the producer has not yet written reads as a whole one.
  */
+
+export interface FleetActualsRollupReadDeps extends FleetRollupReadDeps {
+  readonly series: Pick<
+    SeriesAdapter,
+    'querySeriesRange' | 'queryFleetRollup' | 'queryFleetActualsTotals'
+  >;
+}
 
 /** The one event a fallback emits — this route's own, for `fleetRollupFallbackEvent`'s reason. */
 export const fleetActualsRollupFallbackEvent = 'api.fleet-actuals.rollup-fallback';
@@ -96,12 +104,33 @@ const uncoveredLocations = (
   );
 };
 
+/** Where the slices Query opens: the hour after the last total, or `undefined` if none is left to read. */
+const tailStart = (
+  totals: readonly FleetActualsAggregatePoint[],
+  from: UtcIsoTimestamp,
+  to: UtcIsoTimestamp,
+): UtcIsoTimestamp | undefined => {
+  const last = totals.at(-1);
+  if (last === undefined) {
+    return from;
+  }
+  const start = hoursAfter(last.validTime, 1);
+  return compareUtcIsoTimestamps(start, to) < 0 ? start : undefined;
+};
+
+/** Whether a total already covers the window's first hour, by `uncoveredLocations`'s arithmetic. */
+const firstHourCovered = (
+  totals: readonly FleetActualsAggregatePoint[],
+  from: UtcIsoTimestamp,
+): boolean =>
+  totals.some((point) => compareUtcIsoTimestamps(point.validTime, hoursAfter(from, 1)) < 0);
+
 /**
  * Read the fleet's summed actuals over `from`…`to`: the roll-up if it can answer, the fan-out if
  * not.
  */
 export const readFleetActualsAggregate = async (
-  deps: FleetRollupReadDeps,
+  deps: FleetActualsRollupReadDeps,
   deadline: RequestDeadline,
   sites: readonly FleetSite[],
   from: UtcIsoTimestamp,
@@ -115,20 +144,44 @@ export const readFleetActualsAggregate = async (
   const bound: QueryPaginationBound = {
     hasBudgetForNextPage: () => hasBudgetForStorageCommands(deadline.remainingMs(), 1),
   };
-  const rollup = await deps.series.queryFleetRollup(FLEET_ROLLUP_ACTUALS_KIND, from, to, bound);
+  const totals = await deps.series.queryFleetActualsTotals(from, to, bound);
+  const start = tailStart(totals.rows, from, to);
+  // The slices Query is admitted through the gate: the totals Query's first page is the route's
+  // ungated one, so the prefix stays where `request-budget.ts` counts it.
+  if (start !== undefined && !hasBudgetForStorageCommands(deadline.remainingMs(), 1)) {
+    return {
+      complete: false,
+      response: readDeadlineReached(deps.log, deadlineEvent, { totalsRead: totals.rows.length }),
+    };
+  }
+  const slices =
+    start === undefined
+      ? { rows: [], complete: true }
+      : await deps.series.queryFleetRollup(FLEET_ROLLUP_ACTUALS_KIND, start, to, bound);
   const expected = expectedLocations(sites);
-  const stale = staleLocations(rollup.rows, expected, hoursBefore(to, TRAILING_ACTUALS_HOURS));
-  const uncovered = uncoveredLocations(rollup.rows, sites, from);
-  const base = fallbackReason(rollup, expected, stale);
+  const stale = staleLocations(slices.rows, expected, hoursBefore(to, TRAILING_ACTUALS_HOURS));
+  const uncovered = firstHourCovered(totals.rows, from)
+    ? new Set<string>()
+    : uncoveredLocations(slices.rows, sites, from);
+  const base = fallbackReason(
+    { rows: slices.rows, complete: totals.complete && slices.complete },
+    expected,
+    stale,
+  );
   // An uncovered first hour is part of the window unwritten, so it ranks as `incomplete` does.
   const reason: FallbackReason | undefined =
     base !== 'absent' && uncovered.size > 0 ? 'incomplete' : base;
 
   if (reason === undefined) {
-    const rows = rollup.rows.filter((row) => expected.has(row.locationId));
+    const rows = slices.rows.filter((row) => expected.has(row.locationId));
     return {
       complete: true,
-      points: sumFleetActualsRollupPartials(rows.map((row) => row.partial)),
+      // Totals are never filtered by location: a settled hour is summed as written. They do not
+      // date the response either, being older than every slice by construction.
+      points: [
+        ...totals.rows,
+        ...sumFleetActualsRollupPartials(rows.map((row) => row.partial)),
+      ].sort((a, b) => compareUtcIsoTimestamps(a.validTime, b.validTime)),
       readingTimesByGroup: [...expected.keys()].map((location) =>
         rows.filter((row) => row.locationId === location).map((row) => row.partial.validTime),
       ),
@@ -139,10 +192,13 @@ export const readFleetActualsAggregate = async (
     event: fleetActualsRollupFallbackEvent,
     reason,
     expectedLocations: expected.size,
-    presentLocations: new Set(rollup.rows.map((row) => row.locationId)).size,
+    presentLocations: new Set(slices.rows.map((row) => row.locationId)).size,
     staleLocations: stale.size,
     uncoveredLocations: uncovered.size,
-    hours: new Set(rollup.rows.map((row) => row.partial.validTime)).size,
+    hours: new Set([
+      ...totals.rows.map((point) => point.validTime),
+      ...slices.rows.map((row) => row.partial.validTime),
+    ]).size,
   });
 
   const read = await readFleetSeries(deps, deadline, sites, from, to, deadlineEvent);
