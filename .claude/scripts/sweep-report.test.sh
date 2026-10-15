@@ -256,6 +256,25 @@ expect_rc 2
 expect_stderr 'unknown directive key "carrier"'
 end
 
+begin "a restoration spelled as prose.md rule 1 spells it is counted as restored"
+# PR #661 put "restored (cycle 1)" in a row's check column, because the
+# disposition column refused the spelling rule 1 gives.
+fixture restored-cycle
+ledger_new restored-cycle
+row src/fixture.ts 2 "a deleted carrier, restored" "git show base" "restored (cycle 1)"
+run_report
+expect_rc 0
+expect_stdout "| \`src/fixture.ts\` | 1 | 0 | 0 | 0 | 0 | 1 |"
+end
+
+begin "a restoration spelled any other way is still refused"
+ledger_new restored-round
+row src/fixture.ts 2 "a deleted carrier, restored" "git show base" "restored (round 1)"
+run_report
+expect_rc 2
+expect_stderr 'unknown disposition "restored (round 1)"'
+end
+
 # --- cases: totals, and the two renderings agreeing ------------------------------------------
 
 # Every disposition is non-zero somewhere in this ledger, `deleted` included:
@@ -678,6 +697,18 @@ run_report
 expect_rc 0
 expect_stdout "Command: \`bash .claude/scripts/sweep-report.sh docs/sweeps/522-ledger.tsv $BASE\`"
 expect_not_stdout "Command: \`bash .claude/scripts/sweep-report.sh $ROOT"
+end
+
+begin "two runs over the same tree print the same bytes"
+# prose.md § Trim batches rule 4 diffs a re-run against the pasted report.
+fixture same-bytes
+ledger_new same-bytes
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+first_report=$out
+run_report
+[ "$out" = "$first_report" ] || bad "the second run's report differs from the first"
+expect_stdout "-f '<tmp>/reflow.awk'"
 end
 
 finish

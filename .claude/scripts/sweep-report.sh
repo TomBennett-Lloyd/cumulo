@@ -46,7 +46,9 @@
 #     path<TAB>line<TAB>claim<TAB>check<TAB>disposition[<TAB>key=value]...
 #
 # `disposition` is one of verified-true | trued | deleted | out-of-scope |
-# restored, and anything else is rejected by name and ledger line number.
+# restored, where `restored (cycle <n>)` (`prose.md` § Trim batches rule 1's
+# spelling) counts as restored; anything else is rejected by name and ledger
+# line number.
 # `line` may be empty (a claim pinned to a section rather than a line); every
 # other required field must be non-empty.
 #
@@ -55,7 +57,8 @@
 # columns for one reason: a TSV field cannot contain a tab, so a PCRE holding
 # `]`, `|` or a quote needs no escaping and cannot be mis-parsed.
 #
-#   subject=<identifier>   required on `trued` and `deleted` rows — the trimmed
+#   subject=<identifier or phrase>
+#                          required on `trued` and `deleted` rows — the trimmed
 #                          subject whose inbound references pre-check (a) greps
 #   sweep=<pcre>           a restatement ledger's sweep, run with `git grep -P`
 #   control=<path>         required with `sweep=`, and only with it: the carrier
@@ -254,11 +257,12 @@ NR == 1 {
     next
   }
   path = $1; line = $2; claim = $3; check = $4; disp = $5
+  if (disp ~ /^restored \(cycle [1-9][0-9]*\)$/) disp = "restored"
   if (path == "") err("column 1 (path) is empty")
   if (claim == "") err("column 3 (claim) is empty")
   if (check == "") err("column 4 (check) is empty")
   if (!(disp in OKD)) {
-    err("unknown disposition \"" disp "\" — allowed: verified-true, trued, deleted, out-of-scope, restored")
+    err("unknown disposition \"" disp "\" — allowed: verified-true, trued, deleted, out-of-scope, restored, restored (cycle <n>)")
     next
   }
 
@@ -278,7 +282,7 @@ NR == 1 {
   }
 
   if ((disp == "trued" || disp == "deleted") && nsubject == 0)
-    err("a " disp " row must name the trimmed subject — add subject=<identifier>")
+    err("a " disp " row must name the trimmed subject — add subject=<identifier or phrase>")
   if (disp == "out-of-scope" && nquote == 0)
     err("an out-of-scope row must name at least one quote= for its tech-debt entry")
   if (nsweep > 1) err("more than one sweep= on one row — give a sweep its own row")
@@ -328,10 +332,13 @@ check_pass() { # check_pass <one-line reason>
 # render_cmd — the displayed form of an argv, quoted so that what the report
 # shows is what a reader can paste back. It is built FROM the argv the next line
 # runs, never typed beside it: a displayed command that drifts from the executed
-# one is this script's own version of the defect it exists to stop.
+# one is this script's own version of the defect it exists to stop. The one
+# substitution is `<tmp>` for this run's temp directory, so two runs over one
+# tree print the same bytes (rule 4's diff).
 render_cmd() {
   local rendered="" arg
   for arg in "$@"; do
+    arg=${arg//"$work"/<tmp>}
     case "$arg" in
       '') rendered="$rendered ''" ;;
       *[!A-Za-z0-9_./=:-]*) rendered="$rendered '${arg//\'/\'\\\'\'}'" ;;
