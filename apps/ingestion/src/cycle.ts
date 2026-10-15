@@ -17,18 +17,10 @@ import type { WeatherPublisher } from './publisher/weather-publisher';
  * This module is the only place the order of those three effects is decided, and
  * the order is load-bearing: `cumulo-weather` is the durable record, the published
  * message is a trigger that happens to carry its payload (ADR 0004).
- *
- * Every effect arrives as a dependency (architecture rule 3).
  */
 
 /**
  * What became of one location this cycle, as a value.
- *
- * `published` is the success; `rate-limited` means back off and let the next hourly
- * cycle retry; `malformed` means the provider contract moved and someone must look;
- * `unreachable` is a blip the next cycle absorbs; `store-partial` means DynamoDB
- * declined writes, so the readings exist nowhere downstream *and* the message was
- * withheld; `failed` is an unexpected throw from an adapter or the publisher.
  */
 export type LocationOutcome = { readonly locationId: string } & (
   | { readonly status: 'published'; readonly readingCount: number; readonly droppedHours: number }
@@ -78,9 +70,6 @@ export interface CycleReport {
  * The two bounds a cycle runs under. The deadline protects the function
  * timeout; the cap protects the Open-Meteo quota. `cycle-budget.ts` derives both
  * and states the arithmetic.
- *
- * Injected rather than imported so the numbers stay a decision of the composition
- * root (`docs/standards/architecture.md` rule 3).
  */
 export interface CycleBudget {
   /** Milliseconds after which no further location is *started*. */
@@ -95,14 +84,11 @@ export interface RunCycleDeps {
   /** Only the forecast write: ingestion never touches archive weather (#16 owns that). */
   readonly weather: Pick<WeatherAdapter, 'putForecastWeather'>;
   readonly publisher: WeatherPublisher;
-  /** The one Open-Meteo call a cycle makes; the policy behind it is bound by `main.ts`. */
+  /** The one Open-Meteo call a cycle makes. */
   readonly fetchForecast: FetchForecastForLocation;
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
-  /**
-   * Wall clock, in milliseconds. Injected because the deadline below is the one
-   * piece of this module that depends on time passing.
-   */
+  /** Wall clock, in milliseconds. */
   readonly now: () => number;
   readonly budget: CycleBudget;
 }
@@ -130,11 +116,7 @@ const failedOutcome = (
   detail: `${operation} threw — ${describeThrown(error)}`,
 });
 
-/**
- * A fetch that produced no readings, as this location's outcome: the adapter's
- * vocabulary carried across unchanged rather than collapsed into one "fetch
- * failed".
- */
+/** A fetch that produced no readings, as this location's outcome. */
 const fetchFailureOutcome = (
   locationId: string,
   fetched: Exclude<FetchForecastOutcome, { outcome: 'ok' }>,
@@ -145,10 +127,6 @@ const fetchFailureOutcome = (
 
 /**
  * Fetch, store, publish — for exactly one location, and never throwing.
- *
- * Each awaited call has its own `catch`, and every one of them converts the throw
- * into a typed value carrying the operation that produced it (rule 2a, applied at
- * the boundary of a location's work). That is what makes the fleet independent.
  *
  * The store precedes the publish, and a batch that did not fully drain returns
  * before the publish — `BatchWriteItem` answers HTTP 200 while handing back items
@@ -216,13 +194,9 @@ const countSkipped = (outcomes: readonly LocationOutcome[], reason: SkipReason):
  * keeps a cycle's whole burst spread over its own duration rather than issued at
  * once.
  *
- * **Two bounds, and every location accounted for either way** (#115). The budget's
- * cap decides how many locations this cycle may attempt at all; its deadline, checked
- * before each location, decides when to stop starting more. Neither shortens the
+ * **Two bounds, and every location accounted for either way** (#115). Neither shortens the
  * report: a location the cap deferred and a location the deadline cut off both
  * appear in `locations` with a `skipped` status.
- *
- * The two skip reasons land in different buckets on purpose — see {@link CycleReport}.
  *
  * The deadline is checked *before* a location and never interrupts one in flight —
  * `cycle-budget.ts` reserves a whole location's worst case behind it for exactly

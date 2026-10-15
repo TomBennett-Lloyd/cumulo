@@ -22,8 +22,6 @@ import { z } from 'zod';
  * Lambda as a failure it cannot attribute to any message: the whole batch is then
  * retried, which is precisely the silent multiplier `ReportBatchItemFailures`
  * exists to avoid.
- *
- * `body` is a `string`, not a parsed message.
  */
 export const sqsEventSchema = z.object({
   Records: z.array(z.object({ messageId: z.string().min(1), body: z.string() })),
@@ -39,8 +37,6 @@ export type SqsRecord = SqsEvent['Records'][number];
  * the messages that actually failed, so a bad message is redelivered on its own
  * rather than redriving the batch-mates that already succeeded.
  *
- * An interface rather than a schema because nothing parses it — it is this
- * service's output, and the compiler is the only thing that needs to check it.
  * An empty `batchItemFailures` array is the success case and must still be
  * returned: Lambda reads the field, and omitting it entirely means "the whole
  * batch failed".

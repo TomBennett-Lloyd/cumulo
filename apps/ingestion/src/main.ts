@@ -53,7 +53,7 @@ export type IngestionEnv = z.infer<typeof ingestionEnvSchema>;
  *
  * A throw rather than a value (`docs/standards/error-handling.md` rule 1): a
  * missing queue URL is a deployment that is wrong, not an outcome an ingestion
- * cycle could handle. The message names every offending variable at once.
+ * cycle could handle.
  */
 export const parseIngestionEnv = (source: Record<string, string | undefined>): IngestionEnv => {
   const parsed = ingestionEnvSchema.safeParse(source);
@@ -80,8 +80,7 @@ const openMeteoPolicy: ForecastFetchDeps = {};
 
 /**
  * The cycle's two bounds, bound here for the same reason the Open-Meteo policy
- * is: they are decisions about the running system, and `cycle.ts` should be
- * runnable in a test at a scale a test can express. `cycle-budget.ts` derives
+ * is: they are decisions about the running system. `cycle-budget.ts` derives
  * both numbers from the constants the effects themselves declare, and states
  * the arithmetic.
  */
@@ -93,10 +92,6 @@ const cycleBudget: CycleBudget = {
 /**
  * The Lambda entry point. `dist/main.mjs` is the bundle and `main.handler` is the
  * function handler string ingestion's Terraform configures.
- *
- * `sites` and `weather` are the full adapters; `RunCycleDeps` narrows each to the
- * one method the cycle may use, so ingestion's least-privilege posture (ADR 0002:
- * reads `sites`, writes `weather`) is a compile-time fact as well as an IAM policy.
  *
  * The adapters are passed as whole objects, never as `adapter.listFleetSites`: they
  * hold their client and table name on `this` (#77), so a detached method would

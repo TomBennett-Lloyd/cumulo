@@ -27,11 +27,6 @@ import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
  * **Zero extra reads.** The partials are computed from rows this invocation already holds and the
  * sites it already listed — nothing is re-queried.
  *
- * **No end-of-run event, and none needed.** ADR 0004 makes one SQS message one *location's* whole
- * horizon, so an ingestion cycle is twelve independent invocations with no last-one signal. Each
- * writes only its own keys — `(kind, hour, location)` — so two invocations of one cycle never touch
- * the same item and there is no last-writer race to lose.
- *
  * **It cannot fail the record.** Every failure is converted to a log entry, for the reason
  * `simulate-actuals.ts` states about its own: this runs below the record boundary
  * (`consume-message.ts`) and after the message's real work is already stored, so a throw crossing it
@@ -77,9 +72,6 @@ type FleetRollupOperation =
 
 /**
  * The collaborators a roll-up write needs.
- *
- * `series` is narrowed to the one method this path uses, so the service's least-privilege posture
- * stays a compile-time fact as well as an IAM one.
  */
 export interface FleetRollupWriteDeps {
   readonly series: Pick<SeriesAdapter, 'putFleetRollupPartials'>;
@@ -192,10 +184,6 @@ export const writeFleetActualsRollup = (
 
 /**
  * The roll-up write as `consume-message.ts` calls it: run it, say what happened, return nothing.
- *
- * The outcome is logged here rather than returned to the record boundary because it is not the
- * message's result — the message's work is the forecasts, and those are already stored by the time
- * this runs.
  */
 export const reportFleetRollupWrite = async (
   deps: FleetRollupWriteDeps,

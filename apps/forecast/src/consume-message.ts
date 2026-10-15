@@ -39,10 +39,6 @@ import type { SqsRecord } from './sqs-event';
 /**
  * What became of one message, as a value.
  *
- * The five cases split three ways for the caller:
- *
- * - `stored` is the success, with the shape of the work it did.
- * - `no-active-sites` is **also** a success.
  * - `malformed`, `store-partial` and `failed` each fail the record. They are kept
  *   apart because the operator's next step differs: a malformed body means the
  *   ingestion→forecast contract moved and no retry will help; `store-partial`
@@ -68,13 +64,6 @@ export type MessageOutcome = { readonly messageId: string } & (
  * policy. They are passed as whole objects and never as `adapter.putForecasts`
  * (`docs/standards/structure.md` rule 3).
  *
- * `log` is declared here rather than only on the handler because this is the type
- * the handler binds once and hands down. `consumeMessage` writes no entry of its
- * own — it returns its outcome and the boundary decides what to say about it — but
- * it does hand `log` to `simulateTrailingActuals` and to the fleet roll-up write,
- * whose outcomes are reported where they happen rather than folded into this
- * message's result.
- *
  * `putFleetRollupPartials` joins the `series` narrowing for #494 and adds no AWS
  * permission: it is a Put into the table this function already writes, under the
  * `#FLEET` sentinel partition rather than a site's id.
@@ -87,10 +76,7 @@ export interface ConsumeMessageDeps {
   >;
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
-  /**
-   * The forecast vintage clock. Injected because `issuedAt` is the one input to
-   * an otherwise pure fan-out that depends on when the code ran.
-   */
+  /** The forecast vintage clock. */
   readonly now: () => UtcIsoTimestamp;
 }
 
@@ -122,11 +108,6 @@ const malformedOutcome = (messageId: string, detail: string): MessageOutcome => 
 
 /**
  * A message body, as either the horizon it carries or the reason it is not one.
- *
- * Two failure modes, one vocabulary: a body that is not JSON and a body that is
- * JSON of the wrong shape are the same thing to an operator — the contract in
- * `@cumulo/shared`'s `weatherMessageSchema` was not honoured — and both are
- * hopeless to retry.
  */
 type ParsedBody =
   | { readonly status: 'readings'; readonly readings: readonly ForecastWeatherReading[] }
@@ -179,10 +160,6 @@ const singleLocationId = (readings: readonly ForecastWeatherReading[]): string |
  * the vintage is read once, after the sites are known, so that every row of one
  * message shares an `issuedAt` and the whole message is one identifiable forecast
  * run.
- *
- * Each fallible step converts its own failure where it happens, so what went
- * wrong survives into the log line — the operation for a throw, the site and
- * hour for an implausible one.
  */
 export const consumeMessage = async (
   deps: ConsumeMessageDeps,
@@ -228,17 +205,13 @@ export const consumeMessage = async (
     // in the physics chain rather than a domain outcome. It is converted rather
     // than propagated for one reason only: this is the record boundary, and a
     // throw crossing it would take the batch down with the record (rule 2a and
-    // rule 1's process-boundary corollary). The record still fails, so the
-    // queue's redrive and the alarmed DLQ report it — with `detail` naming the
-    // operation, which is how an operator tells a physics bug from a table.
+    // rule 1's process-boundary corollary).
     return failedOutcome(messageId, 'locationForecasts', error);
   }
 
   if (fanOut.status === 'implausible-hour') {
     // A weather hour that every schema accepts and no atmosphere produces: the
-    // physics landed outside `forecastSchema`'s bounds. This service's policy is
-    // to fail the record — the queue's redrive is both the retry and the operator
-    // signal (#136) — and the detail names the site and the hour.
+    // physics landed outside `forecastSchema`'s bounds.
     return {
       messageId,
       status: 'failed',

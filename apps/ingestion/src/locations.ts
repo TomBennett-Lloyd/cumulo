@@ -5,8 +5,6 @@
  * This is where CLAUDE.md's API-frugality constraint is enforced in code — "only
  * ever fetch weather for locations where active fleet sites exist" is exactly the
  * bucketing below, since every stored site is an active one (#606).
- *
- * Pure: no I/O, no clock. The caller supplies the fleet and fetches the result.
  */
 
 import { locationId } from '@cumulo/shared';
@@ -61,8 +59,6 @@ const activeLocationIds = (sites: readonly FleetSite[]): Set<string> =>
 
 /**
  * The weather fetches one ingestion cycle should issue for `sites`.
- *
- * Co-located sites contribute one entry, and the result is ordered by id.
  */
 export const activeFetchLocations = (sites: readonly FleetSite[]): FetchLocation[] =>
   [...activeLocationIds(sites)].sort().map(fetchLocationOf);
@@ -122,9 +118,6 @@ export interface CycleSelectionSpec {
  *
  * Both halves are returned because the cycle reports on every active location,
  * not only the ones it reached (#115).
- *
- * Pure, and separate from the clock on purpose — the caller resolves `offset`
- * from `now()` and hands in a number.
  */
 export const selectCycleLocations = (
   locations: readonly FetchLocation[],

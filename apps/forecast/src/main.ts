@@ -74,8 +74,7 @@ const documentClient = createStorageDocumentClient();
  *
  * Fixed-width to the second, because ADR 0002's range queries rely on
  * lexicographic order being chronological and `toISOString()`'s milliseconds break
- * that. Parsed through the schema rather than asserted, so the normalizing regex
- * and the brand can never disagree.
+ * that.
  */
 const now = (): UtcIsoTimestamp =>
   utcIsoTimestampSchema.parse(new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'));

@@ -1,8 +1,7 @@
 /**
  * Request construction for the Open-Meteo forecast endpoint.
  *
- * Pure: this module builds a URL string and never fetches it. The adapter that
- * performs the call (and states its timeout/retry policy) lives separately.
+ * Pure: this module builds a URL string and never fetches it.
  */
 
 /**

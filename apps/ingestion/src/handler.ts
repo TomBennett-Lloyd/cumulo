@@ -26,11 +26,6 @@ export interface CycleFailureCounts {
 
 /**
  * Thrown when a cycle finished with any location unpublished.
- *
- * It carries the counts rather than only a message because the interesting
- * question in CloudWatch is which kind of failure this was.
- * The message states both so the distinction survives into a log line, and the
- * fields keep it machine-readable for whatever alarms on it later.
  */
 export class CycleFailedError extends Error {
   override readonly name = 'CycleFailedError';
@@ -50,8 +45,7 @@ export class CycleFailedError extends Error {
  * The handler's signature. The scheduled event payload is deliberately absent:
  * EventBridge's trigger carries nothing this cycle uses — what to fetch comes from
  * the fleet, not from the invocation — so accepting it would only invite someone to
- * start branching on it. The {@link CycleReport} is returned for the benefit of a
- * manual invoke; nothing consumes it in production.
+ * start branching on it.
  */
 export type IngestionHandler = () => Promise<CycleReport>;
 

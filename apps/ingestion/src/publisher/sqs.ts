@@ -34,12 +34,9 @@ import type { WeatherPublisher } from './weather-publisher';
  * file, and the 2026 retry defaults). The number is small on purpose — the real
  * retry for a failed publish is the next hourly cycle.
  *
- * Unlike storage, the *delay curve* is left to the standard strategy. Storage
- * pinned its backoff because provisioned-capacity throttling is its expected
- * retryable failure and the throttling base is environment-dependent; at twelve
- * sends an hour against a service with no provisioned capacity, throttling is not
- * a failure mode this queue has, so there is nothing here for a pinned curve to
- * protect.
+ * Unlike storage, the *delay curve* is left to the standard strategy; against a service
+ * with no provisioned capacity, throttling is not a failure mode this queue has, so there
+ * is nothing here for a pinned curve to protect.
  */
 export const INGESTION_SEND_MAX_ATTEMPTS = 3;
 
@@ -47,8 +44,6 @@ export const INGESTION_SEND_MAX_ATTEMPTS = 3;
  * Per-attempt deadline, in milliseconds. The SDK's default is **0 — no timeout at
  * all**, which in a Lambda means one stalled socket silently consumes the whole
  * invocation.
- *
- * 3 s is roughly thirty times a healthy regional `SendMessage`.
  */
 export const INGESTION_SEND_REQUEST_TIMEOUT_MS = 3_000;
 
@@ -69,8 +64,7 @@ export const createIngestionSqsClient = (): SQSClient =>
     requestHandler: new NodeHttpHandler({
       requestTimeout: INGESTION_SEND_REQUEST_TIMEOUT_MS,
       connectionTimeout: INGESTION_SEND_CONNECTION_TIMEOUT_MS,
-      // Load-bearing, and it was missing until #115 measured it: in the
-      // installed @smithy/node-http-handler 4.9.13, `requestTimeout` alone
+      // Load-bearing: in the installed @smithy/node-http-handler, `requestTimeout` alone
       // only logs a warning and lets the socket hang — the destroy-and-reject
       // branch is gated on this flag.
       throwOnRequestTimeout: true,
@@ -81,16 +75,13 @@ export interface SqsWeatherPublisherDeps {
   readonly client: SQSClient;
   /**
    * The full queue URL of `cumulo-weather-readings-<env>` (ADR 0004, and
-   * `infra/ingestion/transport.tf`), e.g.
-   * `https://sqs.<region>.amazonaws.com/<account>/cumulo-weather-readings-<env>`.
+   * `infra/ingestion/transport.tf`).
    */
   readonly queueUrl: string;
 }
 
 /**
  * A {@link WeatherPublisher} that sends one message per location to an SQS queue.
- *
- * A class rather than a function because there is state to hold.
  */
 export class SqsWeatherPublisher implements WeatherPublisher {
   readonly #client: SQSClient;
@@ -111,12 +102,6 @@ export class SqsWeatherPublisher implements WeatherPublisher {
       // Not a domain outcome: `parseForecastResponse` reports an all-unusable
       // response as `malformed` and `cycle.ts` never publishes one, so an empty
       // batch here is a bug upstream (rule 1).
-      //
-      // `weatherMessageSchema.min(1)` refuses the same thing one line below, and
-      // deliberately so: that is the *contract's* refusal, which the consumer
-      // relies on too. This throw is the *sender's*, and it names the caller's
-      // mistake — "publishing a location with no readings" — rather than
-      // reporting a body that failed to parse.
       throw new Error('SqsWeatherPublisher: refusing to publish a location with no readings');
     }
 

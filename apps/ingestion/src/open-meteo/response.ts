@@ -12,17 +12,14 @@ import type { ForecastLocation, HourlyVariable } from './url';
  * Parsing and normalization of an Open-Meteo forecast response.
  *
  * Pure: takes an already-fetched body as `unknown` and returns either readings or
- * a typed failure. Nothing here performs I/O, so every wire-format hazard the
- * provider hands us is exercised against a captured fixture rather than the network.
+ * a typed failure.
  */
 
 const nullableNumbers = z.array(z.number().nullable());
 
 /**
  * One schema per requested hourly variable. Typing this as a `Record` keyed by
- * `HourlyVariable` is what keeps request and response in step: adding a variable
- * to `hourlyVariables` without adding it here (or vice versa) is a compile error,
- * not a field that silently arrives unparsed.
+ * `HourlyVariable` is what keeps request and response in step.
  */
 const hourlyVariableSchemas: Record<HourlyVariable, typeof nullableNumbers> = {
   shortwave_radiation: nullableNumbers,
@@ -107,7 +104,7 @@ const hasEveryValue = (values: ReceivedHourlyValues): values is HourlyReadingVal
  * Hours with a missing value are dropped and counted instead, because a
  * genuinely partial forecast is normal — Open-Meteo pads the horizon with `null`
  * rather than shortening it — and `droppedHours` is what lets the caller report
- * partial coverage honestly (rule 5) instead of implying a full 48 hours.
+ * partial coverage honestly (rule 5).
  */
 export const parseForecastResponse = (
   location: ForecastLocation,
@@ -145,7 +142,6 @@ export const parseForecastResponse = (
       // The requested coordinates, never `response.latitude`/`response.longitude`:
       // Open-Meteo echoes the centre of the model grid cell it snapped to, which is
       // a different `locationId` from the one the fleet stores and queries under.
-      // Storing the echoed pair would file every reading where nothing looks for it.
       latitude: location.latitude,
       longitude: location.longitude,
       validTime: `${hour}:00Z`,
