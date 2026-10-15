@@ -60,7 +60,6 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 : "${MERGE_PR_POLL_TIMEOUT_SECONDS:=1800}"             # total budget for the checks poll
 : "${MERGE_PR_UPDATE_RETRIES:=3}"                      # update-branch attempts against the head-sha race
 : "${MERGE_PR_RETRY_SECONDS:=10}"                      # between those attempts, between state re-reads, and after a union push
-: "${MERGE_PR_EXPECTED_CHECKS:=0}"                     # a floor the operator can raise; see the checks step
 : "${MERGE_PR_CONFIRM_RETRIES:=5}"                     # re-reads allowed for an eventually-consistent state
 : "${MERGE_PR_PRETTIER_CMD:=pnpm exec prettier}"       # formatter the tech-debt union re-runs; see that step
 
@@ -86,8 +85,7 @@ PR_JSON_FIELDS='baseRefName,body,commits,headRefName,headRefOid,labels,mergeStat
 # to select — so a fat-fingered override would silently change a gate. Refusing
 # up front makes it a usage error instead.
 for knob in MERGE_PR_POLL_INTERVAL_SECONDS MERGE_PR_POLL_TIMEOUT_SECONDS \
-  MERGE_PR_UPDATE_RETRIES MERGE_PR_RETRY_SECONDS MERGE_PR_EXPECTED_CHECKS \
-  MERGE_PR_CONFIRM_RETRIES; do
+  MERGE_PR_UPDATE_RETRIES MERGE_PR_RETRY_SECONDS MERGE_PR_CONFIRM_RETRIES; do
   case "${!knob}" in
     '' | *[!0-9]*)
       printf 'merge-pr: %s must be a non-negative integer, got "%s"\n' "$knob" "${!knob}" >&2
@@ -240,6 +238,13 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       .find((l) => l.startsWith(";") || hashTemplate.test(l));
     if (left !== undefined) put("template", c && c.messageHeadline, left);
   }
+  // One entry per check name, the newest run: a head that has had two workflow
+  // generations lists both, and the rollup is NOT ordered by start time (PR 641
+  // lists a 16:50 gitleaks run before a 16:45 one). A run that has not finished
+  // counts as the newest, so a rerun in flight is never masked by an older green.
+  const newest = new Map();
+  const startedMs = (c, status) =>
+    status !== "COMPLETED" ? Infinity : Date.parse((c && (c.startedAt || c.createdAt)) || "") || 0;
   for (const c of pr.statusCheckRollup || []) {
     // Two shapes share this array. A CheckRun carries status + conclusion; a
     // StatusContext (the older commit-status API, which the rollup still mixes
@@ -253,8 +258,11 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
       status = c.state === "PENDING" || c.state === "EXPECTED" ? "PENDING" : "COMPLETED";
       conclusion = c.state;
     }
-    put("check", name, status, conclusion);
+    const at = startedMs(c, status);
+    const held = newest.get(name);
+    if (!held || at >= held.at) newest.set(name, { at, status, conclusion });
   }
+  for (const [name, c] of newest) put("check", name, c.status, c.conclusion);
   // The closing keywords GitHub itself honours, and the reason this is read from
   // the body rather than from "closingIssuesReferences": the body is what the PR
   // author wrote and what a reviewer read, and the squash-vs-rebase decision has
@@ -1350,8 +1358,6 @@ EOF
 # first and only then refuse at the merge step — a refusal that costs exactly what
 # it exists to prevent.
 
-checks_baseline=0
-
 # What the checks step needs from this one: the heads this run is replacing,
 # whether they were replaced at all, and the answer that claimed so. GitHub goes on
 # answering the old sha and the old rollup after the write lands (the checks step
@@ -1485,25 +1491,8 @@ update_branch_step() {
 if [ "$already_merged" = "1" ]; then
   step 'update-branch' 'skipped (PR is already MERGED)'
 elif [ "$merge_method" = "--rebase" ]; then
-  checks_baseline=${#check_names[@]}
   step 'update-branch' 'skipped — a --rebase batch is curated and force-pushed by its owner, never updated from here (a merge commit would block rebase-merge)'
 else
-  # The count of checks on the PRE-update head is the floor the post-update head
-  # must reach. After an update-branch the rollup is briefly empty or short while
-  # the new head's workflows register, and "no check is pending" is trivially true
-  # of a rollup with no checks in it yet; the floor is what makes the poll wait for
-  # the ones that have not arrived. Derived from this PR rather than from the base
-  # branch, because the base branch's workflow set is not this PR's.
-  #
-  # What the floor does NOT deliver, stated so nobody trusts it for more: it is a
-  # floor, not a required-checks list. A head whose PREVIOUS read also had no
-  # checks — a PR polled for the first time seconds after its push — yields a floor
-  # of 1, so one green check would clear the poll. What stops a merge there is
-  # branch protection, which this script deliberately does not restate: the merge
-  # runs only from mergeStateStatus CLEAN, and a head missing a required check is
-  # BLOCKED, not CLEAN. MERGE_PR_EXPECTED_CHECKS raises the floor for an operator
-  # who wants the poll itself to wait rather than the merge step to refuse.
-  checks_baseline=${#check_names[@]}
   pre_update_sha="$pr_head_sha"
   update_branch_step
 fi
@@ -1515,10 +1504,10 @@ fi
 # hand-typed chain — `gh pr view` still answers the PREVIOUS head's sha, that
 # head's rollup, and BLOCKED, and every verdict this step and the merge step take
 # reads one of those three. On PR #501 the answer was the old head's checks,
-# complete and none pending, so the baseline floor was satisfied by a rollup
-# belonging to a commit that no longer existed, and the merge step then refused on
-# the BLOCKED that came with it. A re-run 90 s later merged. The floor cannot catch
-# this on its own: the stale rollup has the same count as the head it came from.
+# complete and none pending, so the poll was satisfied by a rollup belonging to a
+# commit that no longer existed, and the merge step then refused on the BLOCKED
+# that came with it. A re-run 90 s later merged. The required set cannot catch
+# this on its own: the stale rollup names the same checks as the head it came from.
 #
 # So nothing is evaluated until every sha this run superseded is gone — which shas
 # those are is the update-branch step's business, stated where pre_update_sha and
@@ -1531,11 +1520,33 @@ fi
 # everywhere else, and it quotes gh's answer because the OTHER cause of an unmoved
 # head is a no-op spelling the arm above does not know.
 
-checks_verdict() { # -> ready:<n> | pending:<present>:<expected>:<pending> | failed:<name>:<conclusion>
-  local expected i total pending
-  expected="$checks_baseline"
-  [ "$MERGE_PR_EXPECTED_CHECKS" -gt "$expected" ] && expected="$MERGE_PR_EXPECTED_CHECKS"
-  [ "$expected" -lt 1 ] && expected=1
+# What the poll waits for is a SET, not a count: the base branch's required status
+# checks, read once per run from branch protection (#653). A count of rollup entries
+# counts runs, not checks, and a head with two workflow generations lists both. pr_facts
+# has already reduced the rollup to one entry per name, the newest run. A failing
+# check outside the set still blocks, and a non-required check still running keeps the
+# poll waiting, as before (test 12d asserts both).
+required_checks=()
+
+read_required_checks() { # read_required_checks -> the base branch's required names in $required_checks, or fail
+  local out rc name
+  [ -n "$pr_base_ref" ] || fail 'checks' "could not read required checks: the PR's base branch is unknown"
+  out=$("$MERGE_PR_GH_CMD" api "repos/{owner}/{repo}/branches/$pr_base_ref/protection/required_status_checks" \
+    --jq '.contexts[]' 2>&1)
+  rc=$?
+  [ "$rc" -eq 0 ] || fail 'checks' "could not read required checks for $pr_base_ref (gh api exited $rc): $out"
+  required_checks=()
+  while IFS= read -r name; do
+    [ -n "$name" ] && required_checks+=("$name")
+  done <<EOF
+$out
+EOF
+  [ "${#required_checks[@]}" -gt 0 ] ||
+    fail 'checks' "could not read required checks for $pr_base_ref: branch protection lists none, and an unknown set is never merged on"
+}
+
+checks_verdict() { # -> ready:<n> | pending:<running>:<missing names> | failed:<name>:<conclusion>
+  local i total pending req found missing
   total=${#check_names[@]}
   pending=0
   for ((i = 0; i < total; i++)); do
@@ -1554,16 +1565,25 @@ checks_verdict() { # -> ready:<n> | pending:<present>:<expected>:<pending> | fai
       *) pending=$((pending + 1)) ;;
     esac
   done
-  if [ "$total" -ge "$expected" ] && [ "$pending" -eq 0 ]; then
-    printf 'ready:%s\n' "$total"
+  missing=""
+  for req in "${required_checks[@]}"; do
+    found=0
+    for ((i = 0; i < total; i++)); do
+      [ "${check_names[$i]}" = "$req" ] && found=1
+    done
+    [ "$found" = "1" ] || missing="${missing:+$missing, }$req"
+  done
+  if [ -z "$missing" ] && [ "$pending" -eq 0 ]; then
+    printf 'ready:%s\n' "${#required_checks[@]}"
     return 0
   fi
-  printf 'pending:%s:%s:%s\n' "$total" "$expected" "$pending"
+  printf 'pending:%s:%s\n' "$pending" "$missing"
 }
 
 if [ "$already_merged" = "1" ]; then
   step 'checks' 'skipped (PR is already MERGED)'
 else
+  read_required_checks
   poll_deadline=$((SECONDS + MERGE_PR_POLL_TIMEOUT_SECONDS))
   verdict=""
   while :; do
@@ -1584,7 +1604,7 @@ else
       verdict=$(checks_verdict)
       case "$verdict" in
         ready:*)
-          step 'checks' "${verdict#ready:} check(s) complete on $pr_head_sha, none pending, none failing"
+          step 'checks' "${verdict#ready:} required check(s) complete on $pr_head_sha, none pending, none failing"
           break
           ;;
         failed:*)
@@ -1597,9 +1617,8 @@ else
       [ "$await_new_head" = "0" ] || fail 'checks' \
         "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — gh answered \"$update_answer\", which this step read as a write, but the head still reads $pr_head_sha, one of the sha(s) this run superseded (${pre_update_sha}${superseded_union_sha:+, $superseded_union_sha}), so every check and merge state here is a replaced head's. Either the update has not landed yet (re-run), or that answer is a no-op spelling update-branch does not recognise, in which case the branch is already current and the spelling belongs in that step's no-op arm"
       rest=${verdict#pending:}
-      present=${rest%%:*}
-      rest=${rest#*:}
-      fail 'checks' "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — ${present} of an expected ${rest%%:*} check(s) present, ${rest##*:} still pending"
+      absent=${rest#*:}
+      fail 'checks' "timed out after ${MERGE_PR_POLL_TIMEOUT_SECONDS}s — required check(s) not present: ${absent:-none}; ${rest%%:*} check(s) still pending"
     fi
     sleep "$MERGE_PR_POLL_INTERVAL_SECONDS"
   done
