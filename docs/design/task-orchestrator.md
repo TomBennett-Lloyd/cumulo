@@ -37,7 +37,9 @@ tense, it is describing the routing at review time, not the live routing.
 
 A third amendment, folded into the body (#632): §4's report templates, §7's dispatch table and
 §9.1's draft of the agent file restated `.claude/agents/task-orchestrator.md` with nothing keeping
-them in step, and §7's and §9.1's had drifted, so each now cites that file instead.
+them in step, and §7's and §9.1's had drifted, so each now cites that file instead. #655 cut
+§9.2's draft of `.claude/skills/run-issue/SKILL.md` and §9.3's drafted amendments the same way,
+and §4's account of the templates' shape.
 
 Status: draft for owner review. If accepted, lands via the retro-PR route — this touches
 `.claude/workflow.json` and `CLAUDE.md`, both `humanAlways` paths, so the owner decides.
@@ -199,21 +201,18 @@ artifacts rather than remembered), never correctness.
 
 ## 4. Return contracts (design question 1)
 
-Both templates live in `task-orchestrator.md` and nowhere else. Every sha, exit code, and file
+The templates live in `.claude/agents/task-orchestrator.md` and nowhere else. Every sha, exit code, and file
 list is **pasted command output, never a recollection** — the repo has been burned three separate
 times by reading a pipe's exit instead of the command's (#166 verify, #224 update-branch and
 merge); a hand-typed report field is the same defect wearing a new hat. Reports destined for
 GitHub comments are entity-decoded first (agent outputs have arrived `&lt;`-escaped).
 
-Every report ends with an `Agent:` line naming the handle the top-level can `SendMessage` — that
+The `Agent:` line names the handle the top-level can `SendMessage` — that
 line is how the top-level knows the agent is still addressable, and it is copied into the
 in-flight table on receipt.
 
-The templates are written for the common case (one issue). For a batch (§5a) the same templates
-apply with two changes and no others: the header reads `batch: anchor #<a>, members <list>`, and
-each template's `Per-ticket` block (marked "batch only") becomes mandatory — it is the
-per-ticket dimension the top-level judges doneness by, so batch-level fields (verify rc, CI,
-classification, changed files) stay singular while doneness is reported per member.
+For a batch (§5a), `.claude/agents/task-orchestrator.md` rule 7 and each template's batch fields
+own what changes.
 
 ### 4.1 PLAN CHECKPOINT (ends round 1)
 
@@ -485,129 +484,26 @@ the feedback channel the rollout (§10) reads.
 
 ## 9. In-repo changes (design question 7)
 
-Four files: one new agent, one new top-level skill, one-line boundary notes in two existing
-skills, one CLAUDE.md bullet, one workflow.json block. Contracts stated once: the lifecycle
-mechanics stay in the three skill files; the delegation boundary and report templates live only in
-`task-orchestrator.md`; the top-level's half lives only in `run-issue`.
+Contracts stated once: the lifecycle mechanics stay in the three skill files; the delegation
+boundary and report templates live only in `task-orchestrator.md`; the top-level's half lives
+only in `run-issue`.
 
 ### 9.1 New: `.claude/agents/task-orchestrator.md`
 
 Adopted as `.claude/agents/task-orchestrator.md`, the operative text; the draft as reviewed is §9.1
 of `git show 4faeba7:docs/design/task-orchestrator.md`.
 
-### 9.2 New: `.claude/skills/run-issue/SKILL.md` (draft, complete — the top-level's half)
+### 9.2 New: `.claude/skills/run-issue/SKILL.md`
 
-```markdown
----
-name: run-issue
-description: Run one GitHub issue end-to-end via a task-orchestrator sub-agent, keeping
-  the top-level session free for parallel issues and merge ownership. Replaces invoking
-  plan-issue/execute/review-loop inline when orchestration.mode is delegated.
----
+Adopted as `.claude/skills/run-issue/SKILL.md`, the operative text; the draft as reviewed is §9.2
+of `git show 4faeba7:docs/design/task-orchestrator.md`.
 
-You are the merge owner running one or more issues through task-orchestrators. Check
-`.claude/workflow.json` → `orchestration.mode` first: `flat` means run the three skills
-inline as before; `delegated-pilot`/`delegated` means this procedure.
+### 9.3 Amendments
 
-1. **Admission**: maintain the in-flight table in your session-state scratchpad file
-   (issue, agent handle, phase, footprint, branch). A row leaves the table only at
-   RELEASE. No fixed concurrency cap — **maximize safe parallelism** (owner, 2026-08-09,
-   clarified 2026-08-10): isolation quality is the gate — admit every candidate whose
-   footprint is cleanly isolated from (or trivially rebasable against) everything in
-   flight; entangled candidates hold, or batch. Never hold work back merely to conserve
-   your own context: each set costs you only reports and a table row by design, and
-   delegation is itself the fix for context pressure. Context health is a sanity backstop
-   only — if in-flight sets are somehow costing more than that (bounce chatter, bloated
-   reports), fix the contract breach; don't slow admission. Conserve budget mode is the
-   one hard cap: 1 concurrent set.
-2. **Dispatch** `task-orchestrator` (background) with: the issue number (or, for a batch,
-   the member list + anchor issue) and the main-checkout path. Nothing else — it reads the
-   skills and the issue(s). **Batch composition is yours, at admission**: overlapping
-   footprints among SMALL tickets (debt-burn scale, 1–2 chunks each) on one surface are the
-   signal to batch, not hold — 2–6 members, ≤8 predicted chunks total, no `adr` label, no
-   expected humanAlways paths, no dependency outside the batch, and nothing too large or
-   entangled to be told as one honest commit (each member lands on main as exactly one
-   commit and is its own revert unit). One batch = one agent = one in-flight row
-   (footprint union).
-3. **On PLAN CHECKPOINT**: independently re-check the gates (`gh issue view <n> --json
-labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
-   questions) — the agent declares stops, you enforce them, and a gated plan waits for the
-   owner exactly as before. Then intersect the footprint with every in-flight footprint
-   (docs/tech-debt.md excluded — its conflict is expected and handled at merge). Clear →
-   SendMessage `PROCEED — footprint accepted`. Held → record the hold and its reason;
-   re-check when the blocker merges.
-4. **On TASK REPORT**: verify disk truth in one command (`git rev-parse <branch>` vs the
-   reported HEAD — mismatch: stop, reconcile from the issue ledger before anything else);
-   cross-check the classification against the changed-file list; check the changed files
-   against other in-flight tasks. Then the merge chain of review-loop step 5 (which owns
-   update-branch, the tech-debt union routine, the settle-then-watch, the ritual), one PR
-   at a time — merges are serialized, always. Single-issue PRs merge `--squash` as today;
-   batch PRs merge `--rebase` AFTER the mechanical curated-history check passes — the
-   report's branch commit list must show commit count == surviving-member count, each
-   commit referencing its member issue, and `git log --oneline main..<branch>` must match
-   it (CI green AND curated history are both required; either failing blocks the merge).
-   A batch that is BEHIND or conflicted gets a "curate onto latest main" bounce instead of
-   `gh pr update-branch` (a merge commit would break the invariant and block rebase-merge);
-   after the force-push, wait for the new head's checks as usual. HUMAN-class: notify the
-   owner with the
-   report's review guide — and only via this relay, after you have verified readiness
-   (CI green on the reported head) yourself; the label is already on, and there is
-   deliberately NO issue @-mention at label time (owner, 2026-08-09: a ping must mean
-   "ready for review now", and only the relay carries that guarantee). The agent stays
-   parked either way.
-5. **Bounce, don't do**: anything ticket-shaped that surfaces before release — owner
-   feedback on an awaiting-review PR (relay verbatim; log it to docs/review-feedback.md
-   yourself, as merge owner), branch-side merge fallout beyond the sanctioned tech-debt
-   union routine, a post-merge verification failure, or a question from you or the owner —
-   goes to the warm agent by SendMessage. You never edit an in-flight worktree. Each
-   mutating bounce ends in a refreshed TASK REPORT; re-verify it as in step 4.
-6. **Release**: when the PR is merged, the surviving ticket(s) are closed (a batch's
-   dropped members are back on the backlog with status comments — verify, don't assume),
-   post-merge verification (if any) has settled, and no bounce is open — SendMessage
-   `RELEASE — hand over retro notes`. The handover arrives twice by construction — as the
-   agent's reply (a courtesy copy, never consumed as the record) and as the finalized
-   RETRO NOTES comment on the issue, the sole authoritative record; confirm the comment
-   exists and matches the reply — on divergence the comment wins and the divergence is
-   itself flagged in the retro as a contract breach — then decide worktree fate
-   and run /retro (review-loop step 6 unchanged) with the handover as first-hand input —
-   the retro also asks whether the checkpoint, reports, and handover told you what you
-   needed. Only then remove the row. Never release with an unmerged PR unless the ticket
-   is being abandoned (then say so in the release message; the handover records the
-   abandonment).
-7. **Wedged or expired agent** (no notification, no ledger movement — or SendMessage
-   fails): inspect the issue ledger and the worktree BEFORE anything else; TaskStop the
-   agent if wedged; re-dispatch fresh with `RESUME issue #n` — its reconcile-first step
-   adopts completed work instead of duplicating it. The fresh agent inherits the ticket
-   INCLUDING the handover duty, continuing the existing RETRO NOTES comment (every prior
-   round is already banked there); update the table's handle.
-```
-
-### 9.3 Amendments (one line each, boundary markers only)
-
-- `execute/SKILL.md` step 4 (PARTIAL/BLOCKED re-plan): append — "A revision adding files
-  starts its comment with `Footprint change: +<files>`."
-- `review-loop/SKILL.md` step 5: prefix the merge sequence with — "The merge sequence from
-  here on is the merge owner's (top-level session; see `run-issue` when orchestration is
-  delegated); a task-orchestrator stops at classification + label."
-- `retro/SKILL.md` step 1: append — "When the task ran delegated, read the task-orchestrator's
-  RETRO NOTES/HANDOVER comment on the issue — the sole record of its retro observations, never
-  the agent's chat reply — as first-hand input for this reconstruction; weigh it, don't just
-  copy it."
-- `CLAUDE.md` Workflow section: one bullet — "**Orchestration** (`.claude/workflow.json`
-  → `orchestration.mode`): `delegated` runs each issue via a persistent `task-orchestrator`
-  sub-agent (`/run-issue`), kept addressable until the merge owner releases it after merge +
-  retro handover; the top-level session always owns merging and merge-readiness."
-- `.claude/workflow.json`: add
-
-  ```json
-  "orchestration": {
-    "mode": "delegated-pilot",
-    "note": "flat = top-level runs plan-issue/execute/review-loop inline; delegated-pilot =
-      /run-issue on selected issues while the owner evaluates; delegated = default.
-      Graduation/rollback criteria live in the proposing retro PR. The top-level session
-      owns merging in every mode."
-  }
-  ```
+Each amendment landed in the file it amended, which owns its text: `.claude/skills/execute/SKILL.md`
+step 4, `.claude/skills/review-loop/SKILL.md` step 5, `.claude/skills/retro/SKILL.md` step 1,
+`CLAUDE.md` § Workflow's Orchestration bullet, and `.claude/workflow.json` → `orchestration`. The
+drafts as reviewed are §9.3 of `git show 4faeba7:docs/design/task-orchestrator.md`.
 
 Deliberately **not** changed: `plan-issue`, `implementer.md`, `planner.md`, `reviewer.md`,
 `consultant.md`, `browser-smoke.md` — every existing dispatch contract works unmodified one level
@@ -629,7 +525,7 @@ real dispatchable thing), and its activation checklist should be revised to buil
 | **Report-status inflation** — DONE with buried residue                                                                                                                                | Template forces FIX-NOW residue = NONE for DONE, demotions listed, missing field ⇒ PARTIAL. /retro audits report-vs-reality each pilot issue.                                                                                                                                                                                                                                                                                                                                            |
 | **Entity-escaped relay into GitHub comments**                                                                                                                                         | Decode rule written once in the agent file (rule 6).                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **Budget burn from parallel Fable dispatches** (each task can spawn planner+consultant on Fable)                                                                                      | Budget read happens per dispatch as today (CLAUDE.md rule, unchanged location); conserve mode hard-caps concurrency at 1 (run-issue step 1) — and the owner has confirmed usage limits have never been the observed bottleneck, so no fixed cap exists outside conserve.                                                                                                                                                                                                                 |
-| **Wedged nested agent invisible to the top-level** (hang two levels down)                                                                                                             | The task-orchestrator owns its sub-agents' liveness (it is the one blocked); top-level's wedge detection is ledger movement + TaskStop + RESUME re-dispatch (run-issue step 6), and reconcile-first prevents the duplicate-work re-dispatch the 6h hang nearly caused.                                                                                                                                                                                                                   |
+| **Wedged nested agent invisible to the top-level** (hang two levels down)                                                                                                             | The task-orchestrator owns its sub-agents' liveness (it is the one blocked); top-level's wedge detection is ledger movement + TaskStop + RESUME re-dispatch (run-issue step 7), and reconcile-first prevents the duplicate-work re-dispatch the 6h hang nearly caused.                                                                                                                                                                                                                   |
 | **Concurrent `git -C <main> pull`** from two planning-phase agents                                                                                                                    | Read-only parked checkout; fast-forward pulls; retry-once on index.lock (agent file).                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **Premature release** — agent released, then a question or post-merge failure surfaces                                                                                                | Release checklist (merged + closed + verification settled + no open bounce) makes this rare; when it happens anyway, durable state carries: fresh `RESUME issue #n` dispatch reads the ledger, PR, Q&A comments, and finalized RETRO NOTES. Degraded warmth, full correctness.                                                                                                                                                                                                           |
 | **Zombie unreleased agents** — merged tickets whose agents are never released; the in-flight table silts up                                                                           | A row leaves the table only at RELEASE, and admission reads _unreleased_ rows for its isolation check — so a forgotten release shows up as phantom footprint conflicts rather than leaking silently. Release is bundled into the existing post-merge routine (worktree fate + /retro), which already runs per merge.                                                                                                                                                                     |
@@ -714,9 +610,9 @@ are inlined as normative text where they apply:
 1. **Concurrency cap** (2026-08-09, clarified 2026-08-10): none outside conserve mode —
    maximize safe parallelism; isolation quality is the real gate, context health only a sanity
    backstop, never a pacing mechanism (delegation itself is the fix for context pressure);
-   conserve caps at 1. → §1, §5, §9.2 step 1.
+   conserve caps at 1. → §1, §5, `.claude/skills/run-issue/SKILL.md` § Batch lane step 1.
 2. **HUMAN-class notification** (2026-08-09): no at-label-time issue @-mention; the top-level's
-   relay after verified readiness is the only ping. → §9.2 step 4.
+   relay after verified readiness is the only ping. → `.claude/skills/run-issue/SKILL.md` § Batch lane step 4.
 3. **Retro cadence** (2026-08-09, clarified 2026-08-10): unchanged, per-PR — kept cheap by the
    incremental durable RETRO NOTES comment, never by agent longevity; that comment is the
    single, exclusive source of truth for a ticket's retro observations (chat replies are
@@ -729,4 +625,4 @@ are inlined as normative text where they apply:
    continuously via fixup/autosquash, verified mechanically by the merge owner from the TASK
    REPORT's branch commit list; dropped members vanish via curation; the revert unit is the
    member commit; single-issue PRs stay `--squash`. → §5a (curation + merge mechanics),
-   `.claude/agents/task-orchestrator.md` § TASK REPORT template and rule 7, §9.2 step 4, §10.
+   `.claude/agents/task-orchestrator.md` § TASK REPORT template and rule 7, `.claude/skills/run-issue/SKILL.md` § Batch lane step 4, §10.
