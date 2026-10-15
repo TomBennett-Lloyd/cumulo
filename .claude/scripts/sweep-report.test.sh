@@ -21,12 +21,12 @@
 #     drift apart in step.
 #   - A failing tree cannot produce a passing report. Every failure mode —
 #     unresolved quote, sweep whose carrier did not come back, subject absent at
-#     base, spelled-out figure, ragged comment continuation — has its own case
-#     asserting a non-zero exit, because the exit code is what makes the report
-#     unpasteable over a red tree.
+#     base, spelled-out figure, ragged comment continuation, deleted run with no
+#     row, unpaired bracket — has its own case asserting a non-zero exit,
+#     because the exit code is what makes the report unpasteable over a red tree.
 #   - The subject's OWN positive controls ran. An emptiness claim with no
 #     control is indistinguishable from a broken pattern
-#     (docs/standards/evidence.md member 7), so two cases assert the control
+#     (docs/standards/evidence.md member 7), so one case asserts every control's
 #     output is present in the report and not merely promised by its prose.
 #
 # Usage: bash .claude/scripts/sweep-report.test.sh  (or `pnpm test:scripts`)
@@ -116,6 +116,22 @@ row() { # row <field>... — one ledger row, fields joined with tabs
 
 run_report() { # the production invocation against $ROOT, on the case's ledger
   capture -C "$ROOT" bash "$SUBJECT" "$LEDGER" "$BASE"
+}
+
+commit_base() { # commit_base <path> <line>... — commit <path> as these lines; BASE moves to it
+  local path="$1"
+  shift
+  must mkdir -p "$(dirname "$ROOT/$path")"
+  must printf '%s\n' "$@" >"$ROOT/$path"
+  must gitc "$ROOT" add -A
+  must gitc "$ROOT" commit --quiet -m "base: $path"
+  BASE=$(gitc "$ROOT" rev-parse HEAD) || exit 2
+}
+
+trim_to() { # trim_to <path> <line>... — the uncommitted trim of <path>
+  local path="$1"
+  shift
+  must printf '%s\n' "$@" >"$ROOT/$path"
 }
 
 # --- the two renderings, read back out of the report ----------------------------------------
@@ -256,6 +272,25 @@ expect_rc 2
 expect_stderr 'unknown directive key "carrier"'
 end
 
+begin "a restoration spelled as prose.md rule 1 spells it is counted as restored"
+# PR #661 put "restored (cycle 1)" in a row's check column, because the
+# disposition column refused the spelling rule 1 gives.
+fixture restored-cycle
+ledger_new restored-cycle
+row src/fixture.ts 2 "a deleted carrier, restored" "git show base" "restored (cycle 1)"
+run_report
+expect_rc 0
+expect_stdout "| \`src/fixture.ts\` | 1 | 0 | 0 | 0 | 0 | 1 |"
+end
+
+begin "a restoration spelled any other way is still refused"
+ledger_new restored-round
+row src/fixture.ts 2 "a deleted carrier, restored" "git show base" "restored (round 1)"
+run_report
+expect_rc 2
+expect_stderr 'unknown disposition "restored (round 1)"'
+end
+
 # --- cases: totals, and the two renderings agreeing ------------------------------------------
 
 # Every disposition is non-zero somewhere in this ledger, `deleted` included:
@@ -349,11 +384,15 @@ expect_stdout "src/fixture.ts:1:export const $SUBJECT_ALPHA"
 end
 
 begin "the subject's own positive controls are in the report, not merely promised"
-# evidence.md member 7: an emptiness claim with no control says nothing. Both
-# built-in controls must have produced visible output.
+# evidence.md member 7: an emptiness claim with no control says nothing. Each
+# control must have produced visible output.
 run_report
 expect_stdout "+ // a three-second debounce"
 expect_stdout "reflow-control.ts:"
+expect_stdout "runs-control.ts:2-2 removes 4 word(s)"
+expect_stdout "# positive control — the comment-line and markdown greps over a directory"
+expect_stdout "control.md:1:ControlName in prose"
+expect_stdout "runs-control.ts:2-2: open minus close brackets is -1 before the cut and 0 after"
 end
 
 begin "a tech-debt skeleton is emitted per out-of-scope row, quotes resolved"
@@ -490,6 +529,294 @@ expect_rc 0
 expect_stdout "no ragged comment continuation"
 end
 
+# --- cases: the deleted-run model (#671) --------------------------------------------------------
+#
+# Each positive case is a reduction of a miss a #545 batch shipped to review,
+# with the batch's own lines.
+
+FLEET_SERIES_BASE=(
+  '/*'
+  " * The fleet aggregate, as the chart's point shape — and how complete it is."
+  ' *'
+  ' * Everything here is pure and takes what it reads'
+  ' * (docs/standards/structure.md rule 1), so it is unit-testable without a DOM.'
+  ' *'
+  ' * The summing is not here.'
+  ' */'
+  '// Both series arrive already summed,'
+  '// one point per hour.'
+)
+FLEET_SERIES_TRIM=(
+  '/*'
+  " * The fleet aggregate, as the chart's point shape — and how complete it is."
+  ' *'
+  ' * The summing is not here.'
+  ' */'
+  '// Both series arrive already summed, one point per hour.'
+)
+
+begin "a deleted run whose row names the line above it fails coverage"
+# PR #666 (apps/web/src/dashboard/fleet-series.ts): the row named line 15, the
+# ` *` above the run at 16-18, and seven rows were one line off that way.
+fixture coverage-off-by-one
+commit_base src/fleet-series.ts "${FLEET_SERIES_BASE[@]}"
+trim_to src/fleet-series.ts "${FLEET_SERIES_TRIM[@]}"
+fixture_lacks "$ROOT/src/fleet-series.ts" "Everything here is pure"
+ledger_new coverage-off-by-one
+row src/fleet-series.ts 3 "pure, so unit-testable without a DOM" "shown-by-code" deleted "subject=Everything here is pure"
+run_report
+expect_rc 1
+expect_stdout "src/fleet-series.ts:4-6 removes"
+expect_stdout "1 deleted comment run(s) have no ledger row"
+end
+
+begin "a row inside the run covers it, and a reflow needs no row"
+ledger_new coverage-inside
+row src/fleet-series.ts 4 "pure, so unit-testable without a DOM" "shown-by-code" deleted "subject=Everything here is pure"
+run_report
+expect_rc 0
+expect_stdout "ok — every deleted comment run across"
+expect_not_stdout "src/fleet-series.ts:9"
+end
+
+begin "a row below the run, in another file, or not a deletion does not cover it"
+# Each row alone would cover the run if its guard were widened: line 7 is the
+# line after the run's 4-6, src/fixture.ts at line 5 is in range in the wrong
+# file, and a verified-true row at line 5 deletes nothing.
+ledger_new coverage-edges
+row src/fleet-series.ts 7 "the summing is elsewhere" "shown-by-code" deleted "subject=The summing is not here"
+row src/fixture.ts 5 "a claim" "shown-by-code" deleted "subject=$SUBJECT_ALPHA"
+row src/fleet-series.ts 5 "pure" "read the file" verified-true
+run_report
+expect_rc 1
+expect_stdout "src/fleet-series.ts:4-6 removes"
+expect_stdout "1 deleted comment run(s) have no ledger row"
+end
+
+begin "a trimmed # comment needs a row and a trimmed markdown heading does not"
+fixture coverage-hash
+commit_base src/deploy.sh '#!/bin/sh' '# Not just infra changes, by design.' 'run_it'
+commit_base docs/notes.md '# Notes' '# A removed heading with words' 'tail'
+trim_to src/deploy.sh '#!/bin/sh' 'run_it'
+trim_to docs/notes.md '# Notes' 'tail'
+ledger_new coverage-hash
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 1
+expect_stdout "src/deploy.sh:2-2 removes"
+expect_not_stdout "docs/notes.md:2-2 removes"
+end
+
+begin "a file whose comments were only reflowed is not swept by basename or declaration"
+fixture reflow-only
+commit_base src/reflow-only.ts '// a short note that' '// continues here.' 'export const ReflowOnly = 1;'
+trim_to src/reflow-only.ts '// a short note that continues here.' 'export const ReflowOnly = 1;'
+ledger_new reflow-only
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+expect_rc 0
+expect_not_stdout "(\`src/reflow-only.ts\`)"
+end
+
+CONSUME_MESSAGE_BASE=(
+  '    // throw crossing it would take the batch down with the record (rule 2a and'
+  "    // rule 1's process-boundary corollary). The record still fails, so the"
+  "    // queue's redrive and the alarmed DLQ report it — with \`detail\` naming the"
+  '    // operation, which is how an operator tells a physics bug from a table.'
+  "    return failedOutcome(messageId, 'locationForecasts', error);"
+)
+
+begin "a cut that drops a closing bracket fails the bracket check"
+# PR #669 (apps/forecast/src/consume-message.ts): "(rule 2a and" lost its ")".
+fixture bracket-dropped
+commit_base src/consume-message.ts "${CONSUME_MESSAGE_BASE[@]}"
+trim_to src/consume-message.ts \
+  '    // throw crossing it would take the batch down with the record (rule 2a and' \
+  "    // rule 1's process-boundary corollary." \
+  "    return failedOutcome(messageId, 'locationForecasts', error);"
+ledger_new bracket-dropped
+row src/consume-message.ts 2 "the record still fails" "cited-at" deleted "subject=The record still fails"
+run_report
+expect_rc 1
+expect_stdout "src/consume-message.ts:2-4: open minus close brackets is -1 before the cut and 0 after"
+expect_stdout "1 cut(s) leave a bracket, backtick or ** unpaired"
+end
+
+begin "the repaired cut, and a deleted half-open interval, keep their brackets"
+# The interval is PR #667's (apps/api/src/sites/conflict-retry.ts): `[0, 400)`
+# opens with one kind and closes with another, so brackets count together.
+fixture bracket-kept
+commit_base src/consume-message.ts "${CONSUME_MESSAGE_BASE[@]}"
+commit_base src/conflict-retry.ts \
+  '/**' \
+  ' * The ceiling the doubling stops at.' \
+  ' *' \
+  ' * 400 ms is also wide enough to be a *spread*: full jitter over' \
+  ' * [0, 400) separates 10 contenders by ~40 ms on average, comfortably more than' \
+  ' * the transaction round trip they are queueing behind.' \
+  ' */'
+trim_to src/conflict-retry.ts \
+  '/**' \
+  ' * The ceiling the doubling stops at.' \
+  ' */'
+trim_to src/consume-message.ts \
+  '    // throw crossing it would take the batch down with the record (rule 2a and' \
+  "    // rule 1's process-boundary corollary)." \
+  "    return failedOutcome(messageId, 'locationForecasts', error);"
+ledger_new bracket-kept
+row src/consume-message.ts 2 "the record still fails" "cited-at" deleted "subject=The record still fails"
+row src/conflict-retry.ts 4 "400 ms is wide enough to be a spread" "illustrative" deleted "subject=wide enough to be a *spread*"
+run_report
+expect_rc 0
+expect_stdout "ok — no cut across"
+end
+
+begin "a cut through a code span or a bold span fails the bracket check"
+fixture unpaired-marks
+commit_base src/fleet-series-read.ts \
+  '// **Why one admission prices one command.** The gate asks before a batch.' \
+  'export const first = 1;' \
+  "// The detail is \`failedOutcome\`, which names the operation." \
+  'export const second = 2;'
+trim_to src/fleet-series-read.ts \
+  '// **Why one admission prices one command.' \
+  'export const first = 1;' \
+  "// The detail is \`failedOutcome." \
+  'export const second = 2;'
+ledger_new unpaired-marks
+row src/fleet-series-read.ts 1 "the gate asks before a batch" "shown-by-code" deleted "subject=The gate asks before a batch"
+row src/fleet-series-read.ts 3 "names the operation" "shown-by-code" deleted "subject=which names the operation"
+run_report
+expect_rc 1
+expect_stdout "src/fleet-series-read.ts:1-1: the cut leaves a ** unpaired"
+expect_stdout "src/fleet-series-read.ts:3-3: the cut leaves a backtick unpaired"
+end
+
+begin "a block trimmed behind a fragment subject is swept by the declaration under it"
+# PR #667 (apps/api/src/forecast/fleet-rollup-read.ts): the row's subject was a
+# sentence fragment, and the deleted sentence's only citation names the
+# constant the docblock documents.
+fixture by-declaration
+commit_base src/fleet-actuals-rollup-read.ts \
+  "/** The one event a fallback emits — this route's own, for \`fleetRollupFallbackEvent\`'s reason. */" \
+  "export const fleetActualsRollupFallbackEvent = 'api.fleet-actuals.rollup-fallback';"
+commit_base src/fleet-rollup-read.test.ts \
+  "import { fleetRollupFallbackEvent } from './fleet-rollup-read';"
+commit_base src/fleet-rollup-read.ts \
+  '/**' \
+  ' * The one event a fallback emits.' \
+  ' *' \
+  " * One event with a \`reason\` rather than one event per reason, so an operator counts a single line." \
+  ' */' \
+  "export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';"
+trim_to src/fleet-rollup-read.ts \
+  '/**' \
+  ' * The one event a fallback emits.' \
+  ' */' \
+  "export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';"
+ledger_new by-declaration
+row src/fleet-rollup-read.ts 4 "one event with a reason" "shown-by-code" deleted "subject=rather than one event per reason"
+run_report
+expect_rc 0
+expect_stdout "src/fleet-actuals-rollup-read.ts:1:/** The one event a fallback emits — this route's own, for \`fleetRollupFallbackEvent\`'s reason. */"
+expect_not_stdout "src/fleet-rollup-read.test.ts:1:"
+end
+
+begin "a trimmed file is swept by its basename, in every citation form"
+# PR #669 (apps/ingestion/src/publisher/sqs.ts): the deleted reason's only
+# pointer was "(see \`publisher/sqs.ts\`)"; PR #572's was a path:line.
+fixture by-path
+commit_base src/cycle-budget.ts \
+  '/**' \
+  " * The AWS SDK's own throttling backoff base, for clients that do not replace" \
+  ' * the delay curve — which the SQS publisher deliberately does' \
+  " * not (see \`publisher/sqs.ts\`)." \
+  ' */' \
+  'export const SDK_BASE_DELAY_MS = 100;'
+commit_base src/site-overlay.ts '// Clamped to the bounds at src/publisher/sqs.ts:2.'
+commit_base docs/publisher.md "\`publisher/sqs.ts\` owns the delay curve."
+commit_base data/baseline.tsv "$(printf 'src/publisher/sqs.ts\t5000')"
+commit_base src/publisher/sqs.ts \
+  '/**' \
+  ' * Unlike storage, the *delay curve* is left to the standard strategy; against a service' \
+  ' * with no provisioned capacity, throttling is not a failure mode this queue has, so there' \
+  ' * is nothing here for a pinned curve to protect.' \
+  ' */' \
+  'export const INGESTION_SEND_MAX_ATTEMPTS = 3;'
+trim_to src/publisher/sqs.ts \
+  '/**' \
+  ' * Unlike storage, the *delay curve* is left to the standard strategy.' \
+  ' */' \
+  'export const INGESTION_SEND_MAX_ATTEMPTS = 3;'
+ledger_new by-path
+row src/publisher/sqs.ts 2 "throttling is not this queue's failure mode" "cited-at" deleted "subject=throttling is not a failure mode this queue has"
+run_report
+expect_rc 0
+expect_stdout "src/cycle-budget.ts:4: * not (see \`publisher/sqs.ts\`)."
+expect_stdout "src/site-overlay.ts:1:// Clamped to the bounds at src/publisher/sqs.ts:2."
+expect_stdout "docs/publisher.md:1:\`publisher/sqs.ts\` owns the delay curve."
+expect_not_stdout "data/baseline.tsv:1:"
+end
+
+begin "a plain lowercase declaration name is left to the row's subject"
+# The guard against #666's first report: a ubiquitous name returns every
+# comment in the tree that uses the word.
+fixture plain-name
+commit_base src/fleet-panel.ts '// summed is the word the panel uses for a fleet total.'
+commit_base src/summing.ts \
+  '/**' \
+  ' * Sums the rows. A ghost location is filtered out here, at read.' \
+  ' */' \
+  'export const summed = 1;'
+trim_to src/summing.ts \
+  '/**' \
+  ' * Sums the rows.' \
+  ' */' \
+  'export const summed = 1;'
+ledger_new plain-name
+row src/summing.ts 2 "ghosts are filtered at read" "shown-by-code" deleted "subject=filtered out here, at read"
+run_report
+expect_rc 0
+expect_not_stdout "src/fleet-panel.ts:1:"
+end
+
+# write_shim <dir> <command> <real> <trigger> — <dir>/<command> refuses (exit 2,
+# a word on stderr) when any argument contains <trigger>, else runs <real>.
+write_shim() {
+  local dir="$1" name="$2" real="$3" trigger="$4"
+  cat >"$dir/$name" <<SHIM
+#!/bin/bash
+for a in "\$@"; do case "\$a" in *$trigger*) echo "shim: $name refused" >&2; exit 2;; esac; done
+exec $real "\$@"
+SHIM
+  chmod +x "$dir/$name"
+}
+
+begin "a failed targets awk refuses a verdict instead of reporting no targets"
+# Neither refusal is reachable from a tree, so a shim first on PATH fails the
+# one command each guards: the inline targets program and the control's
+# `git grep --no-index`.
+fixture refusal-shims
+commit_base src/shim.ts '// a note with words' 'export const ShimName = 1;'
+trim_to src/shim.ts 'export const ShimName = 1;'
+ledger_new refusal-shims
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+AWK_SHIM_DIR="$TMP_ROOT/awk-shim-bin"
+GIT_SHIM_DIR="$TMP_ROOT/git-shim-bin"
+must mkdir -p "$AWK_SHIM_DIR" "$GIT_SHIM_DIR"
+write_shim "$AWK_SHIM_DIR" awk "$(command -v awk)" SUBSEP || exit 2
+write_shim "$GIT_SHIM_DIR" git "$(command -v git)" --no-index || exit 2
+capture -C "$ROOT" env "PATH=$AWK_SHIM_DIR:$PATH" bash "$SUBJECT" "$LEDGER" "$BASE"
+expect_rc 2
+expect_stderr "the sweep targets could not be built"
+end
+
+begin "a file-and-declaration sweep whose control cannot run refuses a verdict"
+capture -C "$ROOT" env "PATH=$GIT_SHIM_DIR:$PATH" bash "$SUBJECT" "$LEDGER" "$BASE"
+expect_rc 2
+expect_stderr "the file-and-declaration sweep's own positive control"
+end
+
 # --- cases: a broken tool is not a clean tree ---------------------------------------------------
 
 begin "a git failure is reported as a failure, not counted as a hit"
@@ -529,7 +856,7 @@ end
 
 # --- case: an empty diff is not a clean batch ----------------------------------------------------
 
-begin "a diff that is empty at the base fails checks (c) and (e) rather than passing them"
+begin "a diff that is empty at the base fails every check over the diff rather than passing it"
 # Their silence would otherwise be about the base, not about the batch — a
 # report generated against the wrong sha reads exactly like a clean one.
 fixture empty-diff
@@ -541,6 +868,8 @@ expect_rc 1
 expect_stdout "Diff at this base (tracked working tree vs \`$BASE\`): 0 file(s), +0 / -0 line(s)"
 expect_stdout "pre-check (c) had nothing to run over"
 expect_stdout "pre-check (e) had nothing to run over"
+expect_stdout "the coverage check had nothing to run over"
+expect_stdout "the bracket check had nothing to run over"
 end
 
 begin "the diff's scale is in the header, so an emptiness claim has its scale beside it"
@@ -678,6 +1007,18 @@ run_report
 expect_rc 0
 expect_stdout "Command: \`bash .claude/scripts/sweep-report.sh docs/sweeps/522-ledger.tsv $BASE\`"
 expect_not_stdout "Command: \`bash .claude/scripts/sweep-report.sh $ROOT"
+end
+
+begin "two runs over the same tree print the same bytes"
+# prose.md § Trim batches rule 4 diffs a re-run against the pasted report.
+fixture same-bytes
+ledger_new same-bytes
+row docs/fixture-notes.md 3 "a claim" "read the file" verified-true
+run_report
+first_report=$out
+run_report
+[ "$out" = "$first_report" ] || bad "the second run's report differs from the first"
+expect_stdout "-f '<tmp>/reflow.awk'"
 end
 
 finish
