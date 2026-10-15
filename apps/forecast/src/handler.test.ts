@@ -46,6 +46,11 @@ const handlerDeps = (input: HandlerDepsInput): ConsumeMessageDeps => ({
     // reason: which records Lambda must redeliver does not depend on it either.
     putFleetRollupPartials: (): Promise<BatchWriteOutcome> =>
       Promise.resolve({ status: 'complete' }),
+    // The fleet actuals compaction (#615), answering empty, for the same independence.
+    queryLatestFleetActualsTotals: () => Promise.resolve([]),
+    queryFleetRollup: () => Promise.resolve({ rows: [], complete: true }),
+    putFleetActualsTotals: (): Promise<BatchWriteOutcome> =>
+      Promise.resolve({ status: 'complete' }),
   },
   log: (entry) => {
     input.recorder.entries.push(entry);

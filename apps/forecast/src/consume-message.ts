@@ -9,6 +9,7 @@ import {
 } from '@cumulo/shared';
 import type { BatchWriteOutcome, SeriesAdapter, SiteAdapter } from '@cumulo/storage';
 
+import { reportFleetActualsCompaction } from './fleet-actuals-compaction';
 import { reportFleetActualsRollupWrite, reportFleetRollupWrite } from './fleet-rollup-write';
 import { locationForecasts, type LocationForecastsOutcome } from './location-forecasts';
 import { simulateTrailingActuals } from './simulate-actuals';
@@ -30,9 +31,9 @@ import type { SqsRecord } from './sqs-event';
  * Every row is a Put over a sort key derived from the row itself — `T#<validTime>#
  * FC#physics` for a forecast, `T#<validTime>#GEN` for the simulated actual that
  * follows it (ADR 0002), and `FC#physics#T#<validTime>#L#<locationId>` or
- * `GEN#T#…#L#…` for this location's fleet roll-up slices (ADR 0009) — so a
- * redelivered message rewrites exactly the rows it wrote the first time. The
- * writes are deterministic in their inputs, the draw behind a simulated actual
+ * `GEN#T#…#L#…` for this location's fleet roll-up slices (ADR 0009), and `GEN#TOTAL#T#…#FLEET`
+ * for a settled hour's fleet total — so a redelivered message rewrites exactly the rows it wrote
+ * the first time. The writes are deterministic in their inputs, the draw behind a simulated actual
  * included (`simulatedActualFromForecast`).
  */
 
@@ -72,7 +73,13 @@ export interface ConsumeMessageDeps {
   readonly sites: Pick<SiteAdapter, 'listActiveSitePhysicsAtLocation'>;
   readonly series: Pick<
     SeriesAdapter,
-    'putForecasts' | 'querySeriesRange' | 'putGenerationReadings' | 'putFleetRollupPartials'
+    | 'putForecasts'
+    | 'querySeriesRange'
+    | 'putGenerationReadings'
+    | 'putFleetRollupPartials'
+    | 'queryLatestFleetActualsTotals'
+    | 'queryFleetRollup'
+    | 'putFleetActualsTotals'
   >;
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
@@ -272,6 +279,7 @@ export const consumeMessage = async (
     actuals.settled,
     sites,
   );
+  await reportFleetActualsCompaction({ series: deps.series, log: deps.log }, issuedAt);
 
   return {
     messageId,
