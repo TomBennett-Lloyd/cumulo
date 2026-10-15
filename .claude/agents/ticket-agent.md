@@ -31,7 +31,7 @@ Plan revisions edit that one comment fetch-modify-push (`.claude/agents/task-orc
 
 ## 3. Inline first
 
-Planning, implementation, tests and fix rounds run in your own context. No planner, implementer or general-purpose dispatch by default — the lane's cost advantage is that the ticket's whole reasoning happens once, in one context. The named exceptions, every one of them a fresh `run_in_background: false` dispatch — never a `SendMessage` to an agent you dispatched earlier, whose reply reaches the top level instead of you (`.claude/agents/task-orchestrator.md` rule 4):
+Implementation, tests and fix rounds run in your own context. No planner, implementer or general-purpose dispatch by default. The named exceptions, every one of them a fresh `run_in_background: false` dispatch — never a `SendMessage` to an agent you dispatched earlier, whose reply reaches the top level instead of you (`.claude/agents/task-orchestrator.md` rule 4):
 
 - **(a) `browser-smoke`** for any acceptance criterion measured in a browser; its dispatch contract in `.claude/agents/browser-smoke.md` governs.
 - **(b) `consultant`** on STRUGGLING (rule 5(a)).
