@@ -13,6 +13,7 @@
 #   AWS_PROFILE   the observer's CLI profile (default cumulo-observer)
 #   CUMULO_ENV    the environment watched (default dev)
 #   --history N   transitions printed (default 10)
+#   INCIDENT_WATCH_TICK_SECONDS  the budget all its AWS calls share (default TICK_BUDGET_SECONDS)
 # Exit:  0 nothing firing, 1 something to act on, 2 no verdict reached.
 set -uo pipefail
 export PATH="$PATH:/opt/homebrew/bin"
@@ -28,7 +29,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -h | --help)
-      sed -n '2,16p' "$0"
+      sed -n '2,17p' "$0"
       exit 0
       ;;
     *)
@@ -46,7 +47,7 @@ case "$history_count" in
     ;;
 esac
 
-for tool in aws jq; do
+for tool in aws jq perl; do
   command -v "$tool" >/dev/null 2>&1 || {
     printf 'incident-watch: %s is not on PATH\n' "$tool" >&2
     exit 2
@@ -58,8 +59,9 @@ done
 # identity this script can present.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE
 
+result_file=$(mktemp "${TMPDIR:-/tmp}/incident-watch.XXXXXX") || exit 2
 stderr_file=$(mktemp "${TMPDIR:-/tmp}/incident-watch.XXXXXX") || exit 2
-trap 'rm -f "$stderr_file"' EXIT INT TERM
+trap 'rm -f "$result_file" "$stderr_file"' EXIT INT TERM
 
 # The report is quoted into public issues, so account ids leave it as a shape
 # (infra/README.md convention 7).
@@ -74,9 +76,22 @@ JQ_DEFS='def redact: gsub("(?<![0-9])[0-9]{12}(?![0-9])"; "<account-id>");
           - (if .sign == "+" then 1 else -1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60)
       end;'
 
-# A healthy call answers in seconds, so a longer wait is a stall (#646).
+# A healthy call answers in seconds, so a longer wait is a stall (#646). The
+# timeouts bound one socket wait, not a call's retries, so the tick's calls
+# also share one deadline (#647).
 readonly AWS_CONNECT_TIMEOUT_SECONDS=10
 readonly AWS_READ_TIMEOUT_SECONDS=30
+readonly TICK_BUDGET_SECONDS=300
+
+tick_seconds="${INCIDENT_WATCH_TICK_SECONDS:-$TICK_BUDGET_SECONDS}"
+case "$tick_seconds" in
+  '' | *[!0-9]*)
+    printf 'incident-watch: INCIDENT_WATCH_TICK_SECONDS takes a whole number\n' >&2
+    exit 2
+    ;;
+esac
+started=$(date +%s) || exit 2
+tick_deadline=$((started + tick_seconds))
 
 no_verdict() {
   printf 'incident-watch: %s — no verdict\n' "$1" |
@@ -84,15 +99,26 @@ no_verdict() {
   exit 2
 }
 
+readonly SIGALRM_STATUS=142
+
 # Prints the call's JSON, or reports the failure and exits 2. Callers run it
 # inside $(...), so each ends `|| exit 2` to carry that exit out.
 observe() {
-  local result
-  if ! result=$(aws --profile "$profile" --output json "$@" \
-    --cli-connect-timeout "$AWS_CONNECT_TIMEOUT_SECONDS" --cli-read-timeout "$AWS_READ_TIMEOUT_SECONDS" 2>"$stderr_file"); then
-    no_verdict "aws $1 $2 failed: $(cat "$stderr_file")"
-  fi
-  printf '%s' "$result"
+  local remaining status
+  remaining=$((tick_deadline - $(date +%s)))
+  # alarm 0 would cancel the alarm, not fire it.
+  [ "$remaining" -gt 0 ] || no_verdict "the tick budget ran out at aws $1 $2"
+  # Files, not a pipe: a child the CLI leaves behind cannot hold the tick open.
+  perl -e 'alarm shift; exec @ARGV or die "incident-watch: cannot run $ARGV[0]: $!\n"' "$remaining" \
+    aws --profile "$profile" --output json "$@" \
+    --cli-connect-timeout "$AWS_CONNECT_TIMEOUT_SECONDS" --cli-read-timeout "$AWS_READ_TIMEOUT_SECONDS" \
+    >"$result_file" 2>"$stderr_file"
+  status=$?
+  case "$status" in
+    0) cat "$result_file" ;;
+    "$SIGALRM_STATUS") no_verdict "the tick budget ran out at aws $1 $2" ;;
+    *) no_verdict "aws $1 $2 failed: $(cat "$stderr_file")" ;;
+  esac
 }
 
 # A response jq cannot read is no verdict, never a quiet report.
