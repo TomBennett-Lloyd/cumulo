@@ -484,3 +484,11 @@ A category going quiet across consecutive reviews is the evidence for graduating
 - **Why**: `CLAUDE.md` is a `humanAlways` path, so this cannot merge on green CI plus a review-loop APPROVE. The triggers read as TypeScript, which is how an unbounded `aws` call (#646) and a hand-typed-fixture `.test.sh` harness (#638) passed a lane and its review passes.
 - **How applied**: Reworded the two bullets in `CLAUDE.md`, arrows and targets unchanged, and appended one sentence to rule 3 of `docs/standards/testing.md` so a CLI stub's fixture is a captured real response with its provenance named. At merge, whoever merges fills **Category** and **Verdict** on the branch before the label comes off.
 - **Verdict**: approved, no changes (owner, chat, 2026-10-15: "approve 651"), having read the reviewer's note that the shorter lines drop the two "deciding what…" clauses
+
+## 2026-10-15 — PR #690 — fleet-actuals-compaction
+
+- **Category**: pending — filled at merge
+- **Feedback**: The owner is asked to ratify two ADR entries as written on this branch, and this entry states the ask only. ADR 0009's 2026-10-14 (#615) entry: settled actuals hours are compacted into one fleet total per hour, a total is summed as written (a decommissioned location's settled hours stay in the totals), the first-hour check is satisfied by a total, location presence is checked on the slices read, and three residuals are accepted without a per-cycle re-Put of the totals. ADR 0010's 2026-10-14 entry: the 168-hour roll-up actuals read moves from about 320 to about 14 read units, so revisit trigger 2 stops firing on the roll-up path only, and the fallback double read stays above the premise until #630 or #507 lands. The owner's chat decisions of 2026-10-15 on #615 are the basis the entries were written from.
+- **Why**: `docs/adr/**` is `humanAlways`, so this cannot merge on green CI plus a review-loop APPROVE. The entries record a new mechanism and the figures it moves, and the figures a reader will check are the before and after read units in the PR body.
+- **How applied**: ADR 0009 and ADR 0010 amended on this branch, with the moved quotations annotated as-it-stood. At merge, whoever merges fills **Category** and **Verdict** on the branch before the label comes off.
+- **Verdict**: pending — filled at merge
