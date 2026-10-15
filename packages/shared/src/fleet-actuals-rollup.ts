@@ -18,8 +18,9 @@ export const FLEET_ROLLUP_ACTUALS_KIND = { kind: 'generation' } as const satisfi
 
 /**
  * How far back each forecast run re-simulates actuals and rewrites their slices — three hours, so
- * a missed cycle is repaired by the next. The API reads it too: only these hours' slices are checked
- * for membership (ADR 0009's #506 amendment).
+ * a missed cycle is repaired by the next. Two readers: the API checks membership only on these hours'
+ * slices (ADR 0009's #506 amendment), and the producer compacts hours older than this
+ * (`apps/forecast/src/fleet-actuals-compaction.ts`).
  */
 export const TRAILING_ACTUALS_HOURS = 3;
 
