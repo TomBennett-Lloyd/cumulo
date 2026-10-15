@@ -54,6 +54,8 @@ import { forecastsIn } from './series-split';
 
 /**
  * The one event a fallback emits.
+ *
+ * One event with a `reason` rather than one event per reason, so an operator counts a single line.
  */
 export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';
 

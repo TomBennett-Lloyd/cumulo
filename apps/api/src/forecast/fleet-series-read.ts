@@ -35,7 +35,7 @@ import { hasBudgetForStorageCommands } from '../request-budget';
 /**
  * How many sites this fan-out reads at once: **8**.
  *
- * **So why not wider.** Because the ceiling that binds is not throughput, it is
+ * **Why not wider.** Because the ceiling that binds is not throughput, it is
  * how much work one reading of the clock is allowed to commit. A batch is
  * admitted on the deadline as it stood before the batch began, and the fleet
  * cannot be re-asked mid-batch; a width the size of the fleet is the ungated
@@ -54,7 +54,12 @@ export interface FleetSeriesReadDeps {
  * The whole fleet's points, or the response that says why they are not coming.
  *
  * A discriminated union rather than a points array plus an optional error
- * (`docs/standards/typing.md` rule 4).
+ * (`docs/standards/typing.md` rule 4), and `complete` is the discriminant
+ * because it is the adapter's own word for the same distinction: a read that
+ * stopped with the window unread. The failure arm carries a built
+ * {@link ApiResponse} rather than a reason code — there is exactly one refusal
+ * here and its status, code and message are this module's to decide, not a
+ * decision each handler should be free to spell differently.
  */
 export type FleetSeriesRead =
   | { readonly complete: true; readonly perSite: readonly (readonly SeriesPoint[])[] }

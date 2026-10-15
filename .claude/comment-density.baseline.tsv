@@ -11,8 +11,8 @@ apps/api/src/cost-trip/trip.ts	3200
 apps/api/src/forecast/cycle-cache.ts	4140
 apps/api/src/forecast/fleet-actuals-rollup-read.ts	1780
 apps/api/src/forecast/fleet-rollup-fixtures.ts	701
-apps/api/src/forecast/fleet-rollup-read.ts	4166
-apps/api/src/forecast/fleet-series-read.ts	5633
+apps/api/src/forecast/fleet-rollup-read.ts	4210
+apps/api/src/forecast/fleet-series-read.ts	5782
 apps/api/src/forecast/get-fleet-actuals.ts	5196
 apps/api/src/forecast/get-fleet-forecast.ts	5461
 apps/api/src/forecast/get-site-forecast.ts	5000
