@@ -63,6 +63,9 @@ esac
 case " $* " in
   *" --region us-east-1 "*) fixture="$fixture-billing" ;;
 esac
+if [ -f "$STUB_FIXTURES/$fixture.stall" ]; then
+  sleep "$(cat "$STUB_FIXTURES/$fixture.stall")"
+fi
 if [ -f "$STUB_FIXTURES/$fixture.stderr" ]; then
   cat "$STUB_FIXTURES/$fixture.stderr" >&2
   exit 255
@@ -100,6 +103,10 @@ new_case() {
 
 fixture() { # fixture <name> <json>
   printf '%s\n' "$2" >"$FIX/$1.json" || exit 2
+}
+
+stall() { # stall <name> <seconds> — the stub waits that long before answering
+  printf '%s\n' "$2" >"$FIX/$1.stall" || exit 2
 }
 
 run_watch() {
@@ -415,6 +422,52 @@ calls_made=$(grep -c '^CALL' "$LOG")
 [ "$(grep -c -- '^ARGS .*--cli-connect-timeout 10 --cli-read-timeout 30$' "$LOG")" -eq "$calls_made" ] || bad "a call lacked the timeouts; log: $(calls)"
 end
 
+new_case "a call still running when the tick budget runs out is cut off: no verdict naming the call"
+stall metric 30
+started=$SECONDS
+run_watch INCIDENT_WATCH_TICK_SECONDS=3
+expect_rc 2
+expect_stderr "the tick budget ran out at aws cloudwatch get-metric-data — no verdict"
+expect_not_stdout "VERDICT"
+[ $((SECONDS - started)) -lt 20 ] || bad "the stalled call ran past the budget"
+end
+
+new_case "the budget is the tick's, not each call's: two calls inside it alone outlast it together"
+stall firing 3
+stall firing-billing 3
+run_watch INCIDENT_WATCH_TICK_SECONDS=5
+expect_rc 2
+expect_stderr "the tick budget ran out at aws cloudwatch describe-alarms"
+log_lacks "describe-alarm-history"
+end
+
+new_case "a slow call inside the default budget still reaches a verdict"
+stall firing 2
+run_watch
+expect_rc 0
+expect_stdout "VERDICT quiet"
+end
+
+new_case "a spent budget makes no call at all"
+run_watch INCIDENT_WATCH_TICK_SECONDS=0
+expect_rc 2
+expect_stderr "the tick budget ran out at aws sts get-caller-identity"
+[ "$(grep -c '^CALL' "$LOG")" = "0" ] || bad "expected no aws call; log: $(calls)"
+end
+
+new_case "a budget that is not a whole number is refused before any call"
+run_watch INCIDENT_WATCH_TICK_SECONDS=soon
+expect_rc 2
+expect_stderr "INCIDENT_WATCH_TICK_SECONDS takes a whole number"
+[ "$(grep -c '^CALL' "$LOG")" = "0" ] || bad "expected no aws call; log: $(calls)"
+end
+
+new_case "a budget written with a leading zero is read as decimal"
+run_watch INCIDENT_WATCH_TICK_SECONDS=08
+expect_rc 0
+expect_stdout "VERDICT quiet"
+end
+
 new_case "a response jq cannot read is no verdict, not a quiet report"
 fixture firing 'warning: something
 {"MetricAlarms": [{"AlarmName": "cumulo-forecast-dev-errors"}]}'
@@ -466,6 +519,13 @@ new_case "the DLQ prefix matches the alarm infra/ingestion owns"
 dlq=$(owned_string "$REPO/infra/ingestion/alarms.tf" '^ *alarm_name *= *"(cumulo-weather-readings-dlq-)\$\{var\.environment\}-not-empty"')
 [ "$dlq" = "cumulo-weather-readings-dlq-" ] || bad "DLQ alarm name not found in infra/ingestion/alarms.tf"
 grep -qF "\"^${dlq}\${env_name}-\"" "$WATCH" || bad "incident-watch.sh does not match the DLQ alarm prefix"
+end
+
+new_case "the skill's exit-2 rule quotes the refusal and the budget lines this script prints"
+for line in "refusing to run as anything but the observer" "the tick budget ran out"; do
+  grep -qF "$line" "$WATCH" || bad "incident-watch.sh no longer prints '$line'"
+  grep -qF "$line" "$REPO/.claude/skills/incident-watch/SKILL.md" || bad "SKILL.md's Exit 2 rule does not quote '$line'"
+done
 end
 
 # --- the policy ----------------------------------------------------------------------------
