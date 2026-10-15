@@ -7,10 +7,11 @@ what the top-level session keeps, and the report contracts between them.
 
 **Approved by the owner 2026-08-10**
 ([pre-approval comment](https://github.com/TomBennett-Lloyd/cumulo/issues/336#issuecomment-5234760505))
-**and adopted by the commit that added this file.** The body below is preserved exactly as it was
-reviewed, so where it calls itself a proposal, calls its drafts drafts, or describes itself as
-draft for owner review and final pending that review, it is describing its state at review time,
-not its state now.
+**and adopted by the commit that added this file** (`4faeba7`), which holds the body as reviewed.
+The body below keeps it, trued in place where a carried value moved and less the copies the third
+amendment below cuts, so where it calls itself a proposal, calls its drafts drafts, or describes
+itself as draft for owner review and final pending that review, it is describing its state at
+review time, not its state now.
 
 This document is the rationale and the record of the decisions; the operative copies are
 [`.claude/agents/task-orchestrator.md`](../../.claude/agents/task-orchestrator.md) and
@@ -31,9 +32,12 @@ its own first step or learn that the list can be broken.
 A second amendment, later and larger, and likewise not folded into the body: since
 `.claude/workflow.json` → `orchestration.mode` became `ticket-agent` on 2026-09-10 (#468), a
 single issue takes the ticket-agent lane (`.claude/agents/ticket-agent.md`) and this design
-governs batches. The body below is preserved as reviewed, so where it describes a single
-issue's delegated run in the present tense it is describing the routing at review time, not
-the live routing.
+governs batches. Where the body below describes a single issue's delegated run in the present
+tense, it is describing the routing at review time, not the live routing.
+
+A third amendment, folded into the body (#632): §4's report templates, §7's dispatch table and
+§9.1's draft of the agent file restated `.claude/agents/task-orchestrator.md` with nothing keeping
+them in step, and §7's and §9.1's had drifted, so each now cites that file instead.
 
 Status: draft for owner review. If accepted, lands via the retro-PR route — this touches
 `.claude/workflow.json` and `CLAUDE.md`, both `humanAlways` paths, so the owner decides.
@@ -207,85 +211,17 @@ in-flight table on receipt.
 
 The templates are written for the common case (one issue). For a batch (§5a) the same templates
 apply with two changes and no others: the header reads `batch: anchor #<a>, members <list>`, and
-each template's `Per-ticket` block (marked "batch only" below) becomes mandatory — it is the
+each template's `Per-ticket` block (marked "batch only") becomes mandatory — it is the
 per-ticket dimension the top-level judges doneness by, so batch-level fields (verify rc, CI,
 classification, changed files) stay singular while doneness is reported per member.
 
 ### 4.1 PLAN CHECKPOINT (ends round 1)
 
-```
-## PLAN CHECKPOINT — issue #<n> | batch: anchor #<a>, members <#a #b #c>
-Plan: <anchor issue comment URL>     Label `planned`: applied (each member, batch)
-Planner model: fable | opus (conserve — noted in plan comment)
-Chunks: <k> in <w> waves; browser-surface chunks: <ids | none>
-Footprint (union of chunk Files: lines, repo-relative):
-  <one path per line>
-Shared surfaces the plan names (tokens files, barrels, stylesheets): <list | none>
-Predicted classification: AUTO | HUMAN — source extensions expected: <list | none>;
-  humanAlways paths in footprint: <list | none>
-planApproval stops: NONE | ADR label present | user-only question: "<verbatim>"
-Per-ticket (batch only): #<m> — chunks <ids> — gates clear | DROPPED: <gate/reason,
-  chunks struck, ticket back to backlog>   (one line per member)
-Agent: <this agent's name/id — addressable via SendMessage>
-STATUS: DONE — checkpoint; awaiting PROCEED
-```
+The template is `.claude/agents/task-orchestrator.md` § PLAN CHECKPOINT template.
 
 ### 4.2 TASK REPORT (ends the execution round, and every bounce round thereafter)
 
-```
-## TASK REPORT — issue #<n> | batch: anchor #<a>, members <#a #b #c>
-Branch: <branch>          Worktree: .claude/worktrees/<dir>
-HEAD: <sha>               (pasted: git rev-parse HEAD, run in the worktree)
-PR: #<pr> <url>
-CI: green | red | pending — pasted `gh pr checks` tail, and the head sha it ran against
-
-Verify: rc=<n> (pasted: `pnpm verify; echo $?` — including its `verify root:` line,
-  which must name this worktree and branch)
-
-Review loop: VERDICT APPROVE | CAP-REACHED | CAP-REACHED+CONFIRMED-APPROVE — cycles <c>/3
-  Confirmation pass (mandatory whenever the cap was reached): scope <the fix commits the
-    last cycle never saw>, rounds <n>, verdict APPROVE | ITERATE, findings <n>. It is not
-    a cycle, so it never moves the /3 above. Report bare CAP-REACHED only if the pass has
-    not returned APPROVE — that is what routes the PR to human review.
-  FIX-NOW found/resolved: <n>/<n>
-  Demoted at cap (pure-quality, logged to tech-debt): <titles | none>
-  Correctness residue: NONE (mandatory NONE — a known bug never reaches this report as DONE)
-  SYSTEMIC → docs/tech-debt.md: <n> entries: <slugs | none>
-
-Classification (.claude/workflow.json):
-  AUTO | HUMAN
-  Evidence: source extensions in diff: <e.g. .ts .tsx | none>;
-            humanAlways paths touched: <paths | none>
-  If HUMAN: `awaiting-review` label applied: yes; one-paragraph review guide: <below>
-
-Changed files (pasted: git diff --name-only main...HEAD):
-  <one per line>
-Footprint drift vs checkpoint: <files beyond the declared footprint | none>
-
-Per-ticket (batch only), one line per member:
-  #<m>: DONE — chunks <ids> verified; `Closes #<m>` in PR body
-  #<m>: DROPPED — <why>; commit removed in curation (nothing reaches main); status
-    comment posted; no Closes line
-Branch commits (batch only; pasted: git log --oneline main..HEAD):
-  <sha> #<m>: <first line>     — exactly one line per surviving member, no others;
-  this is the curated-history invariant the merge owner verifies mechanically
-  (commit count == surviving-member count, each referencing its issue) before merging
-Ledger: <issue comment URL (anchor issue, for a batch)> — every surviving chunk ticked
-  verified: yes | naming exceptions
-Retro notes: <issue comment URL — the sole record of retro observations; not restated here>
-Sub-dispatches: <agent (model): reason>, one per dispatch | none — the model each dispatch
-  actually ran on, which #607's comparison reads
-Consultant dispatches: <n> (model, budget mode) | none
-Discovered issues filed: #<a> #<b> | none
-Open questions only the owner can answer: <list | NONE>
-Merge cautions for the merge owner: <e.g. "docs/tech-debt.md appended — expect the
-  union+marker-sweep+prettier-seam routine"; "overlaps in-flight #m on <file>" | none>
-This round: <initial | bounce: what came back, what changed in response — or "n/a">
-
-Agent: <this agent's name/id — parked and addressable until RELEASE>
-STATUS: DONE — READY (auto) | DONE — AWAITING-HUMAN | PARTIAL — <detail> |
-        BLOCKED — <detail> | STRUGGLING — <detail>
-```
+The template is `.claude/agents/task-orchestrator.md` § TASK REPORT template.
 
 This stays inside the repo-wide `STATUS: DONE|PARTIAL|BLOCKED|STRUGGLING` contract (CLAUDE.md);
 merge-readiness rides the qualifier after the dash, the same way PARTIAL already carries detail.
@@ -295,24 +231,7 @@ field as PARTIAL — a template hole is a claim withheld, not a default-pass.
 
 ### 4.3 RETRO HANDOVER (final act, in reply to `RELEASE`)
 
-```
-## RETRO HANDOVER — issue #<n> | batch: <#a #b #c> / PR #<pr>
-Plan accuracy: chunks as planned <n>/<k>; re-planned: <ids + one line why | none>
-  (batch: one line per member, including dropped members and their drop cause)
-Escalations: BLOCKED <n>, STRUGGLING <n> (consultant verdicts, one line each | none)
-Review loop: cycles <c>/3 (+ confirmation pass: <rounds, verdict> | none needed —
-  the loop closed on APPROVE); findings a standards-index trigger should have caught
-  earlier: <finding → the trigger that under-fired | none>
-Bounce rounds after first TASK REPORT: <n> (cause of each | none)
-Wasted work: <duplicated/discarded effort and its cause | none>
-Friction candidates (docs/friction-log.md format — Phase + one concrete observation,
-  no proposed fix required):
-- Phase: <planning|implementation|review|process> — Observed: <...>
-Workflow-change candidates (only if the signal is clear — the /retro pass decides):
-- <rule/trigger/skill line that failed → suggested tightening | none>
-Notes comment: <URL of this content's durable home on the issue>
-STATUS: DONE — released
-```
+The template is `.claude/agents/task-orchestrator.md` § RETRO HANDOVER template.
 
 The handover's shape deliberately mirrors `/retro` step 1's reconstruction checklist and the
 friction log's entry format, so the top-level's retro pass consumes it directly instead of
@@ -513,16 +432,8 @@ dispatch fresh with `RESUME issue #n` — the reconciliation step above does the
 **Assumption A2 — nested spawning works**: an agent definition's tool grant can include `Agent`.
 Evidence from the harness itself: the `Explore` agent's grant is "All tools _except Agent_, …",
 which only makes sense if "All tools" (the grant `implementer` and `browser-smoke` already carry)
-includes `Agent`. So `task-orchestrator.md` grants all tools including `Agent`, and it spawns:
-
-| Layer             | Agent           | Model                       | Notes                                                                                                         |
-| ----------------- | --------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| task-orchestrator | (itself)        | **opus**                    | per the owner's spec; unaffected by conserve mode                                                             |
-| planning          | `planner`       | **fable**, opus if conserve | budget read per CLAUDE.md; downgrade noted in plan comment — rule unchanged, just executed one level down     |
-| implementation    | `implementer`   | opus                        | parallel within a wave, single message, no file overlap — per `execute`                                       |
-| browser check     | `browser-smoke` | sonnet                      | `run_in_background: false`, sequenced away from source-mutating chunks — its own dispatch contract, inherited |
-| review            | `reviewer`      | opus                        | per cycle                                                                                                     |
-| escalation        | `consultant`    | **fable**, opus if conserve | guidance only, re-dispatch same chunk                                                                         |
+includes `Agent`. So `task-orchestrator.md` grants all tools including `Agent`, and it spawns the
+sub-agents its rule 4 lists, on the models that rule names.
 
 A subtlety worth stating: skills. The three lifecycle skills are plain markdown on disk; the
 task-orchestrator is instructed to **Read and follow them verbatim** rather than invoke them via
@@ -537,7 +448,7 @@ a claim, not evidence") and losing wave parallelism. The honest fallback is: kee
 model, and keep the two pieces of this proposal that are independently valuable — the final-report
 template as the top-level's own pre-merge checklist, and the in-flight footprint table. Only §4's
 templates and §5 rest on nothing but current practice; §2, §3, §6 assume A1-or-durable-resume;
-§7's dispatch tables rest on A2.
+§7's nested dispatch rests on A2.
 
 ## 8. Merge ownership (design question 4)
 
@@ -579,123 +490,10 @@ skills, one CLAUDE.md bullet, one workflow.json block. Contracts stated once: th
 mechanics stay in the three skill files; the delegation boundary and report templates live only in
 `task-orchestrator.md`; the top-level's half lives only in `run-issue`.
 
-### 9.1 New: `.claude/agents/task-orchestrator.md` (draft, complete)
+### 9.1 New: `.claude/agents/task-orchestrator.md`
 
-```markdown
----
-name: task-orchestrator
-description: Owns one ticket set's full lifecycle — a single GitHub issue or a small
-  same-surface batch — (plan → execute → review loop → PR →
-  fix rounds) inside its own worktree, as a persistent agent resumed round by round via
-  SendMessage — plan checkpoint first, then execution, then bounce rounds — until the
-  top-level session RELEASEs it after merge. Dispatched by the /run-issue skill. Never
-  merges; the top-level session owns merging.
-model: opus
----
-
-You orchestrate exactly ONE ticket set — a single issue, or a batch of small same-surface
-issues the dispatch names with an anchor issue — end to end, inside its own worktree. You are
-the only git-writer in that worktree (implementers never touch git); you touch nothing outside
-it except GitHub (issue comments, labels, the PR) and the sanctioned read-only
-`git -C <main-checkout> pull` from plan-issue (on an index.lock collision, wait and retry once).
-
-**You live for the ticket set's whole life.** Your lifecycle is rounds, each ending in a report,
-each next round arriving as a message: dispatch → PLAN CHECKPOINT → `PROCEED` → TASK REPORT →
-zero or more bounce rounds (owner feedback on an awaiting-review PR, merge fallout on your
-branch, a post-merge verification failure, or plain questions — questions get answers, never
-edits) each ending in a refreshed TASK REPORT → `RELEASE` → RETRO HANDOVER, your final act.
-A report ends a round, never the ticket; only RELEASE ends the ticket. **Your memory is not
-storage**: create a RETRO NOTES comment on your ticket's issue (anchor issue for a batch) at
-the checkpoint and append that round's retro-relevant observations to it at every round
-boundary — edit the one comment, never post a second. When a round carries a relayed owner
-question, post the question and your answer as one issue comment before replying — you own
-your issue's comments; the top-level never posts them for you.
-
-**Procedure = the three skills, read from disk and followed verbatim**:
-`.claude/skills/plan-issue/SKILL.md`, then `.claude/skills/execute/SKILL.md`, then
-`.claude/skills/review-loop/SKILL.md` — with exactly these deviations:
-
-1. **Reconcile disk state at the start of EVERY round** — fresh dispatch, RESUME, PROCEED,
-   and every bounce alike (you may have been killed, compacted, or the merge owner may have
-   acted on your branch since your context formed — your context is a hypothesis about disk,
-   never disk): check `git worktree list` for this issue's worktree, `git log main..<branch>`
-   for committed waves, `git status` for uncommitted work, the issue for an existing
-   plan/ledger, `gh pr list --head <branch>` for a PR and its state. Adopt what is done: tick
-   ledger boxes the commits prove; commit a clean uncommitted wave only after running its
-   chunks' Verify: commands yourself; never re-dispatch a chunk whose files the tree already
-   contains in completed form. EDIT the existing ledger comment — never post a second ledger.
-2. **The plan checkpoint ends your first run.** After plan-issue step 5 (plan posted, label
-   applied), emit the PLAN CHECKPOINT report below and STOP — regardless of planApproval mode.
-   Execution begins only when the top-level continues you with `PROCEED`. Where plan-issue
-   says "surface to the user and stop", your stop IS the checkpoint: declare the gate in the
-   report; the top-level owns the user.
-3. **Stop before the merge — but you are not done.** Run review-loop through PR creation,
-   CI green, and workflow.json classification (apply `awaiting-review` yourself when
-   classification is HUMAN). Then emit the TASK REPORT below and end the round, staying
-   addressable for bounce rounds until RELEASE. Never: merge, close, or
-   `gh pr update-branch` any PR; resolve conflicts against main or rebase onto main
-   except on an explicit "curate onto latest main" bounce (rule 7);
-   write to the main checkout or another worktree; remove worktrees or run the sweeper;
-   run /retro; message the user. Bounce rounds carrying owner feedback are review-loop
-   territory: the review cycle cap (3 cycles plus the confirmation pass) and the
-   review-feedback logging stay with their owners
-   (cap: you; the log: the merge owner).
-   3a. **On `RELEASE`**: finalize your RETRO NOTES comment into the full RETRO HANDOVER
-   template — the comment is the sole authoritative record — then emit the same content
-   plus the comment URL as your final message, which is a courtesy copy only; that
-   comment edit is your one permitted action; no other edits, no git. If disk state
-   contradicts release (PR not merged, issue open), say so in the handover instead of
-   acting on it: release is the merge owner's call and a wrong one is theirs to retract.
-4. **Sub-agent dispatch is yours**: planner (fable — first read
-   ~/.local/state/claude-budget/mode per CLAUDE.md Model tiers; conserve → opus, note the
-   downgrade in the plan comment), implementers (opus), reviewer (opus), consultant (fable,
-   same budget rule), browser-smoke (sonnet, run_in_background: false, sequenced — see its
-   dispatch contract). Honour every dispatch contract in the agent files you spawn.
-5. **Plan revisions that add files** post to the issue (per execute) with a leading
-   `Footprint change: +<files>` line.
-6. **Report hygiene**: every sha, exit code, and file list in your reports is pasted command
-   output captured immediately (`cmd > out 2>&1; rc=$?` — never the exit of a pipe), and
-   anything you relay into a GitHub comment is HTML-entity-decoded first (nested agents'
-   output sometimes arrives &lt;-escaped).
-7. **Batch dispatches** (member list + anchor issue in the prompt): one plan, every chunk
-   tagged with its owning issue; the plan and the single ledger live on the anchor issue,
-   each member gets a linking comment naming its chunk IDs. planApproval gates bind per
-   member — a member tripping a gate DROPS at the checkpoint (chunks struck, reason
-   declared), never blocks the batch. **Curated history is a standing invariant**: exactly
-   one commit per member, `#<m>: <summary>`, from that member's first completed chunk;
-   every later edit for the member folds in via `git commit --fixup <member-sha>` +
-   `git -c sequence.editor=: rebase -i --autosquash main` (or `--amend` when it is HEAD).
-   You are the only git-writer, so rewriting is safe; force-push only your own branch,
-   never after the merge chain has started. A member not fully verified by review time
-   ships NOTHING: drop its commit in curation (no revert commits — nothing of it reaches
-   main), post a status comment on its issue, strike its `Closes` line — the batch ships
-   without it. On a "curate onto latest main" bounce: rebase onto fresh main, resolve
-   docs/tech-debt.md per the union rules, with the marker sweep and the rebase hygiene
-   `review-loop` step 5 states (`core.commentChar` with `commit.cleanup=strip`, subject check), re-verify,
-   force-push, re-report. **History honesty is mechanical, not inferred**: for every file
-   the branch ADDS, assert no earlier commit references it (`git log --oneline -S<path>`,
-   `git ls-tree`) before writing any commit message that claims a split — two commits in
-   the #327 batch asserted a split that was false and named a file two commits away, on
-   causation reasoning that was coherent and wrong where two git commands settled it. PR body carries one `Closes #<m>` per surviving member. Every report
-   includes the per-ticket block and the branch commit list.
-
-### PLAN CHECKPOINT template (ends round 1)
-
-[§4.1 template verbatim]
-
-### TASK REPORT template (ends the execution round and every bounce round)
-
-[§4.2 template verbatim]
-
-### RETRO HANDOVER template (final act, in reply to RELEASE)
-
-[§4.3 template verbatim]
-
-The top-level treats a missing field as PARTIAL. STATUS vocabulary is the repo contract:
-DONE — READY (auto) | DONE — AWAITING-HUMAN | PARTIAL | BLOCKED | STRUGGLING, detail after
-the dash; every report carries the `Agent:` handle line until release. Correctness residue
-must be NONE for any DONE — a known bug never ships in a DONE report, cap or no cap.
-```
+Adopted as `.claude/agents/task-orchestrator.md`, the operative text; the draft as reviewed is §9.1
+of `git show 4faeba7:docs/design/task-orchestrator.md`.
 
 ### 9.2 New: `.claude/skills/run-issue/SKILL.md` (draft, complete — the top-level's half)
 
@@ -931,4 +729,4 @@ are inlined as normative text where they apply:
    continuously via fixup/autosquash, verified mechanically by the merge owner from the TASK
    REPORT's branch commit list; dropped members vanish via curation; the revert unit is the
    member commit; single-issue PRs stay `--squash`. → §5a (curation + merge mechanics), §4.2,
-   §9.1 rule 7, §9.2 step 4, §10.
+   `.claude/agents/task-orchestrator.md` rule 7, §9.2 step 4, §10.
