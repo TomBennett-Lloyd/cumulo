@@ -34,7 +34,9 @@ import type { WeatherPublisher } from './weather-publisher';
  * file, and the 2026 retry defaults). The number is small on purpose — the real
  * retry for a failed publish is the next hourly cycle.
  *
- * Unlike storage, the *delay curve* is left to the standard strategy.
+ * Unlike storage, the *delay curve* is left to the standard strategy; against a service
+ * with no provisioned capacity, throttling is not a failure mode this queue has, so there
+ * is nothing here for a pinned curve to protect.
  */
 export const INGESTION_SEND_MAX_ATTEMPTS = 3;
 

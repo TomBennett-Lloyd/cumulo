@@ -60,7 +60,7 @@ apps/ingestion/src/main.ts	5495
 apps/ingestion/src/open-meteo/fetch-forecast.ts	3945
 apps/ingestion/src/open-meteo/response.ts	3356
 apps/ingestion/src/open-meteo/url.ts	5483
-apps/ingestion/src/publisher/sqs.ts	6300
+apps/ingestion/src/publisher/sqs.ts	6372
 apps/ingestion/src/publisher/weather-publisher.ts	8333
 apps/web/src/App.tsx	7263
 apps/web/src/AppErrorBoundary.tsx	6532

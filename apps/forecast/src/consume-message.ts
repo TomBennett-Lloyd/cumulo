@@ -205,7 +205,7 @@ export const consumeMessage = async (
     // in the physics chain rather than a domain outcome. It is converted rather
     // than propagated for one reason only: this is the record boundary, and a
     // throw crossing it would take the batch down with the record (rule 2a and
-    // rule 1's process-boundary corollary.
+    // rule 1's process-boundary corollary).
     return failedOutcome(messageId, 'locationForecasts', error);
   }
 
