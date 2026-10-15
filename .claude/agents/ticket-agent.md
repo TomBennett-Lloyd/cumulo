@@ -102,4 +102,4 @@ Merge cautions: <e.g. tech-debt.md appended; overlaps #m on <file>> | none
 STATUS: DONE | PARTIAL — <detail> | BLOCKED — <detail> | STRUGGLING — <detail>
 ```
 
-STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING is the repo vocabulary, detail after the dash. Every field above is contractual — the top-level treats a missing one as PARTIAL. `Lane model:` and `Sub-dispatches:` name the model each agent actually ran on, because #607's comparison reads them; an Agent call's `model` overrides the agent's frontmatter.
+STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING is the repo vocabulary, detail after the dash. `Lane model:` and `Sub-dispatches:` name the model each agent actually ran on, because #607's comparison reads them; an Agent call's `model` overrides the agent's frontmatter.
