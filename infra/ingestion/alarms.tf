@@ -8,13 +8,12 @@
 # alarm, added by #29, covers the one failure that never reaches the handler at
 # all: an invocation that was discarded before it started.
 #
-# `treat_missing_data = "notBreaching"` on all three. The function reports
-# Errors only when it is invoked, and SQS stops publishing queue metrics when a
-# queue has been idle for six hours — so without this an idle demo, which is the
-# normal state, would sit permanently in INSUFFICIENT_DATA and nobody would
-# notice the day it changed. AsyncEventsDropped has no such gap: the live series
-# carries a datapoint every hour, zero when nothing was dropped (#639), so the
-# setting is harmless there rather than needed.
+# `treat_missing_data = "notBreaching"` on all three. SQS stops publishing queue
+# metrics when a queue has been idle for six hours — so without this an idle
+# demo, which is the normal state, would sit permanently in INSUFFICIENT_DATA and
+# nobody would notice the day it changed. AsyncEventsDropped has no such gap: the
+# live series carries a datapoint every hour, zero when nothing was dropped
+# (#639), so the setting is harmless there rather than needed.
 #
 # `alarm_actions` and `ok_actions` on all three, mirroring
 # infra/storage/alarms.tf and infra/api/alarms.tf: they point at the platform
@@ -125,9 +124,9 @@ resource "aws_cloudwatch_metric_alarm" "dlq_not_empty" {
 #
 # It is also every errored cycle's signal. `maximum_retry_attempts` in
 # schedule.tf leaves an invocation that ran and errored no retry, so Lambda drops
-# it as well: both metrics move for the same cycle, and two errored cycles in a
-# row fire this alarm alongside `ingestion_errors` (#639). Firing without it
-# means at least one of the two dropped cycles never started: the starvation
+# it as well: both metrics move for the same cycle, and errored cycles in a row
+# fire this alarm alongside `ingestion_errors` (#639). Firing without it means at
+# least one of the dropped cycles never started: the starvation
 # this block describes, and the case docs/adr/0006-demo-abuse-protection.md's
 # first revisit trigger names this alarm for.
 #
