@@ -1075,6 +1075,75 @@ expect_not_called "pr merge $PR --rebase"
 end
 
 # ==========================================================================================
+# 10g. a lane merges only on its report's STATUS: DONE
+# ==========================================================================================
+# PRs #649 and #652 each carried a lane report with no STATUS line and merged on the
+# header alone (#659). The bodies below follow #649's, read with `gh pr view 649` on
+# 2026-10-15: unfenced header, fields, a trailer after the block.
+begin "a lane report ending STATUS: DONE with detail merges --squash"
+fixture lane-status-done
+V_BODY='Closes #21\n\n## What and why\n\nThe change.\n\n## Lane report — issue #21\nBranch/HEAD: 490-lane aaa111\nReview: APPROVE after 1 pass\nSTATUS: DONE — reviewer APPROVE on aaa111; CI green\n\nGenerated with Claude Code'
+V_COMMITS="#21: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'ticket-agent lane for #21 -> squash'
+expect_called "pr merge $PR --squash"
+end
+
+begin "a lane report with no STATUS line is refused at classify"
+fixture lane-status-missing
+V_BODY='Closes #21\n\n## What and why\n\nThe change.\n\n## Lane report — issue #21\nBranch/HEAD: 490-lane aaa111\nReview: APPROVE after 1 pass\nDiscovered: none\n\nGenerated with Claude Code'
+V_COMMITS="#21: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr "PR #$PR's lane report has no STATUS line (issue #21)"
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+end
+
+begin "a lane report saying STATUS: PARTIAL is refused at classify, --method squash included"
+fixture lane-status-partial
+V_BODY='Closes #21\n\n## Lane report — issue #21\nBranch/HEAD: 490-lane aaa111\nSTATUS: PARTIAL — criterion 3 unmet\n\nGenerated with Claude Code'
+V_COMMITS="#21: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr "PR #$PR's lane report (issue #21) says \"STATUS: PARTIAL — criterion 3 unmet\""
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+case_ctx="--method squash"
+reset_calls
+capture -C "$REPO" env \
+  MERGE_PR_GH_CMD="$ROOT/gh" MERGE_PR_REAP_CMD="$ROOT/reap" \
+  MERGE_PR_POLL_INTERVAL_SECONDS=0 MERGE_PR_POLL_TIMEOUT_SECONDS=30 \
+  MERGE_PR_RETRY_SECONDS=0 MERGE_PR_CONFIRM_RETRIES=2 \
+  bash "$SUBJECT" --method squash "$PR" "$REPO"
+expect_rc 1
+expect_stderr 'says "STATUS: PARTIAL'
+expect_not_called "pr merge $PR --squash"
+case_ctx=""
+end
+
+# The rule reads the header at the start of a line, so a retro or hand-written body
+# that only mentions one is not a lane and carries no STATUS obligation.
+begin "a body with no lane report header merges without a STATUS line"
+fixture lane-status-no-header
+V_BODY='Closes #12\n\nThe retro of #652, whose ## Lane report — issue #634 had no STATUS line.'
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_not_stderr 'STATUS'
+expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
 # 11. a failing check exits non-zero and names the check
 # ==========================================================================================
 begin "a failing check exits non-zero, naming it, and never merges"

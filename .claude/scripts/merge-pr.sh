@@ -26,8 +26,7 @@
 # unfilled one. CI's merge-ritual-gate cannot make that distinction —
 # .github/workflows/ci.yml comment (d) says so in terms: it sees that the file is
 # in the diff and nothing beyond that, so a placeholder clears it exactly as a
-# real entry does. This refusal is that gap, and it is the one step here that is
-# a gate rather than a convenience.
+# real entry does. This refusal is that gap.
 #
 # Usage:
 #   merge-pr.sh [--method squash|rebase] <pr-number> [repo-root]
@@ -290,6 +289,14 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const laneRe = /^## Lane report — issue #(\d+)/gm;
   while ((m = laneRe.exec(pr.body || ""))) lanes.add(m[1]);
   for (const n of lanes) put("lane", n);
+  // The first STATUS line after each lane report header, empty when there is none (#659).
+  const bodyLines = (pr.body || "").split("\n");
+  bodyLines.forEach((line, i) => {
+    const lane = /^## Lane report — issue #(\d+)/.exec(line);
+    if (!lane) return;
+    const status = bodyLines.slice(i + 1).find((l) => l.startsWith("STATUS:"));
+    put("lanestatus", lane[1], status || "");
+  });
   const batches = new Set();
   const batchRe = /^## TASK REPORT — .*?batch: anchor #(\d+)/gm;
   while ((m = batchRe.exec(pr.body || ""))) batches.add(m[1]);
@@ -330,6 +337,8 @@ pr_batches=()
 pr_commits=()
 pr_templates=()
 pr_part_of=()
+lane_status_issues=()
+lane_status_lines=()
 check_names=()
 check_statuses=()
 check_conclusions=()
@@ -363,6 +372,8 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
   pr_commits=()
   pr_templates=()
   pr_part_of=()
+  lane_status_issues=()
+  lane_status_lines=()
   check_names=()
   check_statuses=()
   check_conclusions=()
@@ -384,6 +395,10 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
       commit) pr_commits+=("$a") ;;
       template) pr_templates+=("'$a' carries \"$b\"") ;;
       partof) pr_part_of+=("$a") ;;
+      lanestatus)
+        lane_status_issues+=("$a")
+        lane_status_lines+=("$b")
+        ;;
       check)
         check_names+=("$a")
         check_statuses+=("$b")
@@ -593,6 +608,17 @@ if [ "$already_merged" = "0" ]; then
   if [ "${#pr_templates[@]}" -gt 0 ]; then
     fail 'classify' "editor template left in a commit body: $(printf '%s; ' "${pr_templates[@]}")reword with git -c core.commentChar=';' -c commit.cleanup=strip, force-push, then re-run"
   fi
+  # A lane merges on its own verdict, the STATUS line .claude/agents/ticket-agent.md
+  # rule 8's template ends with; --method does not bypass it (#659).
+  i=0
+  while [ "$i" -lt "${#lane_status_issues[@]}" ]; do
+    case "${lane_status_lines[$i]}" in
+      'STATUS: DONE' | 'STATUS: DONE '*) ;;
+      '') fail 'classify' "PR #$pr_number's lane report has no STATUS line (issue #${lane_status_issues[$i]}) — a lane merges only on STATUS: DONE; refresh the report in the PR body" ;;
+      *) fail 'classify' "PR #$pr_number's lane report (issue #${lane_status_issues[$i]}) says \"${lane_status_lines[$i]}\" — a lane merges only on STATUS: DONE" ;;
+    esac
+    i=$((i + 1))
+  done
 fi
 
 # --- step: feedback ---------------------------------------------------------------------------
