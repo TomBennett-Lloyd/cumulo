@@ -21,8 +21,7 @@ import { MAX_CONFLICT_RETRIES, conflictRetryDelayMs } from './conflict-retry';
  *
  * - **`id`** is server-assigned. `createSiteInputSchema` strips one a caller
  *   sent, so a client cannot predict, collide with, or overwrite an id it did
- *   not create. The generated id is in the 201 body, which is the only
- *   legitimate way for the caller to learn it.
+ *   not create.
  * - **`origin: 'user'`** is what places the site in the sparse
  *   `user-sites-by-age` index and so makes it evictable; seed sites carry no
  *   index attribute at all and are therefore *structurally* exempt from
@@ -80,18 +79,15 @@ export interface CreateSiteDeps {
     SiteAdapter,
     'createUserSiteWithCap' | 'oldestUserSite' | 'evictAndCreateUserSite'
   >;
-  /** Fixed-width UTC to the second — `utcIsoTimestampSchema`'s only accepted form. */
   readonly now: () => UtcIsoTimestamp;
   readonly newSiteId: () => string;
   /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
   readonly log: (entry: Record<string, unknown>) => void;
   /**
-   * The backoff between attempts. Injected rather than a `setTimeout` inside the
-   * loop so the route's tests observe the delays it actually slept instead of
-   * waiting them out (`main.ts` supplies the real timer).
+   * The backoff between attempts.
    */
   readonly sleep: (ms: number) => Promise<void>;
-  /** The jitter source, injected for the same reason. Production is `Math.random`. */
+  /** The jitter source. Production is `Math.random`. */
   readonly random: () => number;
 }
 
@@ -105,9 +101,6 @@ type StoreSiteLoss = 'conflict' | 'oldest_gone' | 'counter_index_drift';
  * because it is the one thing that distinguishes "the fleet is busy" from "the
  * counter and the index have genuinely diverged", and the log line is where an
  * operator reads it.
- *
- * Neither storing outcome names the evicted site: nothing after the committed
- * write reads it.
  */
 type StoreSiteOutcome =
   | { readonly stored: 'created' }
@@ -134,10 +127,6 @@ type StoreSiteAttempt =
  * with it the server-assigned id that is the only place the caller can learn it,
  * can never be lost to the deadline. What the gate can cost is an attempt that
  * had not begun, which costs nobody anything.
- *
- * A refusal is `out_of_time`, and it is terminal rather than a loss: the losses
- * are worth another attempt after a backoff, and time that has run out is worth
- * neither the sleep nor the attempt.
  */
 const attemptStore = async (
   sites: CreateSiteDeps['sites'],
@@ -154,7 +143,6 @@ const attemptStore = async (
   if (created.reason === 'conflict') {
     // A cancelled transaction says nothing about the cap — the fleet may be
     // nowhere near it — so there is nothing to evict and nothing to look up.
-    // The next attempt re-issues exactly this create.
     return { stored: 'lost', loss: 'conflict' };
   }
 
@@ -168,7 +156,7 @@ const attemptStore = async (
     // drifted above the real user population. Neither is something to fix from
     // a request — a bare decrement here would be the corruption, not the cure —
     // so try the create again and let a concurrent delete's decrement make
-    // room. Persistent drift exhausts the attempts and is logged.
+    // room.
     return { stored: 'lost', loss: 'counter_index_drift' };
   }
 
@@ -224,19 +212,12 @@ export const createSite = async (
   const outcome = await storeWithinCap(deps, site, request.deadline);
 
   if (outcome.stored === 'out_of_time') {
-    // Nothing was written — the gate only ever refuses a command that had not
-    // started — so this is a 500 for a create that did not happen, and the log
-    // line is what separates it from the exhaustion above: no race was lost
-    // here, the invocation simply ran out of time to start another command.
     deps.log({ event: createSiteDeadlineEvent, siteId: site.id });
     return errorResponse('internal', 'the site could not be added');
   }
 
   if (outcome.stored === 'exhausted') {
-    // A 500 rather than a 503: nothing here tells the caller when to come back,
-    // and the honest reading is that the fleet lost more races than the number
-    // of things that can be racing explains. The log line is the only place
-    // that says so.
+    // A 500 rather than a 503: nothing here tells the caller when to come back.
     deps.log({
       event: createSiteStoreExhaustedEvent,
       siteId: site.id,

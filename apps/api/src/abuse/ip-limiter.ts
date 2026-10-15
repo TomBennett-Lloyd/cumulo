@@ -3,10 +3,6 @@ import type { AbuseAdapter } from '@cumulo/storage';
 /**
  * The per-IP request limiter: ADR 0006's layer 1, and the layer that bites first
  * against a single determined caller.
- *
- * The gateway's throttles (layers 2 and 3) bound the *bill* but treat every
- * caller as one queue. This is the abuse control: it counts per address, and an
- * address that goes over is refused without spending anyone else's budget.
  */
 
 /**
@@ -64,7 +60,7 @@ const retryAfterFrom = (untilEpochSeconds: number, nowEpochSeconds: number): num
  * A class rather than functions over a closure, because the block cache below is
  * state genuinely shared between one instance's calls and `this.` is what makes
  * that visible (`docs/standards/architecture.md` rule 7,
- * `docs/standards/structure.md` rule 2). It extends nothing.
+ * `docs/standards/structure.md` rule 2).
  */
 export class IpLimiter {
   private readonly deps: IpLimiterDeps;
@@ -72,9 +68,6 @@ export class IpLimiter {
   /**
    * Addresses known to be blocked, and until when — a **container-scoped**
    * cache, deliberately not a source of truth.
-   *
-   * Lambda reuses a warm container across invocations, so an address that got
-   * itself blocked is usually refused by this map with no I/O at all.
    *
    * It is a cache and not the record: a cold container knows nothing, which is
    * why `check` still reads the table when the map misses. And it stays small
@@ -93,11 +86,7 @@ export class IpLimiter {
    * Count one request from an address against the policy, and say whether it may
    * proceed.
    *
-   * Three steps, cheapest first: the in-memory cache, then the stored block,
-   * then the window counter. Only the last one writes.
-   *
-   * **Storage failures propagate, so the limiter fails closed**: no `catch`
-   * here, and the boundary in `main.ts` turns the throw into a 500.
+   * **Storage failures propagate, so the limiter fails closed**.
    */
   async check(ip: string): Promise<IpDecision> {
     const now = this.deps.nowEpochSeconds();

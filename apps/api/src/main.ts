@@ -67,8 +67,7 @@ import { describeThrown } from './thrown-detail';
  * real environment name must satisfy is `storageTableName`'s.
  *
  * `CUMULO_WEB_ORIGINS` is optional because the deployment that has no browser
- * front-end yet is a valid deployment: the API's own origin is always allowed
- * (it is where `/docs` is served from), and this variable only ever *adds*.
+ * front-end yet is a valid deployment.
  */
 export const apiEnvSchema = z.object({
   CUMULO_ENV: z.string().min(1),
@@ -101,11 +100,6 @@ const jsonLineLog = (entry: Record<string, unknown>): void => {
 
 const env = parseApiEnv(process.env);
 
-/**
- * One document client for every adapter: a shared connection pool, and one place
- * the storage failure policy (attempt budget, backoff) is set — `@cumulo/storage`
- * owns both.
- */
 const documentClient = createStorageDocumentClient();
 
 const sites = new SiteAdapter({
@@ -114,8 +108,6 @@ const sites = new SiteAdapter({
 });
 
 /**
- * The `cumulo-series` adapter.
- *
  * This function neither writes a series point nor deletes one. So the IAM
  * policy it runs under grants `Query` on this table and no other action
  * (`infra/api/iam.tf`). The `Pick<SeriesAdapter, …>` in each handler's deps
@@ -127,12 +119,9 @@ const series = new SeriesAdapter({
 });
 
 /**
- * The API's clock, as a dependency rather than a `new Date()` inside a handler.
- *
  * Fixed-width to the second, because ADR 0002's range queries rely on
  * lexicographic order being chronological and `toISOString()`'s milliseconds
- * break that. Parsed through the schema rather than asserted, so the normalizing
- * regex and the brand can never disagree.
+ * break that.
  */
 const now = (): UtcIsoTimestamp =>
   utcIsoTimestampSchema.parse(new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'));
@@ -165,10 +154,6 @@ const limiter = new IpLimiter({ abuse, nowEpochSeconds });
 
 /**
  * The browser origins allowed on write routes *in addition to* the API's own.
- *
- * Comma-separated, trimmed, empties dropped — so `""`, `" "` and an unset
- * variable all mean the same thing, and a trailing comma in a Terraform-built
- * string is not a silently-allowed empty origin.
  */
 export const parseWebOrigins = (value: string | undefined): readonly string[] =>
   value === undefined
@@ -222,9 +207,6 @@ const cycleCached = async (
  *
  * Origin first because it is free — no I/O, no abuse-table write — so a
  * drive-by script that sends no `Origin` is refused without spending anything.
- *
- * `request.ownOrigin` is derived per request from the gateway's `domainName`,
- * so nothing here hard-codes a hostname the stack assigns at create time.
  */
 const guardedWrite = (
   request: RouteRequest,
@@ -267,8 +249,7 @@ const deleteSiteDeps: DeleteSiteDeps = {
  * Where the bundled Swagger UI assets are, decided here because it is a fact
  * about the *artifact* rather than about the code that reads them.
  *
- * `import.meta.url` is `dist/main.mjs` in Lambda, so this resolves to
- * `dist/swagger/`. The trailing slash is load-bearing:
+ * The trailing slash is load-bearing:
  * `new URL('swagger-ui.css', …)` resolves inside the directory only if the base
  * names one.
  */
@@ -310,8 +291,6 @@ export const routes: readonly Route[] = [
     segments: ['v1', 'sites', { param: siteIdParamName }],
     handle: (request) => guardedWrite(request, () => deleteSite(deleteSiteDeps, request)),
   },
-  // The two series reads. Four segments each, so neither can shadow — or be
-  // shadowed by — `GET /v1/sites/{siteId}` above, which matches three.
   {
     method: 'GET',
     segments: ['v1', 'sites', { param: siteIdParamName }, 'forecast'],
@@ -330,9 +309,6 @@ export const routes: readonly Route[] = [
   {
     method: 'GET',
     segments: ['v1', 'fleet', 'actuals'],
-    // Three segments, and the second is `fleet` rather than `sites`, so this
-    // cannot shadow or be shadowed by `GET /v1/sites/{siteId}`.
-    //
     // Limited, and for the opposite reason to the route above: the caller picks
     // nothing about its cost, but the *fleet* does (ADR 0009's roll-up, with a
     // per-site fallback).
@@ -437,10 +413,7 @@ export const handleApiEvent = async (
  * the one fact a handler cannot work out for itself: how long is left before
  * this invocation is killed mid-flight, taking `handleApiEvent`'s error
  * boundary and any 201 body with it (`request-budget.ts` prices what that
- * costs). It stays `unknown` here and is narrowed by a type guard in
- * `http/request-deadline.ts` rather than typed against `@types/aws-lambda`: the
- * boundary already treats its *event* as untrusted, and there is no reason its
- * context is more trustworthy.
+ * costs).
  *
  * Optional, because a direct invoke passes no context and because the fallback
  * countdown is a correct answer for one.

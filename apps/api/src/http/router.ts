@@ -5,10 +5,6 @@ import { errorResponse, type ApiResponse } from './response';
 /**
  * The route table and its matcher.
  *
- * A table rather than a framework. `main.ts`'s route table — a handful of
- * routes, at most one path parameter each, no middleware — does not pay for a
- * dependency.
- *
  * Matching is **exact, deliberately**, because this table is not the only thing
  * that matches these paths: API Gateway matches its own declared route keys
  * against the raw path to decide which throttle applies. A router that accepted
@@ -32,16 +28,9 @@ export type PathSegment = string | PathParameter;
  * keeps a single `validation_failed` shape across both without a `try`/`catch`
  * per handler.
  *
- * `sourceIp`, `originHeader`, `ownOrigin` and `ifNoneMatch` ride through from
- * {@link ApiRequest} unchanged. The router makes no decision with any of them —
- * the abuse protections and the cycle cache are wrappers around individual
- * handlers in `main.ts`, not a middleware layer here.
- *
  * `deadline` is the one field that comes from the *invocation* rather than from
  * the request: how much time is left before Lambda kills this call
- * (`request-deadline.ts`). It rides here rather than being threaded through
- * every handler's deps because it is a property of this request and not of the
- * container.
+ * (`request-deadline.ts`).
  */
 export interface RouteRequest {
   readonly method: string;
@@ -84,21 +73,12 @@ export interface RouteMatch {
  * `POST /v1/sites/` does not match that key, so it fell through to `$default` —
  * and a normalising router then served it as a create.
  *
- * Refusing to match is the fix that keeps the two tables agreeing on what a
- * route *is*, rather than teaching the gateway every spelling of every path.
- * The cost is that `GET /docs/` is now a 404 where it used to render —
- * accepted: `/docs` is what the runbook and every Swagger UI asset URL use, and
- * those are absolute (`/docs/swagger-ui.css`), so nothing in the page depends
- * on the trailing form.
- *
  * The gateway's exact-match behaviour is confirmed live by issue #29's E2
  * evidence run.
  */
 const canonicalPathSegments = (path: string): string[] | undefined => {
   const [leading, ...segments] = path.split('/');
 
-  // A path that does not start with `/` has no leading empty piece, and one
-  // with a doubled or trailing slash has an empty piece among the rest.
   if (leading !== '' || segments.includes('')) {
     return undefined;
   }
@@ -163,10 +143,7 @@ export const matchRoute = (
  * The method-blind half of {@link matchRoute}, and the only question a preflight
  * asks: `OPTIONS /v1/sites` is not a request to do anything to the fleet, it is a
  * request to be told whether the browser may later send the method named in
- * `Access-Control-Request-Method`. Answering it by matching the method would
- * 404 every preflight, since no table here declares an `OPTIONS` route and none
- * should — the answer is the same for every method the CORS configuration
- * allows.
+ * `Access-Control-Request-Method`.
  */
 export const matchesAnyRoutePath = (routes: readonly Route[], path: string): boolean => {
   const actual = canonicalPathSegments(path);
@@ -190,8 +167,7 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
     return { ok: true, body };
   } catch {
     // Converted to an expected-failure value rather than swallowed
-    // (`docs/standards/error-handling.md` rule 2a): the caller sent bytes that
-    // are not JSON, which is a domain outcome of an HTTP API, not a bug.
+    // (`docs/standards/error-handling.md` rule 2a).
     return { ok: false };
   }
 };
@@ -217,7 +193,7 @@ const parseJsonBody = (rawBody: string | undefined): JsonBodyResult => {
  *   would tell an unauthenticated caller which methods a path supports, and the
  *   error contract has one code for "there is nothing here" on purpose.
  * - **A body that is not JSON** → 400 `validation_failed`, before the handler
- *   runs. A handler never sees text it would have to `JSON.parse` itself.
+ *   runs.
  *
  * **Restatement ledger** (`docs/standards/architecture.md` rule 9). The
  * preflight branch below owns what a preflight gets — 204, no body, no
@@ -240,8 +216,6 @@ export const routeRequest = async (
   deadline: RequestDeadline,
 ): Promise<ApiResponse> => {
   if (request.method === 'OPTIONS') {
-    // No body and no headers: 204 is the whole answer, and the gateway attaches
-    // the `Access-Control-*` headers on the way out.
     return matchesAnyRoutePath(routes, request.path)
       ? { statusCode: 204, headers: {} }
       : errorResponse('not_found', 'no route matches this method and path');
