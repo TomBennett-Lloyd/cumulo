@@ -794,8 +794,8 @@ SHIM
 
 begin "a failed targets awk refuses a verdict instead of reporting no targets"
 # Neither refusal is reachable from a tree, so a shim first on PATH fails the
-# one command each guards: the inline targets program (the only awk given its
-# source as an argument) and the control's `git grep --no-index`.
+# one command each guards: the inline targets program and the control's
+# `git grep --no-index`.
 fixture refusal-shims
 commit_base src/shim.ts '// a note with words' 'export const ShimName = 1;'
 trim_to src/shim.ts 'export const ShimName = 1;'

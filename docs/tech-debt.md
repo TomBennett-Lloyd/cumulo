@@ -136,3 +136,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: the deleted-run model's `is_comment`, `COMMENT_LINE_ERE` and pre-check (e)'s `is_comment`, all in `.claude/scripts/sweep-report.sh`
 - What: the three definitions disagree (pre-check (e)'s also takes `--` and any `#`), and all three recognise only a comment that begins the line. A JSX `{/* ... */}` comment, a trailing `// ...` after code and a `/* */` continuation line without a leading `*` are invisible to them, so the coverage check's "every deleted comment run has a row" says nothing about those deletions, and the basename and declaration sweep does not read citations written that way. `docs/standards/structure.md` rule 7 applies: when one definition changes the others are wrong until they change too. Sharing one definition between the awk programs and the git-grep ERE is cross-cutting work in the same script as #534's seam plan and #671's remainder.
 - Source: #671 review cycle 1 (PR for `671-sweep-prechecks`)
+
+## 2026-10-15 — `sweep-report.sh`'s ledger-totals awk has no failure guard, and the targets guard's stderr arm is unpinned
+
+- Where: the claim-ledger totals and title awk near the top of `.claude/scripts/sweep-report.sh`; the stderr disjunct of the sweep-targets guard in pre-check (a)'s file-and-declaration sub-block
+- What: if the totals awk fails, the title fragment and the totals table vanish and the report is still produced, a failed step shown as an absent one (`docs/standards/error-handling.md` rule 2). The new PATH-shim harness case for the targets guard exposes it, because the shim's `SUBSEP` trigger also matches the totals awk. Separately, the targets guard tests both the exit status and a non-empty stderr, and the harness exercises only the exit arm: a shim that exits 0 with a word on stderr would pin the other. Both are in the class #534 tracks (arms nothing can assert).
+- Source: #671 review cycle 2 confirmation pass (PR #686)
