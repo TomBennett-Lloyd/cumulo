@@ -335,5 +335,5 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 ## 2026-10-15 — `decidePoll`'s no-catch-all rule is held only by a TypeScript return-type error
 
 - Where: `apps/web/src/data/use-first-forecast.ts` (`decidePoll`'s `switch (error.code)`); `eslint.config.mjs`
-- What: #545 batch "web 3" deleted the comment saying the switch must stay exhaustive with no catch-all arm, citing TS2366 as the enforcement. That error fires only while no `default` arm exists, and no switch-exhaustiveness lint rule is enabled, so adding a `default` would silently reintroduce the policy the comment guarded against. Enabling one turns the deleted prose into a lint error (`CLAUDE.md` asks for lint rules over prose)
+- What: #545 batch "web 3" deleted the comment saying the switch must stay exhaustive with no catch-all arm, relying on the declared return type as the enforcement. That compile error fires only while no `default` arm exists, and no switch-exhaustiveness lint rule is enabled, so adding a `default` would silently reintroduce the policy the comment guarded against. Enabling one turns the deleted prose into a lint error (`CLAUDE.md` asks for lint rules over prose)
 - Source: #545 batch "web 3" review pass 1 SYSTEMIC
