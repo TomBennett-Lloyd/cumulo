@@ -106,21 +106,16 @@ export const fleetRollupSortKey = (
 ): string => `${fleetRollupTimeBound(kind, validTime)}#${LOCATION_SEGMENT}#${locationId}`;
 
 /**
- * A range bound for a Query over the fleet actuals totals: `GEN#TOTAL#T#<validTime>`, the prefix
- * {@link fleetActualsTotalSortKey} builds on without its `#FLEET` terminal, so the half-open
- * `[from, to)` trick of {@link fleetRollupTimeBound} applies.
- *
- * `TOTAL` sorts after `T` (`'O'` > `'#'` at the segment's first character), so no slices range
- * (`GEN#T#…`) reaches a total and no totals range reaches a slice; `storage-key.test.ts` pins both.
+ * Range bound for a Query over the fleet actuals totals: `GEN#TOTAL#T#<validTime>`, the key
+ * without its `#FLEET` terminal. `TOTAL` sorts after `T`, so no slices range reaches a total and no
+ * totals range a slice (`storage-key.test.ts`).
  */
 export const fleetActualsTotalTimeBound = (validTime: UtcIsoTimestamp): string =>
   `${GENERATION_SEGMENT}#${TOTAL_SEGMENT}#${TIME_SEGMENT}#${validTime}`;
 
 /**
- * `cumulo-series` sort key of one settled hour's fleet-wide actuals total:
- * `GEN#TOTAL#T#<validTime>#FLEET` (ADR 0009's 2026-10-14 (#615) entry).
- *
- * The `#FLEET` terminal exists only so a real item sorts strictly after {@link fleetActualsTotalTimeBound}.
+ * Sort key of one settled hour's fleet actuals total: `GEN#TOTAL#T#<validTime>#FLEET` (ADR 0009's
+ * 2026-10-14 (#615) entry). The terminal makes a real item sort after its own bound.
  */
 export const fleetActualsTotalSortKey = (validTime: UtcIsoTimestamp): string =>
   `${fleetActualsTotalTimeBound(validTime)}#${FLEET_SEGMENT}`;

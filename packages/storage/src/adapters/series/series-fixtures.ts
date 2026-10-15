@@ -214,11 +214,7 @@ export const rollupItem15h = {
   p90AcPowerKw: 8.8,
 };
 
-/**
- * One settled hour's fleet actuals total: the sum of `rollupItem14h` and `otherRollupItem14h` over
- * the three additive fields they hold (`9.6 + 4.4`, `3 + 2`, `15 + 8`). Re-derive, never copy, if
- * those fixtures move.
- */
+/** The sum of `rollupItem14h` and `otherRollupItem14h` over their additive fields. */
 export const totalPoint14h: FleetActualsAggregatePoint = fleetActualsAggregatePointSchema.parse({
   validTime: '2026-07-30T14:00:00Z',
   acPowerKw: 14,
@@ -233,7 +229,6 @@ export const totalItem14h = {
   ...totalPoint14h,
 };
 
-/** Only the hour and the TTL are load-bearing here. */
 export const totalPoint15h: FleetActualsAggregatePoint = fleetActualsAggregatePointSchema.parse({
   validTime: '2026-07-30T15:00:00Z',
   acPowerKw: 11.5,
