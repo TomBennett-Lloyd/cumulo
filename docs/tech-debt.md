@@ -329,7 +329,7 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 ## 2026-10-15 — `sweep-report.sh` does not check that every deleted comment run has a ledger row
 
 - Where: `.claude/scripts/sweep-report.sh`; `docs/standards/prose.md` § Trim batches rule 2
-- What: the script validates rows, not coverage, so an undispositioned deletion is found by the reviewer rather than by the tool. In #545 batch "web 3" seven rows pointed at the kept line before their deleted run, each one line off, and nothing flagged it. A coverage pre-check (every run of lines removed by `git diff <base>` falls inside, or starts at, a ledger row's line) would make the undispositioned-deletion check of rule 4 mechanical
+- What: the script validates rows, not coverage, so an undispositioned deletion is found by the reviewer rather than by the tool. In #545 batch "web 3" seven rows pointed at the kept line before their deleted run, each one line off, and nothing flagged it. A coverage pre-check (every run of lines removed by `git diff <base>` falls inside, or starts at, a ledger row's line) would make the undispositioned-deletion check of rule 4 mechanical. The script's ledger-format header still writes the directive as `subject=<identifier>`; rule 3(a) says a phrase is a subject too since the 2026-10-15b retro, and the header follows when this check lands
 - Source: #545 batch "web 3" review pass 1 SYSTEMIC
 
 ## 2026-10-15 — `decidePoll`'s no-catch-all rule is held only by a TypeScript return-type error
