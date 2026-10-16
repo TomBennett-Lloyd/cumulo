@@ -6,7 +6,9 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import {
   FLEET_ROLLUP_PARTITION,
+  fleetActualsTotalTimeBound,
   fleetRollupTimeBound,
+  type FleetActualsAggregatePoint,
   type FleetRollupPartial,
   type FleetRollupProvenance,
   type Forecast,
@@ -30,6 +32,7 @@ import {
   type QueryPaginationBound,
 } from '../storage-adapter-base';
 
+import { fromFleetActualsTotalItem, toFleetActualsTotalItem } from './fleet-actuals-total-item';
 import { fromFleetRollupItem, toFleetRollupItem, type FleetRollupRow } from './fleet-rollup-item';
 import {
   TIME_BOUND_PREFIX,
@@ -54,9 +57,10 @@ import {
  *
  * **One partition is not a site**: `FLEET_ROLLUP_PARTITION` (`#FLEET`) holds the fleet roll-up
  * partials ADR 0009 introduced — every location's contribution to every hour, keyed
- * `<kind>#T#<validTime>#L#<locationId>`. `fleet-rollup-item.ts` owns its wire format and says
- * why the sentinel is safe; the two roll-up methods below are the only ones in this class that
- * address it.
+ * `<kind>#T#<validTime>#L#<locationId>`. `fleet-rollup-item.ts` owns the slices' wire format and says
+ * why the sentinel is safe, `fleet-actuals-total-item.ts` owns the totals' (ADR 0009's #615 entry);
+ * the five `#FLEET` methods below — two for slices, three for totals — are the only ones in this
+ * class that address it.
  *
  * `ConsistentRead` appears nowhere here (ADR 0002 Consequence 3) — see the
  * comment on `createStorageDocumentClient`.
@@ -104,6 +108,13 @@ export interface SeriesRangeResult {
  */
 export interface FleetRollupRangeResult {
   readonly rows: FleetRollupRow[];
+  /** False when a bound stopped pagination with more of the window unread. */
+  readonly complete: boolean;
+}
+
+/** A window of fleet actuals totals, and whether it was read to its end: {@link FleetRollupRangeResult}'s shape, for its reason. */
+export interface FleetActualsTotalsRangeResult {
+  readonly rows: FleetActualsAggregatePoint[];
   /** False when a bound stopped pagination with more of the window unread. */
   readonly complete: boolean;
 }
@@ -243,6 +254,83 @@ export class SeriesAdapter extends StorageAdapterBase {
     );
 
     return { rows: items.map(fromFleetRollupItem), complete };
+  }
+
+  /**
+   * Writes settled hours' fleet actuals totals (ADR 0009's #615 entry), through the same batch drain
+   * as the slices. Two totals for one hour are refused, by the shared key check.
+   */
+  async putFleetActualsTotals(
+    totals: readonly FleetActualsAggregatePoint[],
+  ): Promise<BatchWriteOutcome> {
+    return this.putSeriesItems('putFleetActualsTotals', totals.map(toFleetActualsTotalItem));
+  }
+
+  /**
+   * Every total over the half-open window `[fromInclusive, toExclusive)`, ascending. The bare
+   * `fleetActualsTotalTimeBound` is the upper bound, so a total at `toExclusive` falls outside, as
+   * in `queryFleetRollup`; pagination is walked and bounded on request for the same reason.
+   */
+  async queryFleetActualsTotals(
+    fromInclusive: UtcIsoTimestamp,
+    toExclusive: UtcIsoTimestamp,
+    bound?: QueryPaginationBound,
+  ): Promise<FleetActualsTotalsRangeResult> {
+    const { items, complete } = await this.queryAllPages(
+      'queryFleetActualsTotals',
+      { siteId: FLEET_ROLLUP_PARTITION },
+      {
+        TableName: this.tableName,
+        KeyConditionExpression: 'siteId = :siteId AND sk BETWEEN :from AND :to',
+        ExpressionAttributeValues: {
+          ':siteId': FLEET_ROLLUP_PARTITION,
+          ':from': fleetActualsTotalTimeBound(fromInclusive),
+          ':to': fleetActualsTotalTimeBound(toExclusive),
+        },
+        ScanIndexForward: true,
+      },
+      bound,
+    );
+
+    return { rows: items.map(fromFleetActualsTotalItem), complete };
+  }
+
+  /**
+   * The newest `limit` totals in `[fromInclusive, toExclusive)`, newest first. One Query, no
+   * pagination: the caller asks for a handful of items a fraction of a kilobyte each, so a page
+   * cannot end before `Limit` does.
+   */
+  async queryLatestFleetActualsTotals(
+    fromInclusive: UtcIsoTimestamp,
+    toExclusive: UtcIsoTimestamp,
+    limit: number,
+  ): Promise<FleetActualsAggregatePoint[]> {
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error(
+        `queryLatestFleetActualsTotals: limit must be a positive integer, got ${String(limit)}`,
+      );
+    }
+
+    const page = await this.sending(
+      'queryLatestFleetActualsTotals',
+      { siteId: FLEET_ROLLUP_PARTITION },
+      () =>
+        this.client.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            KeyConditionExpression: 'siteId = :siteId AND sk BETWEEN :from AND :to',
+            ExpressionAttributeValues: {
+              ':siteId': FLEET_ROLLUP_PARTITION,
+              ':from': fleetActualsTotalTimeBound(fromInclusive),
+              ':to': fleetActualsTotalTimeBound(toExclusive),
+            },
+            ScanIndexForward: false,
+            Limit: limit,
+          }),
+        ),
+    );
+
+    return (page.Items ?? []).map(fromFleetActualsTotalItem);
   }
 
   /** The next `limit` points at or after `fromInclusive`, ascending (A3). */

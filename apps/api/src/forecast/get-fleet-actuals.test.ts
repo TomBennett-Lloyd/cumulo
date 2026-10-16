@@ -80,6 +80,7 @@ const stub = (
       sites: { listFleetSites: () => Promise.resolve([...sites]) },
       series: {
         queryFleetRollup: () => Promise.resolve({ rows: [...rollupRows], complete: true }),
+        queryFleetActualsTotals: () => Promise.resolve({ rows: [], complete: true }),
         querySeriesRange: (siteId, from, to, bound) => {
           reads.push(`${siteId} ${from} ${to}`);
           bounds.push(bound);
@@ -247,7 +248,7 @@ describe('GET /v1/fleet/actuals', () => {
   });
 
   it('answers 500 rather than a fleet that quietly stops part-way through', async () => {
-    // One site more than a batch holds, and a request with no time left: the
+    // One site more than a batch holds, and a request with no time left after the slices gate: the
     // fan-out stops between batches, where the handler can still answer, and
     // refuses to serve a fleet total that is short a site — summed hour by hour,
     // a missing site does not read as missing, it reads as a fleet that
@@ -256,7 +257,7 @@ describe('GET /v1/fleet/actuals', () => {
     const fleet = fleetOfSize(FLEET_READ_CONCURRENCY + 1);
     const { deps, reads, logged } = stub(fleet);
 
-    const response = await getFleetActuals(deps, fleetActualsRequest({}, countdownDeadline(0)));
+    const response = await getFleetActuals(deps, fleetActualsRequest({}, countdownDeadline(1)));
 
     expect(response.statusCode).toBe(500);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
@@ -305,7 +306,7 @@ describe('GET /v1/fleet/actuals', () => {
 
   it.each([
     { name: 'a request with its whole budget left', deadline: fullBudgetDeadline, permitted: true },
-    { name: 'a request whose time is gone', deadline: countdownDeadline(0), permitted: false },
+    { name: 'a request whose time is gone', deadline: countdownDeadline(1), permitted: false },
   ])(
     'hands each site’s read a pagination bound that answers for $name',
     async ({ deadline, permitted }) => {

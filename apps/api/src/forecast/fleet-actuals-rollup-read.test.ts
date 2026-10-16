@@ -1,10 +1,4 @@
-import {
-  FLEET_ROLLUP_ACTUALS_KIND,
-  utcIsoTimestampSchema,
-  type FleetSite,
-  type SeriesKind,
-} from '@cumulo/shared';
-import type { FleetRollupRow, SeriesPoint } from '@cumulo/storage';
+import { FLEET_ROLLUP_ACTUALS_KIND, utcIsoTimestampSchema, type FleetSite } from '@cumulo/shared';
 import { describe, expect, it } from 'vitest';
 
 import { fleetSite, fullBudgetDeadline, generationPoint, RATHMINES_ID } from '../api-fixtures';
@@ -12,8 +6,19 @@ import { fleetSite, fullBudgetDeadline, generationPoint, RATHMINES_ID } from '..
 import {
   fleetActualsRollupFallbackEvent,
   readFleetActualsAggregate,
-  type FleetActualsAggregateRead,
 } from './fleet-actuals-rollup-read';
+import {
+  DUBLIN_SITES,
+  FIRST_HOUR,
+  LONG_AGO,
+  REWRITTEN_HOUR,
+  SETTLED_HOUR,
+  harness,
+  pointsOf,
+  read,
+  slice,
+} from './fleet-actuals-rollup-fixtures';
+import type { FleetActualsRollupReadDeps } from './fleet-actuals-rollup-read';
 import {
   BRISTOL,
   BRISTOL_SITE,
@@ -21,65 +26,10 @@ import {
   EARLIER_RUN,
   RANELAGH,
   RATHMINES,
-  partial,
   row,
 } from './fleet-rollup-fixtures';
-import type { FleetRollupReadDeps } from './fleet-rollup-read';
 
 /** The actuals read's completeness rule (ADR 0009's #506 amendment), case by case. */
-
-const FROM = utcIsoTimestampSchema.parse('2026-07-30T12:00:00Z');
-const TO = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
-/** The window's first hour, and one the producer no longer rewrites, and one it still does. */
-const FIRST_HOUR = '2026-07-30T12:00:00Z';
-const SETTLED_HOUR = '2026-07-31T06:00:00Z';
-const REWRITTEN_HOUR = '2026-07-31T10:00:00Z';
-const LONG_AGO = utcIsoTimestampSchema.parse('2026-07-01T00:00:00Z');
-
-/** A GEN slice: no band, as `fleetActualsRollupPartials` writes it. */
-const slice = (validTime: string, acPowerKw: number) =>
-  partial({
-    validTime,
-    acPowerKw,
-    p10AcPowerKw: acPowerKw,
-    p90AcPowerKw: acPowerKw,
-    hasUncertainty: false,
-  });
-
-const DUBLIN_SITES = [RANELAGH, RATHMINES];
-
-const harness = (
-  rows: readonly FleetRollupRow[],
-  pointsBySite: Readonly<Record<string, readonly SeriesPoint[]>> = {},
-) => {
-  const kinds: SeriesKind[] = [];
-  const siteReads: string[] = [];
-  const logged: Record<string, unknown>[] = [];
-  const deps: FleetRollupReadDeps = {
-    series: {
-      queryFleetRollup: (kind) => {
-        kinds.push(kind);
-        return Promise.resolve({ rows: [...rows], complete: true });
-      },
-      querySeriesRange: (siteId) => {
-        siteReads.push(siteId);
-        return Promise.resolve({ points: [...(pointsBySite[siteId] ?? [])], complete: true });
-      },
-    },
-    log: (entry) => logged.push(entry),
-  };
-  return { deps, kinds, siteReads, logged };
-};
-
-const read = (deps: FleetRollupReadDeps, sites: readonly FleetSite[]) =>
-  readFleetActualsAggregate(deps, fullBudgetDeadline, sites, FROM, TO, 'deadline-event');
-
-const pointsOf = (result: FleetActualsAggregateRead) => {
-  if (!result.complete) {
-    throw new Error('expected a complete read');
-  }
-  return result.points;
-};
 
 describe('readFleetActualsAggregate', () => {
   it('sums every location’s GEN slices, in one Query of the actuals kind, with no band', async () => {
@@ -216,7 +166,7 @@ describe('the first-hour check against a window that opens off the hour', () => 
   // `from = now − hours` is almost never on the hour: the first hour-ending slice is the next one.
   const offFrom = utcIsoTimestampSchema.parse('2026-07-30T12:23:10Z');
   const offTo = utcIsoTimestampSchema.parse('2026-07-31T12:23:10Z');
-  const readOff = (deps: FleetRollupReadDeps, sites: readonly FleetSite[]) =>
+  const readOff = (deps: FleetActualsRollupReadDeps, sites: readonly FleetSite[]) =>
     readFleetActualsAggregate(deps, fullBudgetDeadline, sites, offFrom, offTo, 'deadline-event');
   const old = DUBLIN_SITES.map((site) => ({ ...site, createdAt: LONG_AGO }));
   const recent = row(DUBLIN, old, slice(REWRITTEN_HOUR, 5));

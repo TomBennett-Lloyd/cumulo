@@ -36,6 +36,8 @@ const GENERATION_SEGMENT = 'GEN';
 const ARCHIVE_SEGMENT = 'ARCHIVE';
 const WEATHER_FORECAST_SEGMENT = 'FORECAST';
 const DAY_SEGMENT = 'DAY';
+const TOTAL_SEGMENT = 'TOTAL';
+const FLEET_SEGMENT = 'FLEET';
 
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -102,6 +104,21 @@ export const fleetRollupSortKey = (
   validTime: UtcIsoTimestamp,
   locationId: string,
 ): string => `${fleetRollupTimeBound(kind, validTime)}#${LOCATION_SEGMENT}#${locationId}`;
+
+/**
+ * Range bound for a Query over the fleet actuals totals: `GEN#TOTAL#T#<validTime>`, the key
+ * without its `#FLEET` terminal. `TOTAL` sorts after `T`, so no slices range reaches a total and no
+ * totals range a slice (`storage-key.test.ts`).
+ */
+export const fleetActualsTotalTimeBound = (validTime: UtcIsoTimestamp): string =>
+  `${GENERATION_SEGMENT}#${TOTAL_SEGMENT}#${TIME_SEGMENT}#${validTime}`;
+
+/**
+ * Sort key of one settled hour's fleet actuals total: `GEN#TOTAL#T#<validTime>#FLEET` (ADR 0009's
+ * 2026-10-14 (#615) entry). The terminal makes a real item sort after its own bound.
+ */
+export const fleetActualsTotalSortKey = (validTime: UtcIsoTimestamp): string =>
+  `${fleetActualsTotalTimeBound(validTime)}#${FLEET_SEGMENT}`;
 
 const malformedSeriesSortKey = (sortKey: string): Error =>
   new Error(`Malformed series sort key: ${JSON.stringify(sortKey)}`);

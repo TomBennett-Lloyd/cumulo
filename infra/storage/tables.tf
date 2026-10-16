@@ -99,50 +99,26 @@
 # and ADR 0002's own capacity table, whose 2026-08-03 (#156) and 2026-08-09
 # (#258) entries record both moves out of the pool.
 #
-# The `series` section below also owns the per-dashboard-load read arithmetic:
-# #264 doubled it by giving a load a second fleet fan-out, and ADR 0002's
-# figure is amended (2026-08-10) rather than current. That section states the
-# numbers; this paragraph carries none of its own. Its carriers:
-# infra/README.md's `### Storage stack` series row (already enumerated above),
-# infra/README.md's api cost table DynamoDB row (which computes #603's canary
-# reads from the ~18 and the ~2),
-# the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx, the
-# `listSites` docblock in apps/web/src/data/fleet-data-source.ts, the
-# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts —
-# which since #467's prose trim carries the ratio between a per-site read and a
-# fleet fan-out and none of the unit figures themselves — and the fleet-vs-poll
-# comment in apps/web/src/data/use-first-forecast.test.tsx. Two ADR carriers
-# join them, both quoters of this stack's arithmetic rather than owners of it,
-# and both owed the ADR treatment described above rather than an inline
-# true-up: ADR 0002's 2026-08-10 (#264) Amendments entry, which states the
-# per-load figure as it then stood and halves every read-side figure derived
-# from its predecessor — its 2026-09-11 (#494) successor entry marks it
-# as-it-stood and points back here, and is itself marked so by the 2026-10-07
-# (#602) entry; and ADR 0009's `## Consequences`, which states the roll-up
-# read's own ~18 units and the ≈ $1.78 write line, carries as-it-stood
-# annotations on both (#602 on the first, #506 on the second), and names this
-# section as the owner of the current per-load total. So: change the
-# per-load read arithmetic, and every site named here moves in the same commit.
+# The `series` section below also owns the per-dashboard-load read arithmetic,
+# and `.claude/ledgers/series-per-load-read.ledger` is its restatement ledger
+# (migrated from this paragraph's prose list by #615, architecture rule 9; its
+# sweep is re-run by `pnpm verify`). Three citations no sweep can return stay
+# here: the `Dashboard` docblock in apps/web/src/dashboard/Dashboard.tsx, the
+# `listSites` docblock in apps/web/src/data/fleet-data-source.ts and the
+# `POLL_INTERVAL_MS` docblock in apps/web/src/data/use-first-forecast.ts.
 #
-# Both member lists are a floor rather than a census: one more carrier does not
-# falsify them. The sweep behind the ADR members, run 2026-08-11 with
+# The capacity-posture ADR members above are a floor rather than a census: one
+# more carrier does not falsify them. Their sweep, run 2026-08-11 with
 # `command grep -E` over docs/adr/*.md, is claim-shaped rather than keyed to
-# any literal (architecture rule 10), on two arms —
-# `[0-9] ?(WCU|RCU)|25/25|provisioned` for the capacity posture, and
-# `read units? (a|per) load|per-dashboard-load|per-load read` for the read
-# arithmetic — with every hit read to sort a citation that names its owner and
-# carries no figure, which is owed nothing, from one that computes with,
-# asserts or argues from the figure, which is a member. Two kinds were set
-# aside by that reading: a citation that names one of these figures without
-# repeating it (docs/adr/README.md's description of ADR 0002's #264 entry), and
-# ADR 0002's own in-body per-load figures, which that entry has already
-# declared historical wholesale — the inline half docs/adr/README.md
-# § Amendments says is owed to them. Every sweep of this
-# ledger joins each file's lines before matching (`tr '\n' ' '`), because a
-# comment sentence wrapping across two lines is invisible to a line-scoped
-# grep: that is how the blanket ADR exemption this ledger used to claim
-# survived the sweeps that should have retired it, and a sweep that cannot see
-# its own members is not a floor (#401).
+# any literal (architecture rule 10) — `[0-9] ?(WCU|RCU)|25/25|provisioned` —
+# with every hit read to sort a citation that names its owner and carries no
+# figure, which is owed nothing, from one that computes with, asserts or argues
+# from the figure, which is a member. Every sweep of this ledger joins each
+# file's lines before matching (`tr '\n' ' '`), because a comment sentence
+# wrapping across two lines is invisible to a line-scoped grep: that is how the
+# blanket ADR exemption this ledger used to claim survived the sweeps that
+# should have retired it, and a sweep that cannot see its own members is not a
+# floor (#401).
 #
 # Settings common to all of them, each one an idle-billing decision (ADR 0002,
 # "Table settings"), stated once here rather than repeated per table:
@@ -311,31 +287,38 @@ resource "aws_dynamodb_table" "sites" {
 #    receive — but the thing absorbing the cliff was redelivery patience rather
 #    than capacity, and the alarm mailed on every occurrence (#258).
 #
-#    Cost is activity-shaped rather than standing: ~2.55 M write units/month at
-#    the canonical 12-location fleet (~3,492 items per cycle — ~2,880 forecast
+#    Cost is activity-shaped rather than standing: ~2.56 M write units/month at
+#    the canonical 12-location fleet (~3,504 items per cycle — ~2,880 forecast
 #    items, the figure the forecast stack's cost table carries, plus 12 × 48 =
-#    576 fleet roll-up partials since #494 and 12 × 3 = 36 actuals slices since
-#    #506, each location re-Putting its trailing window's hours — terms that
-#    are `locations × 51` and so grow with *locations* rather than with sites)
-#    ≈ $1.80/month, ≈ $2.81 at ADR 0002's ~50-site planning envelope of 4,850
-#    units per cycle plus the same 612 — that envelope states no location
-#    count, so the canonical 12 is assumed — and ≈ $6.36 at #29's 100-site
+#    576 fleet roll-up partials since #494, 12 × 3 = 36 actuals slices since
+#    #506, each location re-Putting its trailing window's hours, and up to
+#    12 × 1 = 12 fleet actuals totals since #615, each invocation Putting the
+#    hour that has just settled — terms that are `locations × 52` and so grow
+#    with *locations* rather than with sites)
+#    ≈ $1.80/month, ≈ $2.82 at ADR 0002's ~50-site planning envelope of 4,850
+#    units per cycle plus the same 624 — that envelope states no location
+#    count, so the canonical 12 is assumed — and ≈ $6.38 at #29's 100-site
 #    cap, whose worst case is ≤ 52 locations (packages/shared/src/site.ts) and
-#    therefore 52 × 51 = 2,652 partials and slices. $0 while the schedule is
-#    idle. Reads are activity-shaped for the same reason and stay negligible:
-#    the dashboard read path the 21 RCU was sized against now costs **≈ 35 a
-#    load** at $0.1415/M — ~33 read units per load on this table and ~2
-#    elsewhere. The ~33 is two Queries of the `#FLEET` partition (ADR 0009),
-#    both eventually consistent over items of ~300 B: ~22 for the fleet's
-#    forecasts, ~576 items ≈ 173 KB over a 48-hour horizon (#494), and ~11 for
-#    its actuals, 288 items ≈ 86 KB over the default 24-hour look-back (#506;
-#    the 168-hour look-back is ~74). (The load's remaining ~2 units are one
-#    Query over the `FLEET` partition on `sites`, not this table.) **The
-#    units were never what #494 or #506 was filed about**: each half went from
-#    a per-site fan-out to one Query, and the unit saving is incidental. This
-#    paragraph owns the per-load figure — ADR 0002's ≈ 27 was honest until
-#    #264 gave a load its second `series` read, and is amended (2026-08-10)
-#    rather than current; every carrier is named in this file's header ledger.
+#    therefore 52 × 52 = 2,704 partials, slices and totals. $0 while the
+#    schedule is idle. Reads are activity-shaped for the same reason and stay
+#    negligible: the dashboard read path the 21 RCU was sized against now costs
+#    **≈ 27 a load** at $0.1415/M — ~25 read units per load on this table and
+#    ~2 elsewhere. The ~25 is three Queries of the `#FLEET` partition (ADR
+#    0009), all eventually consistent over items of ~300 B, each rounded up to
+#    4 KB: ~22 for the fleet's forecasts, ~576 items ≈ 173 KB over a 48-hour
+#    horizon (#494), and ~3 for its actuals since #615, ~20 settled-hour totals
+#    plus ~4 hours of slices, ≈ 68 items over the default 24-hour look-back
+#    (a total priced at a slice's size, which
+#    `packages/storage/src/adapters/series/fleet-actuals-total-item.test.ts`
+#    shows is the larger; the 168-hour look-back is ≈ 14 at the 52-location
+#    cap: 168 totals plus ≈ 4 h × 52 slices, ≈ 380 items). (The load's
+#    remaining ~2 units are one Query over the `FLEET` partition on `sites`,
+#    not this table.) **The units were never what #494 or #506 was filed
+#    about**: each half went from a per-site fan-out to one Query, and the unit
+#    saving is incidental. This paragraph owns the per-load figure — ADR 0002's
+#    ≈ 27 was honest until #264 gave a load its second `series` read, and is
+#    amended (2026-08-10) rather than current; every carrier is named in
+#    `.claude/ledgers/series-per-load-read.ledger`.
 #    So the loads it takes to spend a cent still number in the thousands, and
 #    the bound on a determined caller is ADR 0010's cost guard rather than a
 #    read allocation — the 21 RCU had stopped being one in practice, and the
@@ -348,7 +331,8 @@ resource "aws_dynamodb_table" "sites" {
 #    whose whole month costs a dollar or two. The backstop against runaway spend
 #    is the account-wide budget alarm in infra/bootstrap/budget.tf, which watches
 #    money rather than throughput and therefore cannot drop a write.
-#    (Restatement ledger: this file's header.)
+#    (Restatement ledger: `.claude/ledgers/series-per-load-read.ledger` for the
+#    per-load read; this file's header for the rest.)
 resource "aws_dynamodb_table" "series" {
   name         = "cumulo-series-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"

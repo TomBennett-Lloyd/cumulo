@@ -1,11 +1,13 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { BatchWriteCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
+  fleetActualsAggregatePointSchema,
   fleetRollupPartialSchema,
   fleetRollupProvenanceSchema,
   forecastSchema,
   generationReadingSchema,
   utcIsoTimestampSchema,
+  type FleetActualsAggregatePoint,
   type FleetRollupPartial,
   type FleetRollupProvenance,
   type Forecast,
@@ -210,6 +212,35 @@ export const rollupItem15h = {
   acPowerKw: 7.2,
   p10AcPowerKw: 6.0,
   p90AcPowerKw: 8.8,
+};
+
+/** The sum of `rollupItem14h` and `otherRollupItem14h` over their additive fields. */
+export const totalPoint14h: FleetActualsAggregatePoint = fleetActualsAggregatePointSchema.parse({
+  validTime: '2026-07-30T14:00:00Z',
+  acPowerKw: 14,
+  contributingSiteCount: 5,
+  contributingCapacityKw: 23,
+});
+
+export const totalItem14h = {
+  siteId: '#FLEET',
+  sk: 'GEN#TOTAL#T#2026-07-30T14:00:00Z#FLEET',
+  expiresAt: EXPIRES_AT_14H,
+  ...totalPoint14h,
+};
+
+export const totalPoint15h: FleetActualsAggregatePoint = fleetActualsAggregatePointSchema.parse({
+  validTime: '2026-07-30T15:00:00Z',
+  acPowerKw: 11.5,
+  contributingSiteCount: 5,
+  contributingCapacityKw: 23,
+});
+
+export const totalItem15h = {
+  siteId: '#FLEET',
+  sk: 'GEN#TOTAL#T#2026-07-30T15:00:00Z#FLEET',
+  expiresAt: EXPIRES_AT_15H,
+  ...totalPoint15h,
 };
 
 /** A roll-up page as DynamoDB returns it: sort-key order, so both locations at 14:00 then 15:00. */

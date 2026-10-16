@@ -19,6 +19,7 @@ import { forecastSchema, type Forecast } from './forecast';
 import { locationId } from './location';
 import { simulatedActualFromForecast } from './simulated-actual';
 import { MAX_PLAUSIBLE_RESIDENTIAL_KW, type Site } from './site';
+import { compareUtcIsoTimestamps, utcIsoTimestampSchema } from './timestamp';
 
 /**
  * The additivity proof — ADR 0009's load-bearing claim, made executable.
@@ -288,6 +289,45 @@ describe('actuals partials sum to the whole-fleet actuals aggregate', () => {
         whole[index]?.contributingCapacityKw ?? Number.NaN,
         MICROWATT_PLACES,
       );
+    });
+  });
+
+  describe('settled totals plus trailing slices sum to the whole-fleet actuals aggregate', () => {
+    it('composes the read: totals for the hours before a split, summed slices from it', () => {
+      const partials = perLocationActualsPartials();
+      const distinct = [...new Set(partials.map((partial) => partial.validTime))].sort(
+        compareUtcIsoTimestamps,
+      );
+      const split = distinct[Math.floor(distinct.length / 2)] ?? utcIsoTimestampSchema.parse(noon);
+
+      const totals = sumFleetActualsRollupPartials(
+        partials.filter((partial) => compareUtcIsoTimestamps(partial.validTime, split) < 0),
+      );
+      const tail = sumFleetActualsRollupPartials(
+        partials.filter((partial) => compareUtcIsoTimestamps(partial.validTime, split) >= 0),
+      );
+      expect(totals.length).toBeGreaterThan(0);
+      expect(tail.length).toBeGreaterThan(0);
+      const totalHours = new Set(totals.map((point) => point.validTime));
+      expect(tail.some((point) => totalHours.has(point.validTime))).toBe(false);
+
+      const merged = [...totals, ...tail];
+      const whole = fleetActualsAggregate(allReadings, fleet);
+
+      expect(merged.map((point) => point.validTime)).toEqual(whole.map((point) => point.validTime));
+      expect(merged.map((point) => point.contributingSiteCount)).toEqual(
+        whole.map((point) => point.contributingSiteCount),
+      );
+      merged.forEach((point, index) => {
+        expect(point.acPowerKw).toBeCloseTo(
+          whole[index]?.acPowerKw ?? Number.NaN,
+          MICROWATT_PLACES,
+        );
+        expect(point.contributingCapacityKw).toBeCloseTo(
+          whole[index]?.contributingCapacityKw ?? Number.NaN,
+          MICROWATT_PLACES,
+        );
+      });
     });
   });
 });

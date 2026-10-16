@@ -39,6 +39,8 @@ sk  <kind>#T#<validTime>#L#<locationId>
 
 > **Amended 2026-10-07 (#506)**: `GEN` now has its producer, with no change to this key. See `## Amendments`.
 
+> **Amended 2026-10-14 (#615)**: `GEN` gains a third key shape in this partition, `GEN#TOTAL#T#<validTime>#FLEET`, one fleet total per settled hour. See `## Amendments`.
+
 Three things about that key are decisions rather than formatting:
 
 1. **The segment order is the inverse of the per-site series key's**, and for the opposite reason. A site's partition is read _by time_, with both models and the actual interleaved (0002's access pattern A4), so time leads there. This partition holds every location and every kind, and the only read is "one kind, over one window", so **kind leads and time follows**: a Query for the forecast kind never reads past a single actuals item, and the established bare-bound `BETWEEN` trick expresses `[from, to)` exactly.
@@ -105,6 +107,8 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 
 **C — One fleet-sum row, written after the partials.** The read becomes a single GetItem instead of a Query. Rejected because it reintroduces exactly the race A removes: twelve concurrent invocations each summing and rewriting one key, where the loser's write is a stale fleet. The Query it avoids is one round trip either way.
 
+> **Amended 2026-10-14 (#615)**: the race this option rejects does not arise for a _settled_ hour, which no later invocation writes (residual 1 below is the exception). A fleet total is kept for those hours alone. See `## Amendments`.
+
 **D — A time-bucketed GSI** (0002's own stated alternative). Turns a single-bucket fleet read into one Query, but turns a week-long window into one Query per bucket, and duplicates the entire forecast write volume into an index. Rejected for the reason 0002 gave, unchanged.
 
 **E — API Gateway response caching.** ~$14/month for the smallest cache, on a platform whose entire storage bill is a dollar or two, and the first reader of every cache period still pays the full fan-out. Rejected on cost and on the part of the problem it does not solve.
@@ -138,7 +142,7 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 
 ## Amendments
 
-No stated value has moved. The 2026-10-05 entry below records two corrections that are not value moves, and the two 2026-10-07 entries move only quotations of figures `infra/storage/tables.tf` owns. This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
+No stated value has moved. The 2026-10-05 entry below records two corrections that are not value moves, and the two 2026-10-07 entries and the 2026-10-14 entry move only quotations of figures `infra/storage/tables.tf` owns (the 2026-10-14 entry also records a new mechanism). This section opens with a **restatement ledger**, which `docs/standards/architecture.md` rule 9 owes beside a value an ADR owns, and this ADR owns one.
 
 **The value: the fan-out's measured latency, 1,753.9 ms p50 / 2,998.9 ms p95 warm** at the canonical 12-location × 5-site fleet. It is stated in `## Context` above, it is the whole reason ADR 0002's revisit trigger 4 is met, and it is quoted by five sites that argue from it rather than merely citing it:
 
@@ -210,7 +214,7 @@ The read computes the same digest per location from the active fleet it already 
 
 The forecast service sums each location's slices from the readings its trailing-actuals step already holds, so it does zero extra reads. It re-Puts every hour of the `TRAILING_ACTUALS_HOURS` window on every run, which is what lets a slice pick up a membership change at its next cycle. If any site's window is unknown (a failed read, or a write that did not fully land), nothing is written. A partial slice would read as a quieter fleet.
 
-`GET /v1/fleet/actuals` reads the slices with one Query (`apps/api/src/forecast/fleet-actuals-rollup-read.ts`) and keeps the fan-out as its fallback. ADR 0002's A5 fan-out is therefore superseded for the actuals read as well, and #507 removes it from both reads.
+`GET /v1/fleet/actuals` reads the slices with one Query _(as it stood before #615; see the 2026-10-14 entry)_ (`apps/api/src/forecast/fleet-actuals-rollup-read.ts`) and keeps the fan-out as its fallback. ADR 0002's A5 fan-out is therefore superseded for the actuals read as well, and #507 removes it from both reads.
 
 **Completeness, decided by the owner on 2026-10-07.** The #602 rule cannot be reused as written, because a look-back is written by many runs:
 
@@ -220,7 +224,7 @@ The forecast service sums each location's slices from the readings its trailing-
 
 `apps/api/src/forecast/fleet-actuals-rollup-read.test.ts` pins each case.
 
-**What it costs.** Writes: up to three slices per location per cycle, `12 × 3 = 36`. That moves `infra/storage/tables.tf`'s write line to ≈ $1.80/month (≈ $6.36 at the 100-site cap), and the `## Consequences` write line is annotated as-it-stood. Reads: the default 24-hour actuals window is 288 items, about 11 units, where the fan-out it replaces cost about 25. The per-load figure falls to ≈ 35, and `infra/storage/tables.tf` owns it. A 168-hour window is about 74 units at the canonical fleet and about 320 at the 52-location cap. Both are above the 30-unit request that ADR 0010 prices its burn-rate projection on. ADR 0010 had priced the same read at ≈ 270, using the pre-#602 item size; its 2026-10-08 amendment trues that figure to this one, and records that the move fires its revisit trigger 2 ([#630](https://github.com/TomBennett-Lloyd/cumulo/issues/630)). Compacting settled hours is [#615](https://github.com/TomBennett-Lloyd/cumulo/issues/615).
+**What it costs.** Writes: up to three slices per location per cycle, `12 × 3 = 36`. That moves `infra/storage/tables.tf`'s write line to ≈ $1.80/month (≈ $6.36 at the 100-site cap) _(as it stood before #615; see the 2026-10-14 entry)_, and the `## Consequences` write line is annotated as-it-stood. Reads: the default 24-hour actuals window is 288 items, about 11 units, where the fan-out it replaces cost about 25. The per-load figure falls to ≈ 35, and `infra/storage/tables.tf` owns it _(as it stood before #615; see the 2026-10-14 entry)_. A 168-hour window is about 74 units at the canonical fleet and about 320 at the 52-location cap _(as it stood before #615; see the 2026-10-14 entry)_. Both are above the 30-unit request that ADR 0010 prices its burn-rate projection on. ADR 0010 had priced the same read at ≈ 270, using the pre-#602 item size; its 2026-10-08 amendment trues that figure to this one, and records that the move fires its revisit trigger 2 ([#630](https://github.com/TomBennett-Lloyd/cumulo/issues/630)). Compacting settled hours is [#615](https://github.com/TomBennett-Lloyd/cumulo/issues/615).
 
 **Quoters of the moved figures.** This is a floor, not a census. The sweep was run 2026-10-07 with `git grep -nE` over `docs infra apps packages`, on five arms:
 
@@ -241,3 +245,40 @@ Every hit was read. Trued up in the same change:
 - Old-path prose in `apps/api/src/forecast/fleet-series-read.ts`, `apps/api/src/forecast/get-fleet-actuals.ts`, `apps/web/src/data/use-first-forecast.ts`, `docs/design/dashboard-composition.md`, `packages/shared/src/storage-key.ts` and `packages/storage/src/adapters/series/fleet-rollup-item.ts`.
 
 Annotated as-it-stood: `## Consequences` above. The remaining hits are ADR 0002's historical entries, `docs/review-feedback.md`'s records, and unrelated numbers that share a literal (fixture data, `apps/web/src/map/clustering.test.ts`).
+
+### 2026-10-14 (#615) — settled actuals hours compacted into one fleet total per hour
+
+The decision and reasoning above are untouched. This entry records a new mechanism and the values it moves. The owner approved it on 2026-10-15.
+
+**What landed.** A third key shape in `#FLEET`: `GEN#TOTAL#T#<validTime>#FLEET` (`fleetActualsTotalSortKey`), holding `fleetActualsAggregatePointSchema` — no band, no provenance, no `locationId`. The forecast service, after writing its location's slices, Queries the latest totals before `issuedAt − TRAILING_ACTUALS_HOURS`, sums the slices of every hour settled since (at least the last `TRAILING_ACTUALS_HOURS` settled hours, and the whole retention reach when no total exists yet), and Puts a total for each hour lacking one (`apps/forecast/src/fleet-actuals-compaction.ts`). The key reuses the partition and `fleetActualsAggregatePointSchema`, so there is still no new table, GSI, attribute definition, IAM grant or credential: the owner read it as a producer change within this ADR's "a producer, never a schema", not a key-design change.
+
+**Why option C's race does not apply.** C rejected one fleet-sum row because twelve concurrent invocations would sum hours still being written. A settled hour has no later writer. Within one invocation the slice window and the compaction window are disjoint (`[issuedAt − 3 h, issuedAt)` versus `< issuedAt − 3 h`), and a later invocation's `issuedAt` is no earlier, so, bar residual 1 below, the invocations compute the same item for an hour and the Put is idempotent with no last-writer.
+
+**The read.** `GET /v1/fleet/actuals` issues two Queries: the totals over the window, then the slices from the hour after the last total. The 2026-10-07 (#506) completeness rule is inherited unchanged in its three parts, with two consequences the owner approved:
+
+- **A total is summed as written.** A site deleted or re-sized, or a whole location decommissioned, keeps its generation and capacity in every hour that was settled when the change happened. Today's read drops a decommissioned _location's_ settled hours; after this it keeps them, which is the #506 site-level rule applied at the location level ("the total should be real").
+- **The first-hour check is satisfied by a total**, since a total exists only where slices did.
+
+Expected locations must appear in the slices read (about the last four hours). That is stricter than today's whole-window presence only for a location that has produced nothing for three or more consecutive cycles, a state in which the fan-out answers the same, at its price. Membership is still checked only on the trailing hours, and there is still no vintage check. `apps/api/src/forecast/fleet-actuals-rollup-read.totals.test.ts` pins each case.
+
+**Migration.** No backfill script. Until the first post-deploy cycle the read finds no totals and is today's read exactly. That cycle's invocations each compact every settled hour in retention (the slices present since #506, one Query of their volume, once), and the read shrinks from the next request. Hours with no slices (idle gaps, the pre-#506 past) get no total and are absent from the result exactly as today.
+
+**Accepted residuals.** The owner accepted all three without the per-cycle re-Put:
+
+1. A total written while a slice for its hour was still in flight (two invocations straddling an hour boundary and overlapping in time; the schedule fires at HH:07) is never re-summed. The hour is short by that slice, labelled only by `contributingSiteCount`.
+2. A partial drain that lands a later hour's total and declines an earlier one leaves that hour uncompacted once it is older than `TRAILING_ACTUALS_HOURS`. Its slices sit between totals and neither Query reads them: a chart gap, like an idle gap, which the compaction's `store-partial` log line reports when it happens.
+3. The read is two Queries. The second is admitted through the deadline gate, so `apps/api/src/request-budget.ts`'s ungated prefix stays at 4.
+
+**Rejected.** A (cap the window) and C (stay on the billing leg), from #506's Q1: A is a product regression that still fails at the cap. Re-Putting every settled hour's total each cycle: 36 writes per cycle, which moves the write line, and it buys only residual 1. A one-off backfill script in the shape the repo already has (`apps/forecast/scripts/backfill-actuals.ts`, run as `pnpm --filter @cumulo/forecast-service backfill-actuals`): it is an operator-credentialed run with a runbook step, the read must cope until it runs anyway, and that script writes per-site `GEN` readings only (`putGenerationReadings`), never `#FLEET` slices or totals, so running it before or after this change cannot leave a total stale. A fixed 24-hour read-side split (falls back for most of every hour). A time-bucketed GSI (option D, unchanged).
+
+**What it costs.** Writes: up to one total per location's invocation per cycle, `locations × 52` items a cycle with the slices (owner: `infra/storage/tables.tf`); the write line is unchanged at the stated precision. Reads: the default 24-hour window is about 3 units at the canonical fleet and a 168-hour window about 14 at the 52-location cap (owner: `infra/storage/tables.tf`, which prices a total at a slice's size; `packages/storage/src/adapters/series/fleet-actuals-total-item.test.ts` shows a total is the smaller). The producer spends two small reads per invocation, and the forecast log census grows by one line per invocation (owner: `infra/forecast/outputs.tf`).
+
+**What would reopen it.** [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507)'s fallback removal has to decide what an hour with slices but no total gets. A `store-partial` from the compaction observed in the logs reopens the per-cycle re-Put this entry declined. A second total kind (forecast) would generalise the `TOTAL` segment.
+
+**Quoters of the moved figures.** This is a floor, not a census. Three sweeps were run 2026-10-15 from the worktree root with `git grep -nE` over the whole tree, at `git rev-parse --short HEAD` = `d30ab3b` (this change's tree before its figures were edited), and every hit was read:
+
+- The write census, `1\.80|6\.36|2\.55 ?M|2,652|52 × 51|locations × 51|12 × 3 = 36|36 actuals slices`: 24 hits. A fourth literal, `3,492`, found three carriers that arm misses (`infra/forecast/outputs.tf` and `event-source.tf`, and the forecast DynamoDB row).
+- The per-load read, `≈ 35|~33|read units? (a|per) load|per-dashboard-load|per-load read|~11 for|288 items|~74\b|≈ 320|about 320`: 39 hits. This claim is now ledgered: `.claude/ledgers/series-per-load-read.ledger` replaces the prose list in `infra/storage/tables.tf`'s header, and `pnpm check:ledgers` re-runs its sweep.
+- The forecast log census, `(twelve|thirteen|[0-9]+) billed lines|[0-9]+ lines per invocation|105 MB|105,100`: 8 hits.
+
+Trued up in the same change: `infra/storage/tables.tf` (the owner, and its header); `infra/README.md` (the storage `series` row, the three-fleet-sizes note, the forecast DynamoDB row, and the forecast log row and its census); `infra/forecast/outputs.tf`, `infra/forecast/event-source.tf` and `infra/forecast/iam.tf`; `apps/forecast/src/main.ts`; `apps/api/src/request-budget.ts`; `apps/web/src/data/use-first-forecast.test.tsx`; `docs/design/dashboard-composition.md`. Annotated as-it-stood: this ADR's own #506 entry above (its one-Query read, its ≈ $6.36 at the cap, and its 11-unit window, ≈ 35 load, 74 and 320 figures). Left as written: ADR 0002's historical entries, `docs/review-feedback.md`'s records, and `infra/README.md`'s ingestion log row, which is a different function's census and which nothing the compaction emits lands in.

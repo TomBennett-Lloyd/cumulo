@@ -102,6 +102,8 @@ export {
   FLEET_ROLLUP_PARTITION,
   fleetRollupSortKey,
   fleetRollupTimeBound,
+  fleetActualsTotalSortKey,
+  fleetActualsTotalTimeBound,
   weatherSortKey,
   archiveDayMarkerSortKey,
   metricsSortKey,

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   archiveDayMarkerSortKey,
   FLEET_ROLLUP_PARTITION,
+  fleetActualsTotalSortKey,
+  fleetActualsTotalTimeBound,
   fleetRollupSortKey,
   fleetRollupTimeBound,
   metricsSortKey,
@@ -283,5 +285,44 @@ describe('fleet roll-up keys', () => {
     // `siteSchema.id` is a v4 UUID: hex and dashes only, so `#` is unreachable there.
     expect(FLEET_ROLLUP_PARTITION).toMatch(/#/u);
     expect(crypto.randomUUID()).not.toContain('#');
+  });
+});
+
+describe('fleet actuals total keys', () => {
+  const DUBLIN = '53.35,-6.26';
+  const CORK = '51.90,-8.48';
+
+  it('renders a total key as the GEN kind, the TOTAL segment, the hour, then the FLEET terminal', () => {
+    expect(fleetActualsTotalSortKey(NOON)).toBe('GEN#TOTAL#T#2026-07-30T12:00:00Z#FLEET');
+    expect(fleetActualsTotalTimeBound(NOON)).toBe('GEN#TOTAL#T#2026-07-30T12:00:00Z');
+  });
+
+  it('excludes the upper bound and includes the lower', () => {
+    expect(byCodeUnit(fleetActualsTotalSortKey(NOON), fleetActualsTotalTimeBound(NOON))).toBe(1);
+    expect(byCodeUnit(fleetActualsTotalSortKey(ONE_PM), fleetActualsTotalTimeBound(TWO_PM))).toBe(
+      -1,
+    );
+    expect(byCodeUnit(fleetActualsTotalSortKey(TWO_PM), fleetActualsTotalTimeBound(TWO_PM))).toBe(
+      1,
+    );
+  });
+
+  it('keeps every total outside every slices range, and every slice outside every totals range', () => {
+    for (const location of [DUBLIN, CORK]) {
+      for (const hour of [NOON, ONE_PM, TWO_PM]) {
+        expect(
+          byCodeUnit(
+            fleetRollupSortKey({ kind: 'generation' }, hour, location),
+            fleetActualsTotalTimeBound(NOON),
+          ),
+        ).toBe(-1);
+        expect(
+          byCodeUnit(
+            fleetActualsTotalSortKey(hour),
+            fleetRollupTimeBound({ kind: 'generation' }, TWO_PM),
+          ),
+        ).toBe(1);
+      }
+    }
   });
 });

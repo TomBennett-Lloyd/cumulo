@@ -2,6 +2,7 @@ import {
   forecastWeatherReadingSchema,
   sitePhysicsSchema,
   utcIsoTimestampSchema,
+  type FleetActualsAggregatePoint,
   type FleetRollupProvenance,
   type Forecast,
   type ForecastWeatherReading,
@@ -10,7 +11,13 @@ import {
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
 
-import type { BatchWriteOutcome, SeriesPoint, SeriesRangeResult } from '@cumulo/storage';
+import type {
+  BatchWriteOutcome,
+  FleetRollupRangeResult,
+  FleetRollupRow,
+  SeriesPoint,
+  SeriesRangeResult,
+} from '@cumulo/storage';
 
 import type { ConsumeMessageDeps } from './consume-message';
 import type { SqsRecord } from './sqs-event';
@@ -144,6 +151,8 @@ export interface Recorder {
     readonly provenance: FleetRollupProvenance;
     readonly hourCount: number;
   }[];
+  /** What the fleet actuals compaction wrote, one entry per Put (#615). */
+  readonly compacted: FleetActualsAggregatePoint[][];
   readonly entries: Record<string, unknown>[];
 }
 
@@ -152,6 +161,7 @@ export const emptyRecorder = (): Recorder => ({
   locationsQueried: [],
   simulatedFor: [],
   rolledUp: [],
+  compacted: [],
   entries: [],
 });
 
@@ -173,6 +183,12 @@ export interface DepsInput {
   readonly rollupOutcome?: BatchWriteOutcome;
   /** Rejected by the fleet roll-up write instead of answering. */
   readonly rollupRejectsWith?: unknown;
+  /** What the latest-totals read answers with, newest first; empty unless given (#615). */
+  readonly latestTotals?: readonly FleetActualsAggregatePoint[];
+  /** What the fleet slices read answers with; empty unless given (#615). */
+  readonly fleetSlices?: readonly FleetRollupRow[];
+  /** Rejected by the latest-totals read, the compaction's first call. */
+  readonly compactionRejectsWith?: unknown;
   readonly now?: () => UtcIsoTimestamp;
 }
 
@@ -223,6 +239,18 @@ export const deps = (input: DepsInput): ConsumeMessageDeps => ({
       }
       input.recorder.rolledUp.push({ kind, locationId, provenance, hourCount: partials.length });
       return Promise.resolve(input.rollupOutcome ?? { status: 'complete' });
+    },
+    // The fleet actuals compaction's three calls (#615), answering empty unless a test says
+    // otherwise, for the same reason as the doubles above.
+    queryLatestFleetActualsTotals: (): Promise<FleetActualsAggregatePoint[]> =>
+      input.compactionRejectsWith === undefined
+        ? Promise.resolve([...(input.latestTotals ?? [])])
+        : rejectedWith(input.compactionRejectsWith),
+    queryFleetRollup: (): Promise<FleetRollupRangeResult> =>
+      Promise.resolve({ rows: [...(input.fleetSlices ?? [])], complete: true }),
+    putFleetActualsTotals: (totals): Promise<BatchWriteOutcome> => {
+      input.recorder.compacted.push([...totals]);
+      return Promise.resolve({ status: 'complete' });
     },
   },
   log: (entry) => {
