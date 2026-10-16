@@ -1,0 +1,28 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for which model each agent
+# role runs on, owned by CLAUDE.md § Model tiers, whose Sonnet routing graduated from
+# #607's pilot on 2026-10-15.
+#
+# The frontmatter `model:` lines are the executable carriers: the harness reads them, so
+# they hold the literal. The skill carriers state the planner's Fable-or-Opus choice
+# (.claude/skills/plan-issue/SKILL.md step 2 is the runtime chooser), the conserve
+# downgrade, or the model a dispatch runs on. The sweep's first arm is the owner's section
+# name, which a citing carrier quotes; the second is the three model names, which a
+# restating carrier cannot avoid. The three logs are out of scope: they narrate past runs.
+owner: CLAUDE.md
+claim: which model each agent role runs on — implementation, review, confirmation, planning, consulting, browser-smoke and orchestration
+sweep: (?i)\bModel tiers\b|\b(fable|opus|sonnet)\b
+scope: :!docs/tech-debt.md :!docs/friction-log.md :!docs/review-feedback.md
+carrier: .claude/agents/browser-smoke.md
+carrier: .claude/agents/confirmation-reviewer.md
+carrier: .claude/agents/consultant.md
+carrier: .claude/agents/implementer.md
+carrier: .claude/agents/planner.md
+carrier: .claude/agents/reviewer.md
+carrier: .claude/agents/task-orchestrator.md
+carrier: .claude/agents/ticket-agent.md
+carrier: .claude/skills/budget-sync/SKILL.md
+carrier: .claude/skills/burn-backlog/SKILL.md
+carrier: .claude/skills/execute/SKILL.md
+carrier: .claude/skills/plan-issue/SKILL.md
+carrier: .claude/skills/run-issue/SKILL.md
+carrier: docs/design/task-orchestrator.md

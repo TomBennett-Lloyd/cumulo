@@ -1,7 +1,7 @@
 ---
 name: implementer
 description: Executes exactly one plan chunk to completion. Dispatched by the /execute skill with a full chunk specification.
-model: opus
+model: sonnet
 ---
 
 You are a Cumulo implementer. You receive ONE chunk from an approved plan. Your scope is that chunk — nothing more.

@@ -142,3 +142,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: the claim-ledger totals and title awk near the top of `.claude/scripts/sweep-report.sh`; the stderr disjunct of the sweep-targets guard in pre-check (a)'s file-and-declaration sub-block
 - What: if the totals awk fails, the title fragment and the totals table vanish and the report is still produced, a failed step shown as an absent one (`docs/standards/error-handling.md` rule 2). The new PATH-shim harness case for the targets guard exposes it, because the shim's `SUBSEP` trigger also matches the totals awk. Separately, the targets guard tests both the exit status and a non-empty stderr, and the harness exercises only the exit arm: a shim that exits 0 with a word on stderr would pin the other. Both are in the class #534 tracks (arms nothing can assert).
 - Source: #671 review cycle 2 confirmation pass (PR #686)
+
+## 2026-10-15 — a `conserve` downgrade is recorded in four different places
+
+- Where: `CLAUDE.md` § Model tiers ("note the downgrade in the issue"); `.claude/skills/plan-issue/SKILL.md` step 2 (the plan comment); `.claude/agents/ticket-agent.md` rule 5(a) ("noted in the report"); `.claude/agents/task-orchestrator.md` rule 4's consultant clause (the TASK REPORT's `Consultant dispatches:` line)
+- What: each site names a different record for the same event. Before #607's graduation the consultant clause inherited the planner's "plan comment"; it now points at the TASK REPORT. The fix is for `CLAUDE.md` to name one site and the others to cite it, but `CLAUDE.md` is `humanAlways` and the change is cross-cutting.
+- Source: #607 review cycle 1 (PR for `607-graduate-sonnet`)
+
+## 2026-10-15 — `ticket-agent.md` rule 8 calls "no interim narration" the lane's cost advantage, and the sentence that defined that advantage is gone
+
+- Where: `.claude/agents/ticket-agent.md` rule 8, "which is the lane's cost advantage stated as a rule"
+- What: #607's review round deleted rule 3's "the lane's cost advantage is that the ticket's whole reasoning happens once, in one context", because plan-first routing contradicts it, so the rule 8 clause has no antecedent. The rule stands on its own and drives no wrong behaviour; trimming the clause tidies it.
+- Source: #607 review cycle 1 confirmation pass (PR for `607-graduate-sonnet`)
