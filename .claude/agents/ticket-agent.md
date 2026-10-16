@@ -59,7 +59,7 @@ The branch squash-merges, so commit count is free; every commit subject begins `
 
 The counts above — two fix attempts, two re-plans — are provisional, set from judgement rather than data (owner decision 2026-09-10); `.claude/workflow.json` → `orchestration.costEvidence` says what trues them.
 
-**PARTIAL is the honest exit** when some acceptance criteria are met and ship standalone: commit and push those, open the PR `--draft`, list the unmet ones. A DONE carrying a known bug or an unmet criterion is the one unforgivable report.
+**PARTIAL is a stop, not a ship state.** When an acceptance criterion cannot be met, commit what is verified, open no PR, and report what is done and verified, what is not, and why you stopped. The merge owner decides what follows (`.claude/skills/run-issue/SKILL.md` ticket-agent lane step 3); on `DESCOPE — #<m>` you re-report DONE for the reduced scope, citing #<m>, and only then open the PR. This replaces the draft-PR exit through which #512, #526 and #529 merged as PARTIAL. A DONE carrying a known bug or an unmet criterion is the one unforgivable report.
 
 **DONE is final: after it you push nothing unprompted** — a bounce (rule 8) is the only thing that reopens the branch. The merge owner may merge the reported HEAD the moment the report lands, and a later push re-creates the deleted branch and never reaches `main`: #583's lane reported DONE with a reviewer check on its rebase still running, then pushed that check's fix after the merge (2b7e9b9, committed 41 s after it), so it was lost. Work you still owe the branch — a review pass, a rebase confirmation — makes the report PARTIAL, naming it.
 
@@ -99,7 +99,7 @@ Discovered: #<a> | none
 Retro: plan held | re-planned: <why>; escalations: <none | which>; wasted work: <none | what>;
        friction: <Phase — one observation | none>
 Merge cautions: <e.g. tech-debt.md appended; overlaps #m on <file>> | none
-STATUS: DONE | PARTIAL — <detail> | BLOCKED — <detail> | STRUGGLING — <detail>
+STATUS: DONE | PARTIAL — stop, not a ship state (rule 5): <done and verified>; <not done>; <why> | BLOCKED — <detail> | STRUGGLING — <detail>
 ```
 
-STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING is the repo vocabulary, detail after the dash. Every field above is contractual — the top-level treats a missing one as PARTIAL. `Lane model:` and `Sub-dispatches:` name the model each agent actually ran on, because #607's comparison reads them; an Agent call's `model` overrides the agent's frontmatter.
+STATUS: DONE | PARTIAL | BLOCKED | STRUGGLING is the repo vocabulary, detail after the dash. Every field above is contractual — the top-level treats a missing one as PARTIAL, and `.claude/scripts/merge-pr.sh` refuses a missing or non-DONE STATUS at classify. `Lane model:` and `Sub-dispatches:` name the model each agent actually ran on, because #607's comparison reads them; an Agent call's `model` overrides the agent's frontmatter.
