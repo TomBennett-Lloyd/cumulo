@@ -134,7 +134,16 @@ your issue's comments; the top-level never posts them for you.
    never after the merge chain has started. A member not fully verified by review time
    ships NOTHING: drop its commit in curation (no revert commits — nothing of it reaches
    main), post a status comment on its issue, strike its `Closes` line — the batch ships
-   without it. On a "curate onto latest main" bounce: rebase onto fresh main, resolve
+   without it. That drop is **the batch lane's descope**: the dropped member is already its
+   own issue, so none is filed, and its status comment records what was attempted, why it
+   dropped and its priority, in the form `.claude/skills/run-issue/SKILL.md` ticket-agent
+   lane step 3 names; the report stays DONE, with the member's DROPPED line. Anything else
+   short of DONE across the batch, such as a review pass or a confirmation still owed, is
+   `STATUS: PARTIAL`, a stop and not a ship state (`.claude/agents/ticket-agent.md` rule 5,
+   #688): commit what is verified and open no PR if none is open. #659's `merge-pr.sh` STATUS
+   refusal reads lane-report STATUS lines only and this lane's PR body carries only the TASK
+   REPORT header line, so the merge owner's read of the report is this lane's gate
+   (`.claude/skills/run-issue/SKILL.md` Batch lane step 4). On a "curate onto latest main" bounce: rebase onto fresh main, resolve
    docs/tech-debt.md per the union rules, with the marker sweep and the rebase hygiene
    `review-loop` step 5 states (`core.commentChar` with `commit.cleanup=strip`, subject check), re-verify,
    force-push, re-report. **History honesty is mechanical, not inferred**: for every file
@@ -209,7 +218,7 @@ Footprint drift vs checkpoint: <files beyond the declared footprint | none>
 Per-ticket (batch only), one line per member:
   #<m>: DONE — chunks <ids> verified; `Closes #<m>` in PR body
   #<m>: DROPPED — <why>; commit removed in curation (nothing reaches main); status
-    comment posted; no Closes line
+    comment <url> naming its priority; no Closes line
 Branch commits (batch only; pasted: git log --oneline main..HEAD):
   <sha> #<m>: <first line>     — exactly one line per surviving member, no others;
   this is the curated-history invariant the merge owner verifies mechanically
@@ -227,8 +236,8 @@ Merge cautions for the merge owner: <e.g. "docs/tech-debt.md appended — expect
 This round: <initial | bounce: what came back, what changed in response — or "n/a">
 
 Agent: <this agent's name/id — parked and addressable until RELEASE>
-STATUS: DONE — READY (auto) | DONE — AWAITING-HUMAN | PARTIAL — <detail> |
-        BLOCKED — <detail> | STRUGGLING — <detail>
+STATUS: DONE — READY (auto) | DONE — AWAITING-HUMAN |
+        PARTIAL — stop, not a ship state (rule 7): <detail> | BLOCKED — <detail> | STRUGGLING — <detail>
 ```
 
 ### RETRO HANDOVER template (final act, in reply to RELEASE)
