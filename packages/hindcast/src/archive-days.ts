@@ -11,9 +11,7 @@ import type { UtcWindow } from '@cumulo/shared';
  *
  * An alias rather than a brand: this string is the same value `@cumulo/shared`'s
  * `archiveDayMarkerSortKey` validates and stores, and it travels as a plain
- * `YYYY-MM-DD` through URLs, sort keys and `Map` keys. The alias buys the
- * signature its meaning; the width guarantee is enforced where it bites — at the
- * boundary functions below and at the sort key.
+ * `YYYY-MM-DD` through URLs, sort keys and `Map` keys.
  */
 export type UtcDay = string;
 
@@ -32,7 +30,6 @@ const MS_PER_DAY = 86_400_000;
 /** Zero-padded `YYYY-MM-DD`, the only day spelling anything here accepts. */
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Days since the Unix epoch — the integer that makes "contiguous" a `+ 1` test. */
 const dayIndexOfInstant = (epochMs: number): number => Math.floor(epochMs / MS_PER_DAY);
 
 const dayAtIndex = (dayIndex: number): UtcDay =>
@@ -99,10 +96,6 @@ const toDayRun = (run: { readonly first: number; readonly last: number }): DayRu
  * a maximum run length.
  *
  * This is the frugality step (CLAUDE.md).
- *
- * The cap is a parameter rather than a constant because the number that belongs there
- * is the *provider's* request limit (`MAX_ARCHIVE_REQUEST_DAYS`), which lives with
- * the adapter that knows about the provider, not with calendar arithmetic.
  *
  * Throws on a `maxRunLength` below 1.
  */
