@@ -8,6 +8,8 @@
 # downgrade, or the model a dispatch runs on. The sweep's first arm is the owner's section
 # name, which a citing carrier quotes; the second is the three model names, which a
 # restating carrier cannot avoid. The three logs are out of scope: they narrate past runs.
+# .claude/scripts/merge-pr.test.sh is excluded for the same reason: it holds a captured
+# lane report (#692) whose Lane model: line names sonnet, a snapshot and not a restatement.
 owner: CLAUDE.md
 claim: which model each agent role runs on — implementation, review, confirmation, planning, consulting, browser-smoke and orchestration
 sweep: (?i)\bModel tiers\b|\b(fable|opus|sonnet)\b
@@ -26,3 +28,4 @@ carrier: .claude/skills/execute/SKILL.md
 carrier: .claude/skills/plan-issue/SKILL.md
 carrier: .claude/skills/run-issue/SKILL.md
 carrier: docs/design/task-orchestrator.md
+excluded: .claude/scripts/merge-pr.test.sh
