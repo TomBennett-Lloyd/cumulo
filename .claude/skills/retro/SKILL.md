@@ -9,7 +9,7 @@ You are reviewing how the _workflow_ performed on the task just merged — not r
 
 2. Produce EXACTLY ONE of:
    - **Clear signal with a clear fix** → make the change now, as its own small PR (issue label `workflow`). In order of preference:
-     a. **Promote to machine enforcement**: a prose rule that keeps being violated becomes a lint rule/tsconfig flag/hook — then DELETE the prose it replaces.
+     a. **Promote to machine enforcement**: a prose rule that keeps being violated becomes a lint rule/tsconfig flag/hook — then DELETE the prose it replaces, and only that: a sentence the tool enforces in part keeps the rest and cites the tool. #659 asked for a STATUS gate with "or is deleted if the gate makes it redundant"; its plan deleted `ticket-agent.md` rule 8's "Every field above is contractual" for a gate that checks one field, and review restored the sentence with the gate cited.
      b. **Rewrite a trigger line** in CLAUDE.md's standards index — most standards misses are recognition failures, not comprehension failures; fix the trigger, not the doc.
      c. **Amend an agent/skill definition** — tighten the instruction that failed.
      d. **Encode recurring human review feedback** into the relevant standards doc or agent definition, and note the promotion in the feedback log entry.
