@@ -13,11 +13,6 @@ import type { UtcDay } from './archive-days';
  * The Open-Meteo **archive** (ERA5) adapter: the one module in `@cumulo/hindcast`
  * allowed to touch the network (`docs/standards/architecture.md` rule 3).
  *
- * Everything below the fetch is pure — request construction and
- * {@link parseArchiveResponse} are functions of their arguments — so every
- * wire-format hazard is exercised against a captured fixture and no test in this
- * package needs the network (`docs/standards/testing.md` rule 3).
- *
  * Ingestion's forecast adapter (`apps/ingestion/src/open-meteo/`, #11) parses a
  * near-identical body, and this module deliberately does not share code with it
  * (`docs/standards/architecture.md` rule 1, `docs/standards/structure.md` rule 7).
@@ -43,21 +38,10 @@ export type ArchiveHourlyVariable = (typeof ARCHIVE_HOURLY_VARIABLES)[number];
 /**
  * Days covered by one archive HTTP request. Backfill asks for a contiguous *run*
  * of missing days (`contiguousDayRuns`), never one request per day — and that
- * difference is the whole frugality argument (CLAUDE.md):
+ * difference is the whole frugality argument (CLAUDE.md).
  *
  * Open-Meteo weights a call by how much data it covers rather than counting every
- * request as one, so a long range is billed as several calls. Budgeting
- * conservatively at one weighted call per 7 days requested:
- * - **runs of 31**: two years for one site is 730 ÷ 31 ≈ 24 requests, each
- *   weighted ⌈31 / 7⌉ = 5 → ≈ 120 weighted calls per site. A 20-site demo fleet
- *   backfills in ≈ 2,400 — under a quarter of one day's allowance, leaving room
- *   for the hourly forecast cycle that shares the quota.
- * - **one request per day**: 730 requests per site, weighted 1 each → 14,600 for
- *   the same fleet, over the daily limit before a single forecast cycle has run.
- *
- * 31 rather than something larger because a month is the unit an operator reasons
- * about, and it bounds what a single failed request costs: at most one month of a
- * site's history has to be asked for again.
+ * request as one, so a long range is billed as several calls.
  */
 export const MAX_ARCHIVE_REQUEST_DAYS = 31;
 
@@ -92,18 +76,12 @@ const ARCHIVE_HOUR_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
  *   domain's label already denote the same instant.
  * - Ingestion (#11) ships that same reading: `parseForecastResponse` in
  *   `apps/ingestion/src/open-meteo/response.ts` normalizes with the identical bare
- *   append. Archive and forecast readings land in the same `cumulo-weather`
- *   partition and are compared hour-for-hour by the hindcast this package exists
- *   for, so a shift applied here and not there would not fail loudly — it would
- *   quietly bias every accuracy metric by one hour.
+ *   append.
  */
 const UTC_HOUR_SUFFIX = ':00Z';
 
 const nullableNumbers = z.array(z.number().nullable());
 
-/**
- * One schema per requested hourly variable.
- */
 const hourlyVariableSchemas: Record<ArchiveHourlyVariable, typeof nullableNumbers> = {
   temperature_2m: nullableNumbers,
   wind_speed_10m: nullableNumbers,
@@ -145,9 +123,7 @@ type HourlyReadingValues = Pick<
 
 /**
  * The same fields as they arrive: `null` where the reanalysis has no value for the
- * hour, and `undefined` for an index past the end of a column — unreachable while
- * {@link hourlySchema}'s equal-length check holds, and handled identically anyway
- * so nothing here depends on that being true.
+ * hour, and `undefined` for an index past the end of a column.
  */
 type ReceivedHourlyValues = { [K in keyof HourlyReadingValues]: number | null | undefined };
 
@@ -156,9 +132,7 @@ type ReceivedHourlyValues = { [K in keyof HourlyReadingValues]: number | null | 
  *
  * A day is either complete — 24 readings, every variable present — or it is named
  * in `incompleteDays` and carries no readings at all. There is no third state and
- * no gap-filling (`docs/standards/error-handling.md` rule 5). Storage relies on the same
- * split — `putArchiveDay` writes a day's readings and its "this day is cached"
- * marker together, so a marker must never be written for a partial day.
+ * no gap-filling (`docs/standards/error-handling.md` rule 5).
  */
 export interface ParsedArchiveDays {
   readonly completeDays: Map<UtcDay, ArchiveWeatherReading[]>;
@@ -244,9 +218,7 @@ export const parseArchiveResponse = (
 };
 
 /**
- * The parts of the request policy a caller may override. Both fields are optional
- * because production overrides neither — the defaults *are* the shipped policy —
- * and a test replaces exactly the piece that would otherwise reach the network.
+ * The parts of the request policy a caller may override.
  */
 export interface ArchiveFetchDeps {
   /** Defaults to the global `fetch`; tests pass a stub so no test hits the network. */
@@ -330,10 +302,7 @@ const describeRejection = async (response: Response): Promise<string> => {
  * defaults (`docs/standards/error-handling.md` rule 3):
  * - every request carries an {@link ARCHIVE_TIMEOUT_MS} deadline via
  *   `AbortSignal.timeout`;
- * - HTTP 429 → `rate-limited` with **zero** retries, not even a delayed one.
- *   Backfill is not time-critical:
- *   the next scheduled run is the retry, and the day markers mean it resumes
- *   exactly where this one stopped;
+ * - HTTP 429 → `rate-limited` with **zero** retries, not even a delayed one;
  * - any other non-2xx → `rejected`, carrying the status and the provider's own
  *   reason so the operator sees why;
  * - a network failure, an aborted deadline or a body that is not JSON → **throws**
