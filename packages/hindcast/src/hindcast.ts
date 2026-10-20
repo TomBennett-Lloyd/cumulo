@@ -48,9 +48,6 @@ import {
  * The archive *reading* surface of the `cumulo-weather` table — the half
  * {@link ArchiveDayStore} deliberately leaves out, because backfill never reads
  * weather back and the replay never writes it.
- *
- * Declared here as the consumer's half of the contract, for the same reason
- * `archive-cache.ts` declares its own.
  */
 export interface ArchiveReadingStore {
   queryArchiveRange(
@@ -108,10 +105,6 @@ export interface HindcastInput {
 
 /**
  * What the run cost and how complete its inputs were, alongside the numbers.
- *
- * Counts rather than day lists for the two large fields but `unavailableDays` stays a
- * list, because those are the days the metrics are *missing*, and an operator
- * deciding whether to trust a skill score needs to see which ones.
  */
 export interface HindcastCoverage {
   readonly alreadyCached: number;
@@ -119,9 +112,8 @@ export interface HindcastCoverage {
   readonly unavailableDays: readonly UtcDay[];
   /**
    * The archived hours the physics refused to forecast — schema-valid weather no
-   * atmosphere produces (`createPhysicsForecast`'s `implausible` result). Listed
-   * for the same reason `unavailableDays` is. Like `unavailableDays`, they are
-   * **not** on the metrics row itself.
+   * atmosphere produces (`createPhysicsForecast`'s `implausible` result). Like
+   * `unavailableDays`, they are **not** on the metrics row itself.
    */
   readonly implausibleHours: readonly UtcIsoTimestamp[];
   readonly apiCallCount: number;
@@ -189,9 +181,6 @@ const replayArchive = (
   const implausibleHours: UtcIsoTimestamp[] = [];
 
   for (const weather of archivedHours) {
-    // `params` is spread over `defaultPhysicsParams` downstream, so an absent
-    // override and an empty one are the same run — which is why this can be a
-    // `??` rather than a conditional key under `exactOptionalPropertyTypes`.
     const result = createPhysicsForecast({
       site: input.site,
       weather,

@@ -25,12 +25,7 @@ import { MAX_ARCHIVE_REQUEST_DAYS, type ArchiveFetchResult } from './open-meteo-
  * Declared rather than imported because no module under `src/` imports
  * `@cumulo/storage`: that package is an AWS-SDK-bearing adapter layer, and this
  * one is offline orchestration over pure day math
- * (`docs/standards/architecture.md` rule 3). Inverting the dependency keeps every
- * test in this package runnable against a `Map` with no SDK in the graph, and the
- * real adapter is checked against {@link ArchiveDayStore} by the compiler at the
- * one place the two meet — `scripts/run-hindcast.ts`, the operator entry point,
- * which is the package's only importer of `@cumulo/storage` and passes a real
- * `WeatherAdapter` in.
+ * (`docs/standards/architecture.md` rule 3).
  *
  * `undetermined` is its own case for the reason the adapter documents: a day
  * DynamoDB never answered for is *unknown*, and guessing costs either quota
@@ -87,7 +82,7 @@ export interface ArchiveCoverageDeps {
  *   for, and no amount of asking again *now* changes that. They carry no marker,
  *   so a later run retries them.
  * - `coverage-unknown` — storage could not say what is cached, so nothing was
- *   fetched at all. Retry when DynamoDB is answering again.
+ *   fetched at all.
  * - `rate-limited` — the quota is spent. Everything in `fetched` is durably
  *   stored, and `remainingDays` is what the next scheduled run picks up.
  *
@@ -137,16 +132,12 @@ const unansweredDays = (
  * Order of operations, each step load-bearing:
  * 1. **Ask storage first.** An `incomplete` coverage answer returns
  *    `coverage-unknown` having fetched *nothing* — not even the days that were
- *    definitely absent. Half a backfill against an unknown cache is how the same
- *    day gets fetched twice, and the run is cheap to repeat once storage is
- *    healthy.
+ *    definitely absent.
  * 2. **Group the misses into contiguous runs**, capped at
  *    {@link MAX_ARCHIVE_REQUEST_DAYS}.
  * 3. **Fetch sequentially.** No parallel fan-out: Open-Meteo allows 600 calls a
  *    minute (CLAUDE.md) and backfill is not time-critical, so concurrency here
- *    would buy minutes and risk tripping the very limit that stops the run. It
- *    also makes "stop on the first rate limit" mean something — a fan-out would
- *    already have spent the calls it was going to spend.
+ *    would buy minutes and risk tripping the very limit that stops the run.
  *
  * Each complete day is stored as it arrives rather than after the whole run, so
  * a rate limit mid-backfill leaves everything before it durably cached and
@@ -161,8 +152,6 @@ export const ensureArchiveCoverage = async (
   coords: GeoCoordinates,
   days: readonly UtcDay[],
 ): Promise<ArchiveCoverageOutcome> => {
-  // Sorted and de-duplicated once, here, so every list this function returns is
-  // in calendar order regardless of what order the caller's window produced.
   const requestedDays = [...new Set(days)].sort();
 
   const coverage = await deps.weatherAdapter.listFetchedArchiveDays(coords, requestedDays);
@@ -203,7 +192,6 @@ export const ensureArchiveCoverage = async (
     }
 
     for (const [day, readings] of result.completeDays) {
-      // A day outside the missing set is a day this run did not ask for.
       if (!missingDays.has(day)) {
         continue;
       }
