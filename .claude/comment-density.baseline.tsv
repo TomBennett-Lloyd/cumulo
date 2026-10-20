@@ -164,7 +164,7 @@ packages/forecast/src/physics-forecast.ts	5454
 packages/forecast/src/power.ts	6914
 packages/forecast/src/solar-position.ts	2151
 packages/forecast/src/spa-periodic-terms.ts	666
-packages/hindcast/src/archive-cache.ts	4776
+packages/hindcast/src/archive-cache.ts	4696
 packages/hindcast/src/archive-days.ts	4561
 packages/hindcast/src/archive-fixtures.ts	2993
 packages/hindcast/src/hindcast-fixtures.ts	2462

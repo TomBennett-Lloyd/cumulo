@@ -154,3 +154,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/agents/ticket-agent.md` rule 8, "which is the lane's cost advantage stated as a rule"
 - What: #607's review round deleted rule 3's "the lane's cost advantage is that the ticket's whole reasoning happens once, in one context", because plan-first routing contradicts it, so the rule 8 clause has no antecedent. The rule stands on its own and drives no wrong behaviour; trimming the clause tidies it.
 - Source: #607 review cycle 1 confirmation pass (PR for `607-graduate-sonnet`)
+
+## 2026-10-20 — `archive-cache.ts` and its test call `MAX_ARCHIVE_REQUEST_DAYS` the provider's limit, while the constant's own history called 31 the repo's choice
+
+- Where: `packages/hindcast/src/archive-cache.ts` (the module header), `packages/hindcast/src/archive-cache.test.ts` (a test title), `packages/hindcast/src/open-meteo-archive.ts` (`MAX_ARCHIVE_REQUEST_DAYS`)
+- What: the header says "as few requests as the provider's range limit allows" and the test is titled "splits a gap longer than the provider's range limit", both reading 31 days as Open-Meteo's own cap. The base docblock on the constant said 31 was chosen because a month is the unit an operator reasons about, i.e. the repo's own choice, and the trim batch deleted that aside under the contract. Which is true needs Open-Meteo's documented archive range limit, which a comment-only trim cannot settle. The in-contract fix once known is to replace the paraphrase with `{@link MAX_ARCHIVE_REQUEST_DAYS}` and retitle the test.
+- Source: #545 hindcast 2 review cycle 1 (PR for `545-trim-hindcast-2`)

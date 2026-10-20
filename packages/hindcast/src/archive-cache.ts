@@ -22,10 +22,7 @@ import { MAX_ARCHIVE_REQUEST_DAYS, type ArchiveFetchResult } from './open-meteo-
  * covered?" — the shape `@cumulo/storage`'s `WeatherAdapter.listFetchedArchiveDays`
  * returns, declared here as the *consumer's* half of the contract.
  *
- * Declared rather than imported because no module under `src/` imports
- * `@cumulo/storage`: that package is an AWS-SDK-bearing adapter layer, and this
- * one is offline orchestration over pure day math
- * (`docs/standards/architecture.md` rule 3).
+ * Declared rather than imported (`docs/standards/architecture.md` rule 3).
  *
  * `undetermined` is its own case for the reason the adapter documents: a day
  * DynamoDB never answered for is *unknown*, and guessing costs either quota
