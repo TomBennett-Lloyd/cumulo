@@ -135,7 +135,11 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
 4. **On TASK REPORT**: verify disk truth in one command (`git rev-parse <branch>` vs the
    reported HEAD — mismatch: stop, reconcile from the issue ledger before anything else);
    cross-check the classification against the changed-file list; check the changed files
-   against other in-flight tasks. Then the merge chain of review-loop step 5 (which owns
+   against other in-flight tasks. A `STATUS: PARTIAL` report merges nothing, under the rule
+   ticket-agent lane step 3 states, and `merge-pr.sh` does not enforce it for a batch
+   (`.claude/agents/task-orchestrator.md` rule 7): bounce it (step 5) to finish, to drop the
+   unfinished member for a DONE re-report, or to re-plan; open each DROPPED member's status
+   comment before merging. Then the merge chain of review-loop step 5 (which owns
    update-branch, the tech-debt union routine, the settle-then-watch, and all of the
    ritual still owed at merge time — filling that PR's review-feedback entry
    **Category and Verdict**, both placeholders and never just one, on
