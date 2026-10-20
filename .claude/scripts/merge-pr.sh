@@ -289,20 +289,19 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const laneRe = /^## Lane report — issue #(\d+)/gm;
   while ((m = laneRe.exec(pr.body || ""))) lanes.add(m[1]);
   for (const n of lanes) put("lane", n);
-  // The first STATUS line after each lane report header, empty when there is none (#659).
   const labels = process.argv.slice(1);
+  // The first STATUS line after each lane report header, empty when there is none (#659).
   const bodyLines = (pr.body || "").split("\n");
   bodyLines.forEach((line, i) => {
     const lane = /^## Lane report — issue #(\d+)/.exec(line);
     if (!lane) return;
-    const status = bodyLines.slice(i + 1).find((l) => l.startsWith("STATUS:"));
-    put("lanestatus", lane[1], status || "");
+    const after = bodyLines.slice(i + 1);
+    const stop = after.findIndex((l) => l.startsWith("STATUS:"));
+    put("lanestatus", lane[1], stop < 0 ? "" : after[stop]);
     // The labels of the template that no line of the report block carries (#692). The
     // block runs from the header to the STATUS line, so a field written after it or
     // above the header does not count; a label counts after whitespace anywhere on a
     // line, because the template puts some mid-line.
-    const after = bodyLines.slice(i + 1);
-    const stop = after.findIndex((l) => l.startsWith("STATUS:"));
     const block = (stop < 0 ? after : after.slice(0, stop)).map((l) => " " + l.replace(/\t/g, " "));
     const missing = labels.filter((label) => !block.some((l) => l.includes(" " + label + ":")));
     put("lanemissing", lane[1], missing.map((label) => label + ":").join(", "));
@@ -438,11 +437,9 @@ EOF
 
 # The fields a lane report must carry are the labels of .claude/agents/ticket-agent.md
 # rule 8's report template, read here rather than restated, for the reason humanAlways
-# is read from .claude/workflow.json: a second copy would be a second owner (#692). A
-# label is what the fenced lane report block starts an unindented line with, or puts
-# after whitespace on one; indented lines continue the field above. STATUS is left
-# to the #659 check. A failure is held, not raised: a PR with no lane report never
-# depends on this file, and classify refuses the ones that do.
+# is read from .claude/workflow.json: a second copy would be a second owner (#692).
+# STATUS is left to the #659 check. A failure is held, not raised: a PR with no lane
+# report never depends on this file, and classify refuses the ones that do.
 lane_template_out=$(node -e '
 const fs = require("fs");
 const refuse = (why) => {

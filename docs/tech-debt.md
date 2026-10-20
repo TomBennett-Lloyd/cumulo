@@ -160,3 +160,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `packages/hindcast/src/archive-cache.ts` (the module header), `packages/hindcast/src/archive-cache.test.ts` (a test title), `packages/hindcast/src/open-meteo-archive.ts` (`MAX_ARCHIVE_REQUEST_DAYS`)
 - What: the header says "as few requests as the provider's range limit allows" and the test is titled "splits a gap longer than the provider's range limit", both reading 31 days as Open-Meteo's own cap. The base docblock on the constant said 31 was chosen because a month is the unit an operator reasons about, i.e. the repo's own choice, and the trim batch deleted that aside under the contract. Which is true needs Open-Meteo's documented archive range limit, which a comment-only trim cannot settle. The in-contract fix once known is to replace the paraphrase with `{@link MAX_ARCHIVE_REQUEST_DAYS}` and retitle the test.
 - Source: #545 hindcast 2 review cycle 1 (PR for `545-trim-hindcast-2`)
+
+## 2026-10-21 — a ledger's `excluded:` hides a whole file from its sweep, so one snapshot line blinds it to the rest
+
+- Where: `.claude/ledgers/model-tiers.ledger` (`excluded: .claude/scripts/merge-pr.test.sh`); the `excluded:` key in the format `.claude/scripts/check-ledgers.sh`'s header owns
+- What: the harness holds a captured lane report whose `Lane model: sonnet … Plan model: opus.` line tripped the model-tiers sweep, and `excluded:` works per file. If a real model-tier restatement is ever added to that harness, the gate will not see it. The format has no line-scoped or snapshot-scoped exclusion. A fix is a format change in the gate, so it is logged rather than patched in a ticket about lane report fields.
+- Source: #692 review cycle 1

@@ -1300,10 +1300,56 @@ run_merge
 expect_rc 1
 expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
 expect_not_called "pr merge $PR --squash"
+case_ctx="a lane fence holding no field"
+fixture lane-field-no-labels
+must printf '%s\n' '```' '## Lane report — issue #<n>' 'STATUS: DONE' '```' >"$REPO/.claude/agents/ticket-agent.md"
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
+expect_not_called "pr merge $PR --squash"
+case_ctx="two lane fences"
+fixture lane-field-two-fences
+must printf '%s\n' '```' '## Lane report — issue #<n>' 'PR: #<pr>' '```' '```' '## Lane report — issue #<n>' 'PR: #<pr>' '```' >"$REPO/.claude/agents/ticket-agent.md"
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
+expect_not_called "pr merge $PR --squash"
 case_ctx="no lane report"
 fixture lane-field-no-template-no-lane
 must rm "$REPO/.claude/agents/ticket-agent.md"
 V_COMMITS="#12: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_called "pr merge $PR --squash"
+case_ctx=""
+end
+
+# A label counts after whitespace (a space or a tab), not after any other character.
+begin "a label glued to the character before it is refused, and one after a tab is accepted"
+fixture lane-field-glued
+V_BODY=$(lane_field_body "${LANE_FIELDS_693/"Retro:"/(Retro:}")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'is missing fields Retro: —'
+expect_not_called "pr merge $PR --squash"
+case_ctx="after a tab"
+fixture lane-field-tab
+lane_tab_ci='\tCI:'
+V_BODY=$(lane_field_body "${LANE_FIELDS_693/"      CI:"/$lane_tab_ci}")
+V_COMMITS="#659: the change"
 write_view default
 write_merged_view
 run_merge
