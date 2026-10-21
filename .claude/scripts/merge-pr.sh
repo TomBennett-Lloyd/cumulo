@@ -198,7 +198,7 @@ defer() { # defer <step> <message>
 # put jq in the stub's contract too, and deliberately not `eval` of a generated
 # assignment block, which would make a PR body a code-execution surface.
 
-pr_facts() { # stdin: a `gh pr view --json` object; stdout: <kind>\t<a>[\t<b>\t<c>] records
+pr_facts() { # pr_facts [lane report field label]...; stdin: a `gh pr view --json` object; stdout: <kind>\t<a>[\t<b>\t<c>] records
   node -e '
 let raw = "";
 process.stdin.on("data", (d) => (raw += d)).on("end", () => {
@@ -289,13 +289,22 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   const laneRe = /^## Lane report — issue #(\d+)/gm;
   while ((m = laneRe.exec(pr.body || ""))) lanes.add(m[1]);
   for (const n of lanes) put("lane", n);
+  const labels = process.argv.slice(1);
   // The first STATUS line after each lane report header, empty when there is none (#659).
   const bodyLines = (pr.body || "").split("\n");
   bodyLines.forEach((line, i) => {
     const lane = /^## Lane report — issue #(\d+)/.exec(line);
     if (!lane) return;
-    const status = bodyLines.slice(i + 1).find((l) => l.startsWith("STATUS:"));
-    put("lanestatus", lane[1], status || "");
+    const after = bodyLines.slice(i + 1);
+    const stop = after.findIndex((l) => l.startsWith("STATUS:"));
+    put("lanestatus", lane[1], stop < 0 ? "" : after[stop]);
+    // The labels of the template that no line of the report block carries (#692). The
+    // block runs from the header to the STATUS line, so a field written after it or
+    // above the header does not count; a label counts after whitespace anywhere on a
+    // line, because the template puts some mid-line.
+    const block = (stop < 0 ? after : after.slice(0, stop)).map((l) => " " + l.replace(/\t/g, " "));
+    const missing = labels.filter((label) => !block.some((l) => l.includes(" " + label + ":")));
+    put("lanemissing", lane[1], missing.map((label) => label + ":").join(", "));
   });
   const batches = new Set();
   const batchRe = /^## TASK REPORT — .*?batch: anchor #(\d+)/gm;
@@ -303,7 +312,7 @@ process.stdin.on("data", (d) => (raw += d)).on("end", () => {
   for (const n of batches) put("batch", n);
   process.stdout.write(out.join("\n") + "\n");
 });
-'
+' "$@"
 }
 
 json_field() { # json_field <key>; stdin: a JSON object; stdout: that key as a string
@@ -339,6 +348,10 @@ pr_templates=()
 pr_part_of=()
 lane_status_issues=()
 lane_status_lines=()
+lane_missing_issues=()
+lane_missing_fields=()
+lane_labels=()
+lane_template_error=""
 check_names=()
 check_statuses=()
 check_conclusions=()
@@ -352,7 +365,7 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
     last_error="gh pr view exited $rc: $json"
     return 1
   fi
-  facts=$(printf '%s' "$json" | pr_facts 2>&1)
+  facts=$(printf '%s' "$json" | pr_facts ${lane_labels[@]+"${lane_labels[@]}"} 2>&1)
   rc=$?
   if [ "$rc" -ne 0 ]; then
     last_error="could not parse gh's answer: $facts"
@@ -374,6 +387,8 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
   pr_part_of=()
   lane_status_issues=()
   lane_status_lines=()
+  lane_missing_issues=()
+  lane_missing_fields=()
   check_names=()
   check_statuses=()
   check_conclusions=()
@@ -399,6 +414,10 @@ read_pr() { # read_pr -> 0 and the globals refreshed, or 1 with $last_error set
         lane_status_issues+=("$a")
         lane_status_lines+=("$b")
         ;;
+      lanemissing)
+        lane_missing_issues+=("$a")
+        lane_missing_fields+=("$b")
+        ;;
       check)
         check_names+=("$a")
         check_statuses+=("$b")
@@ -415,6 +434,55 @@ EOF
   fi
   return 0
 }
+
+# The fields a lane report must carry are the labels of .claude/agents/ticket-agent.md
+# rule 8's report template, read here rather than restated, for the reason humanAlways
+# is read from .claude/workflow.json: a second copy would be a second owner (#692).
+# STATUS is left to the #659 check. A failure is held, not raised: a PR with no lane
+# report never depends on this file, and classify refuses the ones that do.
+lane_template_out=$(node -e '
+const fs = require("fs");
+const refuse = (why) => {
+  process.stderr.write("cannot read the lane report template in .claude/agents/ticket-agent.md: " + why + "\n");
+  process.exit(2);
+};
+let text = "";
+try {
+  text = fs.readFileSync(process.argv[1], "utf8");
+} catch (e) {
+  refuse(e.message);
+}
+const blocks = [];
+let open = null;
+for (const line of text.split("\n")) {
+  if (open === null && line.startsWith("```")) open = [];
+  else if (open !== null && line.startsWith("```")) {
+    blocks.push(open);
+    open = null;
+  } else if (open !== null) open.push(line);
+}
+const lanes = blocks.filter((b) => (b[0] || "").startsWith("## Lane report — issue #"));
+if (lanes.length !== 1) refuse("found " + lanes.length + " fenced lane report blocks, expected exactly 1");
+const labels = [];
+for (const line of lanes[0]) {
+  if (/^\s/.test(line)) continue;
+  for (const m of line.matchAll(/(?:^|\s)([A-Z][A-Za-z\/ -]*):/g)) {
+    if (m[1] !== "STATUS" && !labels.includes(m[1])) labels.push(m[1]);
+  }
+}
+if (labels.length === 0) refuse("the lane report block yields no field labels");
+process.stdout.write(labels.join("\n") + "\n");
+' "$repo_root/.claude/agents/ticket-agent.md" 2>&1)
+lane_template_rc=$?
+if [ "$lane_template_rc" -eq 0 ]; then
+  while IFS= read -r lane_label; do
+    [ -z "$lane_label" ] || lane_labels+=("$lane_label")
+  done <<EOF
+$lane_template_out
+EOF
+else
+  lane_template_error="$lane_template_out"
+fi
 
 read_pr || fail 'classify' "$last_error"
 
@@ -594,8 +662,8 @@ curated_history_ok() { # -> 0, or 1 with the reason on stdout
 
 step 'classify' "PR #$pr_number is $pr_state on '$pr_head_ref'; $merge_reason; $class_summary"
 
-# Deferring either of these to the merge step would mean refusing AFTER
-# update-branch had written to the branch and the poll had waited out a full CI
+# Each refusal below belongs here: deferring it to the merge step would mean refusing
+# AFTER update-branch had written to the branch and the poll had waited out a full CI
 # run — the cost this script exists to save.
 if [ "$already_merged" = "0" ]; then
   [ -n "$merge_method" ] || fail 'classify' \
@@ -617,6 +685,19 @@ if [ "$already_merged" = "0" ]; then
       '') fail 'classify' "PR #$pr_number's lane report has no STATUS line (issue #${lane_status_issues[$i]}) — a lane merges only on STATUS: DONE; refresh the report in the PR body" ;;
       *) fail 'classify' "PR #$pr_number's lane report (issue #${lane_status_issues[$i]}) says \"${lane_status_lines[$i]}\" — a lane merges only on STATUS: DONE" ;;
     esac
+    i=$((i + 1))
+  done
+  # The other fields of that template, read from it (#692); --method does not bypass
+  # this either, and the STATUS refusal above keeps precedence. A template that cannot
+  # be read refuses only a PR that carries a lane report.
+  if [ "${#lane_missing_issues[@]}" -gt 0 ] && [ -n "$lane_template_error" ]; then
+    fail 'classify' "$lane_template_error"
+  fi
+  i=0
+  while [ "$i" -lt "${#lane_missing_issues[@]}" ]; do
+    if [ -n "${lane_missing_fields[$i]}" ]; then
+      fail 'classify' "PR #$pr_number's lane report (issue #${lane_missing_issues[$i]}) is missing fields ${lane_missing_fields[$i]} — every field in .claude/agents/ticket-agent.md rule 8's report template is contractual; refresh the report in the PR body"
+    fi
     i=$((i + 1))
   done
 fi

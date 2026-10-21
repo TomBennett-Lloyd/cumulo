@@ -1,0 +1,15 @@
+# Restatement ledger (docs/standards/architecture.md rule 9) for the lane report's field
+# labels and the layout that makes them findable, owned by the fenced template in
+# .claude/agents/ticket-agent.md rule 8 (#692).
+#
+# merge-pr.sh does not restate the labels: it reads them from the template at classify,
+# a label being what starts an unindented line or follows whitespace on one, so it
+# computes with the layout. A field added on an indented line, or without whitespace
+# before it, is not required. merge-pr.test.sh asserts the list against a real report
+# (#693's, captured).
+owner: .claude/agents/ticket-agent.md
+claim: the lane report template's field labels and their layout, which merge-pr.sh derives its required fields from at classify
+sweep: rule 8's report template|Footprint drift vs plan comment
+scope: :!docs/tech-debt.md :!docs/friction-log.md :!docs/review-feedback.md
+carrier: .claude/scripts/merge-pr.sh
+carrier: .claude/scripts/merge-pr.test.sh

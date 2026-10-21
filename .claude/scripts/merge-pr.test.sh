@@ -332,13 +332,52 @@ EOF
   must chmod +x "$1"
 }
 
+# --- the lane report fields (#692) -------------------------------------------------------------
+#
+# LANE_FIELDS_693 is the 15 field lines of PR #693's lane report, captured verbatim on
+# 2026-10-20 with
+#   gh pr view 693 --json body --jq .body | awk '/^## Lane report — issue #659/{f=1;next} /^STATUS:/{f=0} f'
+# It is a real report, so it carries what a real one does: four labels mid-line (CI:,
+# Footprint drift vs plan comment:, Consultant:, Plan model:) and two apostrophes. The
+# read below turns the newlines into JSON's \n escape, which is how V_BODY is written.
+IFS= read -r -d '' lane_fields_raw <<'LANE_693'
+Branch/HEAD: 659-status-refusal ae88c43e2a86cf0f94a2fcf8ed74496e3ef61b4f
+PR: #693 https://github.com/TomBennett-Lloyd/cumulo/pull/693      CI: green on ae88c43 (checks, gitleaks, merge-ritual-gate, terraform, web-build, web-e2e all pass); mergeStateStatus BEHIND
+Verify: rc=0 (`verify root: /Users/tom/Documents/Repos/cumulo/.claude/worktrees/659-status-refusal [659-status-refusal]`); `bash .claude/scripts/merge-pr.test.sh`: 83 passed, 0 failed; shellcheck rc=0
+Plan comment: https://github.com/TomBennett-Lloyd/cumulo/issues/659#issuecomment-6202270280      Footprint drift vs plan comment: none (the plan's C3 deletion became a restore-and-cite after review, same file)
+Changed files:
+.claude/agents/ticket-agent.md
+.claude/scripts/merge-pr.sh
+.claude/scripts/merge-pr.test.sh
+Review: APPROVE after 2 passes — FIX-NOW 1/1 (ticket-agent.md deletion not redundant; restored and cited the gate), deferred: none, SYSTEMIC: stale refusal-count comment in merge-pr.sh -> https://github.com/TomBennett-Lloyd/cumulo/issues/533#issuecomment-6202892238; per-field check -> #692
+Classification: AUTO — source extensions .sh; humanAlways none
+Lane model: sonnet (pilot #607 stage 2, lane type 5: implementer from an explicit plan). Plan model: opus.
+Sub-dispatches: reviewer (frontmatter model): first full pass; confirmation-reviewer (frontmatter model): fix commit ae88c43   Consultant: none
+Discovered: #692
+Retro: plan held except C3 (deletion reversed after review: the gate covers STATUS only); escalations: none; wasted work: none; friction: Plan — the plan's C3 deleted a sentence covering all rule 8 fields on the strength of a one-field gate; Dispatch — main moved (#688) between plan and lane so the branch is BEHIND.
+Merge cautions: branch BEHIND main; #688 edits ticket-agent.md lines 62 and 102, `merge-tree` clean; update-branch needed, then re-check CI.
+LANE_693
+lane_fields_raw=${lane_fields_raw%$'\n'}
+LANE_FIELDS_693=${lane_fields_raw//$'\n'/\\n}
+
+# The 16 labels of .claude/agents/ticket-agent.md rule 8's report template other than
+# STATUS (which #659's cases own), in template order. merge-pr.sh reads them from that
+# template rather than restating them; this list is the harness asserting what it yields.
+LANE_LABELS=(
+  'Branch/HEAD' 'PR' 'CI' 'Verify' 'Plan comment' 'Footprint drift vs plan comment'
+  'Changed files' 'Review' 'Classification' 'Lane model' 'Plan model' 'Sub-dispatches'
+  'Consultant' 'Discovered' 'Retro' 'Merge cautions'
+)
+
 # --- fixtures ---------------------------------------------------------------------------------
 
 fixture() { # fixture <name> [humanAlways JSON array]
   ROOT="$TMP_ROOT/$1"
   STATE="$ROOT/state"
   REPO="$ROOT/repo"
-  must mkdir -p "$STATE" "$REPO/.claude"
+  must mkdir -p "$STATE" "$REPO/.claude/agents"
+  # The real template, which merge-pr.sh reads the required lane report fields from (#692).
+  must cp "$SCRIPTS/../agents/ticket-agent.md" "$REPO/.claude/agents/ticket-agent.md"
   must git init --quiet -b main "$REPO"
   must printf '{"merge":{"humanAlways":%s}}\n' "${2:-$HUMAN_ALWAYS_DEFAULT}" >"$REPO/.claude/workflow.json"
   must gitc "$REPO" add -A
@@ -872,7 +911,7 @@ end
 # wherever a line starts with it.
 begin "a lane report with two Closes lines merges --squash, not as a batch"
 fixture lane-two-closes
-V_BODY='Closes #21. Closes #22.\n\n~~~\n## Lane report — issue #21\nSTATUS: DONE\n~~~'
+V_BODY="Closes #21. Closes #22.\n\n~~~\n## Lane report — issue #21\n${LANE_FIELDS_693}\nSTATUS: DONE\n~~~"
 V_COMMITS="#21: the first,#21: the second,#21: the third"
 write_view default
 write_merged_view
@@ -923,7 +962,7 @@ end
 # refused here and merged with --method squash by hand.
 begin "a lane report with Part of its issue and no Closes line merges --squash"
 fixture lane-part-of
-V_BODY='Part of #21.\n\n~~~\n## Lane report — issue #21 (batch 2)\nSTATUS: DONE\n~~~'
+V_BODY="Part of #21.\n\n~~~\n## Lane report — issue #21 (batch 2)\n${LANE_FIELDS_693}\nSTATUS: DONE\n~~~"
 V_COMMITS="#21: the first,#21: the second"
 write_view default
 write_merged_view
@@ -1079,10 +1118,11 @@ end
 # ==========================================================================================
 # PRs #649 and #652 each carried a lane report with no STATUS line and merged on the
 # header alone (#659). The bodies below follow #649's, read with `gh pr view 649` on
-# 2026-10-15: unfenced header, fields, a trailer after the block.
+# 2026-10-15: unfenced header, fields, a trailer after the block. The done case's fields
+# are the #693 capture (#692), so the missing-STATUS and PARTIAL cases keep their own.
 begin "a lane report ending STATUS: DONE with detail merges --squash"
 fixture lane-status-done
-V_BODY='Closes #21\n\n## What and why\n\nThe change.\n\n## Lane report — issue #21\nBranch/HEAD: 490-lane aaa111\nReview: APPROVE after 1 pass\nSTATUS: DONE — reviewer APPROVE on aaa111; CI green\n\nGenerated with Claude Code'
+V_BODY="Closes #21\n\n## What and why\n\nThe change.\n\n## Lane report — issue #21\n${LANE_FIELDS_693}\nSTATUS: DONE — reviewer APPROVE on aaa111; CI green\n\nGenerated with Claude Code"
 V_COMMITS="#21: the change"
 write_view default
 write_merged_view
@@ -1140,6 +1180,193 @@ write_merged_view
 run_merge
 expect_rc 0
 expect_not_stderr 'STATUS'
+expect_called "pr merge $PR --squash"
+end
+
+# ==========================================================================================
+# 10h. a lane merges only with every field of rule 8's report template present
+# ==========================================================================================
+# #693 gated the STATUS line and left the template's other fields to the reader (#692).
+# The labels are read from .claude/agents/ticket-agent.md by the subject, so the fixture
+# carries the real template and LANE_FIELDS_693 is a real report to measure it against.
+lane_field_body() { # lane_field_body <fields> -> a lane PR body holding exactly those fields
+  printf '%s' "Closes #659\n\n## Lane report — issue #659\n$1\nSTATUS: DONE\n\nGenerated with Claude Code"
+}
+
+begin "#693's lane report, every field present and four of them mid-line, merges --squash"
+fixture lane-field-all
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_stdout 'ticket-agent lane for #659 -> squash'
+expect_called "pr merge $PR --squash"
+expect_not_stderr 'is missing fields'
+end
+
+lane_label_index=0
+for lane_label in "${LANE_LABELS[@]}"; do
+  lane_label_index=$((lane_label_index + 1))
+  begin "a lane report missing $lane_label: is refused at classify"
+  fixture "lane-field-$lane_label_index"
+  V_BODY=$(lane_field_body "${LANE_FIELDS_693//"$lane_label:"/}")
+  V_COMMITS="#659: the change"
+  write_view default
+  write_merged_view
+  run_merge
+  expect_rc 1
+  expect_stderr 'classify — FAILED'
+  expect_stderr "(issue #659) is missing fields $lane_label: —"
+  expect_not_called "pr update-branch $PR"
+  expect_not_called "pr merge $PR --squash"
+  end
+done
+
+# #684 merged with no STATUS line and none of these five.
+LANE_FIELDS_684=$LANE_FIELDS_693
+for lane_label in 'Sub-dispatches' 'Consultant' 'Discovered' 'Retro' 'Merge cautions'; do
+  LANE_FIELDS_684=${LANE_FIELDS_684//"$lane_label:"/}
+done
+begin "a lane report missing #684's five fields is refused, naming them in template order, --method squash included"
+fixture lane-field-684
+V_BODY=$(lane_field_body "$LANE_FIELDS_684")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'classify — FAILED'
+expect_stderr 'is missing fields Sub-dispatches:, Consultant:, Discovered:, Retro:, Merge cautions: —'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+case_ctx="--method squash"
+reset_calls
+capture -C "$REPO" env \
+  MERGE_PR_GH_CMD="$ROOT/gh" MERGE_PR_REAP_CMD="$ROOT/reap" \
+  MERGE_PR_POLL_INTERVAL_SECONDS=0 MERGE_PR_POLL_TIMEOUT_SECONDS=30 \
+  MERGE_PR_RETRY_SECONDS=0 MERGE_PR_CONFIRM_RETRIES=2 \
+  bash "$SUBJECT" --method squash "$PR" "$REPO"
+expect_rc 1
+expect_stderr 'is missing fields Sub-dispatches:'
+expect_not_called "pr merge $PR --squash"
+case_ctx=""
+end
+
+begin "a field outside its lane report block does not count — after the STATUS line or above the header"
+fixture lane-field-after
+V_BODY="Closes #659\n\n## Lane report — issue #659\n${LANE_FIELDS_693//"Merge cautions:"/}\nSTATUS: DONE\nMerge cautions: none\n\nGenerated with Claude Code"
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'is missing fields Merge cautions: —'
+expect_not_called "pr merge $PR --squash"
+case_ctx="above the header"
+fixture lane-field-above
+V_BODY="Closes #659\n\nMerge cautions: none\n\n## Lane report — issue #659\n${LANE_FIELDS_693//"Merge cautions:"/}\nSTATUS: DONE\n\nGenerated with Claude Code"
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'is missing fields Merge cautions: —'
+expect_not_called "pr merge $PR --squash"
+case_ctx=""
+end
+
+begin "an unreadable lane report template refuses a lane PR and leaves a PR with no lane report alone"
+fixture lane-field-no-template
+must rm "$REPO/.claude/agents/ticket-agent.md"
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
+expect_not_called "pr update-branch $PR"
+expect_not_called "pr merge $PR --squash"
+case_ctx="a template with no fence"
+fixture lane-field-no-fence
+must printf 'no report template in here\n' >"$REPO/.claude/agents/ticket-agent.md"
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
+expect_not_called "pr merge $PR --squash"
+case_ctx="a lane fence holding no field"
+fixture lane-field-no-labels
+must printf '%s\n' '```' '## Lane report — issue #<n>' 'STATUS: DONE' '```' >"$REPO/.claude/agents/ticket-agent.md"
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
+expect_not_called "pr merge $PR --squash"
+case_ctx="two lane fences"
+fixture lane-field-two-fences
+must printf '%s\n' '```' '## Lane report — issue #<n>' 'PR: #<pr>' '```' '```' '## Lane report — issue #<n>' 'PR: #<pr>' '```' >"$REPO/.claude/agents/ticket-agent.md"
+V_BODY=$(lane_field_body "$LANE_FIELDS_693")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'cannot read the lane report template in .claude/agents/ticket-agent.md'
+expect_not_called "pr merge $PR --squash"
+case_ctx="no lane report"
+fixture lane-field-no-template-no-lane
+must rm "$REPO/.claude/agents/ticket-agent.md"
+V_COMMITS="#12: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_called "pr merge $PR --squash"
+case_ctx=""
+end
+
+# A label counts after whitespace (a space or a tab), not after any other character.
+begin "a label glued to the character before it is refused, and one after a tab is accepted"
+fixture lane-field-glued
+V_BODY=$(lane_field_body "${LANE_FIELDS_693/"Retro:"/(Retro:}")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 1
+expect_stderr 'is missing fields Retro: —'
+expect_not_called "pr merge $PR --squash"
+case_ctx="after a tab"
+fixture lane-field-tab
+lane_tab_ci='\tCI:'
+V_BODY=$(lane_field_body "${LANE_FIELDS_693/"      CI:"/$lane_tab_ci}")
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
+expect_called "pr merge $PR --squash"
+case_ctx=""
+end
+
+begin "SYSTEMIC: and friction: are part of a field's value, so a report without them merges"
+fixture lane-field-continuations
+V_BODY=$(lane_field_body "${LANE_FIELDS_693//"SYSTEMIC:"/}")
+V_BODY=${V_BODY//"friction:"/}
+V_COMMITS="#659: the change"
+write_view default
+write_merged_view
+run_merge
+expect_rc 0
 expect_called "pr merge $PR --squash"
 end
 
