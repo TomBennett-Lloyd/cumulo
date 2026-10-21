@@ -13,6 +13,15 @@ one `ticket-agent` (`.claude/agents/ticket-agent.md`), and a **multi-ticket same
 batch** goes to one `task-orchestrator`. Neither lane's procedure is the other's, so pick
 the section before you dispatch.
 
+**Run this seat from the main checkout**, never from a worktree the desktop app made for the
+session. Lanes write in sibling worktrees under `.claude/worktrees/`, and after an app update
+on 2026-10-20 an app-side PreToolUse hook (`.claude/settings.json` declares none) refused a
+lane's Edit and Write outside the session's own worktree: #691's first lane, dispatched from
+`.claude/worktrees/session-handover-357582`, stopped before its first edit, and moving that
+session's cwd did not lift the refusal. A new session started in the main checkout ran the
+same lane to #704. `CLAUDE.md`'s worktree-lifecycle bullet already keeps the main checkout
+for this read-only work.
+
 Two rules hold for every dispatch you write, in either lane or outside both (a `/retro` or
 `/triage` lane, a plan validation). **Name the model**: an agent type with no `model:` in its
 frontmatter, `general-purpose` among them, inherits yours, so the Agent call carries `model:`

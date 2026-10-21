@@ -139,3 +139,13 @@ Entry format:
 
 - Phase: planning
 - Observed: #688's plan measured its acceptance on a scratch copy "with both chunks applied" and stated the results per chunk, including C1's "Expect the full tier, not the docs tier". The full tier came from the soundness guard's hits on the `SKILL.md` basename (`incident-watch.test.sh`), and only C2 edits a `SKILL.md`. C1 alone changed `ticket-agent.md`, which no test reads, so `verify-tier.sh` derived the docs tier, as it should. No cost: rc was 0 either way, and no C1 criterion needed a leg only the full tier runs. The shape is a measurement of the finished tree copied onto an earlier chunk, the when-sensitive acceptance `planner.md` asks to be ordered rather than described, and the tier is the classifier's output rather than something a plan can promise. Not turned into a rule: one instance, nothing lost. Signal if it repeats: a chunk criterion that needs a full-tier leg, passing on the docs tier.
+
+## 2026-10-21 — PR #703 (issue #545, batch "hindcast 2")
+
+- Phase: process
+- Observed: when the orchestrating session was replaced mid-merge, two `merge-pr.sh 703` runs overlapped. The outgoing session's handover, a state file under `~/.local/state/` copied into the new session by hand, recorded its own run as in flight; the incoming session recorded that run as dead after `update-branch` and started a second. The first run was alive: its log reaches the merge step and fails with `GraphQL: Merge already in progress`, seconds after the second run merged squash at 22:55:51Z. Nothing was lost, because `merge-pr.sh` is re-runnable from any state and GitHub refused the duplicate merge. The same handover said the trim lane still running "dies with the session"; the lane finished and opened #703 three minutes later. Both beliefs were stated as facts about live processes and neither was checked, and the hand-copied file was the only record of what was live.
+
+## 2026-10-21 — PR #705 (issue #692)
+
+- Phase: planning
+- Observed: #692's plan measured the labels its fixture would yield against #693's real lane report, but did not run the repo's ledger sweeps over the captured report it planned to commit into `.claude/scripts/merge-pr.test.sh`. That report's `Lane model:` line names `sonnet`, which the `.claude/ledgers/model-tiers.ledger` sweep reads as a model-tier restatement, so the sweep tripped on it and the lane added an `excluded:` line the plan never named (a footprint change posted on #692, and the 2026-10-21 `docs/tech-debt.md` entry on the per-file exclusion's blind spot). The gate caught it at its designed point and it cost one footprint change. A captured snapshot is a carrier shape the sweep was not written for.
