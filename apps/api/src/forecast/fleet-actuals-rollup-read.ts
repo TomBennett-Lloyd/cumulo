@@ -73,7 +73,7 @@ const staleLocations = (
         return (
           members !== undefined &&
           compareUtcIsoTimestamps(row.partial.validTime, rewrittenFrom) >= 0 &&
-          row.provenance?.members !== members
+          row.provenance.members !== members
         );
       })
       .map((row) => row.locationId),

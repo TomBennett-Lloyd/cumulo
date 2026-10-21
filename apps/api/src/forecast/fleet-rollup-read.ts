@@ -47,9 +47,7 @@ import { forecastsIn } from './series-split';
  * for **membership and vintage** (#602, the 2026-10-07 entry): its slices must carry the digest of
  * the sites there now, and one `issuedAt` between them.
  *
- * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent}; #507 removes the
- * fallback and this module's second arm, and ADR 0009's 2026-10-07 entry says what `stale` leaves
- * it to decide.
+ * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent}; #507 removes it.
  */
 
 /**
@@ -110,9 +108,9 @@ export const expectedLocations = (
 };
 
 /**
- * The expected locations whose slices cannot be summed as they stand: a slice with no provenance
- * (written before #602), a membership digest that is not the live one, or a location whose slices
- * carry more than one `issuedAt` — part of its horizon was written by another run.
+ * The expected locations whose slices cannot be summed as they stand: a membership digest that is
+ * not the live one, or a location whose slices carry more than one `issuedAt` — part of its
+ * horizon was written by another run.
  *
  * Vintage is compared within a location and never across them: ingestion visits locations on
  * their own schedule and with no end-of-run event (ADR 0009), so locations legitimately differ.
@@ -128,13 +126,11 @@ const staleLocations = (
     if (members === undefined) {
       continue;
     }
-    const vintage = vintages.get(row.locationId) ?? row.provenance?.issuedAt;
-    if (row.provenance?.members !== members || row.provenance.issuedAt !== vintage) {
+    const vintage = vintages.get(row.locationId) ?? row.provenance.issuedAt;
+    if (row.provenance.members !== members || row.provenance.issuedAt !== vintage) {
       stale.add(row.locationId);
     }
-    if (vintage !== undefined) {
-      vintages.set(row.locationId, vintage);
-    }
+    vintages.set(row.locationId, vintage);
   }
   return stale;
 };
@@ -226,7 +222,7 @@ const issuedAtsByLocation = (
   expected: ReadonlyMap<string, FleetRollupMembers>,
 ): readonly (readonly UtcIsoTimestamp[])[] =>
   [...expected.keys()].map((location) => {
-    const issuedAt = rows.find((row) => row.locationId === location)?.provenance?.issuedAt;
+    const issuedAt = rows.find((row) => row.locationId === location)?.provenance.issuedAt;
     return issuedAt === undefined ? [] : [issuedAt];
   });
 

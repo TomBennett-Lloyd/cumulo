@@ -193,15 +193,6 @@ describe('a stale slice', () => {
     expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1, hours: 2 });
   });
 
-  it('falls back on a slice written before provenance existed', async () => {
-    const { logged } = await staleRead(
-      [{ locationId: DUBLIN, provenance: undefined, partial: partial() }],
-      [RANELAGH],
-    );
-
-    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
-  });
-
   it('sums locations written by different runs, each from one run', async () => {
     // Fresh, and the case that keeps vintage per location: ingestion visits locations with no
     // end-of-run event, so a fleet-wide vintage test would fall back on every cycle (ADR 0009).

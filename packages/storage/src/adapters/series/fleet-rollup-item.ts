@@ -82,17 +82,10 @@ export const toFleetRollupItem = (
   [TTL_ATTRIBUTE_NAME]: expiresAtEpochSeconds(partial.validTime, SERIES_RETENTION_DAYS),
 });
 
-/**
- * One stored item: the partial `sumFleetRollupPartials` adds, and the location and provenance the
- * API's completeness check reads (ADR 0009's fallback condition, and its 2026-10-07 amendment).
- */
+/** One stored item: the partial `sumFleetRollupPartials` adds, and what the API's membership check reads. */
 export interface FleetRollupRow {
   readonly locationId: string;
-  /**
-   * `undefined` for an item written before #602 stamped one. Read as stale rather than refused, so
-   * an API deployed ahead of the first stamped cycle falls back instead of failing the route.
-   */
-  readonly provenance: FleetRollupProvenance | undefined;
+  readonly provenance: FleetRollupProvenance;
   readonly partial: FleetRollupPartial;
 }
 
@@ -122,10 +115,7 @@ export const fromFleetRollupItem = (item: Record<string, unknown>): FleetRollupR
 
   return {
     locationId,
-    provenance:
-      item.members === undefined && item.issuedAt === undefined
-        ? undefined
-        : fleetRollupProvenanceSchema.parse(item),
+    provenance: fleetRollupProvenanceSchema.parse(item),
     partial: fleetRollupPartialSchema.parse(item),
   };
 };
