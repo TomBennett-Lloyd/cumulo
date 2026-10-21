@@ -23,7 +23,7 @@ import { hoursAfter } from './series-window';
  * nameplate capacity stood behind it — rather than every site's rows for the
  * browser to add up. The sum is the same on every load, so it is computed once
  * by the forecast producer and read back as one Query of the `#FLEET` partition;
- * `fleet-rollup-read.ts` owns that read and its fan-out fallback.
+ * `fleet-rollup-read.ts` owns that read.
  *
  * **The mirror of `get-fleet-actuals.ts`**, whose docblock carries the full
  * argument for reading a fleet server-side in one request.
@@ -61,8 +61,8 @@ const fleetForecastHoursSchema = z
 /**
  * Emitted when this route stopped reading because the invocation was running
  * out of time. Its own event rather than one shared with the fleet-actuals
- * fan-out or the per-site routes: both fleet routes' cost grows with the fleet,
- * so "which of them is outgrowing a 15-second function?" is a question only
+ * read or the per-site routes: both fleet routes' cost grows with the fleet's
+ * locations, so "which of them is outgrowing a 15-second function?" is a question only
  * distinct event names can answer in a log query.
  */
 export const fleetForecastReadDeadlineEvent = 'api.fleet-forecast.read-deadline-reached';
@@ -108,9 +108,9 @@ export const getFleetForecast = async (
   const from = deps.now();
   const to = hoursAfter(from, hours.data);
 
-  // One Query of the pre-summed `#FLEET` partition, falling back to the old
-  // deadline-gated fan-out — and saying so in the log — while a partition is
-  // still missing or half-written (ADR 0009). `deps` goes in whole:
+  // One Query of the pre-summed `#FLEET` partition, summing the locations that
+  // have written and saying so in the log when any has not (ADR 0009's
+  // 2026-10-21 entry). `deps` goes in whole:
   // `GetFleetForecastDeps` is a superset of what the read needs, and the `Pick`s
   // in `FleetRollupReadDeps` are what narrow it. The deadline event is passed
   // rather than imported by the read, so this route keeps owning the name an
