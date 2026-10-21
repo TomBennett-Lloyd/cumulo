@@ -8,6 +8,8 @@
 
 > **Amended 2026-10-07 (#506)**: the fast-follow has landed, so A5's fan-out is now superseded for the fleet actuals read as well, and survives only as both reads' fallback. See `## Amendments`.
 
+> **Amended 2026-10-21 (#507)**: the fan-out is gone from both reads, so it no longer survives as anything. See the 2026-10-21 (#507) entry in `## Amendments`.
+
 ## Context
 
 `GET /v1/fleet/forecast` is on the visitor's first paint, and it answers by reading every site's `cumulo-series` partition and summing the result: **1,753.9 ms p50, 2,998.9 ms p95 warm** at the canonical 12-location × 5-site fleet. That is most of the time between opening the demo and seeing a chart.
@@ -91,6 +93,8 @@ Both arms end in the same `@cumulo/shared` functions, so this is a second _path_
 
 > **Amended 2026-10-07 (#602)**: as it stood before `stale`, which fires in steady state after any site add, delete or edit at a bucket, so the event's absence is no longer the whole condition. See `## Amendments`.
 
+> **Amended 2026-10-21 (#507)**: this section is as it stood. The arm, the event and the 24-hour trigger are spent: the arm is deleted and the trigger was met, with the evidence in the entry. The one judgement call survives in a different form: neither `absent` nor `incomplete` is refused, and neither is summed as whole. The response is served short, labelled by `contributingSiteCount`, and logged once as `api.fleet-forecast.rollup-short`. See the 2026-10-21 (#507) entry in `## Amendments`.
+
 ### The client seam moves up
 
 `FleetDataSource.fleetForecasts` returns the aggregate rather than raw rows. The HTTP source reads the summed points off the wire; the demo source computes the identical shape with `fleetForecastAggregate` over its fixtures. One definition of the fleet total, two ways of arriving at the shape. The forecast's per-hour capacity divisor travels on the point, so the `%`-of-capacity view no longer re-derives it from rows the app no longer receives.
@@ -123,6 +127,8 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 
 **What gets harder.** There is one more item kind, one more thing that can be stale, and a fallback path to carry for a release. A reader of `cumulo-series` now has to know that one partition is not a site.
 
+> **Amended 2026-10-21 (#507)**: "a fallback path to carry for a release" is as it stood; the path is gone. See the 2026-10-21 (#507) entry in `## Amendments`.
+
 **What we accept.** A roll-up written mid-cycle mixes this cycle's locations with last cycle's. That is exactly what the per-site series did before it and what the fan-out read before it; the roll-up inherits the staleness and does not introduce it.
 
 **Cost, stated because 0002's cost sections are what a reader will check this against.** Writes: one partial per location-hour, `12 × 48 = 576` items a cycle at the canonical fleet, on top of the ~2,880 forecast items — a term that grows with **locations**, not sites. That is ~2.52 M write units a month at $0.705/M, ≈ **$1.78/month** against ≈ $1.48 before. Reads: a 48-hour fleet forecast is ~576 items of ~250 B ≈ 144 KB, ≈ **18 eventually-consistent read units** against the ~25 the forecast fan-out was sized at — a modest unit saving, and **the units were never the problem**. The whole point is the round trips: `infra/storage/tables.tf`'s `series` section owns the current per-load figure.
@@ -139,6 +145,8 @@ An orchestrated cycle — a state machine that fans out the locations and has a 
 2. The fallback event still appearing 24 hours after the first full post-deploy cycle → the roll-up is not being written, and the producer is wrong. _(As it stood before #602: an `absent` or `incomplete` line still means this; a `stale` line can mean a site changed.)_
 3. A fleet-aggregate field that is _not_ an additive per-hour total → the partial cannot carry it, and the additivity test will say so before anything ships.
 4. The `#FLEET` partition becoming hot enough to be a partition-throughput concern — a single partition key is a single physical partition's worth of throughput, which at a demo's traffic is orders of magnitude away.
+
+> **Amended 2026-10-21 (#507)**: trigger 2 is as it stood. Its event is now `api.fleet-forecast.rollup-short` (and `api.fleet-actuals.rollup-short`), and it means this only for reason `absent` or `incomplete` persisting past one cycle; `stale` can mean a site changed. See the 2026-10-21 (#507) entry in `## Amendments`.
 
 ## Amendments
 
@@ -169,6 +177,8 @@ It stays per location, for three reasons the route cannot argue its way out of:
 - **The residual is labelled, not silent**, which is the half that makes it acceptable under `docs/standards/error-handling.md` rule 5 rather than merely cheap. `contributingSiteCount` travels on every point, `minimumContributingSites` (`apps/web/src/dashboard/fleet-series.ts`) folds it to the thinnest hour, and `partialAggregateNotice` (`apps/web/src/dashboard/state-copy.ts`) renders it. A short hour reads as a fleet whose sites did not all report, because that is what it is. The fan-out arm has the same property, so the two arms agree about this too. `apps/api/src/forecast/fleet-rollup-read.test.ts` pins it as a case rather than as this paragraph.
 
 What would reopen it: [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507), which removes the fan-out arm and so removes the fallback the gap currently hides behind, and any consumer that needs the fleet total without a count beside it.
+
+> **Amended 2026-10-21 (#507)**: #507 has removed the arm, so the gap no longer hides behind a fallback: a location short of an hour is summed and labelled, as this entry decided, and so is a location short of its whole horizon. See the 2026-10-21 (#507) entry in `## Amendments`.
 
 **2. The "latent double-count" in `### One model, named once` was wrong when written.** `aggregateFleetForecast` does not sum two models' views of one site-hour: `groupOnePerSitePerHour` keeps one entry per `siteId` per hour and `forecastSupersedes` is `>=` on `issuedAt`, so same-cycle physics and ML rows collapse to whichever arrived last in input order. An unfiltered fleet total is therefore not inflated — it is a total whose _model_ was decided by row order, and the sort key orders `FC#ml` before `FC#physics`, so the model that survives today is luck rather than design. That is a better reason for naming one model, not a worse one, so the decision is unchanged; what moves is which failure it prevents. `packages/shared/src/fleet-rollup.test.ts` asserts the collapse so the claim has a test under it.
 
@@ -202,9 +212,13 @@ The read computes the same digest per location from the active fleet it already 
 
 **What it costs.** Two attributes, about 50 B an item, still one write unit at every fleet size, so the write line is unchanged. The roll-up read grows from ~18 to ~22 read units at the canonical fleet; `infra/storage/tables.tf`'s `series` section owns that figure and is trued up in the same change. The larger cost is the fallback rate. Any membership change at a location now sends reads down the fan-out until that location's next cycle, and that includes an _add_ at an existing bucket, because a digest cannot tell an add from a delete-plus-add. A new bucket already fell back this way. A read racing a location's write, or a run missing a mid-horizon hour, also shows two runs; both fall back to an answer the fan-out agrees with.
 
+> **Amended 2026-10-21 (#507)**: the fallback-rate cost above is as it stood. An add no longer reads as stale (membership is judged as of the run), and a location that does read stale is left out of the sum and labelled instead of sending the read down the fan-out. See the 2026-10-21 (#507) entry in `## Amendments`.
+
 **Rejected** (priced on #579, 2026-10-07). A `siteIds` set costs a second Query page at the site cap. A per-site contributions map would let the read subtract a departed site instead of falling back, at roughly three times the item size and two pages. Refusing an older vintage at write needs a condition `BatchWriteItem` cannot carry: either a conditional Put per hour (a round trip each) or a transaction per location (double the write units).
 
 **What would reopen it.** [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507) removes the fan-out arm, and with it the answer `stale` falls back to. Before that, #507 has to decide what a stale location gets instead, given that an add now produces one.
+
+> **Amended 2026-10-21 (#507)**: #507 decided what a stale location gets: it is left out of the sum and labelled. See the 2026-10-21 (#507) entry in `## Amendments`.
 
 **Quoters of the moved read figure.** This is a floor, not a census. The sweep was run 2026-10-07 from the worktree root with `command grep -rnE` over `docs infra apps packages`, on the arm `≈ 45|~43|~18( |$)|144 KB|~250 B|read units? (a|per) load|per-dashboard-load|roll-up read`, and every hit was read. Trued up in the same change: `infra/storage/tables.tf`'s `series` section (the owner) and its header ledger, `infra/README.md`'s storage `series` cost row, and the fleet-vs-poll comment in `apps/web/src/data/use-first-forecast.test.tsx`. Annotated as-it-stood: `## Consequences` above, and ADR 0002's 2026-09-11 (#494) entry, through ADR 0002's own 2026-10-07 entry. `docs/review-feedback.md`'s entries are records and are left as written. The remaining hits are other quantities that share a literal (ADR 0005's log bytes, `infra/api/outputs.tf`'s warmer) or prose that names the read without a figure.
 
@@ -216,6 +230,8 @@ The forecast service sums each location's slices from the readings its trailing-
 
 `GET /v1/fleet/actuals` reads the slices with one Query _(as it stood before #615; see the 2026-10-14 entry)_ (`apps/api/src/forecast/fleet-actuals-rollup-read.ts`) and keeps the fan-out as its fallback. ADR 0002's A5 fan-out is therefore superseded for the actuals read as well, and #507 removes it from both reads.
 
+> **Amended 2026-10-21 (#507)**: "keeps the fan-out as its fallback" is as it stood; the fan-out is removed from this read too. See the 2026-10-21 (#507) entry in `## Amendments`.
+
 **Completeness, decided by the owner on 2026-10-07.** The #602 rule cannot be reused as written, because a look-back is written by many runs:
 
 - **No vintage check.** A 24-hour window carries 24 runs' `issuedAt`s by construction.
@@ -223,6 +239,8 @@ The forecast service sums each location's slices from the readings its trailing-
 - **One check the forecast read does not need.** A location whose oldest site predates the window by `TRAILING_ACTUALS_HOURS` must hold a slice for the window's first hour, or the read falls back as `incomplete`. Without this check, for the first week after deploy, a history the producer has not yet written would be served as a whole one. That is the half-truth this ADR's fallback exists to refuse. The same check also sends a window that opens inside an idle-schedule gap down the fan-out, which answers with the same gap. [#629](https://github.com/TomBennett-Lloyd/cumulo/issues/629) removed the `PUT` bucket move that was this check's one known cost case.
 
 `apps/api/src/forecast/fleet-actuals-rollup-read.test.ts` pins each case.
+
+> **Amended 2026-10-21 (#507)**: the first-hour check in the bullet above is retired with the fan-out it fed. Its gap is per hour and labelled by `contributingSiteCount`. See the 2026-10-21 (#507) entry in `## Amendments`.
 
 **What it costs.** Writes: up to three slices per location per cycle, `12 × 3 = 36`. That moves `infra/storage/tables.tf`'s write line to ≈ $1.80/month (≈ $6.36 at the 100-site cap) _(as it stood before #615; see the 2026-10-14 entry)_, and the `## Consequences` write line is annotated as-it-stood. Reads: the default 24-hour actuals window is 288 items, about 11 units, where the fan-out it replaces cost about 25. The per-load figure falls to ≈ 35, and `infra/storage/tables.tf` owns it _(as it stood before #615; see the 2026-10-14 entry)_. A 168-hour window is about 74 units at the canonical fleet and about 320 at the 52-location cap _(as it stood before #615; see the 2026-10-14 entry)_. Both are above the 30-unit request that ADR 0010 prices its burn-rate projection on. ADR 0010 had priced the same read at ≈ 270, using the pre-#602 item size; its 2026-10-08 amendment trues that figure to this one, and records that the move fires its revisit trigger 2 ([#630](https://github.com/TomBennett-Lloyd/cumulo/issues/630)). Compacting settled hours is [#615](https://github.com/TomBennett-Lloyd/cumulo/issues/615).
 
@@ -275,6 +293,8 @@ Expected locations must appear in the slices read (about the last four hours). T
 
 **What would reopen it.** [#507](https://github.com/TomBennett-Lloyd/cumulo/issues/507)'s fallback removal has to decide what an hour with slices but no total gets. A `store-partial` from the compaction observed in the logs reopens the per-cycle re-Put this entry declined. A second total kind (forecast) would generalise the `TOTAL` segment.
 
+> **Amended 2026-10-21 (#507)**: #507 decided it: an hour with slices but no total is a slice hour like any other, summed from the slices read and labelled by its count. The first-hour check that a total satisfied (the bullet above) is retired. See the 2026-10-21 (#507) entry in `## Amendments`.
+
 **Quoters of the moved figures.** This is a floor, not a census. Three sweeps were run 2026-10-15 from the worktree root with `git grep -nE` over the whole tree, at `git rev-parse --short HEAD` = `d30ab3b` (this change's tree before its figures were edited), and every hit was read:
 
 - The write census, `1\.80|6\.36|2\.55 ?M|2,652|52 × 51|locations × 51|12 × 3 = 36|36 actuals slices`: 24 hits. A fourth literal, `3,492`, found three carriers that arm misses (`infra/forecast/outputs.tf` and `event-source.tf`, and the forecast DynamoDB row).
@@ -282,3 +302,28 @@ Expected locations must appear in the slices read (about the last four hours). T
 - The forecast log census, `(twelve|thirteen|[0-9]+) billed lines|[0-9]+ lines per invocation|105 MB|105,100`: 8 hits.
 
 Trued up in the same change: `infra/storage/tables.tf` (the owner, and its header); `infra/README.md` (the storage `series` row, the three-fleet-sizes note, the forecast DynamoDB row, and the forecast log row and its census); `infra/forecast/outputs.tf`, `infra/forecast/event-source.tf` and `infra/forecast/iam.tf`; `apps/forecast/src/main.ts`; `apps/api/src/request-budget.ts`; `apps/web/src/data/use-first-forecast.test.tsx`; `docs/design/dashboard-composition.md`. Annotated as-it-stood: this ADR's own #506 entry above (its one-Query read, its ≈ $6.36 at the cap, and its 11-unit window, ≈ 35 load, 74 and 320 figures). Left as written: ADR 0002's historical entries, `docs/review-feedback.md`'s records, and `infra/README.md`'s ingestion log row, which is a different function's census and which nothing the compaction emits lands in.
+
+### 2026-10-21 (#507) — the fallback removed; a short partition is served labelled; what a stale location gets
+
+The decision above stands: partials at write, one Query at read. This entry removes the second path and answers the question the 2026-10-07 (#602) entry left to this ticket, what a stale location gets instead of the fan-out.
+
+**What came out.** Both reads' fan-out arm; `apps/api/src/forecast/fleet-series-read.ts` and its test; `querySeriesRange` from both reads' dependencies, so neither fleet route issues a per-site Query any more; the events `api.fleet-forecast.rollup-fallback` and `api.fleet-actuals.rollup-fallback`; the unstamped arm of `FleetRollupRow.provenance` (an item with no provenance now fails the parse, a violated invariant under `docs/standards/error-handling.md` rule 1); and the actuals read's first-hour check. Every item written since #602 (merged before #506) is stamped, so no unstamped item can sit in a read window.
+
+**What replaced it.** #507's body proposed a 500 for a missing or incomplete partition. That is withdrawn: `stale` fires in steady state after every add-a-site (a digest cannot tell an add from a delete-plus-add), and a new 0.01° bucket is not written until the next `:07` cycle, so a 500 would blank the fleet chart for every visitor for up to an hour after normal demo use. Instead the read sums the locations whose slices are fresh, leaves the rest out, and the wire contract labels the gap. That is `docs/standards/error-handling.md` rule 5's first sentence, not its second: the contract has the field (`contributingSiteCount` travels on every point, `minimumContributingSites` folds it, `partialAggregateNotice` renders it), so a refusal is not the honest answer. It is the argument the 2026-10-05 (#531) entry makes for a location short of an hour, applied to a location short of its whole horizon.
+
+- **The three reasons are kept** as one line per short response under new events, `api.fleet-forecast.rollup-short` and `api.fleet-actuals.rollup-short`, each with `reason: 'absent' | 'incomplete' | 'stale'`, the expected, present and stale location counts, and `hours`. A line now means the response was served short of what it names.
+- **Membership is judged as of the run.** A slice is fresh when its digest equals the digest of the sites at that location that existed when it was issued (`createdAt <= issuedAt`). An add alone is therefore not stale: the producer had not been told about the site, so it has no forecast ([#286](https://github.com/TomBennett-Lloyd/cumulo/issues/286)), and the slice is exactly the right sum for every site that has one. The mismatches left are a delete, an eviction, a delete-plus-add and a physics edit (the [#579](https://github.com/TomBennett-Lloyd/cumulo/issues/579) cases), which are left out and labelled.
+- **No path makes a stale slice read fresh.** The producer lists its sites before it reads the clock that becomes `issuedAt` (`apps/forecast/src/consume-message.ts`), so every site in a slice's digest was created at or before `issuedAt`. The as-of digest equals the stored one only when the two site sets are equal. Skew between the API's clock and the producer's can only move a site across the `issuedAt` line in the direction that makes the digests differ, so it reads stale and never fresh.
+- **A read cut short by the deadline is the one 500** (`complete: false` from a page walk), answered with the route's own deadline event as the per-site routes do, because a window missing its tail is labelled by no count.
+- **`absent` is `points: []`**, the routes' already-documented answer for a fleet with nothing forecast yet, and is not cached.
+- **The actuals first-hour check is retired.** It existed to send an unwritten history down the fan-out. With the fan-out gone its gap is per hour, and labelled by the same count.
+
+**The removal evidence**, from the deployed environment on 2026-10-21 as the read-only observer identity (`cumulo-observer`, [#604](https://github.com/TomBennett-Lloyd/cumulo/issues/604)): `aws logs filter-log-events --log-group-name /aws/lambda/cumulo-api-dev --filter-pattern '"rollup-fallback"'` over the 30 days to 2026-10-21T10:50Z returned no events, for both arms and every reason. Positive controls on the same group: `REPORT` returned lines, and a quoted term matched inside a token. #603's canary has invoked `GET /v1/fleet/forecast?hours=48` every five minutes since 2026-10-07 20:55Z. Producer side, `/aws/lambda/cumulo-forecast-dev` over 26 hours held 364 `forecast.fleet-rollup.outcome` lines: 26 consecutive hourly cycles, each writing all 14 locations with `status: written`. The actuals arm's log evidence is weaker (only visitors hit that route); the producer-side figure carries it, the slices being written by the same invocation. A 24-hour re-run of the first query, expecting no events, is a merge precondition recorded on the issue.
+
+**What it costs.** Nothing on the per-load figure: `infra/storage/tables.tf`'s `series` section is unchanged. The fallback double read that ADR 0010's entries price no longer exists. After an add-a-site at a new bucket the fleet chart reads one location short, labelled, until that bucket's next cycle: the residual [#286](https://github.com/TomBennett-Lloyd/cumulo/issues/286) owns. A delete at a location now leaves that whole location out of the sum until its next cycle, where the fan-out would have dropped only the deleted site; that is the price of not reading per site, and it is labelled the same way.
+
+**Rejected.** The 500 as the body wrote it (above). A fan-out scoped to the stale locations: it keeps `querySeriesRange`, the module, and the worst case ADR 0010's trigger 2 is still open on. The per-site contributions map priced on #579: it cannot synthesise a forecast for an added site, so it solves only the delete case, at three times the item size.
+
+**What would reopen it.** A `rollup-short` line with reason `absent` or `incomplete` persisting past one cycle: the producer is wrong, as revisit trigger 2 says. A consumer needing the total without its count beside it.
+
+**Quoters.** This is a floor, not a census. The sweep, run 2026-10-21 from the worktree root, was `git grep -nE '#507|rollup-fallback|fallback arm|first-hour|uncovered' -- ':/docs/adr'`; every hit was read. Annotated as-it-stood in the same change: the ten sites above that carry the fallback, and ADR 0010's 2026-10-08 and 2026-10-14 entries (its own amendment below). Left as written: ADR 0002's 2026-10-07 entry ("survives only as both fleet reads' fallback, until #507"), a dated entry that remains true.
