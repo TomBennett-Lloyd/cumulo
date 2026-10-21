@@ -285,8 +285,8 @@ export class HttpFleetDataSource implements FleetDataSource {
    * **A location not yet written is a labelled short sum.** The route sums the
    * locations that have written and leaves the rest out, and
    * `contributingSiteCount` on each point says how many sites stood behind it,
-   * which `partialAggregateNotice` renders; only a read cut short by the
-   * request deadline is refused (`docs/standards/error-handling.md` rule 5).
+   * which `partialAggregateNotice` renders; a read cut short by the
+   * request deadline is refused instead (`docs/standards/error-handling.md` rule 5).
    * That decision is `apps/api/src/forecast/fleet-rollup-read.ts`'s and its
    * reasoning lives there.
    */

@@ -71,9 +71,11 @@ describe('readFleetActualsAggregate', () => {
       row(BRISTOL, [BRISTOL_SITE], slice(REWRITTEN_HOUR, 2)),
     ]);
 
-    const points = pointsOf(await read(deps, [...DUBLIN_SITES, BRISTOL_SITE]));
+    const result = await read(deps, [...DUBLIN_SITES, BRISTOL_SITE]);
 
-    expect(points.map((point) => point.acPowerKw)).toEqual([2]);
+    expect(pointsOf(result).map((point) => point.acPowerKw)).toEqual([2]);
+    // The stale location has no run behind the sum, so it dates nothing.
+    expect(result.complete && result.readingTimesByGroup).toEqual([[REWRITTEN_HOUR]]);
     expect(logged).toEqual([
       {
         event: fleetActualsRollupShortEvent,

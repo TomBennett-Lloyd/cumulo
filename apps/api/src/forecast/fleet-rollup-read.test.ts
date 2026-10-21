@@ -333,6 +333,19 @@ describe('the runs behind the sum', () => {
     expect(groups).toEqual([[ISSUED_AT]]);
   });
 
+  it('has no group for a stale location', async () => {
+    const { deps } = harness({
+      rows: [
+        row(DUBLIN, [RANELAGH, RATHMINES], partial(), ISSUED_AT),
+        row(BRISTOL, [BRISTOL_SITE], partial(), EARLIER_RUN),
+      ],
+    });
+
+    const groups = issuedAtsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
+
+    expect(groups).toEqual([[EARLIER_RUN]]);
+  });
+
   it('has no group for an empty fleet', async () => {
     const { deps } = harness();
 

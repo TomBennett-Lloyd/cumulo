@@ -41,7 +41,7 @@ import { hasBudgetForStorageCommands } from '../request-budget';
 export const fleetRollupShortEvent = 'api.fleet-forecast.rollup-short';
 
 /**
- * Why a response was short. `absent`: nothing written at all. `incomplete`: some locations not
+ * Why a response was short. `absent`: no slice written in the Query's window. `incomplete`: some locations not
  * written. `stale`: every location wrote, but some location's slices fail the provenance rule.
  */
 export type RollupShortReason = 'absent' | 'incomplete' | 'stale';
@@ -155,7 +155,7 @@ export const shortReason = (
  * The one 500 the fleet reads answer, with the log line that says where it stopped.
  *
  * Two callers: the roll-up Queries' truncation, and the actuals read's slices gate. Deliberately
- * one message each: a caller can do nothing different with them, while an operator reads the
+ * one message: a caller can do nothing different with them, while an operator reads the
  * difference off the fields in `detail`.
  */
 export const readDeadlineReached = (
