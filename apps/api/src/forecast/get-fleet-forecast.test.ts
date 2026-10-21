@@ -5,23 +5,13 @@ import {
   utcIsoTimestampSchema,
   type FleetSite,
 } from '@cumulo/shared';
-import type { FleetRollupRow, SeriesPoint } from '@cumulo/storage';
+import type { FleetRollupRow } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
-import {
-  countdownDeadline,
-  fleetOfSize,
-  forecast,
-  forecastPoint,
-  fullBudgetDeadline,
-  jsonBodyOf,
-  RANELAGH_ID,
-  RATHMINES_ID,
-  routeRequest,
-} from '../api-fixtures';
+import { fullBudgetDeadline, jsonBodyOf, routeRequest } from '../api-fixtures';
 import type { RequestDeadline } from '../http/request-deadline';
 
-import { fleetRollupFallbackEvent } from './fleet-rollup-read';
+import { fleetRollupShortEvent } from './fleet-rollup-read';
 import {
   BRISTOL,
   BRISTOL_SITE,
@@ -31,7 +21,6 @@ import {
   partial,
   row,
 } from './fleet-rollup-fixtures';
-import { FLEET_READ_CONCURRENCY } from './fleet-series-read';
 import {
   fleetForecastReadDeadlineEvent,
   getFleetForecast,
@@ -39,20 +28,15 @@ import {
 } from './get-fleet-forecast';
 
 /**
- * The route reads the pre-summed `#FLEET` partition now (#494, ADR 0009), so the questions this
- * suite asks have moved: how many storage commands did one request spend, which arm answered, and
- * does the fallback arm still refuse a fan-out it could not finish.
- *
- * The stub records both reads separately — `rollupReads` and `reads` — because "exactly one storage
- * command on the happy path" is the claim the whole ticket exists to make, and it is only checkable
- * if a fan-out that quietly also ran would be visible.
+ * The route reads the pre-summed `#FLEET` partition (#494, ADR 0009), so the questions this suite
+ * asks are: how many storage commands did one request spend, and what does it answer when the
+ * partition is short of the fleet or the read ran out of time. The surviving claim is one Query,
+ * and nothing behind it.
  */
 interface Stub {
   readonly deps: GetFleetForecastDeps;
   /** `kind from to` per roll-up Query, in order. */
   readonly rollupReads: string[];
-  /** `siteId from to` per per-site Query, in order: the fallback fan-out as the table saw it. */
-  readonly reads: string[];
   readonly logged: Record<string, unknown>[];
 }
 
@@ -65,21 +49,16 @@ const WEEK_AFTER_NOW = '2026-08-07T12:00:00Z';
 interface StubInput {
   readonly sites: readonly FleetSite[];
   readonly rollupRows?: readonly FleetRollupRow[];
-  /** False ⇒ the roll-up Query stopped short of the window, which is a fallback reason. */
+  /** False ⇒ the roll-up Query stopped short of the window, which is the route's 500. */
   readonly rollupComplete?: boolean;
-  readonly pointsBySite?: Readonly<Record<string, readonly SeriesPoint[]>>;
-  /** False ⇒ a per-site window stopped short, which is the fan-out's 500. */
-  readonly fanOutComplete?: boolean;
 }
 
 const stub = (input: StubInput): Stub => {
   const rollupReads: string[] = [];
-  const reads: string[] = [];
   const logged: Record<string, unknown>[] = [];
 
   return {
     rollupReads,
-    reads,
     logged,
     deps: {
       sites: { listFleetSites: () => Promise.resolve([...input.sites]) },
@@ -89,13 +68,6 @@ const stub = (input: StubInput): Stub => {
           return Promise.resolve({
             rows: [...(input.rollupRows ?? [])],
             complete: input.rollupComplete ?? true,
-          });
-        },
-        querySeriesRange: (siteId, from, to) => {
-          reads.push(`${siteId} ${from} ${to}`);
-          return Promise.resolve({
-            points: [...(input.pointsBySite?.[siteId] ?? [])],
-            complete: input.fanOutComplete ?? true,
           });
         },
       },
@@ -112,7 +84,7 @@ const fleetForecastRequest = (
 
 describe('GET /v1/fleet/forecast, reading the roll-up', () => {
   it('answers from one storage command when every location has written', async () => {
-    const { deps, rollupReads, reads, logged } = stub({
+    const { deps, rollupReads, logged } = stub({
       sites: [RANELAGH, RATHMINES],
       rollupRows: [row(DUBLIN, [RANELAGH, RATHMINES], partial())],
     });
@@ -122,7 +94,6 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     expect(response.statusCode).toBe(200);
     // The claim the ticket exists to make: one Query, and no fan-out behind it.
     expect(rollupReads).toEqual([`forecast ${NOW} ${TWO_DAYS_AFTER_NOW}`]);
-    expect(reads).toEqual([]);
     expect(logged).toEqual([]);
   });
 
@@ -190,7 +161,7 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
   });
 
   it('rejects hours outside 24/48/168 with validation_failed, before any read', async () => {
-    const { deps, rollupReads, reads } = stub({ sites: [RANELAGH, RATHMINES] });
+    const { deps, rollupReads } = stub({ sites: [RANELAGH, RATHMINES] });
 
     const response = await getFleetForecast(deps, fleetForecastRequest({ hours: '8760' }));
 
@@ -199,15 +170,14 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     expect(body.code).toBe('validation_failed');
     expect(body.details?.[0]?.path).toBe('hours');
     expect(rollupReads).toEqual([]);
-    expect(reads).toEqual([]);
   });
 
   it('answers 200 with an empty array for a fleet with no sites, reading nothing', async () => {
     // An empty fleet is an answer about the fleet's size, not a missing resource — and it must
     // still carry the attribution, because a client that renders "no forecast yet" beside a chart
-    // is still rendering the chart. A fleet of nothing has no partition state to consult, so this
-    // arm does not fall back and does not read.
-    const { deps, rollupReads, reads, logged } = stub({ sites: [] });
+    // is still rendering the chart. A fleet of nothing has no partition state to consult, so
+    // nothing is read.
+    const { deps, rollupReads, logged } = stub({ sites: [] });
 
     const response = await getFleetForecast(deps, fleetForecastRequest());
 
@@ -216,12 +186,11 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
     expect(body.points).toEqual([]);
     expect(body.attribution).toEqual(openMeteoAttribution);
     expect(rollupReads).toEqual([]);
-    expect(reads).toEqual([]);
     expect(logged).toEqual([]);
     expect(response.headers['cache-control']).toBe('no-store');
   });
 
-  it('credits Open-Meteo in the roll-up arm', async () => {
+  it('credits Open-Meteo in every 200 body', async () => {
     const { deps } = stub({
       sites: [RANELAGH],
       rollupRows: [row(DUBLIN, [RANELAGH], partial())],
@@ -236,69 +205,44 @@ describe('GET /v1/fleet/forecast, reading the roll-up', () => {
   });
 });
 
-describe('GET /v1/fleet/forecast, falling back to the fan-out', () => {
-  it('answers 500 rather than a fleet that quietly stops part-way through', async () => {
-    // One site more than a batch holds, and a request with no time left: the fan-out stops between
-    // batches, where the handler can still answer, and refuses to serve a fleet forecast that is
-    // short a site. The event name is this route's own, which is the half `fleet-series-read.test.ts`
-    // cannot prove from inside the shared module.
-    const fleet = fleetOfSize(FLEET_READ_CONCURRENCY + 1);
-    const { deps, reads, logged } = stub({ sites: fleet });
-
-    const response = await getFleetForecast(deps, fleetForecastRequest({}, countdownDeadline(0)));
-
-    expect(response.statusCode).toBe(500);
-    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    expect(reads).toHaveLength(FLEET_READ_CONCURRENCY);
-    expect(logged.at(-1)).toEqual({
-      event: fleetForecastReadDeadlineEvent,
-      sitesRead: FLEET_READ_CONCURRENCY,
-      fleetSize: fleet.length,
-    });
-  });
-
-  it('answers 500 when any one site\u2019s window stopped short, without reading on', async () => {
-    const { deps, reads, logged } = stub({
-      sites: [RANELAGH, RATHMINES],
-      pointsBySite: { [RANELAGH_ID]: [forecastPoint()] },
-      fanOutComplete: false,
+describe('GET /v1/fleet/forecast, short of a location or of time', () => {
+  it('answers 500 with this route\u2019s own deadline event when the roll-up Query stopped short', async () => {
+    const { deps, logged } = stub({
+      sites: [RANELAGH],
+      rollupRows: [row(DUBLIN, [RANELAGH], partial())],
+      rollupComplete: false,
     });
 
     const response = await getFleetForecast(deps, fleetForecastRequest());
 
     expect(response.statusCode).toBe(500);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    // Both sites share one batch, so both were read \u2014 and the refusal names the first in site
-    // order. No further batch is started: the answer cannot become whole by reading more.
-    expect(reads).toHaveLength(2);
-    expect(logged.at(-1)).toEqual({
-      event: fleetForecastReadDeadlineEvent,
-      siteId: RANELAGH_ID,
-    });
+    expect(logged.at(-1)).toEqual({ event: fleetForecastReadDeadlineEvent, rowsRead: 1 });
   });
 
-  it('serves the fleet the fan-out summed, credited, when nothing has been rolled up yet', async () => {
+  it('serves the locations that have written, labelled by their count, when one has not', async () => {
     const { deps, logged } = stub({
-      sites: [RANELAGH, RATHMINES],
-      pointsBySite: {
-        [RANELAGH_ID]: [{ type: 'forecast', forecast: forecast({ acPowerKw: 2.8 }) }],
-        [RATHMINES_ID]: [
-          { type: 'forecast', forecast: forecast({ siteId: RATHMINES_ID, acPowerKw: 1.6 }) },
-        ],
-      },
+      sites: [RANELAGH, BRISTOL_SITE],
+      rollupRows: [row(DUBLIN, [RANELAGH], partial({ contributingSiteCount: 2 }))],
     });
 
-    const body = fleetForecastResponseSchema.parse(
-      jsonBodyOf(await getFleetForecast(deps, fleetForecastRequest())),
-    );
+    const response = await getFleetForecast(deps, fleetForecastRequest());
 
-    // Summed server-side, which is what the browser used to do with these rows. The arm's own
-    // conditions \u2014 which partition states fall back, and what each logs \u2014 are
-    // `fleet-rollup-read.test.ts`; what is proved here is that the route serves this arm's answer
-    // through the same envelope, attribution included.
-    expect(body.points.map((point) => point.acPowerKw)).toEqual([4.4]);
-    expect(body.attribution).toEqual(openMeteoAttribution);
-    expect(logged[0]).toMatchObject({ event: fleetRollupFallbackEvent, reason: 'absent' });
+    expect(response.statusCode).toBe(200);
+    const body = fleetForecastResponseSchema.parse(jsonBodyOf(response));
+    expect(body.points[0]?.contributingSiteCount).toBe(2);
+    expect(logged[0]).toMatchObject({ event: fleetRollupShortEvent, reason: 'incomplete' });
+  });
+
+  it('answers 200 with no points, uncacheable, when nothing has been rolled up yet', async () => {
+    const { deps, logged } = stub({ sites: [RANELAGH, RATHMINES] });
+
+    const response = await getFleetForecast(deps, fleetForecastRequest());
+
+    expect(response.statusCode).toBe(200);
+    expect(fleetForecastResponseSchema.parse(jsonBodyOf(response)).points).toEqual([]);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(logged[0]).toMatchObject({ event: fleetRollupShortEvent, reason: 'absent' });
   });
 
   it('refuses to serve an aggregate that violates the response contract', async () => {

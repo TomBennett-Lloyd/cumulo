@@ -282,17 +282,13 @@ export class HttpFleetDataSource implements FleetDataSource {
    * of it, which is the pairing with `/v1/fleet/actuals` that the route table in
    * `apps/api/src/main.ts` states.
    *
-   * **All-or-nothing, and that is a deliberate change of semantics.** The
-   * fan-out returned the union of whichever sites answered; one request either
-   * answers for the fleet or fails for it, which is the posture `fleetActuals`
-   * has always had. There is no partial for this client to label because the
-   * route does not serve one: a fleet short of a site's points is summed hour
-   * by hour into a fleet that merely looks like it generates less, so the read
-   * refuses rather than truncating (`docs/standards/error-handling.md` rule 5).
-   * That decision is `apps/api/src/forecast/fleet-series-read.ts`'s and its
-   * reasoning lives there; labelling a response partial is the richer answer
-   * that module names as still open — the same contract change #165 holds for
-   * the per-site routes.
+   * **A location not yet written is a labelled short sum.** The route sums the
+   * locations that have written and leaves the rest out, and
+   * `contributingSiteCount` on each point says how many sites stood behind it,
+   * which `partialAggregateNotice` renders; a read cut short by the
+   * request deadline is refused instead (`docs/standards/error-handling.md` rule 5).
+   * That decision is `apps/api/src/forecast/fleet-rollup-read.ts`'s and its
+   * reasoning lives there.
    */
   readonly fleetForecasts = async (
     range: RangeHours,

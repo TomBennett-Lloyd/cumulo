@@ -24,10 +24,8 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  *
  * **And every admitted unit is bounded by one {@link STORAGE_COMMAND_WORST_MS}
  * of wall clock.** Sequential work meets that by pricing *the next command* —
- * one admission, one command. The fleet fan-out meets it a second way, and
- * `forecast/fleet-series-read.ts` carries that argument. What is still refused
- * is accumulation **in series** behind one admission, the shape ADR 0007
- * retired.
+ * one admission, one command. What is refused is accumulation **in series**
+ * behind one admission, the shape ADR 0007 retired.
  *
  * **Where it stops.** Each route keeps an ungated straight-line prefix: the
  * limiter's own commands (`IpLimiter.check` spends two on the allowed path,
@@ -41,15 +39,10 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * - `GET /v1/sites/{siteId}` — **1** (`getFleetSite`).
  * - `GET …/forecast` — **2**: `getFleetSite`, then the first series page.
  * - `GET …/series` — **4**: limiter 2, `getFleetSite`, first series page.
- * - `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast` — **4** on the
- *   roll-up path (limiter 2, `listFleetSites`, then the first page of the
- *   first `#FLEET` Query — the actuals route's totals Query since #615, whose
- *   slices Query is gated before it is issued); **5** on ADR 0009's fallback,
- *   where that Query's first page is followed by the fan-out's first batch,
- *   because the roll-up read is consulted first and only *then* found wanting,
- *   so both first-reads are ungated in the same request (the deadline gate
- *   sits *between* batches, so the first is ungated exactly as a first page
- *   is). The fallbacks come out at #507 and the prefix returns to 4.
+ * - `GET /v1/fleet/actuals` and `GET /v1/fleet/forecast` — **4** (limiter 2,
+ *   `listFleetSites`, then the first page of the first `#FLEET` Query — the
+ *   actuals route's totals Query since #615, whose slices Query is gated
+ *   before it is issued).
  * - `POST /v1/sites` — **2**: the limiter's. Everything after is admitted per
  *   command. The committed write is the last thing the route does: nothing
  *   follows it, so the 201 and the server-assigned id it carries cannot be lost
@@ -77,13 +70,10 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * pointing at it, and move with it in the same commit:
  *
  * - `apps/api/README.md`, the 504 bullet of the error-contract section —
- *   *paraphrasing*: it restates the bound, the fan-out's overlap and the
- *   ungated-prefix residual for API callers.
+ *   *paraphrasing*: it restates the bound and the ungated-prefix residual for
+ *   API callers.
  * - `apps/api/src/openapi/responses.ts`, the `commonFailures` docblock —
  *   *paraphrasing*: "between admitted units", and the same residual.
- * - `apps/api/src/forecast/fleet-series-read.ts`, the "Why one admission prices
- *   one command" docblock — *arguing*: the batch-costs-its-maximum argument is
- *   about this bound and quotes it to reason from.
  * - `infra/api/lambda.tf`, the header comment above the `timeout` attribute on
  *   `aws_lambda_function.api` — *arguing*: the 504 residual it states turns on a
  *   unit being a bound on wall clock rather than being one command.
@@ -91,8 +81,8 @@ import { STORAGE_COMMAND_WORST_MS } from '@cumulo/storage';
  * None of them quotes this header's wording, so the sweep behind this list is
  * shaped around the claim rather than the phrasing (rule 10):
  * `command grep -rnE 'admitted unit|straight-line prefix|STORAGE_COMMAND_WORST_MS|wall clock' apps/api infra/api`,
- * run 2026-08-11. The list is a **floor**, not a census. That sweep also
- * reaches `request-budget.test.ts`, which imports the constant and computes
+ * run 2026-08-11 and re-run 2026-10-21 (#507), when the fan-out's docblock left
+ * the list. The list is a **floor**, not a census. That sweep also reaches `request-budget.test.ts`, which imports the constant and computes
  * with it rather than restating anything, so it needs no entry.
  */
 

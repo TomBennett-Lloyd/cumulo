@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { countdownDeadline, generationPoint, RATHMINES_ID } from '../api-fixtures';
+import { countdownDeadline } from '../api-fixtures';
 import { errorResponse } from '../http/response';
 
 import { readFleetActualsAggregate } from './fleet-actuals-rollup-read';
@@ -37,12 +37,11 @@ const OLD_SITES = DUBLIN_SITES.map((site) => ({ ...site, createdAt: LONG_AGO }))
 describe('readFleetActualsAggregate over totals and slices', () => {
   it('reads the totals over the window, then the slices from the hour after the last total', async () => {
     const totals = [...hourly(12, 24 + 6, 3)];
-    const { deps, totalsWindows, sliceWindows, siteReads, logged } = harness(
+    const { deps, totalsWindows, sliceWindows, logged } = harness(
       [
         row(DUBLIN, OLD_SITES, slice('2026-07-31T07:00:00Z', 4)),
         row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5)),
       ],
-      {},
       totals,
     );
 
@@ -55,7 +54,6 @@ describe('readFleetActualsAggregate over totals and slices', () => {
       '2026-07-31T07:00:00Z',
       REWRITTEN_HOUR,
     ]);
-    expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
 
@@ -73,7 +71,6 @@ describe('readFleetActualsAggregate over totals and slices', () => {
         row(DUBLIN, DUBLIN_SITES, slice(SETTLED_HOUR, 99)),
         row(DUBLIN, DUBLIN_SITES, slice(REWRITTEN_HOUR, 5)),
       ],
-      {},
       [...hourly(12, 24 + 5, 3), total(SETTLED_HOUR, 3)],
     );
 
@@ -84,63 +81,63 @@ describe('readFleetActualsAggregate over totals and slices', () => {
     ]);
   });
 
-  it('issues no slices Query when the last total ends at the window, and falls back', async () => {
-    const { deps, sliceWindows, logged } = harness([], {}, [total('2026-07-31T11:00:00Z', 3)]);
+  it('issues no slices Query when the last total ends at the window, and logs nothing', async () => {
+    const last = total('2026-07-31T11:00:00Z', 3);
+    const { deps, sliceWindows, logged } = harness([], [last]);
 
-    await read(deps, DUBLIN_SITES);
+    const points = pointsOf(await read(deps, DUBLIN_SITES));
 
     expect(sliceWindows).toEqual([]);
-    expect(logged[0]).toMatchObject({ reason: 'absent' });
-  });
-
-  it('is covered at its first hour by a total, and not by a total an hour later', async () => {
-    const slices = [row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))];
-    const covered = harness(slices, {}, [...hourly(12, 24 + 9, 3)]);
-    expect(pointsOf(await read(covered.deps, OLD_SITES))).toHaveLength(23);
-    expect(covered.logged).toEqual([]);
-
-    const late = harness(slices, {}, [...hourly(13, 24 + 9, 3)]);
-    await read(late.deps, OLD_SITES);
-    expect(late.logged[0]).toMatchObject({ reason: 'incomplete', uncoveredLocations: 1 });
+    expect(points).toEqual([last]);
+    expect(logged).toEqual([]);
   });
 
   it('checks membership on the trailing slices and never on a total', async () => {
     const totals = hourly(12, 24 + 6, 3);
-    const live = harness([row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))], {}, totals);
+    const live = harness([row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))], totals);
     expect(pointsOf(await read(live.deps, OLD_SITES))).toHaveLength(totals.length + 1);
 
-    const resized = harness([row(DUBLIN, [RANELAGH], slice(REWRITTEN_HOUR, 5))], {}, totals);
-    await read(resized.deps, OLD_SITES);
+    const resized = harness([row(DUBLIN, [RANELAGH], slice(REWRITTEN_HOUR, 5))], totals);
+    expect(pointsOf(await read(resized.deps, OLD_SITES))).toHaveLength(totals.length);
     expect(resized.logged[0]).toMatchObject({ reason: 'stale' });
   });
 
-  it('requires every expected location in the slices read', async () => {
-    const { deps, logged } = harness(
-      [row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))],
-      {},
-      hourly(12, 24 + 6, 3),
+  it('names a location missing from the slices read as incomplete, and sums the rest', async () => {
+    const totals = hourly(12, 24 + 6, 3);
+    const { deps, logged } = harness([row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))], totals);
+
+    const points = pointsOf(
+      await read(deps, [...OLD_SITES, { ...BRISTOL_SITE, createdAt: LONG_AGO }]),
     );
 
-    await read(deps, [...OLD_SITES, { ...BRISTOL_SITE, createdAt: LONG_AGO }]);
-
+    expect(points).toHaveLength(totals.length + 1);
     expect(logged[0]).toMatchObject({ reason: 'incomplete', presentLocations: 1 });
   });
 
-  it('falls back as incomplete when the totals page walk was read short', async () => {
-    const { deps, logged } = harness(
-      [row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))],
-      { [RATHMINES_ID]: [generationPoint({ siteId: RATHMINES_ID })] },
-      hourly(12, 24 + 6, 3),
-      { totalsComplete: false },
-    );
+  it.each([
+    { walk: 'totals', options: { totalsComplete: false } },
+    { walk: 'slices', options: { sliceComplete: false } },
+  ])(
+    'refuses with the deadline response when the $walk page walk was read short',
+    async ({ options }) => {
+      const { deps, logged } = harness(
+        [row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))],
+        hourly(12, 24 + 6, 3),
+        options,
+      );
 
-    await read(deps, OLD_SITES);
+      const result = await read(deps, OLD_SITES);
 
-    expect(logged[0]).toMatchObject({ reason: 'incomplete' });
-  });
+      expect(result).toEqual({
+        complete: false,
+        response: errorResponse('internal', 'the request could not be completed in time'),
+      });
+      expect(logged).toEqual([{ event: 'deadline-event', totalsRead: 19, slicesRead: 1 }]);
+    },
+  );
 
   it('refuses with the deadline response rather than start the slices Query without budget', async () => {
-    const { deps, sliceWindows, logged } = harness([], {}, hourly(12, 24 + 6, 3));
+    const { deps, sliceWindows, logged } = harness([], hourly(12, 24 + 6, 3));
 
     const result = await readFleetActualsAggregate(
       deps,
@@ -160,7 +157,7 @@ describe('readFleetActualsAggregate over totals and slices', () => {
   });
 
   it('admits the slices Query with exactly one permit, the gate being a single reading', async () => {
-    const { deps, sliceWindows } = harness([], {}, hourly(12, 24 + 6, 3));
+    const { deps, sliceWindows } = harness([], hourly(12, 24 + 6, 3));
 
     await readFleetActualsAggregate(
       deps,
@@ -176,7 +173,7 @@ describe('readFleetActualsAggregate over totals and slices', () => {
 
   it('dates the response by the slices only, never by a total', async () => {
     const result = await read(
-      harness([row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))], {}, hourly(12, 24 + 6, 3)).deps,
+      harness([row(DUBLIN, OLD_SITES, slice(REWRITTEN_HOUR, 5))], hourly(12, 24 + 6, 3)).deps,
       OLD_SITES,
     );
 

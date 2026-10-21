@@ -1,6 +1,6 @@
 import {
+  compareUtcIsoTimestamps,
   FLEET_ROLLUP_FORECAST_KIND,
-  fleetForecastAggregate,
   fleetRollupMembers,
   locationId,
   sumFleetRollupPartials,
@@ -9,23 +9,14 @@ import {
   type FleetSite,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type {
-  FleetRollupRangeResult,
-  FleetRollupRow,
-  QueryPaginationBound,
-  SeriesAdapter,
-} from '@cumulo/storage';
+import type { FleetRollupRow, QueryPaginationBound, SeriesAdapter } from '@cumulo/storage';
 
 import type { RequestDeadline } from '../http/request-deadline';
-import type { ApiResponse } from '../http/response';
+import { errorResponse, type ApiResponse } from '../http/response';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
-import { readFleetSeries, type FleetSeriesReadDeps } from './fleet-series-read';
-import { forecastsIn } from './series-split';
-
 /**
- * `GET /v1/fleet/forecast`'s read: one Query of the pre-summed `#FLEET` partition, with the old
- * fan-out kept for one release as the fallback (ADR 0009, #494).
+ * `GET /v1/fleet/forecast`'s read: one Query of the pre-summed `#FLEET` partition (ADR 0009, #494).
  *
  * **What this replaces.** The route used to read every site's partition — eight batched round trips
  * for a 61-site fleet, 1,753.9 ms p50 and 2,998.9 ms p95 warm — and hand the browser every row to
@@ -33,52 +24,40 @@ import { forecastsIn } from './series-split';
  * same answer is one Query of about twelve small items per hour, summed in process by the same
  * `@cumulo/shared` functions the browser used to call.
  *
- * **Incomplete counts as absent, deliberately.** A partition holding eleven of twelve locations
- * sums to a fleet total that looks exactly like a plausible number from a quieter fleet — there is
- * no gap to see, because the missing site does not read as missing, it reads as less generation.
- * That is the half-truth `fleet-series-read.ts` refuses for the fan-out, applied to the roll-up.
- * Completeness is checked per **location**, and mechanically: the route already lists the fleet and
- * every site carries coordinates, so the expected set is the listed sites' `locationId`s — the same
- * `locationId` ingestion keys its messages on, over the same unfiltered listing
- * `activeFetchLocations` takes. A cycle that deferred a location for budget is a different
- * dimension and is what `incomplete` is for. The check is **not** per hour, which is a decision
- * rather than an omission: ADR 0009's `## Amendments` entry for 2026-10-05 (#531) states it and
- * what makes the residual honest rather than silent. A location that has written is also checked
- * for **membership and vintage** (#602, the 2026-10-07 entry): its slices must carry the digest of
- * the sites there now, and one `issuedAt` between them.
- *
- * **One release, then gone.** Every fallback logs {@link fleetRollupFallbackEvent}; #507 removes the
- * fallback and this module's second arm, and ADR 0009's 2026-10-07 entry says what `stale` leaves
- * it to decide.
+ * **A short partition is served short, and says so.** A location that has not written, or whose
+ * slices cannot be summed as they stand, is left out of the sum and not refused: the contract has
+ * the label (`contributingSiteCount` on every point), so a refusal is not the honest answer
+ * (`docs/standards/error-handling.md` rule 5), and one {@link fleetRollupShortEvent} line says why.
+ * The check is per **location**, not per hour (ADR 0009, 2026-10-05, #531), and only a Query cut
+ * short by the deadline is refused, because a window missing its tail is labelled by no count.
+ * ADR 0009's 2026-10-21 (#507) entry decides all of it.
  */
 
 /**
- * The one event a fallback emits.
+ * The one event a short response emits: it was served short of what it names.
  *
  * One event with a `reason` rather than one event per reason, so an operator counts a single line.
  */
-export const fleetRollupFallbackEvent = 'api.fleet-forecast.rollup-fallback';
+export const fleetRollupShortEvent = 'api.fleet-forecast.rollup-short';
 
 /**
- * Why the roll-up could not answer. `absent`: nothing written at all. `incomplete`: some of it.
- * `stale`: every location wrote, but some location's slices fail its kind's provenance rule — this
- * module's for forecasts, `fleet-actuals-rollup-read.ts`'s for actuals.
+ * Why a response was short. `absent`: no slice written in the Query's window. `incomplete`: some locations not
+ * written. `stale`: every location wrote, but some location's slices fail the provenance rule.
  */
-export type FallbackReason = 'absent' | 'incomplete' | 'stale';
+export type RollupShortReason = 'absent' | 'incomplete' | 'stale';
 
-export interface FleetRollupReadDeps extends FleetSeriesReadDeps {
-  /**
-   * Reads only, and now two methods: the roll-up partition, plus the per-site fan-out the fallback
-   * still needs (`typing.md` rule 6, ADR 0002 least privilege).
-   */
-  readonly series: Pick<SeriesAdapter, 'querySeriesRange' | 'queryFleetRollup'>;
+export interface FleetRollupReadDeps {
+  /** Reads only (`typing.md` rule 6, ADR 0002 least privilege). */
+  readonly series: Pick<SeriesAdapter, 'queryFleetRollup'>;
+  /** Structured-logging sink (`docs/standards/error-handling.md` rule 4). */
+  readonly log: (entry: Record<string, unknown>) => void;
 }
 
 /**
  * The fleet's summed forecast, or the response that says why it is not coming.
  *
- * {@link FleetSeriesRead}'s shape and its reasoning. `issuedAtsByGroup` is what dates the response
- * (#614): the runs behind the sum, one group per location's slices or per site on the fallback.
+ * `issuedAtsByGroup` is what dates the response (#614): the runs behind the sum, one group per
+ * location summed.
  */
 export type FleetForecastAggregateRead =
   | {
@@ -89,157 +68,149 @@ export type FleetForecastAggregateRead =
   | { readonly complete: false; readonly response: ApiResponse };
 
 /**
- * Which locations the fleet expects a partial from — one per distinct weather bucket its sites sit
- * in — each with the membership digest its slices must carry.
+ * The fleet's sites grouped by the location they are expected to have written a partial for, in the
+ * order each location first appears.
  *
  * Keyed by bucket because two sites in one bucket are one expected partial: `locationId` is what
- * the producer's messages are keyed by (ADR 0004). The digest is over the same sites the producer
- * lists for that bucket, so a slice summed before a delete, an add or a physics edit there misses.
+ * the producer's messages are keyed by (ADR 0004).
  */
-export const expectedLocations = (
+export const expectedSites = (
   sites: readonly FleetSite[],
-): ReadonlyMap<string, FleetRollupMembers> => {
+): ReadonlyMap<string, readonly FleetSite[]> => {
   const sitesByLocation = new Map<string, FleetSite[]>();
   for (const site of sites) {
     const location = locationId(site);
     sitesByLocation.set(location, [...(sitesByLocation.get(location) ?? []), site]);
   }
-  return new Map(
-    [...sitesByLocation].map(([location, members]) => [location, fleetRollupMembers(members)]),
-  );
+  return sitesByLocation;
 };
 
 /**
- * The expected locations whose slices cannot be summed as they stand: a slice with no provenance
- * (written before #602), a membership digest that is not the live one, or a location whose slices
- * carry more than one `issuedAt` — part of its horizon was written by another run.
+ * The digest of the sites a run issued at `issuedAt` could have summed: those that existed then.
+ *
+ * A site added since has no forecast in the slice (#286), so the slice is exactly right for every
+ * site that has one and an add alone is not stale. The producer lists its sites before it reads its
+ * clock, so a site it summed was created at or before `issuedAt`; skew between the two hosts can
+ * only make a slice read stale, never fresh.
+ */
+export const membersAsOf = (
+  sites: readonly FleetSite[],
+  issuedAt: UtcIsoTimestamp,
+): FleetRollupMembers =>
+  fleetRollupMembers(
+    sites.filter((site) => compareUtcIsoTimestamps(site.createdAt, issuedAt) <= 0),
+  );
+
+/**
+ * The expected locations whose slices cannot be summed as they stand: a membership digest that is
+ * not the one the sites then existing give, or a location whose slices carry more than one
+ * `issuedAt` — part of its horizon was written by another run.
  *
  * Vintage is compared within a location and never across them: ingestion visits locations on
  * their own schedule and with no end-of-run event (ADR 0009), so locations legitimately differ.
  */
 const staleLocations = (
   rows: readonly FleetRollupRow[],
-  expected: ReadonlyMap<string, FleetRollupMembers>,
+  expected: ReadonlyMap<string, readonly FleetSite[]>,
 ): ReadonlySet<string> => {
   const stale = new Set<string>();
-  const vintages = new Map<string, UtcIsoTimestamp>();
+  const runs = new Map<string, { issuedAt: UtcIsoTimestamp; members: FleetRollupMembers }>();
   for (const row of rows) {
-    const members = expected.get(row.locationId);
-    if (members === undefined) {
+    const sitesHere = expected.get(row.locationId);
+    if (sitesHere === undefined) {
       continue;
     }
-    const vintage = vintages.get(row.locationId) ?? row.provenance?.issuedAt;
-    if (row.provenance?.members !== members || row.provenance.issuedAt !== vintage) {
+    const run = runs.get(row.locationId) ?? {
+      issuedAt: row.provenance.issuedAt,
+      members: membersAsOf(sitesHere, row.provenance.issuedAt),
+    };
+    runs.set(row.locationId, run);
+    if (row.provenance.members !== run.members || row.provenance.issuedAt !== run.issuedAt) {
       stale.add(row.locationId);
-    }
-    if (vintage !== undefined) {
-      vintages.set(row.locationId, vintage);
     }
   }
   return stale;
 };
 
 /**
- * Whether a roll-up read can answer for this fleet, and if not, why.
- *
- * `expected` is never empty: {@link readFleetForecastAggregate} answers an empty fleet before
- * reaching here, and a site always has a `locationId`.
+ * Why a complete read is short of the fleet, or `undefined` when it is not. No `complete` flag:
+ * a truncated read is refused before this runs.
  */
-export const fallbackReason = (
-  read: FleetRollupRangeResult,
-  expected: ReadonlyMap<string, FleetRollupMembers>,
+export const shortReason = (
+  rows: readonly FleetRollupRow[],
+  expected: ReadonlyMap<string, readonly FleetSite[]>,
   stale: ReadonlySet<string>,
-): FallbackReason | undefined => {
-  const present = new Set(read.rows.map((row) => row.locationId));
-  if (present.size === 0) {
+): RollupShortReason | undefined => {
+  if (rows.length === 0) {
     return 'absent';
   }
-  // `complete: false` is a truncated page walk, which is a partition read short rather than a
-  // partition written short — different causes, same consequence for the answer, so the same arm.
-  if (!read.complete || ![...expected.keys()].every((location) => present.has(location))) {
+  const present = new Set(rows.map((row) => row.locationId));
+  if (![...expected.keys()].every((location) => present.has(location))) {
     return 'incomplete';
   }
   return stale.size === 0 ? undefined : 'stale';
 };
 
 /**
- * The fan-out, aggregated server-side — what the browser used to do with the rows this route used
- * to send.
+ * The one 500 the fleet reads answer, with the log line that says where it stopped.
  *
- * `forecastsIn` then `fleetForecastAggregate` over the rolled-up kind, so that this arm and the
- * roll-up arm answer the same question. The filter is the shared function's rather than this file's
- * (#531): a fleet whose sites had both a physics and an ML row for an hour would otherwise read
- * here as whichever model the Query returned last, and the discrepancy would appear exactly when
- * the fallback fired — the worst possible time for the two paths to disagree.
+ * Two callers: the roll-up Queries' truncation, and the actuals read's slices gate. Deliberately
+ * one message: a caller can do nothing different with them, while an operator reads the
+ * difference off the fields in `detail`.
  */
-const aggregateFromFanOut = async (
-  deps: FleetRollupReadDeps,
-  deadline: RequestDeadline,
-  sites: readonly FleetSite[],
-  from: UtcIsoTimestamp,
-  to: UtcIsoTimestamp,
+export const readDeadlineReached = (
+  log: FleetRollupReadDeps['log'],
   deadlineEvent: string,
-): Promise<FleetForecastAggregateRead> => {
-  const read = await readFleetSeries(deps, deadline, sites, from, to, deadlineEvent);
-  if (!read.complete) {
-    return read;
-  }
-
-  const forecasts = read.perSite.flatMap((points) => forecastsIn(points));
-
-  return {
-    complete: true,
-    points: fleetForecastAggregate(forecasts, sites, FLEET_ROLLUP_FORECAST_KIND),
-    // Only the rolled-up model's rows, so a later ML row cannot date a sum it is not in.
-    issuedAtsByGroup: read.perSite.map((points) =>
-      forecastsIn(points)
-        .filter((forecast) => forecast.model === FLEET_ROLLUP_FORECAST_KIND.model)
-        .map((forecast) => forecast.issuedAt),
-    ),
-  };
+  detail: Record<string, unknown>,
+): ApiResponse => {
+  log({ event: deadlineEvent, ...detail });
+  return errorResponse('internal', 'the request could not be completed in time');
 };
 
 /**
- * Sum the partials of the locations this fleet actually has sites at, and no others.
+ * Sum the partials of the locations this fleet has sites at and whose slices are fresh, and no
+ * others.
  *
- * The filter is not defensive tidiness; without it a decommissioned location keeps generating. Its
- * partials are written under keys nothing rewrites once ingestion stops publishing for it, and they
- * outlive the last site there by the whole forecast horizon — so a fleet that lost a location would
- * carry a ghost's kilowatts, its site count and its nameplate capacity. The fan-out arm cannot do
- * that, because it iterates the site list. A ghost *site* at a surviving location is
- * {@link staleLocations}' job, which has already refused the read by the time this runs.
+ * The expected-set filter is not defensive tidiness; without it a decommissioned location keeps
+ * generating. Its partials are written under keys nothing rewrites once ingestion stops publishing
+ * for it, and they outlive the last site there by the whole forecast horizon — a ghost's kilowatts,
+ * site count and nameplate capacity. A ghost *site* at a surviving location is
+ * {@link staleLocations}' job, which has already left that location out by the time this runs.
  */
 const summed = (
   rows: readonly FleetRollupRow[],
-  expected: ReadonlyMap<string, FleetRollupMembers>,
+  expected: ReadonlyMap<string, readonly FleetSite[]>,
+  stale: ReadonlySet<string>,
 ): readonly FleetForecastAggregatePoint[] =>
   sumFleetRollupPartials(
-    rows.filter((row) => expected.has(row.locationId)).map((row) => row.partial),
+    rows
+      .filter((row) => expected.has(row.locationId) && !stale.has(row.locationId))
+      .map((row) => row.partial),
   );
 
 /**
- * Each expected location's run, as a group of its own for dating the response (#614). One value
- * suffices because {@link staleLocations} has already refused a location with two.
+ * Each summed location's run, as a group of its own for dating the response (#614). One value
+ * suffices because {@link staleLocations} has already left out a location with two. A location
+ * outside the sum has no run behind it, so it has no group.
  */
 const issuedAtsByLocation = (
   rows: readonly FleetRollupRow[],
-  expected: ReadonlyMap<string, FleetRollupMembers>,
+  expected: ReadonlyMap<string, readonly FleetSite[]>,
+  stale: ReadonlySet<string>,
 ): readonly (readonly UtcIsoTimestamp[])[] =>
-  [...expected.keys()].map((location) => {
-    const issuedAt = rows.find((row) => row.locationId === location)?.provenance?.issuedAt;
-    return issuedAt === undefined ? [] : [issuedAt];
-  });
+  [...expected.keys()]
+    .filter((location) => !stale.has(location))
+    .flatMap((location) => {
+      const issuedAt = rows.find((row) => row.locationId === location)?.provenance.issuedAt;
+      return issuedAt === undefined ? [] : [[issuedAt]];
+    });
 
 /**
- * Read the fleet's summed forecast over `from`…`to`: the roll-up if it can answer, the fan-out if
- * it cannot.
+ * Read the fleet's summed forecast over `from`…`to`.
  *
- * The roll-up Query is page-bounded on the same deadline the fan-out uses, so a request that is
- * running out of time cannot spend it all here and then discover it has to fall back too. A
- * `StorageError` from either arm travels to the route boundary as it always did — no `catch` here
- * would have anything to add (`docs/standards/error-handling.md` rule 2), and in particular a
- * roll-up read that *throws* is not a reason to fall back: the fan-out reads the same table, so it
- * would only fail again more slowly.
+ * The Query is page-bounded on the request's deadline, and a walk the deadline cut short is the one
+ * 500 here. A `StorageError` travels to the route boundary as it always did — no `catch` here would
+ * have anything to add (`docs/standards/error-handling.md` rule 2).
  */
 export const readFleetForecastAggregate = async (
   deps: FleetRollupReadDeps,
@@ -262,26 +233,31 @@ export const readFleetForecastAggregate = async (
   };
 
   const rollup = await deps.series.queryFleetRollup(FLEET_ROLLUP_FORECAST_KIND, from, to, bound);
-  const expected = expectedLocations(sites);
-  const stale = staleLocations(rollup.rows, expected);
-  const reason = fallbackReason(rollup, expected, stale);
-
-  if (reason === undefined) {
+  if (!rollup.complete) {
     return {
-      complete: true,
-      points: summed(rollup.rows, expected),
-      issuedAtsByGroup: issuedAtsByLocation(rollup.rows, expected),
+      complete: false,
+      response: readDeadlineReached(deps.log, deadlineEvent, { rowsRead: rollup.rows.length }),
     };
   }
 
-  deps.log({
-    event: fleetRollupFallbackEvent,
-    reason,
-    expectedLocations: expected.size,
-    presentLocations: new Set(rollup.rows.map((row) => row.locationId)).size,
-    staleLocations: stale.size,
-    hours: new Set(rollup.rows.map((row) => row.partial.validTime)).size,
-  });
+  const expected = expectedSites(sites);
+  const stale = staleLocations(rollup.rows, expected);
+  const reason = shortReason(rollup.rows, expected, stale);
 
-  return aggregateFromFanOut(deps, deadline, sites, from, to, deadlineEvent);
+  if (reason !== undefined) {
+    deps.log({
+      event: fleetRollupShortEvent,
+      reason,
+      expectedLocations: expected.size,
+      presentLocations: new Set(rollup.rows.map((row) => row.locationId)).size,
+      staleLocations: stale.size,
+      hours: new Set(rollup.rows.map((row) => row.partial.validTime)).size,
+    });
+  }
+
+  return {
+    complete: true,
+    points: summed(rollup.rows, expected, stale),
+    issuedAtsByGroup: issuedAtsByLocation(rollup.rows, expected, stale),
+  };
 };

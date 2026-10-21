@@ -261,7 +261,7 @@ describe('the aggregate is a valid wire point', () => {
 
 /**
  * The same proof for the actuals kind (#506): the readings are the canonical fleet's simulated
- * actuals, partitioned by the producer's grouping, and the whole-fleet sum is the fallback's.
+ * actuals, partitioned by the producer's grouping, and the whole-fleet sum is `fleetActualsAggregate` over every site.
  */
 describe('actuals partials sum to the whole-fleet actuals aggregate', () => {
   const allReadings = allForecasts.map(simulatedActualFromForecast);

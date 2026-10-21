@@ -257,44 +257,13 @@ describe('the cycle cache on the metered reads', () => {
       expect(incrementRateWindow).toHaveBeenCalledTimes(1);
     });
 
-    it.each([
-      {
-        run: LAST_RUN,
-        outcome: 'briefly, under that run’s tag',
-        cacheControl: `public, max-age=${String(STALE_RETRY_SECONDS)}`,
-        etag: dataCycleAt(MID_CYCLE.getTime() / 1000 - 3600).etag,
-      },
-      {
-        run: THIS_RUN,
-        outcome: 'to the boundary',
-        cacheControl: `public, max-age=${String(dataCycleAt(MID_CYCLE.getTime() / 1000).secondsToNext)}`,
-        etag: dataCycleAt(MID_CYCLE.getTime() / 1000).etag,
-      },
-    ])('caches the fallback $outcome, dated by the per-site forecasts', async (expected) => {
-      await stubStorage(expected.run);
+    it('answers an empty partition uncacheable rather than dated by a run it did not sum', async () => {
+      await stubStorage(THIS_RUN);
       const { handler } = await import('./main');
 
       const response = await handler(fleetForecastEvent({}));
 
-      expect(response.headers['cache-control']).toBe(expected.cacheControl);
-      expect(response.headers.etag).toBe(expected.etag);
-    });
-
-    it('never dates a body by a slice with no stamp: the read falls back to the per-site forecasts', async () => {
-      const unstamped: FleetRollupRow = {
-        locationId: DUBLIN,
-        provenance: undefined,
-        partial: partial(),
-      };
-      const { querySeriesRange } = await stubStorage(LAST_RUN, { rollupRows: [unstamped] });
-      const { handler } = await import('./main');
-
-      const response = await handler(fleetForecastEvent({}));
-
-      expect(querySeriesRange).toHaveBeenCalled();
-      expect(response.headers['cache-control']).toBe(
-        `public, max-age=${String(STALE_RETRY_SECONDS)}`,
-      );
+      expect(response.headers['cache-control']).toBe('no-store');
     });
   });
 });

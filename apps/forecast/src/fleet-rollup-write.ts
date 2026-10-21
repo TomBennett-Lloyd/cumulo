@@ -31,7 +31,7 @@ import type { BatchWriteOutcome, SeriesAdapter } from '@cumulo/storage';
  * `simulate-actuals.ts` states about its own: this runs below the record boundary
  * (`consume-message.ts`) and after the message's real work is already stored, so a throw crossing it
  * would redeliver a whole location's horizon to retry a derived write. What repairs a missed write,
- * and what the API's fallback does meanwhile, is ADR 0009's (its #506 entry for actuals).
+ * and what the API serves meanwhile (a labelled short sum), is ADR 0009's (its #506 entry for actuals).
  */
 
 /**
@@ -143,7 +143,7 @@ const writePartials = async (
  *
  * The arithmetic is `@cumulo/shared`'s and nothing here adds a kilowatt to another
  * (`docs/standards/architecture.md` rule 3). The model selection is `@cumulo/shared`'s too —
- * `fleetRollupPartials` filters on the kind it is handed, so the producer and the API's fallback
+ * `fleetRollupPartials` filters on the kind it is handed, so the producer and the demo source
  * cannot select differently (#531).
  */
 export const writeFleetRollup = (

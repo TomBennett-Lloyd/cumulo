@@ -293,7 +293,7 @@ export class DemoFleetDataSource implements FleetDataSource {
    * The fleet's fixture forecasts, summed here rather than by the consumer (#494).
    *
    * `fleetForecastAggregate` is the same `@cumulo/shared` function the forecast producer writes its
-   * partials with and the API's fallback sums with, so this source and the deployed one answer the
+   * partials with, so this source and the deployed one answer the
    * same question with the same arithmetic — which is what makes the seam's promise ("one
    * definition of the fleet total, two ways of arriving at the shape") true rather than aspirational.
    *
@@ -313,7 +313,7 @@ export class DemoFleetDataSource implements FleetDataSource {
       ),
     });
 
-  /** The fixture readings, summed by the API fallback's own function (#506). */
+  /** The fixture readings, summed by `fleetActualsAggregate` (#506). */
   readonly fleetActuals = (
     range: RangeHours,
   ): Promise<FleetSourceResult<readonly FleetActualsAggregatePoint[]>> =>
