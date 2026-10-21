@@ -406,7 +406,7 @@ describe('the abuse protections on the route table', () => {
     expect(getBlock).toHaveBeenCalledWith(SOURCE_IP);
   });
 
-  it('limits the fleet forecast fan-out, whose cost per request the fleet picks', async () => {
+  it('limits the fleet forecast read, whose cost per request the fleet picks', async () => {
     const { getBlock } = await stubStorage();
     const { handler } = await import('./main');
 
