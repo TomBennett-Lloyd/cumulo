@@ -1,12 +1,9 @@
 import {
   compareUtcIsoTimestamps,
   FLEET_ROLLUP_ACTUALS_KIND,
-  fleetActualsAggregate,
-  locationId,
   sumFleetActualsRollupPartials,
   TRAILING_ACTUALS_HOURS,
   type FleetActualsAggregatePoint,
-  type FleetRollupMembers,
   type FleetSite,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
@@ -16,41 +13,37 @@ import type { RequestDeadline } from '../http/request-deadline';
 import type { ApiResponse } from '../http/response';
 import { hasBudgetForStorageCommands } from '../request-budget';
 
-import { readDeadlineReached, readFleetSeries } from './fleet-series-read';
 import {
-  expectedLocations,
-  fallbackReason,
-  type FallbackReason,
+  expectedSites,
+  membersAsOf,
+  readDeadlineReached,
+  shortReason,
   type FleetRollupReadDeps,
 } from './fleet-rollup-read';
-import { actualsIn } from './series-split';
 import { hoursAfter, hoursBefore } from './series-window';
 
 /**
  * `GET /v1/fleet/actuals`'s read: the `#FLEET` partition's `GEN` totals over the window, then the
- * slices from the hour after the last total, falling back to the per-site fan-out —
- * `fleet-rollup-read.ts`'s shape, with the completeness rule ADR 0009's #506 amendment states for
- * actuals and its #615 entry extends.
+ * slices from the hour after the last total — `fleet-rollup-read.ts`'s shape, with the completeness
+ * rule ADR 0009's #506 amendment states for actuals and its #615 entry extends.
  *
  * A look-back is written by many cycles, so there is no vintage check, and membership is checked
- * only on the hours the producer still rewrites; older hours are summed as written, and a settled
- * hour's total satisfies the first-hour check a location older than the window must meet, or a
- * history the producer has not yet written reads as a whole one.
+ * only on the hours the producer still rewrites, as of the slice's own `issuedAt`; older hours are
+ * summed as written. A location that has not written, or whose rewritten hours fail that check, is
+ * left out and named in {@link fleetActualsRollupShortEvent}; ADR 0009's 2026-10-21 (#507) entry
+ * decides it, and only a Query the deadline cut short is refused.
  */
 
 export interface FleetActualsRollupReadDeps extends FleetRollupReadDeps {
-  readonly series: Pick<
-    SeriesAdapter,
-    'querySeriesRange' | 'queryFleetRollup' | 'queryFleetActualsTotals'
-  >;
+  readonly series: Pick<SeriesAdapter, 'queryFleetRollup' | 'queryFleetActualsTotals'>;
 }
 
-/** The one event a fallback emits — this route's own, for `fleetRollupFallbackEvent`'s reason. */
-export const fleetActualsRollupFallbackEvent = 'api.fleet-actuals.rollup-fallback';
+/** The one event a short response emits — this route's own, for `fleetRollupShortEvent`'s reason. */
+export const fleetActualsRollupShortEvent = 'api.fleet-actuals.rollup-short';
 
 /**
  * The summed actuals, and the hours behind them grouped by what wrote them — one group per
- * location's slices, or per site on the fallback — which is what dates the response (#608).
+ * location's slices — which is what dates the response (#608).
  */
 export type FleetActualsAggregateRead =
   | {
@@ -60,49 +53,24 @@ export type FleetActualsAggregateRead =
     }
   | { readonly complete: false; readonly response: ApiResponse };
 
-/** Locations with a slice in the rewritten hours whose digest is not the live one. */
+/** Locations with a slice in the rewritten hours whose digest is not that of the sites then existing. */
 const staleLocations = (
   rows: readonly FleetRollupRow[],
-  expected: ReadonlyMap<string, FleetRollupMembers>,
+  expected: ReadonlyMap<string, readonly FleetSite[]>,
   rewrittenFrom: UtcIsoTimestamp,
 ): ReadonlySet<string> =>
   new Set(
     rows
       .filter((row) => {
-        const members = expected.get(row.locationId);
+        const sitesHere = expected.get(row.locationId);
         return (
-          members !== undefined &&
+          sitesHere !== undefined &&
           compareUtcIsoTimestamps(row.partial.validTime, rewrittenFrom) >= 0 &&
-          row.provenance.members !== members
+          row.provenance.members !== membersAsOf(sitesHere, row.provenance.issuedAt)
         );
       })
       .map((row) => row.locationId),
   );
-
-/**
- * Locations whose oldest site predates the window by the trailing hours yet hold no slice for
- * its first hour. Such a site has a reading there unless the pipeline was idle, and either way the
- * fan-out is the answer that knows.
- */
-const uncoveredLocations = (
-  rows: readonly FleetRollupRow[],
-  sites: readonly FleetSite[],
-  from: UtcIsoTimestamp,
-): ReadonlySet<string> => {
-  const firstHourEnd = hoursAfter(from, 1);
-  const covered = new Set(
-    rows
-      .filter((row) => compareUtcIsoTimestamps(row.partial.validTime, firstHourEnd) < 0)
-      .map((row) => row.locationId),
-  );
-  const settledBefore = hoursBefore(from, TRAILING_ACTUALS_HOURS);
-  return new Set(
-    sites
-      .filter((site) => compareUtcIsoTimestamps(site.createdAt, settledBefore) <= 0)
-      .map((site) => locationId(site))
-      .filter((location) => !covered.has(location)),
-  );
-};
 
 /** Where the slices Query opens: the hour after the last total, or `undefined` if none is left to read. */
 const tailStart = (
@@ -118,17 +86,7 @@ const tailStart = (
   return compareUtcIsoTimestamps(start, to) < 0 ? start : undefined;
 };
 
-/** Whether a total already covers the window's first hour, by `uncoveredLocations`'s arithmetic. */
-const firstHourCovered = (
-  totals: readonly FleetActualsAggregatePoint[],
-  from: UtcIsoTimestamp,
-): boolean =>
-  totals.some((point) => compareUtcIsoTimestamps(point.validTime, hoursAfter(from, 1)) < 0);
-
-/**
- * Read the fleet's summed actuals over `from`…`to`: the roll-up if it can answer, the fan-out if
- * not.
- */
+/** Read the fleet's summed actuals over `from`…`to`, short of any location that cannot be summed. */
 export const readFleetActualsAggregate = async (
   deps: FleetActualsRollupReadDeps,
   deadline: RequestDeadline,
@@ -158,57 +116,50 @@ export const readFleetActualsAggregate = async (
     start === undefined
       ? { rows: [], complete: true }
       : await deps.series.queryFleetRollup(FLEET_ROLLUP_ACTUALS_KIND, start, to, bound);
-  const expected = expectedLocations(sites);
-  const stale = staleLocations(slices.rows, expected, hoursBefore(to, TRAILING_ACTUALS_HOURS));
-  const uncovered = firstHourCovered(totals.rows, from)
-    ? new Set<string>()
-    : uncoveredLocations(slices.rows, sites, from);
-  const base = fallbackReason(
-    { rows: slices.rows, complete: totals.complete && slices.complete },
-    expected,
-    stale,
-  );
-  // An uncovered first hour is part of the window unwritten, so it ranks as `incomplete` does.
-  const reason: FallbackReason | undefined =
-    base !== 'absent' && uncovered.size > 0 ? 'incomplete' : base;
-
-  if (reason === undefined) {
-    const rows = slices.rows.filter((row) => expected.has(row.locationId));
+  if (!totals.complete || !slices.complete) {
     return {
-      complete: true,
-      // Totals are never filtered by location: a settled hour is summed as written. They do not
-      // date the response either, being older than every slice by construction.
-      points: [
-        ...totals.rows,
-        ...sumFleetActualsRollupPartials(rows.map((row) => row.partial)),
-      ].sort((a, b) => compareUtcIsoTimestamps(a.validTime, b.validTime)),
-      readingTimesByGroup: [...expected.keys()].map((location) =>
-        rows.filter((row) => row.locationId === location).map((row) => row.partial.validTime),
-      ),
+      complete: false,
+      response: readDeadlineReached(deps.log, deadlineEvent, {
+        totalsRead: totals.rows.length,
+        slicesRead: slices.rows.length,
+      }),
     };
   }
 
-  deps.log({
-    event: fleetActualsRollupFallbackEvent,
-    reason,
-    expectedLocations: expected.size,
-    presentLocations: new Set(slices.rows.map((row) => row.locationId)).size,
-    staleLocations: stale.size,
-    uncoveredLocations: uncovered.size,
-    hours: new Set([
-      ...totals.rows.map((point) => point.validTime),
-      ...slices.rows.map((row) => row.partial.validTime),
-    ]).size,
-  });
+  const expected = expectedSites(sites);
+  const stale = staleLocations(slices.rows, expected, hoursBefore(to, TRAILING_ACTUALS_HOURS));
+  // A window the totals cover to its end has nothing to be short of.
+  const reason = start === undefined ? undefined : shortReason(slices.rows, expected, stale);
 
-  const read = await readFleetSeries(deps, deadline, sites, from, to, deadlineEvent);
-  if (!read.complete) {
-    return read;
+  if (reason !== undefined) {
+    deps.log({
+      event: fleetActualsRollupShortEvent,
+      reason,
+      expectedLocations: expected.size,
+      presentLocations: new Set(slices.rows.map((row) => row.locationId)).size,
+      staleLocations: stale.size,
+      hours: new Set([
+        ...totals.rows.map((point) => point.validTime),
+        ...slices.rows.map((row) => row.partial.validTime),
+      ]).size,
+    });
   }
-  const perSite = read.perSite.map((points) => actualsIn(points));
+
+  const rows = slices.rows.filter(
+    (row) => expected.has(row.locationId) && !stale.has(row.locationId),
+  );
   return {
     complete: true,
-    points: fleetActualsAggregate(perSite.flat(), sites),
-    readingTimesByGroup: perSite.map((readings) => readings.map((reading) => reading.validTime)),
+    // Totals are never filtered by location: a settled hour is summed as written. They do not
+    // date the response either, being older than every slice by construction.
+    points: [...totals.rows, ...sumFleetActualsRollupPartials(rows.map((row) => row.partial))].sort(
+      (a, b) => compareUtcIsoTimestamps(a.validTime, b.validTime),
+    ),
+    readingTimesByGroup: [...expected.keys()].flatMap((location) => {
+      const times = rows
+        .filter((row) => row.locationId === location)
+        .map((row) => row.partial.validTime);
+      return times.length === 0 ? [] : [times];
+    }),
   };
 };

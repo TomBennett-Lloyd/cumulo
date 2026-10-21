@@ -9,18 +9,11 @@ import {
   type FleetSite,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type {
-  FleetRollupRangeResult,
-  FleetRollupRow,
-  QueryPaginationBound,
-  SeriesAdapter,
-} from '@cumulo/storage';
+import type { FleetRollupRow, QueryPaginationBound, SeriesAdapter } from '@cumulo/storage';
 
 import type { RequestDeadline } from '../http/request-deadline';
-import type { ApiResponse } from '../http/response';
+import { errorResponse, type ApiResponse } from '../http/response';
 import { hasBudgetForStorageCommands } from '../request-budget';
-
-import { readDeadlineReached } from './fleet-series-read';
 
 /**
  * `GET /v1/fleet/forecast`'s read: one Query of the pre-summed `#FLEET` partition (ADR 0009, #494).
@@ -53,11 +46,6 @@ export const fleetRollupShortEvent = 'api.fleet-forecast.rollup-short';
  */
 export type RollupShortReason = 'absent' | 'incomplete' | 'stale';
 
-/**
- * Why the roll-up could not answer. Retired with the actuals arm (#507 C3).
- */
-export type FallbackReason = RollupShortReason;
-
 export interface FleetRollupReadDeps {
   /** Reads only (`typing.md` rule 6, ADR 0002 least privilege). */
   readonly series: Pick<SeriesAdapter, 'queryFleetRollup'>;
@@ -80,30 +68,11 @@ export type FleetForecastAggregateRead =
   | { readonly complete: false; readonly response: ApiResponse };
 
 /**
- * Which locations the fleet expects a partial from — one per distinct weather bucket its sites sit
- * in — each with the membership digest its slices must carry.
+ * The fleet's sites grouped by the location they are expected to have written a partial for, in the
+ * order each location first appears.
  *
  * Keyed by bucket because two sites in one bucket are one expected partial: `locationId` is what
- * the producer's messages are keyed by (ADR 0004). The digest is over the same sites the producer
- * lists for that bucket, so a slice summed before a delete, an add or a physics edit there misses.
- * Retired with the actuals arm (#507 C3).
- */
-export const expectedLocations = (
-  sites: readonly FleetSite[],
-): ReadonlyMap<string, FleetRollupMembers> => {
-  const sitesByLocation = new Map<string, FleetSite[]>();
-  for (const site of sites) {
-    const location = locationId(site);
-    sitesByLocation.set(location, [...(sitesByLocation.get(location) ?? []), site]);
-  }
-  return new Map(
-    [...sitesByLocation].map(([location, members]) => [location, fleetRollupMembers(members)]),
-  );
-};
-
-/**
- * The fleet's sites grouped by the location they are expected to have written a partial for, in the
- * order each location first appears. Keyed by bucket for the reason {@link expectedLocations} gives.
+ * the producer's messages are keyed by (ADR 0004).
  */
 export const expectedSites = (
   sites: readonly FleetSite[],
@@ -164,29 +133,6 @@ const staleLocations = (
 };
 
 /**
- * Whether a roll-up read can answer for this fleet, and if not, why.
- *
- * `expected` is never empty: {@link readFleetForecastAggregate} answers an empty fleet before
- * reaching here, and a site always has a `locationId`. Retired with the actuals arm (#507 C3).
- */
-export const fallbackReason = (
-  read: FleetRollupRangeResult,
-  expected: ReadonlyMap<string, FleetRollupMembers>,
-  stale: ReadonlySet<string>,
-): FallbackReason | undefined => {
-  const present = new Set(read.rows.map((row) => row.locationId));
-  if (present.size === 0) {
-    return 'absent';
-  }
-  // `complete: false` is a truncated page walk, which is a partition read short rather than a
-  // partition written short — different causes, same consequence for the answer, so the same arm.
-  if (!read.complete || ![...expected.keys()].every((location) => present.has(location))) {
-    return 'incomplete';
-  }
-  return stale.size === 0 ? undefined : 'stale';
-};
-
-/**
  * Why a complete read is short of the fleet, or `undefined` when it is not. No `complete` flag:
  * a truncated read is refused before this runs.
  */
@@ -203,6 +149,22 @@ export const shortReason = (
     return 'incomplete';
   }
   return stale.size === 0 ? undefined : 'stale';
+};
+
+/**
+ * The one 500 the fleet reads answer, with the log line that says where it stopped.
+ *
+ * Two callers: the roll-up Queries' truncation, and the actuals read's slices gate. Deliberately
+ * one message each: a caller can do nothing different with them, while an operator reads the
+ * difference off the fields in `detail`.
+ */
+export const readDeadlineReached = (
+  log: FleetRollupReadDeps['log'],
+  deadlineEvent: string,
+  detail: Record<string, unknown>,
+): ApiResponse => {
+  log({ event: deadlineEvent, ...detail });
+  return errorResponse('internal', 'the request could not be completed in time');
 };
 
 /**

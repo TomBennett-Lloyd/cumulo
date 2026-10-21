@@ -5,19 +5,13 @@ import {
   utcIsoTimestampSchema,
   type FleetSite,
 } from '@cumulo/shared';
-import type { FleetRollupRow, QueryPaginationBound, SeriesPoint } from '@cumulo/storage';
+import type { FleetRollupRow } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
 import {
-  countdownDeadline,
-  fleetOfSize,
   fleetSite,
-  forecastPoint,
   fullBudgetDeadline,
-  generationPoint,
-  generationReading,
   jsonBodyOf,
-  RANELAGH_ID,
   RATHMINES_ID,
   routeRequest,
   VALID_TIME,
@@ -25,9 +19,7 @@ import {
 import type { RequestDeadline } from '../http/request-deadline';
 
 import { cycleOfReading } from './cycle-cache';
-import { fleetActualsRollupFallbackEvent } from './fleet-actuals-rollup-read';
 import { BRISTOL, BRISTOL_SITE, DUBLIN, partial, row } from './fleet-rollup-fixtures';
-import { FLEET_READ_CONCURRENCY } from './fleet-series-read';
 import {
   fleetActualsReadDeadlineEvent,
   getFleetActuals,
@@ -36,17 +28,14 @@ import {
 
 /**
  * The roll-up read's own cases live in `fleet-actuals-rollup-read.test.ts`; here the stub's
- * `#FLEET` partition is empty unless a test fills it, so most cases below exercise the fan-out
- * the route falls back to — one Query per site, and an answer that is the whole fleet or an error.
- * The stub records what was read and in what order, which is the question every deadline test asks.
+ * `#FLEET` partition is empty unless a test fills it. The stub records the totals Query's window,
+ * which is the question the look-back cases ask.
  */
 interface Stub {
   readonly deps: GetFleetActualsDeps;
-  /** `siteId from to` per Query, in order: the fan-out as the series table saw it. */
-  readonly reads: string[];
+  /** `from to` per totals Query, in order. */
+  readonly totalsReads: string[];
   readonly logged: Record<string, unknown>[];
-  /** The pagination bound each read was given, so a test can ask it what the adapter would. */
-  readonly bounds: (QueryPaginationBound | undefined)[];
 }
 
 /** The clock every test below shares, so the windows asserted on are readable here. */
@@ -57,34 +46,32 @@ const WEEK_BEFORE_NOW = '2026-07-24T12:00:00Z';
 const RANELAGH = fleetSite();
 const RATHMINES = fleetSite({ id: RATHMINES_ID, name: 'Rathmines terrace' });
 
+/** A GEN slice at `validTime`: no band, as the producer writes it. */
+const generationSlice = (validTime: string) => partial({ validTime, hasUncertainty: false });
+
 /**
- * `complete` is the adapter's own field rather than a mode flag: it is how a
- * bounded read reports that it stopped with the window unread, and what this
- * handler does with `false` is one of the behaviours under test.
+ * `complete` is the adapter's own field rather than a mode flag: it is how a bounded read reports
+ * that it stopped with the window unread, and what this handler does with `false` is one of the
+ * behaviours under test.
  */
 const stub = (
   sites: readonly FleetSite[],
-  pointsBySite: Readonly<Record<string, readonly SeriesPoint[]>> = {},
-  complete = true,
   rollupRows: readonly FleetRollupRow[] = [],
+  complete = true,
 ): Stub => {
-  const reads: string[] = [];
+  const totalsReads: string[] = [];
   const logged: Record<string, unknown>[] = [];
-  const bounds: (QueryPaginationBound | undefined)[] = [];
 
   return {
-    reads,
+    totalsReads,
     logged,
-    bounds,
     deps: {
       sites: { listFleetSites: () => Promise.resolve([...sites]) },
       series: {
         queryFleetRollup: () => Promise.resolve({ rows: [...rollupRows], complete: true }),
-        queryFleetActualsTotals: () => Promise.resolve({ rows: [], complete: true }),
-        querySeriesRange: (siteId, from, to, bound) => {
-          reads.push(`${siteId} ${from} ${to}`);
-          bounds.push(bound);
-          return Promise.resolve({ points: [...(pointsBySite[siteId] ?? [])], complete });
+        queryFleetActualsTotals: (from, to) => {
+          totalsReads.push(`${from} ${to}`);
+          return Promise.resolve({ rows: [], complete });
         },
       },
       now: () => utcIsoTimestampSchema.parse(NOW),
@@ -99,11 +86,12 @@ const fleetActualsRequest = (
 ) => routeRequest({ path: '/v1/fleet/actuals', query, deadline });
 
 describe('GET /v1/fleet/actuals', () => {
-  it('serves the fleet’s GEN slices summed, reading no site, when the roll-up can answer', async () => {
-    const slice = partial({ validTime: '2026-07-31T11:00:00Z', hasUncertainty: false });
-    const { deps, reads, logged } = stub([RANELAGH, RATHMINES], {}, true, [
-      row(DUBLIN, [RANELAGH, RATHMINES], slice),
-    ]);
+  it('serves the fleet’s GEN slices summed when every location has written', async () => {
+    const slice = generationSlice('2026-07-31T11:00:00Z');
+    const { deps, logged } = stub(
+      [RANELAGH, RATHMINES],
+      [row(DUBLIN, [RANELAGH, RATHMINES], slice)],
+    );
 
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
@@ -116,37 +104,7 @@ describe('GET /v1/fleet/actuals', () => {
         contributingCapacityKw: slice.contributingCapacityKw,
       },
     ]);
-    expect(reads).toEqual([]);
     expect(logged).toEqual([]);
-  });
-
-  it('falls back to summing every site’s readings, leaving the forecasts behind', async () => {
-    // The same partition holds both kinds interleaved (ADR 0002), and only one
-    // of them is this route's answer. The power values are distinct so that a
-    // forecast leaking through would be visible.
-    const { deps, logged } = stub([RANELAGH, RATHMINES], {
-      [RANELAGH_ID]: [forecastPoint({ acPowerKw: 2.8 }), generationPoint({ acPowerKw: 2.4 })],
-      [RATHMINES_ID]: [generationPoint({ siteId: RATHMINES_ID, acPowerKw: 1.1 })],
-    });
-
-    const response = await getFleetActuals(deps, fleetActualsRequest());
-
-    expect(response.statusCode).toBe(200);
-    const [point] = fleetActualsResponseSchema.parse(jsonBodyOf(response)).points;
-    expect(point?.acPowerKw).toBeCloseTo(3.5, 9);
-    expect(point?.contributingSiteCount).toBe(2);
-    expect(logged).toMatchObject([{ event: fleetActualsRollupFallbackEvent, reason: 'absent' }]);
-  });
-
-  it('reads every site in the fleet exactly once', async () => {
-    const { deps, reads } = stub([RANELAGH, RATHMINES]);
-
-    await getFleetActuals(deps, fleetActualsRequest());
-
-    expect(reads).toEqual([
-      `${RANELAGH_ID} ${DAY_BEFORE_NOW} ${NOW}`,
-      `${RATHMINES_ID} ${DAY_BEFORE_NOW} ${NOW}`,
-    ]);
   });
 
   it.each([
@@ -156,19 +114,19 @@ describe('GET /v1/fleet/actuals', () => {
   ])('looks back from the clock to $from given $name', async ({ query, from }) => {
     // The window closes at `now()` and opens `hours` before it — the mirror of
     // the forecast route, which opens at the clock and reads forward.
-    const { deps, reads } = stub([RANELAGH]);
+    const { deps, totalsReads } = stub([RANELAGH]);
 
     const response = await getFleetActuals(deps, fleetActualsRequest(query));
 
     expect(response.statusCode).toBe(200);
-    expect(reads).toEqual([`${RANELAGH_ID} ${from} ${NOW}`]);
+    expect(totalsReads).toEqual([`${from} ${NOW}`]);
   });
 
   it('rejects hours outside 24/48/168 with validation_failed', async () => {
-    // A closed set rather than a bounded integer, because each admitted value is
-    // a fan-out whose cost is known in advance: `hours=8760` would be a year of
-    // partition per site, and it is refused before a single site is listed.
-    const { deps, reads } = stub([RANELAGH, RATHMINES]);
+    // A closed set rather than a bounded integer, because each admitted value is a window whose
+    // cost is known in advance: `hours=8760` would be a year of partition, and it is refused before
+    // a single site is listed.
+    const { deps, totalsReads } = stub([RANELAGH, RATHMINES]);
 
     const response = await getFleetActuals(deps, fleetActualsRequest({ hours: '8760' }));
 
@@ -176,14 +134,14 @@ describe('GET /v1/fleet/actuals', () => {
     const body = apiErrorSchema.parse(jsonBodyOf(response));
     expect(body.code).toBe('validation_failed');
     expect(body.details?.[0]?.path).toBe('hours');
-    expect(reads).toEqual([]);
+    expect(totalsReads).toEqual([]);
   });
 
   it('answers 200 with an empty array for a fleet with no sites', async () => {
     // An empty fleet is an answer about the fleet's size, not a missing
     // resource — and it must still carry the attribution, because a client that
     // renders "no data yet" beside a chart is still rendering the chart.
-    const { deps, reads } = stub([]);
+    const { deps, totalsReads } = stub([]);
 
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
@@ -191,52 +149,38 @@ describe('GET /v1/fleet/actuals', () => {
     const body = fleetActualsResponseSchema.parse(jsonBodyOf(response));
     expect(body.points).toEqual([]);
     expect(body.attribution).toEqual(openMeteoAttribution);
-    expect(reads).toEqual([]);
+    expect(totalsReads).toEqual([]);
   });
 
-  it('answers 200 with an empty array for a fleet whose sites hold no readings', async () => {
-    const { deps, reads } = stub([RANELAGH, RATHMINES]);
+  it('answers 200 with an empty array, uncacheable, for a fleet that holds no readings yet', async () => {
+    const { deps } = stub([RANELAGH, RATHMINES]);
 
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
     expect(response.statusCode).toBe(200);
     expect(fleetActualsResponseSchema.parse(jsonBodyOf(response)).points).toEqual([]);
-    expect(reads).toHaveLength(2);
     expect(response.headers['cache-control']).toBe('no-store');
   });
 
-  it('dates the body by its most-behind site, so one late location is not hidden', async () => {
-    const { deps } = stub([RANELAGH, RATHMINES], {
-      [RANELAGH_ID]: [generationPoint()],
-      [RATHMINES_ID]: [
-        generationPoint({ siteId: RATHMINES_ID, validTime: '2026-07-31T12:00:00Z' }),
+  it('dates a roll-up answer by its most-behind location', async () => {
+    const { deps } = stub(
+      [RANELAGH, RATHMINES, BRISTOL_SITE],
+      [
+        // Bristol's newest sits between Dublin's two, so neither the window's oldest hour nor its
+        // newest is the answer — only each location's newest, then the oldest of those.
+        row(DUBLIN, [RANELAGH, RATHMINES], generationSlice('2026-07-31T09:00:00Z')),
+        row(DUBLIN, [RANELAGH, RATHMINES], generationSlice('2026-07-31T11:00:00Z')),
+        row(BRISTOL, [BRISTOL_SITE], generationSlice('2026-07-31T10:00:00Z')),
       ],
-    });
+    );
 
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
-    expect(response.dataCycleStart).toBe(cycleOfReading('2026-07-31T12:00:00Z'));
-    expect(response.dataCycleStart).toBeLessThan(cycleOfReading(VALID_TIME));
-  });
-
-  it('dates a roll-up answer by its most-behind location, as the fallback dates by site', async () => {
-    const at = (validTime: string) => partial({ validTime, hasUncertainty: false });
-    const { deps, reads } = stub([RANELAGH, RATHMINES, BRISTOL_SITE], {}, true, [
-      // Bristol's newest sits between Dublin's two, so neither the window's oldest hour nor its
-      // newest is the answer — only each location's newest, then the oldest of those.
-      row(DUBLIN, [RANELAGH, RATHMINES], at('2026-07-31T09:00:00Z')),
-      row(DUBLIN, [RANELAGH, RATHMINES], at('2026-07-31T11:00:00Z')),
-      row(BRISTOL, [BRISTOL_SITE], at('2026-07-31T10:00:00Z')),
-    ]);
-
-    const response = await getFleetActuals(deps, fleetActualsRequest());
-
-    expect(reads).toEqual([]);
     expect(response.dataCycleStart).toBe(cycleOfReading('2026-07-31T10:00:00Z'));
   });
 
   it('credits Open-Meteo in every 200 body', async () => {
-    const { deps } = stub([RANELAGH], { [RANELAGH_ID]: [generationPoint()] });
+    const { deps } = stub([RANELAGH], [row(DUBLIN, [RANELAGH], generationSlice(VALID_TIME))]);
 
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
@@ -247,88 +191,22 @@ describe('GET /v1/fleet/actuals', () => {
     expect(body.attribution.text).toBe('Weather data by Open-Meteo.com');
   });
 
-  it('answers 500 rather than a fleet that quietly stops part-way through', async () => {
-    // One site more than a batch holds, and a request with no time left after the slices gate: the
-    // fan-out stops between batches, where the handler can still answer, and
-    // refuses to serve a fleet total that is short a site — summed hour by hour,
-    // a missing site does not read as missing, it reads as a fleet that
-    // generated less. The event name is this route's own, which is the half
-    // `fleet-series-read.test.ts` cannot prove from inside the shared module.
-    const fleet = fleetOfSize(FLEET_READ_CONCURRENCY + 1);
-    const { deps, reads, logged } = stub(fleet);
-
-    const response = await getFleetActuals(deps, fleetActualsRequest({}, countdownDeadline(1)));
-
-    expect(response.statusCode).toBe(500);
-    expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    expect(reads).toHaveLength(FLEET_READ_CONCURRENCY);
-    expect(logged.slice(1)).toEqual([
-      {
-        event: fleetActualsReadDeadlineEvent,
-        sitesRead: FLEET_READ_CONCURRENCY,
-        fleetSize: fleet.length,
-      },
-    ]);
-  });
-
-  it('answers 500 when any one site’s window stopped short, without reading on', async () => {
-    const { deps, reads, logged } = stub(
-      [RANELAGH, RATHMINES],
-      { [RANELAGH_ID]: [generationPoint()] },
-      false,
-    );
+  it('answers 500 with this route’s own deadline event when a Query stopped short', async () => {
+    const { deps, logged } = stub([RANELAGH], [], false);
 
     const response = await getFleetActuals(deps, fleetActualsRequest());
 
     expect(response.statusCode).toBe(500);
     expect(apiErrorSchema.parse(jsonBodyOf(response)).code).toBe('internal');
-    // Both sites share one batch, so both were read — and the refusal names the
-    // first in site order. No further batch is started: the answer cannot
-    // become whole by reading more.
-    expect(reads).toHaveLength(2);
-    expect(logged.slice(1)).toEqual([
-      { event: fleetActualsReadDeadlineEvent, siteId: RANELAGH_ID },
-    ]);
+    expect(logged.at(-1)).toMatchObject({ event: fleetActualsReadDeadlineEvent });
   });
-
-  it('serves the 200 and logs only the fallback when the whole fleet was read to its end', async () => {
-    const { deps, logged } = stub([RANELAGH, RATHMINES], {
-      [RANELAGH_ID]: [generationPoint()],
-      [RATHMINES_ID]: [generationPoint({ siteId: RATHMINES_ID })],
-    });
-
-    const response = await getFleetActuals(deps, fleetActualsRequest());
-
-    expect(response.statusCode).toBe(200);
-    expect(fleetActualsResponseSchema.parse(jsonBodyOf(response)).points).toHaveLength(1);
-    expect(logged.map((entry) => entry.event)).toEqual([fleetActualsRollupFallbackEvent]);
-  });
-
-  it.each([
-    { name: 'a request with its whole budget left', deadline: fullBudgetDeadline, permitted: true },
-    { name: 'a request whose time is gone', deadline: countdownDeadline(1), permitted: false },
-  ])(
-    'hands each site’s read a pagination bound that answers for $name',
-    async ({ deadline, permitted }) => {
-      // The bound is asked *between* pages of one site's Query, so what matters
-      // is that its answer comes from this request's deadline and not a constant.
-      const { deps, bounds } = stub([RANELAGH]);
-
-      await getFleetActuals(deps, fleetActualsRequest({}, deadline));
-
-      expect(bounds).toHaveLength(1);
-      expect(bounds[0]?.hasBudgetForNextPage()).toBe(permitted);
-    },
-  );
 
   it('refuses to serve a stored reading that violates the response contract', async () => {
-    // The negative control for `jsonResponse`'s parse. `acPowerKw: -1`
-    // type-checks and sums to a point `fleetActualsResponseSchema` refuses, so the
-    // handler throws and the boundary answers 500 rather than shipping a 200 the
-    // OpenAPI document does not describe.
-    const { deps } = stub([RANELAGH], {
-      [RANELAGH_ID]: [{ type: 'generation', reading: { ...generationReading(), acPowerKw: -1 } }],
-    });
+    // The negative control for `jsonResponse`'s parse. `acPowerKw: -1` type-checks and sums to a
+    // point `fleetActualsResponseSchema` refuses, so the handler throws and the boundary answers
+    // 500 rather than shipping a 200 the OpenAPI document does not describe.
+    const negative = { ...generationSlice(VALID_TIME), acPowerKw: -1 };
+    const { deps } = stub([RANELAGH], [row(DUBLIN, [RANELAGH], negative)]);
 
     await expect(getFleetActuals(deps, fleetActualsRequest())).rejects.toThrow();
   });
