@@ -149,3 +149,8 @@ Entry format:
 
 - Phase: planning
 - Observed: #692's plan measured the labels its fixture would yield against #693's real lane report, but did not run the repo's ledger sweeps over the captured report it planned to commit into `.claude/scripts/merge-pr.test.sh`. That report's `Lane model:` line names `sonnet`, which the `.claude/ledgers/model-tiers.ledger` sweep reads as a model-tier restatement, so the sweep tripped on it and the lane added an `excluded:` line the plan never named (a footprint change posted on #692, and the 2026-10-21 `docs/tech-debt.md` entry on the per-file exclusion's blind spot). The gate caught it at its designed point and it cost one footprint change. A captured snapshot is a carrier shape the sweep was not written for.
+
+## 2026-11-04 — PR #718 (issue #596)
+
+- Phase: implementation
+- Observed: #596's lane lost three whole `pnpm verify` runs to a 5000 ms timeout in `apps/ingestion/src/main.test.ts`, a file its diff never touched, at a machine load average near 60; the test passes in isolation. It is the second unrelated test in two consecutive lanes to fail only under load: #507's lane, the PR merged just before, saw `.claude/scripts/incident-watch.test.sh` fail its quiet case on a broken pipe, filed as #713. Both lanes ran while other lanes shared the machine, and a full verify there took 10+ minutes, so each load flake costs a full rerun rather than one test. No rule yet: the two failures have different mechanisms (a vitest default timeout, a stub's SIGPIPE race), and #713 is the fix for one of them. Signal if it repeats: a third lane whose verify fails a test outside its diff under load, which would make the parallel-lane count, not the tests, the thing to change.
