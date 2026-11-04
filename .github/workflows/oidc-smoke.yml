@@ -95,12 +95,9 @@ jobs:
       # "does this role still hold permission X", and a red run would no longer
       # tell you which.
       #
-      # It asserts the identity rather than printing it: role name, session
-      # name, and the account the role secret names. A green run therefore
-      # carries the account check B7 used to ask the operator to do by eye, and
-      # the log carries only the ARN with its account field redacted
-      # (convention 7). Under the mask a verbatim print would read `***` and
-      # prove nothing a reader could check.
+      # It asserts the identity rather than printing it: role name and session
+      # name. The log carries only the ARN with its account field redacted
+      # (convention 7).
       - name: Assert the assumed identity
         shell: bash
         env:

@@ -89,7 +89,7 @@ The same holds for Actions run logs, and these mechanisms hold it:
 
 - The role ARN is the repo **secret** `AWS_OIDC_ROLE_ARN`, so the runner masks it everywhere, including the credentials step's `with:` echo. It is held as a secret for masking alone: it is an identifier, not a credential.
 - Every `configure-aws-credentials` step sets `mask-aws-account-id: true`, so the digits are masked for the rest of the job.
-- A step that runs before that one carries no value that embeds the account id (`deploy-web.yml`'s preflight passes presence flags).
+- A step that runs before that one carries no unmasked value that embeds the account id (`deploy-web.yml`'s preflight passes presence flags).
 - The OIDC smoke test asserts its identity rather than printing it.
 - Rule 4 of `.claude/scripts/check-oidc-workflows.sh` holds the secret and the mask mechanically, and the restatements of this claim are listed in `.claude/ledgers/oidc-role-arn-secret.ledger`.
 
@@ -310,7 +310,7 @@ gh variable list --repo TomBennett-Lloyd/cumulo
 gh secret list --repo TomBennett-Lloyd/cumulo   # expect exactly one AWS-named entry, AWS_OIDC_ROLE_ARN, and no credential
 ```
 
-A secret's value cannot be read back, so B7 is the check on what was stored.
+A secret's value cannot be read back.
 
 **B7. Prove the role can be assumed.** This is the only check that exercises the OIDC path end to end:
 
@@ -321,7 +321,7 @@ gh run list --workflow oidc-smoke.yml --repo TomBennett-Lloyd/cumulo --limit 1
 
 `workflow_dispatch` is the whole of the manual path, and since #11 it is also the only way to run this check other than merging an `infra/**` change to `main`. So run it here rather than assuming a PR check covered it.
 
-The evidence is the step "Assert the assumed identity", which passes only if the assumed ARN is `cumulo-github-actions` in the account the role secret names, with session `cumulo-oidc-smoke-<run-id>`. The log shows that ARN with its account field as `<account-id>`.
+The evidence is the step "Assert the assumed identity", which passes only if the assumed ARN is `cumulo-github-actions` with session `cumulo-oidc-smoke-<run-id>`. The log shows that ARN with its account field as `<account-id>`.
 
 ---
 
@@ -1696,7 +1696,7 @@ gh variable set VITE_API_BASE_URL --repo TomBennett-Lloyd/cumulo \
   --body "$(terraform -chdir=../api output -raw api_endpoint)"
 ```
 
-`WEB_BUCKET_NAME` is the convention-7 one: quote its shape (`cumulo-web-dev-<account-id>`) if it has to be described anywhere, and let the command above move the digits. The other two carry no account id. The deploy's credentials step masks the account id for the rest of the job, so the name logs as `cumulo-web-dev-***`; its preflight checks presence without echoing the value; and every AWS CLI call still passes `--only-show-errors`.
+`WEB_BUCKET_NAME` is the convention-7 one: quote its shape (`cumulo-web-dev-<account-id>`) if it has to be described anywhere, and let the command above move the digits. The other two carry no account id. The deploy's credentials step masks the account id for the rest of the job, so the name logs as `cumulo-web-dev-***`; its preflight checks presence without echoing the value; and every `aws s3` call still passes `--only-show-errors`.
 
 `WEB_DISTRIBUTION_ID` doubles as the provisioning marker: `deploy-web.yml` has a job-level `if: vars.WEB_DISTRIBUTION_ID != ''`, so before this step pushes to `main` skip the deploy instead of failing red. After it, the workflow's own guards are loud — a repo with the distribution id set but `VITE_API_BASE_URL` or `WEB_BUCKET_NAME` empty fails the run rather than shipping a demo-mode build.
 

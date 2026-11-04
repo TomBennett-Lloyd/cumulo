@@ -178,3 +178,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `apps/api/src/request-budget.ts` (the restatement ledger's closing paragraph)
 - What: `docs/standards/architecture.md` rule 9 asks a ledger that is not yet declared in `.claude/ledgers/` to record the commit its sweep ran at and to use `git grep -n … -- ':/'`; this one records dates (2026-08-11, re-run 2026-10-21) and a `command grep -rnE` recipe. A candidate for migration to a `.ledger` file.
 - Source: #507 review cycle 1
+
+## 2026-11-04 — check-oidc-workflows rule 4 has pattern-level gaps beyond its per-file count
+
+- Where: `.claude/scripts/check-oidc-workflows.sh` (rule 4)
+- What: a credentials step with no `role-to-assume:` line is never examined, and a composed expression such as `secrets.X || vars.AWS_OIDC_ROLE_ARN` passes because the pattern anchors only on the leading `secrets.`. Expansion of an account-embedding variable before the credentials step stays ungated (#358 entry 2 remainder).
+- Source: #596 review cycle 1
