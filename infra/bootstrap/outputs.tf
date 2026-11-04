@@ -1,5 +1,5 @@
 # These outputs are the only sanctioned source for the values the runbook feeds
-# into backend.hcl and the GitHub repo variables — read them with
+# into backend.hcl, the GitHub repo variables and the role-ARN secret — read them with
 # `terraform output`, never hand-construct them from an account id.
 #
 # Three of the five embed the AWS account id. It is an identifier rather than a
@@ -19,7 +19,7 @@ output "github_oidc_provider_arn" {
 }
 
 output "github_actions_role_arn" {
-  description = "ARN of the role GitHub Actions assumes. Published to the repo variable AWS_OIDC_ROLE_ARN."
+  description = "ARN of the role GitHub Actions assumes. Published to the repo secret AWS_OIDC_ROLE_ARN."
   value       = aws_iam_role.github_actions.arn
 }
 

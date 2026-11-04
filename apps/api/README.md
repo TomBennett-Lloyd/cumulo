@@ -225,7 +225,7 @@ Two mechanisms, and which one you need depends entirely on what changed.
 | Anything else about the function, the gateway, the throttle, the IAM | `terraform apply` in `infra/api/`, by an operator.           |
 
 `deploy-api.yml` rebuilds the artifact on the same toolchain CI verified it with, assumes
-`cumulo-github-actions` by OIDC (no AWS secret exists in this repository), calls
+`cumulo-github-actions` by OIDC (no AWS credential exists in this repository), calls
 `UpdateFunctionCode` on `cumulo-api-dev`, and waits for the update to leave `InProgress` so a bundle
 that fails validation fails the job rather than the next request. Its grant is two Lambda actions on
 one function ARN (`infra/api/deploy.tf`) and **no `apigatewayv2` permission at all** — the stage

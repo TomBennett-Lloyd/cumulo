@@ -79,11 +79,19 @@ The bootstrap stack creates the bucket that stores the bootstrap stack's state, 
 
 ### 7. Account-specific values stay out of the public repo
 
-This repository is public. The AWS account id is not a credential, but it is an identifier that narrows an attacker's search, and there is no reason for it to be in a git history that cannot be rewritten. So `backend.tf` carries a **partial** backend configuration — the repo-wide conventions (`key`, `encrypt`, `use_lockfile`) are committed, and `bucket` and `region` come from a gitignored `backend.hcl` at init time. Region likewise comes from a gitignored `bootstrap.auto.tfvars`. Both have committed `.example` twins, so the shape is documented even though the values are not, and `.gitignore` blocks the real files along with Terraform override files.
+This repository is public. The AWS account id is not a credential, but it is an identifier that narrows an attacker's search, and there is no reason for it to be in a git history that cannot be rewritten, or in a run log, which is just as public as a file. So `backend.tf` carries a **partial** backend configuration — the repo-wide conventions (`key`, `encrypt`, `use_lockfile`) are committed, and `bucket` and `region` come from a gitignored `backend.hcl` at init time. Region likewise comes from a gitignored `bootstrap.auto.tfvars`. Both have committed `.example` twins, so the shape is documented even though the values are not, and `.gitignore` blocks the real files along with Terraform override files.
 
 Personal config tied to the account goes one step further and does not live on the operator's disk either. The budget alarm's notification address is an email address — personal data with no business in a public git history, and no business being retyped into a local file on every machine that ever applies this stack. It lives in an **operator-created SSM parameter**, `/cumulo/notification-email` (SecureString, default KMS key), and Terraform only ever _reads_ it through a data source. The account is the source of truth: there is exactly one copy, in the region the stack deploys to, and a second machine spinning the stack up needs no handoff. Terraform cannot create it without reintroducing the problem — the value would have to come from a variable again — so the one-time `put-parameter` is an operator step in [A1](#phase-a--configure-and-plan). The address does land in Terraform state, which is why state lives in a private bucket; it never lands in git.
 
 That decision has a consequence worth stating plainly: `terraform output` prints values that embed the account id. Do not paste raw output into committed files, PR bodies, or issue comments — quote the shape (`arn:aws:iam::<account-id>:role/cumulo-github-actions`), not the digits.
+
+The same holds for Actions run logs, and these mechanisms hold it:
+
+- The role ARN is the repo **secret** `AWS_OIDC_ROLE_ARN`, so the runner masks it everywhere, including the credentials step's `with:` echo. It is held as a secret for masking alone: it is an identifier, not a credential.
+- Every `configure-aws-credentials` step sets `mask-aws-account-id: true`, so the digits are masked for the rest of the job.
+- A step that runs before that one carries no value that embeds the account id (`deploy-web.yml`'s preflight passes presence flags).
+- The OIDC smoke test asserts its identity rather than printing it.
+- Rule 4 of `.claude/scripts/check-oidc-workflows.sh` holds the secret and the mask mechanically, and the restatements of this claim are listed in `.claude/ledgers/oidc-role-arn-secret.ledger`.
 
 ### 8. The GitHub Actions role starts with zero permissions, and every grant it later holds lives in the stack that needed it
 
@@ -123,7 +131,7 @@ brew install hashicorp/tap/terraform
 terraform version   # expect v1.15.8 — must satisfy >= 1.12.0, < 2.0.0
 ```
 
-**GitHub CLI**, authenticated (`gh auth status`), for publishing repo variables.
+**GitHub CLI**, authenticated (`gh auth status`), for publishing repo variables and the role-ARN secret.
 
 **AWS CLI 2.32 or newer**, because the login flow below needs it:
 
@@ -153,7 +161,7 @@ aws sts get-caller-identity
 >
 > These are the same short-term credentials, exported into environment variables; they expire with the session. Never redirect that command into a file, a `.env`, or an Actions secret.
 
-**What never happens, in either bootstrap runbook:** creating an IAM access key, writing credentials to a file in this repo, or adding an AWS secret to GitHub. The observer's one key is created by [its own runbook](#runbook-the-observer-identity), never by these. `gh secret list` should never show an AWS entry — the OIDC role exists so that it does not have to.
+**What never happens, in either bootstrap runbook:** creating an IAM access key, writing credentials to a file in this repo, or adding an AWS credential to GitHub. The observer's one key is created by [its own runbook](#runbook-the-observer-identity), never by these. `gh secret list` should never show an AWS credential — the OIDC role exists so that it does not have to. Its one AWS-named entry, `AWS_OIDC_ROLE_ARN`, is an identifier held as a secret only so Actions masks it ([convention 7](#7-account-specific-values-stay-out-of-the-public-repo)).
 
 ---
 
@@ -286,10 +294,10 @@ terraform plan -detailed-exitcode
 echo $?   # expect 0
 ```
 
-**B6. Publish the two repo variables.** Both values come from `terraform output`, never hand-assembled from an account id or retyped from memory:
+**B6. Publish the role-ARN secret and the region variable.** Both values come from `terraform output`, never hand-assembled from an account id or retyped from memory:
 
 ```bash
-gh variable set AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo \
+gh secret set AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo \
   --body "$(terraform output -raw github_actions_role_arn)"
 gh variable set AWS_REGION --repo TomBennett-Lloyd/cumulo \
   --body "$(terraform output -raw aws_region)"
@@ -299,8 +307,10 @@ The region is an _input_ to this stack rather than something it derives, so the 
 
 ```bash
 gh variable list --repo TomBennett-Lloyd/cumulo
-gh secret list --repo TomBennett-Lloyd/cumulo   # expect no AWS entry, ever
+gh secret list --repo TomBennett-Lloyd/cumulo   # expect exactly one AWS-named entry, AWS_OIDC_ROLE_ARN, and no credential
 ```
+
+A secret's value cannot be read back, so B7 is the check on what was stored.
 
 **B7. Prove the role can be assumed.** This is the only check that exercises the OIDC path end to end:
 
@@ -311,7 +321,7 @@ gh run list --workflow oidc-smoke.yml --repo TomBennett-Lloyd/cumulo --limit 1
 
 `workflow_dispatch` is the whole of the manual path, and since #11 it is also the only way to run this check other than merging an `infra/**` change to `main`. So run it here rather than assuming a PR check covered it.
 
-The evidence is the `aws sts get-caller-identity` output in the run log: an account, and a caller ARN of the form `arn:aws:sts::<account-id>:assumed-role/cumulo-github-actions/cumulo-oidc-smoke-<run-id>`. Confirm the account matches the one from `terraform output -raw aws_account_id`.
+The evidence is the step "Assert the assumed identity", which passes only if the assumed ARN is `cumulo-github-actions` in the account the role secret names, with session `cumulo-oidc-smoke-<run-id>`. The log shows that ARN with its account field as `<account-id>`.
 
 ---
 
@@ -438,10 +448,10 @@ rm -rf .terraform
 
 Keep `backend.hcl` and `bootstrap.auto.tfvars` — the bucket name is deterministic (convention 3), so both are still correct for the next spin-up.
 
-**T6. Repo variables and the notification parameter — leave them, unless this is the end of the project.** A teardown rehearsal should _not_ delete `AWS_OIDC_ROLE_ARN`: the role name and account are fixed, so a fresh apply reproduces a byte-identical ARN, and the stored value still matching afterwards is itself a check that the runbook is reproducible. The same logic covers `/cumulo/notification-email`: Terraform never owned it, `destroy` therefore never touched it, and leaving it means the next spin-up needs no A1 handoff. Only on a final decommission:
+**T6. The role-ARN secret, the region variable and the notification parameter — leave them, unless this is the end of the project.** A teardown rehearsal should _not_ delete `AWS_OIDC_ROLE_ARN`: the role name and account are fixed, so a fresh apply reproduces a byte-identical ARN, the kept secret stays valid, and the next B7 run proves it. The same logic covers `/cumulo/notification-email`: Terraform never owned it, `destroy` therefore never touched it, and leaving it means the next spin-up needs no A1 handoff. Only on a final decommission:
 
 ```bash
-gh variable delete AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo
+gh secret delete AWS_OIDC_ROLE_ARN --repo TomBennett-Lloyd/cumulo
 gh variable delete AWS_REGION --repo TomBennett-Lloyd/cumulo
 aws ssm delete-parameter --region eu-west-1 --name /cumulo/notification-email
 ```
@@ -1006,7 +1016,7 @@ A `2` here immediately after an apply usually means the artefact was rebuilt in 
 
 `.github/workflows/deploy-ingestion.yml` updates the function's **code** on every push to `main` that touches `apps/ingestion/**`, `packages/shared/**`, `packages/storage/**`, or the lockfile. It does nothing else, and it cannot: `deploy.tf` grants `cumulo-github-actions` exactly `lambda:UpdateFunctionCode` and `lambda:GetFunction` on this one function ARN. There is no `UpdateFunctionConfiguration` in that grant, so timeout, memory, environment variables, execution role, schedule, queue and alarms remain things only a reviewed `.tf` change can move.
 
-Authentication is OIDC and there is no AWS secret in the repository, per the rule at the top of this document. The role is assumed with a session named `deploy-ingestion-<run-id>`, so CloudTrail traces an `UpdateFunctionCode` back to the run — and therefore the commit — that made it.
+Authentication is OIDC and there is no AWS credential in the repository, per the rule at the top of this document. The role is assumed with a session named `deploy-ingestion-<run-id>`, so CloudTrail traces an `UpdateFunctionCode` back to the run — and therefore the commit — that made it.
 
 **The drift this creates is real, expected, and bounded.** Terraform's `source_code_hash` records the artefact of the last _apply_. After CI deploys, the live code no longer matches it, and `terraform plan` reports a pending change to `aws_lambda_function.ingestion`. That is Terraform being right about a fact it was not told, not a fault:
 
@@ -1354,7 +1364,7 @@ The heading differs from the ingestion runbook's only so the two sections have d
 
 There is no `UpdateFunctionConfiguration` in that grant, so timeout, memory and environment stay reviewable `.tf` changes — and, more to the point on this stack, **there is no `apigatewayv2` permission of any kind**, so no workflow can move the throttle, the CORS configuration, or the routes. The cost guard is reachable only through a reviewed diff in this directory.
 
-Authentication is OIDC and there is no AWS secret in the repository. The role is assumed with a session named `deploy-api-<run-id>`, so CloudTrail traces an `UpdateFunctionCode` back to the run — and therefore the commit — that made it. The `source_code_hash` drift this creates is real, expected and bounded, exactly as described in the [ingestion deploy-path section](#the-deploy-path-what-ci-ships-and-what-terraform-owns) above.
+Authentication is OIDC and there is no AWS credential in the repository. The role is assumed with a session named `deploy-api-<run-id>`, so CloudTrail traces an `UpdateFunctionCode` back to the run — and therefore the commit — that made it. The `source_code_hash` drift this creates is real, expected and bounded, exactly as described in the [ingestion deploy-path section](#the-deploy-path-what-ci-ships-and-what-terraform-owns) above.
 
 ### Teardown of the api stack
 
@@ -1557,7 +1567,7 @@ A `2` here immediately after an apply usually means the artefact was rebuilt in 
 
 There is no `UpdateFunctionConfiguration` in that grant, which matters more here than on the other stacks: this function's `timeout` is one half of a cross-stack invariant, and a workflow that could move it could break ADR 0004's floor without a diff. There is no `UpdateEventSourceMapping` either, so the batch size and the concurrency cap are equally out of CI's reach. Code is the one field CI owns.
 
-Authentication is OIDC and there is no AWS secret in the repository. The `source_code_hash` drift a deploy creates is real, expected and bounded, exactly as described in the ingestion deploy-path section.
+Authentication is OIDC and there is no AWS credential in the repository. The `source_code_hash` drift a deploy creates is real, expected and bounded, exactly as described in the ingestion deploy-path section.
 
 ### Teardown of the forecast stack
 
@@ -1686,7 +1696,7 @@ gh variable set VITE_API_BASE_URL --repo TomBennett-Lloyd/cumulo \
   --body "$(terraform -chdir=../api output -raw api_endpoint)"
 ```
 
-`WEB_BUCKET_NAME` is the convention-7 one: quote its shape (`cumulo-web-dev-<account-id>`) if it has to be described anywhere, and let the command above move the digits. The other two carry no account id. The workflow masks the bucket name in its log and passes `--only-show-errors` to every AWS CLI call for the same reason.
+`WEB_BUCKET_NAME` is the convention-7 one: quote its shape (`cumulo-web-dev-<account-id>`) if it has to be described anywhere, and let the command above move the digits. The other two carry no account id. The deploy's credentials step masks the account id for the rest of the job, so the name logs as `cumulo-web-dev-***`; its preflight checks presence without echoing the value; and every AWS CLI call still passes `--only-show-errors`.
 
 `WEB_DISTRIBUTION_ID` doubles as the provisioning marker: `deploy-web.yml` has a job-level `if: vars.WEB_DISTRIBUTION_ID != ''`, so before this step pushes to `main` skip the deploy instead of failing red. After it, the workflow's own guards are loud — a repo with the distribution id set but `VITE_API_BASE_URL` or `WEB_BUCKET_NAME` empty fails the run rather than shipping a demo-mode build.
 
@@ -1759,7 +1769,7 @@ A `2` here does **not** have the deploy-path causes the Lambda stacks' do: CI wr
 
 Three properties of the sync are worth knowing before reading a run log. Assets go first and `index.html` last, so the entry document never references an asset that is not there yet. The cache headers follow **hashing, not location**: `dist/assets/` is the only content-hashed output Vite produces, so it alone is uploaded `public,max-age=31536000,immutable` — true rather than hopeful — while `index.html` gets `no-cache`, and a third sync covers whatever else sits at the root of `dist` with `no-cache` too. That third call was written before `apps/web/public/` existed, to catch the first unhashed file someone dropped in; #282 created the directory with the brand `favicon.svg` and the `brand-512.png` behind the social card, so it now ships real objects revalidate-before-use rather than pinning them immutable for a year at URLs nobody could then update. Each sync's `--delete` is bounded by its own filters — the AWS CLI applies `--exclude` to the destination listing as well as the source — so the `assets/` call prunes only superseded hashed files, and the root call, excluding `assets/*` and `index.html`, can neither delete those assets nor orphan the live entry document. The invalidation is a single `/*`, one path against the free 1,000 a month.
 
-Authentication is OIDC and there is no AWS secret in the repository. The role is assumed with a session named `deploy-web-<run-id>`, so CloudTrail traces a `PutObject` back to the run — and therefore the commit — that made it.
+Authentication is OIDC and there is no AWS credential in the repository. The role is assumed with a session named `deploy-web-<run-id>`, so CloudTrail traces a `PutObject` back to the run — and therefore the commit — that made it.
 
 ### Teardown of the web stack
 
