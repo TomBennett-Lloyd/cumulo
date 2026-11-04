@@ -12,6 +12,13 @@
 #      any caller, run with main's subject (#358, 2026-10-07 infra review,
 #      entry 2); a permit list fails closed on events nobody enumerated.
 #
+#   4. A workflow using the action reads `role-to-assume` from `secrets.` and sets
+#      `mask-aws-account-id: true` once per use (infra/README.md convention 7: the
+#      account id stays out of run logs). actionlint cannot check the action's
+#      input names (lint-workflows.sh KNOWN RESIDUAL), so a dropped or mistyped
+#      key would otherwise pass every gate. The count is per file, not per step,
+#      so it over-approximates.
+#
 # Rule 1 keys on the action rather than on `id-token: write` alone because
 # .github/workflows/deploy-pages.yml mints a token for GitHub Pages, not AWS
 # (#605 plan comment). Minting and the action are matched on any non-comment
@@ -119,6 +126,7 @@ events_of() {
 }
 
 USES_AWS='aws-actions/configure-aws-credentials@'
+MASKS_ACCOUNT='^[[:space:]]*mask-aws-account-id:[[:space:]]*(true|'\''true'\''|"true")[[:space:]]*$'
 MINTS='id-token["'\'']?[[:space:]]*:[[:space:]]*["'\'']?write|write-all'
 
 errors=()
@@ -147,6 +155,17 @@ for path in "${workflows[@]}"; do
     if [ "$mints" -eq 0 ]; then
       errors+=("$WORKFLOWS_REL/$name uses configure-aws-credentials without declaring id-token: write")
     fi
+    n_uses=$(printf '%s\n' "$body" | grep -c -E "$USES_AWS" || true)
+    n_mask=$(printf '%s\n' "$body" | grep -c -E "$MASKS_ACCOUNT" || true)
+    if [ "$n_mask" -lt "$n_uses" ]; then
+      errors+=("$WORKFLOWS_REL/$name assumes the AWS role in $n_uses step(s) but sets mask-aws-account-id: true in $n_mask")
+    fi
+    while IFS= read -r role_line; do
+      [ -n "$role_line" ] || continue
+      if ! [[ "$role_line" =~ role-to-assume:[[:space:]]*\$\{\{[[:space:]]*secrets\. ]]; then
+        errors+=("$WORKFLOWS_REL/$name reads role-to-assume from outside secrets., so the runner echoes the role ARN and its account id unmasked")
+      fi
+    done < <(printf '%s\n' "$body" | grep -E 'role-to-assume:' || true)
   fi
 
   if [ "$mints" -eq 1 ]; then
