@@ -24,7 +24,7 @@ name: Deploy Web
 # hop first.
 #
 # Keyless throughout: `cumulo-github-actions` is assumed by OIDC, and there is
-# no AWS secret in this repository to store or rotate (CLAUDE.md).
+# no AWS credential in this repository to store or rotate (CLAUDE.md).
 
 on:
   push:
@@ -102,12 +102,16 @@ jobs:
       # the outcome that module's own comment names as the worst available. A
       # *malformed* value throws at runtime by that module's design; an absent
       # one cannot, so it is caught here instead.
+      #
+      # It passes presence flags rather than the values: it runs before the
+      # credentials step registers the account mask, the runner echoes a step's
+      # `env:`, and the bucket name embeds the account digits.
       - name: Preflight — repo variables present
         run: |
           missing=0
-          for var in VITE_API_BASE_URL WEB_BUCKET_NAME; do
-            if [ -z "${!var}" ]; then
-              echo "::error::Repo variable $var is not set."
+          for var in HAS_VITE_API_BASE_URL HAS_WEB_BUCKET_NAME; do
+            if [ "${!var}" != true ]; then
+              echo "::error::Repo variable ${var#HAS_} is not set."
               missing=1
             fi
           done
@@ -117,8 +121,8 @@ jobs:
             exit 1
           fi
         env:
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-          WEB_BUCKET_NAME: ${{ vars.WEB_BUCKET_NAME }}
+          HAS_VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL != '' }}
+          HAS_WEB_BUCKET_NAME: ${{ vars.WEB_BUCKET_NAME != '' }}
 
       # No `pnpm verify` step, deliberately. Every commit on main arrived
       # through a PR whose CI ran the composite gate, so re-running it here
@@ -146,27 +150,19 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          # Repo *variables*, never secrets: a role ARN and a region are
-          # identifiers, and the point of OIDC is that there is no secret to
-          # pair them with. Both are published by the bootstrap runbook's B6.
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          # The role ARN is a repo *secret*, not because it is a credential
+          # (OIDC means there is none) but because Actions masks a secret
+          # everywhere it appears, this step's `with:` echo included, and the
+          # ARN embeds the account id (infra/README.md convention 7).
+          # `mask-aws-account-id` then masks the digits for the rest of the
+          # job. The region is a plain variable. Both are published by the
+          # bootstrap runbook's B6.
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
           # Names the session in CloudTrail, so a bucket write can be traced
           # back to the run — and the commit — that made it.
           role-session-name: deploy-web-${{ github.run_id }}
-
-      # The bucket name is `cumulo-web-<env>-<account-id>`, so it carries the
-      # AWS account digits, and this repository is public: infra/README.md
-      # convention 7 keeps those digits out of the repo, and a run log is just
-      # as public as a file. Registering the mask first means that even an
-      # unexpected echo — a shell trace, an error message quoting the argument —
-      # comes out as `***` for the rest of the job. The `--only-show-errors`
-      # flags below are the belt to this braces: they stop the sync printing a
-      # per-object line naming the bucket at all.
-      - name: Mask the bucket name
-        run: echo "::add-mask::$WEB_BUCKET"
-        env:
-          WEB_BUCKET: ${{ vars.WEB_BUCKET_NAME }}
 
       # Assets first, entry last, and the order is the whole correctness
       # argument: `index.html` names the hashed asset files, so uploading it
@@ -201,6 +197,10 @@ jobs:
       # from both sides, so it can neither delete the assets the call above just
       # uploaded nor orphan the live entry document — which is also why the
       # entry stays excluded here and is replaced a second later by the `cp`.
+      #
+      # The bucket name carries the account digits; the credentials step's mask
+      # covers them for the rest of the job, and `--only-show-errors` stops the
+      # sync printing a per-object line naming the bucket at all.
       - name: Sync the build to S3
         run: |
           aws s3 sync apps/web/dist/assets "s3://$WEB_BUCKET/assets/" --delete \
@@ -228,7 +228,7 @@ jobs:
       # URL whose content moves.
       #
       # A distribution id, unlike the bucket name, does not embed the account
-      # id, so it needs no mask.
+      # id.
       - name: Invalidate the distribution and wait for it
         run: |
           INVALIDATION_ID=$(aws cloudfront create-invalidation --distribution-id "$DIST_ID" \

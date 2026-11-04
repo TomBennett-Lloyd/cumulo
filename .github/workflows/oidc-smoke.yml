@@ -21,7 +21,7 @@ name: OIDC smoke test
 # second subject on this one. That option is deliberately out of scope for #11.
 #
 # Still expected to FAIL on a fresh account until the bootstrap runbook's first
-# apply publishes the AWS_OIDC_ROLE_ARN and AWS_REGION repo variables; the
+# apply publishes the AWS_OIDC_ROLE_ARN repo secret and the AWS_REGION repo variable; the
 # preflight step below says so on the run itself. See infra/README.md.
 on:
   workflow_dispatch:
@@ -44,22 +44,22 @@ jobs:
       # Fails loudly rather than skipping. A credential check that quietly
       # no-ops when unconfigured is a check that can pass by doing nothing —
       # the exact failure mode this workflow exists to rule out.
-      - name: Preflight — repo variables present
+      - name: Preflight — role secret and region variable present
         run: |
           missing=0
           for var in AWS_OIDC_ROLE_ARN AWS_REGION; do
             if [ -z "${!var}" ]; then
-              echo "::error::Repo variable $var is not set."
+              echo "::error::$var is not set."
               missing=1
             fi
           done
           if [ "$missing" -ne 0 ]; then
             echo "Run the spin-up runbook in infra/README.md, which sets both" \
-              "variables from 'terraform output' after the first apply."
+              "values from 'terraform output' after the first apply."
             exit 1
           fi
         env:
-          AWS_OIDC_ROLE_ARN: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           AWS_REGION: ${{ vars.AWS_REGION }}
 
       # Prints two claims of the token, never the token, so a failed assume
@@ -74,13 +74,16 @@ jobs:
           while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="$payload="; done
           printf '%s' "$payload" | base64 -d | jq -r '"sub: \(.sub)", "job_workflow_ref: \(.job_workflow_ref)"'
 
-      # Repo *variables*, never secrets: a role ARN and a region are
-      # identifiers, and the whole point of OIDC is that there is no secret to
-      # pair them with.
+      # The role ARN is a repo *secret*, not because it is a credential (OIDC
+      # means there is none) but because Actions masks a secret everywhere it
+      # appears, this step's `with:` echo included, and the ARN embeds the
+      # account id (infra/README.md convention 7). `mask-aws-account-id` then
+      # masks the digits for the rest of the job. The region is a plain variable.
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
           # Names the session in CloudTrail, so an assume-role can be traced
           # back to the workflow run that made it.
           role-session-name: cumulo-oidc-smoke-${{ github.run_id }}
@@ -91,5 +94,21 @@ jobs:
       # deploy policy allows would conflate "can Actions assume this role" with
       # "does this role still hold permission X", and a red run would no longer
       # tell you which.
-      - name: aws sts get-caller-identity
-        run: aws sts get-caller-identity
+      #
+      # It asserts the identity rather than printing it: role name and session
+      # name. The log carries only the ARN with its account field redacted
+      # (convention 7).
+      - name: Assert the assumed identity
+        shell: bash
+        env:
+          ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+        run: |
+          arn=$(aws sts get-caller-identity --query Arn --output text)
+          account=$(cut -d: -f5 <<<"$ROLE_ARN")
+          want="arn:aws:sts::${account}:assumed-role/cumulo-github-actions/cumulo-oidc-smoke-${GITHUB_RUN_ID}"
+          shown=$(sed -E 's/^(arn:aws:sts::)[0-9]+:/\1<account-id>:/' <<<"$arn")
+          if [ "$arn" != "$want" ]; then
+            echo "::error::Assumed $shown, not the cumulo-github-actions role in the role secret's account with session cumulo-oidc-smoke-$GITHUB_RUN_ID."
+            exit 1
+          fi
+          echo "Assumed $shown"

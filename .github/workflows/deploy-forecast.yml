@@ -21,7 +21,7 @@ name: Deploy forecast
 # runbook calls it out so nobody reads it as drift.
 #
 # Keyless throughout: `cumulo-github-actions` is assumed by OIDC, and there is
-# no AWS secret in this repository to store or rotate (CLAUDE.md).
+# no AWS credential in this repository to store or rotate (CLAUDE.md).
 
 on:
   push:
@@ -87,11 +87,16 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6
         with:
-          # Repo *variables*, never secrets: a role ARN and a region are
-          # identifiers, and the point of OIDC is that there is no secret to
-          # pair them with. Both are published by the bootstrap runbook's B6.
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          # The role ARN is a repo *secret*, not because it is a credential
+          # (OIDC means there is none) but because Actions masks a secret
+          # everywhere it appears, this step's `with:` echo included, and the
+          # ARN embeds the account id (infra/README.md convention 7).
+          # `mask-aws-account-id` then masks the digits for the rest of the
+          # job. The region is a plain variable. Both are published by the
+          # bootstrap runbook's B6.
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
           # Names the session in CloudTrail, so an UpdateFunctionCode call can
           # be traced back to the run — and the commit — that made it.
           role-session-name: deploy-forecast-${{ github.run_id }}
@@ -104,10 +109,9 @@ jobs:
       #
       # `--query` on both calls is not cosmetic. The raw responses embed the
       # function ARN and the execution-role ARN, both of which carry the AWS
-      # account id, and this repository is public — so a full JSON dump would
-      # publish into every run log the digits infra/README.md convention 7 keeps
-      # out of the repo. These three fields are the deploy's actual evidence and
-      # none of them identify the account.
+      # account id. These three fields are the deploy's actual evidence and
+      # none of them identify the account, so the log does not lean on the
+      # credentials step's mask alone.
       - name: Update function code
         run: |
           aws lambda update-function-code \

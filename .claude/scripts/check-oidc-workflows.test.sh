@@ -72,6 +72,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: \${{ secrets.AWS_OIDC_ROLE_ARN }}
+          mask-aws-account-id: true
 EOF
 }
 
@@ -236,6 +239,43 @@ aws_workflow deploy.yml "  push:
       - issues"
 run_check "$DIR"
 expect_rc 0 "$rc"
+end
+
+# --- rule 4 --------------------------------------------------------------------------------
+begin "rule 4: a credentials step without mask-aws-account-id fails"
+fixture no_mask
+must sed -i.bak '/mask-aws-account-id/d' "$DIR/.github/workflows/deploy.yml"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "deploy.yml assumes the AWS role in 1 step(s) but sets mask-aws-account-id: true in 0"
+end
+
+begin "rule 4: mask-aws-account-id: false fails"
+fixture mask_false
+must sed -i.bak 's|mask-aws-account-id: true|mask-aws-account-id: false|' "$DIR/.github/workflows/deploy.yml"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "deploy.yml assumes the AWS role in 1 step(s) but sets mask-aws-account-id: true in 0"
+end
+
+begin "rule 4: role-to-assume read from vars. fails"
+fixture vars_role
+must sed -i.bak 's|secrets\.AWS_OIDC_ROLE_ARN|vars.AWS_OIDC_ROLE_ARN|' "$DIR/.github/workflows/deploy.yml"
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "deploy.yml reads role-to-assume from outside secrets."
+end
+
+begin "rule 4: two credentials steps with one mask fails"
+fixture two_steps
+cat >>"$DIR/.github/workflows/deploy.yml" <<'EOF'
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+EOF
+run_check "$DIR"
+expect_rc 1 "$rc"
+expect_out "in 2 step(s) but sets mask-aws-account-id: true in 1"
 end
 
 # --- refusals ------------------------------------------------------------------------------
