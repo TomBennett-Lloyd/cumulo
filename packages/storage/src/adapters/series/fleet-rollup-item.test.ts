@@ -64,12 +64,10 @@ describe('fromFleetRollupItem', () => {
     });
   });
 
-  it('reads an item written before provenance existed as unstamped rather than refusing it', () => {
-    // Items from before #602 sit in the partition until the first stamped cycle rewrites them; a
-    // throw here would fail the fleet route for that hour instead of letting it fall back.
-    expect(
-      fromFleetRollupItem({ ...rollupItem14h, members: undefined, issuedAt: undefined }).provenance,
-    ).toBeUndefined();
+  it('throws on an item with no provenance, which the partition no longer holds', () => {
+    expect(() =>
+      fromFleetRollupItem({ ...rollupItem14h, members: undefined, issuedAt: undefined }),
+    ).toThrow();
   });
 
   it('throws on an item stamped with half a provenance', () => {

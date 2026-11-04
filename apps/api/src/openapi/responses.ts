@@ -132,8 +132,7 @@ export const notModifiedResponse: ResponsesObject = {
  * and this document would be describing something it does not produce. It is
  * unreachable through every *looping* path — the per-request deadline
  * (`http/request-deadline.ts`) stops those between admitted units, which is
- * between commands in the sequential loops and between batches in the fleet
- * fan-out — and the one residual that remains is stated rather than silent, in
+ * between commands, and between pages of the fleet reads' Queries — and the one residual that remains is stated rather than silent, in
  * `apps/api/README.md`'s error contract: independent per-unit worst cases
  * coinciding in a route's ungated straight-line prefix, counted per route in
  * `../request-budget.ts` and carried in `docs/tech-debt.md`.

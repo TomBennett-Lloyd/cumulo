@@ -2,6 +2,7 @@ import {
   FLEET_ROLLUP_ACTUALS_KIND,
   TRAILING_ACTUALS_HOURS,
   fleetActualsAggregatePointSchema,
+  fleetRollupMembers,
   fleetRollupPartialSchema,
   sumFleetActualsRollupPartials,
   type FleetActualsAggregatePoint,
@@ -59,7 +60,7 @@ const slice = (
   acPowerKw: number,
 ): FleetRollupRow => ({
   locationId,
-  provenance: undefined,
+  provenance: { members: fleetRollupMembers([]), issuedAt: validTime },
   partial: fleetRollupPartialSchema.parse({
     validTime,
     acPowerKw,

@@ -170,9 +170,9 @@ const webOrigins = parseWebOrigins(env.CUMULO_WEB_ORIGINS);
  *
  * Applied per route rather than as a blanket middleware, because *which* routes
  * are limited is a deliberate list and not a default. The three writes, the
- * span-capped series read and the two fleet fan-outs are limited: each one
- * either changes state, reads a range whose cost a caller chooses, or issues one
- * Query per fleet site. `GET /v1/sites`, `GET /v1/sites/{siteId}/forecast`,
+ * span-capped series read and the two fleet reads are limited: each one
+ * either changes state, reads a range whose cost a caller chooses, or reads a
+ * partition whose size grows with the fleet's locations. `GET /v1/sites`, `GET /v1/sites/{siteId}/forecast`,
  * `/openapi.json` and the two `/docs` routes are not: they are the pages a
  * reviewer clicks through, their cost per request is fixed and small, and the
  * stage throttle already bounds them.
@@ -310,8 +310,8 @@ export const routes: readonly Route[] = [
     method: 'GET',
     segments: ['v1', 'fleet', 'actuals'],
     // Limited, and for the opposite reason to the route above: the caller picks
-    // nothing about its cost, but the *fleet* does (ADR 0009's roll-up, with a
-    // per-site fallback).
+    // nothing about its cost, but the *fleet* does (ADR 0009's roll-up, whose
+    // size grows with the fleet's locations).
     handle: (request) =>
       cycleCached(request, () =>
         getFleetActuals({ sites, series, now, log: jsonLineLog }, request),

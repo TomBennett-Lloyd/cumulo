@@ -161,7 +161,7 @@ export type FleetForecastAggregatePoint = z.infer<typeof fleetForecastAggregateP
  * contributes `0` capacity — `contributingCapacityKwByHour`'s rule.
  *
  * `kind` selects the model, and it is a required parameter rather than this module's own constant so
- * that the producer, the API's fallback and the browser's demo source are held to passing the same
+ * that the producer and the browser's demo source are held to passing the same
  * one by the compiler (#531).
  */
 export const fleetRollupPartials = (
@@ -256,11 +256,10 @@ export const sumFleetRollupPartials = (
 /**
  * The fleet aggregate computed straight from raw forecasts — the whole fleet as one group.
  *
- * Two callers, and they are the reason this is a composition of the two functions above rather than
- * a third implementation: the API's fallback for a `#FLEET` partition that is missing or
- * incomplete, and the web app's demo source, which has no API behind it and generates its fleet in
- * the browser. Both must produce *the same* numbers the producer-written path produces, and the
- * cheapest way to guarantee that is for all three to be the same code.
+ * Its caller is the web app's demo source, which has no API behind it and generates its fleet in
+ * the browser. It must produce *the same* numbers the producer-written path produces, and the
+ * cheapest way to guarantee that is for both to be the same code, a composition of the two
+ * functions above rather than a third implementation.
  *
  * `kind` is {@link fleetRollupPartials}'s, passed through.
  */

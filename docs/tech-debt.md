@@ -166,3 +166,15 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/ledgers/model-tiers.ledger` (`excluded: .claude/scripts/merge-pr.test.sh`); the `excluded:` key in the format `.claude/scripts/check-ledgers.sh`'s header owns
 - What: the harness holds a captured lane report whose `Lane model: sonnet … Plan model: opus.` line tripped the model-tiers sweep, and `excluded:` works per file. If a real model-tier restatement is ever added to that harness, the gate will not see it. The format has no line-scoped or snapshot-scoped exclusion. A fix is a format change in the gate, so it is logged rather than patched in a ticket about lane report fields.
 - Source: #692 review cycle 1
+
+## 2026-10-21 — prose still describes a per-site dashboard fan-out that no dashboard load performs
+
+- Where: `packages/storage/src/client.ts` (the header paragraph naming "the synchronous per-site fan-out behind a dashboard load"), `infra/forecast/iam.tf` ("sized for the dashboard fan-out")
+- What: both argue from a per-site fan-out behind a dashboard load. #507 removed the last fleet-read fan-out and `iam.tf`'s claim predates it (stale since the table went on-demand), so a reader would size or reason from a path that does not exist. Not introduced by #507; found by the sweep its review ran.
+- Source: #507 review cycle 1
+
+## 2026-10-21 — the `request-budget.ts` restatement ledger's sweep records a date but no commit
+
+- Where: `apps/api/src/request-budget.ts` (the restatement ledger's closing paragraph)
+- What: `docs/standards/architecture.md` rule 9 asks a ledger that is not yet declared in `.claude/ledgers/` to record the commit its sweep ran at and to use `git grep -n … -- ':/'`; this one records dates (2026-08-11, re-run 2026-10-21) and a `command grep -rnE` recipe. A candidate for migration to a `.ledger` file.
+- Source: #507 review cycle 1

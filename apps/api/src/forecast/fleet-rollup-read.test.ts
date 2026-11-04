@@ -2,15 +2,17 @@ import type { FleetSite } from '@cumulo/shared';
 import type { FleetRollupRow } from '@cumulo/storage';
 import { describe, expect, it } from 'vitest';
 
-import { fleetSite, forecast, generationPoint, RANELAGH_ID, RATHMINES_ID } from '../api-fixtures';
+import { errorResponse } from '../http/response';
 
 import {
   BRISTOL,
   BRISTOL_SITE,
+  DEADLINE_EVENT,
   DUBLIN,
   EARLIER_RUN,
   harness,
   ISSUED_AT,
+  NEWCOMER,
   partial,
   pointsOf,
   RANELAGH,
@@ -18,11 +20,12 @@ import {
   read,
   row,
 } from './fleet-rollup-fixtures';
-import { fleetRollupFallbackEvent } from './fleet-rollup-read';
+import { fleetRollupShortEvent } from './fleet-rollup-read';
 
 /**
- * Which partition states answer from the roll-up and which fall back — the decision ADR 0009's
- * fallback *is*, tested where it lives rather than through the route.
+ * Which partition states are summed whole, which are served short, and which are refused — the
+ * decision ADR 0009's 2026-10-21 (#507) entry makes, tested where it lives rather than through the
+ * route.
  *
  * Through `readFleetForecastAggregate` directly because the route adds nothing to this question: it
  * chooses a window and parses an envelope, and `get-fleet-forecast.test.ts` owns both.
@@ -30,7 +33,7 @@ import { fleetRollupFallbackEvent } from './fleet-rollup-read';
 
 describe('the roll-up answers', () => {
   it('sums the partition when every expected location has written', async () => {
-    const { deps, siteReads, logged } = harness({
+    const { deps, logged } = harness({
       rows: [
         row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5 })),
         row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3 })),
@@ -40,29 +43,25 @@ describe('the roll-up answers', () => {
     const points = pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
 
     expect(points.map((point) => point.acPowerKw)).toEqual([8]);
-    expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
 
   it('counts two sites in one bucket as one expected partial', async () => {
     // `locationId` is what the producer's messages are keyed by (ADR 0004), so a fleet of sixty
-    // sites in twelve buckets expects twelve partials. Expecting one per *site* would fall back for
-    // ever.
-    const { deps, siteReads } = harness({
-      rows: [row(DUBLIN, [RANELAGH, RATHMINES], partial())],
-    });
+    // sites in twelve buckets expects twelve partials. Expecting one per *site* would log `short`
+    // for ever.
+    const { deps, logged } = harness({ rows: [row(DUBLIN, [RANELAGH, RATHMINES], partial())] });
 
     await read(deps, [RANELAGH, RATHMINES]);
 
-    expect(siteReads).toEqual([]);
+    expect(logged).toEqual([]);
   });
 
   it('never sums a location the fleet no longer has sites at', async () => {
     // The partials of a decommissioned location are written under keys nothing rewrites once
     // ingestion stops publishing for it, and they outlive its last site by the whole horizon. Summed
-    // blind, that is a ghost site generating for about two days — and a difference from the fan-out
-    // arm, which cannot do it because it iterates the site list.
-    const { deps, siteReads, logged } = harness({
+    // blind, that is a ghost site generating for about two days.
+    const { deps, logged } = harness({
       rows: [
         row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5, contributingSiteCount: 2 })),
         row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3, contributingSiteCount: 1 })),
@@ -73,9 +72,7 @@ describe('the roll-up answers', () => {
 
     expect(points.map((point) => point.acPowerKw)).toEqual([5]);
     expect(points[0]?.contributingSiteCount).toBe(2);
-    // An unexpected location is not a reason to fall back either: the fleet it is asked about is
-    // complete, and the extra row is answered by ignoring it rather than by a fan-out.
-    expect(siteReads).toEqual([]);
+    // The fleet it is asked about is complete, and the extra row is answered by ignoring it.
     expect(logged).toEqual([]);
   });
 
@@ -93,7 +90,7 @@ describe('the roll-up answers', () => {
    */
   it('sums a location that wrote half its hours, and the short hour says how thin it is', async () => {
     const twoPm = '2026-07-31T14:00:00Z';
-    const { deps, siteReads, logged } = harness({
+    const { deps, logged } = harness({
       rows: [
         row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5, contributingSiteCount: 2 })),
         row(
@@ -109,103 +106,122 @@ describe('the roll-up answers', () => {
 
     expect(points.map((point) => point.acPowerKw)).toEqual([8, 6]);
     expect(points.map((point) => point.contributingSiteCount)).toEqual([3, 2]);
-    expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
 
   it('answers an empty fleet without reading anything at all', async () => {
-    const { deps, rollupReads, siteReads, logged } = harness();
+    const { deps, rollupReads, logged } = harness();
 
     expect(pointsOf(await read(deps, []))).toEqual([]);
     expect(rollupReads).toBe(0);
-    expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
 });
 
 /**
- * Membership and vintage (#602, ADR 0009's 2026-10-07 entry): a location that has written is
- * summed only if its slices were summed from the sites there now, by one forecast run. Each
- * stale case below sums on the pre-#602 code — the location-set check alone passes every one.
+ * Membership and vintage (#602, #507): a location that has written is summed only if its slices
+ * were summed from the sites it had when the run was issued, by one run. Each stale case below sums
+ * on the pre-#602 code — the location-set check alone passes every one.
  */
-describe('a stale slice', () => {
-  const NEWCOMER = fleetSite({ id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', name: 'Newcomer' });
-  const ranelaghForecast = {
-    [RANELAGH_ID]: [{ type: 'forecast' as const, forecast: forecast({ acPowerKw: 2.8 }) }],
+describe('a stale location', () => {
+  const BRISTOL_ROW = row(
+    BRISTOL,
+    [BRISTOL_SITE],
+    partial({ acPowerKw: 3, contributingSiteCount: 1 }),
+  );
+
+  /** Dublin's rows against Dublin's sites now, beside a Bristol that is fresh. */
+  const staleRead = async (
+    dublin: readonly FleetRollupRow[],
+    dublinSites: readonly FleetSite[],
+  ) => {
+    const { deps, logged } = harness({ rows: [...dublin, BRISTOL_ROW] });
+    return { points: pointsOf(await read(deps, [...dublinSites, BRISTOL_SITE])), logged };
   };
 
-  const staleRead = async (rows: readonly FleetRollupRow[], sites: readonly FleetSite[]) => {
-    const { deps, siteReads, logged } = harness({ rows, pointsBySite: ranelaghForecast });
-    const points = pointsOf(await read(deps, sites));
-    return { points, siteReads, logged };
-  };
-
-  it('falls back when a site at a surviving location has gone', async () => {
-    // #579: the slice still carries the deleted site's kilowatts, count and capacity.
-    const { points, siteReads, logged } = await staleRead(
-      [row(DUBLIN, [RANELAGH, RATHMINES], partial({ acPowerKw: 5, contributingSiteCount: 2 }))],
-      [RANELAGH],
-    );
-
-    expect(points.map((point) => [point.acPowerKw, point.contributingSiteCount])).toEqual([
-      [2.8, 1],
-    ]);
-    expect(siteReads).toEqual([RANELAGH_ID]);
+  const expectBristolAlone = (
+    { points, logged }: Awaited<ReturnType<typeof staleRead>>,
+    hours = 1,
+  ) => {
+    expect(points.map((point) => [point.acPowerKw, point.contributingSiteCount])).toEqual([[3, 1]]);
     expect(logged).toEqual([
       {
-        event: fleetRollupFallbackEvent,
+        event: fleetRollupShortEvent,
         reason: 'stale',
-        expectedLocations: 1,
-        presentLocations: 1,
+        expectedLocations: 2,
+        presentLocations: 2,
         staleLocations: 1,
-        hours: 1,
+        hours,
       },
     ]);
-  });
+  };
 
-  it('falls back when one site left and another joined the same bucket', async () => {
-    // Same count, possibly the same capacity: only the membership itself tells these apart.
-    const { logged } = await staleRead(
-      [row(DUBLIN, [RANELAGH, RATHMINES])],
-      [RANELAGH, { ...NEWCOMER, capacityKw: RATHMINES.capacityKw }],
+  it('leaves out a location whose slice still sums a site that has gone', async () => {
+    // #579: the slice still carries the deleted site's kilowatts, count and capacity.
+    expectBristolAlone(
+      await staleRead(
+        [row(DUBLIN, [RANELAGH, RATHMINES], partial({ acPowerKw: 5, contributingSiteCount: 2 }))],
+        [RANELAGH],
+      ),
     );
-
-    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
   });
 
-  it('falls back when a site’s physics were edited in place', async () => {
+  it('leaves out a location when one site left and another joined the same bucket', async () => {
+    // Same count, possibly the same capacity: only the membership itself tells these apart. The
+    // joiner is old enough for the run to have listed it, so it is not an add.
+    const joiner = {
+      ...NEWCOMER,
+      createdAt: RATHMINES.createdAt,
+      capacityKw: RATHMINES.capacityKw,
+    };
+
+    expectBristolAlone(await staleRead([row(DUBLIN, [RANELAGH, RATHMINES])], [RANELAGH, joiner]));
+  });
+
+  it('leaves out a location whose site’s physics were edited in place', async () => {
     // `PUT /v1/sites/{siteId}` keeps the id; the slice's capacity divisor and kilowatts do not move.
-    const { logged } = await staleRead([row(DUBLIN, [RANELAGH])], [{ ...RANELAGH, capacityKw: 5 }]);
-
-    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
+    expectBristolAlone(
+      await staleRead([row(DUBLIN, [RANELAGH])], [{ ...RANELAGH, capacityKw: 5 }]),
+    );
   });
 
-  it('falls back when one location’s slices come from two forecast runs', async () => {
+  it('leaves out a location whose slices come from two forecast runs', async () => {
     // A `store-partial` roll-up drain, or a replayed message, leaves part of the horizon on another run.
-    const { logged } = await staleRead(
-      [
-        row(DUBLIN, [RANELAGH], partial(), ISSUED_AT),
-        row(DUBLIN, [RANELAGH], partial({ validTime: '2026-07-31T14:00:00Z' }), EARLIER_RUN),
-      ],
-      [RANELAGH],
+    expectBristolAlone(
+      await staleRead(
+        [
+          row(DUBLIN, [RANELAGH], partial(), ISSUED_AT),
+          row(DUBLIN, [RANELAGH], partial({ validTime: '2026-07-31T14:00:00Z' }), EARLIER_RUN),
+        ],
+        [RANELAGH],
+      ),
+      2,
     );
-
-    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1, hours: 2 });
   });
 
-  it('falls back on a slice written before provenance existed', async () => {
-    const { logged } = await staleRead(
-      [{ locationId: DUBLIN, provenance: undefined, partial: partial() }],
-      [RANELAGH],
-    );
+  it('counts a site created in the same instant as the run as one the run should have listed', async () => {
+    const sameInstant = { ...NEWCOMER, createdAt: ISSUED_AT };
 
-    expect(logged[0]).toMatchObject({ reason: 'stale', staleLocations: 1 });
+    expectBristolAlone(await staleRead([row(DUBLIN, [RANELAGH])], [RANELAGH, sameInstant]));
+  });
+
+  it('sums a location whose only change since its run is an added site', async () => {
+    // The run could not have listed a site created after it, and that site has no forecast yet
+    // (#286): the slice is exactly right for every site that has one.
+    const { deps, logged } = harness({
+      rows: [row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5 }))],
+    });
+
+    const points = pointsOf(await read(deps, [RANELAGH, NEWCOMER]));
+
+    expect(points.map((point) => point.acPowerKw)).toEqual([5]);
+    expect(logged).toEqual([]);
   });
 
   it('sums locations written by different runs, each from one run', async () => {
     // Fresh, and the case that keeps vintage per location: ingestion visits locations with no
-    // end-of-run event, so a fleet-wide vintage test would fall back on every cycle (ADR 0009).
-    const { deps, siteReads, logged } = harness({
+    // end-of-run event, so a fleet-wide vintage test would flag every cycle (ADR 0009).
+    const { deps, logged } = harness({
       rows: [
         row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5 }), ISSUED_AT),
         row(BRISTOL, [BRISTOL_SITE], partial({ acPowerKw: 3 }), EARLIER_RUN),
@@ -215,34 +231,18 @@ describe('a stale slice', () => {
     expect(pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE])).map((p) => p.acPowerKw)).toEqual([
       8,
     ]);
-    expect(siteReads).toEqual([]);
     expect(logged).toEqual([]);
   });
 });
 
-describe('the fallback', () => {
-  it('reports an untouched partition as absent and aggregates the fan-out', async () => {
-    const { deps, siteReads, logged } = harness({
-      pointsBySite: {
-        [RANELAGH_ID]: [
-          // Readings share the partition with forecasts (ADR 0002); only one kind is this answer.
-          generationPoint({ acPowerKw: 0.9 }),
-          { type: 'forecast', forecast: forecast({ acPowerKw: 2.8 }) },
-        ],
-        [RATHMINES_ID]: [
-          { type: 'forecast', forecast: forecast({ siteId: RATHMINES_ID, acPowerKw: 1.6 }) },
-        ],
-      },
-    });
+describe('a short partition', () => {
+  it('serves an untouched partition as no points and says it is absent', async () => {
+    const { deps, logged } = harness();
 
-    const points = pointsOf(await read(deps, [RANELAGH, RATHMINES]));
-
-    expect(points.map((point) => point.acPowerKw)).toEqual([4.4]);
-    expect(points[0]?.contributingSiteCount).toBe(2);
-    expect(siteReads).toEqual([RANELAGH_ID, RATHMINES_ID]);
+    expect(pointsOf(await read(deps, [RANELAGH]))).toEqual([]);
     expect(logged).toEqual([
       {
-        event: fleetRollupFallbackEvent,
+        event: fleetRollupShortEvent,
         reason: 'absent',
         expectedLocations: 1,
         presentLocations: 0,
@@ -252,19 +252,19 @@ describe('the fallback', () => {
     ]);
   });
 
-  it('reports a partition missing one location as incomplete, with the counts', async () => {
-    // Eleven of twelve locations sums to a plausible-looking fleet with nothing visibly missing —
-    // the missing site does not read as missing, it reads as less generation. So a partly-written
-    // partition is treated exactly like an absent one.
-    const { deps, siteReads, logged } = harness({
-      rows: [row(DUBLIN, [RANELAGH], partial())],
+  it('sums the locations that have written and names the missing count', async () => {
+    // Eleven of twelve locations sums to a plausible-looking fleet with nothing visibly missing, so
+    // the response is labelled twice: `contributingSiteCount` on each point, and this line.
+    const { deps, logged } = harness({
+      rows: [row(DUBLIN, [RANELAGH], partial({ acPowerKw: 5, contributingSiteCount: 2 }))],
     });
 
-    await read(deps, [RANELAGH, BRISTOL_SITE]);
+    const points = pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
 
+    expect(points.map((point) => [point.acPowerKw, point.contributingSiteCount])).toEqual([[5, 2]]);
     expect(logged).toEqual([
       {
-        event: fleetRollupFallbackEvent,
+        event: fleetRollupShortEvent,
         reason: 'incomplete',
         expectedLocations: 2,
         presentLocations: 1,
@@ -272,15 +272,13 @@ describe('the fallback', () => {
         hours: 1,
       },
     ]);
-    expect(siteReads).toEqual([RANELAGH_ID, BRISTOL_SITE.id]);
   });
 
   it('reports a missing location as incomplete even when another is stale, and counts both', async () => {
     // Dublin's slice still sums Rathmines, which has gone; Bristol has not written at all.
     const { deps, logged } = harness({ rows: [row(DUBLIN, [RANELAGH, RATHMINES])] });
 
-    await read(deps, [RANELAGH, BRISTOL_SITE]);
-
+    expect(pointsOf(await read(deps, [RANELAGH, BRISTOL_SITE]))).toEqual([]);
     expect(logged[0]).toMatchObject({
       reason: 'incomplete',
       expectedLocations: 2,
@@ -289,62 +287,20 @@ describe('the fallback', () => {
     });
   });
 
-  it('treats a roll-up Query that stopped short as incomplete', async () => {
-    // A read that ran out of page budget and a partition that was never fully written have
-    // different causes and the same consequence for the answer, so they share an arm.
-    const { deps, siteReads, logged } = harness({
+  it('refuses with the deadline response when the roll-up Query stopped short', async () => {
+    // A window missing its tail is labelled by no count, so unlike a short partition it is a 500.
+    const { deps, logged } = harness({
       rows: [row(DUBLIN, [RANELAGH], partial())],
       rollupComplete: false,
     });
 
-    await read(deps, [RANELAGH]);
+    const result = await read(deps, [RANELAGH]);
 
-    expect(logged[0]).toMatchObject({ event: fleetRollupFallbackEvent, reason: 'incomplete' });
-    expect(siteReads).toEqual([RANELAGH_ID]);
-  });
-
-  it('sums one model only, so the two arms cannot answer differently', async () => {
-    // The fan-out reads whatever the partition holds, an ML row for the same site-hour included;
-    // the roll-up arm only ever sums the rolled-up model. Unfiltered, this arm would read 3.1 here
-    // rather than 2.8 — not twice the fleet but the *other model's* fleet, this fixture's ML row
-    // taking the `issuedAt` tie by being listed last. That a model wins is the point, rather than
-    // which one does: `seriesSortKey` puts `FC#ml` before `FC#physics`, so an ascending Query hands
-    // the tie to physics and production survives by sort-key luck (ADR 0009's 2026-10-05 entry).
-    const physics = forecast({ acPowerKw: 2.8 });
-    const { deps } = harness({
-      pointsBySite: {
-        [RANELAGH_ID]: [
-          { type: 'forecast', forecast: physics },
-          { type: 'forecast', forecast: { ...physics, model: 'ml' as const, acPowerKw: 3.1 } },
-        ],
-      },
+    expect(result).toEqual({
+      complete: false,
+      response: errorResponse('internal', 'the request could not be completed in time'),
     });
-
-    const points = pointsOf(await read(deps, [RANELAGH]));
-
-    expect(points.map((point) => point.acPowerKw)).toEqual([2.8]);
-    expect(points[0]?.contributingSiteCount).toBe(1);
-  });
-
-  it('carries the per-hour capacity the percent view divides by', async () => {
-    const { deps } = harness({
-      pointsBySite: {
-        [RANELAGH_ID]: [{ type: 'forecast', forecast: forecast({ acPowerKw: 2.8 }) }],
-      },
-    });
-
-    // The fixture site's nameplate, evidenced from the site list rather than re-derived in the
-    // browser from rows this route no longer sends.
-    expect(pointsOf(await read(deps, [RANELAGH]))[0]?.contributingCapacityKw).toBe(
-      RANELAGH.capacityKw,
-    );
-  });
-
-  it('answers an unforecast fleet with no points rather than an hour of zeroes', async () => {
-    const { deps, logged } = harness();
-
-    expect(pointsOf(await read(deps, [RANELAGH]))).toEqual([]);
-    expect(logged[0]).toMatchObject({ reason: 'absent' });
+    expect(logged).toEqual([{ event: DEADLINE_EVENT, rowsRead: 1 }]);
   });
 });
 
@@ -369,23 +325,25 @@ describe('the runs behind the sum', () => {
     expect(groups).toEqual([[ISSUED_AT], [EARLIER_RUN]]);
   });
 
-  it('groups the fallback by site, from the summed model’s rows alone', async () => {
-    const physics = forecast({ issuedAt: ISSUED_AT });
+  it('has no group for a location left out of the sum', async () => {
+    const { deps } = harness({ rows: [row(DUBLIN, [RANELAGH], partial(), ISSUED_AT)] });
+
+    const groups = issuedAtsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
+
+    expect(groups).toEqual([[ISSUED_AT]]);
+  });
+
+  it('has no group for a stale location', async () => {
     const { deps } = harness({
-      pointsBySite: {
-        [RANELAGH_ID]: [
-          { type: 'forecast', forecast: physics },
-          {
-            type: 'forecast',
-            forecast: { ...physics, model: 'ml' as const, issuedAt: EARLIER_RUN },
-          },
-        ],
-      },
+      rows: [
+        row(DUBLIN, [RANELAGH, RATHMINES], partial(), ISSUED_AT),
+        row(BRISTOL, [BRISTOL_SITE], partial(), EARLIER_RUN),
+      ],
     });
 
-    const groups = issuedAtsOf(await read(deps, [RANELAGH, RATHMINES]));
+    const groups = issuedAtsOf(await read(deps, [RANELAGH, BRISTOL_SITE]));
 
-    expect(groups).toEqual([[ISSUED_AT], []]);
+    expect(groups).toEqual([[EARLIER_RUN]]);
   });
 
   it('has no group for an empty fleet', async () => {

@@ -79,12 +79,8 @@ own `{ "message": … }`:
   every _looping_ path: series pagination, `POST`'s store-and-evict attempts and `DELETE`'s counted
   deletes all stop between commands and answer in schema instead, and every admitted unit is bounded
   by one `STORAGE_COMMAND_WORST_MS` of wall clock, so none can outrun what was priced for it.
-  Sequential work meets that by pricing the next command — one admission, one command. The fleet
-  fan-out (`forecast/fleet-series-read.ts`) meets it a second way: one admission covers a batch of
-  up to `FLEET_READ_CONCURRENCY` Queries dispatched in the same tick, each independently bounded, so
-  their worst cases _overlap_ rather than add — and no member starts a further command on that
-  admission, because a next page is re-admitted per page exactly as on the per-site routes. What is
-  still refused is accumulation _in series_ behind one admission, the shape ADR 0007 retired. One
+  Sequential work meets that by pricing the next command — one admission, one command. What is
+  refused is accumulation _in series_ behind one admission, the shape ADR 0007 retired. One
   residual remains, stated rather than silent — independent per-unit worst cases coinciding in one
   request's ungated straight-line prefix, which `request-budget.ts` counts per route and
   `docs/tech-debt.md` owns.

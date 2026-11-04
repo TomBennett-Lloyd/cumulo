@@ -21,7 +21,7 @@ import { hoursBefore } from './series-window';
  * `GET /v1/fleet/actuals` — every fleet site's actuals over one look-back
  * window, in one request, **already summed** — one point per hour, read from
  * the `#FLEET` partition's `GEN` totals and slices by `fleet-actuals-rollup-read.ts`,
- * which owns the fan-out fallback (#506).
+ * which owns that read (#506, #615).
  *
  * **Why the fleet gets its own route.** The web app plots the fleet's actual
  * output beside the fleet forecast, which means it needs every site's readings
@@ -112,9 +112,9 @@ export const getFleetActuals = async (
   const to = deps.now();
   const from = hoursBefore(to, hours.data);
 
-  // The `GEN` totals, then the slices they leave, or the deadline-gated fan-out when they cannot
-  // answer — and the log says which (ADR 0009). The deadline event is passed so this route keeps
-  // owning the name an operator greps for when *it* runs out of time.
+  // The `GEN` totals, then the slices they leave; a location that cannot be summed is left out and
+  // the log says so (ADR 0009). The deadline event is passed so this route keeps owning the name
+  // an operator greps for when *it* runs out of time.
   const read = await readFleetActualsAggregate(
     deps,
     request.deadline,
@@ -132,7 +132,7 @@ export const getFleetActuals = async (
     points: [...read.points],
     attribution: openMeteoAttribution,
   });
-  // Dated by its laggard (#608): one group per location's slices, or per site on the fallback.
+  // Dated by its laggard (#608): one group per location's slices.
   return read.points.length === 0
     ? uncacheable(response)
     : datedByData(

@@ -66,8 +66,7 @@ export const sumFleetActualsRollupPartials = (
   }));
 
 /**
- * The fleet actuals computed straight from raw readings — the API fallback's and the demo source's
- * path, composed from the two above for `fleetForecastAggregate`'s reason.
+ * The fleet actuals computed straight from raw readings — the demo source's path, composed from the two above for `fleetForecastAggregate`'s reason.
  */
 export const fleetActualsAggregate = (
   readings: readonly GenerationReading[],

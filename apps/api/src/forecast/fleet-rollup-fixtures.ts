@@ -6,7 +6,7 @@ import {
   type FleetSite,
   type UtcIsoTimestamp,
 } from '@cumulo/shared';
-import type { FleetRollupRow, SeriesPoint } from '@cumulo/storage';
+import type { FleetRollupRow } from '@cumulo/storage';
 
 import { fleetSite, fullBudgetDeadline, RATHMINES_ID } from '../api-fixtures';
 
@@ -16,10 +16,7 @@ import {
   type FleetRollupReadDeps,
 } from './fleet-rollup-read';
 
-/**
- * The `#FLEET` fixtures `fleet-rollup-read.test.ts` and `get-fleet-forecast.test.ts` share. Test
- * support.
- */
+/** The `#FLEET` fixtures `fleet-rollup-read.test.ts` and `get-fleet-forecast.test.ts` share. */
 
 export const RANELAGH = fleetSite();
 export const RATHMINES = fleetSite({ id: RATHMINES_ID, name: 'Rathmines terrace' });
@@ -50,6 +47,12 @@ export const partial = (
   });
 
 export const ISSUED_AT = utcIsoTimestampSchema.parse('2026-07-31T11:07:00Z');
+
+export const NEWCOMER = fleetSite({
+  id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+  name: 'Newcomer',
+  createdAt: '2026-07-31T11:30:00Z',
+});
 export const EARLIER_RUN = utcIsoTimestampSchema.parse('2026-07-31T10:07:00Z');
 
 /** One stored slice, stamped as the producer stamps it: the digest of the sites it summed. */
@@ -67,28 +70,24 @@ export const row = (
 /** `readFleetForecastAggregate` with recording stubs, for `fleet-rollup-read.test.ts`. */
 const FROM = utcIsoTimestampSchema.parse('2026-07-31T12:00:00Z');
 const TO = utcIsoTimestampSchema.parse('2026-08-02T12:00:00Z');
-const DEADLINE_EVENT = 'api.fleet-forecast.read-deadline-reached';
+export const DEADLINE_EVENT = 'api.fleet-forecast.read-deadline-reached';
 
 export interface Harness {
   readonly deps: FleetRollupReadDeps;
   readonly rollupReads: number;
-  readonly siteReads: string[];
   readonly logged: Record<string, unknown>[];
 }
 
 export interface HarnessInput {
   readonly rows?: readonly FleetRollupRow[];
   readonly rollupComplete?: boolean;
-  readonly pointsBySite?: Readonly<Record<string, readonly SeriesPoint[]>>;
 }
 
 export const harness = (input: HarnessInput = {}): Harness => {
-  const siteReads: string[] = [];
   const logged: Record<string, unknown>[] = [];
   const state = { rollupReads: 0 };
 
   return {
-    siteReads,
     logged,
     get rollupReads(): number {
       return state.rollupReads;
@@ -100,13 +99,6 @@ export const harness = (input: HarnessInput = {}): Harness => {
           return Promise.resolve({
             rows: [...(input.rows ?? [])],
             complete: input.rollupComplete ?? true,
-          });
-        },
-        querySeriesRange: (siteId) => {
-          siteReads.push(siteId);
-          return Promise.resolve({
-            points: [...(input.pointsBySite?.[siteId] ?? [])],
-            complete: true,
           });
         },
       },

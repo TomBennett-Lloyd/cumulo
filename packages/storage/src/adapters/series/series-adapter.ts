@@ -103,8 +103,8 @@ export interface SeriesRangeResult {
  *
  * `complete` is read harder here than there. A truncated per-site series is a chart with a gap at
  * the end; a truncated roll-up is a fleet *total* summed from some of its locations, which looks
- * exactly like a plausible number from a quieter fleet. So ADR 0009's fallback treats
- * `complete: false` the same way it treats a partition that is not there at all.
+ * exactly like a plausible number from a quieter fleet. So the API reads refuse
+ * `complete: false` as a deadline 500 (ADR 0009, 2026-10-21) rather than summing it.
  */
 export interface FleetRollupRangeResult {
   readonly rows: FleetRollupRow[];
