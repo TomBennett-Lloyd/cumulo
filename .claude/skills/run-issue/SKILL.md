@@ -38,8 +38,10 @@ each was caught only because the lane checked (#681).
 ## Ticket-agent lane
 
 1. **Admission**: the same in-flight table as below (issue, agent handle, branch, and the
-   footprint once the plan comment lands). Predict the footprint from the issue body and
-   name any known in-flight overlap in the dispatch prompt, so the agent either plans around
+   footprint once the plan comment lands). Predict the footprint from the issue body, read through
+   `bash .claude/scripts/gh-owner-comments.sh issue <n>` (`docs/standards/security.md` rule 6; exit 3 means the owner did not
+   file it, so it is neither planned nor dispatched: tell the owner in chat, who takes it up by
+   filing an issue of their own), and name any known in-flight overlap in the dispatch prompt, so the agent either plans around
    it or expects the rebase. A single lane never holds for another lane's plan — overlap is
    priced as rebase cost, and only entangled same-file SOURCE overlap is batched or
    sequenced, here, at dispatch. `conserve` budget mode: one lane.
@@ -49,7 +51,7 @@ each was caught only because the lane checked (#681).
    whose step 6 stops hold here, with this dispatch in place of `/execute`. A trim batch is
    not: its lane's own plan comment is its plan. Then **dispatch** `ticket-agent` with the
    issue number, the main-checkout path, the budget mode, the overlap note and, for a planned
-   issue, the plan comment's URL — nothing else; it reads the issue and the files. It runs on
+   issue, the plan comment's URL — nothing else; it reads the issue (through the script above) and the files. It runs on
    its frontmatter model, and so do the `reviewer` and `confirmation-reviewer` it dispatches.
    **`run_in_background: true`**, which is the opposite of the rule in
    `.claude/agents/task-orchestrator.md` rule 4 and does not contradict it: that rule governs
@@ -60,7 +62,7 @@ each was caught only because the lane checked (#681).
    same with `issue <n>` for its comments.
 3. **Diff check** — your first touchpoint, and your only read of the code. `git rev-parse
 <branch>` must equal the report's HEAD, or stop and reconcile before anything else. Check
-   the changed files against the plan comment's files (drift named, or none); every `Verify`
+   the changed files against the plan comment's files (read through the same script; drift named, or none); every `Verify`
    and `CI` field pasted rather than summarised; CI green on the reported head. Then read
    `gh pr diff <n>` for three things: scope (only this ticket's work), suppressions
    (`gh pr diff <n> | command grep -nE 'eslint-disable|@ts-expect-error|as any'`, with a
@@ -95,7 +97,7 @@ this branch was cut, which files, what the union rule expects>` to the warm agen
    is the retro's first-hand input; run `/retro`; remove the row. A wedged agent (no report,
    no branch movement) gets the worktree and the issue inspected FIRST, then `TaskStop`, then
    a fresh `RESUME issue #n` dispatch — the new agent reconciles from `git log main..<branch>`,
-   `git status`, the plan comment and any PR, and adopts what is already done. A dead lane is
+   `git status`, the plan comment (through the script) and any PR, and adopts what is already done. A dead lane is
    recognised by a harness notification, never inferred from disk: the notification says `ENOTFOUND`,
    stall-watchdog or killed, and a lane with no notification is alive (`ticket-agent.md` rule 5(f) is
    why the lane cannot tell you itself). The output file and `ps` are not evidence: a lane reading
@@ -196,7 +198,7 @@ labels` for planApproval.alwaysRequiredFor; read the plan's Risks for user-only
    `RELEASE — hand over retro notes`. The handover arrives twice by construction — as the
    agent's reply (a courtesy copy, never consumed as the record) and as the finalized
    RETRO NOTES comment on the issue, the sole authoritative record; confirm the comment
-   exists and matches the reply — on divergence the comment wins and the divergence is
+   (through `bash .claude/scripts/gh-owner-comments.sh issue <n>`) exists and matches the reply — on divergence the comment wins and the divergence is
    itself flagged in the retro as a contract breach — then decide worktree fate
    and run /retro (review-loop step 6 unchanged) with the handover as first-hand input —
    the retro also asks whether the checkpoint, reports, and handover told you what you
