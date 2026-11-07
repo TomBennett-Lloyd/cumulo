@@ -22,6 +22,7 @@ carrier: .claude/agents/planner.md
 carrier: .claude/agents/reviewer.md
 carrier: .claude/agents/task-orchestrator.md
 carrier: .claude/agents/ticket-agent.md
+carrier: .claude/agents/untrusted-reader.md
 carrier: .claude/skills/budget-sync/SKILL.md
 carrier: .claude/skills/burn-backlog/SKILL.md
 carrier: .claude/skills/execute/SKILL.md
