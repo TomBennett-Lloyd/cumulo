@@ -24,7 +24,7 @@
 #
 # Fixture bodies and expressions reach node on stdin, never argv: Linux caps one argv string at
 # 128 KiB (MAX_ARG_STRLEN) where macOS does not, and the long-comment case below is larger than
-# that, which failed on the CI runner on 2026-11-07 (docs/standards/testing.md rule 3).
+# that, which failed on the CI runner on 2026-11-07.
 #
 # Usage: bash .claude/scripts/gh-owner-comments.test.sh  (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
