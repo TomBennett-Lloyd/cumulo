@@ -22,6 +22,10 @@
 # `"$MERGE_PR_GH_CMD" pr view ... --json "$PR_JSON_FIELDS"` is invisible to the last section's
 # line match by construction (the call and its field list are in variables).
 #
+# Fixture bodies and expressions reach node on stdin, never argv: Linux caps one argv string at
+# 128 KiB (MAX_ARG_STRLEN) where macOS does not, and the long-comment case below is larger than
+# that, which failed on the CI runner on 2026-11-07 (docs/standards/testing.md rule 3).
+#
 # Usage: bash .claude/scripts/gh-owner-comments.test.sh  (or `pnpm test:scripts`)
 # Exit:  0 every case PASS, 1 at least one FAIL, 2 the harness itself broke.
 set -uo pipefail
@@ -69,14 +73,14 @@ chmod +x "$BIN/gh"
 
 # put <name> <js expression>: writes $FX/<name>.json from the expression's JSON.
 put() {
-  node -e 'process.stdout.write(JSON.stringify(eval("(" + process.argv[1] + ")")))' "$2" >"$FX/$1.json" || exit 2
+  printf '%s' "$2" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(eval("(" + s + ")"))))' >"$FX/$1.json" || exit 2
 }
 
 rec() { # rec <id> <login|null> <association> <body>   (as a JS expression)
   local user
   if [ "$2" = null ]; then user=null; else user="{login:\"$2\"}"; fi
   printf '{id:%s,user:%s,author_association:"%s",body:%s,html_url:"https://example.test/%s",created_at:"2026-01-01T00:00:00Z"}' \
-    "$1" "$user" "$3" "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$4")" "$1"
+    "$1" "$user" "$3" "$(printf '%s' "$4" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))')" "$1"
 }
 
 reset() {
