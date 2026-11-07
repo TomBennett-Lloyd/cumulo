@@ -184,3 +184,9 @@ Maintenance: a row dies with its issue; whoever closes the issue deletes the row
 - Where: `.claude/scripts/check-oidc-workflows.sh` (rule 4)
 - What: a credentials step with no `role-to-assume:` line is never examined, and a composed expression such as `secrets.X || vars.AWS_OIDC_ROLE_ARN` passes because the pattern anchors only on the leading `secrets.`. Expansion of an account-embedding variable before the credentials step stays ungated (#358 entry 2 remainder).
 - Source: #596 review cycle 1
+
+## 2026-11-07 — the owner-filter backstop's READER pattern misses list-shaped API reads, and its ci.yml acceptance is not tied to the file
+
+- Where: `.claude/scripts/gh-owner-comments.test.sh` (`READER`, and the `jq '.labels[].name'` acceptance)
+- What: three API read shapes that return bodies match none of the pattern's alternatives: the repository issues list endpoint, the same with a query string, and an issue's timeline endpoint (the harness's positive control, a plain `--comments` view, matches). The label acceptance matches a line in any file, where the tidy-tech-debt one is anchored to its path. Widen the pattern with a hit control per shape and anchor the label acceptance to `^\.github/workflows/ci\.yml:` when it is next touched.
+- Source: #720 review cycle 1

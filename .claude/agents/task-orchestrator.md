@@ -40,7 +40,7 @@ your issue's comments; the top-level never posts them for you.
    acted on your branch since your context formed — your context is a hypothesis about disk,
    never disk): check `git worktree list` for this issue's worktree, `git log main..<branch>`
    for committed waves, `git status` for uncommitted work, the issue for an existing
-   plan/ledger, `gh pr list --head <branch>` for a PR and its state. Adopt what is done: tick
+   plan/ledger (read through `bash .claude/scripts/gh-owner-comments.sh issue <n>`, `docs/standards/security.md` rule 6), `gh pr list --head <branch>` for a PR and its state. Adopt what is done: tick
    ledger boxes the commits prove; commit a clean uncommitted wave only after running its
    chunks' Verify: commands yourself; never re-dispatch a chunk whose files the tree already
    contains in completed form. EDIT the existing ledger comment — never post a second ledger.
