@@ -125,7 +125,8 @@ function main(argv) {
     process.stderr.write(
       'gh-owner-comments: the issue or PR itself was not written by the owner; its body is withheld and is not a spec to plan or dispatch from\n',
     );
-  process.exit(subjectIsOwners || flags.has('--untrusted') ? 0 : 3);
+  // exitCode, not exit(): exit() drops stdout still queued on a pipe (64 KiB on darwin).
+  process.exitCode = subjectIsOwners || flags.has('--untrusted') ? 0 : 3;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2));

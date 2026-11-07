@@ -4,7 +4,7 @@
 # The subject exists so that a stranger's comment is never read as the owner's PROCEED, plan
 # or issue spec (docs/standards/security.md rule 6). What this harness has to be able to fail on:
 #
-#   - Each association GitHub reports for a non-owner (NONE, CONTRIBUTOR, COLLABORATOR, MEMBER),
+#   - The associations GitHub reports for a non-owner (NONE, CONTRIBUTOR, COLLABORATOR, MEMBER),
 #     a deleted account, and both half-matches (the owner's login with another association, the
 #     OWNER association under another login) are excluded; an OWNER comment passes.
 #   - The owner is READ from `gh repo view`: a fixture whose owner is someone else flips every
@@ -86,6 +86,7 @@ reset() {
   put comments "[[ $(rec 101 "$OWNER" OWNER 'OWNER-COMMENT-A'), $(rec 102 stranger NONE "$FORGED"), $(rec 103 contrib CONTRIBUTOR 'CONTRIBUTOR-TEXT') ],
     [ $(rec 104 collab COLLABORATOR 'COLLABORATOR-TEXT'), $(rec 105 member MEMBER 'MEMBER-TEXT'), $(rec 106 null NONE 'GHOST-TEXT'),
       $(rec 107 "$OWNER" NONE 'OWNER-LOGIN-WRONG-ASSOC'), $(rec 108 impostor OWNER 'OWNER-ASSOC-WRONG-LOGIN'),
+      $(rec 110 "${OWNER}-bot" OWNER 'OWNER-LOGIN-SUFFIXED'), $(rec 111 "x${OWNER}" OWNER 'OWNER-LOGIN-PREFIXED'),
       $(rec 109 "$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')" OWNER 'OWNER-COMMENT-B-LOWERCASE-LOGIN') ]]"
   put review-comments "[[ $(rec 201 stranger NONE 'STRANGER-REVIEW-COMMENT'), $(rec 202 "$OWNER" OWNER 'OWNER-REVIEW-COMMENT') ]]"
   put reviews "[[ $(rec 301 stranger NONE 'STRANGER-REVIEW'), $(rec 302 "$OWNER" OWNER 'OWNER-REVIEW') ]]"
@@ -97,7 +98,7 @@ ids_of() { # ids_of: stdin is the subject's JSON output; prints the record ids, 
   node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);process.stdout.write(o.records.map(r=>r.id).sort((a,b)=>a-b).join(","))})'
 }
 
-NON_OWNER_MARKS='PROCEED CONTRIBUTOR-TEXT COLLABORATOR-TEXT MEMBER-TEXT GHOST-TEXT OWNER-LOGIN-WRONG-ASSOC OWNER-ASSOC-WRONG-LOGIN'
+NON_OWNER_MARKS='PROCEED CONTRIBUTOR-TEXT COLLABORATOR-TEXT MEMBER-TEXT GHOST-TEXT OWNER-LOGIN-WRONG-ASSOC OWNER-ASSOC-WRONG-LOGIN OWNER-LOGIN-SUFFIXED OWNER-LOGIN-PREFIXED'
 
 begin "default mode prints the owner's issue and comments and withholds every other author"
 reset
@@ -109,9 +110,10 @@ expect_stdout 'OWNER-COMMENT-B-LOWERCASE-LOGIN'
 for mark in $NON_OWNER_MARKS; do
   case_ctx="$mark"
   expect_not_stdout "$mark"
+  expect_not_stderr "$mark"
 done
 expect_not_stdout 'STRANGER-REVIEW'
-expect_stderr '7 record(s) not written by Octo-Owner withheld'
+expect_stderr '9 record(s) not written by Octo-Owner withheld'
 end
 
 begin "the owner is read from gh, not restated: a different owner flips every verdict"
@@ -146,7 +148,7 @@ trusted_ids=$(printf '%s' "$out" | ids_of)
 run --untrusted issue 7
 untrusted_ids=$(printf '%s' "$out" | ids_of)
 [ "$trusted_ids" = "7,101,109" ] || bad "trusted ids were $trusted_ids"
-[ "$untrusted_ids" = "102,103,104,105,106,107,108" ] || bad "untrusted ids were $untrusted_ids"
+[ "$untrusted_ids" = "102,103,104,105,106,107,108,110,111" ] || bad "untrusted ids were $untrusted_ids"
 end
 
 begin "a body that forges the default mode's record header stays one JSON string in the untrusted output"
@@ -176,6 +178,7 @@ expect_rc 0
 expect_stdout 'OWNER-REVIEW-COMMENT'
 expect_stdout 'OWNER-REVIEW'
 expect_not_stdout 'STRANGER-REVIEW'
+expect_not_stderr 'STRANGER-REVIEW'
 run --untrusted pr 7
 expect_stdout 'STRANGER-REVIEW-COMMENT'
 expect_stdout 'STRANGER-REVIEW'
@@ -199,6 +202,13 @@ for failing in review-comments reviews; do
   expect_rc 2
   [ -z "$out" ] || bad "stdout was not empty: $out"
 done
+end
+
+begin "output past a pipe's buffer arrives whole: the newest owner comment is not cut off"
+reset
+put comments "[[ $(rec 101 "$OWNER" OWNER "$(head -c 200000 /dev/zero | tr '\0' 'a')END-OF-LONG-COMMENT") ]]"
+PATH="$BIN:$PATH" FX="$FX" bash "$SUBJECT" issue 7 2>/dev/null | (sleep 1; cat) >"$TMP_ROOT/piped.out"
+grep -q 'END-OF-LONG-COMMENT' "$TMP_ROOT/piped.out" || bad "piped output was truncated at $(wc -c <"$TMP_ROOT/piped.out") bytes"
 end
 
 begin "an owner answer with no login fails closed"
@@ -226,6 +236,10 @@ expect_rc 2
 case_ctx="unknown flag"
 run --frob issue 7
 expect_rc 2
+case_ctx="extra positional"
+run issue 7 8
+expect_rc 2
+expect_not_stderr 'gh stub'
 end
 
 begin "isOwnerAuthored given no owner refuses, whatever the record says"

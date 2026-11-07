@@ -11,7 +11,7 @@
 #   bash .claude/scripts/gh-owner-comments.sh --untrusted <issue|pr> <n>
 #
 # Default: the owner-authored records only (the issue or PR body, its comments and, for `pr`,
-# review comments and reviews), as text or --json. Everyone else's are counted on stderr.
+# review comments and reviews), as text or --json. In text mode everyone else's are counted on stderr.
 # --untrusted: the rest, as one JSON object marked `"untrusted": true`; who reads it is
 # docs/standards/security.md rule 6.
 #
@@ -34,7 +34,14 @@ for arg in "$@"; do
       exit 2
       ;;
     *)
-      if [ -z "$kind" ]; then kind="$arg"; else number="$arg"; fi
+      if [ -z "$kind" ]; then
+        kind="$arg"
+      elif [ -z "$number" ]; then
+        number="$arg"
+      else
+        printf 'gh-owner-comments: unexpected extra argument %s\n' "$arg" >&2
+        exit 2
+      fi
       ;;
   esac
 done

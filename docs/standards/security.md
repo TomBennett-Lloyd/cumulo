@@ -124,8 +124,8 @@
    the merge owner and every lane post through the owner's `gh` login, so their comments carry
    `author_association: OWNER` too. The filter separates the owner's account from outsiders and
    nothing finer. A decision that needs the owner's own words (a `PROCEED`, an approval) keeps its
-   guard: the merge owner relays the owner's words verbatim as a bounce (`.claude/skills/run-issue/SKILL.md`,
-   batch lane step 5), and an owner-authored comment is never evidence on its own that the owner said
+   guard: the merge owner relays the owner's words verbatim in a `PROCEED` (`.claude/agents/ticket-agent.md`
+   rule 2) or a bounce (`.claude/skills/run-issue/SKILL.md`, batch lane step 5), and an owner-authored comment is never evidence on its own that the owner said
    it. The predicate fails closed: an organisation-owned repository trusts nothing until it is
    re-decided. The repository-level interaction limit the owner set on 2026-11-07 is a second, separate
    layer; it expires, so this rule does not rely on it (#720).
