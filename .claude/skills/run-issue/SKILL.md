@@ -56,8 +56,8 @@ each was caught only because the lane checked (#681).
    what an orchestrator spawns, and the reason it exists — a nested child's completion routing
    past its parent to you — cannot arise for your own direct child, whose completion IS the
    lane report arriving. Silence until that report is the healthy state; do not poll. If the
-   notification is lost the report is still durable: `gh pr view <n> --json body`, or the
-   issue's comments.
+   notification is lost the report is still durable: `bash .claude/scripts/gh-owner-comments.sh pr <n>`, or the
+   same with `issue <n>` for its comments.
 3. **Diff check** — your first touchpoint, and your only read of the code. `git rev-parse
 <branch>` must equal the report's HEAD, or stop and reconcile before anything else. Check
    the changed files against the plan comment's files (drift named, or none); every `Verify`
